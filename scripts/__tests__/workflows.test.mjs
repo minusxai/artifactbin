@@ -209,6 +209,28 @@ describe('code scanning runs after merge, not on every pull request', () => {
   });
 });
 
+describe('CodeQL avoids redundant post-merge work without narrowing analysis',()=>{
+ it('skips prose-only pushes and cancels superseded push scans while retaining scheduled/manual scans',()=>{
+  const scan=workflow('codeql.yml');
+  expect(scan.on.push['paths-ignore']).toEqual(['**/*.md','**/*.txt']);
+  expect(scan.on.schedule).toHaveLength(1);
+  expect(scan.on).toHaveProperty('workflow_dispatch');
+  expect(scan.concurrency.group).toContain('github.event_name');
+  expect(scan.concurrency['cancel-in-progress']).toBe("${{ github.event_name == 'push' }}");
+ });
+ it('uploads the same complete findings while omitting optional push database archives',()=>{
+  const steps=workflow('codeql.yml').jobs.analyze.steps;
+  const init=steps.find(step=>step.uses?.startsWith('github/codeql-action/init@'));
+  const analyze=steps.find(step=>step.uses?.startsWith('github/codeql-action/analyze@'));
+  expect(analyze.with['upload-database']).toBe("${{ github.event_name != 'push' }}");
+  expect(analyze.with.upload??'always').toBe('always');
+  expect(analyze.with['skip-queries']??'false').toBe('false');
+  expect(init.with.queries).toBeUndefined();
+  expect(init.with['config-file']).toBeUndefined();
+  expect(init.with['config']).toBeUndefined();
+ });
+});
+
 describe('page speed: the base is main\'s own measurement of the same bytes', () => {
   const speed = workflow('page-speed.yml');
   it('measures only the head beside the report, never a second build of main', () => {

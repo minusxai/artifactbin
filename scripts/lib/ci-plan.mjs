@@ -110,8 +110,15 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   // npm artifact (with native acceptance), typecheck, and skip the suite the unchanged tree already answered.
   if (versionOnly) return { full: false, cliRelease: true, cliTests: false, jobs: { ...nothing, checks: true, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'version-only release' };
   const changed = new Set();
+  // Scanner configuration and its contract tests never enter a product bundle.
+  // Keep workflow checks; mixed source or unknown inputs retain their normal selection.
+  let scannerContracts = false;
   full ||= paths.length === 0;
   for (const path of paths) {
+    if (path === '.github/workflows/codeql.yml' || path === 'scripts/__tests__/workflows.test.mjs') {
+      scannerContracts = true;
+      continue;
+    }
     // Only repository prose is inert. Skill/reference markdown under services
     // is shipped product input and must exercise its owning module.
     if (/^(README\.md|CONTRIBUTING\.md|AGENTS\.md|CLAUDE\.md|LICENSE)$/.test(path)
@@ -140,7 +147,7 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   const jobs = Object.fromEntries(CI_JOBS.map((job) => [job, full]));
   jobs.checks = true;
   if (!full) {
-    jobs.node = affected.size > 0;
+    jobs.node = affected.size > 0 || scannerContracts;
     for (const job of ['ui', 'build', 'api', 'gates']) jobs[job] = app;
   }
   // Release-only, full run or not: the npm artifact is proved on every supported consumer.
@@ -150,7 +157,7 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   // The CLI source suite (node job, shard 3) still guards every CLI change.
   const cliTests = full || affected.has('cli');
   const nodeRoots = full ? [] : [
-    ...(affected.size ? ['scripts/'] : []),
+    ...(affected.size || scannerContracts ? ['scripts/'] : []),
     ...[...affected].filter((module) => module !== 'cli').map((module) => `services/${module}/`),
   ].sort();
   return { full, cliRelease, cliTests, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };

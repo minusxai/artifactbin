@@ -43,3 +43,31 @@ it('retains bounded structural welcome diagnostics without tokens, codes or work
   expect(fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
  }finally{vi.unstubAllGlobals();dom.window.close();}
 });
+
+it('keeps resource and session diagnostics through OTP navigation and removes listeners after welcome failure', async () => {
+  const page = new EventEmitter();
+  page.goto = async () => ({ status: () => 200 });
+  page.url = () => 'https://example.test/?token=never_log_this';
+  page.waitForSelector = async () => {};
+  page.fill = async () => {};
+  page.click = async selector => {
+    if (selector !== '[aria-label="Verify code"]') return;
+    page.emit('requestfailed', { resourceType: () => 'script', url: () => 'https://example.test/assets/home.js?token=never_log_this', failure: () => ({ errorText: 'net::ERR_FAILED' }) });
+    page.emit('pageerror', new TypeError('private workspace text must not be included'));
+    page.emit('response', { request: () => ({ resourceType: () => 'fetch' }), url: () => 'https://example.test/api/page/session', status: () => 503, json: async () => ({ kind: 'none', user: null, token: 'never_log_this' }) });
+  };
+  let waits = 0;
+  page.waitForURL = async () => { if (++waits > 1) throw Error('welcome navigation missing'); };
+  page.waitForFunction = async () => ({ jsonValue: async () => 'welcome' });
+  page.evaluate = async () => ({ readyState: 'complete', rootChildren: 2, session: { kind: 'account', onboarded: false } });
+  let failure;
+  try { await loginViaEmail(page, 'https://example.test', { lastCode: () => '123456' }, 'mxmx_test_gate@example.com'); } catch (error) { failure = error; }
+  expect(failure.message).toContain('script /assets/home.js: net::ERR_FAILED');
+  expect(failure.message).toContain('page error: TypeError');
+  expect(failure.message).toContain('session=HTTP 503, kind=none, user=false');
+  expect(failure.message).toContain('session /api/page/session: HTTP 503');
+  expect(failure.message).not.toContain('never_log_this');
+  expect(failure.message).not.toContain('private workspace text');
+  expect(failure.message).not.toContain('123456');
+  for (const event of ['requestfailed', 'pageerror', 'response']) expect(page.listenerCount(event)).toBe(0);
+});

@@ -45,7 +45,8 @@ export async function startMailSink() {
  */
 export async function loginViaEmail(page, base, sink, email) {
   // Record only public navigation/resource paths and session shape, never a cookie or response body.
-  // A blank SPA, an auth redirect and an unresolved session used to look like the same 45s timeout.
+  // Keep these listeners through OTP and welcome: a failed home chunk or initial session read
+  // happens after the Email form, and a later healthy identity probe cannot explain that failure.
   const failures = [];
   let navigationStatus = null;
   let session = 'not observed';
@@ -59,52 +60,57 @@ export async function loginViaEmail(page, base, sink, email) {
     if (response.status() >= 400 && ['script', 'stylesheet', 'document'].includes(request.resourceType()))
       remember(`${request.resourceType()} ${route}: HTTP ${response.status()}`);
     if (route === '/api/page/session') {
+      if (response.status() >= 400) remember(`session ${route}: HTTP ${response.status()}`);
       session = `HTTP ${response.status()}`;
-      void response.json().then(body => { session = `HTTP ${response.status()}, kind=${body.kind}, user=${!!body.user}`; }).catch(() => {});
+      void response.json().then(body => { session = `HTTP ${response.status()}, kind=${body.kind}, user=${!!body.user}, onboarded=${typeof body.onboarded === 'boolean' ? body.onboarded : 'unknown'}`; }).catch(() => {});
     }
   };
   page.on('requestfailed', onFailure);
   page.on('pageerror', onPageError);
   page.on('response', onResponse);
   try {
-    navigationStatus = (await page.goto(`${base}/login`, { waitUntil: 'load' }))?.status() ?? null;
-    // Wait for the real hydrated form; keep the established gate budget.
-    await page.waitForSelector('[aria-label="Email"]', { timeout: 45_000 });
-  } catch (cause) {
-    throw new Error(`Login email form unavailable: navigation HTTP ${navigationStatus}, path=${pathname(page.url())}, session=${session}; ${failures.join('; ') || 'no resource or page error observed'}`, { cause });
+    try {
+      navigationStatus = (await page.goto(`${base}/login`, { waitUntil: 'load' }))?.status() ?? null;
+      // Wait for the real hydrated form; keep the established gate budget.
+      await page.waitForSelector('[aria-label="Email"]', { timeout: 45_000 });
+    } catch (cause) {
+      throw new Error(`Login email form unavailable: navigation HTTP ${navigationStatus}, path=${pathname(page.url())}, session=${session}; ${failures.join('; ') || 'no resource or page error observed'}`, { cause });
+    }
+    await page.fill('[aria-label="Email"]', email);
+    await page.click('[aria-label="Log in with email"]');
+    await page.waitForSelector('[aria-label="Login code"]', { timeout: 15_000 });
+
+    const code = sink.lastCode(email);
+    if (!code) {
+      throw new Error(
+        `No login code reached the development outbox ${outboxPath()}. ` +
+        `Request a new code, then run: npm run dev:otp -- ${email}`,
+      );
+    }
+    await page.fill('[aria-label="Login code"]', code);
+    await page.click('[aria-label="Verify code"]');
+    await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 }).catch(() => {});
+    // Verify the cookie-backed identity through the same endpoint the app uses.
+    // The dashboard no longer prints an email or a profile link in its chrome.
+    await page.waitForFunction(async (expectedEmail) => {
+      try {
+        const response = await fetch('/api/page/session', { credentials: 'same-origin' });
+        if (!response.ok) return false;
+        const session = await response.json();
+        return session.kind === 'account' && session.user?.email === expectedEmail;
+      } catch { return false; }
+    }, email, { timeout: 20_000 }).catch(() => {
+      throw new Error(`login did not establish the session for ${email} within 20s (path ${pathname(page.url())})`);
+    });
+    await passTheWelcomePage(page, email).catch(cause => {
+      throw new Error(`${cause.message}; login navigation HTTP ${navigationStatus}, session=${session}; ${failures.join('; ') || 'no resource or page error observed'}`, { cause });
+    });
+    return email;
   } finally {
     page.off('requestfailed', onFailure);
     page.off('pageerror', onPageError);
     page.off('response', onResponse);
   }
-  await page.fill('[aria-label="Email"]', email);
-  await page.click('[aria-label="Log in with email"]');
-  await page.waitForSelector('[aria-label="Login code"]', { timeout: 15_000 });
-
-  const code = sink.lastCode(email);
-  if (!code) {
-    throw new Error(
-      `No login code reached the development outbox ${outboxPath()}. ` +
-      `Request a new code, then run: npm run dev:otp -- ${email}`,
-    );
-  }
-  await page.fill('[aria-label="Login code"]', code);
-  await page.click('[aria-label="Verify code"]');
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 }).catch(() => {});
-  // Verify the cookie-backed identity through the same endpoint the app uses.
-  // The dashboard no longer prints an email or a profile link in its chrome.
-  await page.waitForFunction(async (expectedEmail) => {
-    try {
-      const response = await fetch('/api/page/session', { credentials: 'same-origin' });
-      if (!response.ok) return false;
-      const session = await response.json();
-      return session.kind === 'account' && session.user?.email === expectedEmail;
-    } catch { return false; }
-  }, email, { timeout: 20_000 }).catch(() => {
-    throw new Error(`login did not establish the session for ${email} within 20s (url ${page.url()})`);
-  });
-  await passTheWelcomePage(page, email);
-  return email;
 }
 
 /**
@@ -166,7 +172,7 @@ export async function passTheWelcomePage(page, email) {
   await page.getByRole('button', { name: 'Confirm', exact: true }).click({ timeout: 20_000 });
   await page.waitForURL((u) => !onWelcome(u), { timeout: 20_000 }).catch(() => {
     throw new Error(
-      `the welcome page did not hand ${email} back within 20s: Confirm was pressed and the app stayed on ${page.url()}`,
+      `the welcome page did not hand ${email} back within 20s: Confirm was pressed and the app stayed on ${new URL(page.url()).pathname}`,
     );
   });
 }
