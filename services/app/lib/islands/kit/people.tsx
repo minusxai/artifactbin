@@ -37,14 +37,16 @@ export function UserImage(p: Props) {
   let image: HTMLImageElement | undefined;
   // A served image can fail before hydration attaches onError. Recover that settled failure too.
   onMount(() => { if (image?.complete && image.naturalWidth === 0) setFailed(image.getAttribute('src')); });
-  const missingImage = () => !card()?.image || failed() === card()?.image;
+  const source = () => card()?.image === failed() ? null : card()?.image;
+  // The avatar owns its accessible name whether its picture or initial is visible.
+  const label = () => p.decorative ? undefined : card()?.name;
   const box = () => join('inline-flex shrink-0 align-middle',BOX[size()],p.className);
   return <Show when={hasId(who().id)} fallback={p.fallback ? <span data-slot="user-image" class={p.classes?.fallback ?? join('text-muted-foreground',p.className)} {...rest(p)}>{p.fallback}</span> : null}>
     <span data-slot="avatar" data-size="default" data-unknown={!card() ? '' : undefined} aria-hidden={p.decorative || !card() ? 'true' : undefined}
-      role={!p.decorative && card() && missingImage() ? 'img' : undefined} aria-label={!p.decorative && card() && missingImage() ? card()?.name : undefined}
+      role={label() ? 'img' : undefined} aria-label={label()}
       class={p.classes?.avatar ?? join(AVATAR,box())} style={card() && typeof who().id === 'string' ? { 'background-color': personFaceBackground(who().id as string) } : undefined} {...rest(p)}>
       <span data-slot="avatar-fallback" class={(card() ? p.classes?.initial : p.classes?.unknownInitial) ?? join(FALLBACK,card() && 'bg-transparent font-medium text-white',GLYPH[size()])}>{card() ? personInitial(card()!.name) : '?'}</span>
-      <Show when={card()?.image && failed() !== card()?.image}><img ref={image} data-slot="avatar-image" class="absolute inset-0 aspect-square size-full object-cover" src={card()!.image!} alt={p.decorative ? '' : card()!.name} aria-hidden={p.decorative ? 'true' : undefined} onError={() => setFailed(card()!.image)} /></Show>
+      <Show when={source()}><img ref={image} data-slot="avatar-image" class="absolute inset-0 aspect-square size-full object-cover" src={source()!} alt="" aria-hidden="true" onError={e => setFailed(e.currentTarget.getAttribute('src'))} /></Show>
     </span>
   </Show>;
 }

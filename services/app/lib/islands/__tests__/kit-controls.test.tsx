@@ -7,6 +7,7 @@
  * draws from the resolved cards, a diagram from the stored drawings.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { RECIPES as controlsRecipes } from '../kit/recipes/controls';
 import { RECIPES as peopleRecipes, peopleClasses } from '../kit/recipes/people';
@@ -140,6 +141,26 @@ describe('people and files', () => {
       expect(host.querySelector('[data-slot="avatar-fallback"]')?.textContent).toBe('A');
       expect(host.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Ada');
     } finally { dispose(); complete.mockRestore(); width.mockRestore(); }
+  });
+  it('keeps one accessible avatar name through picture failure and replacement', () => {
+    const [image, setImage] = createSignal<string | null>(null);
+    const island = fakeIsland();
+    island.people = () => ({ usr_ada: { name: 'Ada', handle: 'ada', image: image() } });
+    const { host, dispose } = mount(island, () => <UserImage userId="usr_ada" />);
+    const avatar = host.querySelector('[role="img"]');
+    try {
+      expect(avatar?.getAttribute('aria-label')).toBe('Ada');
+      setImage('https://app.example/first.webp');
+      expect(host.querySelector('img')?.getAttribute('alt')).toBe('');
+      expect(host.querySelector('img')?.getAttribute('aria-hidden')).toBe('true');
+      host.querySelector('img')!.dispatchEvent(new Event('error'));
+      expect(host.querySelector('img')).toBeNull();
+      expect(avatar?.textContent).toBe('A');
+      setImage('https://app.example/replacement.webp');
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('https://app.example/replacement.webp');
+      expect(host.querySelector('[role="img"]')).toBe(avatar);
+      expect(avatar?.getAttribute('aria-label')).toBe('Ada');
+    } finally { dispose(); }
   });
 
   it('Files renders the file cards of its table', () => {
