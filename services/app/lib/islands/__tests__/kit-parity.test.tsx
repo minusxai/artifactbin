@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'solid-js/web';
-import { applyCurrentSlideLayout, parityOf, reactRender } from './kit-parity';
+import { applyCurrentLayoutContracts, diffShapes, parityOf, reactRender, shapeOf } from './kit-parity';
 
 describe('kit parity helper', () => {
   it('renders today\'s kit and finds no difference against the same DOM', () => {
@@ -25,16 +25,27 @@ describe('kit parity helper', () => {
   it('applies the current sizing recipe only to captured Slide roots', () => {
     const captured = '<section data-mx-slide class="relative flex flex-col min-h-[var(--mx-vh,760px)] py-4"></section>'
       + '<div class="relative flex flex-col min-h-[var(--mx-vh,760px)] py-4"></div>';
-    const adapted = applyCurrentSlideLayout(captured);
+    const adapted = applyCurrentLayoutContracts(captured);
     expect(adapted).toBe(
       '<section data-mx-slide="" class="relative flex w-full min-w-0 flex-col min-h-[var(--mx-vh,760px)] py-4"></section>'
       + '<div class="relative flex flex-col min-h-[var(--mx-vh,760px)] py-4"></div>',
     );
-    expect(applyCurrentSlideLayout(adapted)).toBe(adapted);
+    expect(applyCurrentLayoutContracts(adapted)).toBe(adapted);
   });
 
   it('preserves captured non-Slide markup byte for byte', () => {
     const captured = '<span data-slot="badge" class="[a&]:hover:bg-primary/90">New</span>\n';
-    expect(applyCurrentSlideLayout(captured)).toBe(captured);
+    expect(applyCurrentLayoutContracts(captured)).toBe(captured);
+  });
+
+  it('applies the DataTable wrapper min-width contract idempotently', () => {
+    const captured = '<section><div aria-label="DataTable embed" style="width:100%"></div><span class="[a&]:hover:bg-primary/90">New</span></section>\n';
+    const adapted = applyCurrentLayoutContracts(captured);
+    expect(adapted).toBe('<section><div aria-label="DataTable embed" style="width:100%;min-width:0"></div><span class="[a&]:hover:bg-primary/90">New</span></section>\n');
+    expect(applyCurrentLayoutContracts(adapted)).toBe(adapted);
+    const broken = adapted.replace('min-width:0', 'min-width:1px');
+    const brokenStyleDiff = diffShapes(shapeOf(adapted), shapeOf(broken)).join('\n');
+    expect(brokenStyleDiff).toContain('min-width:0');
+    expect(brokenStyleDiff).toContain('min-width:1px');
   });
 });

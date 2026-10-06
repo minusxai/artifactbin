@@ -10,7 +10,7 @@ import { JSDOM } from 'jsdom';
 import { compilePage, declaredValues, generate } from '../compiler';
 import { loadCompilerBuild } from '../build.server';
 import type { CompileInput } from '../contract';
-import { shapeOf, diffShapes, applyCurrentSlideLayout } from '@/lib/islands/__tests__/kit-parity';
+import { shapeOf, diffShapes, applyCurrentLayoutContracts } from '@/lib/islands/__tests__/kit-parity';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { compileDataflow, prepareCompile } from '@/lib/story/data/compile-dataflow';
 import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
@@ -50,7 +50,7 @@ const todays = (input: CompileInput, values: Record<string, unknown>): string =>
   const key = JSON.stringify({ nodes: input.nodes, values, glyphs: input.glyphs ?? {} });
   const recorded = oracle[key];
   if (recorded === undefined) throw new Error('no recorded React render for these nodes and values');
-  return applyCurrentSlideLayout(recorded);
+  return applyCurrentLayoutContracts(recorded);
 };
 /** The compiled column's children against today's render of the same version at the same values. */
 const columnParity = (html: string, input: CompileInput, values: Record<string, unknown> = {}, drop: string[] = []): string[] => {

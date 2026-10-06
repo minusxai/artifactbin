@@ -19,10 +19,18 @@ export interface ParityData { tables?: Record<string, TableResult>; values?: Rec
  * DOM. A markup the oracle never saw has no reference: add the case with an explicit expected shape instead.
  */
 let oracle: Record<string, string> | null = null;
-/** The shared Slide sizing contract was added after the retired React reader was captured. */
-export function applyCurrentSlideLayout(html: string): string {
-  if (!html.includes('data-mx-slide')) return html;
-  const root = new JSDOM(`<div id="__slide-layout-reference">${html}</div>`).window.document.getElementById('__slide-layout-reference')!;
+/** Shared reader layout contracts added after the retired React reader was captured. */
+export function applyCurrentLayoutContracts(html: string): string {
+  // Keep the DataTable upgrade confined to its identity-bearing adapter wrapper and preserve every
+  // other captured byte. Its inner overflow container already owns horizontal scrolling.
+  const withDataTableWidth = html.replace(/<div\b[^>]*\baria-label="DataTable embed"[^>]*>/g, (opening) => {
+    const style = opening.match(/\bstyle="([^"]*)"/);
+    if (!style || !/(?:^|;)\s*width:\s*100%\s*(?:;|$)/.test(style[1]!) || /(?:^|;)\s*min-width\s*:/i.test(style[1]!)) return opening;
+    const updated = `${style[1]}${style[1]!.endsWith(';') ? '' : ';'}min-width:0`;
+    return opening.replace(style[0], `style="${updated}"`);
+  });
+  if (!withDataTableWidth.includes('data-mx-slide')) return withDataTableWidth;
+  const root = new JSDOM(`<div id="__slide-layout-reference">${withDataTableWidth}</div>`).window.document.getElementById('__slide-layout-reference')!;
   for (const slide of root.querySelectorAll<HTMLElement>('[data-mx-slide]')) {
     const classes = slide.getAttribute('class') ?? '';
     if (/(?:^|\s)w-full(?:\s|$)/.test(classes) && /(?:^|\s)min-w-0(?:\s|$)/.test(classes)) continue;
@@ -42,7 +50,7 @@ export function reactRender(markup: string, data?: ParityData): string {
   oracle ??= JSON.parse(readFileSync(path.join(import.meta.dirname, 'fixtures', 'react-oracle.json'), 'utf8')) as Record<string, string>;
   const recorded = oracle[JSON.stringify({ markup, data: data ?? null })];
   if (recorded === undefined) throw new Error(`no recorded React render for ${JSON.stringify(markup).slice(0, 120)}`);
-  return applyCurrentSlideLayout(recorded);
+  return applyCurrentLayoutContracts(recorded);
 }
 
 export interface Shape { tag: string; attrs: Record<string, string>; text: string; kids: Shape[] }
