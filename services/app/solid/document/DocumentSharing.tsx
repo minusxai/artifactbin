@@ -48,6 +48,8 @@ export function DocumentSharing(props: {
   variant?: 'chip' | 'menu' | 'dialog' | 'embedded'; onClose?: () => void;
   onSharingChange?: (verdict: SharingVerdict) => void;
   onSocialPreview?: () => void; version?: number;
+  /** Embedded dataset editors can switch tabs without discarding their draft. */
+  onDataActions?: () => void;
   /** The menu entry hands the dialog to its page (which closes the panel it sits in) instead of opening its own. */
   onOpen?: () => void;
   /** The artifact's format: a dataset's sharing also answers who may WRITE it (the writes row). */
@@ -187,7 +189,7 @@ export function DocumentSharing(props: {
           <button type="submit" aria-label="Add email" class="min-h-10 cursor-pointer rounded-[4px] border border-edge px-4 py-2 text-sm text-muted hover:border-edge-bright hover:text-fg">Add</button>
         </form>
       </div>
-      <Show when={props.format === 'dataset' && !postgres()}><a aria-label="Manage access policies" onClick={close} href={artifactEditPath(props.id)} class="mt-4 block rounded-lg border border-edge px-3 py-2 text-sm text-muted hover:border-accent hover:text-fg">Manage data actions ↗</a></Show>
+      <Show when={props.format === 'dataset' && !postgres()}><a aria-label="Manage access policies" onClick={event => { close(); if (props.onDataActions) { event.preventDefault(); props.onDataActions(); } }} href={artifactEditPath(props.id)} class="mt-4 block rounded-lg border border-edge px-3 py-2 text-sm text-muted hover:border-accent hover:text-fg">Manage data actions ↗</a></Show>
     </>}</Show>
   </>;
   const heading = () => `Share “${props.title || (props.format === 'folder' ? 'Untitled folder' : 'Untitled')}”`;

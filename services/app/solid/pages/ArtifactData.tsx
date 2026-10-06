@@ -4,8 +4,8 @@
  * recipe or a dataset: the data branch of the artifact route. The data tiers are
  * VALUES, not documents: they read as an image, a file card, a table or a recipe inside the app's own
  * measure, under the one app bar (solid/components/PageChrome) carrying the artifact's title as its
- * crumb, Fork as the bar's action and the "Artifact controls" panel (forked-from, the owner's dataset
- * reference and the sharing menu).
+ * crumb, Fork as the bar's action, and workspace tabs for the asset and sharing. The
+ * "Artifact controls" panel carries fork credit and the owner's dataset reference.
  *
  * A capture (the exporter's keyed `/a/<id>?key=`, lib/export) photographs `<main>`: it renders the same
  * view without opening the live stream. Everyone else follows the artifact live: a new version redraws
@@ -22,6 +22,9 @@ import { displayTitle } from '@/lib/story/document/title';
 import type { ReaderForkedFrom } from '@/lib/story/reader/fork-credit.server';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { pageDataChanged } from '@/web/page-data-events';
+import WorkspaceShell from '../components/WorkspaceShell';
+import { AssetWorkspace, type AssetSection } from '../components/AssetWorkspace';
+import { DatasetActionsView } from '../components/DatasetActionsView';
 import { PageChrome, useChromeVisibility } from '../components/PageChrome';
 import { DatasetCatalogView } from '../components/DatasetCatalogView';
 import { FileViewer, fileKindOf } from '../components/FileViewer';
@@ -105,14 +108,13 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
 
   const [copiedRef, setCopiedRef] = createSignal(false);
   const controls = () => <div class="space-y-4">
-    <Show when={surface.author?.forkedFrom || canEdit()}>
+    <Show when={surface.author?.forkedFrom}>
       <section aria-label="Document actions">
         <h2 class={SECTION_HEADING}>Artifact</h2>
         <Show when={surface.author?.forkedFrom}>{(source) => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{(href) => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>
-        <Show when={canEdit() && !owner()}><DocumentSharing id={id} title={title()} owner={false} editable variant="menu" version={live()?.version ?? surface.version} format={format} datasetKind={catalog()?.kind} /></Show>
       </section>
     </Show>
-    <Show when={owner()}>
+    <Show when={owner() && format === 'dataset'}>
       <section aria-label="Owner actions">
         <h2 class={SECTION_HEADING}>owner</h2>
         <Show when={format === 'dataset'}>
@@ -121,14 +123,12 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
             {copiedRef() ? 'copied dataset reference' : catalog() ? `copy query · source="${id}"` : `copy ref:${id}`}
           </button>
         </Show>
-        <DocumentSharing id={id} title={title()} owner variant="menu" version={live()?.version ?? surface.version} format={format} datasetKind={catalog()?.kind} />
       </section>
     </Show>
   </div>;
 
-  return <>
-    <PageChrome title={title()} label="Artifact controls" actions={<ForkArtifact id={id} title={title()} variant="bar" />} controls={controls} />
-    <main class="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">
+  const [section, setSection] = createSignal<AssetSection>(format === 'dataset' ? 'data' : 'asset');
+  const preview = <>
       <Show when={format === 'image'}>
         {/* A capture has no session: its image is read with the capture's own key, as its page was. */}
         <Show when={rawKey()} keyed>{(_version) => <img src={rawUrl()} alt={title()} class="mt-4 max-w-full rounded-[6px] border border-edge" />}</Show>
@@ -149,7 +149,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
           <FileViewer tall name={fileName()} size={surface.bytes ?? 0} url={rawUrl()} pdfUrl={format === 'pdf' ? rawUrl() : null} />
         </div>}</Show>
       </Show>
-      <Show when={format === 'dataset' && catalog()}>{(shown) => <DatasetCatalogView id={id} catalog={shown()} canEdit={canEdit()} />}</Show>
+      <Show when={format === 'dataset' && catalog()}>{(shown) => <DatasetCatalogView id={id} catalog={shown()} canEdit={false} />}</Show>
       <Show when={format === 'dataset' && !catalog()}>
         <p class="mt-4 font-sans text-xs text-muted" aria-label="Dataset summary">
           {formatCount(rows().length)} rows · {surface.columns.length} columns
@@ -175,6 +175,23 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
       <Show when={format === 'viz'}>
         <pre class="mt-4 overflow-x-auto rounded-[6px] border border-edge bg-surface p-4 font-mono text-xs text-muted">{content()}</pre>
       </Show>
-    </main>
+  </>;
+  return <>
+    <PageChrome title={title()} label="Artifact controls" actions={<ForkArtifact id={id} title={title()} variant="bar" />} controls={controls} />
+    <Show when={!capture} fallback={<main class="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">{preview}</main>}>
+      <WorkspaceShell>
+        <AssetWorkspace workspace={format === 'dataset' ? 'Dataset' : 'Asset'} tabs={format === 'dataset' ? ['data', 'actions', 'sharing'] : ['asset', 'sharing']} active={section()} onSelect={setSection}
+          actions={<Show when={format === 'dataset' && canEdit()}><a href={`/a/${id}/edit`} aria-label="Edit dataset" class="rounded border border-accent/30 bg-accent-soft px-3 py-1 font-mono text-xs text-accent">Edit dataset</a></Show>}>
+          <div hidden={section() !== 'data' && section() !== 'asset'}>{preview}</div>
+          <Show when={format === 'dataset' && section() === 'actions'}><DatasetActionsView id={id} canInspect={canEdit()} kind={catalog()?.kind} /></Show>
+          <Show when={section() === 'sharing'}>
+            <div class="mx-auto max-w-2xl space-y-4 rounded-lg border border-edge bg-surface p-5 sm:p-6">
+              <DocumentSharing id={id} title={title()} owner={owner()} editable={canEdit()} variant="embedded" format={format} datasetKind={catalog()?.kind} onDataActions={() => setSection('actions')} />
+              <Show when={canEdit()}><p class="text-xs text-muted">Sharing changes save immediately.</p></Show>
+            </div>
+          </Show>
+        </AssetWorkspace>
+      </WorkspaceShell>
+    </Show>
   </>;
 }

@@ -8,8 +8,8 @@ export function EditorToolbar(props: { top: number; right?: number; children: JS
   return <header aria-label="Editor toolbar" class="fixed z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px] items-center gap-x-1 border-b border-edge bg-surface px-2 sm:gap-x-2 sm:px-3" style={{ top: `${props.top}px`, height: `${EDIT_BAR_H}px`, left: '0px', right: `${props.right ?? 0}px` }}>{props.children}</header>;
 }
 export interface EditorViewTab { key: string; label: string; aria: string; tip: string; icon: JSX.Element; active: boolean; disabled?: boolean; choose: () => void }
-export function EditorViewTabs(props: { tabs: EditorViewTab[] }): JSX.Element {
-  return <div role="tablist" aria-label="Editor view" class="flex h-11 shrink-0 items-stretch sm:gap-1" onKeyDown={(event) => {
+export function EditorViewTabs(props: { tabs: EditorViewTab[]; label?: string }): JSX.Element {
+  return <div role="tablist" aria-label={props.label ?? "Editor view"} class="flex h-11 shrink-0 items-stretch sm:gap-1" onKeyDown={(event) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]:not([disabled])'));
     if (!tabs.length) return;

@@ -9,7 +9,6 @@ import { UsernameCard } from '../components/UsernameCard';
 import { NotificationSettings } from '../components/NotificationSettings';
 import { CustomDomainCard } from '../components/CustomDomainCard';
 import { TokensPanel } from '../components/TokensPanel';
-import { DatasetUpload } from '../components/DatasetUpload';
 
 export function AccountPage(): JSX.Element {
   const { session } = useSession();
@@ -28,7 +27,6 @@ export function AccountPage(): JSX.Element {
         <NotificationSettings />
         <div class="empty:hidden"><CustomDomainCard /></div>
         <section aria-labelledby="connections-heading"><h2 id="connections-heading" class="text-base font-semibold">Connections</h2><p class="mt-2 max-w-2xl text-sm leading-relaxed text-muted">Manage each afbin CLI connection to your account. Revoking a connection stops its agent. To add one, run <code class="rounded border border-edge bg-surface px-1.5 py-0.5 font-mono text-xs">afbin auth</code> on your machine.</p><div class="mt-4"><TokensPanel /></div></section>
-        <section aria-labelledby="data-heading"><h2 id="data-heading" class="text-base font-semibold">Data</h2><div class="mt-4"><DatasetUpload /></div></section>
       </div>
     </main>
   </Show>;

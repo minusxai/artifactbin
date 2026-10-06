@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createMemo, createSignal, For, onMount, Show, type JSX } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { parse as parseYaml } from 'yaml';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils/dataset-grants';
 import type { DatasetAccessPolicy, DatasetOperation, DatasetTablePolicy, InsertPermission, UpdatePermission, DeletePermission } from '@artifactbin/contracts';
@@ -16,15 +17,15 @@ const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 const control = 'w-full rounded border border-edge bg-surface px-3 py-2 text-sm text-fg';
 
 /** The server remains the admission and validation boundary for every policy write. */
-export function DatasetPolicies(props: { artifactId: string; expanded?: boolean }): JSX.Element {
+export function DatasetPolicies(props: { artifactId: string; expanded?: boolean; saveTarget?: HTMLElement }): JSX.Element {
   const [open, setOpen] = createSignal(Boolean(props.expanded));
   return <div>
     <Show when={!props.expanded}><Button variant="ghost" aria-expanded={open()} onClick={() => setOpen(value => !value)}>Manage access policies</Button></Show>
-    <Show when={open()}><PolicyEditor artifactId={props.artifactId} /></Show>
+    <Show when={open()}><PolicyEditor artifactId={props.artifactId} saveTarget={props.saveTarget} /></Show>
   </div>;
 }
 
-function PolicyEditor(props: { artifactId: string }): JSX.Element {
+function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): JSX.Element {
   const [state, setState] = createSignal<PolicyState | null>(null);
   const [draft, setDraft] = createSignal<DatasetAccessPolicy | null>(null);
   const [source, setSource] = createSignal<string | null>(null);
@@ -66,6 +67,7 @@ function PolicyEditor(props: { artifactId: string }): JSX.Element {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save policies.'); }
     finally { setSaving(false); }
   };
+  const saveButton = (compact = false) => <Button aria-label="Save access policies" disabled={!state() || state()?.canManage === false || saving() || source() !== null} onClick={() => void save()}>{saving() ? 'Saving…' : compact ? 'Save' : 'Save access policies'}</Button>;
   return <section aria-label="Access policies" class="space-y-5 py-4 text-sm text-fg">
     <header class="flex flex-wrap justify-between gap-3"><div><h2 class="text-xl font-semibold">Control how data can change</h2><p class="mt-1 text-muted">Choose allowed actions, then narrow them with column and row rules.</p></div>
       <Show when={state() && state()?.canManage !== false && source() === null}><Button variant="ghost" onClick={() => setSource(pretty(draft()))}>Edit JSON / YAML</Button></Show></header>
@@ -94,7 +96,7 @@ function PolicyEditor(props: { artifactId: string }): JSX.Element {
         <div class="flex gap-2"><Button onClick={() => { try { change(parseDatasetAccessPolicy(parseYaml(source()!))); setSource(null); setTableIndex(0); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid policy'); } }}>Apply policy source</Button><Button variant="ghost" onClick={() => setSource(null)}>Cancel source changes</Button></div>
       </Show>
       <details><summary>Review permission changes</summary><pre>{pretty(draft())}</pre></details>
-      <footer class="flex items-center justify-between gap-3 rounded border border-edge bg-surface p-3"><p role="status">{notice() || (pretty(draft()) !== pretty(state()?.policy) ? 'You have unsaved rule changes.' : 'Rules are up to date.')}</p><Button disabled={saving() || source() !== null} onClick={() => void save()}>{saving() ? 'Saving policies…' : 'Save access policies'}</Button></footer>
+      <footer class="flex items-center justify-between gap-3 rounded border border-edge bg-surface p-3"><p role="status">{notice() || (pretty(draft()) !== pretty(state()?.policy) ? 'You have unsaved rule changes.' : 'Rules are up to date.')}</p><Show when={props.saveTarget} fallback={saveButton()}>{target => <Portal mount={target()}>{saveButton(true)}</Portal>}</Show></footer>
     </Show>
   </section>;
 }
