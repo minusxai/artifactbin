@@ -8,21 +8,11 @@ Author with [markup]([[ base ]]/llms/markup), [SQL/actions]([[ base ]]/llms/mark
 Getting started: [[ base ]]/getting-started.md — install afbin, read its help, select this server, approve access in the browser, and make your first edit.
 Human-readable version: [[ base ]]/getting-started
 
-
-## CLI setup
-
-Prepare Node: afbin_node_setup="$(mktemp)" && curl -fsSL [[ base ]]/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
-Windows: Invoke-RestMethod [[ base ]]/chat/ensure-node.ps1 | Invoke-Expression
-Setup once: npx --yes @afbin/cli@latest setup --server '[[ base ]]'
-Windows: npx.cmd --yes @afbin/cli@latest setup --server '[[ base ]]'
-This installs the afbin command and the agent skills. Node setup reuses supported Node/npm or installs LTS; keep this terminal.
 Then: afbin pull <artifact url> --output report.jsx; edit the file; afbin push report.jsx (push runs afbin validate itself)
 Reference: afbin help or afbin help <topic>. Restart your agent to load the installed skill.
 Local: afbin preview report.jsx needs no cloud or credentials. Downloads: .jsx.html. Prepare a pinned npm cache before disconnecting; npm is not a sandbox.
 
-
 Server commands sign in through browser approval, including guests. Automation: --yes --json returns the approval URL; open it to continue. HTTP requires email; guest browser approval is CLI-only.
-
 
 Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; use either or its bare id. Add @<version> for history.
 

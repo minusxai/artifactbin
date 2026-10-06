@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-Editable `.jsx` combines YAML metadata and kit JSX. Datasets/media are artifacts too.
+artifactbin publishes editable `.jsx`: a YAML fence and kit JSX. Datasets/media are artifacts too.
 
 npm CLI: local files/browser approval, guests allowed. Direct HTTP: email auth, no CLI; [HTTP API](references/http-api.md).
 
