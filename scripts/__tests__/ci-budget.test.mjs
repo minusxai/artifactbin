@@ -47,11 +47,11 @@ it('runs invariant declarations on Linux and Windows once while keeping every co
  expect(experience.if).toBe("matrix.phase == 'preview' || matrix.phase == 'local'");
  expect(experience.run).toContain('playwright/cli.js install chromium');
 });
-it('pins browser tooling to its actual aliased manifest and installs OS dependencies only on Linux misses',()=>{
+it('pins browser tooling to its actual aliased manifest and installs OS dependencies on every fresh Linux runner',()=>{
  const steps=workflow().jobs.cli.steps,cache=steps.find(step=>step.with?.key?.startsWith('chromium-'));
  expect(cache?.with.key).toContain("hashFiles('scripts/ci/npm-acceptance/node_modules/playwright/browsers.json')");
  const deps=steps.find(step=>step.name==='Install Linux acceptance browser dependencies');
- expect(deps?.if).toBe("(matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux' && steps.acceptance-browser.outputs.cache-hit != 'true'");
+ expect(deps?.if).toBe("(matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux'");
  const proof=steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
  expect(proof.run).toContain('playwright/cli.js install chromium');
  expect(proof.run).not.toContain('--with-deps');
@@ -122,16 +122,6 @@ it('exits nonzero for an over-limit attempt and missing start, but accepts a fre
   expect(run({created_at:'2020-01-01T00:00:00Z'}).status).toBe(1);
  } finally {rmSync(directory,{recursive:true,force:true});}
 });
-it('keys download blobs across candidate version bumps without ignoring dependency integrity or runtime',async()=>{
- const {npmDependencyCacheKey}=await import('../lib/npm-dependency-cache.mjs');
- const lock={name:'@afbin/cli',version:'0.4.11',lockfileVersion:3,packages:{'':{name:'@afbin/cli',version:'0.4.11',dependencies:{sharp:'1.0.0'}},'node_modules/sharp':{version:'1.0.0',integrity:'sha512-one',resolved:'https://registry.npmjs.org/sharp/-/sharp-1.0.0.tgz'}}};
- const key=(input,runtime={os:'Windows',arch:'X64',node:'22.22.3'})=>npmDependencyCacheKey(JSON.stringify(input),runtime);
- const bumped=structuredClone(lock);bumped.version=bumped.packages[''].version='0.4.12';
- expect(key(lock)).toMatch(/^npm-dependencies-v1-Windows-X64-node22.22.3-/);
- expect(key(bumped)).toBe(key(lock));
- bumped.packages['node_modules/sharp'].integrity='sha512-two';expect(key(bumped)).not.toBe(key(lock));
- expect(key(lock,{os:'Windows',arch:'X64',node:'24.21.0'})).not.toBe(key(lock));
-});
 it('shares only verified npm download blobs, never installed modules or npx state',async()=>{
  const {mergeNpmDependencyCache}=await import('../lib/npm-dependency-cache.mjs');
  const directory=mkdtempSync(join(tmpdir(),'afbin-npm-cas-'));
@@ -148,8 +138,9 @@ it('shares only verified npm download blobs, never installed modules or npx stat
 });
 it('warms only normal matrix download blobs while keeping the standard-user bootstrap cold',()=>{
  const jobs=workflow().jobs,steps=jobs.cli.steps;
- const cache=steps.find(step=>step.id==='dependency-cache');
- expect(cache).toBeDefined();
+ const path=steps.find(step=>step.id==='dependency-cache-path');
+ expect(path).toBeDefined();
+ expect(steps.some(step=>step.id==='dependency-cache')).toBe(false);
  expect(steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--dependency-cache');
  expect(steps.find(step=>step.name==='Install the same candidate for experience checks').run).toContain('--dependency-cache');
  expect(jobs['cli-bootstrap'].steps.some(step=>step.id==='dependency-cache')).toBe(false);
@@ -190,16 +181,16 @@ it('seeds only pinned public shrinkwrap tarballs including optional native platf
  }
 });
 it('creates a fresh seed with bounded npm cache operations instead of selecting arbitrary host caches',async()=>{
- const {populateNpmSeed}=await import('../lib/npm-dependency-cache.mjs');
+ const {populateNpmSeed,npmSeedRequest}=await import('../lib/npm-dependency-cache.mjs');
  const directory=mkdtempSync(join(tmpdir(),'afbin-clean-seed-'));
- const dependencies=Array.from({length:19},(_,i)=>({resolved:`https://registry.npmjs.org/a/-/${i}.tgz`,integrity:'sha512-test'}));
+ const dependencies=Array.from({length:19},(_,i)=>({resolved:`https://registry.npmjs.org/a/-/a-${i}.0.0.tgz`,integrity:'sha512-test'}));
  let active=0,max=0;const calls=[];
  try {
   await populateNpmSeed(dependencies,directory,async(args)=>{calls.push(args);active++;max=Math.max(max,active);await new Promise(resolve=>setTimeout(resolve,2));active--;});
   expect(max).toBeLessThanOrEqual(1);expect(calls).toHaveLength(3);
-  expect(calls.flatMap(args=>args.slice(2,args.indexOf('--cache')))).toEqual(dependencies.map(d=>d.resolved));
+  expect(calls.flatMap(args=>args.slice(2,args.indexOf('--cache')))).toEqual(dependencies.map(npmSeedRequest));
   expect(calls.every(args=>args.includes('--ignore-scripts')&&args.includes('--userconfig'))).toBe(true);
-  const steps=workflow().jobs['cli-pack'].steps;expect(steps.some(step=>step.id==='npm-seed-key')).toBe(false);
+  const steps=workflow().jobs['cli-pack'].steps;expect(steps.some(step=>step.id==='npm-seed-key')).toBe(true);
   expect(steps.some(step=>step.run?.includes('prepare-seed'))).toBe(true);
   expect(steps.filter(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).map(step=>step.with.name)).toEqual(['Linux-X64','Linux-ARM64','macOS-X64','macOS-ARM64','Windows-X64'].map(platform=>'afbin-npm-dependency-seed-'+platform));
   expect(workflow().jobs.cli.steps.find(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).with.name).toBe('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');

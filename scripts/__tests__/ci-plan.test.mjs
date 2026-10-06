@@ -852,7 +852,7 @@ describe('CI job shape', () => {
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
     expect(run.run).toContain('--servers=2');
     expect(run.run).toContain(`--shard=\${{ matrix.shard }}/${CI_GATE_SHARDS}`);
-    const browser = jobs.gates.steps.find((step) => step.id === 'playwright');
+    const browser = jobs.gates.steps.find((step) => step.id === 'browser-chromium');
     expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
     const selection = jobs.gates.steps.find(step => step.id === 'gate-browsers');
     expect(selection.run).toContain(`--browsers --shard=\${{ matrix.shard }}/${CI_GATE_SHARDS}`);
@@ -874,7 +874,7 @@ describe('CI job shape', () => {
     expect(jobs['warm-caches'].needs).toBeUndefined();
     expect(jobs.test.needs).not.toContain('warm-caches');
     const warmKeys = jobs['warm-caches'].steps.filter((step) => step.uses?.startsWith('actions/cache@')).map((step) => step.with.key);
-    for (const restore of [debs, jobs.gates.steps.find((step) => step.id === 'playwright'), jobs.gates.steps.find((step) => step.id === 'build-cache')]) {
+    for (const restore of [debs, jobs.gates.steps.find((step) => step.id === 'browser-chromium'), jobs.gates.steps.find((step) => step.id === 'build-cache')]) {
       // The independent warmer writes ordinary builds; release-only caches use their own shape.
       expect(warmKeys).toContain(restore.with.key.replace('${{ needs.plan.outputs.cli }}','false'));
     }
