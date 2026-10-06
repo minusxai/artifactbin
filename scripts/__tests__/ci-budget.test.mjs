@@ -24,10 +24,10 @@ it('installs isolated acceptance tooling only for experience checks before consu
  const cached=native.indexOf(cache),install=native.findIndex(step=>step.run==='npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
  expect(cached).toBeLessThan(install);
  expect(native.some(step=>step.run==='npm ci')).toBe(false);
- expect(jobs.cli.strategy.matrix.phase).toEqual(['native','experience']);
- expect(native.find(step=>step.run==='node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase == 'experience'");
- expect(cache.if).toBe("matrix.phase == 'experience'");
- expect(native[install].if).toBe("matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'");
+ expect(jobs.cli.strategy.matrix.phase).toEqual(['native','runtime','preview','local']);
+ expect(native.find(step=>step.run==='node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase != 'native'");
+ expect(cache.if).toBe("matrix.phase != 'native'");
+ expect(native[install].if).toBe("matrix.phase != 'native' && steps.install.outputs.cache-hit != 'true'");
  expect(native.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').if).toBe("matrix.phase == 'native'");
  const runtimes=native.filter(step=>step.uses?.startsWith('actions/setup-node@'));
  expect(runtimes.map(step=>step.with['node-version'])).toEqual(['22.22.3','${{ matrix.node }}']);
@@ -36,20 +36,20 @@ it('installs isolated acceptance tooling only for experience checks before consu
 
 it('runs invariant declarations on Linux and Windows once while keeping every consumer journey',()=>{
  const steps=workflow().jobs.cli.steps;
- const types=steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
+ const types=steps.find(step=>step.name==='Installed npm runtime boundary, terminal exit and declarations');
  expect(types.run).toContain("matrix.node == '22.22.3'");
  expect(types.run).toContain("runner.os == 'Windows'");
  expect(types.run).toContain("runner.os == 'Linux' && runner.arch == 'X64'");
  expect(types.run).toContain("&& '--types' || ''");
- const experience=steps.find(step=>step.run?.includes('test-installed-npm.mjs experience'));
- expect(experience.if).toBe("matrix.phase == 'experience'");
+ const experience=steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
+ expect(experience.if).toBe("matrix.phase == 'preview' || matrix.phase == 'local'");
  expect(experience.run).toContain('playwright/cli.js install chromium');
 });
 it('pins browser tooling to its actual aliased manifest and installs OS dependencies only on Linux misses',()=>{
  const steps=workflow().jobs.cli.steps,cache=steps.find(step=>step.with?.key?.startsWith('chromium-'));
  expect(cache?.with.key).toContain("hashFiles('scripts/ci/npm-acceptance/node_modules/playwright/browsers.json')");
  const deps=steps.find(step=>step.name==='Install Linux acceptance browser dependencies');
- expect(deps?.if).toBe("matrix.phase == 'experience' && runner.os == 'Linux' && steps.acceptance-browser.outputs.cache-hit != 'true'");
+ expect(deps?.if).toBe("(matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux' && steps.acceptance-browser.outputs.cache-hit != 'true'");
  const proof=steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
  expect(proof.run).toContain('playwright/cli.js install chromium');
  expect(proof.run).not.toContain('--with-deps');
@@ -60,10 +60,12 @@ it('keeps ten cold native consumers and six complete platform/runtime journeys',
  const expanded=matrix.os.flatMap(os=>matrix.node.flatMap(node=>matrix.phase.map(phase=>({os,node,phase}))));
  const selected=expanded.filter(row=>!(matrix.exclude??[]).some(excluded=>Object.entries(excluded).every(([key,value])=>row[key]===value)));
  expect(selected.filter(row=>row.phase==='native')).toHaveLength(10);
- const experience=selected.filter(row=>row.phase==='experience');
- expect(experience).toHaveLength(6);
- expect(experience.filter(row=>row.node==='22.22.3').map(row=>row.os).sort()).toEqual([...matrix.os].sort());
- expect(experience.filter(row=>row.node==='24.21.0')).toEqual([{os:'ubuntu-24.04',node:'24.21.0',phase:'experience'}]);
+ for(const phase of ['runtime','preview','local']) {
+  const experience=selected.filter(row=>row.phase===phase);
+  expect(experience).toHaveLength(6);
+  expect(experience.filter(row=>row.node==='22.22.3').map(row=>row.os).sort()).toEqual([...matrix.os].sort());
+  expect(experience.filter(row=>row.node==='24.21.0')).toEqual([{os:'ubuntu-24.04',node:'24.21.0',phase}]);
+ }
 });
 it('keeps a cold standard-user query without repeating native offline acceptance',()=>{
  const script=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');

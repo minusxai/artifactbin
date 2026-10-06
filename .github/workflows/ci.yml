@@ -855,7 +855,30 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      - run: npm ci
+      # Share the same normalized, version-insensitive tooling cache as other Linux jobs.
+      # This does not warm the fresh npm caches used by native consumer acceptance.
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      # Markers validate every actual build input before reusing these prepared assets.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-builds-v1-${{ runner.os }}-
       - run: npm run build -w services/cli
       - run: npm run pack:release -w services/cli
       - name: Sign the actual build's npm provenance
@@ -878,6 +901,18 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
+      # Source-vs-installed proof needs both locations, not another compilation of the same tree.
+      - name: Archive the source build for reference conformance
+        run: |
+          tar --exclude='services/cli/dist/packages' -cf afbin-reference-build.tar \
+            services/cli/dist services/app/dist services/app/lib/build-assets \
+            services/app/public/islands services/app/public/libraries services/app/server/routes.generated.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-reference-build
+          path: afbin-reference-build.tar
+          if-no-files-found: error
+          retention-days: 1
       # Downstream hosts consume this same universal tarball after the run's tested receipt.
       # Pack owns the release alias even for nightly/version-only selection.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -891,22 +926,23 @@ jobs:
   # A genuinely cold standard-user bootstrap is a separate machine/user proof.
   # It must not contend with native install/browser consumers in the same Windows VM.
   cli-bootstrap:
-    needs: [ plan, cli-pack ]
+    needs: [ plan ]
     if: needs.plan.outputs.cli-bootstrap == 'true'
     name: CLI Windows standard-user bootstrap
     runs-on: windows-2022
     timeout-minutes: 4
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: afbin-npm-release
-          path: npm-candidate
       - name: Standard-user Windows Node bootstrap under Restricted PS5.1
         shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $env:PSModulePath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules"
-          ./services/cli/scripts/test-node-bootstrap.ps1 -Tarball (Get-ChildItem npm-candidate/*.tgz | Select-Object -First 1).FullName
+          ./services/cli/scripts/test-node-bootstrap.ps1 -WaitForArtifact
 
   cli:
     needs: [ plan, cli-pack ]
@@ -919,14 +955,23 @@ jobs:
       matrix:
         os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-2022 ]
         node: [22.22.3, 24.21.0]
-        phase: [native, experience]
+        phase: [native, runtime, preview, local]
         # Native ABI and offline execution cover both Node versions on every OS.
-        # The full shared application journey needs each OS and one Node 24 cross-check.
+        # Each journey still covers every OS and one Node 24 cross-check. Its independent
+        # runtime, preview/export and offline-file lanes get separate CPUs instead of contending.
         exclude:
-          - { os: ubuntu-24.04-arm, node: 24.21.0, phase: experience }
-          - { os: macos-14, node: 24.21.0, phase: experience }
-          - { os: macos-15-intel, node: 24.21.0, phase: experience }
-          - { os: windows-2022, node: 24.21.0, phase: experience }
+          - { os: ubuntu-24.04-arm, node: 24.21.0, phase: runtime }
+          - { os: ubuntu-24.04-arm, node: 24.21.0, phase: preview }
+          - { os: ubuntu-24.04-arm, node: 24.21.0, phase: local }
+          - { os: macos-14, node: 24.21.0, phase: runtime }
+          - { os: macos-14, node: 24.21.0, phase: preview }
+          - { os: macos-14, node: 24.21.0, phase: local }
+          - { os: macos-15-intel, node: 24.21.0, phase: runtime }
+          - { os: macos-15-intel, node: 24.21.0, phase: preview }
+          - { os: macos-15-intel, node: 24.21.0, phase: local }
+          - { os: windows-2022, node: 24.21.0, phase: runtime }
+          - { os: windows-2022, node: 24.21.0, phase: preview }
+          - { os: windows-2022, node: 24.21.0, phase: local }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -935,15 +980,15 @@ jobs:
       # Acceptance tooling has its own pinned lock: no app build or local execution engines.
       # Each phase's clock includes restoring or installing all its prerequisites.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        if: matrix.phase == 'experience'
+        if: matrix.phase != 'native'
         id: install
         with:
           path: |
             scripts/ci/npm-acceptance/node_modules
           key: npm-acceptance-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('scripts/ci/npm-acceptance/package-lock.json', 'services/contracts/package.json', 'services/utils/package.json') }}
-      - if: matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'
+      - if: matrix.phase != 'native' && steps.install.outputs.cache-hit != 'true'
         run: npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund
-      - if: matrix.phase == 'experience'
+      - if: matrix.phase != 'native'
         run: node scripts/ci/link-npm-acceptance.mjs
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -958,10 +1003,10 @@ jobs:
         if: matrix.phase == 'native'
         run: npm run test:npm-package -w services/cli -- --ci ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
       - name: Install the same candidate for experience checks
-        if: matrix.phase == 'experience'
+        if: matrix.phase != 'native'
         run: npm run test:npm-package -w services/cli -- --ci --install-only
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        if: matrix.phase == 'experience'
+        if: matrix.phase == 'preview' || matrix.phase == 'local'
         id: acceptance-browser
         with:
           path: |
@@ -972,20 +1017,24 @@ jobs:
       # Windows/macOS ship Chromium dependencies; --with-deps needlessly installed
       # Windows Media Foundation for 44s although these headless proofs do not record video.
       - name: Install Linux acceptance browser dependencies
-        if: matrix.phase == 'experience' && runner.os == 'Linux' && steps.acceptance-browser.outputs.cache-hit != 'true'
+        if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux' && steps.acceptance-browser.outputs.cache-hit != 'true'
         working-directory: services/cli
         run: node ../../node_modules/playwright/cli.js install-deps chromium
+      - name: Installed npm runtime boundary, terminal exit and declarations
+        if: matrix.phase == 'runtime'
+        working-directory: services/cli
+        run: node scripts/test-installed-npm.mjs runtime ${{ matrix.node == '22.22.3' && (runner.os == 'Linux' && runner.arch == 'X64' || runner.os == 'Windows') && '--types' || '' }}
       - name: Installed npm preview and export, with process shutdown
-        if: matrix.phase == 'experience'
+        if: matrix.phase == 'preview' || matrix.phase == 'local'
         working-directory: services/cli
         run: |
           node ../../node_modules/playwright/cli.js install chromium
-          node scripts/test-installed-npm.mjs experience ${{ matrix.node == '22.22.3' && (runner.os == 'Linux' && runner.arch == 'X64' || runner.os == 'Windows') && '--types' || '' }}
+          node scripts/test-installed-npm.mjs ${{ matrix.phase }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: failure() && matrix.phase == 'experience'
+        if: failure() && matrix.phase != 'native'
         with:
-          name: npm-local-journey-${{ matrix.os }}-${{ matrix.node }}
+          name: npm-local-journey-${{ matrix.os }}-${{ matrix.node }}-${{ matrix.phase }}
           path: |
             services/cli/test-results/local-journey
             services/cli/test-results/preview
@@ -996,9 +1045,14 @@ jobs:
   reference-compatibility:
     needs: [ plan, cli-pack ]
     if: needs.plan.outputs.reference-compatibility == 'true'
-    name: CLI distributions against ID-first host
+    name: CLI distributions against ID-first host (${{ matrix.proof }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # Distinct identity and database hosts share the same current-run build, not CPUs.
+    strategy:
+      fail-fast: false
+      matrix:
+        proof: [accounts, team]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -1025,13 +1079,18 @@ jobs:
             ~/.cache/ms-playwright
             ~/Library/Caches/ms-playwright
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      - run: npm run build -w services/cli
-        working-directory: .
+      # The current run's pack job built these source entrypoints and their app assets together.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: afbin-reference-build
+          path: .
+      - run: tar -xf afbin-reference-build.tar
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: afbin-npm-release
           path: npm-candidate
       - name: Install real package artifacts outside the checkout
+        if: matrix.proof == 'accounts'
         working-directory: .
         run: |
           mkdir -p "$RUNNER_TEMP/afbin-packages" "$RUNNER_TEMP/afbin-consumer"
@@ -1041,9 +1100,11 @@ jobs:
         working-directory: .
       # CLI host build already compiled the app; bundle only the gate server now.
       - name: Build OSS host
+        if: matrix.proof == 'accounts'
         working-directory: .
         run: node scripts/build/build-server.mjs dist/server.mjs
       - name: ID-first conformance for source bundle and installed npm package
+        if: matrix.proof == 'accounts'
         working-directory: .
         run: |
           # Each runner owns a PID-scoped data directory, outbox and OS-allocated port.
@@ -1063,6 +1124,7 @@ jobs:
           wait_pair
 
       - name: Prepare standalone sandbox worker
+        if: matrix.proof == 'team'
         run: |
           sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -1071,6 +1133,7 @@ jobs:
           sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
           sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: Team hosts with isolated PGLite and PostgreSQL
+        if: matrix.proof == 'team'
         working-directory: services/cli
         run: |
           docker run -d --name afbin-serve-postgres -p 5432:5432 -e POSTGRES_PASSWORD=afbin -e POSTGRES_DB=afbin postgres:17-alpine

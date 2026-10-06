@@ -1,5 +1,5 @@
 # CI-only native standard-user Windows PS5.1 bootstrap. No organization policy bypass.
-param([string]$Tarball)
+param([string]$Tarball,[switch]$WaitForArtifact)
 $ErrorActionPreference = 'Stop'
 $identity = 'mxmx_node_' + [Guid]::NewGuid().ToString('N').Substring(0,6)
 $password = [Guid]::NewGuid().ToString('N')+'aA!9'
@@ -8,8 +8,8 @@ $credential = New-Object Management.Automation.PSCredential("$env:COMPUTERNAME\$
 $root = Join-Path $env:PUBLIC ('afbin-node-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $root | Out-Null
 Copy-Item services/app/public/chat/ensure-node.ps1 (Join-Path $root 'ensure-node.ps1')
-if (!$Tarball) { throw 'Pass the exact npm candidate tarball.' }
-Copy-Item $Tarball (Join-Path $root 'candidate.tgz')
+if (!$Tarball -and !$WaitForArtifact) { throw 'Pass the exact npm candidate tarball or wait for this CI run.' }
+if ($Tarball) { Copy-Item $Tarball (Join-Path $root 'candidate.tgz') }
 New-LocalUser -Name $identity -Password $secure -PasswordNeverExpires | Out-Null
 Add-LocalGroupMember -Group Users -Member $identity
 Start-Service seclogon
@@ -93,6 +93,12 @@ $env:npm_config_audit='false';$env:npm_config_fund='false';$env:npm_config_updat
 $env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_SKILLS='off';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
 $rows=Join-Path '__ROOT__' 'rows.csv';[IO.File]::WriteAllText($rows,"amount`n10`n20`n")
 if(Test-Path $env:npm_config_cache){throw 'Expected genuinely cold npm cache'}
+$phase='wait for exact current-run candidate'
+$candidateDeadline=[DateTime]::UtcNow.AddMinutes(3)
+while(!(Test-Path '__ROOT__\candidate.tgz')) {
+  if([DateTime]::UtcNow -gt $candidateDeadline){throw 'Exact current-run candidate did not arrive'}
+  Start-Sleep -Milliseconds 200
+}
 $phase='standard-user online npx query'
 $result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\candidate.tgz','afbin','query',$rows,'--json')
 if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){throw 'Standard-user npx candidate query failed'}
@@ -128,7 +134,26 @@ try {
     Write-Output ("Standard-user exit contract: $observed")
   }
   $process=Start-StandardProcess $encoded 'bootstrap'
-  try{$exitCode=Wait-StandardExit $process 600000}finally{$process.Dispose()}
+  try {
+    if($WaitForArtifact) {
+      # This parent uses the runner's existing Node/gh. The child still proves an empty PATH
+      # and installs official Node as its own fresh non-admin user while packaging runs.
+      $archive=Join-Path $root 'candidate.zip'
+      & node scripts/lib/ci-artifact-wait.mjs $env:GITHUB_REPOSITORY $env:GITHUB_RUN_ID $env:GITHUB_RUN_ATTEMPT $archive (Join-Path $root 'failed.json')
+      if($LASTEXITCODE -ne 0){throw 'Waiting for exact current-run package failed'}
+      $download=Join-Path $root 'download'
+      Expand-Archive -Path $archive -DestinationPath $download
+      $candidates=@(Get-ChildItem $download -Filter '*.tgz')
+      if($candidates.Count -ne 1){throw 'Expected one exact current-run npm candidate'}
+      # Publish only a complete file to the waiting child.
+      Copy-Item $candidates[0].FullName (Join-Path $root 'candidate.pending')
+      Move-Item (Join-Path $root 'candidate.pending') (Join-Path $root 'candidate.tgz')
+    }
+    $exitCode=Wait-StandardExit $process 600000
+  } finally {
+    if(!$process.HasExited){$process.Kill();$process.WaitForExit()}
+    $process.Dispose()
+  }
   Get-Content (Join-Path $root 'bootstrap.stdout')
   Write-Output ('Standard-user child exit: '+$exitCode)
   if(Test-Path (Join-Path $root 'failed.json')){Get-Content (Join-Path $root 'failed.json')}

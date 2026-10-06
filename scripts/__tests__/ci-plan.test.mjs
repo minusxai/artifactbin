@@ -803,11 +803,11 @@ describe('CI job shape', () => {
     expect(caches[0].with.path.trim()).toBe('scripts/ci/npm-acceptance/node_modules');
     expect(caches[0].with.key).toContain('npm-acceptance-v1-');
     expect(caches[0].with.key).toContain("hashFiles('scripts/ci/npm-acceptance/package-lock.json'");
-    expect(caches[0].if).toBe("matrix.phase == 'experience'");
+    expect(caches[0].if).toBe("matrix.phase != 'native'");
     const install = jobs.cli.steps.find((step) => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
-    expect(install.if).toBe("matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'");
+    expect(install.if).toBe("matrix.phase != 'native' && steps.install.outputs.cache-hit != 'true'");
     expect(jobs.cli.steps.some((step) => step.run === 'npm ci')).toBe(false);
-    expect(jobs.cli.steps.find((step) => step.run === 'node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase == 'experience'");
+    expect(jobs.cli.steps.find((step) => step.run === 'node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase != 'native'");
     expect(jobs.cli.steps.find((step) => step.name === 'Same-tarball native npm and warmed offline acceptance').if).toBe("matrix.phase == 'native'");
   });
 
@@ -881,12 +881,15 @@ describe('CI job shape', () => {
     expect(job['runs-on']).toBe('ubuntu-24.04');
     const commands = job.steps.map(step => step.run ?? '');
     expect(commands.some(command => command.includes('build:binary'))).toBe(false);
-    // The bundle, types and host runtime that `npm pack` and the bundle conformance read.
-    const build = job.steps.findIndex(step => step.run === 'npm run build -w services/cli');
-    const download = job.steps.findIndex(step => step.uses?.startsWith('actions/download-artifact'));
+    // Both conformance locations consume the current pack job's build, without rebuilding it.
+    expect(commands).not.toContain('npm run build -w services/cli');
+    const source = job.steps.findIndex(step => step.with?.name === 'afbin-reference-build');
+    const extract = job.steps.findIndex(step => step.run === 'tar -xf afbin-reference-build.tar');
+    const download = job.steps.findIndex(step => step.with?.name === 'afbin-npm-release');
     expect(job.steps[download]?.with).toMatchObject({ name: 'afbin-npm-release', path: 'npm-candidate' });
-    expect(download).toBeGreaterThan(build);
-    expect(build).toBeGreaterThan(-1);
+    expect(source).toBeGreaterThan(-1);
+    expect(extract).toBeGreaterThan(source);
+    expect(download).toBeGreaterThan(extract);
     expect(commands.some(command=>command.includes('npm install --prefix'))).toBe(true);
     expect(ci().jobs.cli.strategy.matrix.os).toContain('ubuntu-24.04');
     expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-npm-release')?.with.path).toBe('npm-candidate');
@@ -906,8 +909,8 @@ describe('CI job shape', () => {
   it('keeps preview/export and Node bootstrap proofs mandatory on every supported npm platform', () => {
     const {jobs}=ci();
     const proof=jobs.cli.steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
-    expect(proof.if).toBe("matrix.phase == 'experience'");
-    expect(proof.run).toContain('scripts/test-installed-npm.mjs experience');
+    expect(proof.if).toBe("matrix.phase == 'preview' || matrix.phase == 'local'");
+    expect(proof.run).toContain('scripts/test-installed-npm.mjs ${{ matrix.phase }}');
     expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
     expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
     expect(jobs).not.toHaveProperty('cli-preview');
@@ -917,7 +920,7 @@ describe('CI job shape', () => {
 
   it('keeps a merged PR\'s npm artifact downloadable for a week after the merge', () => {
     const uploads = Object.values(ci().jobs).flatMap((job) => job.steps ?? [])
-      .filter((step) => step.uses?.startsWith('actions/upload-artifact') && /^afbin-|^tested-/.test(step.with.name ?? ''));
+      .filter((step) => step.uses?.startsWith('actions/upload-artifact') && /^(afbin-npm-|tested-)/.test(step.with.name ?? ''));
     expect(uploads.length).toBeGreaterThan(0);
     for (const upload of uploads) expect(Number(upload.with['retention-days']), upload.with.name).toBeGreaterThanOrEqual(7);
   });
