@@ -209,7 +209,7 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/my/datasets/discover", dir: "/api/my/datasets/discover", methods: ["POST"], module: r67 },
   { path: "/api/my/datasets/notebook/preview", dir: "/api/my/datasets/notebook/preview", methods: ["POST"], module: r68 },
   { path: "/api/my/datasets/preview", dir: "/api/my/datasets/preview", methods: ["POST"], module: r69 },
-  { path: "/api/my/domain", dir: "/api/my/domain", methods: ["GET","POST","DELETE"], module: r70 },
+  { path: "/api/my/domain", dir: "/api/my/domain", methods: ["GET","POST","PATCH","DELETE"], module: r70 },
   { path: "/api/my/domain/verify", dir: "/api/my/domain/verify", methods: ["POST"], module: r71 },
   { path: "/api/my/people/email", dir: "/api/my/people/email", methods: ["GET","PATCH"], module: r72 },
   { path: "/api/my/people/events", dir: "/api/my/people/events", methods: ["GET"], module: r73 },

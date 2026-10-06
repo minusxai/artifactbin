@@ -55,6 +55,7 @@ export interface AttachedDomain {
   target: string | null;
   verifiedAt: string | null;
   missingSince: string | null;
+  homepageArtifactId: string | null;
 }
 export type AttachRefusal = 'disabled' | 'invalid_hostname' | 'taken' | 'limit';
 export type VerifyRefusal = 'disabled' | 'not_found' | 'taken' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
@@ -75,6 +76,7 @@ interface DomainRow {
   status: DomainStatus;
   verified_at: Date | string | null;
   missing_since: Date | string | null;
+  homepage_artifact_id: string | null;
 }
 
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -133,10 +135,11 @@ function view(row: DomainRow): AttachedDomain {
     target: CUSTOM_DOMAINS_TARGET,
     verifiedAt: isoOrNull(row.verified_at),
     missingSince: isoOrNull(row.missing_since),
+    homepageArtifactId: row.homepage_artifact_id,
   };
 }
 
-const COLUMNS = 'hostname, user_id, token, status, verified_at, missing_since';
+const COLUMNS = 'hostname, user_id, token, status, verified_at, missing_since, homepage_artifact_id';
 
 async function rowForUser(userId: string): Promise<DomainRow | null> {
   const db = await getDb();
@@ -378,6 +381,29 @@ const EMBEDDED_FORMATS = new Set(['image', 'file', 'pdf']);
 /** The owner's public, live markup documents, as the SQL both embed rules below scope to. */
 const OWNER_POSTS_SQL = `user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}`;
 
+/** Eligible homepage documents, including documents inside folders, scoped to this owner. */
+export async function domainHomepageOptions(ownerId: string): Promise<Array<{ id: string; title: string }>> {
+  const db = await getDb();
+  return (await db.query<{ id: string; title: string }>(`SELECT id, title FROM artifacts WHERE ${OWNER_POSTS_SQL} ORDER BY title, id`, [ownerId])).rows;
+}
+
+/** Save on this account's domain only. Validation and selection are one SQL statement. */
+export async function setDomainHomepage(ownerId: string, artifactId: string | null): Promise<AttachedDomain | { error: 'not_found' | 'invalid_homepage' }> {
+  const db = await getDb();
+  const result = await db.query<DomainRow>(`UPDATE custom_domains SET homepage_artifact_id = $2 WHERE user_id = $1 AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM artifacts WHERE ${OWNER_POSTS_SQL} AND id = $2)) RETURNING ${COLUMNS}`, [ownerId, artifactId]);
+  if (result.rows[0]) return view(result.rows[0]);
+  return { error: await rowForUser(ownerId) ? 'invalid_homepage' : 'not_found' };
+}
+
+/** Resolve anew on each root request: a trashed, private or transferred document falls back to the listing. */
+export async function domainHomepage(ownerId: string): Promise<ArtifactRow | null> {
+  const db = await getDb();
+  const domain = await rowForUser(ownerId);
+  if (!domain?.homepage_artifact_id) return null;
+  const row = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE ${OWNER_POSTS_SQL} AND id = $2`, [ownerId, domain.homepage_artifact_id])).rows[0];
+  return row ?? null;
+}
+
 /**
  * An uploaded image (or file, or PDF) the host may serve at `/a/<id>/raw`:
  * one of the owner's public documents REFERENCES it (`meta.refs`, what
@@ -419,8 +445,8 @@ export function domainPostUrl(hostname: string, row: Pick<ArtifactRow, 'id' | 't
  */
 export async function canonicalDocumentUrl(row: Pick<ArtifactRow, 'id' | 'title' | 'user_id' | 'visibility' | 'format'>): Promise<string> {
   if (row.user_id && row.visibility === 'public' && row.format === 'markup') {
-    const host = await verifiedHostOf(row.user_id);
-    if (host) return domainPostUrl(host, row);
+    const domain = await rowForUser(row.user_id);
+    if (domain?.status === 'verified') return domain.homepage_artifact_id === row.id ? `https://${domain.hostname}/` : domainPostUrl(domain.hostname, row);
   }
   return `${PUBLIC_BASE_URL.replace(/\/+$/, '')}${canonicalArtifactPath(row, await ownerUsername(row.user_id))}`;
 }

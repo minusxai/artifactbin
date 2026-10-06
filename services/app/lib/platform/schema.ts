@@ -97,6 +97,8 @@ const CUSTOM_DOMAINS: Table = {
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'verified_at', type: 'TIMESTAMPTZ' },
     { name: 'missing_since', type: 'TIMESTAMPTZ' },
+    // A public document to serve at /; null keeps the profile listing.
+    { name: 'homepage_artifact_id', type: 'TEXT' },
   ],
   primaryKey: ['user_id'],
   indexes: [

@@ -35,7 +35,7 @@ import { ACTOR_HEADER, BUILD_ASSET_PATH } from '@artifactbin/contracts';
 import { isBuildAssetPath } from '@artifactbin/utils';
 import { getArtifactById, declarationsForRow } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL } from '@/lib/platform';
-import { customHostCandidate, ownerForHost, servesDocument, servesEmbeddedArtifact, servesWebAsset } from '@/lib/serving';
+import { customHostCandidate, domainHomepage, ownerForHost, servesDocument, servesEmbeddedArtifact, servesWebAsset } from '@/lib/serving';
 import { DOMAIN_HOME_CSP, renderDomainHome, type ProfileListingData } from '@/lib/serving';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -125,6 +125,11 @@ async function profileOf(request: Request, username: string | null): Promise<Pro
 
 /** The home page: the owner's profile listing, drawn by the app's own components under the app's own stylesheet. */
 async function home(request: Request, hostname: string, ownerId: string, stylesheets: (url: string) => Promise<string[]>): Promise<Response> {
+  const homepage = await domainHomepage(ownerId);
+  if (homepage) {
+    const guest = await asGuest(request);
+    return runWithRequest(guest, async () => (request.method === 'HEAD' ? rawHead : rawGet)(guest, { params: Promise.resolve({ id: homepage.id }), domain: { hostname, ownerId, homepage: true } }));
+  }
   const owner = await getUserById(ownerId);
   const [profile, styles] = await Promise.all([profileOf(request, owner?.username ?? null), stylesheets(request.url)]);
   const base = PUBLIC_BASE_URL.replace(/\/+$/, '');
