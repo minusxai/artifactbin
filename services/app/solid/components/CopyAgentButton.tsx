@@ -12,9 +12,10 @@ export function CopyAgentButton(props: { id: string; template?: string | null })
   const description = () => state() === 'copied' ? 'Copied — paste into your agent' : 'Copy for agent';
   return <span class="relative">
     <Tooltip content={description()}><button type="button" aria-label="Copy for agent" aria-description={description()}
-      class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-[4px] border border-edge bg-surface text-muted hover:border-edge-bright hover:text-fg"
+      class="inline-flex h-8 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[4px] border border-edge bg-surface px-3 font-mono text-xs text-muted hover:border-edge-bright hover:text-fg"
       onClick={() => void copyText(existingPaste(window.location.origin, props.id, props.template)).then(ok => setState(ok ? 'copied' : 'error'))}>
-      <Show when={state() === 'copied'} fallback={<Copy size={13} />}><Check size={13} /></Show>
+      <Show when={state() === 'copied'} fallback={<Copy size={14} />}><Check size={14} /></Show>
+      <span>{state() === 'copied' ? 'Copied' : 'Copy for agent'}</span>
     </button></Tooltip>
     <Show when={state() === 'error'}><span role="alert" class="absolute left-0 top-full z-50 w-64 rounded border border-edge bg-surface p-3 text-xs">Could not copy. Try again with clipboard access enabled.</span></Show>
   </span>;
