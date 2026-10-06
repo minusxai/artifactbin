@@ -30,11 +30,11 @@ it('preserves the account metrics and engagement chart in the Home rail', () => 
   expect(screen.getByLabelText('Engagement Vega chart')).toBeInTheDocument();
 });
 
-it('opens a wider dashboard and closes it with Escape', () => {
+it('keeps stats in the rail without expansion and preserves chart focus', () => {
   render(() => <Dashboard rows={[]} viewsOverTime={[1]} />);
-  fireEvent.click(screen.getByLabelText('Expand dashboard'));
-  expect(screen.getByRole('dialog', { name: 'Expanded dashboard' })).toBeInTheDocument();
-  expect(screen.getByLabelText('Expanded dashboard metrics')).toBeInTheDocument();
-  fireEvent.keyDown(window, { key: 'Escape' });
-  expect(screen.queryByRole('dialog', { name: 'Expanded dashboard' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Expand dashboard' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Focus views' }));
+  expect(screen.getByRole('button', { name: 'Focus views' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'Focus views' }));
+  expect(screen.getByRole('button', { name: 'Focus views' })).toHaveAttribute('aria-pressed', 'false');
 });
