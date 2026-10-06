@@ -5,7 +5,7 @@ import { useSession } from './session';
 
 /** The sidebar and agent list agree on which connections are current. */
 export const isConnectedAgent = (session: RemoteSessionInfo): boolean =>
-  (session.online || !!session.runId && session.activity === 'starting') && session.exitCode == null;
+  (session.online || !!session.runId && ['starting','stopping'].includes(session.activity ?? '')) && session.exitCode == null;
 
 /** Shares the agent page's session-scoped resource; its faster poll owns updates while open. */
 export function useConnectedAgentCount(agentPageOpen: Accessor<boolean>): Accessor<number | null> {

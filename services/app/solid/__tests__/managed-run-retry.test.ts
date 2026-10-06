@@ -8,12 +8,12 @@ const response = (ok: boolean, status: number, error: string) => ({ ok, status, 
 afterEach(() => vi.restoreAllMocks());
 
 it('retries only restart-pending with the exact same request body and bounded virtual time', async () => {
-  let time = 0; const bodies: unknown[] = []; const pendingStatus = vi.fn();
-  const fetcher = vi.fn(async (_url: string, init: RequestInit) => { bodies.push(init.body); return bodies.length === 1 ? pending() : accepted(); });
+  let time = 0; const bodies: unknown[] = []; const signals:unknown[]=[]; const pendingStatus = vi.fn();
+  const fetcher = vi.fn(async (_url: string, init: RequestInit) => { bodies.push(init.body);signals.push(init.signal);return bodies.length === 1 ? pending() : accepted(); });
   const body = JSON.stringify({ requestId: 'stable-once', name: 'box', command: ['codex'] });
   const result = await startManagedRun({ body, signal: new AbortController().signal, fetcher, now: () => time, sleep: async ms => { time += ms; }, onPending: pendingStatus });
   expect(result.session.id).toBe('same-box'); expect(fetcher).toHaveBeenCalledTimes(2); expect(bodies).toEqual([body, body]);
-  expect(time).toBe(1000); expect(pendingStatus).toHaveBeenCalledTimes(1);
+  expect(time).toBe(1000); expect(pendingStatus).toHaveBeenCalledTimes(1);expect(signals[0]).not.toBe(signals[1]);
 });
 
 it('does not retry unknown conflicts and stops at the fixed waiting budget', async () => {
@@ -39,4 +39,30 @@ it('honors abort while waiting and does not issue another request', async () => 
   const task = startManagedRun({ body: '{}', signal: controller.signal, fetcher, sleep: (_ms, signal) => new Promise((_, reject) => { if(signal.aborted) reject(signal.reason); else signal.addEventListener('abort', () => reject(signal.reason), { once: true }); }) });
   controller.abort(new DOMException('Aborted', 'AbortError'));
   await expect(task).rejects.toMatchObject({ name: 'AbortError' }); expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('keeps one restart request alive across a forty-five-second provider teardown', async () => {
+ let time=0; const bodies:unknown[]=[]; const body=JSON.stringify({requestId:'long-reap-once',name:'box',command:['bash']});
+ const fetcher=vi.fn(async (_url:string,init:RequestInit)=>{bodies.push(init.body);return time<45_000?pending():accepted();});
+ const result=await startManagedRun({body,signal:new AbortController().signal,fetcher,now:()=>time,sleep:async ms=>{time+=ms;}});
+ expect(result.session.id).toBe('same-box');expect(time).toBeGreaterThanOrEqual(45_000);expect(new Set(bodies)).toEqual(new Set([body]));
+});
+
+it('bounds each network attempt to thirty seconds and uses a fresh abort signal', async () => {
+ vi.useFakeTimers();
+ try {
+  const signals:AbortSignal[]=[];
+  let notifyStarted!:()=>void;const started=new Promise<void>(resolve=>{notifyStarted=resolve;});
+  const fetcher=vi.fn(async (_url:string,init:RequestInit)=>{
+   signals.push(init.signal as AbortSignal);
+   notifyStarted();
+   return new Promise<never>((_,reject)=>init.signal?.addEventListener('abort',()=>reject(init.signal?.reason),{once:true}));
+  });
+  const task=startManagedRun({body:'{}',signal:new AbortController().signal,fetcher});
+  await started;
+  const failure=expect(task).rejects.toThrow(/request timed out/i);
+  await vi.advanceTimersByTimeAsync(30_000);
+  await failure;
+  expect(fetcher).toHaveBeenCalledTimes(1);expect(signals).toHaveLength(1);
+ } finally { vi.useRealTimers(); }
 });

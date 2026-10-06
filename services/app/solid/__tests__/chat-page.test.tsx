@@ -46,6 +46,41 @@ it('shows an ended session without terminal input controls', async () => {
   expect(screen.getByText('claude · Ended')).toBeInTheDocument();
 });
 
+it('labels hosted runner lifecycle separately from local online status', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const make = (id:string,activity:string) => ({ id,name:id,harness:'codex',machine:'hosted',online:activity==='working',controller:'web',cols:100,rows:30,exitCode:null,runId:`run-${id}`,managed:true,activity });
+  const sessions = [make('box-starting','starting'),make('box-running','working'),make('box-stopping','stopping'),make('box-ended','stopped'),make('box-unknown','unknown')];
+  vi.stubGlobal('fetch', vi.fn(async (url:string) => ({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions}:url==='/api/run-capabilities'?{managedProcesses:false}:{session:sessions[1],seq:1,snapshot:'',frames:[]} })));
+  open('box-running');
+  expect(await screen.findByText('codex · Running')).toBeInTheDocument();
+  expect(screen.getByText('codex · Starting')).toBeInTheDocument();
+  expect(screen.getByText('codex · Stopping')).toBeInTheDocument();
+  expect(screen.queryByText('codex · Online')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'Show previous sessions (2)'}));
+  expect(screen.getByText('codex · Ended')).toBeInTheDocument();
+  expect(screen.getByText('codex · Unavailable')).toBeInTheDocument();
+});
+
+it('lets the user stop waiting and start again with a fresh client wait', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  let starts=0;
+  const fetch=vi.fn(async (url:string) => {
+    if(url==='/api/run-capabilities')return {ok:true,json:async()=>({version:1,managedProcesses:true})};
+    if(url==='/api/remote/sessions')return {ok:true,json:async()=>({sessions:[]})};
+    if(url==='/api/runs')return ++starts===1
+      ? {ok:false,status:409,headers:new Headers({'Retry-After':'1'}),json:async()=>({error:'box_restart_pending'})}
+      : {ok:true,status:202,headers:new Headers(),json:async()=>({session:{id:'fresh-run',name:'my-agent',harness:'bash',machine:'hosted',online:false,exitCode:null,controller:'web',cols:100,rows:30,runId:'fresh-run'}})};
+    return {ok:true,json:async()=>({session:null,seq:0,frames:[]})};
+  });
+  vi.stubGlobal('fetch',fetch);
+  open('');
+  fireEvent.click(await screen.findByRole('button',{name:'Start hosted box'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Stop waiting'}));
+  expect(await screen.findByText(/Check your sessions before starting again/)).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button',{name:'Start hosted box'}));
+  await waitFor(()=>expect(starts).toBe(2));
+});
+
 it('retries failed polls, clears reconnecting on recovery, and scrolls without sending input', async () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   const session = { id: 'retry', name: 'Retry', harness: 'claude', machine: 'laptop', online: true, controller: 'local', cols: 80, rows: 24, exitCode: null };

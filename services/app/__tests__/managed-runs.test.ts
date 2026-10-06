@@ -90,3 +90,16 @@ it('keeps stopping truthful and retries same-name admission only after teardown 
   const replacement=await create();expect(replacement.status).toBe(202);expect((await replacement.json()).session.id).toBe(session.id);expect(starts).toHaveLength(2);expect(starts[1]?.command).toEqual(['codex']);
  }finally{registry.clear();}
 });
+
+it('projects durable hosted lifecycle instead of leaving ended runs starting in the roster',async()=>{
+ const db=await harness.db(),{runner}=fixture();setServices({runner});
+ let status:'queued'|'running'|'failed'='queued';runner.getRun=async({runId})=>({runId,status,output:null,receipt:null});
+ const response=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'roster',name:'roster-box'}}),'create',{enabled:true,runner,db});
+ const {session}=await response.json(),registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
+ try{
+  expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'starting'});
+  status='running';expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:true,activity:'working'});
+  await agents.stop('alice',session.id);expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopping'});
+  status='failed';expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopped'});
+ }finally{registry.clear();}
+});
