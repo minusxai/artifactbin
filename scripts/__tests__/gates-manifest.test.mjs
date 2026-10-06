@@ -26,6 +26,12 @@ const MAIL = /dev-mail|DEV_OUTBOX|startMailSink|\/mail\b|mailSink|MAIL_SINK|read
 const ALLOWED_FIELDS = new Set(['seconds', 'name', 'needsMail', 'needsPostgres', 'serialGroup', 'timeoutMs', 'browsers']);
 
 describe('the manifest and the disk are one set', () => {
+  it('settles the Postgres gate network setup before launching Chromium', () => {
+    const gate = source('data-journey');
+    expect(gate.indexOf('await postgres')).toBeGreaterThan(-1);
+    expect(gate.indexOf('await postgres')).toBeLessThan(gate.indexOf('await launchChromium()'));
+  });
+
   it('1. every gate file has a row and every row has a file', () => {
     expect(onDisk.length).toBeGreaterThanOrEqual(20);
     expect([...GATE_SPECS].map((s) => s.name).sort()).toEqual(onDisk);
