@@ -10,6 +10,7 @@ import {parseResourceFile} from '../src/resource-file';
 import {baselineOf,loadWorkspace} from '../src/workspace';
 import {tracking} from './tracking';
 import {cliHarness} from './harness';
+import {bindDatasetSecret} from '../src/dataset-source';
 
 test('YAML dataset push publishes content and access together, tracks source bytes and skips unchanged work offline',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-resource-push-'));let requests=0,version=0;const writes:Record<string,unknown>[]=[];
@@ -85,11 +86,43 @@ describe('push --secret-env', () => {
      const response=path==='/api/secrets'?Response.json({secret:{id:'sec_new'}},{status:201}):path==='/api/artifacts/preflight'?Response.json({ok:true}):Response.json({id:'ds0003',version:1,edit_id:'e1',state:'c'.repeat(64),format:'dataset',url:'/a/ds0003'},{status:201});
      response.headers.set('X-Artifactbin-Account','usr_seed');return response;
     }});
-    assert.equal(code,0,h.out.join(''));
+    assert.equal(code,0,JSON.stringify({out:h.out,calls}));
     const secret=calls.find(c=>c.path==='/api/secrets');assert.equal((secret?.body as {value:string}).value,'hunter2');
+    assert.equal((secret?.body as {datasetId?:string}).datasetId,undefined,'the first publication creates a pending secret');
     const publish=calls.find(c=>c.path==="/api/artifacts");assert.ok(!JSON.stringify(publish?.body).includes('hunter2'));assert.ok(JSON.stringify(publish?.body).includes('sec_new'));
     for(const file of ['orders.yaml','orders.jsx'])assert.ok(!(await readFile(join(h.root,file),'utf8')).includes('hunter2'));
     assert.ok(!h.out.join('').includes('hunter2'));
+   }finally{await h.cleanup();}
+  });
+  test('add then push binds a pending secret for an unpublished reserved dataset ID',async()=>{
+   const h=await harness('afbin-seed-secret-env-');await seedIdentityPool(h.home,h.root,['ds0003'],'usr_seed');const calls:Array<{method:string;path:string;body:unknown}>=[];
+   try{
+    await writeFile(join(h.root,'orders.jsx'),'<Dataset kind="postgres">\n  <Connection host="db.example.com" port={5432} database="commerce" username="reader" ssl={true} />\n</Dataset>\n');
+    await writeFile(join(h.root,'orders.yaml'),'type: dataset\nsource: orders.jsx\ntitle: Orders\n');
+    assert.equal(await h.invoke(['add','orders.yaml'],()=>{throw new Error('add must be local');}),0,h.out.join(''));
+    h.out.length=0;
+    const code=await runCli(['push','orders.yaml','--secret-env','PGPASSWORD','--json','--server','https://example.com'],{cwd:h.root,home:h.root,env:{PGPASSWORD:'hunter2'},interactive:false,stdout:s=>h.out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+     const request=new Request(input,init);const path=new URL(request.url).pathname;const body=await request.json().catch(()=>undefined);calls.push({method:request.method,path,body});
+     if(path==='/api/secrets'&&(body as {datasetId?:string})?.datasetId)return Response.json({error:'dataset_error',details:['Dataset not found']},{status:404});
+     const response=path==='/api/secrets'?Response.json({secret:{id:'sec_new'}},{status:201}):path==='/api/artifacts/reservations'?Response.json({ids:Array.from({length:100},(_,i)=>`R${String(i).padStart(5,'0')}`)}):path==='/api/artifacts/preflight'?Response.json({ok:true}):path==='/api/artifacts'?Response.json({id:(body as {reserved_id?:string})?.reserved_id??'ds0003',version:1,edit_id:'e1',state:'c'.repeat(64),format:'dataset',url:'/a/ds0003'},{status:201}):Response.json({id:'ds0003',version:1,edit_id:'e1',state:'c'.repeat(64),format:'dataset',url:'/a/ds0003'},{status:200});
+     response.headers.set('X-Artifactbin-Account','usr_seed');return response;
+    }});
+    assert.equal(code,0,JSON.stringify({out:h.out,calls}));
+    const secret=calls.find(c=>c.path==='/api/secrets');assert.equal((secret?.body as {datasetId?:string}).datasetId,undefined);assert.equal((secret?.body as {value:string}).value,'hunter2');
+    const publish=calls.find(c=>c.path==="/api/artifacts");assert.ok(!JSON.stringify(publish?.body).includes('hunter2'));assert.ok(JSON.stringify(publish?.body).includes('sec_new'));
+    for(const file of ['orders.yaml','orders.jsx'])assert.ok(!(await readFile(join(h.root,file),'utf8')).includes('hunter2'));
+    assert.ok(!h.out.join('').includes('hunter2'));
+   }finally{await h.cleanup();}
+  });
+  test('secret rotation keeps a complete published dataset fence bound to its owner',async()=>{
+   const h=await harness('afbin-seed-secret-rotation-');let body:Record<string,unknown>|undefined;
+   try{
+    await writeFile(join(h.root,'orders.jsx'),'<Dataset kind="postgres">\n  <Connection host="db.example.com" port={5432} database="commerce" username="reader" ssl={true} passwordSecretId="sec_old" />\n</Dataset>\n');
+    await writeFile(join(h.root,'orders.yaml'),'type: dataset\nid: ds0003\nedit_id: e1\nhead_version: 3\nstate: '+('c'.repeat(64))+'\nsource: orders.jsx\ntitle: Orders\n');
+    const workspace={home:h.root,root:h.root,cwd:h.root,tracking:null};
+    const client={request:async(_path:string,_method:string,requestBody:Record<string,unknown>)=>{body=requestBody;return{secret:{id:'sec_rotated'}};}};
+    await bindDatasetSecret(workspace,['orders.yaml'],client as never,{PGPASSWORD:'hunter3'},'PGPASSWORD');
+    assert.equal(body?.datasetId,'ds0003');assert.equal(body?.value,'hunter3');
    }finally{await h.cleanup();}
   });
 });

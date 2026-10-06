@@ -2,7 +2,7 @@ import {parseJsx,type JsxElement} from '../../app/lib/jsx';
 import {parseDatasetDefinition} from '../../app/lib/datasets/definition';
 import type {CatalogInput} from '../../app/lib/datasets/types';
 import {resolveReference} from './reference';
-import {extname,join,resolve} from 'node:path';
+import {extname,join,relative,resolve,sep} from 'node:path';
 import {CliError} from './errors';
 import {atomicWrite,readOptional} from './files';
 import {confinedPath} from './journal';
@@ -72,7 +72,18 @@ export async function bindDatasetSecret(workspace:Workspace,paths:string[],clien
  // A dry run creates no credential, so an unbound definition cannot be validated against the server either.
  if(dryRun)return connection.secretId?{secret:{source:variable,status:'bound',id:connection.secretId},source:resource.source}
   :{dry_run:true,secret:{source:variable,status:'would_create'},connection:connection.target,operations:[{path:paths[0],status:'skipped',reason:'secret_binding_required'}]};
- const created=await client.request<{secret?:{id?:unknown}}>('/secrets','POST',{value,connection:connection.target,...(resource.id?{datasetId:resource.id}:{})});
+ // An ID assigned by `afbin add` is only a reservation. Scope a rotated or
+ // existing dataset credential to its owner only when publication evidence
+ // exists in tracking or in the resource's remote version fence.
+ const tracked=workspace.tracking?.files[relative(workspace.root,path).split(sep).join('/')];
+ // Tracking is validated when the workspace loads. For an untracked file, a
+ // complete current-head fence is the evidence that this ID has been published;
+ // an ID (or historical `version`) by itself can be assigned by `afbin add`.
+ const hasPublishedFence=typeof resource.edit_id==='string'&&!!resource.edit_id
+  &&typeof resource.state==='string'&&!!resource.state
+  &&typeof (resource.head_version??resource.version)==='number';
+ const published=!!resource.id&&((tracked?.id===resource.id&&tracked.snapshot.id===resource.id)||hasPublishedFence);
+ const created=await client.request<{secret?:{id?:unknown}}>('/secrets','POST',{value,connection:connection.target,...(published?{datasetId:resource.id}:{})});
  const id=created.secret?.id;
  if(typeof id!=='string'||!id)throw new CliError('invalid_response','The secret door did not return a secret id.');
  await atomicWrite(definitionPath,Buffer.from(withSecretId(definition.toString(),connection,id)));

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { runRemote } from "../src/runner";
 import { HttpClient } from "../src/http";
+import {deliverRemoteInput} from "../src/remote-input";
 test("real PTY delivers a remote line and relays output and exit, acknowledging each input once", async () => {
   let output = "",
     ack = 0;
@@ -370,4 +371,50 @@ test('Windows natural PTY exit releases ConPTY handles and still sends final out
  assert.equal(await runRemote({client,command:'cmd.exe',args:[],interactive:false,managed:true,onOutput:()=>{}}),7);
  assert.equal(killed,1,'natural ConPTY exit must close its worker handles without a process-group signal');
  assert.equal(reportedExit,7);assert.equal(output,'final-native-output');
+});
+
+
+// Codex must see a paste boundary before submit, not guess where a burst ended.
+test('managed Codex comment input frames the paste and submits it once',async(t)=>{
+ let onExit:((event:{exitCode:number})=>void)|undefined; const writes:string[]=[];
+ t.mock.method(process,'kill',()=>true);
+ t.mock.method(pty,'spawn',()=>({pid:12345,onData:()=>({dispose(){}}),onExit:(listener:(event:{exitCode:number})=>void)=>{onExit=listener;return{dispose(){}};},kill(){},resize(){},write(data:string){writes.push(data);if(data==='\r')onExit?.({exitCode:0});}} as unknown as import('node-pty').IPty));
+ let sent=false,duplicateDelivered=false;const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async(_url,init)=>{
+  const body=JSON.parse(String(init?.body));if(!body.runnerKey)return Response.json({id:'paste-submit',runnerKey:'proof'});
+  if(!sent){sent=true;return Response.json({controller:'local',inputs:[{id:1,kind:'input',source:'comment',data:JSON.stringify({type:'artifactbin.comment',request_id:'request-test',body:'Synthetic controlled request'})+'\r'}]});}
+  if(body.ack===1&&!duplicateDelivered){duplicateDelivered=true;return Response.json({controller:'local',inputs:[{id:1,kind:'input',source:'comment',data:JSON.stringify({type:'artifactbin.comment',request_id:'request-test',body:'Synthetic controlled request'})+'\r'}]});}
+  return Response.json({controller:'local',inputs:[]});
+ }});
+ assert.equal(await runRemote({client,command:'codex',args:[],interactive:false,managed:true,commentCommand:'/synthetic/afbin',onOutput:()=>{},signal:AbortSignal.timeout(3000)}),0);
+ const wire=writes.join('');assert.ok(wire.startsWith('\x1b[200~'),'explicit bracketed paste start bypasses burst guessing');
+ assert.ok(wire.endsWith('\x1b[201~\r'),'paste end precedes one distinct submit');
+ assert.equal(writes.filter(value=>value==='\r').length,1,'submit once');
+ assert.equal(duplicateDelivered,true,'relay repeated the already acknowledged input');
+ const payload=JSON.parse(wire.slice('\x1b[200~'.length,-'\x1b[201~\r'.length));assert.equal(payload.request_id,'request-test');assert.equal(payload.cli_executable,'/synthetic/afbin');
+});
+
+test('other-provider comments and manual Codex keystrokes retain terminal input semantics',async()=>{
+ const comment=JSON.stringify({type:'artifactbin.comment',request_id:'other-provider',body:'Keep provider input generic'})+'\r';
+ const otherWrites:string[]=[];
+ await deliverRemoteInput(data=>otherWrites.push(data),comment,{source:'comment',command:'claude',managed:true,commentCommand:'/synthetic/afbin'});
+ const otherInput=otherWrites.join('');
+ assert.ok(otherInput.endsWith('\r'));
+ assert.ok(!otherInput.includes('\x1b[200~'));
+ const otherPayload=JSON.parse(otherInput.slice(0,-1));
+ assert.equal(otherPayload.cli_executable,'/synthetic/afbin');
+ assert.match(otherPayload.instruction,/Use the absolute cli_executable/);
+ const manualWrites:string[]=[];
+ await deliverRemoteInput(data=>manualWrites.push(data),'typed\r',{source:'keyboard',command:'codex',managed:true,commentCommand:'/synthetic/afbin'});
+ assert.deepEqual(manualWrites,['typed','\r']);
+ assert.ok(!manualWrites.join('').includes('\x1b[200~'));
+});
+
+test('managed Codex paste omits Enter if the PTY exits before submission',async()=>{
+ const writes:string[]=[];
+ await deliverRemoteInput(data=>writes.push(data),JSON.stringify({type:'artifactbin.comment',request_id:'exit-before-submit',body:'Do not submit after exit'})+'\r',{
+  source:'comment',command:'codex',managed:true,commentCommand:'/synthetic/afbin',canWrite:()=>false,
+ });
+ assert.equal(writes[0],'\x1b[200~');
+ assert.equal(writes.at(-1),'\x1b[201~');
+ assert.ok(!writes.includes('\r'));
 });
