@@ -31,17 +31,21 @@ describe('report requests have an explicit page-type default', () => {
 
 describe('the markup skill teaches vocabulary before configuration', () => {
   const doc = renderDoc('artifactbin/references/markup.md', BASE);
+  const components = renderDoc('artifactbin/references/markup-components.md', BASE);
   it('carries the wrapper, the skeleton and both allowlists', () => {
     for (const needle of ['data-design="tw"', '## Skeleton', 'complete allowlist']) expect(doc).toContain(needle);
   });
   it('puts the Helmet/CSS/script configuration AFTER the skeleton', () => {
     expect(doc.indexOf('## `<Helmet>`')).toBeGreaterThan(doc.indexOf('## Skeleton'));
   });
-  it('shows the supported Accordion composition for an FAQ', () => {
-    expect(doc).toContain('<Accordion type="single" collapsible>');
-    expect(doc).toContain('<AccordionItem value="shipping">');
-    expect(doc).toContain('<AccordionTrigger>How long does shipping take?</AccordionTrigger>');
-    expect(doc).toContain('<AccordionContent>Orders arrive in three to five business days.</AccordionContent>');
+  it('makes the reusable Accordion FAQ example discoverable from markup.md', () => {
+    expect(doc).toContain('[Accordion FAQ](markup-components.md).');
+    expect(components).toContain('<Accordion type="single" collapsible>');
+    expect(components).toContain('<AccordionItem value="shipping">');
+    expect(components).toContain('<AccordionTrigger>How long does shipping take?</AccordionTrigger>');
+    expect(components).toContain('<AccordionContent>Orders arrive in three to five business days.</AccordionContent>');
+  });
+  it('states the existing Helmet script child contract', () => {
     expect(doc).toContain('exactly one template-literal child');
     expect(doc).toContain('``<script>{`…`}</script>``');
   });

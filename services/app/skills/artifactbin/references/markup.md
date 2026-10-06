@@ -62,24 +62,7 @@ publish.
 
 [Conditions and dialogs](markup-state.md).
 
-### FAQ with an Accordion
-
-Compose an FAQ from the kit's root, item, trigger and content components. Use a
-distinct `value` for each item; `collapsible` lets the open item close when
-selected again.
-
-```jsx
-<Accordion type="single" collapsible>
-  <AccordionItem value="shipping">
-    <AccordionTrigger>How long does shipping take?</AccordionTrigger>
-    <AccordionContent>Orders arrive in three to five business days.</AccordionContent>
-  </AccordionItem>
-  <AccordionItem value="returns">
-    <AccordionTrigger>Can I return an order?</AccordionTrigger>
-    <AccordionContent>Unused items can be returned within 30 days.</AccordionContent>
-  </AccordionItem>
-</Accordion>
-```
+[Accordion FAQ](markup-components.md).
 
 **HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
 (prose, headings, lists, tables, links, media, the bare controls `input`
@@ -89,10 +72,9 @@ outright, no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
 
 ## `<Helmet>` — the document's own head
 
-At most ONE per document, holding at most one each of `<title>`, `<style>`
-and `<script>`, plus `<meta name content />` pairs, plus any number of the
-DATA declarations `<Import>`, `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
-Write it anywhere; it is hoisted when stored.
+At most ONE per document: a `<Helmet>` holds one each of `<title>`, `<style>`
+and `<script>`; any number of metas and data declarations (`<Import>`, etc.;
+[data](markup-data.md)). It may appear anywhere; it is hoisted.
 
 ```jsx
 <Helmet>
@@ -101,9 +83,9 @@ Write it anywhere; it is hoisted when stored.
 </Helmet>
 ```
 
-The `<script>` is an ES module in the document: Solid bound to the declared
-names, npm libraries, exported components — [scripts](markup-scripts.md). It
-must have exactly one template-literal child, ``<script>{`…`}</script>``.
+The `<script>` module uses Solid, npm libraries and exported components
+([scripts](markup-scripts.md)); use exactly one template-literal child:
+``<script>{`…`}</script>``.
 
 - **Custom CSS lives in that `<style>` block**; an inline `style={{…}}` is fine
   for a one-off. Scope rules to your own class names (bare element selectors
