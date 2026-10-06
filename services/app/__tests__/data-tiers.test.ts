@@ -44,6 +44,29 @@ async function create(token: string, body: Record<string, unknown>) {
   return { status: res.status, body: await res.json() };
 }
 
+describe('empty media upload errors', () => {
+  it.each([
+    ['image', 'data:image/png;base64,', 'invalid_image', 'image is empty'],
+    ['pdf', 'data:application/pdf;base64,', 'invalid_pdf', 'the pdf is empty'],
+  ])('identifies an empty %s file rather than calling its data URL malformed', async (field, value, error, detail) => {
+    const token = await mintToken('empty-media');
+    const result = await create(token.token, { title: 'empty upload', [field]: value });
+    expect(result.status).toBe(400);
+    expect(result.body).toMatchObject({ error, details: [detail] });
+  });
+
+  it.each([
+    ['image', 'data:image/png;base64,not@base64', 'invalid_image'],
+    ['pdf', 'data:application/pdf;base64,not@base64', 'invalid_pdf'],
+  ])('still refuses a malformed %s data URL', async (field, value, error) => {
+    const token = await mintToken('malformed-media');
+    const result = await create(token.token, { title: 'malformed upload', [field]: value });
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe(error);
+    expect(result.body.details.join(' ')).toContain('base64 data: URL');
+  });
+});
+
 describe('dataset tier', () => {
   it('stores rows, infers + echoes columns', async () => {
     const t = await mintToken('t');

@@ -178,7 +178,9 @@ export function publishVizRecipe(_body: Record<string, unknown>, recipe: unknown
 
 // ── images ───────────────────────────────────────────────────────────────────
 
-const IMAGE_DATA_URL_RE = /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml));base64,([A-Za-z0-9+/=]+)$/;
+// An empty payload is a well-shaped data URL. Let the shared byte validator
+// explain that the file is empty, just as it does for raw-body uploads.
+const IMAGE_DATA_URL_RE = /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml));base64,([A-Za-z0-9+/=]*)$/;
 
 /**
  * Store already-decoded image bytes. The single home for both entry points: a
@@ -252,7 +254,7 @@ export async function publishImage(_body: Record<string, unknown>, dataUrl: stri
 
 // ── pdf ──────────────────────────────────────────────────────────────────────
 
-const PDF_DATA_URL_RE = /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/;
+const PDF_DATA_URL_RE = /^data:application\/pdf;base64,([A-Za-z0-9+/=]*)$/;
 
 /**
  * Store already-decoded PDF bytes — THE ONE DOOR, shared by the `pdf` data URL
