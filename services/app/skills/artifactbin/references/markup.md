@@ -131,8 +131,8 @@ Galleries: [image bindings](markup-repeat.md).
   Web URLs also work and are served as written.
 - In parent markup only `<img src>` and `<File src>` take a URL;
   `srcSet`/`background` reject an external one. `href` is free.
-- `<iframe src="https://…" title="…" />` frames a player: YouTube
-  (nocookie), Vimeo, Loom; others need `csp-frame`.
+- `<iframe src="https://…" title="…" />` frames an [embed URL](markup-embeds.md);
+  popular providers by default, others need `csp-frame`.
 <!--bundle:skip-->
 - An image `src` also binds: `"$pick"`, or `"https://…/{$pick}.png"` to
   compose one — the only braced position; the first reader imports it.

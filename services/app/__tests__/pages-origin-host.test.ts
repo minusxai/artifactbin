@@ -235,7 +235,7 @@ describe('a document\'s own origin', () => {
     const res = await app.request(`${self}/`, { headers: { cookie: `afbin_pages=${cookie}` } });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-security-policy')).toBe(buildDocumentCsp({ self, app: APP, id: w.secret }));
-    expect(res.headers.get('content-security-policy')).not.toContain('sandbox');
+    expect(res.headers.get('content-security-policy')).not.toMatch(/(^|; )sandbox/);
     const html = await res.text();
     expect(html).toContain('Private plan');
     expect(html).not.toContain('data-mx-reader-chrome=""');
