@@ -216,13 +216,6 @@ body {
   }
 }
 
-/* The top bar's menu pane emerging from the left edge. */
-@keyframes drawer-in {
-  from {
-    transform: translateX(-100%);
-  }
-}
-
 /* A MobileSheet rising from the bottom edge. */
 @keyframes sheet-in {
   from {

@@ -65,8 +65,6 @@ export interface PageChromeProps {
   mode?: Accessor<'light' | 'dark'>;
   onMode?: (next: 'light' | 'dark') => void;
   star?: boolean;
-  /** Document pages open the profile menu beside the avatar, or as a phone bottom sheet. */
-  menuDropdown?: boolean;
 }
 
 export function PageChrome(props: PageChromeProps = {}): JSX.Element {
@@ -121,7 +119,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
     <Show when={panel()}><Portal mount={trustedPortalOf(document) ?? document.body}>
       <button type="button" aria-label="Close panel" class="fixed inset-0 z-40 cursor-default border-0 bg-black/25 p-0" onClick={close} />
       <Show when={panel() === 'menu'}>
-        <PageMenuPanel close={close} dropdown={props.menuDropdown} phone={phone()} />
+        <PageMenuPanel close={close} phone={phone()} />
       </Show>
       <Show when={panel() === 'controls'}><PageControlsPanel label={label()} title={controlsName()} onClose={close}><section aria-label="Appearance"><h2 class="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">appearance</h2><div role="group" aria-label="Color mode" class="flex overflow-hidden rounded-[5px] border border-edge"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => pick('light')} class={modeClass('light')}><Sun size={14} strokeWidth={1.5} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => pick('dark')} class={modeClass('dark')}><Moon size={14} strokeWidth={1.5} />dark</button></div></section>
         <Show when={props.controls}>{render => <div class="mt-4 border-t border-edge pt-3">{render()(close)}</div>}</Show>
@@ -135,10 +133,9 @@ const MENU_ROW = 'flex w-full items-center gap-3 rounded-[5px] border-0 bg-trans
 
 /**
  * The app menu (links, then sign out / disconnect / login), shared by the app bar and the document
- * page. On its own it is the app's left DRAWER; opened from a document's chrome (`dropdown`) it drops
- * under the bar at the right, and is a bottom sheet on a phone — the twin of the controls panel.
+ * page. It opens under the bar at the right, or as a bottom sheet on a phone.
  */
-export function PageMenuPanel(props: { close: () => void; dropdown?: boolean; phone?: boolean; top?: number }): JSX.Element {
+export function PageMenuPanel(props: { close: () => void; phone?: boolean; top?: number }): JSX.Element {
   const { session } = useSession();
   const location = useLocation();
   const person = () => session()?.kind === 'account' ? session()?.user : null;
@@ -148,13 +145,11 @@ export function PageMenuPanel(props: { close: () => void; dropdown?: boolean; ph
     return <a href={href} rel={['/', '/assets', '/trash', '/login', '/start', '/welcome', '/notifications', '/account', '/docs-human', '/chat', '/schedules', '/programs/new'].includes(href) ? undefined : 'external'} aria-label={label}
       class={`${MENU_ROW} cursor-pointer ${active() ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'}`} onClick={close}>{icon}{label}</a>;
   };
-  const placement = () => props.dropdown
-    ? (props.phone
-      ? 'fixed inset-x-0 bottom-0 z-50 flex animate-[rise_.14s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(20px,env(safe-area-inset-bottom))] shadow-xl'
-      : 'fixed right-3 top-14 z-50 flex w-72 animate-[rise_.14s_ease-out] flex-col rounded-[7px] border border-edge bg-surface p-2 shadow-xl')
-    : 'fixed inset-y-0 left-0 z-50 flex w-full animate-[drawer-in_.15s_ease-out] flex-col border-r border-edge bg-surface p-2 pt-16 shadow-xl sm:w-72';
+  const placement = () => props.phone
+    ? 'fixed inset-x-0 bottom-0 z-50 flex animate-[rise_.14s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(20px,env(safe-area-inset-bottom))] shadow-xl'
+    : 'fixed right-3 top-14 z-50 flex w-72 animate-[rise_.14s_ease-out] flex-col rounded-[7px] border border-edge bg-surface p-2 shadow-xl';
   return (
-    <nav aria-label="Menu" class={placement()} style={props.dropdown && !props.phone && props.top !== undefined ? { top: `${props.top}px` } : undefined}>
+    <nav aria-label="Menu" class={placement()} style={!props.phone && props.top !== undefined ? { top: `${props.top}px` } : undefined}>
       <button type="button" aria-label="Dismiss menu" onClick={close} style={{ top: 'max(12px, env(safe-area-inset-top))' }}
         class="absolute right-3 top-3 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-edge bg-surface text-muted hover:bg-raised hover:text-fg sm:hidden"><X size={17} stroke-width={1.5} /></button>
       <a href="/" aria-label="Hosted at artifactbin" class="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"><img src="/logo-128.png" alt="" class="h-7 w-7" />artifactbin</a>
