@@ -85,6 +85,25 @@ describe('Solid shell', () => {
     else expect(account.querySelector('[data-face-initial]')).toHaveTextContent('O');
   });
 
+  it('links the footer to the signed-in account’s public profile', async () => {
+    window.history.replaceState(null, '', '/trash');
+    render(() => <App />);
+    await screen.findByRole('table');
+    const nav = within(screen.getByRole('navigation', { name: 'Workspace' }));
+    expect(await nav.findByRole('link', { name: 'Public profile' })).toHaveAttribute('href', '/@owner');
+    expect(nav.getByRole('link', { name: 'Account settings' })).toHaveAttribute('href', '/account');
+  });
+
+  it('omits the public profile link until the account has a username', async () => {
+    session = { user: { id: 'usr_1', email: 'owner@example.com', username: null, image: null }, kind: 'account', onboarded: true };
+    window.history.replaceState(null, '', '/trash');
+    render(() => <App />);
+    await screen.findByRole('table');
+    const nav = within(screen.getByRole('navigation', { name: 'Workspace' }));
+    await waitFor(() => expect(nav.getByRole('link', { name: 'Account settings' })).toHaveTextContent('owner@example.com'));
+    expect(nav.queryByRole('link', { name: 'Public profile' })).not.toBeInTheDocument();
+  });
+
   it('mounts /trash under the session and publishes its rows only once the session has a scope', async () => {
     window.history.replaceState(null, '', '/trash');
     render(() => <App />);
