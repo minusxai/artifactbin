@@ -31,19 +31,22 @@ Inspect non-success JSON and follow its recovery instructions. After an uncertai
 
 ## Browser preview and interactive QA
 
-For browser QA, use `POST /api/browser-sessions`; no local Chrome is needed. Use your email bearer; the script navigates to an existing `artifactId`. Sessions default to your identity; `viewer` is fixed at creation. Scripts run for at most 20 seconds.
+For browser QA, use `POST /api/browser-sessions`; no local Chrome is needed. Use your email bearer; the script navigates to an existing `artifactId`. Sessions default to your identity; `viewer` is fixed at creation. Scripts run for at most 20 seconds. HTTP 200 can still contain a failed receipt: check its error and accepted session/execution IDs before polling. A capacity refusal creates no session. For `SESSION_ACTOR_CAPACITY` or `SESSION_CAPACITY`, read the returned recovery message: close one of your named sessions when done, or wait before a bounded retry of creation. Never poll or close an ID whose creation was refused.
 
 ```js
 const headers = {Authorization:'Bearer ' + accessToken,'Content-Type':'application/json'};
-const call = async body => {const r=await fetch(base+'/api/browser-sessions',{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
+const call = async body => {const r=await fetch(base+'/api/browser-sessions',{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('HTTP '+r.status);const receipt=await r.json();if(receipt.error)throw Error(receipt.error.code+': '+receipt.error.message);return receipt};
 const session_id=crypto.randomUUID(), execution_id=crypto.randomUUID();
+let accepted=false;
 try {
-  await call({op:'script',session_id,execution_id,create:true,code:`const page=await context.newPage();await page.goto('/a/${artifactId}');await page.getByRole('heading').first().waitFor();await output.image(await page.screenshot());`});
-  let s;
-  for(let end=Date.now()+20000;Date.now()<end;){s=await call({op:'status',session_id,execution_id});if(!['queued','running'].includes(s.status))break;await new Promise(r=>setTimeout(r,250));}
+  const receipt=await call({op:'script',session_id,execution_id,create:true,code:`const page=await context.newPage();await page.goto('/a/${artifactId}');await page.getByRole('heading').first().waitFor();await output.image(await page.screenshot());`});
+  if(receipt.session_id!==session_id||receipt.execution_id!==execution_id||!['queued','running','completed'].includes(receipt.status))throw Error('Session was not accepted');
+  accepted=true;
+  let s=receipt;
+  for(let end=Date.now()+20000;['queued','running'].includes(s.status)&&Date.now()<end;){s=await call({op:'status',session_id,execution_id});if(!['queued','running'].includes(s.status))break;await new Promise(r=>setTimeout(r,250));}
   if(s?.status!=='completed')throw Error(s?.error?.code||s?.status||'timeout');
   // s.attachments[0].base64 is the PNG screenshot.
-} finally {await call({op:'close',session_id});}
+} finally {if(accepted)await call({op:'close',session_id});}
 ```
 
 - A saved page action uses `POST /api/artifacts/<page-id>/mutate` with `{"name":"vote","args":{"choice":"ramen"}}`. The stored `<Mutation>` supplies its SQL and context; the API rechecks page access, dataset policy and any required membership. A public or unlisted link does not grant writes. Direct SQL against a dataset ID is a separate path and may return 403 even to its owner under the default policy. See [actions](markup-data.md#declarations-helmet-only) and [dataset rules](apps.md#dataset-rules).

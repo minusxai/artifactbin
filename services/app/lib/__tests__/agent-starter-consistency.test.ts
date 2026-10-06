@@ -17,6 +17,8 @@ import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
 import { createUser, mintToken } from '@/lib/accounts';
 import { POST as createCommentRoute, GET as listCommentsRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as actOnCommentRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
+import { createBrowserSessions } from '../../../browser/src/sessions';
+import type { Actor, BrowserSessionRequest } from '@artifactbin/contracts';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -230,4 +232,29 @@ it('the published HTTP comment example creates, replies, resolves and reopens th
   const stale = await actOnCommentRoute(request(`/api/artifacts/${artifact.id}/annotations/${result.created.id}`, {method:'POST',token:token.token,json:{reply:'stale duplicate',expected_revision:result.created.revision}}), {params:Promise.resolve({id:artifact.id,annId:result.created.id})});
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({error:'annotation_conflict',current_revision:result.reopened.revision});
+});
+
+
+it('the published browser example preserves a capacity refusal and only polls and closes accepted sessions', async () => {
+  const script = publicGuideText('http-api', BASE)!.match(/## Browser preview and interactive QA[\s\S]*?```js\n([\s\S]*?)```/)?.[1];
+  expect(script).toBeTruthy();
+  const sessions = createBrowserSessions(async () => ({run: async () => ({result:'screenshot',pages:[],attachments:[]}), close:async () => {}}));
+  const other: Actor = {credential:'bearer', userId:'another-owner'};
+  const actor: Actor = {credential:'bearer', userId:'example-owner'};
+  const operations: string[] = [];
+  const localFetch = async (_url: string, init: RequestInit) => {
+    const body=JSON.parse(String(init.body));operations.push(body.op);
+    return Response.json(await sessions.request({...body,actor} as BrowserSessionRequest));
+  };
+  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+  const run=()=>new AsyncFunction('fetch','base','accessToken','artifactId',script)(localFetch,BASE,'test-token','ab3cd9');
+  try {
+    for(const session_id of ['occupied-one','occupied-two'])await sessions.request({actor:other,op:'script',session_id,execution_id:'occupied',create:true,code:''});
+    await expect(run()).rejects.toThrow(/SESSION_CAPACITY.*None of them are yours/);
+    expect(operations).toEqual(['script']);
+    await sessions.request({actor:other,op:'close',session_id:'occupied-one'});
+    operations.length=0;
+    await expect(run()).resolves.toBeUndefined();
+    expect(operations[0]).toBe('script');expect(operations.at(-1)).toBe('close');
+  } finally {await sessions.close();}
 });
