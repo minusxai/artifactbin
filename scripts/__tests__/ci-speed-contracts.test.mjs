@@ -157,7 +157,7 @@ it('prepares all consumer prerequisites before waiting for the same-run candidat
  const job=workflow().jobs.cli,steps=job.steps;
  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
  const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs'));
- expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='dependency-cache'));
+ expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='dependency-cache-path'));
  expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='acceptance-browser'));
  expect(steps[waiting].run).toContain('--wait-only');
  expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
@@ -180,7 +180,7 @@ const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.
 it('builds pack-only candidates without preparing or uploading unused native download seeds',()=>{
  const steps=workflow().jobs['cli-pack'].steps;
  const selected=steps.filter(step=>step.run?.includes('prepare-seed')||step.run?.includes('pack-seeds')||step.with?.name?.startsWith('afbin-npm-dependency-seed-'));
- expect(selected).toHaveLength(7);expect(selected.every(step=>step.if==="needs.plan.outputs.cli == 'true'")).toBe(true);
+ expect(selected).toHaveLength(7);expect(selected.every(step=>step.if.startsWith("needs.plan.outputs.cli == 'true'"))).toBe(true);
  expect(steps.find(step=>step.run==='npm run build -w services/cli').if).toBe("needs.plan.outputs.cli != 'true'");
  expect(steps.find(step=>step.run==='npm run pack:release -w services/cli').if).toBeUndefined();
  expect(steps.find(step=>step.with?.name==='afbin-npm-packages').if).toBeUndefined();

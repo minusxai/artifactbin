@@ -181,8 +181,11 @@ jobs:
         if: matrix.shard == 1
         id: playwright
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+          path: |
+            ~/.cache/ms-playwright/chromium-*
+            ~/.cache/ms-playwright/chromium_headless_shell-*
+            ~/.cache/ms-playwright/ffmpeg-*
+          key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
       # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
       # deps pass is only worth paying for when the browser is actually being downloaded.
@@ -410,8 +413,11 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+          path: |
+            ~/.cache/ms-playwright/chromium-*
+            ~/.cache/ms-playwright/chromium_headless_shell-*
+            ~/.cache/ms-playwright/ffmpeg-*
+          key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
       # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
       # deps pass is only worth paying for when the browser is actually being downloaded.
@@ -513,20 +519,36 @@ jobs:
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: |
           ( node scripts/build/build-gate-inputs.mjs > "$RUNNER_TEMP/gate-build.log" 2>&1; echo $? > "$RUNNER_TEMP/gate-build.status" ) < /dev/null > /dev/null 2>&1 &
-      # KEYED ON WHAT PINS THE BROWSER, not on the lockfile: browsers.json is where playwright-core
-      # records the Chromium revision it will download, so the entry survives every lockfile change
-      # that is not a Playwright upgrade — including the version line a release rewrites.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: playwright
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      # Chromium libraries ship on the runner. Firefox/WebKit need additional system
-      # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
         run: |
           echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/7)" >> "$GITHUB_OUTPUT"
           echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/7)" >> "$GITHUB_OUTPUT"
+      # KEYED ON WHAT PINS THE BROWSER, not on the lockfile: browsers.json is where playwright-core
+      # records the Chromium revision it will download, so the entry survives every lockfile change
+      # that is not a Playwright upgrade — including the version line a release rewrites.
+      # Engine paths and keys are disjoint, including Chromium headless shell and ffmpeg.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: browser-chromium
+        with:
+          path: |
+            ~/.cache/ms-playwright/chromium-*
+            ~/.cache/ms-playwright/chromium_headless_shell-*
+            ~/.cache/ms-playwright/ffmpeg-*
+          key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: contains(steps.gate-browsers.outputs.browsers, 'firefox')
+        id: browser-firefox
+        with:
+          path: ~/.cache/ms-playwright/firefox-*
+          key: playwright-v2-firefox-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: contains(steps.gate-browsers.outputs.browsers, 'webkit')
+        id: browser-webkit
+        with:
+          path: ~/.cache/ms-playwright/webkit-*
+          key: playwright-v2-webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      # Chromium libraries ship on the runner. Firefox/WebKit need additional system
+      # packages even on a browser-cache hit; install them only on shards that use them.
       # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs. Their `--with-deps` apt pass is the one
       # provisioning step that hangs on a slow mirror: 91s typically, 236s on PR #269's run 36867396926
       # (one gate shard), against a 240s job budget. Only the cross-browser shards pay it, and with the
@@ -539,7 +561,7 @@ jobs:
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
-          CACHE_HIT: ${{ steps.playwright.outputs.cache-hit }}
+          CACHE_HIT: ${{ steps.browser-chromium.outputs.cache-hit }}
         run: |
           read -ra selected_engines <<< "$BROWSERS"
           deps=()
@@ -631,18 +653,31 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      # All three engines under the one key every job restores: on main this job is the only writer.
+      # Disjoint engine caches: a Chromium-only writer cannot freeze an incomplete all-browser key.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: playwright
+        id: browser-chromium
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+          path: |
+            ~/.cache/ms-playwright/chromium-*
+            ~/.cache/ms-playwright/chromium_headless_shell-*
+            ~/.cache/ms-playwright/ffmpeg-*
+          key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: browser-firefox
+        with:
+          path: ~/.cache/ms-playwright/firefox-*
+          key: playwright-v2-firefox-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: browser-webkit
+        with:
+          path: ~/.cache/ms-playwright/webkit-*
+          key: playwright-v2-webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: browser-debs
         with:
           path: ~/browser-debs
           key: browser-debs-v1-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      - if: steps.playwright.outputs.cache-hit != 'true' || steps.browser-debs.outputs.cache-hit != 'true'
+      - if: steps.browser-chromium.outputs.cache-hit != 'true' || steps.browser-firefox.outputs.cache-hit != 'true' || steps.browser-webkit.outputs.cache-hit != 'true' || steps.browser-debs.outputs.cache-hit != 'true'
         run: |
           npx playwright install --with-deps chromium firefox webkit
           mkdir -p "$HOME/browser-debs"
@@ -679,6 +714,18 @@ jobs:
             services/app/lib/build-assets
             node_modules/.cache/build-islands.json
           key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+
+      - id: npm-seed-key
+        run: node scripts/lib/npm-dependency-cache.mjs seed-key "$GITHUB_OUTPUT"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: npm-seeds
+        with:
+          path: .ci-cache-key/npm-platform-seeds/*.tar
+          key: ${{ steps.npm-seed-key.outputs.key }}-${{ hashFiles('scripts/lib/npm-dependency-cache.mjs') }}
+      - if: steps.npm-seeds.outputs.cache-hit != 'true'
+        run: |
+          node scripts/lib/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed"
+          node scripts/lib/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #
@@ -735,7 +782,7 @@ jobs:
         run: node scripts/ci/ci.mjs check
       # Per-job diagnostics remain useful, but the chain is the speed contract:
       # attempt start -> final required rollup, including setup and waits between needs.
-      # Target <3 minutes, normal maximum <4; >5 fails on both PR and main.
+      # Target <3 minutes, normal maximum <4; >8 fails on both PR and main.
       - name: every job's wall clock, over-budget named
         if: always()
         # Per-job times include legitimate prerequisite waits: diagnostics on PRs and main.
@@ -882,16 +929,31 @@ jobs:
             node_modules/.cache/build-islands.json
           key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
           restore-keys: test-builds-v1-${{ runner.os }}-
+      - if: needs.plan.outputs.cli == 'true'
+        id: npm-seed-key
+        run: node scripts/lib/npm-dependency-cache.mjs seed-key "$GITHUB_OUTPUT"
+      - if: needs.plan.outputs.cli == 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: npm-seeds
+        with:
+          path: .ci-cache-key/npm-platform-seeds/*.tar
+          key: ${{ steps.npm-seed-key.outputs.key }}-${{ hashFiles('scripts/lib/npm-dependency-cache.mjs') }}
       # Create only pinned public tarballs, never an arbitrary prior user cache.
       - name: Prepare public downloads while building the CLI
         if: needs.plan.outputs.cli == 'true'
+        env:
+          SEED_CACHE_HIT: ${{ steps.npm-seeds.outputs.cache-hit }}
         run: |
-          node scripts/lib/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed" &
-          seed_pid=$!
-          trap 'kill "$seed_pid" 2>/dev/null || true' EXIT
+          if [[ "$SEED_CACHE_HIT" != true ]]; then
+            node scripts/lib/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed" &
+            seed_pid=$!
+            trap 'kill "$seed_pid" 2>/dev/null || true' EXIT
+          fi
           npm run build -w services/cli
-          wait "$seed_pid"
-          trap - EXIT
+          if [[ "$SEED_CACHE_HIT" != true ]]; then
+            wait "$seed_pid"
+            trap - EXIT
+          fi
       - if: needs.plan.outputs.cli != 'true'
         run: npm run build -w services/cli
       # Publish the signed candidate before transferring native seeds, so the cold
@@ -919,13 +981,13 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
-      - if: needs.plan.outputs.cli == 'true'
-        run: node scripts/lib/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" "$RUNNER_TEMP/npm-platform-seeds"
+      - if: needs.plan.outputs.cli == 'true' && steps.npm-seeds.outputs.cache-hit != 'true'
+        run: node scripts/lib/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: needs.plan.outputs.cli == 'true'
         with:
           name: afbin-npm-dependency-seed-Linux-X64
-          path: ${{ runner.temp }}/npm-platform-seeds/npm-dependency-seed-Linux-X64.tar
+          path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-Linux-X64.tar
           compression-level: 0
           if-no-files-found: error
           retention-days: 1
@@ -933,7 +995,7 @@ jobs:
         if: needs.plan.outputs.cli == 'true'
         with:
           name: afbin-npm-dependency-seed-Linux-ARM64
-          path: ${{ runner.temp }}/npm-platform-seeds/npm-dependency-seed-Linux-ARM64.tar
+          path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-Linux-ARM64.tar
           compression-level: 0
           if-no-files-found: error
           retention-days: 1
@@ -941,7 +1003,7 @@ jobs:
         if: needs.plan.outputs.cli == 'true'
         with:
           name: afbin-npm-dependency-seed-macOS-X64
-          path: ${{ runner.temp }}/npm-platform-seeds/npm-dependency-seed-macOS-X64.tar
+          path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-macOS-X64.tar
           compression-level: 0
           if-no-files-found: error
           retention-days: 1
@@ -949,7 +1011,7 @@ jobs:
         if: needs.plan.outputs.cli == 'true'
         with:
           name: afbin-npm-dependency-seed-macOS-ARM64
-          path: ${{ runner.temp }}/npm-platform-seeds/npm-dependency-seed-macOS-ARM64.tar
+          path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-macOS-ARM64.tar
           compression-level: 0
           if-no-files-found: error
           retention-days: 1
@@ -957,7 +1019,7 @@ jobs:
         if: needs.plan.outputs.cli == 'true'
         with:
           name: afbin-npm-dependency-seed-Windows-X64
-          path: ${{ runner.temp }}/npm-platform-seeds/npm-dependency-seed-Windows-X64.tar
+          path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-Windows-X64.tar
           compression-level: 0
           if-no-files-found: error
           retention-days: 1
@@ -1058,21 +1120,11 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
-      # Registry blobs can survive a package version bump. Consumers still own a fresh HOME,
-      # node_modules and npm exec state; the harness copies only _cacache in/out.
-      - id: dependency-cache-key
+      # Every consumer receives the complete platform seed from this attempt. A second
+      # persistent npm cache only duplicated restore/save and cache-copy work.
+      - id: dependency-cache-path
         shell: bash
-        run: |
-          node scripts/lib/npm-dependency-cache.mjs "${{ runner.os }}" "${{ runner.arch }}" "${{ matrix.node }}" "$GITHUB_OUTPUT"
-          printf 'path=%s\n' "$(npm config get cache)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: dependency-cache
-        with:
-          path: ${{ steps.dependency-cache-key.outputs.path }}/_cacache
-          key: ${{ steps.dependency-cache-key.outputs.key }}
-          # Older npm cache blobs remain safe: npm checks shrinkwrap integrity during fresh install.
-          restore-keys: |
-            npm-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node }}-
+        run: printf 'path=%s\n' "$RUNNER_TEMP/npm-consumer-downloads" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         if: matrix.phase == 'preview' || matrix.phase == 'local'
         id: acceptance-browser
@@ -1085,9 +1137,9 @@ jobs:
       # Windows/macOS ship Chromium dependencies; --with-deps needlessly installed
       # Windows Media Foundation for 44s although these headless proofs do not record video.
       - name: Install Linux acceptance browser dependencies
-        if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux' && steps.acceptance-browser.outputs.cache-hit != 'true'
+        if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux'
         working-directory: services/cli
-        run: node ../../node_modules/playwright/cli.js install-deps chromium
+        run: node ../../scripts/ci/npm-acceptance/node_modules/playwright/cli.js install-deps chromium
       # Tooling and download/browser caches prepare while this run packs the candidate.
       # The shared bounded waiter rejects other attempts and failed producers.
       - name: Wait for this attempt's packed candidate
@@ -1106,16 +1158,16 @@ jobs:
         with:
           name: afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}
           path: .
-      - name: Merge verified public download blobs without replacing this consumer's own cache
-        run: node scripts/lib/npm-dependency-cache.mjs merge-seed npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar "${{ steps.dependency-cache-key.outputs.path }}"
+      - name: Verify the complete platform seed before isolated offline installation
+        run: node scripts/lib/npm-dependency-cache.mjs merge-seed npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar "${{ steps.dependency-cache-path.outputs.path }}" "${{ runner.os }}" "${{ runner.arch }}"
       # Unix bootstrap owns a separate fresh cache and is cheap enough to run alongside npm.
       # Windows Restricted bootstrap runs on its own required runner above.
       - name: Same-tarball native npm and warmed offline acceptance
         if: matrix.phase == 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --dependency-cache "${{ steps.dependency-cache-key.outputs.path }}" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
+        run: npm run test:npm-package -w services/cli -- --ci --dependency-cache "${{ steps.dependency-cache-path.outputs.path }}" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
       - name: Install the same candidate for experience checks
         if: matrix.phase != 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-cache "${{ steps.dependency-cache-key.outputs.path }}"
+        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-cache "${{ steps.dependency-cache-path.outputs.path }}"
       - name: Installed npm runtime boundary, terminal exit and declarations
         if: matrix.phase == 'runtime'
         working-directory: services/cli

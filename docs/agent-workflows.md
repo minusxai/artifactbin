@@ -58,6 +58,17 @@ cold transfers/installs from warm runs. Reduce serial work or safely share immut
 changing shard counts. Keep required coverage and exact-tree provenance; improving one job is not proof
 that the complete chain improved. Record observed timings and remaining misses in the handoff.
 
+CI browser downloads use separate immutable Chromium, Firefox and WebKit caches. A cache hit
+certifies only that engine's files; each fresh runner still provisions its required OS libraries.
+The main warmer writes the same engine keys as readers.
+
+CLI consumers receive verified public platform seeds as artifacts from their current attempt.
+Archive keys include the pinned dependency graph and seed generator, excluding only the candidate
+version. Seeds include tarballs and full public npm manifests: isolated installs use
+`--offline --full-metadata` with native lifecycle scripts enabled. Installed trees, HOME and npx
+state remain fresh; the separate cold bootstrap proof keeps its online installation. Streamed npm
+phase timings and heartbeats distinguish registry work from native reification and extraction.
+
 ## Local loop
 
 Work up the tiers, and stop at the cheapest one that can still be wrong:

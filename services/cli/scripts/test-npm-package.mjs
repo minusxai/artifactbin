@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {mergeNpmDependencyCache} from '../../../scripts/lib/npm-dependency-cache.mjs';
+import {installNpmConsumer} from '../../../scripts/lib/npm-consumer-install.mjs';
 import {npmConsumerArgs} from './npm-consumer-args.mjs';
 import {runAcceptanceProcesses} from './acceptance-processes.mjs';
 import {cleanupFailedNativeConsumer} from './native-consumer-lifecycle.mjs';
@@ -31,18 +32,14 @@ const run=args=>{const start=performance.now();try{return execFileSync(process.e
 const bootstrap=process.platform!=='win32'&&process.argv.includes('--parallel-bootstrap')&&process.versions.node.startsWith('22.')
  ?runAcceptanceProcesses([{label:'absent-Node Unix bootstrap',command:process.execPath,args:['services/cli/scripts/test-node-bootstrap.mjs'],cwd:repository,env:process.env}])
  :Promise.resolve();
-// Attach a handler immediately while synchronous npm install/native checks are running.
+// Attach a handler immediately while the install and native checks are running.
 bootstrap.catch(()=>{});
 let nativeLoaded=false;
 try{
  await writeFile(join(root,'package.json'),'{}\n');
  const seeded=dependencyCache?await mergeNpmDependencyCache(dependencyCache,env.npm_config_cache):false;
- const installStarted=performance.now();
- const installed=spawnSync(process.execPath,[npm,'install','--foreground-scripts','--no-audit','--no-fund',tarball],{cwd:root,env,encoding:'utf8',timeout:300000});
- console.log(`Native timing: ${seeded?'blob-cached':'cold'} npm install ${((performance.now()-installStarted)/1000).toFixed(1)}s`);
- const installOutput=(installed.stdout??'')+(installed.stderr??'');
- assert.equal(installed.status,0,installOutput);
- if(dependencyCache)await mergeNpmDependencyCache(env.npm_config_cache,dependencyCache);
+ if(dependencyCache&&!seeded)throw Error('Expected verified npm download seed before offline consumer install');
+ const {output:installOutput}=await installNpmConsumer({npm,tarball,cwd:root,env,seeded});
  assert.doesNotMatch(installOutput,/Rebuilding because|gyp info|gyp ERR/,'Supported native consumers must use prebuilt dependencies, without a compiler fallback');
  const cli=join(root,'node_modules/@afbin/cli');
  assert.ok(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
