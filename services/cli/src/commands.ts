@@ -6,6 +6,7 @@ export {CliError} from './errors.js';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ account:{value:'ACCOUNT',description:'Explicit workspace rebind target: current authenticated account only.'},
  artifact:{value:'ID',description:'Published live artifact ID for a schedule, including program artifacts.'},
  cron:{value:'EXPRESSION',description:'Five-field cron expression interpreted in --timezone.'},
  timezone:{value:'ZONE',description:'IANA timezone, for example Asia/Kolkata or UTC.'},
@@ -79,6 +80,7 @@ export const FORMATS:Record<string,readonly string[]>={
 export const globalFlags=['help','version','json','server','yes'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
+ {name:'workspace',usage:'rebind --account current',description:'Explicitly rebind local workspace ownership; preserves content and remote permission checks.',min:1,max:1,flags:['account','dry-run'],examples:['afbin workspace rebind --account current --dry-run','afbin workspace rebind --account current']},
  {name:'add',usage:'<path> [<path> ...]',description:'Assign stable account-scoped identities to local files without publishing.',min:1,max:Infinity,flags:[],examples:['afbin add sales.csv report.jsx --json']},
  {name:'mv',usage:'<from> <to>',description:'Move a registered local file while retaining its identity.',min:2,max:2,flags:[],examples:['afbin mv sales.csv data.csv']},
  {name:'import',usage:'<file.jsx.html> [--output <file.jsx>]',description:'Import an offline HTML file into local JSX without publishing; defaults to the same basename with .jsx. Existing local documents reconcile safely.',min:1,max:1,flags:['output'],examples:['afbin import report.jsx.html','afbin import review.jsx.html --output report.jsx']},
@@ -192,6 +194,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
  }
  if(command.name==='query'&&f['dry-run']&&!f.write)throw new CliError('invalid_arguments','query --dry-run validates a mutation; add --write.','Reads have no side effects; run them directly.');
  if(command.name==='comment'&&f['dry-run']&&f.body===undefined&&f.input===undefined&&!f.state)throw new CliError('invalid_comment','--dry-run checks a proposed comment; add --body, --input or --state.');
+ if(command.name==='workspace'&&(result.positionals[0]!=='rebind'||f.account!=='current'))throw new CliError('invalid_arguments','Use afbin workspace rebind --account current.');
  if(command.name==='schedule')validateScheduleArguments(result.positionals,f);
  if(command.name==='runs'){
   const [action,id]=result.positionals;

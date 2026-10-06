@@ -1,15 +1,21 @@
+import {prepareBindings,deliverBound,finalizeBindings} from '../src/publication-binding';
+import {observeDelivery} from '../src/delivery-observer';
+import {pull} from '../src/pull';
+import {localStatus} from '../src/local';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,rm,cp,realpath,rename} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {publishLocalWorkspace} from '../src/local-publication';
-import {registerLocalFiles,localWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '../src/local-workspace';
+import {registerLocalFiles,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles} from '../src/local-workspace';
 import {HttpClient} from '../src/http';
 import {stateFor} from '../src/state-access';
 import {digest} from '../src/files';
 import {configDir,withPrivateStateHome} from '../src/config';
-import type {Workspace} from '../src/workspace';
+import {loadWorkspace,saveTracking,writeTracking,type Workspace} from '../src/workspace';
+import {snapshotDocument} from '../src/local';
+import {writeDocument} from '../src/document';
 import {createDocumentGraph,graphSource} from '../../app/lib/story/graph/document-graph';
 import {applyGraphPatch} from '../../app/lib/story/graph/document-graph-patch';
 
@@ -20,7 +26,7 @@ async function fixture(){
  await writeFile(join(cwd,'child.jsx'),'---\nid: loc002\n---\n<p id="text">One</p>');await writeFile(join(cwd,'rows.json'),'[{"link":"ref:loc002"}]');
  await registerLocalFiles(workspace,['doc.jsx','child.jsx']);
  const portable=await localWorkspaceState(cwd);portable.put(LOCAL_WORKSPACE_SCOPE,'draft-identity','rows.json',{id:'loc003'});
- const heads=new Map<string,any>(),versions=new Map<string,any>(),keys=new Map<string,any>();const calls:Array<{path:string;method:string;body:any}>=[];let lose=false,conflict=false;
+ const heads=new Map<string,any>(),versions=new Map<string,any>(),keys=new Map<string,any>();const calls:Array<{path:string;method:string;body:any}>=[];let lose=false,conflict=false,readEffect:(()=>Promise<void>)|undefined;
  const request:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname,method=init?.method??'GET',body=JSON.parse(String(init?.body??'{}'));calls.push({path,method,body});
   const headers={'X-Artifactbin-Account':'usr_one'};
@@ -31,16 +37,33 @@ async function fixture(){
   }
   const id=path.split('/')[3],head=heads.get(id);
   if(method==='GET'&&path.includes('/versions/')){const archived=versions.get(id+':'+path.split('/').at(-1));return Response.json(archived??{error:'not_found'},{status:archived?200:404,headers});}
-  if(method==='GET')return Response.json(head,{headers});
+  if(method==='GET'){await readEffect?.();return Response.json(head,{headers});}
   if(path.endsWith('/edits')){
    if(conflict)return Response.json({error:'doc_changed',detail:'Changed',current:head},{status:409,headers});
-   const document=applyGraphPatch(head.document,head.version,body.document_update.patch);assert.ok(document);const next={...head,version:head.version+1,edit_id:'edit2',state:digest(id+'2'),markup:graphSource(document),document};heads.set(id,next);return Response.json(next,{headers});
+   const document=applyGraphPatch(head.document,head.version,body.document_update.patch);assert.ok(document);const next={...head,version:head.version+1,edit_id:'edit2',state:digest(id+'2'),markup:graphSource(document),document};heads.set(id,next);if(lose){lose=false;throw Error('lost reply');}return Response.json(next,{headers});
   }
   throw Error(`Unexpected ${method} ${path}`);
  };
  const client=new HttpClient({connection:{server:'https://example.com',token:'mxmx_test_publication'},home,account:'usr_one',fetch:request});
- return{root,workspace,client,heads,versions,calls,setLost:()=>{lose=true;},setConflict:()=>{conflict=true;},cleanup:()=>rm(root,{recursive:true,force:true})};
+ return{root,workspace,client,heads,versions,calls,setReadEffect:(effect:()=>Promise<void>)=>{readEffect=effect;},setLost:()=>{lose=true;},setConflict:(value=true)=>{conflict=value;},cleanup:()=>rm(root,{recursive:true,force:true})};
 }
+test('a pulled identity in a marked workspace updates its original and finalizes the authoring baseline',async()=>{
+ const f=await fixture();try{
+  const markup='<p id="text">One</p>',head={id:'old001',version:1,edit_id:'edit1',state:digest('old0011'),format:'markup',markup,document:createDocumentGraph(markup,1),title:null,theme:null,template:null,visibility:'unlisted' as const,link_role:'viewer' as const,parent_id:null,capabilities:{edit:true}};
+  f.heads.set(head.id,head);
+  const accepted=Buffer.from(writeDocument(snapshotDocument(head)));
+  await saveTracking(f.workspace,{server:f.client.connection.server,account:'usr_one',set:{'child.jsx':{id:head.id,file:digest(accepted),url:'https://example.com/a/old001',snapshot:head}}});
+  await writeFile(join(f.workspace.root,'child.jsx'),accepted.toString().replace('One','Updated'));
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.cwd,f.workspace.home),['child.jsx'],f.client,{});
+  assert.equal(f.heads.size,1,'must not create a duplicate');
+  assert.match(f.heads.get(head.id).markup,/Updated/);
+  assert.ok(!f.calls.some(call=>call.path==='/api/artifacts/reservations'||call.method==='POST'&&call.path==='/api/artifacts'));
+  const current=await loadWorkspace(f.workspace.cwd,f.workspace.home),bytes=await readFile(join(f.workspace.root,'child.jsx'));
+  assert.equal(current.tracking?.files['child.jsx']?.snapshot.version,2);
+  assert.equal(current.tracking?.files['child.jsx']?.file,digest(bytes));
+  const count=f.calls.length;await publishLocalWorkspace(current,['child.jsx'],f.client,{});assert.equal(f.calls.length,count);
+ }finally{await f.cleanup();}
+});
 test('local publication maps nested document and row references while retaining source, reuses identities, and survives workspace moves',async()=>{
  const f=await fixture();try{
   const before=await readFile(join(f.workspace.root,'doc.jsx'));
@@ -180,5 +203,126 @@ test('an imported baseline may publish when the remote version advanced without 
   assert.equal(f.heads.get('old001').title,'Remote metadata changed');
   assert.ok(f.calls.some(call=>call.path==='/api/artifacts/old001/edits'));
   assert.ok(!f.calls.some(call=>call.path==='/api/artifacts'||call.path==='/api/artifacts/reservations'));
+ }finally{await f.cleanup();}
+});
+
+async function bindOriginal(f:Awaited<ReturnType<typeof fixture>>,path='child.jsx'){
+ const markup='<p id="text">One</p>',head={id:'old001',version:1,edit_id:'edit1',state:digest('old0011'),format:'markup',markup,document:createDocumentGraph(markup,1),title:null,theme:null,template:null,visibility:'unlisted' as const,link_role:'viewer' as const,parent_id:null,capabilities:{edit:true}};
+ f.heads.set(head.id,head);const bytes=Buffer.from(writeDocument(snapshotDocument(head)));
+ await saveTracking(f.workspace,{server:f.client.connection.server,account:'usr_one',set:{[path]:{id:head.id,file:digest(bytes),url:'https://example.com/a/'+head.id,snapshot:head}}});await writeFile(join(f.workspace.root,path),bytes);return head;
+}
+test('copied complete published fences update their original without requiring a draft registration',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f);await saveTracking(f.workspace,{server:f.client.connection.server,account:'usr_one',remove:['child.jsx']});await writeFile(join(f.workspace.root,'copy.jsx'),writeDocument(snapshotDocument(head)).replace('One','Copied'));
+  await publishLocalWorkspace(f.workspace,['copy.jsx'],f.client);assert.equal(f.heads.size,1);assert.match(f.heads.get(head.id).markup,/Copied/);assert.ok(!f.calls.some(call=>call.path.includes('reservations')));
+ }finally{await f.cleanup();}
+});
+test('stale, partial and read-only copied fences refuse the entire mixed selection before reservation or writes',async()=>{
+ for(const mode of ['stale','partial','viewer']){
+  const f=await fixture();try{
+   const head=await bindOriginal(f);if(mode==='viewer')head.capabilities.edit=false;
+   let bytes=writeDocument(snapshotDocument(head)).replace('One','Copied');if(mode==='stale')bytes=bytes.replace('head_version: 1','head_version: 2');if(mode==='partial')bytes=bytes.replace(/edit_id:.*\n/,'');
+   await writeFile(join(f.workspace.root,'copy.jsx'),bytes);
+   await assert.rejects(publishLocalWorkspace(f.workspace,['child.jsx','copy.jsx'],f.client));assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.heads.size,1);
+  }finally{await f.cleanup();}
+ }
+});
+test('automatic registration does not make a copied ID-only fence a trusted local draft',async()=>{
+ const f=await fixture();try{
+  await writeFile(join(f.workspace.root,'copy.jsx'),'---\nid: old001\n---\n<p id="text">Copied</p>');await registerLocalFiles(f.workspace,['copy.jsx'],{intent:'automatic'});
+  await assert.rejects(publishLocalWorkspace(f.workspace,['copy.jsx'],f.client),/unregistered identity/);assert.equal(f.calls.length,0);
+ }finally{await f.cleanup();}
+});
+test('bound conflict appears on original status; explicit pull clears projection and a later edit updates the original',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f);await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client);
+  await writeFile(join(f.workspace.root,'child.jsx'),(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Proposal'));f.setConflict();
+  await assert.rejects(publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client),/doc_changed/);
+  assert.equal((await localStatus(await loadWorkspace(f.workspace.root,f.workspace.home))).files.find(file=>file.path==='child.jsx')?.status,'conflicted');
+  f.setConflict(false);await pull(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client,{force:true});
+  await writeFile(join(f.workspace.root,'child.jsx'),(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Resolved'));
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client);assert.match(f.heads.get(head.id).markup,/Resolved/);assert.equal(f.heads.size,1);
+ }finally{await f.cleanup();}
+});
+test('lost successful bound response plus newer typing recovers the edit and retains identity',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f);await writeFile(join(f.workspace.root,'child.jsx'),(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','First'));f.setLost();
+  await assert.rejects(publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client),/confirmed response/);
+  await writeFile(join(f.workspace.root,'child.jsx'),(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('First','Second'));
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client);assert.equal(f.heads.size,1);assert.match(f.heads.get(head.id).markup,/Second/);assert.equal(f.calls.filter(call=>call.method==='POST'&&call.path.endsWith('/edits')).length,2);assert.ok(!f.calls.some(call=>call.path.includes('reservations')));
+ }finally{await f.cleanup();}
+});
+test('a bound parent retains discovery of its offline child after canonical references acquire remote IDs',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f,'doc.jsx');head.markup='<a id="link" href="/a/loc002">Child</a>';head.document=createDocumentGraph(head.markup,1);const bytes=Buffer.from(writeDocument(snapshotDocument(head)));
+  await saveTracking(f.workspace,{server:f.client.connection.server,account:'usr_one',set:{'doc.jsx':{id:head.id,file:digest(bytes),url:'https://example.com/a/'+head.id,snapshot:head}}});await writeFile(join(f.workspace.root,'doc.jsx'),bytes);
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['doc.jsx'],f.client);
+  assert.equal(f.heads.size,2);assert.match(await readFile(join(f.workspace.root,'doc.jsx'),'utf8'),/href="\/a\/r\d{5}"/);
+  await writeFile(join(f.workspace.root,'child.jsx'),(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Child edited'));
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['doc.jsx'],f.client);
+  assert.equal(f.heads.size,2);assert.ok([...f.heads.values()].some(head=>head.markup?.includes('Child edited')));
+ }finally{await f.cleanup();}
+});
+test('a copied untracked fence survives a lost successful edit response and newer typing',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f);await saveTracking(f.workspace,{server:f.client.connection.server,account:'usr_one',remove:['child.jsx']});await writeFile(join(f.workspace.root,'copy.jsx'),writeDocument(snapshotDocument(head)).replace('One','First'));f.setLost();
+  await assert.rejects(publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['copy.jsx'],f.client),/confirmed response/);
+  await writeFile(join(f.workspace.root,'copy.jsx'),(await readFile(join(f.workspace.root,'copy.jsx'),'utf8')).replace('First','Second'));
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['copy.jsx'],f.client);assert.equal(f.heads.size,1);assert.match(f.heads.get(head.id).markup,/Second/);assert.ok(!f.calls.some(call=>call.path.includes('reservations')));
+ }finally{await f.cleanup();}
+});
+test('confirmed original finalization is replayable after each store boundary, including fresh-home transfer',async()=>{
+ for(const phase of ['portable','home']){
+  const f=await fixture();try{
+   const head=await bindOriginal(f),workspace=await loadWorkspace(f.workspace.root,f.workspace.home);
+   const frozen=Buffer.from(writeDocument(snapshotDocument(head)).replace('One','Accepted'));await writeFile(join(workspace.root,'child.jsx'),frozen);
+   const manifest={format:1 as const,server:f.client.connection.server,account:'usr_one',root:join(f.root,'projection'),ids:{old001:'old001'},inputs:{'child.jsx':{localId:'old001',bytes:frozen.toString('base64'),hash:digest(frozen)}}};
+   const bindings=await prepareBindings(workspace,['child.jsx'],{ 'child.jsx':'old001'},manifest,f.client);
+   const acceptedHead={...head,version:2,edit_id:'edit2',state:digest('accepted'),markup:head.markup.replace('One','Accepted')},accepted=Buffer.from(writeDocument(snapshotDocument(acceptedHead))),entry={id:head.id,url:'https://example.com/a/'+head.id,snapshot:acceptedHead,file:digest(accepted)};
+   await deliverBound(workspace,bindings,manifest,()=>observeDelivery('child.jsx',entry,accepted));
+   await assert.rejects(finalizeBindings(workspace,{onProgress:at=>{if(at===phase)throw Error('simulated finalization interruption');}}),/interruption/);
+   const moved=join(f.root,'moved'),home=join(f.root,'new-home');await cp(workspace.root,moved,{recursive:true});await mkdir(home);
+   const transferred={...workspace,root:moved,cwd:moved,home};await finalizeBindings(transferred);const current=await loadWorkspace(moved,home);assert.equal(current.tracking!.files['child.jsx']!.snapshot.version,2);assert.deepEqual(await readFile(join(moved,'child.jsx')),accepted);
+   assert.equal((await localStatus(current)).files.find(file=>file.path==='child.jsx')?.status,'unchanged');assert.equal((await localWorkspaceState(moved)).list(LOCAL_WORKSPACE_SCOPE,'archive').filter(row=>row.key.startsWith('publication-finalize/')).length,0);
+  }finally{await f.cleanup();}
+ }
+});
+test('in-flight binary author edits remain byte-exact through confirmed finalization',async()=>{
+ const f=await fixture();try{
+  const path='asset.bin',frozen=Buffer.from([255,1,128]),latest=Buffer.from([255,2,128,0]);await writeFile(join(f.workspace.root,path),frozen);
+  const head={id:'old001',version:2,edit_id:'edit2',state:digest('binary'),format:'file'},entry={id:head.id,url:'https://example.com/a/'+head.id,snapshot:head,file:digest(frozen)};
+  const manifest={format:1 as const,server:f.client.connection.server,account:'usr_one',root:join(f.root,'projection'),ids:{old001:'old001'},inputs:{[path]:{localId:'old001',bytes:frozen.toString('base64'),hash:digest(frozen)}}};
+  await deliverBound(f.workspace,[{path,localId:'old001',tracked:entry,bytes:frozen}],manifest,async()=>{await writeFile(join(f.workspace.root,path),latest);await observeDelivery(path,entry,frozen);});
+  await finalizeBindings(f.workspace);assert.deepEqual(await readFile(join(f.workspace.root,path)),latest);assert.equal((await loadWorkspace(f.workspace.root,f.workspace.home)).tracking!.files[path]!.file,digest(frozen));
+ }finally{await f.cleanup();}
+});
+test('pull tracking journal travels before home synchronization and detects unrelated store divergence',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f),workspace=await loadWorkspace(f.workspace.root,f.workspace.home),snapshot={...head,version:2,edit_id:'edit2',state:digest('pulled2')},bytes=Buffer.from(writeDocument(snapshotDocument(snapshot))),entry={id:head.id,url:'https://example.com/a/'+head.id,snapshot,file:digest(bytes)};
+  const portable=await localWorkspaceState(workspace.root);
+  await stageLocalFiles(workspace.root,[{path:'child.jsx',before:digest(await readFile(join(workspace.root,'child.jsx'))),data:bytes}],store=>{writeTracking(store,LOCAL_WORKSPACE_SCOPE,{server:f.client.connection.server,account:'usr_one',set:{'child.jsx':entry}});store.put(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current',{server:f.client.connection.server,account:'usr_one'});});
+  const moved=join(f.root,'moved'),home=join(f.root,'new-home');await cp(workspace.root,moved,{recursive:true});await mkdir(home);await recoverLocalFiles(moved);
+  const current=await loadWorkspace(moved,home);assert.equal(current.tracking!.files['child.jsx']!.snapshot.version,2);assert.deepEqual(await readFile(join(moved,'child.jsx')),bytes);
+  portable.delete(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current');await assert.rejects(loadWorkspace(workspace.root,workspace.home),/disagree/);
+ }finally{await f.cleanup();}
+});
+
+test('a manual identity change during authenticated preflight refuses before any reservation or artifact write',async()=>{
+ const f=await fixture();try{
+  await bindOriginal(f);const file=join(f.workspace.root,'child.jsx');await writeFile(file,(await readFile(file,'utf8')).replace('One','Proposal'));
+  f.setReadEffect(async()=>{await writeFile(file,(await readFile(file,'utf8')).replace('id: old001','id: other1'));});
+  await assert.rejects(publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client),/identity/i);assert.ok(f.calls.every(call=>call.method==='GET'));assert.match(await readFile(file,'utf8'),/id: other1/);
+ }finally{await f.cleanup();}
+});
+
+test('a different published fence typed during delivery is preserved with confirmed recovery evidence',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f),workspace=await loadWorkspace(f.workspace.root,f.workspace.home),frozen=Buffer.from(writeDocument(snapshotDocument(head)).replace('One','Accepted'));
+  await writeFile(join(workspace.root,'child.jsx'),frozen);
+  const manifest={format:1 as const,server:f.client.connection.server,account:'usr_one',root:join(f.root,'projection'),ids:{old001:'old001'},inputs:{'child.jsx':{localId:'old001',bytes:frozen.toString('base64'),hash:digest(frozen)}}};
+  const bindings=await prepareBindings(workspace,['child.jsx'],{'child.jsx':'old001'},manifest,f.client),next={...head,version:2,edit_id:'edit2',state:digest('accepted'),markup:head.markup.replace('One','Accepted')},accepted=Buffer.from(writeDocument(snapshotDocument(next))),entry={id:head.id,url:'https://example.com/a/'+head.id,snapshot:next,file:digest(accepted)},other=Buffer.from(frozen.toString().replace('id: old001','id: other1'));
+  await deliverBound(workspace,bindings,manifest,async()=>{await writeFile(join(workspace.root,'child.jsx'),other);await observeDelivery('child.jsx',entry,accepted);});f.calls.length=0;
+  await assert.rejects(finalizeBindings(workspace),/changed identity/);assert.deepEqual(await readFile(join(workspace.root,'child.jsx')),other);assert.ok((await localWorkspaceState(workspace.root)).list(LOCAL_WORKSPACE_SCOPE,'archive').some(row=>row.key.startsWith('publication-finalize/')));assert.equal(f.calls.length,0);
+  await writeFile(join(workspace.root,'child.jsx'),frozen);await finalizeBindings(workspace);assert.deepEqual(await readFile(join(workspace.root,'child.jsx')),accepted);assert.equal(f.calls.length,0);
  }finally{await f.cleanup();}
 });

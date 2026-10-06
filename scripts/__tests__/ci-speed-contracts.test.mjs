@@ -141,6 +141,18 @@ it('preserves GitHub artifact archive checksum verification',async()=>{
  expect(()=>verifyArtifactArchive(Buffer.from('abc'),undefined)).toThrow(/checksum/);
 });
 
+it('releases the signed candidate before seed uploads and waits for each native platform seed',()=>{
+ const jobs=workflow().jobs,pack=jobs['cli-pack'].steps;
+ const candidate=pack.findIndex(step=>step.with?.name==='afbin-npm-release');
+ const seeds=pack.map((step,index)=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')?index:-1).filter(index=>index>=0);
+ expect(seeds).toHaveLength(5);
+ for(const index of seeds)expect(candidate).toBeLessThan(index);
+ const steps=jobs.cli.steps,wait=steps.findIndex(step=>step.name==="Wait for this attempt's platform seed"),download=steps.findIndex(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-'));
+ expect(wait).toBeGreaterThan(-1);expect(wait).toBeLessThan(download);
+ expect(steps[wait].run).toContain('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
+ expect(steps[wait].run).toContain('--wait-only');
+});
+
 it('prepares all consumer prerequisites before waiting for the same-run candidate',()=>{
  const job=workflow().jobs.cli,steps=job.steps;
  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});

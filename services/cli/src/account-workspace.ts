@@ -1,3 +1,5 @@
+import {findLocalWorkspace,withLocalLock} from './local-workspace';
+import {accountMismatch} from './account-diagnostic';
 import {join,relative,resolve} from 'node:path';
 import {readdir,stat} from 'node:fs/promises';
 import {isDeepStrictEqual} from 'node:util';
@@ -191,7 +193,8 @@ async function save(workspace:Workspace,path:string,resource:AccountResource,byt
  const state=await stateFor(workspace.home);
  {
   const saved=await tracking(state,workspace);
-  if(saved&&(!client.sameServer(saved.server)||saved.account!==account))throw new CliError('account_mismatch','Account resource tracking belongs to another origin or account.');
+  if(saved&&!client.sameServer(saved.server))throw new CliError('wrong_server','Account resource tracking belongs to another origin.');
+  if(saved&&saved.account!==account)throw accountMismatch(saved.account,account,client.connection.server,workspace);
   const duplicate=Object.entries(saved?.files??{}).find(([other,entry])=>other!==path&&entry.resource.id===resource.id)?.[0];
   if(duplicate&&await readOptional(join(workspace.root,duplicate)))throw new CliError('duplicate_identity',`${duplicate} already tracks this ${resource.type}.`);
   const changes:FileChange[]=working?[{path,before:bytes?digest(bytes):null,data:working}]:[];
@@ -254,10 +257,15 @@ async function pullProfile(workspace:Workspace,parsed:ParsedCommand,plan:Account
  await save(workspace,path,current,before,Buffer.from(yaml(merged)),client);return {value:{operations:[{path,id:current.id,type:'profile',status:'pulled',...(backup?{backup}:{})}]}};
 }
 export async function remoteAccountCommand(workspace:Workspace,parsed:ParsedCommand,plan:AccountPlan,client:HttpClient):Promise<{value?:unknown;content?:string;exitCode?:number}>{
+ if(!parsed.flags['dry-run']&&['pull','push','delete'].includes(parsed.command)&&await findLocalWorkspace(workspace.root))return withLocalLock(workspace.root,()=>withLock(workspace.home,workspace.root,()=>remoteAccountCore(workspace,parsed,plan,client)));
+ return remoteAccountCore(workspace,parsed,plan,client);
+}
+async function remoteAccountCore(workspace:Workspace,parsed:ParsedCommand,plan:AccountPlan,client:HttpClient):Promise<{value?:unknown;content?:string;exitCode?:number}>{
  if(plan.kind==='restore')return {value:await pushRestore(workspace,plan.paths,client)};
  if(plan.kind==='refresh')return {value:await pushRefresh(workspace,plan.paths,client)};
  if(plan.kind==='delete')return deleteResources(workspace,parsed,client);
- if(plan.manifest&&(!client.sameServer(plan.manifest.server)||client.account&&plan.manifest.account!==client.account))throw new CliError('account_mismatch','Use the tracked account and server.');
+ if(plan.manifest&&!client.sameServer(plan.manifest.server))throw new CliError('wrong_server','Use the tracked account resource server.');
+ if(plan.manifest&&client.account&&plan.manifest.account!==client.account)throw accountMismatch(plan.manifest.account,client.account,client.connection.server,workspace);
  if(plan.manifest)client.account=plan.manifest.account;
  const sessions=parsed.flags.type==='session'?plan.paths:parsed.flags.type==='profile'?[]:plan.paths.filter(path=>plan.manifest?.files[path]?.resource.type==='session');
  const profiles=plan.paths.filter(path=>!sessions.includes(path));

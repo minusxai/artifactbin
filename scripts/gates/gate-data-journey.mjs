@@ -63,7 +63,7 @@ const documentResponse = (page) => page.waitForResponse((r) => { try { return r.
 /** Armed BEFORE a navigation: resolves once that page has loaded its SQLite engine's wasm (false after 20 s). */
 const engineLoads = (page) => page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), { timeout: 20000 }).then(() => true, () => false);
 
-// ── the disposable PostgreSQL, started now and awaited by its leg ──────────────
+// ── the disposable PostgreSQL, ready before Chromium observes the host network ──
 const adminPassword = randomUUID();
 const readerPassword = randomUUID();
 let container;
@@ -90,9 +90,13 @@ const postgres = (async () => {
 })();
 postgres.catch(() => {}); // awaited (and reported) by the PostgreSQL leg
 
-const b = await launchChromium();
+let b;
 const sink = await startMailSink();
 try {
+// Docker creates host interfaces. Settle its startup before Chromium starts fetching app modules,
+// so this gate's own network change cannot interrupt those requests with ERR_NETWORK_CHANGED.
+await postgres;
+b = await launchChromium();
 // ── two connections: a guest, and one the owner account adopts ─────────────────
 const [guestConnection, adoptedConnection] = await Promise.all([connectAgent(B), connectAgent(B)]);
 const tok = guestConnection.token;
@@ -974,7 +978,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
   // Unknown ids answering the uniform 404 (POST and GET) moved to vitest: api.test.ts:46–49,190–196.
 } finally {
   try {
-    await Promise.allSettled([b.close(), admin?.end()]);
+    await Promise.allSettled([b?.close(), admin?.end()]);
     sink.close();
   } finally {
     await postgres.catch(() => {});

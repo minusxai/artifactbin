@@ -61,7 +61,7 @@ export async function localCommentCommand(workspace:Workspace,parsed:ParsedComma
      }else if(![...annotations.list('open'),...annotations.list('resolved')].some(item=>item.id===flags.thread))throw new CliError('invalid_thread','That thread is not on the local document.');
      if(flags['dry-run']){results.push({...context,dry_run:true,action:flags.thread?(body!==undefined?'reply':'state'):'thread',...(node?{node}:{}),...(quote?{quote}:{}),...(flags.thread?{thread:flags.thread}:{}),...(flags.state?{state:flags.state}:{})});continue;}
      if(source!==document.body)await saveLocalFile(workspace.root,target.path,digest(original),Buffer.from(writeDocument({...document,body:source})));
-     await registerLocalFiles(workspace,[resolve(workspace.root,target.path)]);
+     await registerLocalFiles(workspace,[resolve(workspace.root,target.path)],{intent:'automatic'});
      const assigned=Object.entries(await localIdentities(workspace)).find(([,path])=>path===target.path)?.[0];
      if(assigned)Object.assign(context,{artifact_id:assigned});
      if(parseDocument(await readFile(await confinedPath(workspace.root,target.path),'utf8')).body!==source)throw new CliError('local_changed','The document changed while preparing the comment. Read it again and retry.');

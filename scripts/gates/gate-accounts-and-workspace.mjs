@@ -491,15 +491,36 @@ async function forkLeg(owner) {
     const dialog = forker.getByRole('dialog', { name: 'Fork this artifact?', exact: true });
     await step('login returned them to the document with the fork confirm open', () => dialog.waitFor({ state: 'visible', timeout: 30000 }));
     check(!new URL(forker.url()).search.includes('intent='), 'the instruction is consumed: the address no longer carries it, so a refresh does not re-prompt');
-    await Promise.all([
-      forker.waitForURL((u) => !u.pathname.includes(doc.id), { timeout: 30000 }),
+    const forkEndpoint = `${BASE}/api/my/artifacts/${doc.id}/fork`;
+    let forkResult;
+    // Read the real response before delivering it: the UI immediately navigates, which can discard
+    // Chromium's response body before a waitForResponse caller can read it.
+    await forker.route(forkEndpoint, async (route) => {
+      if (route.request().method() !== 'POST' || route.request().postDataJSON()?.dry_run === true) return route.continue();
+      const response = await route.fetch();
+      forkResult = await response.json();
+      await route.fulfill({ response });
+    });
+    const [forkResponse] = await Promise.all([
+      forker.waitForResponse((response) => response.request().method() === 'POST'
+        && new URL(response.url()).pathname === `/api/my/artifacts/${doc.id}/fork`
+        && response.request().postDataJSON()?.dry_run !== true, { timeout: 30000 }),
       forker.locator('[aria-label="Confirm fork"]').click(),
     ]);
-    const copyPath = new URL(forker.url()).pathname;
+    must(forkResponse.status() === 201, `fork creates the copy (${forkResponse.status()})`);
+    const copyPath = new URL(forkResult.url, BASE).pathname;
+    // Welcome is an intentional intermediate destination for this new account, not the copy's address.
+    // Only wait for commitment here: the copy's load can be interrupted by that redirect.
+    await forker.waitForURL((u) => u.pathname === copyPath
+      || (u.pathname === '/welcome' && new URL(u.searchParams.get('callbackUrl') ?? '', BASE).pathname === copyPath), { timeout: 30000, waitUntil: 'commit' }).catch((cause) => {
+        const current = new URL(forker.url());
+        const callback = current.searchParams.get('callbackUrl');
+        throw new Error(`fork did not arrive at ${copyPath}; path=${current.pathname}, callback=${callback ? new URL(callback, BASE).pathname : 'none'}`, { cause });
+      });
     check(copyPath.startsWith('/@'), `the copy is at its new owner's address (${copyPath})`);
 
     // ── 6. the copy is theirs, and says where it came from ──
-    const copyId = /([A-Za-z0-9]{6,12})(?:-|$)/.exec(copyPath.split('/').pop() ?? '')?.[1] ?? '';
+    const copyId = forkResult.id;
     // The new reader can still be navigating (or handing a new account to Welcome).
     // Use the browser context's authenticated request instead of its unloading page.
     const copyResponse = await forker.request.get(`${BASE}/api/my/artifacts/${copyId}`);

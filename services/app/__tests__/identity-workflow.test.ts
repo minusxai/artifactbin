@@ -3,8 +3,10 @@ import {useAppHarness,request} from './harness';
 import {mintToken,createGuestOwner,mergeGuestUsers} from '@/lib/accounts';
 import {POST as create,GET as list} from '@/app/api/artifacts/route';
 import {GET as read,DELETE as remove} from '@/app/api/artifacts/[id]/route';
+import {GET as readVersion} from '@/app/api/artifacts/[id]/versions/[version]/route';
+import {GET as readRaw} from '@/app/a/[id]/raw/route';
 import {reserveIds} from '@/lib/artifacts';
-import {writeFile,readFile,rename,copyFile} from 'node:fs/promises';
+import {writeFile,readFile,rename,copyFile,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
 import {cliWorkspace,artifactTransport,CLI_SERVER,type CliCall} from './cli-harness';
 import {digest} from '../../cli/src/files';
@@ -267,7 +269,7 @@ it('an adopted browser guest workspace continues with a new account token while 
   expect((await(await getDb()).query('SELECT user_id,version FROM artifacts WHERE id=$1',[nextRemote])).rows).toEqual([{user_id:user.id,version:1}]);
   const unrelated=await createUser({email:'mxmx_test_foreign_claimed_publication@example.test'}),foreign=await mintToken('mxmx_test_foreign_claim_token',unrelated.id);await cli.useToken(foreign.token);
   const refusedSource=source.replace('Claimed account edit','Foreign proposal');await writeFile(join(cli.root,'report.jsx'),refusedSource);calls.length=0;
-  const result=await cli.run(['push','report.jsx']);expect(result.code).not.toBe(0);expect(result.result.error.code).toBe('account_mismatch');expect(calls.map(call=>`${call.method} ${call.path}`)).toEqual(['GET /api/artifacts']);
+  const result=await cli.run(['push','report.jsx']);expect(result.code).not.toBe(0);expect(result.result.error.code).toBe('workspace_account_mismatch');expect(calls.map(call=>`${call.method} ${call.path}`)).toEqual(['GET /api/artifacts']);
   expect(await publication(cli.root)).toMatchObject({account:guest.userId,ids:initial.ids});expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(refusedSource);
   expect((await(await getDb()).query('SELECT id,version FROM artifacts ORDER BY id')).rows).toEqual([{id:remoteId,version:2},{id:nextRemote,version:1}].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0));
  }finally{await cli.cleanup();}
@@ -286,4 +288,80 @@ it('guest adoption preserves reservation replay and unused IDs despite an accoun
  const publish=(token:string)=>create(request('/api/artifacts',{method:'POST',token,json:{reserved_id:guestIds[0],markup:'<p>After adoption</p>'}}));
  expect((await publish(other.token)).status).toBe(403);expect((await publish(accountToken.token)).status).toBe(201);expect((await publish(accountToken.token)).status).toBe(409);
  expect((await(await allocate(accountToken.token,guest.userId)).json()).ids).toEqual(guestIds);
+});
+
+it('marked pull edits the original, finalizes both stores, and keeps offline account ownership visible after credential replacement',async()=>{
+ const calls:CliCall[]=[];const cli=await cliWorkspace('bound-pull-rebind',{fetch:artifactTransport(calls),separateHome:true});
+ try{
+  const owner=await createUser({email:'mxmx_test_bound_owner@example.test'}),first=await cli.connect('mxmx_test_bound_token',owner.id);
+  const made=await create(request('/api/artifacts',{method:'POST',token:first.token,json:{markup:'<p id="words">Original</p>',visibility:'unlisted'}}));expect(made.status).toBe(201);const head=await made.json();
+  await writeFile(join(cli.root,'note.csv'),'value\n1\n');await cli.invoke(['add','note.csv']);await cli.invoke(['pull',head.id,'--output','report.jsx']);
+  await writeFile(join(cli.root,'report.jsx'),(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('Original','Updated'));calls.length=0;
+  await cli.invoke(['push','report.jsx']);expect(calls.filter(call=>call.method==='POST').map(call=>call.path)).toEqual([`/api/artifacts/${head.id}/edits`]);
+  const status=await cli.invoke(['status']);expect(status.files.find((file:any)=>file.path==='report.jsx')).toMatchObject({id:head.id,status:'unchanged',version:2});expect(status.accounts).toMatchObject({observation:'last_observed',workspace:{account:owner.id}});
+  calls.length=0;await cli.invoke(['push','report.jsx']);expect(calls).toEqual([]);
+  const other=await createUser({email:'mxmx_test_bound_other@example.test'}),second=await mintToken('mxmx_test_bound_other_token',other.id);await cli.useToken(second.token);
+  const unverified=await cli.invoke(['status'],async()=>{throw Error('offline status made HTTP');});expect(unverified.accounts.credential).toBeNull();
+  await cli.invoke(['auth']);const offline=await cli.invoke(['status'],async()=>{throw Error('offline status made HTTP');});expect(offline.accounts).toMatchObject({workspace:{account:owner.id},credential:{account:other.id},publications:[{account:owner.id}]});
+  await writeFile(join(cli.root,'report.jsx'),(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('Updated','Foreign'));const refused=await cli.run(['push','report.jsx']);expect(refused.code).toBe(3);expect(refused.result.error).toMatchObject({code:'workspace_account_mismatch',details:{http_status:409,expected_account:owner.id,actual_account:other.id,workspace_root:await realpath(cli.root)}});
+  calls.length=0;const rebound=await cli.invoke(['workspace','rebind','--account','current']);expect(rebound.status).toBe('rebound');expect(calls.every(call=>call.method==='GET')).toBe(true);
+  const denied=await cli.run(['push','report.jsx']);expect(denied.code).not.toBe(0);expect(denied.result.error.code).toBe('edit_required');expect((await(await getDb()).query('SELECT id,version,user_id FROM artifacts')).rows).toEqual([{id:head.id,version:2,user_id:owner.id}]);
+  await writeFile(join(cli.root,'new.jsx'),'<p>New account draft</p>');await cli.invoke(['add','new.jsx']);await cli.invoke(['push','new.jsx']);expect((await(await getDb()).query('SELECT user_id FROM artifacts WHERE id<>$1',[head.id])).rows).toEqual([{user_id:other.id}]);
+ }finally{await cli.cleanup();}
+});
+
+it('marked source-backed dataset YAML preserves source identity and updates existing content without another artifact',async()=>{
+ const calls:CliCall[]=[];const cli=await cliWorkspace('bound-dataset-yaml',{fetch:artifactTransport(calls),separateHome:true});
+ try{
+  const token=await cli.connect('mxmx_test_bound_dataset');const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{value:1}],visibility:'unlisted'}}));expect(made.status).toBe(201);const head=await made.json();
+  await writeFile(join(cli.root,'note.csv'),'value\n1\n');await cli.invoke(['add','note.csv']);await cli.invoke(['pull',head.id,'--output','data.yaml']);
+  const pulled=await readFile(join(cli.root,'data.yaml'),'utf8');expect(pulled).toContain('source:');const workspace=await loadWorkspace(cli.root,cli.home),source=workspace.tracking!.files['data.yaml']!.source!;
+  await writeFile(join(cli.root,source.path),'[\n  {"value": 2}\n]\n');calls.length=0;
+  await cli.invoke(['push','data.yaml']);expect(calls.some(call=>call.path==='/api/artifacts/reservations'||call.method==='POST'&&call.path==='/api/artifacts')).toBe(false);expect((await(await getDb()).query('SELECT id FROM artifacts')).rows).toEqual([{id:head.id}]);
+  const current=await loadWorkspace(cli.root,cli.home);expect(current.tracking!.files['data.yaml']!.source!.path).toBe(source.path);expect(current.tracking!.files['data.yaml']!.source!.bytes).toBe((await readFile(join(cli.root,source.path))).toString('base64'));
+  expect((await cli.invoke(['status'])).files.find((file:any)=>file.path==='data.yaml').status).toBe('unchanged');calls.length=0;await cli.invoke(['push','data.yaml']);expect(calls).toEqual([]);
+  const sourceBytes=await readFile(join(cli.root,source.path));await writeFile(join(cli.root,'data.yaml'),(await readFile(join(cli.root,'data.yaml'),'utf8')).replace(/title:.*\n/,'title: Settings only\n'));calls.length=0;await cli.invoke(['push','data.yaml']);expect(calls.filter(call=>call.method==='PATCH').map(call=>call.path)).toEqual(['/api/artifacts/'+head.id]);expect(await readFile(join(cli.root,source.path))).toEqual(sourceBytes);expect((await cli.invoke(['status'])).files.find((file:any)=>file.path==='data.yaml').status).toBe('unchanged');
+  await cli.invoke(['add',source.path]);calls.length=0;await cli.invoke(['push','data.yaml',source.path]);expect((await(await getDb()).query('SELECT id FROM artifacts')).rows).toEqual([{id:head.id}]);expect(calls.some(call=>call.path==='/api/artifacts/reservations'||call.path==='/api/artifacts'&&call.method==='POST')).toBe(false);
+ }finally{await cli.cleanup();}
+});
+
+it('marked historical restore retains the current head guard and publishes into the same identity',async()=>{
+ const calls:CliCall[]=[];const cli=await cliWorkspace('bound-history',{fetch:artifactTransport(calls,async(req,url)=>{
+  const match=/^\/api\/artifacts\/([^/]+)\/versions\/(\d+)$/.exec(url.pathname);return match?readVersion(req,{params:Promise.resolve({id:match[1]!,version:match[2]!})}):undefined;
+ }),separateHome:true});
+ try{
+  const token=await cli.connect('mxmx_test_bound_history');const head=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="text">Version one</p>'}}))).json();
+  await cli.invoke(['pull',head.id,'--output','report.jsx']);await writeFile(join(cli.root,'report.jsx'),(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('Version one','Version two'));await cli.invoke(['push','report.jsx']);
+  await writeFile(join(cli.root,'note.csv'),'value\n1\n');await cli.invoke(['add','note.csv']);await cli.invoke(['pull',head.id+'@1','--output','report.jsx','--force']);
+  const selected=(await loadWorkspace(cli.root,cli.home)).tracking!.files['report.jsx']!;expect(selected.selected?.version).toBe(1);expect(selected.snapshot.version).toBe(2);calls.length=0;
+  await cli.invoke(['push','report.jsx']);expect(calls.some(call=>call.path==='/api/artifacts/reservations'||call.path==='/api/artifacts'&&call.method==='POST')).toBe(false);
+  const actual=await(await read(request('/api/artifacts/'+head.id,{token:token.token}),{params:Promise.resolve({id:head.id})})).json();expect(actual.version).toBe(3);expect(actual.markup).toContain('Version one');
+  expect((await cli.invoke(['status'])).files.find((file:any)=>file.path==='report.jsx').status).toBe('unchanged');
+ }finally{await cli.cleanup();}
+});
+
+it('marked native binary publication preserves invalid UTF8 bytes and source identity',async()=>{
+ const calls:CliCall[]=[];const cli=await cliWorkspace('bound-binary',{fetch:artifactTransport(calls,async(req,url)=>{const match=/^\/a\/([^/]+)\/raw$/.exec(url.pathname);return match?readRaw(req,{params:Promise.resolve({id:match[1]!})}):undefined;}),separateHome:true});
+ try{
+  const token=await cli.connect('mxmx_test_bound_binary');const made=await create(new Request(CLI_SERVER+'/api/artifacts?format=file&filename=scene.glb',{method:'POST',headers:{Authorization:'Bearer '+token.token,'Content-Type':'model/gltf-binary'},body:new Uint8Array([103,108,84,70,255])}));expect(made.status).toBe(201);const head=await made.json();
+  await writeFile(join(cli.root,'note.csv'),'value\n1\n');await cli.invoke(['add','note.csv']);await cli.invoke(['pull',head.id,'--output','asset.yaml']);
+  const source=(await loadWorkspace(cli.root,cli.home)).tracking!.files['asset.yaml']!.source!;const bytes=Buffer.from([103,108,84,70,254,0,255]);await writeFile(join(cli.root,source.path),bytes);calls.length=0;await cli.invoke(['push','asset.yaml']);
+  expect(calls.some(call=>call.path==='/api/artifacts/reservations'||call.path==='/api/artifacts'&&call.method==='POST')).toBe(false);expect(await readFile(join(cli.root,source.path))).toEqual(bytes);expect((await cli.invoke(['status'])).files.find((file:any)=>file.path==='asset.yaml').status).toBe('unchanged');calls.length=0;await cli.invoke(['push','asset.yaml']);expect(calls).toEqual([]);
+ }finally{await cli.cleanup();}
+});
+
+it('a committed marked edit with a lost reply recovers once before delivering newer typing',async()=>{
+ const calls:CliCall[]=[];const transport=artifactTransport(calls);let lose=false;const cli=await cliWorkspace('bound-uncertain',{fetch:async(input,init)=>{const response=await transport(input,init);if(lose&&new URL(String(input)).pathname.endsWith('/edits')){lose=false;throw Error('reply lost after commit');}return response;},separateHome:true});
+ try{
+  const token=await cli.connect('mxmx_test_bound_uncertain');const head=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="text">Original</p>'}}))).json();await writeFile(join(cli.root,'note.csv'),'value\n1\n');await cli.invoke(['add','note.csv']);await cli.invoke(['pull',head.id,'--output','report.jsx']);
+  await writeFile(join(cli.root,'report.jsx'),(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('Original','First edit'));lose=true;const failed=await cli.run(['push','report.jsx']);expect(failed.code).not.toBe(0);expect((await(await getDb()).query('SELECT version FROM artifacts WHERE id=$1',[head.id])).rows).toEqual([{version:2}]);
+  await writeFile(join(cli.root,'report.jsx'),(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('First edit','New typing'));await cli.invoke(['push','report.jsx']);expect(calls.filter(call=>call.path==='/api/artifacts/'+head.id+'/edits')).toHaveLength(2);expect((await(await getDb()).query('SELECT version FROM artifacts WHERE id=$1',[head.id])).rows).toEqual([{version:3}]);expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toContain('New typing');
+ }finally{await cli.cleanup();}
+});
+
+
+it('unbound offline draft status reports verified selected-host credential account without HTTP',async()=>{
+ const cli=await cliWorkspace('unbound-account-status',{fetch:artifactTransport(),separateHome:true});
+ try{const owner=await createUser({email:'mxmx_test_offline_unbound@example.test'});await cli.connect('mxmx_test_offline_unbound_token',owner.id);await cli.invoke(['auth']);await writeFile(join(cli.root,'draft.jsx'),'<p>Offline</p>');await cli.invoke(['add','draft.jsx']);const status=await cli.invoke(['status'],async()=>{throw Error('offline status made HTTP');});expect(status.accounts).toMatchObject({workspace:null,credential:{account:owner.id,server:CLI_SERVER},observation:'last_observed'});}
+ finally{await cli.cleanup();}
 });

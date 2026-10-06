@@ -1,3 +1,5 @@
+import {accountMismatch} from './account-diagnostic';
+import {rebindWorkspace} from './workspace-rebind';
 import {collectionFilters} from './collection-filters';
 import {localCommentCommand} from './local-comments-command';
 import {localHistory,localHistoryHead} from './local-history';
@@ -89,7 +91,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const publicUrl=previewPublicOrigin(typeof flags['public-url']==='string'?flags['public-url']:undefined);
    const workspace=await loadWorkspace(context.cwd,home),known=await localIdentities(workspace);
    const paths=positionals.length?await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path)):[];
-   await registerLocalFiles(workspace,paths.map(path=>resolve(workspace.root,path)));
+   await registerLocalFiles(workspace,paths.map(path=>resolve(workspace.root,path)),{intent:'automatic'});
    return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,...(publicUrl?{publicUrl}:{}),server:typeof flags.server==='string'?flags.server:workspace.tracking?.server??await exportedServer(home,context.env)});
   }
   if(command==='config'&&!flags.help){
@@ -220,7 +222,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    }
    emit(results.length===1?results[0]:{operations:results});return 0;
   }
-  if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
+  if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env,typeof flags.server==='string'?flags.server:undefined));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
    try{const result=await diffCommand(workspace,parsed,serverOrigin()??declaredServer,false,stdout,undefined,style,await addresses());if(result)emit(result);return 0;}
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
@@ -305,6 +307,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // login JavaScript. Name both origins and the way out before any request.
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,onRelease:release=>checkUpdateNotice({home,server:connection!.server,env:context.env,stderr,release}),account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  if(command==='workspace'){emit(await rebindWorkspace(workspace,client,{dryRun:!!flags['dry-run']}));return 0;}
   if(command==='schedule'){emit(await scheduleCommand(workspace,client,positionals,flags));return 0;}
   if(command==='runs'){
    const action=positionals[0];let id=positionals[1];
@@ -398,6 +401,12 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   throw new CliError('command_integration_pending',`The ${command} command is still being integrated.`);
  }catch(error){
+  if(error instanceof CliError&&error.code==='workspace_account_mismatch'){
+   const details=error.details&&typeof error.details==='object'?error.details as Record<string,unknown>:{};
+   if(!details.workspace_root){
+    try{const workspace=await loadWorkspace(context.cwd,context.home??homedir());error=accountMismatch(typeof details.expected_account==='string'?details.expected_account:workspace.tracking?.account,typeof details.actual_account==='string'?details.actual_account:undefined,String(details.server??workspace.tracking?.server??parsed?.flags.server??DEFAULT_SERVER),workspace,details,details.recovery_blocked===true);}catch{/* Retain the primary refusal if unrelated local state is invalid. */}
+   }
+  }
   const failure=error instanceof ApprovalRequired?{code:error.code,message:error.message,verification_url:error.verificationUrl,user_code:error.userCode,expires_at:new Date(error.expiresAt).toISOString()}:error instanceof CliError?{code:error.code,message:error.message,...(error.fix?{fix:error.fix}:{}),...(error.details?{details:error.details}:{})}:{code:'operation_failed',message:error instanceof Error?error.message:String(error)};
   if(json)stdout(JSON.stringify({error:failure})+'\n');
   const diagnosed=refusalDetails(failure.message,'details'in failure?failure.details:undefined);

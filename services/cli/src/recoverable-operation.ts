@@ -1,3 +1,4 @@
+import {accountMismatch} from './account-diagnostic';
 import {randomUUID} from 'node:crypto';
 import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
 import {CliError} from './errors';
@@ -24,7 +25,7 @@ export async function recoverableOperation(workspace:Workspace,client:HttpClient
    if(saved.version!==3)throw new CliError('pending_recovery','A different operation is pending.','Repeat its original command to recover it.');
    if(claimed!==checksum(value)||!saved.key||saved.intent!==digest(JSON.stringify([saved.method,saved.path,saved.identity])))throw new CliError('invalid_journal','The pending operation checksum or intent is invalid.');
    if(saved.intent!==intent||saved.server!==client.connection.server)throw new CliError('pending_recovery','A different operation is pending.','Repeat its original command and inputs to recover it.');
-   if(saved.account&&client.account&&client.account!==saved.account)throw new CliError('account_mismatch','The pending operation belongs to another account.');
+   if(saved.account&&client.account&&client.account!==saved.account)throw accountMismatch(saved.account,client.account,client.connection.server,workspace,{},true);
    if(saved.account)client.account=saved.account;
   }else{
    // The account is bound from the first confirmed response when no earlier read named it.

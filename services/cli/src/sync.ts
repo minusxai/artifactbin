@@ -1,3 +1,5 @@
+import {accountMismatch} from './account-diagnostic';
+import {observeDelivery} from './delivery-observer';
 import {createDocumentGraph} from '../../app/lib/story/graph/document-graph';
 import {documentOutcomePresent} from './document-recovery';
 import {prepareClientDocumentPublication} from '../../app/lib/story/graph/document-update-client';
@@ -282,7 +284,8 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
  });
 }
 async function recoverRequest(workspace:Workspace,client:HttpClient,pending:PendingRequest,replaying=false):Promise<Snapshot>{
- if(!client.sameServer(pending.server)||pending.account&&client.account&&pending.account!==client.account)throw new CliError('account_mismatch','Pending recovery belongs to another server or account.');
+ if(!client.sameServer(pending.server))throw new CliError('wrong_server','Pending recovery belongs to another server.');
+ if(pending.account&&client.account&&pending.account!==client.account)throw accountMismatch(pending.account,client.account,client.connection.server,workspace,{},true);
  if(!pending.account&&pending.credential!==digest(client.connection.token))throw new CliError('recovery_credentials_changed','Restore the credentials that initiated this pending create before retrying.');
  if(replaying&&!pending.response&&pending.request.path!=='/artifacts'){
   const id=pending.file.tracked?.id??parseDocument(Buffer.from(pending.file.bytes,'base64').toString()).metadata.id;
@@ -315,7 +318,8 @@ async function recoverRequest(workspace:Workspace,client:HttpClient,pending:Pend
 const sameAddress=(one:string,other:string,addresses:readonly string[])=>one===other||(addresses.includes(one)&&addresses.includes(other));
 async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingRequest,fallbackAccount?:string,addresses:readonly string[]=[]):Promise<Snapshot>{
  const account=pending.responseAccount??fallbackAccount;
- if(workspace.tracking&&(!sameAddress(workspace.tracking.server,pending.server,addresses)||workspace.tracking.account!==account))throw new CliError('account_mismatch','Saved recovery belongs to another server or account.');
+ if(workspace.tracking&&!sameAddress(workspace.tracking.server,pending.server,addresses))throw new CliError('wrong_server','Saved recovery belongs to another server.');
+ if(workspace.tracking&&workspace.tracking.account!==account)throw accountMismatch(workspace.tracking.account,account,pending.server,workspace,{},true);
  const snapshot=readSnapshot(pending.response!,pending);
  const current=await readOptional(await confinedPath(workspace.root,pending.file.path));
  if(!current)throw new CliError('local_changed',`Remote publication succeeded, but ${pending.file.path} was removed. Recovery was retained.`,'Restore the local file and rerun afbin push.');
@@ -353,7 +357,7 @@ async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingReque
  const source=pending.file.source?{...pending.file.source,version:pending.request.method==='PATCH'?(pending.file.tracked?.source?.version??pending.file.tracked?.snapshot.version):snapshot.version}:undefined;
  const entry:TrackedFile={source,id:snapshot.id,url:typeof snapshot.url==='string'?snapshot.url:`${pending.server}/a/${snapshot.id}`,file:digest(accepted),snapshot};
  await stageFiles(workspace.home,workspace.root,[{path:pending.file.path,before:digest(current),data:written}],state=>writeTracking(state,workspace.root,{server:pending.server,account,set:{[pending.file.path]:entry},...(pending.file.renamedFrom?{remove:[pending.file.renamedFrom]}:{})}));
- await recoverFiles(workspace.home,workspace.root);await clearConflict(workspace.home,workspace.root,snapshot.id);await clearPendingRequest(workspace.home,workspace.root);return snapshot;
+ await recoverFiles(workspace.home,workspace.root);await observeDelivery(pending.file.path,entry,accepted);await clearConflict(workspace.home,workspace.root,snapshot.id);await clearPendingRequest(workspace.home,workspace.root);return snapshot;
 }
 function readSnapshot(response:Record<string,unknown>,pending:PendingRequest):Snapshot{
  const previous=pending.file.tracked?.snapshot;
@@ -369,7 +373,7 @@ function readSnapshot(response:Record<string,unknown>,pending:PendingRequest):Sn
 /** Persist a confirmed response using only its checksummed journal. */
 export async function finishSavedRequest(workspace:Workspace,server?:string,addresses:readonly string[]=[]):Promise<{path:string;[key:string]:unknown}|undefined>{
  const initial=await readPendingRequest(workspace.home,workspace.root);if(!initial?.response)return;
- if(server&&!sameAddress(server,initial.server,addresses))throw new CliError('account_mismatch','Saved recovery belongs to another server.');
+ if(server&&!sameAddress(server,initial.server,addresses))throw new CliError('wrong_server','Saved recovery belongs to another server.');
  return withLock(workspace.home,workspace.root,async()=>{
   await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const pending=await readPendingRequest(workspace.home,workspace.root);if(!pending?.response)return;
