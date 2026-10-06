@@ -56,3 +56,15 @@ it('prefills the artifact query when route props contain an empty artifact ID',a
  window.history.replaceState({},'', '/schedules?artifact=program-one');vi.stubGlobal('fetch',vi.fn(async()=>Response.json({schedules:[]})));
  render(()=><SchedulesPage artifactId=""/>);await screen.findByText('No schedules yet.');expect(screen.getByLabelText('Artifact ID')).toHaveValue('program-one');
 });
+
+
+it('explains the actual invalid_schedule code while preserving the complete draft',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(_url:string,init:RequestInit)=>init?.method==='POST'?Response.json({error:'invalid_schedule'},{status:400}):Response.json({schedules:[]})));
+ render(()=><SchedulesPage artifactId="doc-one"/>);await screen.findByText('No schedules yet.');
+ fireEvent.input(screen.getByLabelText('Cron expression'),{target:{value:'not a cron'}});
+ fireEvent.input(screen.getByLabelText('Timezone'),{target:{value:'Bad/Zone'}});
+ fireEvent.click(screen.getByRole('button',{name:'Create schedule'}));
+ const alert=await screen.findByRole('alert');expect(alert).toHaveTextContent(/five.*fields/i);expect(alert).toHaveTextContent(/timezone/i);expect(alert).toHaveTextContent(/1.?10 attempts/i);expect(alert).toHaveTextContent(/1.?86,400 seconds/i);expect(alert).not.toHaveTextContent('invalid_schedule');
+ expect(screen.getByLabelText('Cron expression')).toHaveValue('not a cron');expect(screen.getByLabelText('Timezone')).toHaveValue('Bad/Zone');expect(screen.getByLabelText('Artifact ID')).toHaveValue('doc-one');
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Create schedule'})).toBeEnabled());
+});

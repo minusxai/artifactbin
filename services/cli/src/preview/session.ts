@@ -42,6 +42,7 @@ import {dataflowOf} from '../../../app/lib/story/document/helmet';
 import type {CompiledDataflow} from '../../../app/lib/story/data/compiled-dataflow';
 import {compileLocal,declaredRefs,runLocal} from '../local-dataflow';
 import {ISLANDS_PATH,assembleDocument,compileDocument,documentModuleSha,readDocumentModule,readSpeculationRules,renderStoryHtml,speculationRulesSha} from './compiled';
+import {startupPortFailure} from '../operator-error';
 
 class Refusal extends Error {constructor(readonly status:number,message:string){super(message);}}
 export async function startPreview(options:{root:string;files:string[];home:string;localFiles?:Record<string,string>;assets?:string;publicAssets?:string;port?:number;share?:boolean;publicUrl?:string;capture?:boolean;origin?:string;asset?:(id:string)=>Promise<{bytes:Buffer;contentType:string}>;dataset?:(id:string)=>Promise<LocalDataset>}){
@@ -306,7 +307,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   }
   throw new Refusal(404,'Not found');
  })().catch(error=>{if(options.capture&&req.url!=='/favicon.ico')failure=String(error.message);res.statusCode=error instanceof Refusal||error instanceof BackendRequestError?error.status:error instanceof CliError?(error.code==='import_conflict'?409:400):500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:String(error.message),...(error instanceof CliError&&error.fix?{fix:error.fix}:{})}));});});
- try{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(options.port??0,options.share?'0.0.0.0':'127.0.0.1',resolve);});}catch(error){comments.close();throw error;}
+ try{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(options.port??0,options.share?'0.0.0.0':'127.0.0.1',resolve);});}catch(error){comments.close();throw startupPortFailure(error,options.port??0);}
  const address=server.address();if(!address||typeof address==='string')throw Error('No port');url=`http://127.0.0.1:${address.port}`;
  return {url,document:read,failure:()=>failure,close:async()=>{await queue;server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));comments.close();}};
 }

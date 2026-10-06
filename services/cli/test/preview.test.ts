@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,readFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createServer} from 'node:http';
 import {serializeJsx} from '../../app/lib/jsx';
 import {runCli} from '../src/dispatch';
 import {startPreview} from '../src/preview/session';
@@ -370,4 +371,16 @@ test('the preview browser bundle carries no react or react-dom',async()=>{
    assert.doesNotMatch(code,/from *["']react(?:-dom(?:\/client)?)?["']|require\(["']react["']\)/,`${name} pulls in react`);
   }
  }finally{await rm(outdir,{recursive:true,force:true});}
+});
+
+
+test('occupied preview port gives a recoverable instruction and preserves the listener',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-port-recovery-'));
+ const existing=createServer((_req,res)=>res.end('existing listener'));
+ await new Promise<void>(resolve=>existing.listen(0,'127.0.0.1',resolve));
+ const port=(existing.address() as {port:number}).port;
+ try{
+  await assert.rejects(startPreview({root,files:[],home:join(root,'home'),port}),error=>error instanceof Error&&error.name==='OperatorError'&&error.message===`Port ${port} is already in use; choose another with --port.`);
+  assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(),'existing listener');
+ }finally{await new Promise<void>((resolve,reject)=>existing.close(error=>error?reject(error):resolve()));await rm(root,{recursive:true,force:true});}
 });
