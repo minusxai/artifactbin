@@ -33,6 +33,16 @@ interface Crumb {
 
 /** The app's own pages, named for the bar. */
 const PAGE_NAMES: Record<string, string> = {
+  '/': 'artifacts',
+  '/assets': 'assets',
+  '/schedules': 'schedules',
+  '/chat': 'connected agents',
+  '/datasets/new': 'new dataset',
+  '/files/new': 'upload file',
+  '/programs/new': 'new program',
+  '/connect': 'connect',
+  '/start': 'get started',
+  '/welcome': 'welcome',
   '/notifications': 'notifications',
   '/account': 'account',
   '/tokens': 'tokens',
@@ -65,6 +75,8 @@ export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
   // `/docs-human` is the one docs page the app serves; every `/docs…` address
   // is a 404 the shell never mounts under.
   if (path === '/docs-human') return [{ label: 'docs' }];
+
+  if (/^\/programs\/[^/]+\/edit$/.test(path)) return [{ label: named ?? 'edit program' }];
 
   const name = PAGE_NAMES[path] ?? named;
   return name ? [{ label: name }] : [];
