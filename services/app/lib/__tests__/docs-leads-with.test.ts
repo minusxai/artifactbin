@@ -37,6 +37,14 @@ describe('the markup skill teaches vocabulary before configuration', () => {
   it('puts the Helmet/CSS/script configuration AFTER the skeleton', () => {
     expect(doc.indexOf('## `<Helmet>`')).toBeGreaterThan(doc.indexOf('## Skeleton'));
   });
+  it('shows the supported Accordion composition for an FAQ', () => {
+    expect(doc).toContain('<Accordion type="single" collapsible>');
+    expect(doc).toContain('<AccordionItem value="shipping">');
+    expect(doc).toContain('<AccordionTrigger>How long does shipping take?</AccordionTrigger>');
+    expect(doc).toContain('<AccordionContent>Orders arrive in three to five business days.</AccordionContent>');
+    expect(doc).toContain('exactly one template-literal child');
+    expect(doc).toContain('``<script>{`…`}</script>``');
+  });
 });
 
 describe('the design skill leads with the rules an agent can act on', () => {

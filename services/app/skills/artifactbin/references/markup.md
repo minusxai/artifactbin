@@ -62,6 +62,25 @@ publish.
 
 [Conditions and dialogs](markup-state.md).
 
+### FAQ with an Accordion
+
+Compose an FAQ from the kit's root, item, trigger and content components. Use a
+distinct `value` for each item; `collapsible` lets the open item close when
+selected again.
+
+```jsx
+<Accordion type="single" collapsible>
+  <AccordionItem value="shipping">
+    <AccordionTrigger>How long does shipping take?</AccordionTrigger>
+    <AccordionContent>Orders arrive in three to five business days.</AccordionContent>
+  </AccordionItem>
+  <AccordionItem value="returns">
+    <AccordionTrigger>Can I return an order?</AccordionTrigger>
+    <AccordionContent>Unused items can be returned within 30 days.</AccordionContent>
+  </AccordionItem>
+</Accordion>
+```
+
 **HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
 (prose, headings, lists, tables, links, media, the bare controls `input`
 `select` `textarea` `button` (themed), SVG): an unlisted tag returns `400`
@@ -83,7 +102,8 @@ Write it anywhere; it is hoisted when stored.
 ```
 
 The `<script>` is an ES module in the document: Solid bound to the declared
-names, npm libraries, exported components — [scripts](markup-scripts.md).
+names, npm libraries, exported components — [scripts](markup-scripts.md). It
+must have exactly one template-literal child, ``<script>{`…`}</script>``.
 
 - **Custom CSS lives in that `<style>` block**; an inline `style={{…}}` is fine
   for a one-off. Scope rules to your own class names (bare element selectors
