@@ -71,7 +71,7 @@ Authentication and artifact read permission are required. Native programs are ow
 
 ## Declared data in the program
 
-Replace `abc123` with your dataset ID (CLI: `afbin push sales.csv --type dataset --access readwrite --json`). Inspect actual tables/columns first. This example assumes `rows(region,month,revenue)`.
+Replace `abc123` with your dataset ID (CLI: `afbin push sales.csv --type dataset --json`). Inspect actual tables/columns first. This example assumes `rows(region,month,revenue)`.
 
 ```jsx
 <Helmet>

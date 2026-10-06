@@ -118,3 +118,17 @@ describe('native grid layouts bound evidence at phone width',()=>{
     expect(landing).toContain('grid grid-cols-1 gap-8');
   });
 });
+
+describe('new dataset examples preserve app grant defaults',()=>{
+  it('keeps accepted participants and Lambda examples on the current dataset access path',()=>{
+    const users=renderDoc('artifactbin/references/databases-users.md',BASE);
+    const yaml=users.match(/Save this resource as `people\.yaml`:[\s\S]*?```yaml\n([\s\S]*?)```/)?.[1];
+    expect(yaml).toBeDefined();
+    expect(yaml).not.toMatch(/^\s*(?:access|policy):/m);
+
+    const lambdas=renderDoc('artifactbin/references/lambdas.md',BASE);
+    const creation=lambdas.match(/CLI: `([^`]+)`/)?.[1];
+    expect(creation).toBe('afbin push sales.csv --type dataset --json');
+    expect(creation).not.toContain('--access');
+  });
+});
