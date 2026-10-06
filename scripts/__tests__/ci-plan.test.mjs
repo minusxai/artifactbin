@@ -881,12 +881,15 @@ describe('CI job shape', () => {
     expect(job['runs-on']).toBe('ubuntu-24.04');
     const commands = job.steps.map(step => step.run ?? '');
     expect(commands.some(command => command.includes('build:binary'))).toBe(false);
-    // The bundle, types and host runtime that `npm pack` and the bundle conformance read.
-    const build = job.steps.findIndex(step => step.run === 'npm run build -w services/cli');
-    const download = job.steps.findIndex(step => step.uses?.startsWith('actions/download-artifact'));
+    // Both conformance locations consume the current pack job's build, without rebuilding it.
+    expect(commands).not.toContain('npm run build -w services/cli');
+    const source = job.steps.findIndex(step => step.with?.name === 'afbin-reference-build');
+    const extract = job.steps.findIndex(step => step.run === 'tar -xf afbin-reference-build.tar');
+    const download = job.steps.findIndex(step => step.with?.name === 'afbin-npm-release');
     expect(job.steps[download]?.with).toMatchObject({ name: 'afbin-npm-release', path: 'npm-candidate' });
-    expect(download).toBeGreaterThan(build);
-    expect(build).toBeGreaterThan(-1);
+    expect(source).toBeGreaterThan(-1);
+    expect(extract).toBeGreaterThan(source);
+    expect(download).toBeGreaterThan(extract);
     expect(commands.some(command=>command.includes('npm install --prefix'))).toBe(true);
     expect(ci().jobs.cli.strategy.matrix.os).toContain('ubuntu-24.04');
     expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-npm-release')?.with.path).toBe('npm-candidate');
@@ -917,7 +920,7 @@ describe('CI job shape', () => {
 
   it('keeps a merged PR\'s npm artifact downloadable for a week after the merge', () => {
     const uploads = Object.values(ci().jobs).flatMap((job) => job.steps ?? [])
-      .filter((step) => step.uses?.startsWith('actions/upload-artifact') && /^afbin-|^tested-/.test(step.with.name ?? ''));
+      .filter((step) => step.uses?.startsWith('actions/upload-artifact') && /^(afbin-npm-|tested-)/.test(step.with.name ?? ''));
     expect(uploads.length).toBeGreaterThan(0);
     for (const upload of uploads) expect(Number(upload.with['retention-days']), upload.with.name).toBeGreaterThanOrEqual(7);
   });
