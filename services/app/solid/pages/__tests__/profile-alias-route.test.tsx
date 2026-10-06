@@ -10,7 +10,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, waitFor } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ProfileAliasRoute } from '@/solid/pages/Profile';
+import { ProfileAliasRoute } from '@/solid/pages/ProfileAliasRoute';
 import { replaceDocument } from '@/solid/lib/document-navigation';
 import { InboxProvider } from '@/solid/lib/notifications';
 
