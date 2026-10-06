@@ -28,7 +28,7 @@ import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
 import { DOCUMENT_FRAME, documentFrame, documentLocator, inlineStory, INLINE_STORY } from './lib/page-facts.mjs';
-import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
+import { openMenu } from './lib/reveal-chrome.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { becomeOwner, mergeGuestIntoAccount, startDocument } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
@@ -666,7 +666,10 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     const ownerPage = await b.newPage({ viewport: { width: 1400, height: 1000 } });
     await becomeOwner(ownerPage, B, st.token);
     await ownerPage.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-    await openArtifactControls(ownerPage);
+    // StarterPage hides the app shell's generic chrome after mount. Target the starter document's
+    // own control button so the helper cannot click a transient shell opener during that handoff.
+    await ownerPage.getByRole('button', { name: 'Open artifact controls', exact: true }).click();
+    await ownerPage.getByRole('region', { name: 'Artifact controls', exact: true }).waitFor({ state: 'visible' });
     // The controls panel fills in after it opens: wait for the fields rather than reading them at once.
     const shown = (locator) => locator.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
     check(await shown(ownerPage.getByRole('textbox', { name: 'Agent instructions', exact: true })), 'a new artifact offers its owner editable agent instructions');
