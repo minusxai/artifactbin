@@ -167,6 +167,7 @@ try {
     check(contextPage.url().includes(contextDoc.id), 'Open document goes to the companion artifact');
     await contextPage.goto(`${base}/a/${contextDoc.id}#edit`);
     const contextFrame = await documentFrame(contextPage);
+    await contextFrame.getByRole('textbox', { name: 'Document text' }).first().waitFor({ timeout: 30000 });
     await contextFrame.getByText('Revenue excludes refunds.', { exact: true }).click();
     await contextFrame.locator('#context-note').fill('Revenue excludes refunds and internal accounts.');
     await contextPage.getByRole('button', { name: 'Exit edit mode' }).click();
