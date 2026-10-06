@@ -39,6 +39,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { documentFrame, DOCUMENT_FRAME, servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
+import { jsonRouteResponse } from './lib/json-route-response.mjs';
 import { forkDestination } from './lib/fork-destination.mjs';
 import { lane } from './lib/lane.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
