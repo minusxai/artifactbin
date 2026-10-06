@@ -257,6 +257,122 @@ describe('markdown block shortcuts', () => {
   }
   const ID = 'e[0-9a-f]{32}';
 
+  it.each(['space', 'enter'])('inserts a horizontal rule with --- and %s, preserving undo and a place to type', async trigger => {
+    const e = editor('<article id="doc"><p id="divider"></p></article>');
+    e.type('---');
+    if (trigger === 'space') e.type(' '); else e.enter();
+    expect(e.view.container.querySelector('article > hr#divider')).not.toBeNull();
+    expect(e.view.container.querySelector('hr + p')).not.toBeNull();
+    const converted = e.store.current();
+    expect(serializeJsx(sourceNodes(editorDocument(nodes(converted))))).toBe(converted);
+    await e.store.undo();
+    expect(e.store.current()).toBe(`<article id="doc"><p id="divider">---${trigger === 'space' ? ' ' : ''}</p></article>`);
+    await e.store.redo();
+    expect(e.store.current()).toBe(converted);
+    e.type('After the divider');
+    expect(e.view.container.querySelector('hr + p')?.textContent).toBe('After the divider');
+  });
+
+  it('keeps text after the horizontal-rule marker in the following paragraph', () => {
+    const e = editor('<p id="divider">Keep me</p>');
+    e.caret('start');
+    e.type('--- ');
+    expect(e.view.container.querySelector('hr + p')?.textContent).toBe('Keep me');
+  });
+
+  it.each(['[] ', '[ ] ', '[x] '])('creates a saved, toggleable checkbox from %s', async prefix => {
+    const e = editor('<p id="task"></p>');
+    e.type(`${prefix}Ship it`);
+    const checkbox = e.view.getByRole('checkbox') as HTMLInputElement;
+    expect(checkbox.checked).toBe(prefix === '[x] ');
+    expect(checkbox.disabled).toBe(false);
+    const before = e.store.current();
+    fireEvent.click(checkbox);
+    const saved = e.store.current();
+    expect(saved).not.toBe(before);
+    expect(e.view.getByRole('checkbox').getAttribute('aria-label')).toBe('Task completed');
+    expect(serializeJsx(sourceNodes(editorDocument(nodes(saved))))).toBe(saved);
+    expect(saved).toContain('disabled');
+    await e.store.undo();
+    expect(e.store.current()).toBe(before);
+  });
+
+  it('continues checkboxes unchecked on Enter and exits an empty task', () => {
+    const e = editor('<p id="task"></p>');
+    e.type('[x] Done');
+    e.enter();
+    e.type('Next');
+    const boxes = e.view.getAllByRole('checkbox') as HTMLInputElement[];
+    expect(boxes.map(box => box.checked)).toEqual([true, false]);
+    e.enter();
+    e.enter();
+    e.type('Plain paragraph');
+    expect(e.view.getAllByRole('checkbox')).toHaveLength(2);
+    expect(e.view.container.querySelector('p:last-child')?.textContent).toBe('Plain paragraph');
+  });
+
+  it.each(['space', 'enter'])('starts a literal code block with a fence and %s', trigger => {
+    const e = editor('<p id="code" className="lead"></p>');
+    e.type('```');
+    if (trigger === 'space') e.type(' '); else e.enter();
+    e.type('# literal');
+    e.enter();
+    e.type('  indented');
+    expect(e.store.current()).toBe('<pre id="code"># literal\n  indented</pre>');
+    expect(serializeJsx(sourceNodes(editorDocument(nodes(e.store.current()))))).toBe(e.store.current());
+    const mac = /Mac/.test(navigator.platform);
+    e.v().someProp('handleKeyDown', f => f(e.v(), new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: !mac, metaKey: mac })));
+    e.type('After code');
+    expect(e.view.container.querySelector('pre + p')?.textContent).toBe('After code');
+  });
+
+  it('preserves code newlines and indentation when native typing changes the DOM', async () => {
+    const e = editor('<pre id="code"># literal\n  codeCode</pre>');
+    const text = e.view.container.querySelector('pre')!.firstChild!;
+    // Native browser input is read by ProseMirror's mutation observer, unlike command insertion.
+    text.nodeValue = '# literal\n  codeXCode';
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flushFlowView(e.v());
+    expect(e.store.current()).toBe('<pre id="code"># literal\n  codeXCode</pre>');
+  });
+
+  it('wraps a paragraph in a blockquote and exits an empty quote', () => {
+    const e = editor('<p id="quote"></p>');
+    e.type('> Quoted');
+    expect(e.view.container.querySelector('blockquote > p#quote')?.textContent).toBe('Quoted');
+    e.enter();
+    e.enter();
+    e.type('After quote');
+    expect(e.view.container.querySelector('blockquote + p')?.textContent).toBe('After quote');
+  });
+
+  it.each(['[] ', '``` ', '> '])('undoes the %s conversion back to its literal marker', async prefix => {
+    const e = editor('<p id="a"></p>');
+    e.type(prefix);
+    await e.store.undo();
+    expect(e.store.current()).toBe(`<p id="a">${prefix.replace('>', '&gt;')}</p>`);
+  });
+
+  it.each(['[] ', '``` ', '> ', '--- '])('keeps %s literal in code, a cell, and mid-paragraph', prefix => {
+    for (const source of ['<pre id="a"></pre>', '<table><tr><td><p id="a"></p></td></tr></table>', '<p id="a">Literal: </p>']) {
+      const e = editor(source);
+      e.caret('end');
+      e.type(prefix);
+      expect(e.view.container.querySelector('#a')?.textContent).toContain(prefix);
+      expect(e.view.queryByRole('checkbox')).toBeNull();
+    }
+  });
+
+  it('keeps a saved checkbox disabled when prose is not editable', () => {
+    const onChange = vi.fn();
+    const e = render(() => <FlowEditor nodes={nodes('<p><input type="checkbox" disabled checked={true} /> Done</p>')} path="0" canEdit={() => false} onChange={onChange} />);
+    const box = e.getByRole('checkbox') as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    fireEvent.click(box);
+    expect(box.checked).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('keeps repeated Enter and markdown headings inside the document column', () => {
     const e = editor('<article id="doc" className="max-w-3xl"><h1 id="title">Notes</h1><p id="body">Body</p></article>');
     e.caret('end');

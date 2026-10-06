@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * AN ARTIFACT ADDRESS THE SERVER ANSWERED WITHOUT A COMPILED PAGE — `/a/<id>[/edit]` or its pretty alias
- * (solid/App ArtifactRoute, solid/pages/Profile ProfileAliasRoute), once `servedDocumentFrame()` has said
+ * (solid/App ArtifactRoute, solid/pages/ProfileAlias ProfileAliasRoute), once `servedDocumentFrame()` has said
  * this load carries no document frame. The page door's answer (inlined by server/app, or fetched on a
  * client navigation) says what the artifact is, and so which page draws it:
  *
