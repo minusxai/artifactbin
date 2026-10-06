@@ -15,7 +15,7 @@ import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObject
 
 // Fault injection still writes/truncates real files. Pause before bytes finish so a reader deterministically
 // observes the publication boundary; an atomic writer's temporary file is not the reader's destination.
-const publication = vi.hoisted(() => ({active:false,fail:false,reached:()=>{},pending:Promise.resolve()}));
+const publication = vi.hoisted(() => ({active:false,fail:false,rejectIdenticalRename:false,rejectRename:false,reached:()=>{},pending:Promise.resolve()}));
 const mockedFs = vi.hoisted(() => async () => {
   const real = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
   const writing = async (truncate:()=>Promise<void>,finish:()=>Promise<void>) => {
@@ -26,6 +26,14 @@ const mockedFs = vi.hoisted(() => async () => {
   };
   return {
     ...real,
+    rename: async (...args:Parameters<typeof real.rename>) => {
+      if (publication.rejectRename) throw Object.assign(new Error('Windows denied replacing an open object'),{code:'EPERM'});
+      if (publication.rejectIdenticalRename) {
+        const existing=await real.readFile(args[1]).catch((error:NodeJS.ErrnoException)=>{if(error.code==='ENOENT')return null;throw error;});
+        if (existing?.equals(await real.readFile(args[0]))) throw Object.assign(new Error('Windows denied replacing an identical open object'),{code:'EPERM'});
+      }
+      return real.rename(...args);
+    },
     writeFile: (...args:Parameters<typeof real.writeFile>) => writing(() => real.writeFile(args[0], ''), () => real.writeFile(...args)),
     open: async (...args:Parameters<typeof real.open>) => {
       const handle = await real.open(...args);
@@ -355,4 +363,39 @@ describe('local objects publish complete bytes', () => {
     expect((await store.get('islands/module')).toString()).toBe('complete old module');
     expect(await readdir(path.join(dir,'islands'))).toEqual(['module']);
   });
+});
+
+
+it('publishes the same cache key concurrently without replacing identical existing bytes',async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-identical-'));tmpDirs.push(dir);
+  const first=createLocalStore(dir),second=createLocalStore(dir),bytes=Buffer.from('complete compiled module');
+  await first.put('islands/module',bytes);
+  // Deterministic Windows sharing violation: replacing this existing immutable object is denied.
+  // Two store instances and concurrent callers must reuse it, without weakening differing-byte replacement.
+  publication.rejectIdenticalRename=true;
+  try {
+    const writes=await Promise.allSettled(Array.from({length:12},(_,i)=>(i%2?first:second).put('islands/module',bytes)));
+    expect(writes.every(write=>write.status==='fulfilled'),JSON.stringify(writes)).toBe(true);
+  }finally{publication.rejectIdenticalRename=false;}
+  expect(await first.get('islands/module')).toEqual(bytes);
+  expect(await readdir(path.join(dir,'islands'))).toEqual(['module']);
+});
+
+it('publishes concurrent first writers of identical bytes as one complete object',async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-race-'));tmpDirs.push(dir);
+  const stores=[createLocalStore(dir),createLocalStore(dir)],bytes=Buffer.from('complete SSR module');
+  await Promise.all(Array.from({length:12},(_,i)=>stores[i%2]!.put('islands-ssr/module',bytes)));
+  expect(await stores[0]!.get('islands-ssr/module')).toEqual(bytes);
+  expect(await readdir(path.join(dir,'islands-ssr'))).toEqual(['module']);
+});
+
+it('reports a denied differing-byte replacement and preserves the existing complete object',async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-denied-'));tmpDirs.push(dir);
+  const store=createLocalStore(dir);
+  await store.put('islands/module','old compiled module');
+  publication.rejectRename=true;
+  try {await expect(store.put('islands/module','new compiled module')).rejects.toMatchObject({code:'EPERM'});}
+  finally {publication.rejectRename=false;}
+  expect((await store.get('islands/module')).toString()).toBe('old compiled module');
+  expect(await readdir(path.join(dir,'islands'))).toEqual(['module']);
 });

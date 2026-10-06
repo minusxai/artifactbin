@@ -17,7 +17,7 @@ Setup once: npx --yes @afbin/cli@latest setup --server '[[ base ]]'
 Windows: npx.cmd --yes @afbin/cli@latest setup --server '[[ base ]]'
 This installs the afbin command and the agent skills. Node setup reuses supported Node/npm or installs LTS; keep this terminal.
 Then: afbin pull <artifact url> --output report.jsx; edit the file; afbin push report.jsx (push runs afbin validate itself)
-Help: afbin help or afbin help <topic>. Restart your agent to load the installed skill.
+Reference: afbin help or afbin help <topic>. Restart your agent to load the installed skill.
 Local: afbin preview report.jsx needs no cloud or credentials. Downloads: .jsx.html. Prepare a pinned npm cache before disconnecting; npm is not a sandbox.
 
 

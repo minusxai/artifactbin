@@ -254,7 +254,7 @@ export function createLocalStore(dir: string): ObjectStore {
     async put(key, body) {
       const file = resolve(key);
       await mkdir(path.dirname(file), { recursive: true });
-      await atomicWrite(file, body);
+      await atomicWrite(file, body, {reuseIdentical: true});
     },
     async get(key) {
       try {
