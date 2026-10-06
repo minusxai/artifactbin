@@ -83,3 +83,58 @@ it('publishes an uploaded CSV with the account session and shows its reference',
   await waitFor(() => expect(calls.some(call => call.url === '/api/my/artifacts' && call.init?.method === 'POST')).toBe(true));
   expect(await screen.findByRole('button', { name: 'Copy dataset reference' })).toHaveTextContent('ref:data_1');
 });
+
+it('bounds connections to five rows and separates inactive history', async () => {
+  const tokens = Array.from({ length: 12 }, (_, index) => ({ id: `tok_${index}`, name: `Connection ${index}`, status: index < 7 ? 'active' : 'expired', created_at: '2026-01-01', deleted_at: null, expires_at: null, last_used_at: null }));
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
+    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
+    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
+    if (url === '/api/my/domain') return Response.json({ enabled: false, target: null, targetAddresses: [], domain: null });
+    if (url === '/api/my/tokens') return Response.json({ tokens });
+    return Response.json({});
+  }));
+  window.history.replaceState(null, '', '/account');
+  render(() => <App />);
+  expect(await screen.findByRole('button', { name: 'Active (7)' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getAllByRole('row', { name: /Token row/ })).toHaveLength(5);
+  expect(screen.queryByRole('row', { name: 'Token row Connection 7' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Next connections page' }));
+  expect(screen.getAllByRole('row', { name: /Token row/ })).toHaveLength(2);
+  expect(screen.getByRole('row', { name: 'Token row Connection 6' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'History (5)' }));
+  expect(screen.getAllByRole('row', { name: /Token row/ })).toHaveLength(5);
+  expect(screen.getByRole('row', { name: 'Token row Connection 7' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Previous connections page' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Active (7)' }));
+  expect(screen.getByRole('row', { name: 'Token row Connection 0' })).toBeInTheDocument();
+});
+
+
+it('saves a custom-domain homepage and can restore the document listing', async () => {
+  let homepageArtifactId: string | null = null;
+  const saves: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
+    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
+    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
+    if (url === '/api/my/domain') {
+      if (init?.method === 'PATCH') { const body = JSON.parse(String(init.body)); saves.push(body); homepageArtifactId = body.homepageArtifactId; return Response.json({}); }
+      return Response.json({ enabled: true, target: 'edge.example.net', targetAddresses: [], homepageOptions: [{ id: 'doc_1', title: 'My homepage' }], domain: { hostname: 'blog.example.com', status: 'verified', txtName: '_verify.blog.example.com', txtValue: 'proof', target: 'edge.example.net', verifiedAt: null, missingSince: null, homepageArtifactId } });
+    }
+    if (url === '/api/my/tokens') return Response.json({ tokens: [] });
+    return Response.json({});
+  }));
+  window.history.replaceState(null, '', '/account');
+  render(() => <App />);
+  const select = await screen.findByRole('combobox', { name: 'Domain homepage' });
+  fireEvent.change(select, { target: { value: 'doc_1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save homepage' }));
+  await waitFor(() => expect(saves).toEqual([{ homepageArtifactId: 'doc_1' }]));
+  expect(await screen.findByText('Homepage saved.')).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Domain homepage' })).toHaveValue('doc_1');
+  expect(screen.getByRole('button', { name: 'Save homepage' })).toBeDisabled();
+  fireEvent.change(screen.getByRole('combobox', { name: 'Domain homepage' }), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save homepage' }));
+  await waitFor(() => expect(saves).toEqual([{ homepageArtifactId: 'doc_1' }, { homepageArtifactId: null }]));
+});

@@ -43,7 +43,7 @@ import { CARD_RENDER_GENERATION } from '@/lib/serving';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
-import { canonicalDocumentUrl, domainPostUrl, servesDocument } from '@/lib/serving';
+import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
 import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/contract';
 import type { StorySurface } from '@/lib/compiled-page/story-fragment';
 import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
@@ -70,7 +70,7 @@ const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title>
  * a footer back to the app, and a self-canonical on the domain; every
  * capture, archive and editing switch on the URL is ignored.
  */
-export interface DomainPost { hostname: string; ownerId: string }
+export interface DomainPost { hostname: string; ownerId: string; homepage?: boolean }
 
 const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
@@ -83,7 +83,7 @@ const notFound = () =>
  * a footer back to the app, and a self-canonical on the domain; every
  * capture, archive and editing switch on the URL is ignored.
  */
-export interface DomainPost { hostname: string; ownerId: string }
+export interface DomainPost { hostname: string; ownerId: string; homepage?: boolean }
 
 /**
  * THE STORY FRAGMENT (`GET /a/:id/story`, app/a/[id]/story): the compiled document's newest version as
@@ -370,7 +370,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           head: chrome
             ? {
               description: row.description,
-              canonical: domain ? domainPostUrl(domain.hostname, artifact) : await canonicalDocumentUrl(artifact),
+              canonical: domain?.homepage ? `https://${domain.hostname}/` : await canonicalDocumentUrl(artifact),
               social: { title: displayTitle(row), description: row.description, image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}` },
               help: reader ? agentDiscovery(base) : null,
             }

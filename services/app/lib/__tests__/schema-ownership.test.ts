@@ -66,6 +66,8 @@ it('notification outbox and subscriber receipts stay with their existing owners'
 
 it('custom domains belong to app accounts: one per account, one VERIFIED owner per hostname',()=>{
  expect(declared()['app.custom_domains']).toBe('app');
+ expect(renderedSchema().schema).toContain('homepage_artifact_id TEXT');
+ expect(renderedSchema().schema).toContain('ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS homepage_artifact_id TEXT');
  expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.custom_domains \([\s\S]*PRIMARY KEY \(user_id\)/);
  expect(renderedSchema().schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_verified_host ON app\.custom_domains \(hostname\) WHERE status = 'verified'/);
 });

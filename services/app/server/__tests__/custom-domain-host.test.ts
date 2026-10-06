@@ -512,6 +512,55 @@ describe('the settings API', () => {
     }
   });
 
+  it('sets only an owned public document as homepage and serves it safely at the root', async () => {
+    const w = await world();
+    settings.session = w.vivek.userId;
+    const select = (id: unknown) => call('PATCH', '/api/my/domain', { homepageArtifactId: id });
+    for (const id of [w.quiet.id, w.secret.id, w.theirs.id, w.ds.id, w.folder.id, 'missing']) {
+      const refused = await select(id);
+      expect(refused.status, String(id)).toBe(422);
+      expect(await refused.json()).toEqual({ error: 'invalid_homepage' });
+    }
+    expect((await call('PATCH', '/api/my/domain', {})).status).toBe(400);
+    const saved = await select(w.post.id);
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ homepageArtifactId: w.post.id });
+    const settingsResponse = await (await call('GET', '/api/my/domain')).json();
+    expect(settingsResponse.homepageOptions).toContainEqual({ id: w.post.id, title: 'Hello World' });
+    expect(settingsResponse.homepageOptions.map((item: { id: string }) => item.id)).not.toContain(w.quiet.id);
+    const root = await app().request(`${HOST}/`, { headers: { cookie: 'authjs.session-token=forged' } });
+    expect(root.status).toBe(200);
+    const html = await root.text();
+    expect(html).toContain('Hello from my blog');
+    expect(html).toContain(`<link rel="canonical" href="${HOST}/">`);
+    expect(html).not.toContain('id="root"');
+    noCookie(root);
+    const head = await app().request(`${HOST}/`, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe('');
+    expect((await app().request(`${HOST}/${w.post.id}-hello-world`)).status).toBe(200);
+    const appCopy = await app().request(`${APP}/a/${w.post.id}/raw`);
+    expect(await appCopy.text()).toContain(`<link rel="canonical" href="${HOST}/">`);
+    await (await getDb()).query("UPDATE artifacts SET visibility = 'private' WHERE id = $1", [w.post.id]);
+    const fallback = await app().request(`${HOST}/`);
+    const fallbackHtml = await fallback.text();
+    expect(fallback.status).toBe(200);
+    expect(fallbackHtml).not.toContain('Hello from my blog');
+    expect(fallbackHtml).toContain('Made with');
+    expect((await select(null)).status).toBe(200);
+    expect(await (await call('GET', '/api/my/domain')).json()).toMatchObject({ domain: { homepageArtifactId: null } });
+  });
+
+  it('requires account ownership and same-origin writes for homepage changes', async () => {
+    const w = await world();
+    expect((await call('PATCH', '/api/my/domain', { homepageArtifactId: w.post.id })).status).toBe(401);
+    settings.session = w.vivek.userId;
+    const crossSite = await app().request(`${APP}/api/my/domain`, { method: 'PATCH', headers: { 'content-type': 'application/json', origin: 'https://evil.example' }, body: JSON.stringify({ homepageArtifactId: w.post.id }) });
+    expect(crossSite.status).toBe(403);
+    settings.session = w.other.userId;
+    expect((await call('PATCH', '/api/my/domain', { homepageArtifactId: w.theirs.id })).status).toBe(404);
+  });
+
   it('attaches, reports, verifies with a named failure, verifies, and removes', async () => {
     const me = await owner('settings');
     settings.session = me.userId;

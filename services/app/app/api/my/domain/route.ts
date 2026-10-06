@@ -1,5 +1,5 @@
 /**
- * GET/POST/DELETE /api/my/domain — the signed-in account's custom domain
+ * GET/POST/PATCH/DELETE /api/my/domain — the signed-in account's custom domain
  * (lib/custom-domains holds every rule; this translates them to HTTP).
  *
  * GET    → { enabled, target, targetAddresses, domain }: whether attaching is
@@ -12,7 +12,7 @@
  */
 import { auth } from '@/auth';
 import { CUSTOM_DOMAINS_TARGET } from '@/lib/platform';
-import { attachDomain, domainOf, domainResolver, removeDomain } from '@/lib/serving';
+import { attachDomain, domainHomepageOptions, setDomainHomepage, domainOf, domainResolver, removeDomain } from '@/lib/serving';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -26,7 +26,8 @@ export async function GET(request: Request) {
     domainOf(session.user.id),
     target ? domainResolver().addresses(target).catch(() => []) : Promise.resolve([]),
   ]);
-  return json({ enabled: !!target, target, targetAddresses, domain }, 200, NO_STORE);
+  const homepageOptions = domain ? await domainHomepageOptions(session.user.id) : undefined;
+  return json({ enabled: !!target, target, targetAddresses, domain, ...(homepageOptions ? { homepageOptions } : {}) }, 200, NO_STORE);
 }
 
 export async function POST(request: Request) {
@@ -47,4 +48,16 @@ export async function DELETE(request: Request) {
   if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403, NO_STORE);
   await removeDomain(session.user.id);
   return new Response(null, { status: 204, headers: NO_STORE });
+}
+
+/** A null selection restores the default listing; only owned public documents can be selected. */
+export async function PATCH(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return unauthorized(request);
+  if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403, NO_STORE);
+  const body = await readJson(request);
+  if (!body || !(body.homepageArtifactId === null || typeof body.homepageArtifactId === 'string')) return json({ error: 'invalid_homepage' }, 400, NO_STORE);
+  const result = await setDomainHomepage(session.user.id, body.homepageArtifactId);
+  if ('error' in result) return json(result, result.error === 'not_found' ? 404 : 422, NO_STORE);
+  return json(result, 200, NO_STORE);
 }
