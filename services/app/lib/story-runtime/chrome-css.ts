@@ -62,6 +62,7 @@
  */
 export const STORY_COLUMN_CSS = `
 .mx-doc { flex: 1 1 auto; min-width: 0; container-type: inline-size; overflow-x: clip; }
+.mx-doc--document { box-sizing: border-box; width: 100%; max-width: 816px; margin-inline: auto; padding: 48px 24px 96px; overflow-wrap: anywhere; }
 `;
 
 /**

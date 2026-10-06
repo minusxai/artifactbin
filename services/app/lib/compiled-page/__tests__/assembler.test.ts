@@ -68,6 +68,13 @@ describe('assembleReaderPage', () => {
     expect(reading.children[1]?.className).toBe('mx-doc');
     expect(dom(assembleReaderPage(input())).querySelector('.mx-outline')).toBeNull();
   });
+  it('keeps a hidden outline host in a blank doc so typing never reparents the focused column', () => {
+    const options = { compiled: compiled({ outlineDoc: true }), story: '<div class="mx-doc mx-doc--document"><h1></h1></div>' };
+    const doc = dom(assembleReaderPage(input(options)));
+    expect(doc.querySelector('.mx-reading > .mx-outline')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.mx-reading > .mx-doc--document')).toBeTruthy();
+    expect(dom(assembleReaderPage(input({ ...options, documentChrome: false }))).querySelector('.mx-outline')).toBeNull();
+  });
   it('places the request\'s story, never re-rendering it: the story input is what appears', () => {
     const page = assembleReaderPage(input({ story: '<div class="mx-doc"><b id="with-data">$744,503</b></div>' }));
     expect(dom(page).querySelector('#mx-story-root #with-data')?.textContent).toBe('$744,503');

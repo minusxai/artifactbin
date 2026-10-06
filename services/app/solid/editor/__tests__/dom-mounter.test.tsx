@@ -40,6 +40,30 @@ describe('a region the draft draws unchanged', () => {
 });
 
 describe('compiled DOM edit mounter', () => {
+  it('shows placeholders only while prose is empty and never saves them as text', () => {
+    const source = '<article id="doc"><h1 id="headline" data-placeholder="Headline"></h1><p id="body" data-placeholder="Start writing…"></p></article>';
+    const root = document.createElement('div');
+    root.innerHTML = '<article data-mx-ast="0" id="doc"><h1 data-mx-ast="0.0" id="headline"></h1><p data-mx-ast="0.1" id="body"></p></article>';
+    document.body.append(root);
+    let view: EditorView | null = null;
+    const onFlow = vi.fn();
+    const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow, onView: value => { if (value) view = value; } });
+    try {
+      expect(root.querySelector('#headline')?.getAttribute('data-mx-placeholder')).toBe('Headline');
+      expect(root.querySelector('#body')?.textContent).toBe('');
+      const editor = view as unknown as EditorView;
+      let headlinePosition = 1;
+      editor.state.doc.descendants((node, pos) => { if (node.attrs.source?.tag === 'h1') headlinePosition = pos + 1; });
+      editor.dispatch(editor.state.tr.insertText('My notes', headlinePosition));
+      expect(root.querySelector('#headline')?.hasAttribute('data-mx-placeholder')).toBe(false);
+      flushFlowView(editor);
+      expect(onFlow).toHaveBeenCalled();
+      expect(onFlow.mock.calls[0][2]).toContain('My notes');
+      expect(onFlow.mock.calls[0][2]).not.toContain('data-mx-placeholder');
+      expect(onFlow.mock.calls[0][2]).not.toContain('>Headline<');
+    } finally { mounted.dispose(); root.remove(); }
+  });
+
   it('mounts the regions on screen at once and the off-screen ones in later slices, never after dispose', async () => {
     // A component between each heading and table pair: six regions, one editor each.
     const blocks = Array.from({ length: 6 }, (_, i) => `<Badge id="b${i}">b</Badge><h2 id="h${i}">Table ${i}</h2><table id="t${i}"><tbody><tr><td>r${i}</td></tr></tbody></table>`).join('');

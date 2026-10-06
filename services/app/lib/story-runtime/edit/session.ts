@@ -17,6 +17,7 @@
 import type { JsxNode } from '@/lib/jsx';
 import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-v2/bookmark';
 import { flushFlowView } from '@/lib/editor-v2/flow-view';
+import { syncDocumentOutline } from '../outline-view';
 import { toggleInline, pasteFragment } from '@/lib/editor-v2/model';
 import { clipboardAst } from '@/lib/editor-v2/clipboard';
 import { SELECTION_PRESENTATION } from '../selection-presentation';
@@ -65,6 +66,7 @@ import type { CompiledEditMount, CompiledEditCallbacks, HeldEditors, ReconcileOp
 const EDIT_LAYOUT_ATTR = 'data-mx-parent-layout';
 const EDIT_MODE_CSS = [
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
+  '.ProseMirror [data-mx-placeholder]::before { content: attr(data-mx-placeholder); float: left; height: 0; opacity: .35; pointer-events: none; }',
   // A prose region's blocks sit inside the editor root (a focusable box: with `display: contents`
   // it cannot take focus), not in their authored parent. Under a flex or grid parent the root takes the
   // parent's place in full and inherits its layout through the box-less region wrappers, so a flex
@@ -447,6 +449,7 @@ export function createFrameEditSession({
         return;
       }
       nodes = next;
+      syncDocumentOutline(root, nodes);
       selection.nodesChanged();
     },
     onParentMessage(message: StoryEditParentMessage) {

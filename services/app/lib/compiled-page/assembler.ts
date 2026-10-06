@@ -27,7 +27,7 @@
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/serving/agent-discovery';
 import { AUTHOR_VENDOR_EXPORTS, LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands/contract';
-import type { OutlineEntry } from '@/lib/story-runtime/outline';
+import { renderOutlineRail } from '@/lib/story-runtime/outline-view';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/styles';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
@@ -42,18 +42,6 @@ import { splitCarriers, withStoredCarriers } from './carriers';
 import { bindModuleRef } from './runtime-binding';
 import { speculationRulesOf } from './speculation';
 
-/** The first-paint outline has no event handlers; the app attaches navigation after adoption. */
-function renderOutlineRail(entries: readonly OutlineEntry[]): string {
-  let section = 0;
-  const rows = entries.map((entry) => {
-    if (entry.level === 2) section++;
-    const label = entry.level === 2 ? `Go to section ${section}: ${entry.title}` : `Go to ${entry.title}`;
-    const cls = entry.level === 3 ? 'mx-outline-row mx-outline-sub' : 'mx-outline-row';
-    return `<button type="button" class="${cls}" aria-label="${escapeHtml(label)}" data-mx-target="${escapeHtml(entry.path)}">${escapeHtml(entry.title)}</button>`;
-  }).join('');
-  return `<nav class="mx-outline" aria-label="Contents"><div class="mx-outline-label">Contents</div>${rows}</nav>`;
-}
-
 export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): AssembledPage => {
   const { compiled, overlay, build } = input;
   const help = input.head?.help ?? null;
@@ -64,7 +52,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   // to the compiled module and may exist only in its stored first render.
   const { story: storySource, moduleData, literals } = splitCarriers(withStoredCarriers(input.story, compiled.html));
   const storyHtml = fillChartSlots(storySource, input.snapshot?.drawings ?? {});
-  const withOutline = input.documentChrome !== false && compiled.outline?.length
+  const withOutline = input.documentChrome !== false && (compiled.outline?.length || compiled.outlineDoc)
     ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderOutlineRail(compiled.outline)}${storyHtml}</div>`
     : storyHtml;
   const story = storyElement(withOutline, input.colorMode, input.theme);

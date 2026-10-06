@@ -342,6 +342,9 @@ export function normalizeIdentities(tr: Transaction, mintMissing = false): Trans
   if (!tr.docChanged) return tr;
   const seen = new Set<string>();
   const identify = (source: JsxElement | null, tag: string): JsxElement | null => {
+    // Markdown/block formatting changes the tag while preserving identity. The
+    // metadata must agree so AST-path decorations can still select this block.
+    if (source && source.tag !== tag) source = { ...source, tag };
     const id = source?.attributes.find((a) => a.name === 'id')?.value;
     const value = id?.static && typeof id.json === 'string' ? id.json : null;
     if (value && !seen.has(value)) {

@@ -995,7 +995,8 @@ export function generate(input: GenerateInput): Generated {
   // included; its behaviour is the framework-free `@mx/deck` chunk.
   const slides = input.chrome !== false ? discoverSlides(nodes) : [];
   const deck = slides.length >= MIN_SLIDES_FOR_RAIL;
-  let root = `<div class="mx-doc">${body}</div>`;
+  const columnClass = input.template === 'doc' ? 'mx-doc mx-doc--document' : 'mx-doc';
+  let root = `<div class="${columnClass}">${body}</div>`;
   if (deck) {
     const allocate = createPreviewPropsAllocator(nodes, '_R_1_');
     const previewValues = declaredValues(input.flow);
@@ -1025,7 +1026,7 @@ export function generate(input: GenerateInput): Generated {
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
   const moduleData: string[] = [];
-  const browserRoot = deck ? `<div class="mx-deck"><rt.NoHydration /><div class="mx-doc">${browserBody}</div><rt.NoHydration /></div>` : `<div class="mx-doc">${browserBody}</div>`;
+  const browserRoot = deck ? `<div class="mx-deck"><rt.NoHydration /><div class="${columnClass}">${browserBody}</div><rt.NoHydration /></div>` : `<div class="${columnClass}">${browserBody}</div>`;
   const browserUses = new Set([...browserRoot.matchAll(/\$d(\d+)\b/g)].map((match) => Number(match[1])));
   const browserConsts = data.map((value, i) => {
     if (!browserUses.has(i)) return '';
@@ -1087,10 +1088,11 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   const plan = input.flow ? planOf(input.flow, input.access ?? { datasets: {} }) : null;
   const links = input.nodes.length ? linkHintsOf(input.nodes, { origins: deploymentOrigins() }) : EMPTY_LINK_HINTS;
   const outlinePlan = input.template === 'plan';
-  const outline = input.chrome && (input.template === 'editorial' || outlinePlan) && hasOutline(input.nodes)
-    ? discoverOutline(input.nodes) : [];
+  const outlineDoc = input.template === 'doc';
+  const outline = !input.chrome ? [] : outlineDoc ? discoverOutline(input.nodes, true)
+    : (input.template === 'editorial' || outlinePlan) && hasOutline(input.nodes) ? discoverOutline(input.nodes) : [];
   const base = {
-    build: build.id, ...(build.ssr ? { ssrHalf: build.ssr.url } : {}), handoverContract: MIN_HANDOVER_CONTRACT, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
+    build: build.id, ...(build.ssr ? { ssrHalf: build.ssr.url } : {}), handoverContract: MIN_HANDOVER_CONTRACT, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan, outlineDoc,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
     // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
     authorScript: input.authorScript || null,
