@@ -25,14 +25,20 @@ export function verifyArtifactArchive(bytes,digest){
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try {
-  const [repo,run,attempt,output,failedFile]=process.argv.slice(2);
-  if(!/^[\w.-]+\/[\w.-]+$/.test(repo??'')||!/^\d+$/.test(run??'')||!/^\d+$/.test(attempt??'')||!output)throw Error('Pass repository, run, attempt and output zip');
+  const args=process.argv.slice(2),waitOnly=args[0]==='--wait-only';
+  if(waitOnly)args.shift();
+  const [repo,run,attempt,output,failedFile]=args;
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo??'')||!/^\d+$/.test(run??'')||!/^\d+$/.test(attempt??'')||(!waitOnly&&!output))throw Error('Pass repository, run, attempt and output zip (or --wait-only)');
   const api=(path)=>JSON.parse(execFileSync('gh',['api',`/repos/${repo}/actions/${path}`],{encoding:'utf8',timeout:30000}));
   const current=api(`runs/${run}/attempts/${attempt}`);
   const artifact=await waitForCurrentArtifact({startedAt:current.run_started_at,jobs:()=>api(`runs/${run}/attempts/${attempt}/jobs?per_page=100`),artifacts:()=>api(`runs/${run}/artifacts?per_page=100`),childFailed:()=>Boolean(failedFile&&existsSync(failedFile))});
+  if(waitOnly){
+   console.log(`Ready: same-run, same-attempt npm artifact ${artifact.id}`);
+  }else{
   const bytes=execFileSync('gh',['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{maxBuffer:64*1024*1024,timeout:30000});
   verifyArtifactArchive(bytes,artifact.digest);
   writeFileSync(output,bytes);
   console.log(`Downloaded same-run, same-attempt npm artifact ${artifact.id}`);
+  }
  }catch(error){console.error(error.message);process.exitCode=1;}
 }

@@ -1,7 +1,11 @@
 /** Required checks consume the package they prove without redundant serial acceptance. */
-import {readFileSync} from 'node:fs';
+import {readFileSync,mkdtempSync,writeFileSync,chmodSync,rmSync} from 'node:fs';
 import {describe,it,expect} from 'vitest';
 import yaml from 'yaml';
+import {spawnSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
 describe('release critical path',()=>{
  it('runs Intel preview/export through the supported-platform experience proof once',()=>{
@@ -135,4 +139,37 @@ it('preserves GitHub artifact archive checksum verification',async()=>{
  expect(()=>verifyArtifactArchive(Buffer.from('abc'),digest)).not.toThrow();
  expect(()=>verifyArtifactArchive(Buffer.from('tampered'),digest)).toThrow(/checksum/);
  expect(()=>verifyArtifactArchive(Buffer.from('abc'),undefined)).toThrow(/checksum/);
+});
+
+it('prepares all consumer prerequisites before waiting for the same-run candidate',()=>{
+ const job=workflow().jobs.cli,steps=job.steps;
+ expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
+ const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs'));
+ expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='dependency-cache'));
+ expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='acceptance-browser'));
+ expect(steps[waiting].run).toContain('--wait-only');
+ expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
+ expect(waiting).toBeLessThan(steps.findIndex(step=>step.with?.name==='afbin-npm-release'));
+});
+it('wait-only CLI checks exact attempt and accepts readiness without downloading a duplicate zip',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-wait-only-'));
+ const calls=join(directory,'calls');
+ const gh=join(directory,'gh');
+ writeFileSync(gh,`#!${process.execPath}
+const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.stringify(calls)},path+'\\n');console.log(JSON.stringify(path.endsWith('/attempts/2')?{run_started_at:'2026-10-06T00:00:00Z'}:path.includes('/jobs?')?{jobs:[{name:'CLI npm pack',status:'in_progress'}]}:{artifacts:[{id:123,name:'afbin-npm-release',created_at:'2026-10-06T00:01:00Z'}]}));
+`);chmodSync(gh,0o755);
+ try{
+  const result=spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-artifact-wait.mjs',import.meta.url)),'--wait-only','minusxai/artifactbin','100','2'],{encoding:'utf8',env:{...process.env,PATH:directory+':'+process.env.PATH}});
+  expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('Ready');
+  const requested=readFileSync(calls,'utf8');expect(requested).toContain('/runs/100/attempts/2');expect(requested).not.toContain('/zip');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('builds pack-only candidates without preparing or uploading unused native download seeds',()=>{
+ const steps=workflow().jobs['cli-pack'].steps;
+ const selected=steps.filter(step=>step.run?.includes('prepare-seed')||step.run?.includes('pack-seeds')||step.with?.name?.startsWith('afbin-npm-dependency-seed-'));
+ expect(selected).toHaveLength(7);expect(selected.every(step=>step.if==="needs.plan.outputs.cli == 'true'")).toBe(true);
+ expect(steps.find(step=>step.run==='npm run build -w services/cli').if).toBe("needs.plan.outputs.cli != 'true'");
+ expect(steps.find(step=>step.run==='npm run pack:release -w services/cli').if).toBeUndefined();
+ expect(steps.find(step=>step.with?.name==='afbin-npm-packages').if).toBeUndefined();
 });

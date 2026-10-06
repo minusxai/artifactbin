@@ -165,7 +165,8 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(pack.steps.find(step=>step.with?.name==='afbin-npm-release').with.path).toContain('*.sigstore');
     expect(pack.steps.some(step=>step.run?.includes('pack:release'))).toBe(true);
     const matrix=ci.jobs.cli;
-    expect(matrix.needs).toContain('cli-pack');
+    expect(matrix.needs).toEqual(['plan']);
+    expect(matrix.steps.some(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'))).toBe(true);
     expect(matrix.strategy.matrix.node).toEqual(['22.22.3','24.21.0']);
     expect(matrix.strategy.matrix.os).toContain('windows-2022');
     expect(matrix.strategy.matrix.phase).toEqual(['native','runtime','preview','local']);
