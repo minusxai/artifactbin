@@ -2,7 +2,7 @@ artifactbin: agents publish and edit stateful, interactive artifacts with the np
 
 # artifactbin
 
-Publish JSX documents, apps, decks and datasets; people edit, annotate and share their URLs.
+Publish and share JSX documents, apps, decks and datasets.
 Choose CLI or direct HTTP (no Node/npm needed): [authentication]([[ base ]]/llms/http-api), [JSX edits]([[ base ]]/llms/http-authoring).
 Author with [markup]([[ base ]]/llms/markup), [SQL/actions]([[ base ]]/llms/markup-data), [design systems]([[ base ]]/llms/design-systems) and [templates]([[ base ]]/llms/templates).
 Getting started: [[ base ]]/getting-started.md — install afbin, read its help, select this server, approve access in the browser, and make your first edit.
@@ -13,11 +13,13 @@ Human-readable version: [[ base ]]/getting-started
 
 Prepare Node: afbin_node_setup="$(mktemp)" && curl -fsSL [[ base ]]/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
 Windows: Invoke-RestMethod [[ base ]]/chat/ensure-node.ps1 | Invoke-Expression
-Setup once: npx --yes @afbin/cli@latest setup --server '[[ base ]]' (Windows: npx.cmd). This installs afbin and agent skills. Use the same terminal; Node setup reuses supported Node/npm or installs official LTS for your user.
+Setup once: npx --yes @afbin/cli@latest setup --server '[[ base ]]'
+Windows: npx.cmd --yes @afbin/cli@latest setup --server '[[ base ]]'
+This installs the afbin command and the agent skills. Node setup reuses supported Node/npm or installs LTS; keep this terminal.
 Then: afbin pull <artifact url> --output report.jsx; edit the file; afbin push report.jsx (push runs afbin validate itself)
-Reference: afbin help, afbin help <topic>, and the installed skill. Restart your agent after setup to load it.
+Help: afbin help or afbin help <topic>. Restart your agent to load the installed skill.
+Local: afbin preview report.jsx needs no cloud or credentials. Downloads: .jsx.html. Prepare a pinned npm cache before disconnecting; npm is not a sandbox.
 
-Local: afbin preview report.jsx needs no cloud or credentials. HTML exports/downloads use .jsx.html. Pin the npm version and prepare its cache before disconnecting; npm is not a sandbox.
 
 Server commands sign in through browser approval, including guests. Automation: --yes --json returns the approval URL; open it to continue. HTTP requires email; guest browser approval is CLI-only.
 
@@ -26,7 +28,7 @@ Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the sam
 
 ## Direct HTTP API
 
-An HTTP client does not need Node or the CLI. Direct integrations authenticate by email; guest browser approval is CLI-only. All JSON requests use Content-Type: application/json. Use this server's Origin for session-authenticated requests.
+An HTTP client does not need Node or the CLI. Direct HTTP clients require email authentication; guest browser approval is CLI-only. All JSON requests use Content-Type: application/json. Use this server's Origin for session-authenticated requests.
 
 1. POST [[ base ]]/api/auth/email-otp/send-verification-otp with {"email":"you@example.com","type":"sign-in"} and Origin: [[ base ]]. Ask the user for the emailed code.
 2. POST [[ base ]]/api/auth/sign-in/email-otp with {"email":"you@example.com","otp":"<user's code>"} and the same Origin. Keep the returned session cookies in a private cookie jar.
