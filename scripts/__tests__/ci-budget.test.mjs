@@ -153,18 +153,53 @@ it('warms only normal matrix download blobs while keeping the standard-user boot
  expect(jobs['cli-bootstrap'].steps.some(step=>step.id==='dependency-cache')).toBe(false);
 });
 
-it('selects an observed nonempty main registry cache and refuses credential/private seed metadata',async()=>{
- const {selectNpmSeedCache,assertPublicNpmCache}=await import('../lib/npm-dependency-cache.mjs');
- const key='node-cache-Linux-x64-npm-abc';
- expect(selectNpmSeedCache([{key,ref:'refs/heads/main',sizeInBytes:31208860,createdAt:'2026-10-05'},{key:key+'empty',ref:'refs/heads/main',sizeInBytes:785,createdAt:'2026-10-06'}])).toBe(key);
+it('refuses credential/private seed metadata',async()=>{
+ const {assertPublicNpmCache}=await import('../lib/npm-dependency-cache.mjs');
  const directory=mkdtempSync(join(tmpdir(),'afbin-npm-public-'));
  const {mkdirSync}=await import('node:fs');
  const index=join(directory,'_cacache','index-v5');mkdirSync(index,{recursive:true});
- const record={key:'make-fetch-happen:request-cache:https://registry.npmjs.org/is-number',metadata:{url:'https://registry.npmjs.org/is-number'}};
+ const record={key:'make-fetch-happen:request-cache:https://registry.npmjs.org/is-number',integrity:'sha512-pinned',metadata:{url:'https://registry.npmjs.org/is-number'}};
  const store=value=>writeFileSync(join(index,'entry'),'checksum\t'+JSON.stringify(value)+'\n');
  try{
   store(record);expect(await assertPublicNpmCache(directory)).toBe(1);
+  const pinned={...record,integrity:'sha512-pinned'};
+  writeFileSync(join(index,'entry'),'checksum\t'+JSON.stringify(pinned)+'\nchecksum\t'+JSON.stringify(pinned)+'\n');
+  expect(await assertPublicNpmCache(directory,[{resolved:record.metadata.url,integrity:pinned.integrity}])).toBe(1);
+  const removed={...pinned,key:'make-fetch-happen:request-cache:https://registry.npmjs.org/removed'};
+  writeFileSync(join(index,'entry'),[pinned,removed,{...removed,integrity:null}].map(value=>'checksum\t'+JSON.stringify(value)+'\n').join(''));
+  expect(await assertPublicNpmCache(directory,[{resolved:record.metadata.url,integrity:pinned.integrity}])).toBe(1);
+  await expect(assertPublicNpmCache(directory,[{resolved:record.metadata.url,integrity:'sha512-wrong'}])).rejects.toThrow(/integrity/);
   store({...record,metadata:{...record.metadata,reqHeaders:{authorization:'secret-test'}}});await expect(assertPublicNpmCache(directory)).rejects.toThrow(/Credential/);
   store({...record,key:'make-fetch-happen:request-cache:https://private.example/package'});await expect(assertPublicNpmCache(directory)).rejects.toThrow(/Non-public/);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('seeds only pinned public shrinkwrap tarballs including optional native platforms',async()=>{
+ const {npmSeedDependencies,npmSupportedSeedDependencies}=await import('../lib/npm-dependency-cache.mjs');
+ const lock={packages:{'':{name:'@afbin/cli'},'node_modules/a':{resolved:'https://registry.npmjs.org/a/-/a-1.tgz',integrity:'sha512-a'},'node_modules/b':{optional:true,os:['win32'],resolved:'https://registry.npmjs.org/b/-/b-1.tgz',integrity:'sha512-b'}}};
+ expect(npmSeedDependencies(JSON.stringify(lock),{os:'linux',cpu:'x64'})).toEqual([{resolved:lock.packages['node_modules/a'].resolved,integrity:'sha512-a'}]);
+ expect(npmSeedDependencies(JSON.stringify(lock),{os:'win32',cpu:'x64'})).toHaveLength(2);
+ lock.packages['node_modules/freebsd']={os:['freebsd'],resolved:'https://registry.npmjs.org/freebsd/-/a.tgz',integrity:'sha512-freebsd'};
+ expect(npmSupportedSeedDependencies(JSON.stringify(lock))).toHaveLength(2);
+ delete lock.packages['node_modules/freebsd'];
+ expect(npmSeedDependencies(JSON.stringify(lock))).toEqual([lock.packages['node_modules/a'],lock.packages['node_modules/b']].map(({resolved,integrity})=>({resolved,integrity})));
+ for(const resolved of ['file:local.tgz','https://private.example/a.tgz','https://registry.npmjs.org/a.tgz?token=hidden']){
+  lock.packages['node_modules/a'].resolved=resolved;expect(()=>npmSeedDependencies(JSON.stringify(lock))).toThrow(/public registry/);
+ }
+});
+it('creates a fresh seed with bounded npm cache operations instead of selecting arbitrary host caches',async()=>{
+ const {populateNpmSeed}=await import('../lib/npm-dependency-cache.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-clean-seed-'));
+ const dependencies=Array.from({length:19},(_,i)=>({resolved:`https://registry.npmjs.org/a/-/${i}.tgz`,integrity:'sha512-test'}));
+ let active=0,max=0;const calls=[];
+ try {
+  await populateNpmSeed(dependencies,directory,async(args)=>{calls.push(args);active++;max=Math.max(max,active);await new Promise(resolve=>setTimeout(resolve,2));active--;});
+  expect(max).toBeLessThanOrEqual(1);expect(calls).toHaveLength(3);
+  expect(calls.flatMap(args=>args.slice(2,args.indexOf('--cache')))).toEqual(dependencies.map(d=>d.resolved));
+  expect(calls.every(args=>args.includes('--ignore-scripts')&&args.includes('--userconfig'))).toBe(true);
+  const steps=workflow().jobs['cli-pack'].steps;expect(steps.some(step=>step.id==='npm-seed-key')).toBe(false);
+  expect(steps.some(step=>step.run?.includes('prepare-seed'))).toBe(true);
+  expect(steps.filter(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).map(step=>step.with.name)).toEqual(['Linux-X64','Linux-ARM64','macOS-X64','macOS-ARM64','Windows-X64'].map(platform=>'afbin-npm-dependency-seed-'+platform));
+  expect(workflow().jobs.cli.steps.find(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).with.name).toBe('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
  }finally{rmSync(directory,{recursive:true,force:true});}
 });

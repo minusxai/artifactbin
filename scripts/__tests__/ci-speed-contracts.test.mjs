@@ -22,7 +22,7 @@ it('supplies ordinary composition the cached exact-tree universal package before
  const pack=steps.findIndex(step=>step.run?.includes('pack:release'));
  const prune=steps.findIndex(step=>step.run?.includes('rm -rf services/cli/dist/runtime'));
  const upload=steps.find(step=>step.with?.name==='afbin-npm-packages');
- expect(pack).toBeGreaterThan(steps.findIndex(step=>step.run==='npm run build -w services/cli'));
+ expect(pack).toBeGreaterThan(steps.findIndex(step=>step.run?.includes('npm run build -w services/cli')));
  expect(prune).toBeGreaterThan(pack);
  expect(steps[pack].run).toContain('dist/npm-candidate');
  expect(upload.with.path).toBe('dist/npm-candidate/*.tgz');
@@ -51,7 +51,7 @@ it('warms the complete ordinary package cache without a nonexistent plan depende
  expect(cache.with.key).toMatch(/-npm-false$/);
  const pack=job.steps.findIndex(step=>step.run?.includes('pack:release'));
  const prune=job.steps.findIndex(step=>step.run?.includes('rm -rf services/cli/dist/runtime'));
- expect(pack).toBeGreaterThan(job.steps.findIndex(step=>step.run==='npm run build -w services/cli'));
+ expect(pack).toBeGreaterThan(job.steps.findIndex(step=>step.run?.includes('npm run build -w services/cli')));
  expect(prune).toBeGreaterThan(pack);
  expect(job.steps[pack].run).toContain('dist/npm-candidate');
 });
@@ -76,7 +76,7 @@ it('restores normalized tooling and content-verified reader builds before releas
  expect(pack.find(step=>step.run==='npm ci')?.if).toBe("steps.install.outputs.cache-hit != 'true'");
  const reader=pack.find(step=>step.id==='test-builds');
  expect(reader?.with.path).toContain('node_modules/.cache/build-islands.json');
- expect(pack.indexOf(reader)).toBeLessThan(pack.findIndex(step=>step.run==='npm run build -w services/cli'));
+ expect(pack.indexOf(reader)).toBeLessThan(pack.findIndex(step=>step.run?.includes('npm run build -w services/cli')));
 });
 it('hands the source build from the current pack run to reference proof without recompiling',()=>{
  const jobs=workflow().jobs,pack=jobs['cli-pack'].steps,reference=jobs['reference-compatibility'].steps;
@@ -88,7 +88,7 @@ it('hands the source build from the current pack run to reference proof without 
  expect(upload?.with.path).toBe('afbin-reference-build.tar');
  expect(download?.with['run-id']).toBeUndefined();
  expect(download?.with.path).toBe('.');
- expect(reference.some(step=>step.run==='npm run build -w services/cli')).toBe(false);
+ expect(reference.some(step=>step.run?.includes('npm run build -w services/cli'))).toBe(false);
  expect(reference.some(step=>step.run==='tar -xf afbin-reference-build.tar')).toBe(true);
  expect(pack.indexOf(archive)).toBeGreaterThan(pack.findIndex(step=>step.run==='npm run pack:release -w services/cli'));
 });
