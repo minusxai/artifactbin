@@ -58,13 +58,13 @@ it('warms the complete ordinary package cache without a nonexistent plan depende
 it('requires one isolated cold Windows bootstrap whenever the native CLI matrix is selected',()=>{
  const jobs=workflow().jobs,job=jobs['cli-bootstrap'];
  expect(job).toBeDefined();
- expect(job.needs).toEqual(['plan','cli-pack']);
+ expect(job.needs).toEqual(['plan']);
  expect(job.if).toBe("needs.plan.outputs.cli-bootstrap == 'true'");
  expect(job['runs-on']).toBe('windows-2022');
  expect(job.strategy).toBeUndefined();
- expect(job.steps.find(step=>step.with?.name==='afbin-npm-release')).toBeDefined();
+ expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(false);
  const proof=job.steps.find(step=>step.run?.includes('test-node-bootstrap.ps1'));
- expect(proof.shell).toBe('powershell');expect(proof.run).toContain('npm-candidate/*.tgz');
+ expect(proof.shell).toBe('powershell');expect(proof.run).toContain('-WaitForArtifact');
  expect(jobs.test.needs).toContain('cli-bootstrap');
  expect(jobs['notify-consumer'].needs).toContain('cli-bootstrap');
  expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain("runner.os != 'Windows'");
@@ -106,4 +106,33 @@ it('separates CPU-heavy installed proofs while retaining every platform journey'
  expect(proofs.map(step=>step.if)).toEqual(["matrix.phase == 'runtime'","matrix.phase == 'preview' || matrix.phase == 'local'"]);
  expect(proofs[0].run).toContain('test-installed-npm.mjs runtime');
  expect(proofs[1].run).toContain('test-installed-npm.mjs ${{ matrix.phase }}');
+});
+
+it('overlaps the same standard-user bootstrap with pack instead of waiting to create the user',()=>{
+ const job=workflow().jobs['cli-bootstrap'];
+ expect(job.needs).toEqual(['plan']);
+ expect(job.permissions.actions).toBe('read');
+ expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(false);
+ expect(job.steps.find(step=>step.run?.includes('test-node-bootstrap.ps1')).run).toContain('-WaitForArtifact');
+ const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ expect(source.indexOf("$process=Start-StandardProcess $encoded 'bootstrap'")).toBeLessThan(source.indexOf('ci-artifact-wait.mjs'));
+ expect(source.indexOf("$phase='wait for exact current-run candidate'")).toBeLessThan(source.indexOf("$phase='standard-user online npx query'"));
+});
+it('waits only for current-attempt artifacts and fails on packaging failures or deadline',async()=>{
+ const {waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ let time=0,calls=0;
+ const options={startedAt:'2026-10-06T00:00:00Z',now:()=>time,sleep:async()=>{time+=5000;},jobs:async()=>({jobs:[{name:'CLI npm pack',status:'in_progress'}]}),artifacts:async()=>({artifacts:++calls===1?[{id:1,name:'afbin-npm-release',created_at:'2026-10-05T00:00:00Z'}]:[{id:2,name:'afbin-npm-release',created_at:'2026-10-06T00:01:00Z'}]})};
+ expect((await waitForCurrentArtifact(options)).id).toBe(2);
+ expect(calls).toBe(2);
+ await expect(waitForCurrentArtifact({...options,jobs:async()=>({jobs:[{name:'CLI npm pack',status:'completed',conclusion:'failure'}]})})).rejects.toThrow(/pack failed/);
+ time=0;
+ await expect(waitForCurrentArtifact({...options,timeout:5000,artifacts:async()=>({artifacts:[]})})).rejects.toThrow(/timed out/);
+});
+
+it('preserves GitHub artifact archive checksum verification',async()=>{
+ const {verifyArtifactArchive}=await import('../lib/ci-artifact-wait.mjs');
+ const digest='sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+ expect(()=>verifyArtifactArchive(Buffer.from('abc'),digest)).not.toThrow();
+ expect(()=>verifyArtifactArchive(Buffer.from('tampered'),digest)).toThrow(/checksum/);
+ expect(()=>verifyArtifactArchive(Buffer.from('abc'),undefined)).toThrow(/checksum/);
 });
