@@ -1,8 +1,8 @@
 import {readdir,readFile} from 'node:fs/promises';
 import {join} from 'node:path';
-/** Native consumers share one tested tarball. Windows also has a separate standard-user standalone npx proof. */
-export function npmConsumerArgs(tarball,platform){
- return ['exec','--yes',...(platform==='win32'?[]:['--package',tarball]),'--','afbin','query','rows.csv','--json'];
+/** Unix Node22 lanes prove standalone npx; Windows and Node24 reuse their fresh native install. */
+export function npmConsumerArgs(tarball,platform,nodeMajor=22){
+ return ['exec','--yes',...(platform==='win32'||nodeMajor===24?[]:['--package',tarball]),'--','afbin','query','rows.csv','--json'];
 }
 
 /** Seeded CI installs resolve the locked closure from verified blobs; lifecycle scripts still run. */

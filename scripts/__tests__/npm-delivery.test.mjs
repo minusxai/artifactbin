@@ -39,15 +39,18 @@ it('packs a standalone locked npm tarball that installs outside its checkout',()
  const consumer=join(root,'consumer');await mkdir(consumer);
  const installed=spawnSync(process.execPath,[npmCli,'install','--prefix',consumer,'--offline','--no-audit','--no-fund',file],{env:{...process.env,npm_execpath:npmCli,npm_config_cache:join(root,'cache')},encoding:'utf8'});expect(installed.status,installed.stderr).toBe(0);
  const launched=spawnSync(process.execPath,[join(consumer,'node_modules/@afbin/cli/dist/afbin.mjs')],{encoding:'utf8'});expect(launched.stdout.trim()).toBe('fixture-0.1.0');
- // Windows native acceptance must execute the already-installed exact candidate, not stage it twice.
+ // Windows and second-runtime lanes execute the installed candidate; Unix Node22 retains standalone npx coverage.
  const environment={...process.env,npm_config_cache:join(root,'cache')};
  for(const platform of ['darwin','linux'])expect(npmConsumerArgs(file,platform)).toEqual(['exec','--yes','--package',file,'--','afbin','query','rows.csv','--json']);
- const online=npmConsumerArgs(file,'win32');
+ for(const platform of ['darwin','linux','win32'])expect(npmConsumerArgs(file,platform,24)).toEqual(['exec','--yes','--','afbin','query','rows.csv','--json']);
+ for(const [platform,nodeMajor] of [['win32',22],['darwin',24],['linux',24]]){
+ const online=npmConsumerArgs(file,platform,nodeMajor);
  for(const args of [online,['exec','--offline',...online.slice(1)]]){
   const execution=spawnSync(process.execPath,[npmCli,...args],{cwd:consumer,env:environment,encoding:'utf8'});
   expect(execution.status,execution.stderr).toBe(0);expect(execution.stdout.trim()).toBe('fixture-0.1.0');
  }
  await expect(readFile(join(root,'cache/_npx'),'utf8')).rejects.toMatchObject({code:'ENOENT'});
+ }
 
 }),30000);
 it('refuses build-machine runtime dependencies instead of packing a platform-specific npm release',()=>fixture(async(root,cli)=>{

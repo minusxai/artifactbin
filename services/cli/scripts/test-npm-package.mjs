@@ -48,12 +48,12 @@ try{
  await assert.rejects(readdir(env.PLAYWRIGHT_BROWSERS_PATH));
  if(!installOnly){
  await writeFile(join(root,'rows.csv'),'amount\n10\n20\n');
- // Windows independently proves a cold standalone npx tarball in Restricted standard-user PS5.1.
- // This native consumer executes its exact installed candidate instead of staging a second copy.
- const args=npmConsumerArgs(tarball,process.platform);
+ // Unix Node22 lanes prove standalone npx; Windows has its Restricted standard-user proof.
+ // Node24 native lanes execute the freshly installed candidate without staging a second copy.
+ const args=npmConsumerArgs(tarball,process.platform,Number(process.versions.node.split('.')[0]));
  const online=JSON.parse(run(args));assert.ok(JSON.stringify(online).includes('10'));
  const offline=JSON.parse(run(['exec','--offline',...args.slice(1)]));assert.deepEqual(offline,online);
- if(process.platform==='win32')await assert.rejects(readdir(join(env.npm_config_cache,'_npx')),error=>error.code==='ENOENT','Windows native execution must not duplicate the candidate install');
+ if(!args.includes('--package'))await assert.rejects(readdir(join(env.npm_config_cache,'_npx')),error=>error.code==='ENOENT','Installed native execution must not duplicate the candidate install');
  const require=createRequire(join(cli,'package.json'));
  nativeLoaded=true;
  const sharp=require('sharp');const image=await sharp({create:{width:2,height:2,channels:3,background:'red'}}).png().toBuffer();assert.equal((await sharp(image).metadata()).width,2);
