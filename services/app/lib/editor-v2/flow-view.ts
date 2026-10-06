@@ -4,7 +4,7 @@
  * composition handling. solid/editor/FlowEditor.tsx adapts it with onMount + one effect.
  */
 import { runtimeId } from '@/lib/story-runtime/runtime-id';
-import { DOMSerializer, type ResolvedPos } from 'prosemirror-model';
+import { DOMSerializer } from 'prosemirror-model';
 import { EditorState, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
 import { splitListItem, sinkListItem, liftListItem } from 'prosemirror-schema-list';
@@ -14,6 +14,7 @@ import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { mergeIdentityMaps } from './annotation-map';
 import { captureBookmark, type EditorSelectionChange } from './bookmark';
 import { clipboardAst, type ClipboardKind } from './clipboard';
+import { BLOCK_SHORTCUT, ordinaryParagraph, blockShortcut, splitTask, leaveCode } from './block-shortcuts';
 import { editorDocument, editorSchema, normalizeIdentities, pasteFragment, sourceNodes, toggleInline } from './model';
 
 export interface FlowEditorProps {
@@ -79,49 +80,6 @@ export function flushFlowView(view: EditorView): void { flushers.get(view)?.(); 
 const repathers = new WeakMap<EditorView, (path: string) => Array<() => void>>();
 /** A mounted view's path redraw in steps (`FlowView.repath`); none for a view not mounted here. */
 export function repathFlowView(view: EditorView, path: string): Array<() => void> { return repathers.get(view)?.(path) ?? []; }
-
-/**
- * MARKDOWN BLOCK SHORTCUTS. A marker typed at the start of an ordinary paragraph, then a space, turns the
- * paragraph into the structure it names: `# `..`###### ` a heading, `* `/`- ` a bullet item, `1. ` a
- * numbered item. The space is typed first, as ordinary typing (it joins the marker's undo step), and the
- * conversion is its own structural transaction — so one undo, through the source history, puts the literal
- * marker back. Never inside code, a list, a table cell or a synthetic run, never mid-prose, never while
- * composing.
- */
-const BLOCK_SHORTCUT = /^(#{1,6}|[*-]|1\.)[ \u00a0]$/;
-
-/** The block a shortcut may convert: an authored `<p>`, outside lists, cells and code. */
-function ordinaryParagraph($at: ResolvedPos): boolean {
-  const block = $at.parent;
-  if (block.type !== editorSchema.nodes.paragraph || block.attrs.tag !== 'p' || block.attrs.synthetic) return false;
-  for (let depth = $at.depth - 1; depth > 0; depth--)
-    if (['list_item', 'table_cell'].includes($at.node(depth).type.name)) return false;
-  return !$at.marks().some((mark) => mark.attrs.tag === 'code');
-}
-
-/** The paragraph's identity survives the conversion (comments anchor to it); its paragraph styling does not. */
-function identityOnly(source: JsxElement | null): JsxElement | null {
-  if (!source) return null;
-  return { ...source, attributes: source.attributes.filter((a) => ['id', 'data-annotation-anchor', 'dir', 'lang'].includes(a.name)) };
-}
-
-/** The structural transaction for a marker already typed (with its space) before the caret, or null. */
-function blockShortcut(state: EditorState): Transaction | null {
-  const { $from, empty } = state.selection;
-  if (!empty || !ordinaryParagraph($from)) return null;
-  const typed = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
-  const marker = BLOCK_SHORTCUT.exec(typed)?.[1];
-  if (!marker) return null;
-  const start = $from.start();
-  const tr = state.tr.delete(start, start + typed.length);
-  const paragraph = { ...$from.parent.attrs, source: identityOnly($from.parent.attrs.source as JsxElement | null) };
-  if (marker.startsWith('#')) return tr.setNodeMarkup($from.before(), undefined, { ...paragraph, tag: `h${marker.length}` });
-  const range = tr.doc.resolve(start).blockRange();
-  if (!range) return null;
-  const list = marker === '1.' ? editorSchema.nodes.ordered_list : editorSchema.nodes.bullet_list;
-  tr.setNodeMarkup($from.before(), undefined, paragraph);
-  return tr.wrap(range, [{ type: list }, { type: editorSchema.nodes.list_item }]);
-}
 
 /** Enter on an empty item of a top-level list leaves the list (splitListItem only nests out of inner lists). */
 const exitEmptyListItem: Command = (state, dispatch) => {
@@ -245,7 +203,16 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
             return true;
           },
           ...baseKeymap,
+          'Mod-Enter': leaveCode,
           Enter: chainCommands(
+            (state, dispatch, view) => {
+              if (view?.composing) return false;
+              const tr = blockShortcut(state, true);
+              if (!tr) return false;
+              dispatch?.(tr.setMeta('mx-command', true));
+              return true;
+            },
+            splitTask,
             (state, dispatch) => {
               if (state.selection.$from.parent.attrs.tag !== 'pre') return false;
               dispatch?.(state.tr.insertText('\n'));
@@ -266,8 +233,19 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         .filter(([, type]) => !!type.spec.toDOM)
         .map(([name, type]) => [
           name,
-          (node: import('prosemirror-model').Node, view: EditorView) => {
+          (node: import('prosemirror-model').Node, view: EditorView, getPos: () => number | undefined) => {
             const rendered = DOMSerializer.renderSpec(view.dom.ownerDocument, type.spec.toDOM!(node));
+            if (node.type === editorSchema.nodes.task_checkbox) {
+              const input = rendered.dom as HTMLInputElement;
+              input.disabled = props().canEdit?.() === false;
+              input.contentEditable = 'false';
+              input.addEventListener('change', () => {
+                const at = getPos();
+                if (at === undefined || props().canEdit?.() === false) { input.checked = !!node.attrs.checked; return; }
+                view.dispatch(view.state.tr.setNodeMarkup(at, undefined, { ...node.attrs, checked: input.checked }).setMeta('mx-command', true));
+              });
+              return { dom: input, stopEvent: () => true, ignoreMutation: () => true };
+            }
             return {
               ...rendered,
               ignoreMutation(mutation: import('prosemirror-view').ViewMutationRecord) {

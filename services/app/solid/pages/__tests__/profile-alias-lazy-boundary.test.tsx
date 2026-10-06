@@ -27,7 +27,7 @@ vi.mock('../Document', () => {
 
 vi.mock('@/web/served-frame', () => ({ servedDocumentFrame: () => loaded.servedFrame }));
 
-import { ProfileAliasRoute } from '@/solid/pages/ProfileAliasRoute';
+import { ProfileAliasRoute } from '@/solid/pages/ProfileAlias';
 
 const at = (path: string) => {
   window.history.replaceState(null, '', path);

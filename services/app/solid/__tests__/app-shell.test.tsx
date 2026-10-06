@@ -23,7 +23,14 @@ beforeEach(() => {
   }));
 });
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
+afterEach(async () => {
+  cleanup();
+  // Redirects can unmount a route before its lazy import finishes. Drain that import
+  // while this environment still exists so later files can reuse the module graph.
+  await vi.dynamicImportSettled();
+  vi.unstubAllGlobals();
+  window.history.replaceState(null, '', '/');
+});
 
 describe('Solid shell', () => {
   it('refreshes restored page data on browser Back without refetching on an ordinary pageshow', async () => {

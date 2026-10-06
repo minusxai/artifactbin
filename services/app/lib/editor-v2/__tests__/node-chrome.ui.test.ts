@@ -259,3 +259,30 @@ it('hands the drag its block and parent names', () => {
   fireEvent.keyDown(screen.getByRole('button', { name: 'Move selected block' }), { key: 'ArrowDown' });
   expect(document.querySelector('[data-mx-drag-preview]')).toHaveTextContent('Can only move within this card');
 });
+
+it.each([false, true])('keeps a checkbox clickable where an inset hover grip would overlap it (touch: %s)', (touch) => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: touch })));
+  try {
+    chrome = createNodeChrome(document, vi.fn());
+    const p = document.createElement('p');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    p.append(checkbox);
+    document.body.append(p);
+    p.getBoundingClientRect = () => new DOMRect(0, 40, 300, 24);
+    checkbox.getBoundingClientRect = () => new DOMRect(0, 44, 13, 13);
+    chrome.hover(p);
+    expect(screen.queryByRole('button', { name: 'Drag block' })).toBeNull();
+    // Space in the margin restores the grip; controls elsewhere in the block do not hide it.
+    p.getBoundingClientRect = () => new DOMRect(100, 40, 300, 24);
+    checkbox.getBoundingClientRect = () => new DOMRect(100, 44, 13, 13);
+    chrome.hover(p);
+    expect(screen.getByRole('button', { name: 'Drag block' })).toBeVisible();
+    p.getBoundingClientRect = () => new DOMRect(0, 40, 300, 24);
+    checkbox.getBoundingClientRect = () => new DOMRect(100, 44, 13, 13);
+    chrome.hover(p);
+    expect(screen.getByRole('button', { name: 'Drag block' })).toBeVisible();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

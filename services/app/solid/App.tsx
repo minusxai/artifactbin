@@ -23,7 +23,7 @@ const AccountPage = lazy(() => import('./pages/Account').then((m) => ({ default:
 const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.DocsPage })));
 const GettingStartedPage = lazy(() => import('./pages/GettingStarted').then((m) => ({ default: m.GettingStartedPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
-const ProfileAliasRoute = lazy(() => import('./pages/ProfileAliasRoute').then((m) => ({ default: m.ProfileAliasRoute })));
+const ProfileAliasRoute = lazy(() => import('./pages/ProfileAlias').then((m) => ({ default: m.ProfileAliasRoute })));
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
 const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((m) => ({ default: m.ArtifactAddressRoute })));
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
@@ -113,7 +113,7 @@ export function App(): JSX.Element {
       <Route path="/docs-human" component={DocsPage} />
       <Route path="/getting-started" component={GettingStartedPage} />
       <Route path="/:user" component={ProfilePage} />
-      {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/ProfileAliasRoute.tsx
+      {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/ProfileAlias.tsx
         * ProfileAliasRoute); a sibling `/:user/:alias` route here would overlap it and win first for
         * every one-segment alias regardless of what it actually names. */}
       <Route path="/:user/*rest" component={ProfileAliasRoute} />

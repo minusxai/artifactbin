@@ -24,7 +24,7 @@ interface ProfileAnswer {
   files?: ShelfRow[];
 }
 
-/** The profile index is its own route; artifact aliases live in ProfileAliasRoute.tsx. */
+/** The profile index is its own route; its artifact aliases have a separate lazy route entry (ProfileAlias.tsx). */
 export function ProfilePage(): JSX.Element {
   const params = useParams();
   const location = useLocation();
@@ -47,6 +47,7 @@ export function ProfilePage(): JSX.Element {
     </Show>}
   </Show>;
 }
+
 
 function Social(props: { ownerId: string; social: ProfileSocial; signedIn: boolean }): JSX.Element {
   const [following, setFollowing] = createSignal(props.social.relation?.youFollow ?? false);
