@@ -4,6 +4,7 @@ import type {ProgramDefinition,RunSnapshot} from '@artifactbin/contracts';
 import {runtimeId as newRequestId} from '@/lib/story-runtime/runtime-id';
 import {pageDataChanged} from '@/web/page-data-events';
 import {apiRequest} from '../lib/api';
+import {runFailureMessage} from '../lib/run-failure-message';
 import {useSession} from '../lib/session';
 import {DocumentSharing} from '../document/DocumentSharing';
 const FIELD='mt-1 w-full rounded border border-edge bg-bg p-2 font-mono text-xs';
@@ -57,5 +58,5 @@ export function ProgramPage(props:{artifactId?:string;owner?:boolean}={}):JSX.El
  <p class="text-xs text-muted">Version 1 requires a command array. Compute and environment configuration are optional. Defaults: 1 vCPU, 2 GiB RAM. Runtime authentication is supplied separately.</p>
  <Show when={canManage()} fallback={<p>Only the owner can run or schedule this program.</p>}><div class="flex flex-wrap gap-2"><button type="submit" class={BUTTON} disabled={busy()||loading()}>Save program</button><Show when={id()}><button type="button" class={BUTTON} disabled={busy()||dirty()||['queued','running'].includes(run()?.status??'')} onClick={()=>void invoke()}>Run program</button><a aria-label="Schedule program" class={BUTTON} href={`/schedules?artifact=${encodeURIComponent(id()!)}`}>Schedule</a></Show></div><Show when={dirty()&&id()}><p class="mt-2 text-xs text-muted">Save your changes before running.</p></Show></Show>
  </form></Show></Show><Show when={canManage()&&id()}><DocumentSharing id={id()!} title={title()} owner version={version()} format="program" /></Show><Show when={id()}><a href={`/a/${id()}`} class="text-sm underline">Open saved program</a></Show>
- <Show when={run()}>{state=><section aria-label="Program run" class="rounded border border-edge p-4"><h2 class="font-semibold">Run {state().runId}</h2><p role="status" class="mt-2">{state().status}</p><Show when={state().receipt?.reason}><p role="alert" class="text-danger">{state().receipt?.reason}</p></Show><Show when={state().output!==null}><details><summary>Output</summary><pre class="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(state().output,null,2)}</pre></details></Show></section>}</Show></main>;
+ <Show when={run()}>{state=><section aria-label="Program run" class="rounded border border-edge p-4"><h2 class="font-semibold">Run {state().runId}</h2><p role="status" class="mt-2">{state().status}</p><Show when={state().receipt?.reason}><p role="alert" class="text-danger">{runFailureMessage(state().receipt!.reason!)}</p></Show><Show when={state().output!==null}><details><summary>Output</summary><pre class="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(state().output,null,2)}</pre></details></Show></section>}</Show></main>;
 }

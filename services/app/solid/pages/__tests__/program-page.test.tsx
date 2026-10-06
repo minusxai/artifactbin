@@ -30,6 +30,15 @@ it('retries an ambiguously accepted program invocation with the same request ID'
   return Response.json({id:'program-one',title:'Saved',program:{version:1,command:['echo','hello']},version:1,state:'state-one'});
  }));render(()=><ProgramPage artifactId="program-one" owner/>);await screen.findByDisplayValue('Saved');fireEvent.click(screen.getByRole('button',{name:'Run program'}));await screen.findByText('Response lost');fireEvent.click(screen.getByRole('button',{name:'Run program'}));await screen.findByText('completed');expect(ids).toHaveLength(2);expect(ids[1]).toBe(ids[0]);
 });
+it('shows a helpful ambiguous process-exit message for a failed run',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+  if(url==='/api/my/artifacts/program-one')return Response.json({id:'program-one',title:'Saved',program:{version:1,command:['sleep','70'],compute:{vcpu:1,memoryMiB:2048,ttlSeconds:60}},version:1,state:'state-one'});
+  if(url==='/api/artifacts/program-one/runs')return Response.json({runId:'run-one'});
+  if(url==='/api/runs/run-one')return Response.json({runId:'run-one',status:'failed',output:null,receipt:{reason:'process_exit_137'}});
+  return Response.json({error:'not_found'},{status:404});
+ }));
+ render(()=><ProgramPage artifactId="program-one" owner/>);await screen.findByDisplayValue('Saved');fireEvent.click(screen.getByRole('button',{name:'Run program'}));expect(await screen.findByRole('alert')).toHaveTextContent('The process was terminated (exit code 137). Check its memory and time limits before trying again.');
+});
 it('loads the newly selected program when navigation reuses the editor',async()=>{
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>Response.json({id:url.split('/').pop(),title:'Program '+url.split('/').pop(),program:{version:1,command:['echo',url]},version:1,state:'state-one'})));
  const {createSignal}=await import('solid-js');const [id,setId]=createSignal('first');render(()=><ProgramPage artifactId={id()} owner/>);await screen.findByDisplayValue('Program first');setId('second');await screen.findByDisplayValue('Program second');
