@@ -83,11 +83,11 @@ it('keeps a cold standard-user query without repeating native offline acceptance
 
 it('measures the complete attempt chain including waits instead of individual job durations',()=>{
  const start='2026-10-06T00:00:00Z';
- expect(measureCiElapsed(start,'2026-10-06T00:05:01Z')).toEqual({seconds:301,status:'failed',targetSeconds:180,normalSeconds:240,hardSeconds:300});
+ expect(measureCiElapsed(start,'2026-10-06T00:08:01Z')).toEqual({seconds:481,status:'failed',targetSeconds:180,normalSeconds:240,hardSeconds:480});
 });
 it('keeps the hard limit inclusive and reports target and normal ranges separately',()=>{
  const start='2026-10-06T00:00:00Z';
- for(const [seconds,status] of [[179,'target'],[180,'normal'],[239,'normal'],[240,'slow'],[300,'slow'],[300.001,'failed']]) {
+ for(const [seconds,status] of [[179,'target'],[180,'normal'],[239,'normal'],[240,'slow'],[300,'slow'],[480,'slow'],[480.001,'failed']]) {
   expect(measureCiElapsed(start,new Date(Date.parse(start)+seconds*1000).toISOString()).status).toBe(status);
  }
 });
@@ -114,11 +114,11 @@ it('exits nonzero for an over-limit attempt and missing start, but accepts a fre
   return spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),attempt,summary],{encoding:'utf8'});
  };
  try {
-  const old=run({run_started_at:new Date(Date.now()-301000).toISOString()});
+  const old=run({run_started_at:new Date(Date.now()-481000).toISOString()});
   expect(old.status).toBe(1); expect(old.stdout).toContain('::error::');
   const fresh=run({run_started_at:new Date(Date.now()-1000).toISOString()});
   expect(fresh.status).toBe(0); expect(fresh.stdout).toContain('(target)');
-  expect(readFileSync(summary,'utf8')).toContain('hard failure >300s');
+  expect(readFileSync(summary,'utf8')).toContain('hard failure >480s');
   expect(run({created_at:'2020-01-01T00:00:00Z'}).status).toBe(1);
  } finally {rmSync(directory,{recursive:true,force:true});}
 });

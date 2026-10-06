@@ -50,6 +50,7 @@ if(Get-Command node.exe -ErrorAction SilentlyContinue){throw 'Expected Node-free
 $helper=[IO.File]::ReadAllText('__ROOT__\ensure-node.ps1')
 $ErrorActionPreference='Continue';$ProgressPreference='Continue'
 $clock=[Diagnostics.Stopwatch]::StartNew()
+Write-Host 'Bootstrap phase: absent Node official bootstrap'
 Invoke-Expression $helper
 Write-Host ('Native timing: absent Node official bootstrap '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s')
 if($ErrorActionPreference -ne 'Continue' -or $ProgressPreference -ne 'Continue'){throw 'Bootstrap changed caller preferences'}
@@ -117,8 +118,25 @@ function Start-StandardProcess([string]$Encoded,[string]$Label) {
   $null=$process.Handle
   return $process
 }
-function Wait-StandardExit([Diagnostics.Process]$Process,[int]$Timeout) {
-  if(!$Process.WaitForExit($Timeout)){throw 'Standard-user child timed out'}
+function Write-StandardOutput([string]$Path,[ref]$Printed) {
+  if (!$Path -or !(Test-Path $Path)) { return }
+  $lines=@(Get-Content $Path)
+  while($Printed.Value -lt $lines.Count) {
+    Write-Host $lines[$Printed.Value]
+    $Printed.Value++
+  }
+}
+function Wait-StandardExit([Diagnostics.Process]$Process,[int]$Timeout,[string]$OutputPath='') {
+  $clock=[Diagnostics.Stopwatch]::StartNew();$printed=0;$heartbeat=15
+  while(!$Process.WaitForExit(1000)) {
+    Write-StandardOutput $OutputPath ([ref]$printed)
+    if($clock.ElapsedMilliseconds -ge $Timeout){throw 'Standard-user child timed out'}
+    if($OutputPath -and $clock.Elapsed.TotalSeconds -ge $heartbeat) {
+      Write-Host ('Standard-user child still running: '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s')
+      $heartbeat+=15
+    }
+  }
+  Write-StandardOutput $OutputPath ([ref]$printed)
   $Process.WaitForExit()
   $Process.Refresh()
   $code=$Process.ExitCode
@@ -149,12 +167,11 @@ try {
       Copy-Item $candidates[0].FullName (Join-Path $root 'candidate.pending')
       Move-Item (Join-Path $root 'candidate.pending') (Join-Path $root 'candidate.tgz')
     }
-    $exitCode=Wait-StandardExit $process 600000
+    $exitCode=Wait-StandardExit $process 360000 (Join-Path $root 'bootstrap.stdout')
   } finally {
     if(!$process.HasExited){$process.Kill();$process.WaitForExit()}
     $process.Dispose()
   }
-  Get-Content (Join-Path $root 'bootstrap.stdout')
   Write-Output ('Standard-user child exit: '+$exitCode)
   if(Test-Path (Join-Path $root 'failed.json')){Get-Content (Join-Path $root 'failed.json')}
   if($exitCode -ne 0 -or !(Test-Path (Join-Path $root 'passed.json'))){Get-Content (Join-Path $root 'bootstrap.stderr');throw 'Standard-user Node bootstrap failed'}

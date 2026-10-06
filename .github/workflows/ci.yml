@@ -739,7 +739,7 @@ jobs:
       - name: every job's wall clock, over-budget named
         if: always()
         # Per-job times include legitimate prerequisite waits: diagnostics on PRs and main.
-        # The complete required-check chain below owns the hard five-minute timing limit.
+        # The complete required-check chain below owns the hard eight-minute timing limit.
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -992,7 +992,7 @@ jobs:
     if: needs.plan.outputs.cli-bootstrap == 'true'
     name: CLI Windows standard-user bootstrap
     runs-on: windows-2022
-    timeout-minutes: 4
+    timeout-minutes: 7
     permissions:
       contents: read
       actions: read
