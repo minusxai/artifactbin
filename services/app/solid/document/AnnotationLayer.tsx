@@ -50,7 +50,6 @@ import { positionedComposer } from './AnnotationComposerPosition';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';
 import { RailChrome } from './AnnotationRail';
 import { AnnotationThread } from './AnnotationThread';
-import { captureAvailable } from '@/lib/capture/screen';
 import { createCommentCapture } from './CommentCapture';
 import { CommentMarkdownField } from './CommentMarkdown';
 import { PersonMentionProvider } from './PersonMention';
@@ -619,9 +618,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   onMount(() => { if (props.pickRequested && props.pickOnOpen !== false) startPick(); });
   const endPick = () => { resumeSelectAfterCompose = false; capture.reset(); setPick(null); };
   const toggleSelect = () => pick() === 'block' ? endPick() : beginPick('block');
-  // Chrome only exposes tab capture on secure origins (https or localhost), never plain http.
-  const screenshotUnavailable = () => imagesUnavailable ?? (!props.editId ? 'Screenshots need a saved document.'
-    : !captureAvailable() ? 'Screenshots need Chrome on a secure page (https or localhost).' : null);
+  // Without tab capture (Firefox, Safari, plain http) the area tool still runs: the composer takes an uploaded image.
+  const screenshotUnavailable = () => imagesUnavailable ?? (!props.editId ? 'Screenshots need a saved document.' : null);
 
   const topOffset = () => props.topOffset ?? 0;
   // The collapsed identity mark is small enough for phones too; its click opens the same rail as a sheet.

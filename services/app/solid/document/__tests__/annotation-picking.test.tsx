@@ -50,15 +50,13 @@ describe('picking a block from the rail', () => {
     expect(beginCapture).not.toHaveBeenCalled();
   });
 
-  it('disables Screenshot with a reason where the browser cannot capture this tab (plain http)', async () => {
+  it('keeps Screenshot usable where the browser cannot capture this tab: the area tool still starts', async () => {
     vi.spyOn(captureScreen, 'captureAvailable').mockReturnValue(false);
-    const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
     layer({ railOpen: true, editId: 'edit-current' }); await flush();
     const button = screen.getByRole('button', { name: 'Screenshot' });
-    expect(button).toBeDisabled();
-    fireEvent.click(button);
-    expect(beginCapture).not.toHaveBeenCalled();
-    expect(screen.queryByRole('status', { name: 'Screenshot tool active' })).toBeNull();
+    expect(button).toBeEnabled();
+    fireEvent.click(button); await flush();
+    expect(screen.getByRole('status', { name: 'Screenshot tool active' })).toBeInTheDocument();
   });
 
   it('requests sharing only from Screenshot, then captures the selected area', async () => {
