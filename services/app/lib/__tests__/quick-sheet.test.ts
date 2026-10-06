@@ -95,6 +95,7 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('the design system carries the palette');
   expect(sheet).toContain('does not verify appearance');
   expect(sheet).toContain('For visual review');
+  for(const term of ['Files/registered IDs use local data, unchanged by server mutations','afbin export <artifact-url> --output out.png','ID with `--refresh`','fresh published image; refuses local paths','afbin help publishing-versions'])expect(sheet).toContain(term);
   const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');
   for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });

@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. Datasets/media are artifacts too.
+Editable `.jsx` combines YAML metadata and kit JSX. Datasets/media are artifacts too.
 
 npm CLI: local files/browser approval, guests allowed. Direct HTTP: email auth, no CLI; [HTTP API](references/http-api.md).
 
@@ -22,16 +22,16 @@ npm CLI: local files/browser approval, guests allowed. Direct HTTP: email auth, 
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork deliberately: copy the file and remove those five fields.
-- Questions: source first; answer plainly, internals on request. Render only if needed.
-- Copy: plain words, short sentences, small paragraphs. Cut AI filler and repetition; preserve facts and caveats. Follow [copy guidance](references/copy.md), inspired by ASD-STE100, not bound by it.
-- Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. Files and registered IDs render local source and dataset copies; those copies do not automatically receive server mutations. To inspect the published page and its current datasets, use `afbin export <artifact-url> --output out.png`, or `afbin export <id> --refresh --output out.png`. `--refresh` selects published image rendering and is refused on local file paths. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
+- Questions: source first; render only if needed.
+- Copy: plain words, short sentences; preserve facts and caveats. [Copy guidance](references/copy.md).
+- Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. Files/registered IDs use local data, unchanged by server mutations. Published data: `afbin export <artifact-url> --output out.png` or ID with `--refresh` (fresh published image; refuses local paths). See `afbin help publishing-versions`. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 
 `afbin -h` and `afbin help <topic>` work offline; `afbin help` prints this file’s location.
 
 ## Example
 
-Before writing, read `afbin help <page type>` for design and markup; skipping the frame leaves content flush to the viewport edge.
+Before writing, read `afbin help <page type>`; otherwise content is flush to the viewport edge.
 
 ```jsx
 [[ example ]]
