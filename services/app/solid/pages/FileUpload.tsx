@@ -89,7 +89,7 @@ export function FileUploadPage(): JSX.Element {
     if (file) void pick(file);
   };
   return <Show when={!session()?.user && session()} fallback={
-    <main class="mx-auto w-full min-w-0 max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
+    <main class="workspace-page">
       <AssetPageHeader icon={FileUp} eyebrow="Asset upload" title="Upload a file" link={{ href: '/assets', label: 'Back to assets', text: 'all assets' }} />
       <div class="mx-auto max-w-4xl space-y-6"><section aria-label="Upload a file" class="rounded-xl border border-edge bg-surface p-5">
         <input ref={input} type="file" accept={ACCEPT} aria-label="Choose a file" class="hidden"

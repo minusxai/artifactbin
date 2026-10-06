@@ -50,7 +50,7 @@ export function FolderPage(props: FolderProps): JSX.Element {
     <Show when={folder().rows.length === 0}><div aria-label="Empty folder" class="mb-5 rounded-[6px] border border-dashed border-edge px-4 py-6"><p class="m-0 font-sans text-sm text-fg">Nothing here yet.</p><Show when={mayWrite()}><p class="m-0 mt-1 font-sans text-sm text-muted">Move a document in from its ⋯ menu, or give your agent <code class="rounded-sm bg-raised px-1 py-0.5 font-mono text-[0.9em] text-fg">parent_id: &quot;{folder().id}&quot;</code> when it publishes.</p></Show></div></Show>
     <Shelf rows={workspace()?.artifacts.map(row => ({ ...row, sparkline: row.sparkline ?? undefined })) ?? folder().rows} actions={mayWrite() ? 'full' : 'share'} canCreateFolders={mayWrite() && !workspace()} parentId={folder().id} scopeParentId={folder().id} assets={false} />
   </>;
-  return <main aria-label="Folder" class={`${workspace() ? HOME_WORKSPACE_COLUMN : PAGE_COLUMN} mt-8 pb-24`}>
+  return <main aria-label="Folder" class={workspace() ? HOME_WORKSPACE_COLUMN : `${PAGE_COLUMN} mt-8 pb-24`}>
     <Show when={workspace()} fallback={contents()}>{owned => <WorkspaceLayout workspace={owned()} parentId={folder().id} onCreated={reread} label="Folder workspace">{contents()}</WorkspaceLayout>}</Show>
   </main>;
 }

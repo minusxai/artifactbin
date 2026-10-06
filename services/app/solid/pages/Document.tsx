@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
+import { CopyAgentButton } from '../components/CopyAgentButton';
 import { createEffect, createMemo, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
@@ -350,6 +351,9 @@ export function DocumentPage(): JSX.Element {
     <div ref={host} aria-label="Artifact viewport" />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
+      <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>
+        <div class="fixed left-6" style={{ top: `${APP_BAR_H + (editing() ? EDIT_BAR_H : 0) + 12}px` }}><CopyAgentButton id={id!} template="doc" /></div>
+      </Show>
       <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
       <Show when={fork() && id}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Show>
     </TrustedUi>

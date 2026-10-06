@@ -98,11 +98,11 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
   createEffect(() => { if (panel()) onCleanup(closeOnEscape(close)); });
   return <>
-    <PageBar logo={<img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} />} mobileTitle={props.byline ? props.title ?? undefined : undefined}
+    <PageBar logo={<img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} />} mobileTitle={props.byline ? props.title ?? undefined : crumbs().at(-1)?.label}
       navigation={<>        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length || props.byline ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
         <Show when={props.byline} fallback={<>
           <Show when={!crumbs().length}><span aria-hidden="true" class="text-faint">·</span><span class="truncate font-normal text-muted">Google Docs for agents</span></Show>
-          <For each={crumbs()}>{crumb => <span class="flex min-w-0 items-center gap-2"><ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" /><Show when={crumb.href} fallback={<span class="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>}><a href={crumb.href} class="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a></Show></span>}</For>
+          <For each={crumbs()}>{crumb => <span class="flex min-w-0 items-center gap-2"><ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" /><Show when={crumb.href} fallback={<span aria-current="page" class="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>}><a href={crumb.href} class="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a></Show></span>}</For>
         </>}>{props.byline}</Show>
 </>} actions={<>        <Show when={props.star !== false}><Star mobile={false} /><Star mobile={true} /></Show>
         {props.actions}
@@ -155,7 +155,7 @@ export function PageMenuPanel(props: { close: () => void; phone?: boolean; top?:
       <a href="/" aria-label="Hosted at artifactbin" class="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"><img src="/logo-128.png" alt="" class="h-7 w-7" />artifactbin</a>
       {link('/', 'Artifacts', <FileText size={15} stroke-width={1.5} />)}
       {link('/schedules', 'Schedules', <CalendarClock size={15} />)}
-      {link('/chat', 'Remote sessions', <User size={15} stroke-width={1.5} />)}
+      {link('/chat', 'Connected agents', <User size={15} stroke-width={1.5} />)}
       {link('/notifications', 'Notifications', <User size={15} stroke-width={1.5} />)}
       {link('/account', 'Account', <User size={15} stroke-width={1.5} />)}
       {link('/docs-human', 'Human Docs', <BookOpen size={15} stroke-width={1.5} />)}

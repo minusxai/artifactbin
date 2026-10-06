@@ -70,6 +70,17 @@ it('says how to copy by hand when the clipboard refuses', async () => {
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not copy. Select and copy the instructions above.'));
 });
 
+it.each([['deck', 'presentation'], ['app', 'app'], ['editorial', 'article'], ['landing', 'landing page']])('names the %s starter and links to installation instructions', (template, label) => {
+  const data = answer();
+  data.surface.template = template;
+  open(data);
+  expect(screen.getByRole('heading', { name: `Your ${label} is ready for your agent!` })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Getting started' })).toHaveAttribute('href', `${window.location.origin}/getting-started`);
+  const prompt = (screen.getByRole('textbox', { name: 'Agent instructions' }) as HTMLTextAreaElement).value;
+  expect(prompt).toContain(`${window.location.origin}/getting-started.md`);
+  expect(prompt).not.toMatch(/ensure-node|afbin help|--server|Approve access/);
+});
+
 /** The app bar's panel opens in the page's trusted overlay (lib/islands/trusted-portal), above the comments rail. */
 const controls = (): HTMLElement => {
   const roots = [...document.querySelectorAll('[data-trusted-ui]')].map((host) => host.shadowRoot as unknown as HTMLElement);

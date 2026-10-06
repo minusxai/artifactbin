@@ -25,8 +25,8 @@ import { hasSlideRail } from './slides';
 export const MIN_OUTLINE_SECTIONS = 3;
 
 export interface OutlineEntry {
-  /** 2 for a section, 3 for a part of the section before it. */
-  level: 2 | 3;
+  /** Docs include their title (1), sections (2) and subsections (3). */
+  level: 1 | 2 | 3;
   title: string;
   /** Where the heading is in the tree (`data-mx-ast`) — how a click finds it. */
   path: string;
@@ -42,7 +42,7 @@ function textOf(node: JsxNode): string {
 }
 
 /** Every h2/h3 outside a slide, in document order. */
-export function discoverOutline(nodes: JsxNode[]): OutlineEntry[] {
+export function discoverOutline(nodes: JsxNode[], includeTitle = false): OutlineEntry[] {
   const out: OutlineEntry[] = [];
   const walk = (list: JsxNode[], prefix: string): void => {
     list.forEach((n, i) => {
@@ -51,9 +51,9 @@ export function discoverOutline(nodes: JsxNode[]): OutlineEntry[] {
       if (n.isComponent && n.tag === 'Slide') return;
       if (!n.isComponent) {
         const tag = n.tag.toLowerCase();
-        if (tag === 'h2' || tag === 'h3') {
+        if (tag === 'h2' || tag === 'h3' || (includeTitle && tag === 'h1')) {
           const title = textOf(n).replace(/\s+/g, ' ').trim();
-          if (title) out.push({ level: tag === 'h2' ? 2 : 3, title, path });
+          if (title) out.push({ level: tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3, title, path });
           return;
         }
       }

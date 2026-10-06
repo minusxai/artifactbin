@@ -1,6 +1,6 @@
 /**
- * The docs addresses. `/docs` and everything under it is retired and answers 404 to machines and browsers
- * alike; people get `/docs-human`, and an agent gets the CLI pointer (`/llms.txt`, `afbin help`). A guessed
+ * The docs addresses. Browser visits to `/docs` redirect to `/docs-human`; machines and retired paths
+ * underneath still get 404 with the CLI pointer (`/llms.txt`, `afbin help`). A guessed
  * API path answers that pointer as JSON rather than the SPA's HTML 404, which tells a fetch tool nothing.
  */
 import fs from 'node:fs';
@@ -17,13 +17,28 @@ describe('docs addresses', () => {
   useAppHarness();
 
   it('retired remote skill paths return 404 to machines and browsers', async () => {
-    for(const path of ['/docs','/docs/artifactbin','/docs/artifactbin/SKILL.md','/docs/artifactbin/references/publishing.md']) {
+    for(const path of ['/docs/artifactbin','/docs/artifactbin/SKILL.md','/docs/artifactbin/references/publishing.md']) {
       expect((await app.request(path)).status).toBe(404);
       expect((await app.request(path,{headers:BROWSER})).status).toBe(404);
     }
     // The remote MCP transport retired with them — moved here from the Hono route
     // smoke test, which keeps to the artifact routes it exists to prove.
     expect((await app.request('/mcp',{method:'POST'})).status).toBe(404);
+  });
+
+  it('redirects browser docs visits while retaining the agent help response', async () => {
+    const browser = await app.request('/docs', { headers: BROWSER });
+    expect(browser.status).toBe(302);
+    expect(browser.headers.get('location')).toBe('/docs-human');
+    expect(browser.headers.get('vary')).toContain('Accept');
+    const target = await app.request(browser.headers.get('location')!, { headers: BROWSER });
+    expect(target.status).toBe(200);
+    expect(target.headers.get('content-type')).toContain('text/html');
+    for (const accept of ['*/*', 'application/json']) {
+      const agent = await app.request('/docs', { headers: { accept } });
+      expect(agent.status).toBe(404);
+      expect(await agent.json()).toEqual({ error: 'not_found', help: 'afbin help' });
+    }
   });
 
   // The start-link brief, its claim door and the public anonymous mint are GONE, not merely unadvertised: the CLI's
@@ -45,6 +60,30 @@ describe('docs addresses', () => {
     expect(human.headers.get('content-type')).toContain('text/html');
     const old = await app.request('/docs/human', { headers: BROWSER });
     expect(old.status).toBe(404);
+  });
+
+  it('serves Getting started as a public page and a direct Markdown guide', async () => {
+    const human = await app.request('/getting-started', { headers: BROWSER });
+    expect(human.status).toBe(200);
+    expect(human.headers.get('content-type')).toContain('text/html');
+    const guide = await app.request('/getting-started.md');
+    expect(guide.status).toBe(200);
+    expect(guide.headers.get('content-type')).toContain('text/plain');
+    const text = await guide.text();
+    expect(text).toContain('# Getting started');
+    expect(text).toContain('npx --yes @afbin/cli@latest setup');
+    expect(text).toContain('npx.cmd --yes @afbin/cli@latest setup');
+    expect(text).toContain('afbin help');
+    expect(text).toContain('Claude Code, Codex, Pi, and OpenCode');
+    expect(text).toContain('use the artifactbin skill');
+    expect(text).toContain('afbin help to discover everything you can do');
+    expect(text).toContain('Approve access in your browser');
+    expect(text).toContain('--server');
+    expect(text).toContain('afbin pull');
+    expect(text).toContain('afbin push');
+    const discovery = await (await app.request('/llms.txt')).text();
+    expect(discovery).toContain('/getting-started.md');
+    expect(discovery).not.toContain('Prepare Node:');
   });
 
   it('a guessed API path answers 404 JSON naming /docs, never the SPA', async () => {

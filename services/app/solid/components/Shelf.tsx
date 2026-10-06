@@ -14,7 +14,7 @@ import FolderInput from 'lucide-solid/icons/folder-input';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import { writeBrowserArtifact } from '@/lib/artifacts/browser-artifact-write';
 import { buildShelf, parentOfRow, type ShelfRow } from '@/lib/workspace/shelf';
-import { CARD_RENDER_GENERATION } from '@/lib/serving/og-card';
+import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@/lib/serving/og-card';
 import { pageDataChanged } from '@/web/page-data-events';
 import { MicroLabel, PANEL, timeAgo } from './ui';
 import { Tooltip } from './Tooltip';
@@ -48,7 +48,7 @@ function Visibility(props: { row: ShelfRow }): JSX.Element {
 function ArtifactCover(props: { row: ShelfRow; showVisibility: boolean; children: JSX.Element }): JSX.Element {
   return <div class="artifact-cover">
     <a href={props.row.url} rel="external" aria-label={`Open ${nameOf(props.row)}`} class="artifact-cover-link" />
-    <div class="artifact-cover-preview"><img src={`/a/${props.row.id}/export?format=jpg&mode=card&v=${props.row.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" /></div>
+    <div class="artifact-cover-preview"><img width={CARD_WIDTH} height={CARD_HEIGHT} src={`/a/${props.row.id}/export?format=jpg&mode=card&v=${props.row.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" /></div>
     <span class="artifact-cover-fold" aria-hidden="true" />
     <Show when={props.showVisibility}><div class="artifact-cover-visibility"><Visibility row={props.row} /></div></Show>
     <div class="artifact-cover-front">

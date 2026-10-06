@@ -338,18 +338,23 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
               </Show>
               {props.insertionControls}
             </div>
-            <div aria-label="Selection actions" class={props.layout === 'panel' ? 'flex items-center justify-end gap-2' : 'ml-auto flex shrink-0 items-center gap-2 border-l border-edge px-2'}>
+            <div aria-label="Selection actions" class={props.layout === 'panel' ? 'mt-1 flex items-center gap-2' : 'ml-auto flex shrink-0 items-center gap-2 border-l border-edge px-2'}>
               <Show when={props.onComment}>
                 {(onComment) => (
                   <Tooltip content="comment on this (⌘⌥M)">
                     <button type="button" aria-label="Comment on selection" onMouseDown={keepFocus} onClick={() => onComment()(selection())}
-                      class="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 font-mono text-[11px] font-normal leading-none text-fg hover:bg-surface">
-                      <MessageSquare size={11} /><span class="hidden sm:inline">Comment</span>
+                      class={props.layout === 'panel' ? 'inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-fg hover:border-edge-bright hover:bg-raised' : 'inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 font-mono text-[11px] font-normal leading-none text-fg hover:bg-surface'}>
+                      <MessageSquare size={14} /><span class={props.layout === 'panel' ? '' : 'hidden sm:inline'}>Comment</span>
                     </button>
                   </Tooltip>
                 )}
               </Show>
-              <Chip label="Delete element" onClick={props.onDelete}><Trash2 size={14} /></Chip>
+              <Show when={props.layout === 'panel'} fallback={<Chip label="Delete element" onClick={props.onDelete}><Trash2 size={14} /></Chip>}>
+                <Tooltip content="Delete selected block">
+                  <button type="button" aria-label="Delete element" onMouseDown={keepFocus} onClick={props.onDelete}
+                    class="inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-muted hover:border-danger/40 hover:bg-raised hover:text-danger"><Trash2 size={14} />Delete</button>
+                </Tooltip>
+              </Show>
             </div>
           </div>
         );

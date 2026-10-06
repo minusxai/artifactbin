@@ -9,6 +9,7 @@
  */
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
 import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
+import { gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, skillExample, skillTree } from '../skills';
 import { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, llmsText } from '@/lib/serving';
@@ -67,34 +68,34 @@ describe('llms.txt and the discovery head', () => {
 
   it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
-    for (const line of [`npx --yes @afbin/cli@latest setup --server '${BASE}'`, `npx.cmd --yes @afbin/cli@latest setup --server '${BASE}'`, 'installs the afbin command and the agent skills', 'afbin help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, 'afbin pull', 'afbin validate', 'afbin push', 'afbin preview report.jsx', 'afbin help http-api', 'skill']) {
+    for (const line of [`${BASE}/getting-started.md`, `${BASE}/getting-started`, 'afbin help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, 'afbin preview report.jsx', 'afbin help http-api', 'skill']) {
       expect(text, line).toContain(line);
     }
     expect(text).not.toContain('[[');
-    // npm is the one setup line (and its Windows twin); every other command is `afbin <command>`.
-    expect(text.split('npx --yes @afbin/cli@').length - 1).toBe(1);
-    for (const [, command] of text.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command).toBe('setup');
+    // Discovery links to the single setup guide; it does not maintain a second installer.
+    expect(text).not.toContain('@afbin/cli@');
+    const guide = gettingStartedMarkdown(BASE);
+    expect(guide).toContain(afbinInstallCommand(BASE));
+    expect(guide).toContain(afbinWindowsInstallCommand(BASE));
+    expect(guide).toContain('artifactbin skill');
+    expect(guide.split('npx --yes @afbin/cli@').length - 1).toBe(1);
+    for (const [, command] of guide.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command).toBe('setup');
     // `afbin setup`, /raw, MCP and /docs/ are retired-surfaces.test.ts's row for the one-pager.
     expect(llmsText(`${BASE}/`)).toBe(text);
   });
 
   /**
    * PUSH VALIDATES. The brief's publishing guidance says there is no separate validate step — push
-   * runs `afbin validate` itself — and the one-pager is what the agent with NOTHING installed
-   * reads, so a validate of its own in that command line is the one place the contradiction costs
-   * a real call. The line still NAMES the validation, as part of push, rather than dropping it:
-   * an agent told elsewhere to validate needs to see where it went.
+   * runs validation itself. The linked Getting started guide teaches the edit loop and must not
+   * insert a redundant validate command before publishing.
    */
   it('its command line ends at push, because push validates — no separate validate step', () => {
-    const then = llmsText(BASE).split('\n').find((line) => line.startsWith('Then:'))!;
-    expect(then).toBeDefined();
-    expect(then).toContain('afbin pull <artifact url> --output report.jsx');
-    expect(then).toContain('edit the file');
-    expect(then).toContain('afbin push report.jsx');
-    expect(then).not.toContain('npx');
-    // A validate standing as its own step in the sequence — `afbin validate report.jsx;` — is the offence.
-    expect(then).not.toMatch(/afbin validate [^;()]*;/);
-    expect(then).toMatch(/push runs .*afbin validate/i);
+    const edit = gettingStarted(DEFAULT_SERVER).sections.find(section => section.id === 'edit')!;
+    expect(edit).toBeDefined();
+    expect(edit.blocks.filter(block => block.kind === 'command').map(block => block.text)).toEqual([
+      "afbin pull 'ARTIFACT_URL' --output artifact.jsx", 'afbin preview artifact.jsx', 'afbin push artifact.jsx',
+    ]);
+    expect(edit.blocks.map(block => block.text).join('\n')).toContain('Push validates the file before publishing.');
   });
 
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {

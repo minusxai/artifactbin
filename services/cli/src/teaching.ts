@@ -18,6 +18,7 @@ export const localSkillFiles:Readonly<Record<string,string>>=teaching.files;
 /** The bundle addressed to one server — what `afbin setup`/`update` write into a harness' skills folder. */
 export function skillFilesFor(origin:string=DEFAULT_SERVER):Record<string,string>{return teachingFilesFor(localSkillFiles,origin);}
 export const examples:Record<string,string>={
+ doc:'<article id="document" data-design="tw" className="mx-auto max-w-3xl px-6 py-12"><h1 id="headline" className="text-4xl font-semibold">Notes</h1><p id="body" className="mt-6 text-base leading-relaxed">Start writing.</p></article>',
  editorial:'<article className="mx-auto max-w-3xl p-8"><h1>Report</h1><p>Explain the finding.</p></article>',
  dashboard:'<Helmet><Import name="sales_data" src="ref:abc123" /><Query name="sales">{`select * from sales_data.rows`}</Query></Helmet>\n<main className="p-8"><h1>Sales</h1><Table data="$sales" /></main>',
  deck:'<SlideDeck><Slide><h1>Presentation</h1><p>One clear point.</p></Slide></SlideDeck>',

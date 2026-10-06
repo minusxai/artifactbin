@@ -1,3 +1,4 @@
+import WorkspaceHeading from '../components/WorkspaceHeading';
 /* @jsxImportSource solid-js */
 import {createResource,createSignal,For,Show,type JSX} from 'solid-js';
 import {useSearchParams} from '@solidjs/router';
@@ -30,7 +31,7 @@ export function SchedulesPage(props:{artifactId?:string}={}):JSX.Element{
  });};
  const edit=(record:ScheduleRecord)=>{setEditing(record.id);setArtifact(record.artifactId);setCron(record.cron);setTimezone(record.timezone);setInput(JSON.stringify(record.input,null,2));setMaxAttempts(record.maxAttempts);setBackoff(record.retryBackoffSeconds);setError('');document.getElementById('schedule-cron')?.focus();};
  const loadHistory=async(record:Pick<ScheduleRecord,'id'|'artifactId'>)=>{const result=await apiRequest<{history:ScheduleOccurrence[]}>(`/api/schedules/${record.id}/history`);setHistory({id:record.id,artifact:record.artifactId,rows:result.history});};
- return <main class="mx-auto max-w-5xl space-y-8 px-4 py-8"><header><h1 class="text-2xl font-semibold">Schedules</h1><p class="mt-2 max-w-2xl text-sm text-muted">Run the current version of an artifact on a schedule. Native programs require ownership; server handlers use artifact access permissions. The shortest interval is one minute.</p></header>
+ return <main class="workspace-page workspace-sections"><WorkspaceHeading title="Schedules" description="Run the current version of an artifact on a schedule. Native programs require ownership; server handlers use artifact access permissions. The shortest interval is one minute." />
  <Show when={session()?.user} fallback={<p><a href="/login" class="underline">Sign in</a> to manage schedules.</p>}>
  <Show when={error()}><p role="alert" class="text-danger">{error()}</p></Show><Show when={notice()}><p role="status">{notice()}</p></Show>
  <form onSubmit={save} class="rounded border border-edge bg-surface p-5"><h2 class="mb-4 text-lg font-semibold">{editing()?'Edit schedule':'New schedule'}</h2><div class="grid gap-4 sm:grid-cols-2">

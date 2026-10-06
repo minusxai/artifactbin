@@ -194,6 +194,14 @@ describe('compilePage', () => {
     expect((await compilePage(await inputOf(source, 'dashboard'), loadCompilerBuild())).outline).toEqual([]);
     expect((await compilePage({ ...(await inputOf(source, 'plan')), chrome: false }, loadCompilerBuild())).outline).toEqual([]);
   });
+  it('gives docs a persistent reading column and Contents from the first section', async () => {
+    const input = await inputOf('<article><h1>Notes</h1><h2>First section</h2><h3>Detail</h3></article><p>Another block</p>', 'doc');
+    const page = await compilePage(input, loadCompilerBuild());
+    expect(dom(page.html).querySelector('.mx-doc--document > p')?.textContent).toBe('Another block');
+    expect(page.outline.map(entry => entry.title)).toEqual(['Notes', 'First section', 'Detail']);
+    expect(generate(input).islands).toContain('mx-doc--document');
+    expect((await compilePage({ ...input, chrome: false }, loadCompilerBuild())).outline).toEqual([]);
+  });
   it('prose: static HTML only — no islands, no module, no slot left behind', async () => {
     const page = await compilePage(await inputOf(fixture('prose.jsx')), loadCompilerBuild());
     expect(page.islands).toEqual([]);

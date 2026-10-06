@@ -711,9 +711,8 @@ await section('pictures', async () => {
     const st = await mint();
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await openEditor(page, st);
-    // Insert ▸ Image… opens the dialog; a chosen file is uploaded and previewed, and Insert places it.
-    await page.getByRole('button', { name: 'Insert', exact: true }).click();
-    await page.getByRole('button', { name: 'Image…', exact: true }).click();
+    // The selection panel's Image button opens the dialog; Insert places the uploaded preview.
+    await page.getByRole('button', { name: 'Insert image', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Insert image' });
     await dialog.locator('[aria-label="Image file"]').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: PNG_BUF });
     const insert = dialog.getByRole('button', { name: 'Insert', exact: true });

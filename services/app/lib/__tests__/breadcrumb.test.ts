@@ -7,10 +7,10 @@ import { describe, expect, it } from 'vitest';
 import { crumbsFor } from '@/lib/workspace';
 
 describe('crumbsFor — the app pages', () => {
-  it('gives the root nothing to say: the brand mark IS the root', () => {
-    expect(crumbsFor('/')).toEqual([]);
+  it('names the artifact library at the root', () => {
+    expect(crumbsFor('/')).toEqual([{ label: 'artifacts' }]);
     // …and a trailing slash is the same address.
-    expect(crumbsFor('//')).toEqual([]);
+    expect(crumbsFor('//')).toEqual([{ label: 'artifacts' }]);
   });
 
   it('names the app pages, unlinked, because you are on them', () => {
@@ -77,4 +77,14 @@ describe('crumbsFor — the unknown', () => {
   it('but uses a name it was handed', () => {
     expect(crumbsFor('/some/new/thing', 'Named')).toEqual([{ label: 'Named' }]);
   });
+});
+
+it.each([
+  ['/assets', 'assets'], ['/schedules', 'schedules'], ['/chat', 'connected agents'],
+  ['/notifications', 'notifications'], ['/trash', 'trash'], ['/datasets/new', 'new dataset'],
+  ['/files/new', 'upload file'], ['/programs/new', 'new program'], ['/programs/abc123/edit', 'edit program'],
+  ['/connect', 'connect'], ['/start', 'get started'], ['/welcome', 'welcome'],
+])('names workspace page %s in the breadcrumb', (path, label) => {
+  expect(crumbsFor(path)).toEqual([{ label }]);
+  expect(crumbsFor(`${path}/`)).toEqual([{ label }]);
 });

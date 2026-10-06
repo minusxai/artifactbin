@@ -1,3 +1,4 @@
+import WorkspaceHeading from '../components/WorkspaceHeading';
 import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
@@ -7,6 +8,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import type {RunnerCapabilities} from '@artifactbin/contracts';
 import type { RemoteSessionInfo, RemoteView } from '../../../contracts/src/remote';
+import { isConnectedAgent } from '../lib/connected-agents';
 import { Tooltip } from '../components/Tooltip';
 import { Button } from '../components/ui';
 import { usePageData } from '../lib/use-page-data';
@@ -242,9 +244,8 @@ export function ChatPage(): JSX.Element {
   const [historyExpanded, setHistoryExpanded] = createSignal(false);
   const page = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions', { loader: (signal) => request('', undefined, 'GET', signal) });
   const sessions = () => page.data()?.sessions ?? [];
-  const isActive = (session: RemoteSessionInfo) => (session.online || !!session.runId && session.activity==='starting') && session.exitCode == null;
-  const previousCount = () => sessions().filter((session) => !isActive(session)).length;
-  const visibleSessions = () => sessions().filter((session) => isActive(session) || historyExpanded() || session.id === id());
+  const previousCount = () => sessions().filter((session) => !isConnectedAgent(session)).length;
+  const visibleSessions = () => sessions().filter((session) => isConnectedAgent(session) || historyExpanded() || session.id === id());
   const error = () => page.error() ? connectionMessage(page.error()) : '';
   let stopped = false, timer: ReturnType<typeof setTimeout>;
   let failures = 0;
@@ -256,8 +257,8 @@ export function ChatPage(): JSX.Element {
   void poll();
   onCleanup(() => { stopped = true; clearTimeout(timer); });
   const close = () => { const closed = id(); setParams({}); page.seed({ sessions: sessions().filter((session) => session.id !== closed) }); };
-  return <main class="mx-auto max-w-7xl px-4 py-6">
-    <h1 class="mb-1 text-xl font-semibold">Remote sessions</h1><p class="mb-6 text-sm text-muted">Your agents, on your machine or hosted for you.</p>
+  return <main class="workspace-page">
+    <WorkspaceHeading title="Connected agents" description="Your agents, on your machine or hosted for you." />
     <Show when={error()}><p role="alert" class="mb-4 text-sm">{error()} <Show when={error().startsWith('Sign in')}><a href={`/login?callbackUrl=${encodeURIComponent(`/chat${id() ? `?session=${id()}` : ''}`)}`} class="underline">Sign in</a></Show></p></Show>
     <div class="flex flex-col gap-6 md:flex-row"><aside class="shrink-0 md:w-80">
       <For each={visibleSessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {session.exitCode !== null && session.exitCode !== undefined ? 'Ended' : session.online ? 'Online' : session.runId&&session.activity==='starting'?'Starting':'Offline'}</span></button>}</For>
