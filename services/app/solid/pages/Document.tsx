@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
+import { CopyAgentButton } from '../components/CopyAgentButton';
 import { createEffect, createMemo, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
@@ -331,7 +332,7 @@ export function DocumentPage(): JSX.Element {
     <DocumentPeople id={id!} initialOpen revision={membershipRevision()} onChange={() => setMembershipRevision((n) => n + 1)} /></Show>
   </div>;
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<NotFoundPage />}>
-    <DocumentChrome id={id!} template={live()?.template ?? page!.surface?.template} title={() => (!editing() && editorTitle()) || shownTitle()} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
+    <DocumentChrome id={id!} title={() => (!editing() && editorTitle()) || shownTitle()} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
       like={page!.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={openAnnotationCount}
       archived={page!.archived ?? null} editing={editing} canEdit={editable()} canFork={!archivedNow()} owner={isOwner()}
       install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={page!.surface?.hasInvitedUsers}
@@ -350,6 +351,9 @@ export function DocumentPage(): JSX.Element {
     <div ref={host} aria-label="Artifact viewport" />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
+      <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>
+        <div class="fixed left-6" style={{ top: `${APP_BAR_H + (editing() ? EDIT_BAR_H : 0) + 12}px` }}><CopyAgentButton id={id!} template="doc" /></div>
+      </Show>
       <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
       <Show when={fork() && id}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Show>
     </TrustedUi>

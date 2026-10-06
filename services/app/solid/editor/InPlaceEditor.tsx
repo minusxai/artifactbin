@@ -26,6 +26,8 @@ import Smartphone from 'lucide-solid/icons/smartphone';
 import { readPwaSettings } from '@/lib/story/reader/pwa-settings';
 import { PwaSettingsPanel, PwaSharingSetting } from './PwaSettingsPanel';
 import Files from 'lucide-solid/icons/files';
+import ImagePlus from 'lucide-solid/icons/image-plus';
+import FileCode from 'lucide-solid/icons/file-code';
 import Share2 from 'lucide-solid/icons/share-2';
 import Hash from 'lucide-solid/icons/hash';
 import History from 'lucide-solid/icons/history';
@@ -639,20 +641,32 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       class="min-w-0 text-ellipsis rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none" />
   );
   const selectionBody = () => <>
-    <section aria-label="Document appearance" class="flex flex-col items-start gap-2 px-1 py-2">
-      <h3 class="mb-1 font-mono text-[11px] uppercase tracking-wide text-faint">Document</h3>
+    <section aria-label="Document appearance" class="px-1 py-1">
       <Show when={!props.titleHost}>{titleEditor()}</Show>
+      <div class="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5">
+      <Show when={art.template}><span class="font-sans text-xs text-muted">Page type</span><div class="flex h-7 items-center px-2"><TemplateChip template={art.template} /></div></Show>
+      <span class="font-sans text-xs text-muted">Design</span><div class="min-w-0">
       <ThemePicker value={theme()} colorMode={colorMode()} onPick={(t) => {
         setTheme(t);
         queue({ theme: t });
         showInDocument(editorSource.current(), { redraw: true });
       }} />
-      <TemplateChip template={art.template} />
+      </div><span class="font-sans text-xs text-muted">Mode</span>
       <ModeChip mode={colorMode()} themeDefault={storyThemeDefaultMode(theme()) ?? 'light'} onPick={(next) => {
         setColorMode(next);
         queue({ colorMode: next });
         showInDocument(editorSource.current(), { redraw: true });
       }} />
+      </div>
+    </section>
+    <section aria-label="Insert content" class="mt-3 border-t border-edge px-1 pt-3 pb-1">
+      <h3 class="mb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-faint">Insert</h3>
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" aria-label="Insert image" onMouseDown={event => event.preventDefault()} onClick={openInsertDialog}
+          class="flex h-8 cursor-pointer items-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-fg hover:border-edge-bright hover:bg-raised"><ImagePlus size={14} class="text-muted" />Image</button>
+        <button type="button" aria-label="Paste Markdown" onMouseDown={event => event.preventDefault()} onClick={() => setMarkdownDraft('')}
+          class="flex h-8 cursor-pointer items-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-fg hover:border-edge-bright hover:bg-raised"><FileCode size={14} class="text-muted" />Markdown</button>
+      </div>
     </section>
     <hr class="my-3 border-edge" />
     {formatControls()}
@@ -666,7 +680,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       onBackToCurrent={backToCurrent} busy={history.busy()} />
   );
   const viewTabs = (): Array<{ key: string; label: string; aria: string; tip: string; icon: JSX.Element; active: boolean; choose: () => void }> => [
-    { key: 'design', label: 'App', aria: 'Edit on the page', tip: 'edit on the page', icon: <Paintbrush size={12} />, active: mode() === 'design' && contentView() === null, choose: () => { chooseMode('design'); setContentView(null); } },
+    { key: 'design', label: 'Artifact', aria: 'Edit on the page', tip: 'edit on the page', icon: <Paintbrush size={12} />, active: mode() === 'design' && contentView() === null, choose: () => { chooseMode('design'); setContentView(null); } },
     { key: 'code', label: 'Code', aria: 'Edit the source', tip: 'edit the source', icon: <Code size={12} />, active: mode() === 'code', choose: () => { chooseMode('code'); setContentView(null); } },
     ...(queryNotebook().length > 0 ? [{ key: 'data', label: 'Data', aria: 'Show data', tip: "the document's queries", icon: <Database size={12} />, active: queriesOpen(), choose: () => { const was = queriesOpen(); setContentView('data'); chooseMode('design'); if (!was) inPlace.select(null); } }] : []),
     ...(pwaEnabled() ? [{ key: 'pwa', label: 'PWA', aria: 'Show PWA settings', tip: 'PWA settings', icon: <Smartphone size={12} />, active: contentView() === 'pwa', choose: async () => { if (await live.flushForNavigation(() => inPlace.commitPending(true))) { setContentView('pwa'); chooseMode('design'); inPlace.select(null); } } }] : []),
@@ -773,7 +787,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
               </Tooltip>
             </Show>
           </Show>
-          <Show when={appView()}>{insertionControls()}</Show>
+          <Show when={appView() && (!wide() || collapsed() || panelTab() !== 'selection')}>{insertionControls()}</Show>
           <Show when={appView()}><div aria-label="Editing history" class="flex items-center">{historyControls()}</div></Show>
           <Tooltip content="done editing">
             <button type="button" aria-label="Exit edit mode" onClick={(event) => {

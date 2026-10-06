@@ -121,7 +121,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   const chooseMode = (next: 'light' | 'dark') => { chooseTheme(next); setMode(next); };
 
   return <>
-    <DocumentChrome id={id} template={surface.template} title={title} author={surface.author ?? null} follow={answer.follow ?? null}
+    <DocumentChrome id={id} title={title} author={surface.author ?? null} follow={answer.follow ?? null}
       like={answer.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={() => surface.openAnnotations ?? 0}
       canEdit={editable} canFork owner={owner} visibility={surface.visibility} hasInvitedUsers={surface.hasInvitedUsers}
       panel={panel} setPanel={setPanel} mode={mode} onMode={chooseMode}

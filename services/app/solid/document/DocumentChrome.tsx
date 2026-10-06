@@ -26,14 +26,12 @@ import { DocumentTitle } from '../components/PageBar';
 import { DocumentCommentAction, DocumentEditAction, DOCUMENT_ACTION_CLASS } from './DocumentBarActions';
 import { Avatar } from '../components/Avatar';
 import { sendReaction } from './reactions';
-import { CopyAgentButton } from '../components/CopyAgentButton';
 
 /** The one line an archived render's bar carries. */
 export const archivedBanner = (version: number, head: number): string => `Version ${version} of ${head} · read-only`;
 
 export interface DocumentChromeProps {
   id: string;
-  template?: string | null;
   title: Accessor<string>;
   author: { username: string | null; id?: string | null; image?: string | null } | null;
   follow?: { userId: string; following: boolean; count: number } | null;
@@ -123,7 +121,6 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   </>;
 
   const actions = <>
-    <Show when={props.canEdit && !props.archived}><CopyAgentButton id={props.id} template={props.template} /></Show>
     <Show when={reading()}>
       <Tooltip content={like().liked ? 'Unlike' : 'Like'}>
         <button type="button" class={RAIL_BUTTON} aria-label={like().liked ? 'Unlike' : 'Like'} aria-pressed={like().liked} onClick={() => void toggleLike()}>
