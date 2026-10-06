@@ -370,7 +370,7 @@ export function DocumentPage(): JSX.Element {
       <AnnotationLayer id={id!} backend={backend ?? undefined} editId={editorPart()?.editId ?? page?.surface?.editId} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} showViewComments={annotatable()} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
-        pickOnOpen={!editing()} onAnnotationsChange={setAnnotationItems}
+        pickOnOpen={!editing() || wide()} onAnnotationsChange={setAnnotationItems}
         topOffset={APP_BAR_H + (editing() ? EDIT_BAR_H : 0)}
         railHost={editing() && wide() ? commentsHost() : undefined}
         railSheet={editing() && !wide()}

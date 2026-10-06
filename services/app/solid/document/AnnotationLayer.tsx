@@ -325,7 +325,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   /*
    * OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is about to leave one. Not for a
-   * rail opened FOR A THREAD, not while a composer is open, not under the editor (`pickOnOpen`),
+   * rail opened FOR A THREAD, not while a composer is open, not when the page says so (`pickOnOpen`:
+   * the editor's narrow comments sheet, which covers the document),
    * and not on a phone, whose sheet covers the document. Closing the rail ends the pick it opened,
    * unless a pick is what put the sheet away. DECLARED BEFORE the handed-in selection below, so a
    * rail opening together with a selection ends with the composer, not the pick.
@@ -607,7 +608,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
 
   const beginScreenshot = async () => {
-    if (!props.editId || imagesUnavailable) return;
+    if (screenshotUnavailable()) return;
     beginPick('area');
     const preparation = capture.start(); // Only this explicit gesture requests sharing.
     void loadScreenshotEditor().catch(() => {});
@@ -617,6 +618,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   onMount(() => { if (props.pickRequested && props.pickOnOpen !== false) startPick(); });
   const endPick = () => { resumeSelectAfterCompose = false; capture.reset(); setPick(null); };
   const toggleSelect = () => pick() === 'block' ? endPick() : beginPick('block');
+  // Without tab capture (Firefox, Safari, plain http) the area tool still runs: the composer takes an uploaded image.
   const screenshotUnavailable = () => imagesUnavailable ?? (!props.editId ? 'Screenshots need a saved document.' : null);
 
   const topOffset = () => props.topOffset ?? 0;
@@ -735,7 +737,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           <For each={placedIds()}>{(id) => (
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={recentResolved()[id]?.remaining}
-                hovered={hoverId() === id} onOpen={() => openThread(id)} onHover={hoverUi} />
+                hovered={hoverId() === id} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi} />
             )}</Show>
           )}</For>
         </div>

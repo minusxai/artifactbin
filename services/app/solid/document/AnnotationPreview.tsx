@@ -162,6 +162,8 @@ const ACTIVE_PHASES = ['queued', 'dispatching', 'delivered', 'acknowledged'];
 /** A quiet identity mark until intent is shown; then enough context to choose. */
 export function AnnotationPreview(props: {
   row: AnnotationWire; top: number; remaining?: number; hovered: boolean;
+  /** Room taken on the right (the edit panel): the mark sits beside it, never under it. */
+  rightInset?: number;
   onOpen: () => void; onHover: (id: string | null) => void;
 }): JSX.Element {
   const [repliesExpanded, setRepliesExpanded] = createSignal(false);
@@ -201,9 +203,9 @@ export function AnnotationPreview(props: {
       position: 'fixed',
       outline: work() ? `2px solid ${REMOTE_COLOR_CSS[work()!.color]}` : undefined,
       top: `${props.top}px`,
-      right: `${VIEW_COMMENT_INSET}px`,
+      right: `${(props.rightInset ?? 0) + VIEW_COMMENT_INSET}px`,
       width: `${props.hovered ? 288 : compactWidth()}px`,
-      'max-width': `calc(100vw - ${VIEW_COMMENT_INSET * 2}px)`,
+      'max-width': `calc(100vw - ${(props.rightInset ?? 0) + VIEW_COMMENT_INSET * 2}px)`,
       height: props.hovered ? (repliesExpanded() ? 'auto' : `${VIEW_COMMENT_EXPANDED_H}px`) : `${VIEW_COMMENT_COLLAPSED_H}px`,
       'max-height': props.hovered && repliesExpanded() ? `calc(100dvh - ${props.top + VIEW_COMMENT_INSET}px)` : undefined,
       'overflow-y': props.hovered && repliesExpanded() ? 'auto' : undefined,
