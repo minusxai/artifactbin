@@ -71,7 +71,7 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     join('connect-src', "'self'", appDoors, MODULE_CDNS, asset, 'blob: data:'),
     join('style-src', "'self'", "'unsafe-inline'", FONT_STYLES, ext.style),
     join('font-src', "'self'", 'data:', FONT_FILES, asset, ext.style),
-    join('img-src', "'self'", 'https:', 'data:', 'blob:', asset, ext.img),
+    join('img-src', "'self'", 'https:', 'data:', 'blob:', `${appOrigin}/api/users/`, asset, ext.img),
     join('media-src', "'self'", 'https:', 'blob:', asset, ext.media),
     // An author `<iframe>` (lib/jsx/validate): the default players, then the hosts the document declares.
     join('frame-src', FRAME_HOSTS, ext.frame),
