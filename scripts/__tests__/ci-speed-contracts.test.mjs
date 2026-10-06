@@ -173,3 +173,14 @@ it('builds pack-only candidates without preparing or uploading unused native dow
  expect(steps.find(step=>step.run==='npm run pack:release -w services/cli').if).toBeUndefined();
  expect(steps.find(step=>step.with?.name==='afbin-npm-packages').if).toBeUndefined();
 });
+
+it('reuses current-attempt waiting for prepared CLI packages without accepting other producers or stale artifacts',async()=>{
+ const {waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ let time=0,calls=0;
+ const current={id:3,name:'prepared-cli',created_at:'2026-10-06T00:01:00Z'};
+ const options={jobName:'package',artifactName:'prepared-cli',startedAt:'2026-10-06T00:00:00Z',now:()=>time,sleep:async()=>{time+=5000;},jobs:async()=>({jobs:[{name:'package',status:'in_progress'},{name:'CLI npm pack',status:'completed',conclusion:'failure'}]}),artifacts:async()=>({artifacts:++calls===1?[{...current,id:1,created_at:'2026-10-05T00:01:00Z'},{...current,id:2,expired:true},{...current,id:4,name:'afbin-npm-release'}]:[current]})};
+ expect((await waitForCurrentArtifact(options)).id).toBe(3);expect(calls).toBe(2);
+ await expect(waitForCurrentArtifact({...options,jobs:async()=>({jobs:[{name:'package',status:'completed',conclusion:'failure'}]})})).rejects.toThrow('package failed');
+ await expect(waitForCurrentArtifact({...options,artifacts:async()=>({artifacts:[current,{...current,id:5}]})})).rejects.toThrow(/Multiple current-attempt/);
+ time=0;await expect(waitForCurrentArtifact({...options,timeout:5000,artifacts:async()=>({artifacts:[{...current,expired:true}]})})).rejects.toThrow(/timed out/);
+});

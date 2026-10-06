@@ -5,14 +5,14 @@ import {execFileSync} from 'node:child_process';
 import {existsSync,writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as sleep} from 'node:timers/promises';
-export async function waitForCurrentArtifact({startedAt,artifacts,jobs,now=Date.now,sleep:pause=sleep,timeout=180000,childFailed=()=>false}) {
+export async function waitForCurrentArtifact({startedAt,artifacts,jobs,now=Date.now,sleep:pause=sleep,timeout=180000,childFailed=()=>false,jobName='CLI npm pack',artifactName='afbin-npm-release'}) {
  const start=Date.parse(startedAt),deadline=now()+timeout;
  if(!Number.isFinite(start))throw Error('Missing current-attempt start');
  while(now()<deadline){
   if(childFailed())throw Error('Standard-user bootstrap child failed before candidate arrival');
-  const packing=(await jobs()).jobs.find(job=>job.name==='CLI npm pack');
-  if(packing?.status==='completed'&&packing.conclusion!=='success')throw Error('CLI npm pack failed; no candidate can be accepted');
-  const available=(await artifacts()).artifacts.filter(artifact=>artifact.name==='afbin-npm-release'&&!artifact.expired&&Date.parse(artifact.created_at)>=start);
+  const packing=(await jobs()).jobs.find(job=>job.name===jobName);
+  if(packing?.status==='completed'&&packing.conclusion!=='success')throw Error(`${jobName} failed; no candidate can be accepted`);
+  const available=(await artifacts()).artifacts.filter(artifact=>artifact.name===artifactName&&!artifact.expired&&Date.parse(artifact.created_at)>=start);
   if(available.length>1)throw Error('Multiple current-attempt candidates');
   if(available.length===1)return available[0];
   await pause(5000);
