@@ -137,26 +137,17 @@ describe('a release is a version and nothing else', () => {
   it('accepts exactly the files and lines `npm run release:cli` rewrites', () => {
     expect(VERSION_BUMP_FILES).toContain('services/cli/package.json');
     expect(VERSION_BUMP_FILES).toContain('services/cli/transition/afbin');
-    expect(VERSION_BUMP_FILES).toHaveLength(7);
+    expect(VERSION_BUMP_FILES).toHaveLength(5);
     const transition = { path: 'services/cli/transition/afbin', hunks: [{ removed: ['AFBIN_VERSION=0.1.44'], added: ['AFBIN_VERSION=0.1.45'] }] };
-    const shaped = VERSION_BUMP_FILES.filter((path) => !path.endsWith('install.sh')&&!path.endsWith('install.ps1')&&path !== transition.path).map((path) => bump(path));
+    const shaped = VERSION_BUMP_FILES.filter((path) => path !== transition.path).map((path) => bump(path));
     expect(isVersionOnlyBump([...shaped, transition])).toBe(true);
-    // All seven lockstep files, every one in its own shape: still nothing but the number.
-    expect(isVersionOnlyBump([...shaped, transition,
-      { path: 'services/app/public/chat/install.ps1', hunks: [{ removed: ["  [string]$Version = '0.1.44',"], added: ["  [string]$Version = '0.1.45',"] }] },
-      { path: 'services/app/public/chat/install.sh', hunks: [{ removed: ['  version=0.1.44'], added: ['  version=0.1.45'] }] },
-    ])).toBe(true);
     // The transition asset old installs download is pinned to the release; a bump that leaves it behind is not one.
     expect(isVersionOnlyBump(shaped), 'transition pin missing').toBe(false);
     expect(isVersionOnlyBump([...shaped, { path: transition.path, hunks: [{ removed: ['AFBIN_VERSION=0.1.44'], added: ['AFBIN_PROTOCOL=3'] }] }]), 'another transition line').toBe(false);
-    // install.sh carries the version twice, in two shapes, and both move together.
-    expect(isVersionOnlyBump([bump('services/cli/package.json'), transition, {
-      path: 'services/app/public/chat/install.sh',
-      hunks: [
-        { removed: ['  version=0.1.44'], added: ['  version=0.1.45'] },
-        { removed: ['Install afbin: sh install.sh [--version 0.1.44] [--dir PATH] [--yes]'], added: ['Install afbin: sh install.sh [--version 0.1.45] [--dir PATH] [--yes]'] },
-      ],
-    }])).toBe(true);
+    // npm wrappers are runtime code, never version-only release input.
+    for (const path of ['services/app/public/chat/install.sh', 'services/app/public/chat/install.ps1']) {
+      expect(isVersionOnlyBump([...shaped, transition, bump(path)]), path).toBe(false);
+    }
   });
 
   it('refuses anything that is not purely the number moving', () => {
@@ -288,8 +279,8 @@ describe('GitHub CI adapter', () => {
     };
     write('services/cli/package.json', `{\n  "name": "afbin",\n  "version": "${version}"\n}\n`);
     write('package-lock.json', `{\n  "packages": {\n    "services/cli": {\n      "version": "${version}"\n    }\n  }\n}\n`);
-    write('services/app/public/chat/install.sh', `main() {\n  version=${version}\nInstall afbin: sh install.sh [--version ${version}] [--dir PATH] [--yes]\n}\n`);
-    write('services/app/public/chat/install.ps1', `  [string]$Version = '${version}',\n`);
+    write('services/app/public/chat/install.sh', 'npx --yes @afbin/cli@latest setup\n');
+    write('services/app/public/chat/install.ps1', 'npx.cmd --yes @afbin/cli@latest setup\n');
     write('services/app/public/chat/release.json', `{\n  "version": "${version}",\n  "protocol": 1\n}\n`);
     write('services/cli/transition/afbin', `#!/bin/sh\nAFBIN_VERSION=${version}\nAFBIN_PROTOCOL=1\n`);
   };

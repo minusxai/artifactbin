@@ -12,13 +12,10 @@ export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 
  * the source under that version has already passed the suites.
  */
 const VERSION_LINE = {
-  'services/app/public/chat/install.ps1': /^\s*\[string\]\$Version = '\d+\.\d+\.\d+',$/,
   'services/cli/npm-shrinkwrap.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'services/cli/package.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'package-lock.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'services/app/public/chat/release.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
-  // Twice, in two shapes: the installer's own default and the line of usage that quotes it.
-  'services/app/public/chat/install.sh': /^\s*version=\d+\.\d+\.\d+$|--version \d+\.\d+\.\d+/,
   // The bootstrap old 0.3.x installs download from every release pins the version it installs.
   'services/cli/transition/afbin': /^AFBIN_VERSION=\d+\.\d+\.\d+$/,
 };

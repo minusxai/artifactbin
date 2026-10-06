@@ -16,8 +16,8 @@ function fixture(transitionVersion) {
   writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
   writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({ version: '0.1.9', packages: { '': { version: '0.1.9' } } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
-  writeFileSync(join(dir, 'services/app/public/chat/install.sh'), '  version=0.1.9\n--version 0.1.9\n');
-  writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), "  [string]$Version = '0.1.9',\n");
+  writeFileSync(join(dir, 'services/app/public/chat/install.sh'), 'npx --yes @afbin/cli@latest setup\n');
+  writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), 'npx.cmd --yes @afbin/cli@latest setup\n');
   writeFileSync(join(dir, 'services/app/public/chat/release.json'), '{\n  "version": "0.1.9",\n  "protocol": 1\n}\n');
   if (transitionVersion) writeFileSync(join(dir, transition), script(transitionVersion), { mode: 0o755 });
   return dir;
@@ -43,7 +43,7 @@ for (const [label, version] of [['a drifted', '0.1.8'], ['an absent', undefined]
       expect(run.status).not.toBe(0);
       expect(run.stderr).toContain(transition);
       expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.9');
-      expect(readFileSync(join(dir, 'services/app/public/chat/install.sh'), 'utf8')).toBe('  version=0.1.9\n--version 0.1.9\n');
+      expect(readFileSync(join(dir, 'services/app/public/chat/install.sh'), 'utf8')).toBe('npx --yes @afbin/cli@latest setup\n');
       if (version) expect(readFileSync(join(dir, transition), 'utf8')).toBe(script(version));
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
