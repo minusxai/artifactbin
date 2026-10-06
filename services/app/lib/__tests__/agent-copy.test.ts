@@ -11,7 +11,7 @@ import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place.\n\nGetting started with afbin: https://x.test/getting-started.md\n\n---\n\nLet's build an artifact for ";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. If afbin is not installed, install and set it up first: https://x.test/getting-started.md\n\n---\n\nLet's build an artifact for ...";
 
 describe('the tokenless paste', () => {
   it('existing: the link plus how to reach afbin, and never a token', () => {
@@ -54,7 +54,7 @@ describe('the tokenless paste', () => {
     const prompt = existingPaste(B, ID, template);
     expect(prompt).toContain(`template: ${template}`);
     expect(prompt).toContain('/a/ab3cd9');
-    expect(prompt.endsWith(`Let's build ${phrase} for `)).toBe(true);
+    expect(prompt.endsWith(`Let's build ${phrase} for ...`)).toBe(true);
   });
   it('is the module\'s only export — the start-link paste and the claim relay are gone', () => {
     expect(Object.keys(agentCopy)).toEqual(['existingPaste']);
