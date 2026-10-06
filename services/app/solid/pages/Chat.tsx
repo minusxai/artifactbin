@@ -13,6 +13,7 @@ import { Tooltip } from '../components/Tooltip';
 import { Button } from '../components/ui';
 import { usePageData } from '../lib/use-page-data';
 import { copyText } from '../lib/copy-text';
+import { startManagedRun } from '../lib/managed-run-retry';
 
 class RemoteRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -85,7 +86,7 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
         }
         if (stopped) return;
         cursor = view.seq; failures = 0;
-        setConnection(view.session.online || view.session.exitCode !== null ? '' : view.session.runId ? view.session.activity==='starting'?'Starting your hosted box…':view.session.activity==='stopped'?'This run has ended. Start the same box name to restore your home files.':'Waiting for your hosted terminal…' : 'Reconnecting… Waiting for your local terminal.');
+        setConnection(view.session.online || view.session.exitCode !== null ? '' : view.session.runId ? view.session.activity==='starting'?'Starting your hosted box…':view.session.activity==='stopping'?'Stopping your hosted box…':view.session.activity==='stopped'?'This run has ended. Start the same box name to restore your home files.':'Waiting for your hosted terminal…' : 'Reconnecting… Waiting for your local terminal.');
       } catch (reason) {
         if (!stopped) {
           failures++;
@@ -213,22 +214,25 @@ function InstallInstructions(): JSX.Element {
 
 function ManagedRunSetup(props:{onCreated:(session:RemoteSessionInfo)=>void}):JSX.Element {
   const [name,setName]=createSignal('my-agent'),[command,setCommand]=createSignal('bash'),[key,setKey]=createSignal('');
-  const [busy,setBusy]=createSignal(false),[error,setError]=createSignal('');
+  const [busy,setBusy]=createSignal(false),[error,setError]=createSignal(''),[progress,setProgress]=createSignal('');
+  const controller=new AbortController();let disposed=false;
+  onCleanup(()=>{disposed=true;controller.abort();});
   const start=async(event:SubmitEvent)=>{
-    event.preventDefault();if(busy())return;setBusy(true);setError('');
+    event.preventDefault();if(busy())return;setBusy(true);setError('');setProgress('');
     try {
-      const response=await fetch('/api/runs',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:crypto.randomUUID?.()??Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join(''),name:name(),command:[command()],...(key().trim()?{sshPublicKey:key().trim()}:{}),compute:{vcpu:1,memoryMiB:2048,ttlSeconds:3600}})});
-      const result=await response.json();if(!response.ok)throw Error(result.error??'Could not start your agent');
+      const body=JSON.stringify({requestId:crypto.randomUUID?.()??Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join(''),name:name(),command:[command()],...(key().trim()?{sshPublicKey:key().trim()}:{}),compute:{vcpu:1,memoryMiB:2048,ttlSeconds:3600}});
+      const result=await startManagedRun({body,signal:controller.signal,onPending:()=>{if(!disposed)setProgress('Finishing the previous hosted box…');}});
       props.onCreated(result.session);
-    }catch(reason){setError(reason instanceof Error?reason.message:'Could not start your agent');}finally{setBusy(false);}
+    }catch(reason){if(!disposed&&!(reason instanceof DOMException&&reason.name==='AbortError'))setError(reason instanceof Error?reason.message:'Could not start your agent');}finally{if(!disposed){setBusy(false);setProgress('');}}
   };
   return <form class="mb-5 space-y-3 rounded border border-edge p-3" onSubmit={start}>
     <h2 class="font-semibold">Run your agent on a hosted box</h2>
-    <label class="block text-sm">Box name<input aria-label="Box name" class="mt-1 w-full rounded border border-edge bg-surface p-2" value={name()} onInput={e=>setName(e.currentTarget.value)} pattern="[a-z][a-z0-9_-]{0,31}" required /></label>
-    <label class="block text-sm">Program<select aria-label="Hosted program" class="mt-1 w-full rounded border border-edge bg-surface p-2" value={command()} onChange={e=>setCommand(e.currentTarget.value)}><option value="bash">Shell</option><option value="claude">Claude Code</option><option value="codex">Codex</option></select></label>
-    <label class="block text-sm">SSH public key (optional)<textarea aria-label="SSH public key" class="mt-1 w-full rounded border border-edge bg-surface p-2" value={key()} onInput={e=>setKey(e.currentTarget.value)} placeholder="ssh-ed25519 …" /></label>
+    <label class="block text-sm">Box name<input aria-label="Box name" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={name()} onInput={e=>setName(e.currentTarget.value)} pattern="[a-z][a-z0-9_-]{0,31}" required /></label>
+    <label class="block text-sm">Program<select aria-label="Hosted program" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={command()} onChange={e=>setCommand(e.currentTarget.value)}><option value="bash">Shell</option><option value="claude">Claude Code</option><option value="codex">Codex</option></select></label>
+    <label class="block text-sm">SSH public key (optional)<textarea aria-label="SSH public key" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={key()} onInput={e=>setKey(e.currentTarget.value)} placeholder="ssh-ed25519 …" /></label>
     <p class="text-xs text-muted">1 vCPU · 2 GiB RAM · up to 1 hour. Sign in to your agent in the terminal. Your home files are retained for the same box name.</p>
     <button class="rounded bg-accent px-3 py-2 text-bg disabled:opacity-40" disabled={busy()}>{busy()?'Starting…':'Start hosted box'}</button>
+    <Show when={progress()}><p role="status" class="text-sm">{progress()}</p></Show>
     <Show when={error()}><p role="alert" class="text-sm text-red-500">{error()}</p></Show>
   </form>;
 }

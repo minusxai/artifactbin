@@ -135,6 +135,29 @@ it('offers native hosted boxes only when the configured service advertises manag
  await waitFor(()=>expect(write).toHaveBeenCalledWith('Log in to Codex',expect.any(Function)));
 });
 
+it('retries a stopped-box admission with one frozen request and visible progress',async()=>{
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ const session={id:'native-restarted',runId:'run-two',name:'my-agent',harness:'codex',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null};
+ const bodies:string[]=[];let attempts=0;
+ const fetch=vi.fn(async(url:string,options?:RequestInit)=>{
+  if(url==='/api/run-capabilities')return {ok:true,json:async()=>({version:1,managedProcesses:true})};
+  if(url==='/api/runs'){
+   bodies.push(options?.body as string);attempts++;
+   return attempts===1?{ok:false,status:409,headers:new Headers({'Retry-After':'0.001'}),json:async()=>({error:'box_restart_pending'})}:{ok:true,status:202,headers:new Headers(),json:async()=>({session,runId:'run-two'})};
+  }
+  if(url==='/api/remote/sessions')return {ok:true,json:async()=>({sessions:[]})};
+  return {ok:true,json:async()=>({session,seq:0,frames:[],snapshot:'ready'})};
+ });
+ vi.stubGlobal('fetch',fetch);open('');
+ const name=await screen.findByRole('textbox',{name:'Box name'});
+ fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
+ expect(await screen.findByText('Finishing the previous hosted box…')).toBeInTheDocument();
+ expect(name).toBeDisabled();expect(screen.getByRole('combobox',{name:'Hosted program'})).toBeDisabled();
+ await waitFor(()=>expect(attempts).toBe(2));
+ expect(bodies).toHaveLength(2);expect(bodies[1]).toBe(bodies[0]);
+ expect(JSON.parse(bodies[0]!).requestId).toBeTruthy();
+});
+
 it('switches native terminal layout without sending unsupported PTY resize controls',async()=>{
  let resized=()=>{};vi.stubGlobal('ResizeObserver',class {constructor(callback:()=>void){resized=callback;}observe(){}disconnect(){}});
  const session={id:'native-fixed',runId:'run-fixed',name:'Fixed',harness:'bash',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null};

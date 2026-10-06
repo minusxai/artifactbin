@@ -40,8 +40,11 @@ export async function managedRunRoute(request:Request,action:'capabilities'|'cre
     if(existing.info.runId){
      const run=await runner.getRun({userId:owner,runId:existing.info.runId});
      if(['queued','running'].includes(run.status)){
+      // A stop marks the app record inactive before the runner has finished
+      // reaping its process. Tell callers to wait before comparing config: the
+      // current process still owns this box name and home directory.
+      if(!existing.active)throw Error('box_restart_pending');
       if(existing.info.managedConfigHash!==configHash)throw Error('box_configuration_conflict');
-      if(!existing.active)throw Error('box_ending_conflict');
       return {runId:existing.info.runId,session:existing.info,attached:true};
      }
     }
@@ -54,5 +57,5 @@ export async function managedRunRoute(request:Request,action:'capabilities'|'cre
    return json(result,result.attached?200:202);
   }catch(error){if(admitted)await runner.cancel({userId:owner,runId:admitted});throw error;}
 
- }catch(error){const reason=error instanceof Error?error.message:'managed_runs_unavailable';return json({error:reason},reason==='not_found'?404:reason.includes('conflict')?409:503);}
+ }catch(error){const reason=error instanceof Error?error.message:'managed_runs_unavailable';return json({error:reason},reason==='not_found'?404:reason==='box_restart_pending'||reason.includes('conflict')?409:503,reason==='box_restart_pending'?{'Retry-After':'1'}:{});}
 }
