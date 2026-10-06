@@ -127,12 +127,19 @@ it('rejects incomplete or wrong-platform archives before copying a seed into the
  const dependencies=seeds.npmSeedDependencies(lock,{os:'linux',cpu:'x64'});
  const archive=join(directory,'seed.tar'),target=join(directory,'consumer');
  const run=(os='Linux',arch='X64')=>spawnSync(process.execPath,[fileURLToPath(new URL('../lib/npm-dependency-cache.mjs',import.meta.url)),'merge-seed',archive,target,os,arch],{encoding:'utf8'});
- const pack=(selected)=>{
-  writeFileSync(join(index,'entry'),selected.map(dependency=>'checksum\t'+JSON.stringify({key:'make-fetch-happen:request-cache:'+dependency.resolved,integrity:dependency.integrity,metadata:{url:dependency.resolved}})+'\n').join(''));
+ const pack=(selected,{manifests=true}={})=>{
+  const records=selected.flatMap(dependency=>{
+   const tarball={key:'make-fetch-happen:request-cache:'+dependency.resolved,integrity:dependency.integrity,metadata:{url:dependency.resolved}};
+   const name=dependency.spec.slice(0,dependency.spec.lastIndexOf('@'));
+   const url='https://registry.npmjs.org/'+name;
+   return manifests?[tarball,{key:'make-fetch-happen:request-cache:'+url,integrity:'sha512-manifest-fixture',metadata:{url}}]:[tarball];
+  });
+  writeFileSync(join(index,'entry'),records.map(record=>'checksum\t'+JSON.stringify(record)+'\n').join(''));
   execFileSync('tar',['-cf',archive,'-C',join(directory,'seed'),'_cacache']);
  };
  try{
   pack(dependencies.slice(1));expect(run().status).toBe(1);expect(existsSync(join(target,'_cacache'))).toBe(false);
+  pack(dependencies,{manifests:false});const missingManifest=run();expect(missingManifest.status).toBe(1);expect(missingManifest.stderr).toContain('manifest');
   pack(dependencies);expect(run('Unsupported','X64').status).toBe(1);
   expect(run().status).toBe(0);expect(existsSync(join(target,'_cacache','index-v5','entry'))).toBe(true);
   pack([{...dependencies[0],integrity:'sha512-wrong'},...dependencies.slice(1)]);
@@ -203,12 +210,14 @@ it('prunes platform aliases without deleting shared npm content or breaking subs
  try{
   for(const [name,dep] of [['all',all],['linux-only',linux]]){
    for(const key of ['make-fetch-happen:request-cache:'+dep.resolved,`pacote:tarball:${name}@1.0.0`])await cacache.put(join(source,'_cacache'),key,bytes);
+   const manifest={name,versions:{'1.0.0':{name,version:'1.0.0',dist:{tarball:dep.resolved,integrity}}}};
+   await cacache.put(join(source,'_cacache'),'make-fetch-happen:request-cache:https://registry.npmjs.org/'+name,JSON.stringify(manifest));
   }
   const lock=JSON.stringify({packages:{'':{},'node_modules/all':all,'node_modules/linux-only':linux}});
   await seeds.packPlatformNpmSeeds(source,output,lock);
   const entries=await cacache.ls(join(output,'macOS-ARM64','_cacache'));
-  expect(Object.keys(entries)).toHaveLength(2);
+  expect(Object.keys(entries)).toHaveLength(3);
   expect(Object.keys(entries).every(key=>!key.includes('linux-only'))).toBe(true);
-  expect(await seeds.assertPublicNpmCache(join(output,'macOS-ARM64'),[all])).toBe(2);
+  expect(await seeds.assertPublicNpmCache(join(output,'macOS-ARM64'),[{...all,spec:'all@1.0.0'}])).toBe(3);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
