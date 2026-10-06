@@ -6,6 +6,7 @@ import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract } from '@/lib/serving';
 import { existingPaste } from '@/lib/serving';
+import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
 import { agentDiscovery, llmsText } from '@/lib/serving';
 import { createArtifact } from '@/lib/artifacts';
 import { unauthorized } from '@/lib/http';
@@ -24,7 +25,7 @@ const BOOTSTRAP = 'If `afbin` is not installed, run `npx --yes @afbin/cli@latest
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['token','mint','claim'];
 const httpDiscovery=(name:string)=>name==='skills/artifactbin/llms.txt'||name==='lib/agent-discovery meta';
-const linkedInstaller = (name: string) => name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt');
+const linkedInstaller = (name: string) => name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt') || name === 'skills/artifactbin/llms.txt';
 
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
 const ALLOWED_SENTENCE = 'never mint or print tokens';
@@ -52,6 +53,7 @@ const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
     ['POST /api/my/artifacts/:id/agent-prompt prompt', handed.prompt],
     ['skills/artifactbin/SKILL.md', buildQuickSheet(BASE)],
     ['skills/artifactbin/llms.txt', llmsText(BASE)],
+    ['GET /getting-started.md', gettingStartedMarkdown(BASE)],
     ['lib/agent-discovery meta', agentDiscovery(BASE).instruction],
     ['lib/agent-contract', agentContract(BASE)],
     ['the 401 hint', refused.help],
@@ -67,8 +69,8 @@ describe('every agent-facing starter says the same thing', () => {
   });
 
   it('(b) carries the installer, so an agent without the binary is never stuck', async () => {
-    for (const [name, text] of await surfaces()) expect(text, name).toContain(linkedInstaller(name) ? `${BASE}/llms.txt` : INSTALLER);
-    expect(llmsText(BASE)).toContain(INSTALLER);
+    for (const [name, text] of await surfaces()) expect(text, name).toContain(linkedInstaller(name) ? `${BASE}/getting-started.md` : INSTALLER);
+    expect(gettingStartedMarkdown(BASE)).toContain(INSTALLER);
   });
 
   it('(b) spells npm only as that one setup line; every other command is `afbin <command>`', async () => {

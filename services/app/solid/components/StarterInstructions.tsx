@@ -33,7 +33,7 @@ export function StarterInstructions(props: { id: string; template?: string | nul
     <textarea ref={instructions} aria-label="Agent instructions" rows={8} spellcheck={false} value={prompt()}
       onInput={(event) => { setDraft(event.currentTarget.value); setState('idle'); fitInstructions(); }}
       class="w-full resize-y rounded-md border border-edge bg-surface p-4 font-mono text-xs leading-relaxed text-muted focus:border-accent focus:outline-none" />
-    <p class="-mt-2 font-sans text-xs text-muted">New to afbin? <a href={`${origin}/llms.txt`} target="_blank" rel="noopener noreferrer" class="underline decoration-edge-bright underline-offset-4 hover:text-fg">Installation instructions</a></p>
+    <p class="-mt-2 font-sans text-xs text-muted">New to afbin? <a href={`${origin}/getting-started`} target="_blank" rel="noopener noreferrer" class="underline decoration-edge-bright underline-offset-4 hover:text-fg">Getting started</a></p>
     <button type="button" aria-label="Copy agent instructions" disabled={!origin} onClick={() => void copy()} class="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-accent px-5 py-3 text-sm font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50">
       <Show when={state() === 'copied'} fallback={<Copy size={18} aria-hidden="true" />}><Check size={18} aria-hidden="true" /></Show>
       {state() === 'copied' ? 'Copied — paste into your agent' : 'Copy agent instructions'}

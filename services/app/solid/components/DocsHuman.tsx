@@ -1,7 +1,6 @@
 /* @jsxImportSource solid-js */
 /** The human docs — the tour of the product. */
 import FlowSchematic from './FlowSchematic';
-import GetStarted from './GetStarted';
 import { FormatBadge, LINK } from './ui';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import DesignSystemSpecimen from './DesignSystemSpecimen';
@@ -75,12 +74,9 @@ export default function DocsHuman() {
 
       <section {...anchor('get-started')}>
         <h2 class={SECTION}>get started</h2>
-        <div class="mt-3">
-          <GetStarted heading={false} />
-        </div>
         <p class={PROSE}>
-          Setup installs local guidance for publishing, editing, themes and charts.
-          Your agent can read the files and validate changes locally before publishing.
+          Install afbin, connect your agent, and make your first edit with the{' '}
+          <a href="/getting-started" class={LINK}>Getting started guide</a>.
         </p>
       </section>
 

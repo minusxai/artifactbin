@@ -62,6 +62,30 @@ describe('docs addresses', () => {
     expect(old.status).toBe(404);
   });
 
+  it('serves Getting started as a public page and a direct Markdown guide', async () => {
+    const human = await app.request('/getting-started', { headers: BROWSER });
+    expect(human.status).toBe(200);
+    expect(human.headers.get('content-type')).toContain('text/html');
+    const guide = await app.request('/getting-started.md');
+    expect(guide.status).toBe(200);
+    expect(guide.headers.get('content-type')).toContain('text/plain');
+    const text = await guide.text();
+    expect(text).toContain('# Getting started');
+    expect(text).toContain('npx --yes @afbin/cli@latest setup');
+    expect(text).toContain('npx.cmd --yes @afbin/cli@latest setup');
+    expect(text).toContain('afbin help');
+    expect(text).toContain('Claude Code, Codex, Pi, and OpenCode');
+    expect(text).toContain('use the artifactbin skill');
+    expect(text).toContain('afbin help to discover everything you can do');
+    expect(text).toContain('Approve access in your browser');
+    expect(text).toContain('--server');
+    expect(text).toContain('afbin pull');
+    expect(text).toContain('afbin push');
+    const discovery = await (await app.request('/llms.txt')).text();
+    expect(discovery).toContain('/getting-started.md');
+    expect(discovery).not.toContain('Prepare Node:');
+  });
+
   it('a guessed API path answers 404 JSON naming /docs, never the SPA', async () => {
     for (const p of ['/api', '/api/docs', '/openapi.json', '/.well-known/ai-plugin.json']) {
       const res = await app.request(p);

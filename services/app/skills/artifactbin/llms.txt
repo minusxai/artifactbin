@@ -4,14 +4,12 @@ artifactbin: agents publish and edit stateful, interactive artifacts with the np
 
 Artifacts are interactive documents, apps, dashboards, decks, plans and datasets. Agents write a JSX file: YAML metadata, SQL over datasets, JSX views, typed values and actions. People read, edit, annotate and share its URL. The npm CLI installs a local skill teaching the format, commands and refusal codes.
 
-Prepare Node: afbin_node_setup="$(mktemp)" && curl -fsSL [[ base ]]/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
-Windows: Invoke-RestMethod [[ base ]]/chat/ensure-node.ps1 | Invoke-Expression
-Setup: if afbin is not installed, run npx --yes @afbin/cli@latest setup --server '[[ base ]]' once (Windows PowerShell: npx.cmd --yes @afbin/cli@latest setup --server '[[ base ]]'); it installs the afbin command and the agent skills. Run preparation and setup in the same terminal. Supported Node/npm is reused; otherwise official Node LTS is installed for your user.
-Then: afbin pull <artifact url> --output report.jsx; edit the file; afbin push report.jsx (push runs afbin validate itself)
-Reference: afbin help, afbin help <topic>, and the installed skill. Restart your agent after setup to load it.
+Getting started: [[ base ]]/getting-started.md — install afbin, read its help, select this server, approve access in the browser, and make your first edit.
+Human-readable version: [[ base ]]/getting-started
+Reference: afbin help, afbin help <topic>, and the installed skill.
 Local: afbin preview report.jsx needs no cloud or credentials. HTML exports/downloads use .jsx.html. Pin the npm version and prepare its cache before disconnecting; npm is not a sandbox.
 
-Sign-in is automatic for server commands through browser approval, including guests. In automation add --yes --json: open the returned approval URL, then the command continues. Direct HTTP clients require email authentication; guest browser approval is CLI-only.
+Direct HTTP clients require email authentication; guest browser approval is CLI-only.
 
 Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; use either or its bare id. Add @<version> for history.
 

@@ -74,6 +74,7 @@ export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
 
   // Browser visits to `/docs` redirect here before the shell mounts.
   if (path === '/docs-human') return [{ label: 'docs' }];
+  if (path === '/getting-started') return [{ label: 'docs', href: '/docs-human' }, { label: 'getting started' }];
 
   if (/^\/programs\/[^/]+\/edit$/.test(path)) return [{ label: named ?? 'edit program' }];
 

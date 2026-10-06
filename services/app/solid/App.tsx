@@ -20,6 +20,7 @@ const WelcomePage = lazy(() => import('./pages/Welcome').then((m) => ({ default:
 const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.NotificationsPage })));
 const AccountPage = lazy(() => import('./pages/Account').then((m) => ({ default: m.AccountPage })));
 const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.DocsPage })));
+const GettingStartedPage = lazy(() => import('./pages/GettingStarted').then((m) => ({ default: m.GettingStartedPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
 const ProfileAliasRoute = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfileAliasRoute })));
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
@@ -45,7 +46,7 @@ function IntentPreload(): JSX.Element {
 
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
-  const workspaceRoute = () => ['/assets', '/trash', '/schedules', '/chat', '/notifications', '/account', '/docs-human', '/datasets/new', '/files/new', '/programs/new'].includes(location.pathname);
+  const workspaceRoute = () => ['/assets', '/trash', '/schedules', '/chat', '/notifications', '/account', '/docs-human', '/getting-started', '/datasets/new', '/files/new', '/programs/new'].includes(location.pathname);
   const servedDocument = !!servedDocumentFrame();
   const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
@@ -109,6 +110,7 @@ export function App(): JSX.Element {
       <Route path="/notifications" component={NotificationsPage} />
       <Route path="/account" component={AccountPage} />
       <Route path="/docs-human" component={DocsPage} />
+      <Route path="/getting-started" component={GettingStartedPage} />
       <Route path="/:user" component={ProfilePage} />
       {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/Profile.tsx
         * ProfileAliasRoute); a sibling `/:user/:alias` route here would overlap it and win first for

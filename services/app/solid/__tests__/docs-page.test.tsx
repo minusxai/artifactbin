@@ -7,9 +7,10 @@ import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import GetStarted from '@/solid/components/GetStarted';
 import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
 import { App } from '@/solid/App';
+import { gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
-it('serves the human tour with current templates, live design systems, install command and working contents links', async () => {
+it('serves the human tour with current templates, live design systems and a link to Getting started', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/page/session' ? Response.json({ user: null, kind: 'none', onboarded: true }) : Response.json({})));
   window.history.replaceState(null, '', '/docs-human');
   render(() => <App />);
@@ -25,9 +26,29 @@ it('serves the human tour with current templates, live design systems, install c
   for (const field of ['markup', 'dataset', 'viz', 'image']) expect(main).toHaveTextContent(field);
   expect(main.textContent).not.toContain('/plugin');
   expect(main.textContent).not.toContain('—');
-  expect(screen.getByRole('button', { name: 'Copy the CLI install command' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Getting started guide' })).toHaveAttribute('href', '/getting-started');
   const contents = screen.getByRole('navigation', { name: 'Contents' });
   for (const link of within(contents).getAllByRole('link')) expect(document.getElementById(link.getAttribute('href')!.slice(1))).toBeInTheDocument();
+});
+
+it('renders the same Getting started instructions as Markdown, with sidebar and copyable commands', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/page/session' ? Response.json({ user: null, kind: 'none', onboarded: true }) : Response.json({})));
+  window.history.replaceState(null, '', '/getting-started');
+  render(() => <App />);
+  const main = await screen.findByRole('main');
+  expect(within(main).getByRole('heading', { level: 1, name: 'Getting started' })).toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeInTheDocument();
+  expect(within(main).getByRole('link', { name: 'Markdown for agents ↗' })).toHaveAttribute('href', '/getting-started.md');
+  const guide = gettingStarted(window.location.origin);
+  const markdown = gettingStartedMarkdown(window.location.origin);
+  for (const section of guide.sections) {
+    expect(document.getElementById(section.id)).toBeInTheDocument();
+    for (const block of section.blocks) {
+      expect(markdown).toContain(block.text);
+      expect(within(main).getByText(block.text, { normalizer: text => text })).toBeInTheDocument();
+      if (block.kind === 'command') expect(within(main).getByRole('button', { name: `Copy ${block.label.toLowerCase()} command` })).toBeInTheDocument();
+    }
+  }
 });
 
 it.each(['Win32','MacIntel'])('shows executable Node preparation and npm instructions on %s', (platform) => {

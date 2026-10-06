@@ -653,6 +653,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return c.req.header('Accept')?.includes('text/html') ? c.redirect('/docs-human', 302) : apiNotFound(c);
   });
   app.get('/docs-human', (c) => page(c));
+  app.get('/getting-started', (c) => page(c));
   // Page data is finished JSON: brotli for a client that takes it (server/content-encoding).
   app.use('/api/page/*', dynamicEncoding());
   // The app's API and document handlers.
