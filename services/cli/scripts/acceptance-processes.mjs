@@ -19,9 +19,9 @@ export async function runAcceptanceProcesses(checks,{spawnProcess=spawn,timeout=
 
 /** Declaration invariants join the same isolated parallel proofs only where CI selects them. */
 export function installedAcceptanceModes(mode,includeTypes=false){
- return mode==='experience'?['runner','terminal','preview','local',...(includeTypes?['types']:[])]:[mode];
+ return mode==='experience'?['runner','terminal','preview','local',...(includeTypes?['types']:[])]:mode==='runtime'?['runner','terminal',...(includeTypes?['types']:[])]:[mode];
 }
 export function installedAcceptanceGroups(mode,includeTypes=false){
  const selected=installedAcceptanceModes(mode,includeTypes);
- return mode==='experience'?[['terminal'],selected.filter(name=>name!=='terminal')]:[selected];
+ return ['experience','runtime'].includes(mode)?[['terminal'],selected.filter(name=>name!=='terminal')]:[selected];
 }

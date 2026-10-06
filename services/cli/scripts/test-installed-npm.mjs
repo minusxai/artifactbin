@@ -9,5 +9,5 @@ const installed=(await readFile(join(process.env.RUNNER_TEMP??tmpdir(),'npm-proo
 const mode=process.argv[2];
 const modes={types:['scripts/test-npm-types.mjs',installed],runner:['--import','tsx','scripts/test-npm-runner-boundary.mjs',installed],terminal:['scripts/test-npm-terminal.mjs',installed],preview:['--import','tsx','scripts/test-preview.ts',installed],local:['scripts/test-npm-local-journey.mjs',installed]};
 const groups=installedAcceptanceGroups(mode,process.argv.includes('--types'));
-if(groups.flat().some(name=>!modes[name]))throw new Error('Choose types, runner, terminal, preview, local or experience.');
+if(groups.flat().some(name=>!modes[name]))throw new Error('Choose types, runner, terminal, preview, local, runtime or experience.');
 for(const selected of groups)await runAcceptanceProcesses(selected.map(label=>({label,command:process.execPath,args:modes[label],cwd:cli,env:process.env})));

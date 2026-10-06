@@ -27,3 +27,7 @@ it('observes the tiny terminal proof before launching CPU-heavy experience check
  expect(installedAcceptanceGroups('experience')).toEqual([['terminal'],['runner','preview','local']]);
  expect(installedAcceptanceGroups('types')).toEqual([['types']]);
 });
+it('keeps terminal before runner and declarations in the browser-free runtime lane',()=>{
+ expect(installedAcceptanceGroups('runtime')).toEqual([['terminal'],['runner']]);
+ expect(installedAcceptanceGroups('runtime',true)).toEqual([['terminal'],['runner','types']]);
+});

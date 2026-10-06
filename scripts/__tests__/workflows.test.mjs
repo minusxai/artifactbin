@@ -168,16 +168,16 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(matrix.needs).toContain('cli-pack');
     expect(matrix.strategy.matrix.node).toEqual(['22.22.3','24.21.0']);
     expect(matrix.strategy.matrix.os).toContain('windows-2022');
-    expect(matrix.strategy.matrix.phase).toEqual(['native','experience']);
+    expect(matrix.strategy.matrix.phase).toEqual(['native','runtime','preview','local']);
     const install = matrix.steps.find(step => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
-    expect(install.if).toContain("matrix.phase == 'experience'");
+    expect(install.if).toContain("matrix.phase != 'native'");
     const native = matrix.steps.find(step => step.name === 'Same-tarball native npm and warmed offline acceptance');
     expect(native.if).toBe("matrix.phase == 'native'");
-    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase == 'experience'");
+    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase != 'native'");
     for (const name of ['Installed npm preview and export, with process shutdown']) {
-      expect(matrix.steps.find(step => step.name === name)?.if,name).toBe("matrix.phase == 'experience'");
+      expect(matrix.steps.find(step => step.name === name)?.if,name).toBe("matrix.phase == 'preview' || matrix.phase == 'local'");
     }
-    expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase == 'experience'");
+    expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase != 'native'");
     for(const job of ['cli','reference-compatibility']){
       const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
       expect(download,job).toBeDefined();

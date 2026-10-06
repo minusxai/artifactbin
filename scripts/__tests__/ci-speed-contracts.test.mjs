@@ -7,7 +7,7 @@ describe('release critical path',()=>{
  it('runs Intel preview/export through the supported-platform experience proof once',()=>{
   const jobs=workflow().jobs;
   expect(jobs['cli-preview']).toBeUndefined();
-  expect(jobs.cli.steps.some(step=>step.run?.includes('test-installed-npm.mjs experience'))).toBe(true);
+  expect(jobs.cli.steps.some(step=>step.run?.includes('test-installed-npm.mjs ${{ matrix.phase }}'))).toBe(true);
  });
  it('starts ID-first conformance from the packed candidate instead of waiting on unrelated native proofs',()=>{
   const job=workflow().jobs['reference-compatibility'];
@@ -91,4 +91,19 @@ it('hands the source build from the current pack run to reference proof without 
  expect(reference.some(step=>step.run==='npm run build -w services/cli')).toBe(false);
  expect(reference.some(step=>step.run==='tar -xf afbin-reference-build.tar')).toBe(true);
  expect(pack.indexOf(archive)).toBeGreaterThan(pack.findIndex(step=>step.run==='npm run pack:release -w services/cli'));
+});
+it('splits independent credential and database host proofs into required parallel lanes',()=>{
+ const job=workflow().jobs['reference-compatibility'];
+ expect(job.strategy?.matrix.proof).toEqual(['accounts','team']);
+ expect(job.steps.find(step=>step.name==='ID-first conformance for source bundle and installed npm package').if).toBe("matrix.proof == 'accounts'");
+ expect(job.steps.find(step=>step.name==='Team hosts with isolated PGLite and PostgreSQL').if).toBe("matrix.proof == 'team'");
+ expect(job.strategy['fail-fast']).toBe(false);
+});
+it('separates CPU-heavy installed proofs while retaining every platform journey',()=>{
+ const job=workflow().jobs.cli;
+ expect(job.strategy.matrix.phase).toEqual(['native','runtime','preview','local']);
+ const proofs=job.steps.filter(step=>step.run?.includes('test-installed-npm.mjs'));
+ expect(proofs.map(step=>step.if)).toEqual(["matrix.phase == 'runtime'","matrix.phase == 'preview' || matrix.phase == 'local'"]);
+ expect(proofs[0].run).toContain('test-installed-npm.mjs runtime');
+ expect(proofs[1].run).toContain('test-installed-npm.mjs ${{ matrix.phase }}');
 });
