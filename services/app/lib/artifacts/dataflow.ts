@@ -815,7 +815,7 @@ export async function refDataForRow(
   // data: its rows go through the engine (dataflowForRow) and only the query's
   // RESULT reaches the document.
   for (const ref of meta.refs ?? []) {
-    if (ref.kind === 'dataset') continue;
+    if (ref.kind === 'dataset' || ref.kind === 'document') continue;
     // Resolve by the doc's token first, then — for a user-owned doc — by the
     // account, then anything link-readable. A signed-in human's docs and their
     // pasted images can sit under DIFFERENT tokens of the same user (the doc on

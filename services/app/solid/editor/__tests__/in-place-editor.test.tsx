@@ -92,6 +92,40 @@ it('copies the current source and unsaved metadata after a refused save', async 
 
 const drafts = (sent: Array<Record<string, unknown>>) => sent.filter((m) => m.type === STORY_DOCUMENT_MESSAGE).map((m) => m.source);
 
+it('opens the referenced document in Context and links to its own editor', async () => {
+  const backend = fakeBackend();
+  vi.mocked(backend.documentFrame).mockResolvedValue('https://abc.pages.test/');
+  const { view } = mountEditor('<Helmet><Context src="ref:abc123" /></Helmet><p>Dashboard</p>', backend);
+  expect(backend.documentFrame).not.toHaveBeenCalled();
+  fireEvent.click(view.getByRole('tab', { name: 'Show context' }));
+  await vi.waitFor(() => expect(view.getByTitle('Context document')).toHaveAttribute('src', 'https://abc.pages.test/'));
+  expect(backend.documentFrame).toHaveBeenCalledWith('abc123');
+  expect(view.getByRole('link', { name: 'Open document' })).toHaveAttribute('href', '/a/abc123');
+  fireEvent.click(view.getByRole('tab', { name: 'Edit on the page' }));
+  expect(view.queryByTitle('Context document')).toBeNull();
+});
+
+it('shows an unavailable message when the context document cannot be read', async () => {
+  const { view } = mountEditor('<Helmet><Context src="ref:abc123" /></Helmet><p>Dashboard</p>');
+  fireEvent.click(view.getByRole('tab', { name: 'Show context' }));
+  await vi.waitFor(() => expect(view.getByText('This context document is unavailable or you do not have access.')).toBeInTheDocument());
+  expect(view.queryByTitle('Context document')).toBeNull();
+});
+
+it('does not offer Context without a declaration', () => {
+  const { view } = mountEditor();
+  expect(view.queryByRole('tab', { name: 'Show context' })).toBeNull();
+});
+
+it('keeps an offline context reference without making a network request', () => {
+  const backend = fakeBackend({}, { mode: 'offline' });
+  const { view } = mountEditor('<Helmet><Context src="ref:abc123" /></Helmet><p>Dashboard</p>', backend);
+  fireEvent.click(view.getByRole('tab', { name: 'Show context' }));
+  expect(view.getByText('Context lives in a separate document. Open the live artifact to read it.')).toBeInTheDocument();
+  expect(backend.documentFrame).not.toHaveBeenCalled();
+  expect(view.queryByRole('link', { name: 'Open document' })).toBeNull();
+});
+
 it('offers image and Markdown insertion directly in the right panel', () => {
   const { sent, view } = mountEditor();
   const insert = within(view.getByRole('region', { name: 'Insert content' }));

@@ -42,6 +42,16 @@ describe('createHttpBackend', () => {
     await expect(backend.load()).rejects.toThrow('Failed to fetch');
   });
 
+  it('loads a companion frame with its own access check and no parent document parameters', async () => {
+    const calls = stubFetch(json({ src: 'https://pages.test/pages-session', origin: 'https://abc.pages.test' }));
+    await expect(backend.documentFrame('Doc123')).resolves.toBe('https://pages.test/pages-session');
+    expect(calls).toEqual([{ url: '/api/page/frame/Doc123', init: { credentials: 'same-origin', cache: 'no-store' } }]);
+    stubFetch(json({ error: 'not_found' }, 404));
+    await expect(backend.documentFrame('Doc123')).resolves.toBeNull();
+    stubFetch(new TypeError('offline'));
+    await expect(backend.documentFrame('Doc123')).resolves.toBeNull();
+  });
+
   it('commits an edit batch and answers with status and body, {} when the body is not JSON', async () => {
     const calls = stubFetch(json({ edit_id: 'e2', version: 4, markup: 'x' }));
     const update = { schema: 1 } as never;

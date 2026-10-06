@@ -7,6 +7,13 @@ const doc = (name: string) => renderDoc(`artifactbin/references/${name}.md`, 'ht
 const blocks = (text: string, language: string) => [...text.matchAll(new RegExp('```' + language + '\\n([\\s\\S]*?)```', 'g'))].map(match => match[1]);
 
 describe('feedback authoring examples', () => {
+  it('teaches context as a linked Doc with independent permissions and editing', () => {
+    const markup = doc('markup');
+    expect(markup).toContain('<Context src="ref:<documentId>" />');
+    expect(markup).toContain('Open document');
+    expect(markup).toContain('attaching it grants\nno access');
+    expect(markup).toContain('afbin pull <documentId> --output context.jsx');
+  });
   it.each([
     ['markup-select', '## Standalone multi-select'],
     ['markup-actions', '## Row action menus'],

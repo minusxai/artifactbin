@@ -86,6 +86,14 @@ export function createHttpBackend(id: string): ArtifactBackend {
       const res = await fetch(mine);
       return res.ok ? ((await res.json()) as ArtifactHead) : null;
     },
+    async documentFrame(ref) {
+      try {
+        const res = await fetch(`/api/page/frame/${encodeURIComponent(ref)}`, { credentials: 'same-origin', cache: 'no-store' });
+        if (!res.ok) return null;
+        const body = await res.json() as { src?: unknown };
+        return typeof body.src === 'string' ? body.src : null;
+      } catch { return null; }
+    },
     async commitEdit(input) {
       return answer(await fetch(`${mine}/edits`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }));
     },

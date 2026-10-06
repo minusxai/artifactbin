@@ -19,7 +19,8 @@
  *  - children: at most one each of `<title>`, `<style>`, browser `<script>` and `<script type="server">`, plus any
  *    number of `<meta>` (unique `name`s) and of the DATA declarations
  *    `<Import>` / `<Value>` / `<Query>` / `<Mutation>` (lib/story/data/dataflow.ts owns their shape and the
- *    `$name` reference rules; the grammar here only admits them);
+ *    `$name` reference rules; the grammar here only admits them), and at most
+ *    one `<Context src="ref:<documentId>" />` companion document;
  *  - `<meta>` carries `name` + `content` and NOTHING else: `http-equiv` is a
  *    policy channel (an authored CSP would rewrite the document's own
  *    sandbox) and `charset` re-declares the encoding the builder fixes;
@@ -32,6 +33,7 @@
  *    CSS has no use for the sequence; the snapshot's styleTag precedent.)
  */
 import { parseJsx, type JsxElement, type JsxNode, type ValidationError } from '@/lib/jsx';
+import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseNotifyDecl, parseQueryDecl, parseValueDecl, type Dataflow, type ImportDecl, type MutationDecl, type NotifyDecl, type QueryDecl, type ValueDecl } from '../data/dataflow';
 
 export const HELMET_TAG = 'Helmet';
@@ -44,6 +46,8 @@ interface HelmetMeta {
 
 /** What a Helmet carries, extracted as plain strings ('' = tag absent). */
 export interface HelmetContent {
+  /** Optional companion document ID; a live reference, never rendered in the body. */
+  context?: string;
   title: string | null;
   style: string | null;
   script: string | null;
@@ -116,6 +120,20 @@ function findHelmets(nodes: JsxNode[], out: JsxElement[] = []): JsxElement[] {
 const contentChildren = (el: JsxElement): JsxNode[] =>
   el.children.filter((c) => !(c.type === 'text' && c.value.trim() === ''));
 
+/** Context is one reference to a regular document, with no inline content or options. */
+function contextRef(el: JsxElement): string | null {
+  if (el.attributes.length !== 1 || contentChildren(el).length) return null;
+  const src = el.attributes[0];
+  if (src.name !== 'src' || !src.value.static || typeof src.value.json !== 'string') return null;
+  return ARTIFACT_REFERENCE_PATTERN.exec(src.value.json)?.[1] ?? null;
+}
+
+/** The companion document declared by source; malformed drafts declare nothing. */
+export function contextRefOf(source: string): string | null {
+  const parsed = parseJsx(source);
+  return parsed.ok ? splitHelmet(parsed.nodes).content.context ?? null : null;
+}
+
 /**
  * The single text payload of a Helmet child. `<title>` may hold a plain text
  * child; `<style>`/`<script>` must hold a static-string EXPRESSION (the
@@ -162,6 +180,12 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
   const seen = new Set<string>();
   const seenMetaNames = new Set<string>();
   for (const child of contentChildren(helmet)) {
+    if (child.type === 'element' && child.isComponent && child.tag === 'Context') {
+      if (seen.has('Context')) errors.push({ message: '<Helmet> may carry at most one <Context>', tag: child.tag, start: child.start, end: child.end });
+      seen.add('Context');
+      if (!contextRef(child)) errors.push({ message: '<Context> needs only src="ref:<documentId>" and no children: <Context src="ref:abc123" />', tag: child.tag, start: child.start, end: child.end });
+      continue;
+    }
     // The DATA declarations (lib/story/data/dataflow.ts owns their shape; the
     // grammar here only knows they exist and repeat). Graph-level rules —
     // duplicate names, undeclared `$refs`, cycles — involve the body and run
@@ -173,7 +197,7 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
     }
     if (child.type !== 'element' || !(CHILD_TAGS as readonly string[]).includes(child.tag.toLowerCase()) || child.isComponent) {
       errors.push({
-        message: `<Helmet> may only contain <title>, <style>, <script>, <meta>, <Import>, <Value>, <Query>, <Mutation>, <Notify>`,
+        message: `<Helmet> may only contain <title>, <style>, <script>, <meta>, <Import>, <Value>, <Query>, <Mutation>, <Notify>, <Context>`,
         start: child.start, end: child.end, ...(child.type === 'element' ? { tag: child.tag } : {}),
       });
       continue;
@@ -251,6 +275,7 @@ function helmetContent(helmet: JsxElement): HelmetContent {
   for (const child of contentChildren(helmet)) {
     if (child.type !== 'element') continue;
     if (child.isComponent) {
+      if (child.tag === 'Context') content.context ??= contextRef(child) ?? undefined;
       if (child.tag === IMPORT_TAG) { const p = parseImportDecl(child); if (p.ok) content.imports.push(p.decl); }
       else if (child.tag === VALUE_TAG) { const p = parseValueDecl(child); if (p.ok) content.values.push(p.decl); }
       else if (child.tag === QUERY_TAG) { const p = parseQueryDecl(child); if (p.ok) content.queries.push(p.decl); }
