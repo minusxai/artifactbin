@@ -277,6 +277,31 @@ async function doorLeg() {
       must(/^\d{6}$/.test(code0 ?? ''), 'a 6-digit code arrived by email');
       check(mine().length === 2, `one email per request, including the re-send after change-email (${mine().length})`);
 
+      // A browser transport failure and a temporary server response must leave
+      // the same real code available for retry before the real wrong/right-code path.
+      const verifyOtpUrl = `${BASE}/api/auth/sign-in/email-otp`;
+      await page.route(verifyOtpUrl, route => route.abort('failed'), { times: 1 });
+      await page.fill('[aria-label="Login code"]', code0);
+      await page.click('[aria-label="Verify code"]');
+      await page.getByText('Couldn’t reach the server. Your code is still here; try again.', { exact: true }).waitFor({ state: 'visible' });
+      check(await page.inputValue('[aria-label="Login code"]') === code0, 'a network interruption keeps the real code in the login field');
+      await page.getByRole('button', { name: 'Verify code', exact: true }).waitFor({ state: 'visible' });
+      check(await page.getByRole('button', { name: 'Verify code', exact: true }).isEnabled(), 'verification is enabled again after a network interruption');
+      check(!(await isSignedInAs(page, email)), 'a network interruption does not authenticate the account');
+      await page.unroute(verifyOtpUrl);
+
+      await page.route(verifyOtpUrl, route => route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'temporarily_unavailable' }),
+      }), { times: 1 });
+      await page.click('[aria-label="Verify code"]');
+      await page.getByText('The server is temporarily unavailable. Your code is still here; try again.', { exact: true }).waitFor({ state: 'visible' });
+      check(await page.inputValue('[aria-label="Login code"]') === code0, 'HTTP 503 keeps the real code in the login field');
+      check(await page.getByRole('button', { name: 'Verify code', exact: true }).isEnabled(), 'verification is enabled again after HTTP 503');
+      check(!(await isSignedInAs(page, email)), 'HTTP 503 does not authenticate the account');
+      await page.unroute(verifyOtpUrl);
+
       // A wrong code must not log anyone in.
       await page.fill('[aria-label="Login code"]', code0 === '000000' ? '111111' : '000000');
       await page.click('[aria-label="Verify code"]');
