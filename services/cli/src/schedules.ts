@@ -24,6 +24,10 @@ export function validateScheduleArguments(positionals:string[],options:Options):
  if(options.request!==undefined&&(action!=='run'||typeof options.request!=='string'||!options.request.trim()||options.request.length>128))throw new CliError('invalid_arguments','--request applies only to schedule run and requires a stable nonempty ID (up to 128 characters).');
 }
 function parseInput(value:string):unknown {try{return JSON.parse(value);}catch{throw new CliError('invalid_input','Schedule input must be valid JSON.','Pass --input \'{"key":"value"}\' or --input null.');}}
+function scheduleFailure(error:unknown):never{
+ if(error instanceof CliError&&error.code==='invalid_schedule')throw new CliError('invalid_schedule','The schedule was not saved. Check the five cron fields, IANA timezone, 1–10 attempts, and 1–86,400 seconds of retry backoff.', 'Use five cron fields (minute, hour, day, month, weekday), an IANA timezone such as UTC, 1–10 attempts, and 1–86,400 seconds of retry backoff.',error.details,error.exitCode);
+ throw error;
+}
 /** Thin client of the same authenticated scheduling endpoints used by the app. */
 export async function scheduleCommand(workspace:Workspace,client:HttpClient,positionals:string[],options:Options):Promise<Record<string,unknown>> {
  const [action,id]=positionals;const path=`/schedules${id?`/${id}`:''}`;
@@ -41,5 +45,5 @@ export async function scheduleCommand(workspace:Workspace,client:HttpClient,posi
  if(options.input!==undefined)body.input=parseInput(String(options.input));
  if(options['max-attempts']!==undefined)body.maxAttempts=Number(options['max-attempts']);
  if(options['retry-backoff']!==undefined)body.retryBackoffSeconds=Number(options['retry-backoff']);
- return client.request(path,action==='create'?'POST':'PATCH',body);
+ try{return await client.request(path,action==='create'?'POST':'PATCH',body);}catch(error){return scheduleFailure(error);}
 }

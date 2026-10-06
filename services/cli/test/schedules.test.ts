@@ -33,6 +33,25 @@ test('schedule commands use the authenticated HTTP API through real CLI dispatch
   }
  }finally{await h.cleanup();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });
+test('invalid_schedule HTTP refusal keeps its code and explains how to correct the request',async()=>{
+ const server=createServer(async(req,res)=>{
+  assert.equal(req.method,'POST');assert.equal(req.url,'/api/schedules');assert.equal(req.headers.authorization,'Bearer test-token');
+  let raw='';for await(const chunk of req)raw+=chunk;
+  assert.deepEqual(JSON.parse(raw),{artifactId:'abc123',cron:'nonsense',timezone:'Bad/Zone'});
+  res.writeHead(400,{'Content-Type':'application/json'}).end(JSON.stringify({error:'invalid_schedule'}));
+ });
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+ const h=await cliHarness('afbin-schedule-invalid-http-',{server:origin});
+ try{
+  const out:string[]=[],err:string[]=[];
+  const code=await runCli(['schedule','create','--artifact','abc123','--cron','nonsense','--timezone','Bad/Zone','--server',origin,'--json'],{cwd:h.root,home:h.home,env:{},interactive:false,stdout:value=>out.push(value),stderr:value=>err.push(value)});
+  assert.equal(code,1);const answer=JSON.parse(out.at(-1)!);
+  assert.equal(answer.error.code,'invalid_schedule');assert.equal(answer.error.details.error,'invalid_schedule');assert.equal(answer.error.details.http_status,400);
+  assert.match(answer.error.message,/five cron fields.*IANA timezone.*retry bounds/i);assert.match(answer.error.fix,/five cron fields.*IANA timezone/i);
+  assert.match(err.join(''),/five cron fields/i);assert.doesNotMatch(err.join(''),/invalid_schedule: invalid_schedule/);
+ }finally{await h.cleanup();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});
 test('manual schedule run recovers the journalled request after an uncertain response',async()=>{
  const h=await cliHarness('afbin-schedule-recovery-');
  try{
