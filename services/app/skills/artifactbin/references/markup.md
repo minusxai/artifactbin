@@ -5,8 +5,7 @@ description: >-
 ---
 ## Start
 
-`markup` is **static JSX data** over the component registry.
-Markup carries content, data and layout; the Helmet script carries behaviour.
+`markup` is **static JSX data**. Helmet scripts add behaviour.
 
 <!--bundle:skip-->
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
@@ -50,7 +49,7 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
 ```
 <!--/bundle:skip-->
 
-## Component vocabulary (the complete allowlist)
+## Component vocabulary
 
 Kit components ([[ components | length ]]):
 `[[ components | join(' ') ]]`
@@ -76,16 +75,7 @@ At most ONE per document: a `<Helmet>` holds one each of `<title>`, `<style>`
 and `<script>`; any number of metas and data declarations (`<Import>`, etc.;
 [data](markup-data.md)). It may appear anywhere; it is hoisted.
 
-### Supporting context
-
-Publish background, assumptions or methodology as a regular Doc, then reference it
-with one `<Context src="ref:<documentId>" />` directly inside `<Helmet>`. The editor's
-**Context** tab displays the current document; **Open document** opens its artifact
-page for normal editing. Context stays out of the main presentation and visual
-exports. The linked Doc keeps its own history and permissions: attaching it grants
-no access, and forks keep the same reference. Pull the referenced Doc separately
-when you need its contents (`afbin pull <documentId> --output context.jsx`).
-Context is a reference only: no inline content or extra attributes.
+`<Context src="ref:<documentId>" />` links a Doc; see [context](templates-doc.md#context).
 
 ```jsx
 <Helmet>

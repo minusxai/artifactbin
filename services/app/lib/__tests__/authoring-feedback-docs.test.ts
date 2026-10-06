@@ -8,7 +8,7 @@ const blocks = (text: string, language: string) => [...text.matchAll(new RegExp(
 
 describe('feedback authoring examples', () => {
   it('teaches context as a linked Doc with independent permissions and editing', () => {
-    const markup = doc('markup');
+    const markup = [doc('markup'), doc('templates-doc')].join('\n');
     expect(markup).toContain('<Context src="ref:<documentId>" />');
     expect(markup).toContain('Open document');
     expect(markup).toContain('attaching it grants\nno access');

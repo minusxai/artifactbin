@@ -36,3 +36,15 @@ Don't
 - Save editor placeholders or copy-for-agent controls into published content.
 
 For a composed long-form report or article, see [templates-editorial.md](templates-editorial.md).
+
+## Context
+
+Publish background, assumptions or methodology as a regular Doc, then reference it
+with one `<Context src="ref:<documentId>" />` directly inside `<Helmet>`. Every page type has a **Context** tab. When empty it says **No additional context**;
+choose **Add context** and paste a Doc link, ID or `ref:ID` from the same server.
+**Change context** lets you replace or remove the reference. The tab displays the current document; **Open document** opens its artifact
+page for normal editing. Context stays out of the main presentation and visual
+exports. The linked Doc keeps its own history and permissions: attaching it grants
+no access, and forks keep the same reference. Pull the referenced Doc separately
+when you need its contents (`afbin pull <documentId> --output context.jsx`).
+Context is a reference only: no inline content or extra attributes.

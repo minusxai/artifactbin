@@ -21,7 +21,7 @@ import { llmsText } from '@/lib/serving/agent-references.server';
 import { MARKUP_FIELD_GUIDANCE } from '@/lib/serving';
 import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
 import { JSX_TIER_COMPONENTS } from '@/lib/story/document/jsx-tier';
-import { HELMET_TAG } from '@/lib/story/document/helmet';
+import { CONTEXT_TAG, HELMET_TAG } from '@/lib/story/document/helmet';
 import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG } from '@/lib/story/data/dataflow';
 import teaching from '../../../cli/src/generated/teaching.json';
 
@@ -121,7 +121,7 @@ describe('no teaching surface names a retired one', () => {
  * validation cannot drift apart.
  */
 describe('the components we promise to agents', () => {
-  const KNOWN = new Set<string>([...JSX_TIER_COMPONENTS, HELMET_TAG, IMPORT_TAG, VALUE_TAG, QUERY_TAG, MUTATION_TAG, NOTIFY_TAG]);
+  const KNOWN = new Set<string>([...JSX_TIER_COMPONENTS, HELMET_TAG, CONTEXT_TAG, IMPORT_TAG, VALUE_TAG, QUERY_TAG, MUTATION_TAG, NOTIFY_TAG]);
   const AGENT_FACING = ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/SKILL.md'];
   const rendered = (path: string) => renderTree(skillTree(), BASE).find(({ file }) => file.path === path)!.text;
   /** Capitalized JSX-shaped tags named in that prose: `<Name>`, `<Name …`, `</Name>`. */

@@ -116,7 +116,6 @@ try {
     must(contextResponse.status === 201, 'the companion is an ordinary document');
     const contextDoc = await contextResponse.json();
     const humanMarkup = `<Helmet>
-<Context src="ref:${contextDoc.id}" />
 <Value name="region" type="string" />
 <Import name="sales_data" src="ref:${dataset.id}" /><Query name="sales">{\`select * from sales_data.rows where $region is null or region = $region\`}</Query>
 </Helmet><div data-design="tw" className="@container p-10">
@@ -155,6 +154,10 @@ try {
     // Context reads a regular Doc, and its own editor changes what the tab shows next time.
     check(await humanFrame.getByText('Revenue excludes refunds.').count() === 0, 'context stays out of the main presentation');
     await humanPage.getByRole('tab', { name: 'Show context' }).click();
+    await expect(humanPage.getByText('No additional context', { exact: true })).toBeVisible();
+    await humanPage.getByRole('button', { name: 'Add context', exact: true }).click();
+    await humanPage.getByRole('textbox', { name: 'Document link or ID' }).fill(`${base}/a/${contextDoc.id}`);
+    await humanPage.getByRole('button', { name: 'Add context', exact: true }).click();
     const companion = humanPage.frameLocator('iframe[title="Context document"]');
     await expect(companion.getByText('Revenue excludes refunds.')).toBeVisible();
     const opened = humanPage.waitForEvent('popup');
@@ -173,6 +176,10 @@ try {
     await humanPage.getByRole('tab', { name: 'Show context' }).click();
     await expect(companion.getByText('Revenue excludes refunds and internal accounts.')).toBeVisible({ timeout: 20000 });
     check(true, 'the Context tab shows the latest independently edited Doc');
+    await humanPage.getByRole('button', { name: 'Change context' }).click();
+    await humanPage.getByRole('button', { name: 'Remove context' }).click();
+    await expect(humanPage.getByText('No additional context', { exact: true })).toBeVisible();
+    check(true, 'a companion can be added by link and removed from the permanent Context tab');
     await humanPage.getByRole('tab', { name: 'Edit on the page' }).click();
 
     // Versions are the edit panel's History tab on a wide window — the panel

@@ -37,6 +37,7 @@ import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseNotifyDecl, parseQueryDecl, parseValueDecl, type Dataflow, type ImportDecl, type MutationDecl, type NotifyDecl, type QueryDecl, type ValueDecl } from '../data/dataflow';
 
 export const HELMET_TAG = 'Helmet';
+export const CONTEXT_TAG = 'Context';
 
 /** A `<meta name content>` pair — the only meta shape the grammar admits. */
 interface HelmetMeta {
@@ -180,9 +181,9 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
   const seen = new Set<string>();
   const seenMetaNames = new Set<string>();
   for (const child of contentChildren(helmet)) {
-    if (child.type === 'element' && child.isComponent && child.tag === 'Context') {
-      if (seen.has('Context')) errors.push({ message: '<Helmet> may carry at most one <Context>', tag: child.tag, start: child.start, end: child.end });
-      seen.add('Context');
+    if (child.type === 'element' && child.isComponent && child.tag === CONTEXT_TAG) {
+      if (seen.has(CONTEXT_TAG)) errors.push({ message: '<Helmet> may carry at most one <Context>', tag: child.tag, start: child.start, end: child.end });
+      seen.add(CONTEXT_TAG);
       if (!contextRef(child)) errors.push({ message: '<Context> needs only src="ref:<documentId>" and no children: <Context src="ref:abc123" />', tag: child.tag, start: child.start, end: child.end });
       continue;
     }
@@ -275,7 +276,7 @@ function helmetContent(helmet: JsxElement): HelmetContent {
   for (const child of contentChildren(helmet)) {
     if (child.type !== 'element') continue;
     if (child.isComponent) {
-      if (child.tag === 'Context') content.context ??= contextRef(child) ?? undefined;
+      if (child.tag === CONTEXT_TAG) content.context ??= contextRef(child) ?? undefined;
       if (child.tag === IMPORT_TAG) { const p = parseImportDecl(child); if (p.ok) content.imports.push(p.decl); }
       else if (child.tag === VALUE_TAG) { const p = parseValueDecl(child); if (p.ok) content.values.push(p.decl); }
       else if (child.tag === QUERY_TAG) { const p = parseQueryDecl(child); if (p.ok) content.queries.push(p.decl); }

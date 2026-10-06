@@ -112,9 +112,38 @@ it('shows an unavailable message when the context document cannot be read', asyn
   expect(view.queryByTitle('Context document')).toBeNull();
 });
 
-it('does not offer Context without a declaration', () => {
+it('offers an empty Context tab on a document without a declaration', () => {
   const { view } = mountEditor();
-  expect(view.queryByRole('tab', { name: 'Show context' })).toBeNull();
+  fireEvent.click(view.getByRole('tab', { name: 'Show context' }));
+  expect(view.getByText('No additional context')).toBeInTheDocument();
+  expect(view.getByRole('button', { name: 'Add context' })).toBeInTheDocument();
+});
+
+it('attaches an accessible Doc from the Context tab and can remove the reference', async () => {
+  const backend = fakeBackend();
+  vi.mocked(backend.documentFrame).mockResolvedValue('https://abc.pages.test/');
+  const { view } = mountEditor(SOURCE, backend);
+  fireEvent.click(view.getByRole('tab', { name: 'Show context' }));
+  fireEvent.click(view.getByRole('button', { name: 'Add context' }));
+  fireEvent.input(view.getByRole('textbox', { name: 'Document link or ID' }), { target: { value: 'ref:abc123' } });
+  fireEvent.click(view.getByRole('button', { name: 'Add context' }));
+  await vi.waitFor(() => expect(queued.at(-1)?.source).toContain('<Context src="ref:abc123" />'));
+  expect(queued.at(-1)?.source).toContain(SOURCE);
+  expect(view.getByRole('link', { name: 'Open document' })).toHaveAttribute('href', '/a/abc123');
+  fireEvent.click(view.getByRole('button', { name: 'Change context' }));
+  fireEvent.click(view.getByRole('button', { name: 'Remove context' }));
+  expect(queued.at(-1)?.source).not.toContain('<Context');
+  expect(view.getByText('No additional context')).toBeInTheDocument();
+});
+
+it('does not attach an unavailable or non-document reference', async () => {
+  const { view } = mountEditor();
+  fireEvent.click(view.getByRole('tab', { name: 'Show context' }));
+  fireEvent.click(view.getByRole('button', { name: 'Add context' }));
+  fireEvent.input(view.getByRole('textbox', { name: 'Document link or ID' }), { target: { value: 'abc123' } });
+  fireEvent.click(view.getByRole('button', { name: 'Add context' }));
+  await vi.waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Choose a document you can access.'));
+  expect(queued).toEqual([]);
 });
 
 it('keeps an offline context reference without making a network request', () => {

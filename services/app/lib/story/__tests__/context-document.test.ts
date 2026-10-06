@@ -4,8 +4,37 @@ import { serializeJsx } from '@/lib/jsx';
 import { splitHelmet } from '../document/helmet';
 import { validateMarkupStructure } from '../document/local-validation';
 import { collectRefUses, validateRefs } from '../data/refs';
+import { contextDocumentId, writeContextRef } from '../document/context';
 
 const source = '<Helmet><Context src="ref:abc123" /></Helmet><p id="body">Dashboard</p>';
+
+it('accepts same-server Doc links, IDs and refs without treating an external URL as a local artifact', () => {
+  const origin = 'https://example.test';
+  for (const input of ['abc123', ' ref:abc123 ', '/a/abc123', 'https://example.test/@owner/abc123-notes#edit']) {
+    expect(contextDocumentId(input, origin), input).toBe('abc123');
+  }
+  for (const input of ['', 'bad', 'https://other.test/a/abc123', 'javascript:alert(1)', 'https://example.test/no-document']) {
+    expect(contextDocumentId(input, origin), input).toBeNull();
+  }
+});
+
+it('adds, replaces and removes context while preserving unrelated source and node identities', () => {
+  const body = '<p id="kept">  Original content &amp; spacing </p>';
+  for (const before of [body, '<Helmet />' + body, '<Helmet><title>Kept</title></Helmet>' + body]) {
+    const added = writeContextRef(before, 'abc123');
+    expect(added).toContain(body);
+    expect(validateMarkupStructure(added).errors).toEqual([]);
+    expect(splitHelmet(parseJsxOrThrow(added).nodes).content.context).toBe('abc123');
+    const replaced = writeContextRef(added, 'def456');
+    expect(replaced).not.toContain('ref:abc123');
+    expect(replaced).toContain('ref:def456');
+    const removed = writeContextRef(replaced, null);
+    expect(removed).toContain(body);
+    expect(removed).not.toContain('<Context');
+    if (before.includes('<title>')) expect(removed).toContain('<title>Kept</title>');
+  }
+  expect(() => writeContextRef(body, 'https://other.test')).toThrow();
+});
 
 it('keeps a companion document in source and out of the rendered body', () => {
   expect(validateMarkupStructure(source).errors).toEqual([]);
