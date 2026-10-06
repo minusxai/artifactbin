@@ -66,7 +66,8 @@ const story = HELMET + `<div data-design="tw" className="@container p-8">` +
   `<Question title="Revenue" data="$sales" height="430px" /></div>`;
 await api(`/api/artifacts/${start.id}`, { method: 'PUT', body: JSON.stringify({ title: 'Review', markup: story, theme: 'manuscript', template: 'doc' }) }, token);
 
-const b = await launchChromium();
+// The gate app uses a loopback HTTP alias; emulate production HTTPS for its clipboard API.
+const b = await launchChromium({ args: [`--unsafely-treat-insecure-origin-as-secure=${B}`] });
 const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
 await p.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
 const frame = () => documentLocator(p);
