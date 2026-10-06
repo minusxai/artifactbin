@@ -19,7 +19,7 @@ import { pageDataChanged } from '@/web/page-data-events';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { ARTIFACT_STARTERS, artifactStarter } from '@/lib/workspace/artifact-starters';
 import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';
-import { replaceDocument } from '../lib/document-navigation';
+import { openDocument } from '../lib/document-navigation';
 import { DialogShell } from '@/solid/components/DialogShell';
 import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
 import { apiFetch } from '../lib/api';
@@ -61,7 +61,9 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
       const body = await response.json() as { id?: string };
       if (!body.id) throw new Error('missing artifact');
       pageDataChanged();
-      replaceDocument(`/a/${encodeURIComponent(body.id)}${template === 'doc' ? '/edit' : ''}`);
+      // Browser Back can restore this exact component from the page cache.
+      setOpen(false); setTypesOpen(false); setBusy(false);
+      openDocument(`/a/${encodeURIComponent(body.id)}${template === 'doc' ? '/edit' : ''}`);
     } catch { setError('Could not create the artifact. Try again.'); setBusy(false); }
   };
   const createFolder = async (event: SubmitEvent) => {

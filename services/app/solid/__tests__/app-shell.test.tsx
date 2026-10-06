@@ -26,6 +26,24 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
 describe('Solid shell', () => {
+  it('refreshes restored page data on browser Back without refetching on an ordinary pageshow', async () => {
+    let title = 'Before creation';
+    const existing = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => String(input) === '/api/page/trash'
+      ? Response.json({ files: [{ id: 'doc_1', title, format: 'markup', version: 1, deleted_at: '2026-09-05T06:00:00.000Z' }] })
+      : existing(input, init));
+    window.history.replaceState(null, '', '/trash');
+    render(() => <App />);
+    await vi.dynamicImportSettled();
+    const table = await screen.findByRole('table');
+    expect(table).toHaveTextContent('Before creation');
+    title = 'After creation';
+    fireEvent(window, new PageTransitionEvent('pageshow', { persisted: false }));
+    expect(table).toHaveTextContent('Before creation');
+    fireEvent(window, new PageTransitionEvent('pageshow', { persisted: true }));
+    await waitFor(() => expect(table).toHaveTextContent('After creation'));
+  });
+
   it('shows live agent and unread notification counts in the sidebar', async () => {
     let online = true;
     let unread = 3;

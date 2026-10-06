@@ -49,6 +49,11 @@ export function SessionProvider(props: { children: JSX.Element }): JSX.Element {
   listen(REFRESH_EVENT, () => { pages.expire(); setNonce((n) => n + 1); });
   listen(PAGE_DATA_CHANGED, () => pages.expire());
   listen(PROFILE_CHANGED, () => { pages.expire(); setNonce((n) => n + 1); });
+  // A history restore resumes this provider without remounting it. Data may have
+  // changed while the page was frozen (for example, a newly created artifact).
+  const restore = (event: PageTransitionEvent) => { if (event.persisted) window.dispatchEvent(new Event(REFRESH_EVENT)); };
+  window.addEventListener('pageshow', restore);
+  onCleanup(() => window.removeEventListener('pageshow', restore));
   return <Ctx.Provider value={{ session, reload, pages, sessionError }}>{props.children}</Ctx.Provider>;
 }
 
