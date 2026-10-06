@@ -125,7 +125,8 @@ it('attaches an accessible Doc from the Context tab and can remove the reference
   const { view } = mountEditor(SOURCE, backend);
   fireEvent.click(view.getByRole('tab', { name: 'Show context' }));
   fireEvent.click(view.getByRole('button', { name: 'Add context' }));
-  fireEvent.input(view.getByRole('textbox', { name: 'Document link or ID' }), { target: { value: 'ref:abc123' } });
+  expect(view.queryByText('No additional context')).toBeNull();
+  fireEvent.input(view.getByRole('textbox', { name: 'Artifact link' }), { target: { value: 'ref:abc123' } });
   fireEvent.click(view.getByRole('button', { name: 'Add context' }));
   await vi.waitFor(() => expect(queued.at(-1)?.source).toContain('<Context src="ref:abc123" />'));
   expect(queued.at(-1)?.source).toContain(SOURCE);
@@ -140,7 +141,7 @@ it('does not attach an unavailable or non-document reference', async () => {
   const { view } = mountEditor();
   fireEvent.click(view.getByRole('tab', { name: 'Show context' }));
   fireEvent.click(view.getByRole('button', { name: 'Add context' }));
-  fireEvent.input(view.getByRole('textbox', { name: 'Document link or ID' }), { target: { value: 'abc123' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Artifact link' }), { target: { value: 'abc123' } });
   fireEvent.click(view.getByRole('button', { name: 'Add context' }));
   await vi.waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Choose a document you can access.'));
   expect(queued).toEqual([]);

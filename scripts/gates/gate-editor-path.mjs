@@ -156,7 +156,7 @@ try {
     await humanPage.getByRole('tab', { name: 'Show context' }).click();
     await expect(humanPage.getByText('No additional context', { exact: true })).toBeVisible();
     await humanPage.getByRole('button', { name: 'Add context', exact: true }).click();
-    await humanPage.getByRole('textbox', { name: 'Document link or ID' }).fill(`${base}/a/${contextDoc.id}`);
+    await humanPage.getByRole('textbox', { name: 'Artifact link' }).fill(`${base}/a/${contextDoc.id}`);
     await humanPage.getByRole('button', { name: 'Add context', exact: true }).click();
     const companion = humanPage.frameLocator('iframe[title="Context document"]');
     await expect(companion.getByText('Revenue excludes refunds.')).toBeVisible();
