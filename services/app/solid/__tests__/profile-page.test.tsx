@@ -6,7 +6,7 @@ import { App } from '@/solid/App';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
-it('renders the public profile, filters its shelf, and follows with the server answer', async () => {
+it.each(['/@cee', '/@cee/'])('renders the public profile at %s, filters its shelf, and follows with the server answer', async path => {
   const calls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? 'GET'} ${url}`);
@@ -21,8 +21,9 @@ it('renders the public profile, filters its shelf, and follows with the server a
     if (url === '/api/users/owner/follow') return Response.json({ following: true, count: 4 });
     return Response.json({});
   }));
-  window.history.replaceState(null, '', '/@cee');
+  window.history.replaceState(null, '', path);
   render(() => <App />);
+  await vi.dynamicImportSettled();
   expect(await screen.findByRole('link', { name: 'Profile root' })).toHaveTextContent('@cee');
   expect(screen.getByRole('button', { name: 'Follow back' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Follow back' }));

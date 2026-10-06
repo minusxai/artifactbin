@@ -24,9 +24,13 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  // Route components are lazy; let any import started by a redirect settle before this jsdom environment is torn down.
+  cleanup();
+  // Redirects can unmount a route before its lazy import finishes. Drain that import
+  // while this environment still exists so later files can reuse the module graph.
   await vi.dynamicImportSettled();
-  cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/');
+  vi.unstubAllGlobals();
+  window.history.replaceState(null, '', '/');
+
 });
 
 describe('Solid shell', () => {

@@ -12,6 +12,7 @@
 import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
+import { STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface/task-checkbox-css';
 import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
@@ -54,6 +55,7 @@ export function documentStyleSheets(input: DocumentStylesInput): DocumentSheet[]
     // A bare form control looks like a form control: preflight strips its border and padding, and
     // nothing else styles it back (lib/story-surface/bare-controls).
     { attr: 'data-mx-bare-controls', css: STORY_BARE_CONTROLS_CSS },
+    { attr: 'data-mx-task-checkbox', css: STORY_TASK_CHECKBOX_CSS },
     // The document's own navigation keeps its styles on a bare page too; only the reader chrome's MARKUP is withheld.
     input.chrome ? { attr: 'data-mx-chrome', css: DOCUMENT_NAV_CSS } : null,
     input.bare ? { attr: 'data-mx-domain-footer', css: DOMAIN_FOOTER_CSS } : null,
