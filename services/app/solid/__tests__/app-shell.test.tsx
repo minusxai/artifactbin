@@ -34,10 +34,29 @@ describe('Solid shell', () => {
     expect(screen.getByRole('banner', { name: 'Page bar' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Current page' })).toHaveTextContent('trash');
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    expect(screen.getByRole('navigation', { name: 'Menu' })).toBeInTheDocument();
+    const menu = screen.getByRole('navigation', { name: 'Menu' });
+    expect(menu).toHaveClass('right-3', 'top-14');
+    expect(menu).not.toHaveClass('left-0', 'inset-y-0');
     expect(screen.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications');
     fireEvent.click(screen.getByRole('button', { name: 'Open page controls' }));
     expect(screen.getByRole('group', { name: 'Color mode' })).toBeInTheDocument();
+  });
+
+  it('opens the app menu as a phone bottom sheet and follows viewport changes', async () => {
+    vi.stubGlobal('innerWidth', 390);
+    window.history.replaceState(null, '', '/trash');
+    render(() => <App />);
+    await screen.findByRole('table');
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const menu = screen.getByRole('navigation', { name: 'Menu' });
+    expect(menu).toHaveClass('inset-x-0', 'bottom-0');
+    expect(menu).not.toHaveClass('left-0', 'inset-y-0');
+    vi.stubGlobal('innerWidth', 1280);
+    fireEvent(window, new Event('resize'));
+    expect(menu).toHaveClass('right-3', 'top-14');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(menu).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus();
   });
 
   it('routes a new account to welcome even while its home data is pending', async () => {
