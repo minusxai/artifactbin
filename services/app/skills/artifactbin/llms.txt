@@ -2,25 +2,28 @@ artifactbin: agents publish and edit stateful, interactive artifacts with the np
 
 # artifactbin
 
-Artifacts are interactive documents, apps, dashboards, decks, plans and datasets. Agents write a JSX file: YAML metadata, SQL over datasets, JSX views, typed values and actions. People read, edit, annotate and share its URL. The npm CLI installs a local skill teaching the format, commands and refusal codes.
-
+Publish and share JSX documents, apps, decks and datasets.
+Choose CLI or direct HTTP (no Node/npm needed): [email auth and browser QA]([[ base ]]/llms/http-api), [JSX edits]([[ base ]]/llms/http-authoring).
+Author with [markup]([[ base ]]/llms/markup), [SQL/actions]([[ base ]]/llms/markup-data), [design systems]([[ base ]]/llms/design-systems) and [templates]([[ base ]]/llms/templates).
 Getting started: [[ base ]]/getting-started.md — install afbin, read its help, select this server, approve access in the browser, and make your first edit.
 Human-readable version: [[ base ]]/getting-started
-Reference: afbin help, afbin help <topic>, and the installed skill.
-Local: afbin preview report.jsx needs no cloud or credentials. HTML exports/downloads use .jsx.html. Pin the npm version and prepare its cache before disconnecting; npm is not a sandbox.
 
-Direct HTTP clients require email authentication; guest browser approval is CLI-only.
+Then: afbin pull <artifact url> --output report.jsx; edit the file; afbin push report.jsx (push runs afbin validate itself)
+Reference: afbin help or afbin help <topic>. Restart your agent to load the installed skill.
+Local: afbin preview report.jsx needs no cloud or credentials. Downloads: .jsx.html. Prepare a pinned npm cache before disconnecting; npm is not a sandbox.
+
+Server commands sign in through browser approval, including guests. Automation: --yes --json returns the approval URL; open it to continue. HTTP requires email; guest browser approval is CLI-only.
 
 Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; use either or its bare id. Add @<version> for history.
 
 ## Direct HTTP API
 
-An HTTP client does not need Node or the CLI. Direct integrations authenticate by email; guest browser approval is CLI-only. All JSON requests use Content-Type: application/json. Use this server's Origin for session-authenticated requests.
+An HTTP client does not need Node or the CLI. Direct HTTP clients require email authentication; guest browser approval is CLI-only. All JSON requests use Content-Type: application/json. Use this server's Origin for session-authenticated requests.
 
 1. POST [[ base ]]/api/auth/email-otp/send-verification-otp with {"email":"you@example.com","type":"sign-in"} and Origin: [[ base ]]. Ask the user for the emailed code.
 2. POST [[ base ]]/api/auth/sign-in/email-otp with {"email":"you@example.com","otp":"<user's code>"} and the same Origin. Keep the returned session cookies in a private cookie jar.
 3. POST [[ base ]]/api/authentication/token with those cookies and Origin: [[ base ]]. Only verified email account sessions qualify. Read access_token from the JSON response; use Authorization: Bearer <access_token> on this server's /api requests. Keep secrets out of URLs, documents and logs. The bearer expires and has no refresh token; authenticate by email again when needed.
 
-GET [[ base ]]/api/artifacts lists accessible artifacts. GET [[ base ]]/api/artifacts/<id> reads source and current version/state. POST [[ base ]]/api/artifacts creates an artifact, for example {"csv":"name,value\nExample,2","title":"Example"}. PUT [[ base ]]/api/artifacts/<id> updates a dataset with csv plus the observed expectedVersion and expectedState. Preserve these concurrency checks; a 409 requires reconciliation. Markup updates require a prepared document_update graph, rather than raw markup replacement; the complete direct HTTP authoring contract and executable JSON example follow below. GET/POST [[ base ]]/api/artifacts/<id>/annotations reads/creates comments with document permissions.
+GET [[ base ]]/api/artifacts lists accessible artifacts. GET [[ base ]]/api/artifacts/<id> reads source and current version/state. POST [[ base ]]/api/artifacts creates an artifact, for example {"dataset":[{"name":"Example","value":2}],"title":"Example"}. PUT [[ base ]]/api/artifacts/<id> updates a dataset with dataset (JSON rows or CSV text) plus the observed expectedVersion and expectedState. Preserve these concurrency checks; a 409 requires reconciliation. To edit markup, send the complete edited JSX as source plus the observed edit_id and expectedVersion to POST [[ base ]]/api/artifacts/<id>/prepare, then submit its returned edit_id and document_update unchanged to POST [[ base ]]/api/artifacts/<id>/edits. Preparation does not save; preserve element IDs and reconcile 409 conflicts. The complete executable HTTP example follows below. GET/POST [[ base ]]/api/artifacts/<id>/annotations reads/creates comments with document permissions.
 
 Local and offline edits do not call these HTTP endpoints. Edit downloaded .jsx.html files locally or use CLI preview/import/export; push is explicit remote publication. Local commands use a prepared npm cache when disconnected. CLI reference: afbin help http-api.

@@ -133,16 +133,18 @@ it('shares only verified npm download blobs, never installed modules or npx stat
   expect(await mergeNpmDependencyCache(source,target)).toBe(true);
   expect(readFileSync(join(target,'_cacache','blob'),'utf8')).toBe('content');
   expect(existsSync(join(target,'_npx'))).toBe(false);
+  writeFileSync(join(target,'_cacache','blob'),'stale index');
+  expect(await mergeNpmDependencyCache(source,target)).toBe(true);
+  expect(readFileSync(join(target,'_cacache','blob'),'utf8')).toBe('content');
   expect(await mergeNpmDependencyCache(join(directory,'absent'),target)).toBe(false);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 it('warms only normal matrix download blobs while keeping the standard-user bootstrap cold',()=>{
  const jobs=workflow().jobs,steps=jobs.cli.steps;
- const path=steps.find(step=>step.id==='dependency-cache-path');
- expect(path).toBeDefined();
  expect(steps.some(step=>step.id==='dependency-cache')).toBe(false);
- expect(steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--dependency-cache');
- expect(steps.find(step=>step.name==='Install the same candidate for experience checks').run).toContain('--dependency-cache');
+ expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
+ expect(steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--dependency-seed');
+ expect(steps.find(step=>step.name==='Install the same candidate for experience checks').run).toContain('--dependency-seed');
  expect(jobs['cli-bootstrap'].steps.some(step=>step.id==='dependency-cache')).toBe(false);
 });
 
@@ -162,6 +164,15 @@ it('refuses credential/private seed metadata',async()=>{
   writeFileSync(join(index,'entry'),[pinned,removed,{...removed,integrity:null}].map(value=>'checksum\t'+JSON.stringify(value)+'\n').join(''));
   expect(await assertPublicNpmCache(directory,[{resolved:record.metadata.url,integrity:pinned.integrity}])).toBe(1);
   await expect(assertPublicNpmCache(directory,[{resolved:record.metadata.url,integrity:'sha512-wrong'}])).rejects.toThrow(/integrity/);
+  const tarball={key:'make-fetch-happen:request-cache:https://registry.npmjs.org/is-number/-/is-number-1.0.0.tgz',integrity:'sha512-tarball',metadata:{url:'https://registry.npmjs.org/is-number/-/is-number-1.0.0.tgz'}};
+  writeFileSync(join(index,'entry'),[record,tarball].map(value=>'checksum\t'+JSON.stringify(value)+'\n').join(''));
+  const dependency={resolved:tarball.metadata.url,integrity:tarball.integrity,spec:'is-number@1.0.0'};
+  expect(await assertPublicNpmCache(directory,[dependency])).toBe(2);
+  writeFileSync(join(index,'entry'),'checksum\t'+JSON.stringify(tarball)+'\n');
+  await expect(assertPublicNpmCache(directory,[dependency])).rejects.toThrow(/manifest/);
+  writeFileSync(join(index,'entry'),[record,tarball].map(value=>'checksum\t'+JSON.stringify(value)+'\n').join(''));
+  await expect(assertPublicNpmCache(directory,[{...dependency,spec:'other@1.0.0'}])).rejects.toThrow(/manifest/);
+
   store({...record,metadata:{...record.metadata,reqHeaders:{authorization:'secret-test'}}});await expect(assertPublicNpmCache(directory)).rejects.toThrow(/Credential/);
   store({...record,key:'make-fetch-happen:request-cache:https://private.example/package'});await expect(assertPublicNpmCache(directory)).rejects.toThrow(/Non-public/);
  }finally{rmSync(directory,{recursive:true,force:true});}
@@ -187,12 +198,16 @@ it('creates a fresh seed with bounded npm cache operations instead of selecting 
  let active=0,max=0;const calls=[];
  try {
   await populateNpmSeed(dependencies,directory,async(args)=>{calls.push(args);active++;max=Math.max(max,active);await new Promise(resolve=>setTimeout(resolve,2));active--;});
-  expect(max).toBeLessThanOrEqual(1);expect(calls).toHaveLength(3);
-  expect(calls.flatMap(args=>args.slice(2,args.indexOf('--cache')))).toEqual(dependencies.map(npmSeedRequest));
+  expect(max).toBeLessThanOrEqual(8);expect(calls).toHaveLength(22);
+  const downloads=calls.filter(args=>args[0]==='cache'),manifests=calls.filter(args=>args[0]==='view');
+  expect(downloads).toHaveLength(3);
+  expect(downloads.flatMap(args=>args.slice(2,args.indexOf('--cache')))).toEqual(dependencies.map(d=>d.resolved));
+  expect(manifests.map(args=>args[1])).toEqual(dependencies.map(npmSeedRequest));
+  expect(manifests.every(args=>args.includes('--json'))).toBe(true);
   expect(calls.every(args=>args.includes('--ignore-scripts')&&args.includes('--userconfig'))).toBe(true);
   const steps=workflow().jobs['cli-pack'].steps;expect(steps.some(step=>step.id==='npm-seed-key')).toBe(true);
   expect(steps.some(step=>step.run?.includes('prepare-seed'))).toBe(true);
-  expect(steps.filter(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).map(step=>step.with.name)).toEqual(['Linux-X64','Linux-ARM64','macOS-X64','macOS-ARM64','Windows-X64'].map(platform=>'afbin-npm-dependency-seed-'+platform));
+  expect(steps.filter(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).map(step=>step.with.name)).toEqual(['Windows-X64','Linux-X64','Linux-ARM64','macOS-X64','macOS-ARM64'].map(platform=>'afbin-npm-dependency-seed-'+platform));
   expect(workflow().jobs.cli.steps.find(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).with.name).toBe('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
@@ -206,4 +221,31 @@ it('warns rather than fails when a PR consumer includes a long prerequisite wait
   expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('::warning::');expect(result.stdout).toContain('259s');
   expect(readFileSync(summary,'utf8')).toContain('259');
  }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('packs independent platform seeds with bounded concurrent npm processes',async()=>{
+ const {packPlatformNpmSeeds}=await import('../lib/npm-dependency-cache.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-pack-concurrency-')),source=join(directory,'source');
+ const {mkdir,writeFile}=await import('node:fs/promises');await mkdir(join(source,'_cacache/index-v5'),{recursive:true});
+ const url='https://registry.npmjs.org/a/-/a-1.tgz',integrity='sha512-test';
+ await writeFile(join(source,'_cacache/index-v5/entry'),'hash\t'+JSON.stringify({key:'make-fetch-happen:request-cache:'+url,integrity})+'\n');
+ const lock=JSON.stringify({packages:{'':{},'node_modules/a':{resolved:url,integrity}}});
+ let active=0,max=0;const archives=[];
+ try {
+  await packPlatformNpmSeeds(source,join(directory,'output'),lock,{concurrency:2,run:async(command,args)=>{
+   active++;max=Math.max(max,active);await new Promise(resolve=>setTimeout(resolve,10));
+   if(command==='tar'){archives.push(args[1]);await writeFile(args[1],'test archive');}active--;
+  }});
+  expect(max).toBe(2);expect(archives).toHaveLength(5);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('keys repository install caches on the shared font pipeline without removed vendored inputs',()=>{
+ const caches=Object.values(workflow().jobs).flatMap(job=>job.steps??[]).filter(step=>step.with?.key?.startsWith('install-v4-'));
+ expect(caches.length).toBeGreaterThan(0);
+ for(const cache of caches){
+  expect(cache.with.key).toContain('services/app/scripts/system-font-packages.mjs');
+  expect(cache.with.key).not.toContain('design-systems/font-assets');
+  expect(cache.with.key).not.toContain('design-systems/lib/font-assets.mjs');
+ }
 });

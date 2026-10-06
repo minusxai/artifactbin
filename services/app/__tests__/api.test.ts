@@ -208,6 +208,7 @@ describe('CLI and HTTP discovery',()=>{
   // MCP and /docs/ on this text are retired-surfaces.test.ts's row for the one-pager.
   expect(Buffer.byteLength(text.split('## Direct HTTP API')[0]!)).toBeLessThan(2048);
   expect(text).toContain('/api/authentication/token');
+  expect(text).toContain('/api/browser-sessions');
   expect(text).toContain('function buildPlainTextUpdate');
   expect(text).toContain('guest browser approval is CLI-only');
  });

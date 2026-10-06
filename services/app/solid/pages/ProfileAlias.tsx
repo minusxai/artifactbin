@@ -3,10 +3,10 @@ import { createMemo, lazy, Show, type JSX } from 'solid-js';
 import { useLocation, useParams } from '@solidjs/router';
 import { artifactViewPath, parsePrettyPath } from '@/lib/http/urls';
 import { servedDocumentFrame } from '@/web/served-frame';
-import { NotFoundPage } from './NotFound';
 
 // Artifact aliases are a small route entry: reading a document must not load profile UI.
 // Each destination stays a lazy browser chunk, including the trailing-slash profile fallback.
+const NotFoundPage = lazy(() => import('./NotFound').then(m => ({ default: m.NotFoundPage })));
 const ProfilePage = lazy(() => import('./Profile').then(m => ({ default: m.ProfilePage })));
 const ArtifactAddressRoute = lazy(() => import('./ArtifactAddress').then(m => ({ default: m.ArtifactAddressRoute })));
 const DocumentPage = lazy(() => import('./Document').then(m => ({ default: m.DocumentPage })));

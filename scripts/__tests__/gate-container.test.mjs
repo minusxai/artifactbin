@@ -73,7 +73,7 @@ describe('image and dependency volume', () => {
   });
 
   it('keys the volume on every input that decides the installed bytes', () => {
-    const base = { lock: 'L', copyAssets: 'C', preparePty: 'P', image: 'I' };
+    const base = { lock: 'L', copyAssets: 'C', fontAssets: 'F', preparePty: 'P', image: 'I' };
     const key = depsVolume(base);
     expect(key).toMatch(/^afbin-gate-deps-[0-9a-f]{16}$/);
     expect(depsVolume({ ...base })).toBe(key);

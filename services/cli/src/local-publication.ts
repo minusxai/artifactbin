@@ -280,15 +280,20 @@ async function publishProjection(workspace:Workspace,paths:string[],client:HttpC
   for(const path of ordered){
    const bytes=frozen[path]!,hash=digest(bytes),previous=manifest.inputs[path];if(previous?.hash===hash&&JSON.stringify(previous.ids??{})===JSON.stringify(manifest.ids))continue;
    const target=await confinedPath(root,path),remote=await readFile(target);let mapped=mappedBytes(path,bytes,manifest.ids,remote);
-   if(previous&&extname(path).toLowerCase()==='.jsx'){
+   const accepted=stage.tracking?.files[path]?.snapshot;
+   // A refused create has no accepted normalization to merge. Its staging
+   // bytes are merely the rejected proposal; stamping IDs into that invented
+   // "remote" baseline makes a corrected source conflict with itself.
+   // Uncertain deliveries are recovered above before newer inputs reach here.
+   // Bound authoring already has the accepted canonical baseline in tracking.
+   // Its ordinary push compiler handles changes; rematching an older un-IDed
+   // draft can invent IDs for repeated nodes and conflict with normalization.
+   if(previous&&accepted&&!bindings.some(binding=>binding.path===path)&&extname(path).toLowerCase()==='.jsx'){
     const base=parseDocument(mappedBytes(path,Buffer.from(previous.bytes,'base64'),previous.ids??manifest.ids,remote).toString());const local=parseDocument(mapped.toString()),confirmed=parseDocument(remote.toString());
-    const accepted=stage.tracking?.files[path]?.snapshot;
-    if(accepted){
-     const normalized=snapshotDocument(accepted).metadata;
-     // Omitted author fields acquired server defaults on the accepted create;
-     // those defaults are the baseline for a later explicit metadata change.
-     for(const key of metadataFields)if(base.metadata[key]===undefined)Object.assign(base.metadata,{[key]:normalized[key]});
-    }
+    const normalized=snapshotDocument(accepted).metadata;
+    // Omitted author fields acquired server defaults on the accepted create;
+    // those defaults are the baseline for a later explicit metadata change.
+    for(const key of metadataFields)if(base.metadata[key]===undefined&&normalized[key]!==undefined)Object.assign(base.metadata,{[key]:normalized[key]});
     // Server-assigned node IDs are normalization, not an intervening user edit.
     // Match them before computing changes; keep author originals unchanged.
     base.body=stampNodeIds(base.body,{previousSource:confirmed.body}).source;

@@ -2,7 +2,6 @@ import {PREVIEW_CONNECT_PATH,PREVIEW_CONNECT_INSPECT_PATH,PREVIEW_CONNECT_IMPORT
 import {previewPublicOrigin} from '../preview-options';
 import {inspectPreviewOffer,importPreviewOffer,previewConnectPage} from './connect-import';
 import {loadWorkspace} from '../workspace';
-import {localIdentities} from '../identities';
 import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile} from '../local-workspace';
 import {workspaceStateEnv} from '../config';
 import {localHistory,localHistoryHead} from '../local-history';
@@ -35,7 +34,7 @@ import {splitHelmet} from '../../../app/lib/story/document/helmet';
 import {stampNodeIds,nodeIndex} from '../../../app/lib/story/document/node-ids';
 import {parseAnnotationRange} from '../../../app/lib/story/annotations/annotation-range';
 import type {PreviewComment} from './comments';
-import {localInputPath,readLocalDataset,type LocalDataset} from './local-inputs';
+import {localInputPath,localInputReferences,readLocalDataset,type LocalDataset} from './local-inputs';
 import {CliError} from '../errors';
 import type {Scalar} from '../../../contracts/src/index';
 import {validateQueryValues} from '../../../app/lib/story/data/query-values';
@@ -49,8 +48,8 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  let failure:string|undefined;
  const root=await realpath(options.root),{home}=options;
  const publicOrigin=previewPublicOrigin(options.publicUrl);
- options.localFiles={...options.localFiles};
  await localWorkspaceState(root);await recoverLocalFiles(root);
+ options.localFiles={...options.localFiles,...await localInputReferences(await loadWorkspace(root,home),options.origin)};
  const allowed=new Set(options.files),resources=new Set<string>();
  for(const file of options.files)for(const path of await previewGraph(root,file,options.localFiles)){if(path.toLowerCase().endsWith('.jsx'))allowed.add(path);else resources.add(path);}
  await mkdir(home,{recursive:true});
@@ -132,7 +131,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  const comments=await State.open(root,workspaceStateEnv(root));
  await migrateLocalDiscussion(root,home,comments);
  const admitImport=async(path:string)=>{
-  const identities={...options.localFiles,...await localIdentities(await loadWorkspace(root,home))};
+  const identities={...options.localFiles,...await localInputReferences(await loadWorkspace(root,home),options.origin)};
   const graph=await previewGraph(root,path,identities),refs=new Set<string>();
   // Prepare the new graph first. Unrelated previously selected files may have been deleted externally.
   for(const selected of graph)if(selected.toLowerCase().endsWith('.jsx')){

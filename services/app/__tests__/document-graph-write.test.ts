@@ -1,8 +1,12 @@
+import {POST as editRoute} from '@/app/api/artifacts/[id]/edits/route';
+import {GET as readRoute} from '@/app/api/artifacts/[id]/route';
+import {PUT as shareRoute} from '@/app/api/my/artifacts/[id]/sharing/route';
+import {documentPublicationBody} from './prepared-document';
 import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
-import {useAppHarness,request,settleBackgroundWrites} from './harness';
+import {useAppHarness,request,setSession,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/platform';
-import {mintToken} from '@/lib/accounts';
+import {mintToken,createUser,claimToken} from '@/lib/accounts';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {createDocumentGraph} from '@/lib/story/graph/document-graph';
@@ -16,7 +20,7 @@ async function setup(){
  await db.query('UPDATE artifacts SET document=$2::jsonb,source=NULL WHERE id=$1',[id,JSON.stringify(document)]);
  // The create's telemetry must not land inside a test's count of its own statements.
  await settleBackgroundWrites();
- return {db,actor,row,base:{id,version:row.version,document,meta:row.meta}};
+ return {db,actor,row,token,base:{id,version:row.version,document,meta:row.meta}};
 }
 it('atomically commits a structural edit, exact archive and invertible history in one statement',async()=>{
  const {db,actor,row,base}=await setup();
@@ -76,4 +80,43 @@ it('applies a stale independent operation after a concurrent commit without a he
  }finally{spy.mockRestore();}
  expect((await getArtifactById(base.id))?.source).toContain('Concurrent much longer text 👩');
  expect((await getArtifactById(base.id))?.source).toContain('Updated Beta');
+});
+
+it.each(['missing child','cycle','missing root','malformed parts','malformed references','malformed AST','wrong policy'])('refuses a whole graph with %s before storage and leaves subsequent reads healthy',async(kind)=>{
+ const {row,token}=await setup();
+ const candidate=documentPublicationBody(row,{source:row.source!.replace('Alpha','Changed')},true);
+ const replacement=candidate.document_update.replacement!,root=replacement.nodes.$root!,child=replacement.nodes[root.children[0]!]!;
+ if(kind==='missing child')root.children=['missing-child'];
+ if(kind==='cycle')root.children=['$root'];
+ if(kind==='missing root')delete replacement.nodes.$root;
+ if(kind==='malformed parts')Object.assign(root,{parts:null});
+ if(kind==='malformed references')Object.assign(child,{refs:[null]});
+ if(kind==='malformed AST')Object.assign(child,{ast:{schema:1,kind:'jsx',roots:null}});
+ if(kind==='wrong policy')replacement.policy='unsupported';
+ const params={params:Promise.resolve({id:row.id})};
+ const refused=await editRoute(request(`/api/artifacts/${row.id}/edits`,{method:'POST',token:token.token,json:candidate}),params);
+ expect(refused.status).toBe(400);
+ const read=await readRoute(request(`/api/artifacts/${row.id}`,{token:token.token}),{params:Promise.resolve({id:row.id})});
+ expect(read.status).toBe(200);const actual=await read.json();expect(actual.version).toBe(row.version);expect(actual.markup).toContain('Alpha');
+});
+
+it.each(['omitted inserted touches','wrong inserted parts'])('refuses a partial insertion with %s before storage',async(kind)=>{
+ const {row,token,db}=await setup();
+ const history=(await db.query('SELECT edit_id,document_state FROM artifact_edits WHERE artifact_id=$1',[row.id])).rows;
+ const versions=(await db.query('SELECT version FROM artifact_versions WHERE artifact_id=$1',[row.id])).rows;
+ const candidate=documentPublicationBody(row,{source:row.source!+'<figure><p>Caption</p><p>Details</p></figure>'});
+ const patch=candidate.document_update.patch,inserted=Object.keys(patch.inserted);
+ expect(inserted.length).toBeGreaterThan(0);
+ if(kind==='omitted inserted touches')patch.touched=patch.touched.filter(key=>!inserted.includes(key));
+ else{const node=Object.values(patch.inserted).find(node=>node.children.length===2)!;node.parts.pop();}
+ const refused=await editRoute(request(`/api/artifacts/${row.id}/edits`,{method:'POST',token:token.token,json:candidate}),{params:Promise.resolve({id:row.id})});
+ expect(refused.status).toBe(400);
+ const read=await readRoute(request(`/api/artifacts/${row.id}`,{token:token.token}),{params:Promise.resolve({id:row.id})});
+ expect(read.status).toBe(200);const actual=await read.json();expect(actual.version).toBe(row.version);expect(actual.markup).not.toContain('Caption');
+ expect((await db.query('SELECT edit_id,document_state FROM artifact_edits WHERE artifact_id=$1',[row.id])).rows).toEqual(history);
+ expect((await db.query('SELECT version FROM artifact_versions WHERE artifact_id=$1',[row.id])).rows).toEqual(versions);
+ const owner=await createUser({email:'mxmx_test_graph_read@example.com'});await claimToken(owner.id,token.token);
+ setSession(()=>({user:{id:owner.id,email:owner.email}}));
+ const shared=await shareRoute(request(`/api/my/artifacts/${row.id}/sharing`,{method:'PUT',origin:'same',json:{visibility:'unlisted'}}),{params:Promise.resolve({id:row.id})});
+ expect(shared.status).toBe(200);
 });

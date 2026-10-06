@@ -7,6 +7,7 @@ import { inputOf, parsedDomDiffs } from './harness';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { JSDOM } from 'jsdom';
+import { applyCurrentLayoutContracts } from '@/lib/islands/__tests__/kit-parity';
 
 const baseline = JSON.parse(readFileSync(new URL('./react-html.json', import.meta.url), 'utf8')) as Record<string, string>;
 
@@ -55,7 +56,8 @@ describe('Solid static render parity', () => {
       const input = await inputOf(doc);
       const page = await compilePage(input, build);
       const generated = generate({ ...input, glyphCatalogUrl: build.manifest['@mx/glyphs'] });
-      const parsed = parsedDomDiffs(visibleHtml(baseline[doc.key]!), visibleHtml(page.html));
+      const expected = applyCurrentLayoutContracts(baseline[doc.key]!);
+      const parsed = parsedDomDiffs(visibleHtml(expected), visibleHtml(page.html));
       reports.push({ key: doc.key, dom: parsed.dom, hydrationKeys: parsed.hydrationKeys, generatedIds: parsed.generatedIds,
         contentDom: parsed.dom.filter((diff) => !parsed.hydrationKeys.includes(diff) && !parsed.generatedIds.includes(diff)),
         scripts: parsed.scripts.length, comments: parsed.comments.length });

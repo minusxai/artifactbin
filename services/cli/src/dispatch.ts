@@ -471,7 +471,7 @@ function refusalDetails(message:string,details:unknown):string[]{
  return lines.filter(line=>!message.includes(line));
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
-export const PUBLISHED_NEXT='Published: the saved local file contains the published source. If source_rewritten is reported, re-read it before editing. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';
+export const PUBLISHED_NEXT='Published: the saved local file contains the published source. If source_rewritten is reported, re-read it before editing. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look at the published page and its current datasets, one `afbin export <artifact-url> --output out.png` shows the whole document, every slide, in one image. Files and registered IDs render local copies; `afbin export <id> --refresh --output out.png` selects fresh published rendering.';
 /**
  * A push proves markup and read queries. It never runs a write, so a page that declares one is
  * told so by name: the measured rule above is for documents, and an untested button is how a

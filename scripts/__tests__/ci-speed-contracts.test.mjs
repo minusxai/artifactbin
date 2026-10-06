@@ -121,6 +121,16 @@ it('overlaps the same standard-user bootstrap with pack instead of waiting to cr
  const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
  expect(source.indexOf("$process=Start-StandardProcess $encoded 'bootstrap'")).toBeLessThan(source.indexOf('ci-artifact-wait.mjs'));
  expect(source.indexOf("$phase='wait for exact current-run candidate'")).toBeLessThan(source.indexOf("$phase='standard-user online npx query'"));
+ // A child can fail before the package arrives; preserve its cause before parent cleanup.
+ const early=source.match(/if\(\$LASTEXITCODE -ne 0\)\{([^}]*Waiting for exact current-run package failed[^}]*)\}/)?.[1];
+ expect(early).toBeDefined();
+ expect(early.indexOf('Write-StandardFailure')).toBeGreaterThanOrEqual(0);
+ expect(early.indexOf('Write-StandardFailure')).toBeLessThan(early.indexOf('throw'));
+ const diagnostics=source.slice(source.indexOf('function Write-StandardFailure'),source.indexOf('function Wait-StandardExit'));
+ for(const file of ['failed.json','bootstrap.stdout','bootstrap.stderr'])expect(diagnostics).toContain(file);
+ expect(diagnostics).toContain('-Tail 60');expect(diagnostics).toContain('Substring(0,8192)');
+ expect(diagnostics).toContain('$password,$env:GH_TOKEN');expect(diagnostics).toContain(".Replace($secret,'[redacted]')");
+
 });
 it('waits only for current-attempt artifacts and fails on packaging failures or deadline',async()=>{
  const {waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
@@ -157,7 +167,7 @@ it('prepares all consumer prerequisites before waiting for the same-run candidat
  const job=workflow().jobs.cli,steps=job.steps;
  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
  const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs'));
- expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='dependency-cache-path'));
+ expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
  expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='acceptance-browser'));
  expect(steps[waiting].run).toContain('--wait-only');
  expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
@@ -195,4 +205,46 @@ it('reuses current-attempt waiting for prepared CLI packages without accepting o
  await expect(waitForCurrentArtifact({...options,jobs:async()=>({jobs:[{name:'package',status:'completed',conclusion:'failure'}]})})).rejects.toThrow('package failed');
  await expect(waitForCurrentArtifact({...options,artifacts:async()=>({artifacts:[current,{...current,id:5}]})})).rejects.toThrow(/Multiple current-attempt/);
  time=0;await expect(waitForCurrentArtifact({...options,timeout:5000,artifacts:async()=>({artifacts:[{...current,expired:true}]})})).rejects.toThrow(/timed out/);
+});
+
+it('recovers a real gh transport timeout within the original artifact deadline',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-gh-transport-')),calls=join(directory,'calls'),gh=join(directory,'gh');
+ writeFileSync(gh,`#!${process.execPath}
+const fs=require('node:fs');const file=${JSON.stringify(calls)};const count=fs.existsSync(file)?Number(fs.readFileSync(file,'utf8')):0;fs.writeFileSync(file,String(count+1));if(!count)setInterval(()=>{},1000);else console.log(JSON.stringify({ready:true}));
+`);chmodSync(gh,0o755);
+ try{
+  const result=await requestCurrentArtifact(['api','fixture'],{command:gh,deadline:Date.now()+5000,requestTimeout:1000,retryDelay:1});
+  expect(JSON.parse(result)).toEqual({ready:true});expect(readFileSync(calls,'utf8')).toBe('2');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+it('does not retry real gh authorization failures',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-gh-permanent-')),calls=join(directory,'calls'),gh=join(directory,'gh');
+ writeFileSync(gh,`#!${process.execPath}
+const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},'call\\n');console.error('HTTP 403 forbidden');process.exit(1);
+`);chmodSync(gh,0o755);
+ try{
+  await expect(requestCurrentArtifact(['api','fixture'],{command:gh,deadline:Date.now()+2000,retryDelay:1})).rejects.toThrow(/403/);
+  expect(readFileSync(calls,'utf8')).toBe('call\n');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+it('bounds transport retries and each request by the original deadline',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ let time=0,calls=0;const timeouts=[];
+ const options={deadline:200,now:()=>time,requestTimeout:30,retryDelay:5,request:(_command,_args,options)=>{calls++;timeouts.push(options.timeout);time+=options.timeout;throw Object.assign(Error('transport timed out'),{code:'ETIMEDOUT'});},sleep:async delay=>{time+=delay;}};
+ await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow(/transport timed out/);
+ expect(calls).toBe(3);expect(time).toBe(100);expect(timeouts).toEqual([30,30,30]);
+ calls=0;time=198;await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow(/artifact timed out/);expect(calls).toBe(1);expect(time).toBe(200);expect(timeouts.at(-1)).toBe(2);
+});
+it('does not accept a candidate after requests consume the artifact deadline',async()=>{
+ const {waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');let time=0;
+ await expect(waitForCurrentArtifact({startedAt:'2026-10-06T00:00:00Z',timeout:100,now:()=>time,jobs:async()=>{time=100;return{jobs:[]};},artifacts:async()=>({artifacts:[{name:'afbin-npm-release',created_at:'2026-10-06T00:01:00Z'}]})})).rejects.toThrow(/artifact timed out/);
+});
+
+it('leaves malformed API responses and non-transport process failures authoritative',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');let calls=0;
+ const options={deadline:Date.now()+1000,request:()=>{calls++;return '{not-json';}};
+ await expect((async()=>JSON.parse(await requestCurrentArtifact(['api','fixture'],options)))()).rejects.toThrow();expect(calls).toBe(1);
+ calls=0;await expect(requestCurrentArtifact(['api','fixture'],{...options,request:()=>{calls++;throw Object.assign(Error('output exceeded'),{code:'ENOBUFS'});}})).rejects.toThrow('output exceeded');expect(calls).toBe(1);
 });

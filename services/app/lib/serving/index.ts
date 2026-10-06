@@ -2,7 +2,7 @@
 export { agentContract } from './agent-contract';
 export { existingPaste } from './agent-copy';
 export type { AgentDiscovery } from './agent-discovery-tags';
-export { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, agentDiscoveryTail, llmsText, withAgentDiscoveryTail } from './agent-discovery';
+export { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, agentDiscoveryTail, withAgentDiscoveryTail } from './agent-discovery';
 export { COMPUTED_FIGURE_RULE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from './agent-guidance';
 export { APP_SHELL_FONT_PRELOADS } from './app-fonts';
 export { archivedReadOnly, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';

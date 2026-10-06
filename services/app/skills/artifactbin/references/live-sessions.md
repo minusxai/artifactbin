@@ -91,3 +91,23 @@ return after;
 Close it, then rerun `--as guest`: every `$_me.id` write must be refused with
 a sign-in offer while reads still work.
 Stop once each `<Mutation>` has worked once per identity; retest only a failed run.
+
+## Phone layout
+
+Check the published page in the same session before replying. Start with one column on a phone; add columns with container breakpoints when each card has room. Keep negative margins inside a parent with matching padding. Keep long labels outside numeric specimen slots. For a table that scrolls internally, verify its action columns can be reached.
+
+```js
+const page = await context.newPage();
+await page.setViewportSize({width:390,height:844});
+await page.goto('/a/abc123');
+await page.getByRole('heading').first().waitFor();
+await page.evaluate(() => document.fonts.ready);
+const widths = await page.evaluate(() => ({
+  viewport:innerWidth, page:document.documentElement.scrollWidth,
+  roots:[...document.querySelectorAll('[data-design]')].map(root => ({width:root.clientWidth, content:root.scrollWidth}))
+}));
+await output.image(await page.screenshot({fullPage:true}));
+return widths;
+```
+
+The page must fit the viewport, and each root's content must fit its width. Inspect the screenshot too: clipped text can still pass a width check. Fix the source and repeat only the failed check. Close the session when done.

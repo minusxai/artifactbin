@@ -22,6 +22,6 @@ export const RECIPES: Record<string, Recipe> = {
   BreadcrumbSeparator: withClass('[&>svg]:size-3.5'),
   BreadcrumbEllipsis: withClass('flex size-9 items-center justify-center'),
   SlideDeck: withClass('@container w-full'),
-  Slide: withClass('relative flex flex-col min-h-[var(--mx-vh,760px)]'),
+  Slide: withClass('relative flex w-full min-w-0 flex-col min-h-[var(--mx-vh,760px)]'),
   File: withClass('flex items-center gap-3 rounded-md border border-border bg-card p-4 text-card-foreground'),
 };

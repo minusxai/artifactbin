@@ -385,18 +385,22 @@ export async function storyOf(compiled: CompiledPage, input: StoryInput): Promis
 /**
  * The story without a deck's own chrome: the compiler wraps a deck's column as
  * `<div class="mx-deck"><nav class="mx-rail">…</nav><div class="mx-doc">…</div><div class="mx-present">…</div></div>`;
- * this keeps the column exactly as served (sliced by the parser's source offsets, never re-serialised) and
- * drops the rest. A story that is not a deck comes back as it is.
+ * hide its rail and presenter without changing that tree: the stored browser module hydrates the
+ * same wrapper and static siblings. Removing them creates a hydration mismatch and can erase every
+ * slide. Source offsets preserve the column and immutable carriers byte for byte.
  */
 export function withoutDeckChrome(story: string): string {
   const fragment = parseFragment(story, { sourceCodeLocationInfo: true }) as unknown as { childNodes: Located[] };
   const deck = fragment.childNodes.find((n) => n.tagName === 'div' && classOf(n) === 'mx-deck');
-  const column = deck?.childNodes?.find((n) => n.tagName === 'div' && classOf(n) === 'mx-doc');
-  const [whole, kept] = [deck?.sourceCodeLocation, column?.sourceCodeLocation];
-  if (!whole || !kept) return story;
-  return story.slice(0, whole.startOffset) + story.slice(kept.startOffset, kept.endOffset) + story.slice(whole.endOffset);
+  const controls = deck?.childNodes?.filter((node) => ['mx-rail', 'mx-present'].includes(classOf(node) ?? '')) ?? [];
+  let bare = story;
+  for (const node of controls.reverse()) {
+    const end = node.sourceCodeLocation?.startTag?.endOffset;
+    if (end) bare = bare.slice(0, end - 1) + ' hidden style="display:none"' + bare.slice(end - 1);
+  }
+  return bare;
 }
-interface Located { tagName?: string; attrs?: Array<{ name: string; value: string }>; childNodes?: Located[]; sourceCodeLocation?: { startOffset: number; endOffset: number } }
+interface Located { tagName?: string; attrs?: Array<{ name: string; value: string }>; childNodes?: Located[]; sourceCodeLocation?: { startOffset: number; endOffset: number; startTag?: { endOffset: number } } }
 const classOf = (node: Located): string | undefined => node.attrs?.find((a) => a.name === 'class')?.value;
 /** The deck's framework-free behaviour chunk (the compiler's `DECK_BEHAVIOR`). */
 const DECK_BEHAVIOR = '@mx/deck';

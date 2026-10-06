@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {readFileSync,mkdtempSync,writeFileSync,rmSync,mkdirSync,existsSync} from 'node:fs';
+import {readFileSync,mkdtempSync,writeFileSync,rmSync,mkdirSync,existsSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -30,6 +30,12 @@ it('gives every browser a disjoint immutable cache that the main warmer also pop
   const chromium=jobs[name].steps.find(step=>step.id==='playwright');
   expect(chromium.with).toEqual(warm.find(step=>step.id==='browser-chromium').with);
  }
+ // Reference conformance uses the same runner/browser prerequisite as Chromium-only gates.
+ const reference=jobs['reference-compatibility'];
+ expect(reference['runs-on']).toBe(jobs.gates['runs-on']);
+ expect(reference.steps.find(step=>step.id==='browser-chromium').with).toEqual(warm.find(step=>step.id==='browser-chromium').with);
+ const referenceInstall=reference.steps.find(step=>step.run?.includes('npx playwright install'));
+ expect(referenceInstall.run).toBe('npx playwright install chromium');
  const selection=jobs.gates.steps.findIndex(step=>step.id==='gate-browsers');
  expect(selection).toBeLessThan(jobs.gates.steps.findIndex(step=>step.id==='browser-chromium'));
  const install=warm.find(step=>step.run?.includes('install --with-deps chromium firefox webkit'));
@@ -65,8 +71,13 @@ it('reuses only public platform archives and still uploads them from the current
  expect(uploads).toHaveLength(5);
  expect(uploads.every(step=>step.if==="needs.plan.outputs.cli == 'true'")).toBe(true);
  expect(uploads.every(step=>step.with.path.startsWith('.ci-cache-key/npm-platform-seeds/'))).toBe(true);
- const merge=jobs.cli.steps.find(step=>step.run?.includes('merge-seed'));
- expect(merge.run).toContain('${{ runner.os }}');expect(merge.run).toContain('${{ runner.arch }}');
+ const consumers=jobs.cli.steps.filter(step=>['Same-tarball native npm and warmed offline acceptance','Install the same candidate for experience checks'].includes(step.name));
+ expect(consumers).toHaveLength(2);
+ expect(consumers.every(step=>step.run.includes('--dependency-seed'))).toBe(true);
+ // npm -w changes cwd: hand the root-downloaded archive across that boundary absolutely.
+ expect(consumers.every(step=>step.run.includes('--dependency-seed "${{ github.workspace }}/'))).toBe(true);
+ expect(consumers.every(step=>step.run.includes('npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar'))).toBe(true);
+ expect(jobs.cli.steps.some(step=>step.run?.includes('merge-seed'))).toBe(false);
 });
 
 it('installs isolated candidates offline after a seed and retains the cold bootstrap network proof',()=>{
@@ -114,10 +125,10 @@ it('kills lifecycle descendants that inherit npm output pipes when the install d
 it('does not restore and save a duplicate npm download cache when every consumer receives a complete seed',()=>{
  const steps=workflow().jobs.cli.steps;
  expect(steps.some(step=>step.id==='dependency-cache')).toBe(false);
- const path=steps.find(step=>step.id==='dependency-cache-path');
- expect(path.run).toContain('$RUNNER_TEMP/npm-consumer-downloads');
+ expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
  const source=readFileSync(new URL('../../services/cli/scripts/test-npm-package.mjs',import.meta.url),'utf8');
- expect(source).not.toContain('mergeNpmDependencyCache(env.npm_config_cache,dependencyCache)');
+ expect(source).toContain('extractValidatedNpmSeed(dependencySeed,env.npm_config_cache');
+ expect(source).toContain('--dependency-cache');
 });
 
 it('rejects incomplete or wrong-platform archives before copying a seed into the consumer',()=>{
@@ -127,16 +138,74 @@ it('rejects incomplete or wrong-platform archives before copying a seed into the
  const dependencies=seeds.npmSeedDependencies(lock,{os:'linux',cpu:'x64'});
  const archive=join(directory,'seed.tar'),target=join(directory,'consumer');
  const run=(os='Linux',arch='X64')=>spawnSync(process.execPath,[fileURLToPath(new URL('../lib/npm-dependency-cache.mjs',import.meta.url)),'merge-seed',archive,target,os,arch],{encoding:'utf8'});
- const pack=(selected)=>{
-  writeFileSync(join(index,'entry'),selected.map(dependency=>'checksum\t'+JSON.stringify({key:'make-fetch-happen:request-cache:'+dependency.resolved,integrity:dependency.integrity,metadata:{url:dependency.resolved}})+'\n').join(''));
+ const pack=(selected,{manifests=true}={})=>{
+  const records=selected.flatMap(dependency=>{
+   const tarball={key:'make-fetch-happen:request-cache:'+dependency.resolved,integrity:dependency.integrity,metadata:{url:dependency.resolved}};
+   const name=dependency.spec.slice(0,dependency.spec.lastIndexOf('@'));
+   const url='https://registry.npmjs.org/'+name;
+   return manifests?[tarball,{key:'make-fetch-happen:request-cache:'+url,integrity:'sha512-manifest-fixture',metadata:{url}}]:[tarball];
+  });
+  writeFileSync(join(index,'entry'),records.map(record=>'checksum\t'+JSON.stringify(record)+'\n').join(''));
   execFileSync('tar',['-cf',archive,'-C',join(directory,'seed'),'_cacache']);
  };
  try{
   pack(dependencies.slice(1));expect(run().status).toBe(1);expect(existsSync(join(target,'_cacache'))).toBe(false);
+  pack(dependencies,{manifests:false});const missingManifest=run();expect(missingManifest.status).toBe(1);expect(missingManifest.stderr).toContain('manifest');
   pack(dependencies);expect(run('Unsupported','X64').status).toBe(1);
   expect(run().status).toBe(0);expect(existsSync(join(target,'_cacache','index-v5','entry'))).toBe(true);
+  rmSync(target,{recursive:true,force:true});
   pack([{...dependencies[0],integrity:'sha512-wrong'},...dependencies.slice(1)]);
   const wrong=run();expect(wrong.status).toBe(1);expect(wrong.stderr).toContain('integrity');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('extracts a verified platform archive directly into empty independent consumer caches',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-direct-seed-extract-'));
+ const source=join(directory,'seed'),cacheRoot=join(source,'_cacache'),index=join(cacheRoot,'index-v5'),archive=join(directory,'seed.tar');
+ mkdirSync(index,{recursive:true});
+ writeFileSync(join(cacheRoot,'_lastverified'),'npm-cache-ok\n');
+ const dependency={version:'1.0.0',resolved:'https://registry.npmjs.org/a/-/a-1.0.0.tgz',integrity:'sha512-a',os:['linux'],cpu:['x64']};
+ const lock=JSON.stringify({name:'@afbin/cli',packages:{'':{name:'@afbin/cli'},'node_modules/a':dependency}});
+ const deps=seeds.npmSeedDependencies(lock,{os:'linux',cpu:'x64'}),manifestUrl='https://registry.npmjs.org/a';
+ const records=[
+  {key:'make-fetch-happen:request-cache:'+dependency.resolved,integrity:dependency.integrity,metadata:{url:dependency.resolved}},
+  {key:'make-fetch-happen:request-cache:'+manifestUrl,integrity:'sha512-manifest',metadata:{url:manifestUrl}},
+ ];
+ writeFileSync(join(index,'entry'),records.map(record=>'checksum\t'+JSON.stringify(record)+'\n').join(''));
+ execFileSync('tar',['-cf',archive,'-C',source,'_cacache']);
+ const archiveHash=createHash('sha256').update(readFileSync(archive)).digest('hex');
+ const extract=seeds.extractValidatedNpmSeed;
+ const first=join(directory,'consumer-one','cache'),second=join(directory,'consumer-two','cache');
+ try{
+  expect(extract,'consumer preparation needs the archive-to-private-cache boundary').toBeTypeOf('function');
+  const result=await extract(archive,first,lock,{os:'linux',cpu:'x64'});
+  expect(result.records).toBe(2);
+  expect(result.phases).toEqual({inspectMs:expect.any(Number),extractMs:expect.any(Number),validateMs:expect.any(Number)});
+  expect(readFileSync(join(first,'_cacache','index-v5','entry'),'utf8')).toBe(readFileSync(join(index,'entry'),'utf8'));
+  expect(readFileSync(join(first,'_cacache','_lastverified'),'utf8')).toBe('npm-cache-ok\n');
+  expect(existsSync(archive+'.seed')).toBe(false);
+  await extract(archive,second,lock,{os:'linux',cpu:'x64'});
+  writeFileSync(join(first,'_cacache','index-v5','entry'),'consumer mutation');
+  expect(readFileSync(join(second,'_cacache','index-v5','entry'),'utf8')).toBe(readFileSync(join(index,'entry'),'utf8'));
+  expect(createHash('sha256').update(readFileSync(archive)).digest('hex')).toBe(archiveHash);
+  const occupied=join(directory,'occupied');mkdirSync(occupied);writeFileSync(join(occupied,'keep'),'untouched');
+  await expect(extract(archive,occupied,lock,{os:'linux',cpu:'x64'})).rejects.toThrow(/empty/i);
+  expect(readFileSync(join(occupied,'keep'),'utf8')).toBe('untouched');
+  const wrongPlatform=join(directory,'wrong-platform');
+  await expect(extract(archive,wrongPlatform,lock,{os:'win32',cpu:'x64'})).rejects.toThrow(/dependency graph|platform/i);
+  expect(existsSync(wrongPlatform)).toBe(false);
+  const linked=join(directory,'linked-seed'),linkedIndex=join(linked,'_cacache','index-v5');mkdirSync(linkedIndex,{recursive:true});
+  writeFileSync(join(linkedIndex,'entry'),readFileSync(join(index,'entry')));
+  symlinkSync('outside',join(linked,'_cacache','_lastverified'));
+  const linkedArchive=join(directory,'linked.tar');execFileSync('tar',['-cf',linkedArchive,'-C',linked,'_cacache']);
+  const refused=join(directory,'refused');
+  await expect(extract(linkedArchive,refused,lock,{os:'linux',cpu:'x64'})).rejects.toThrow(/link or unsupported/i);
+  expect(existsSync(refused)).toBe(false);
+  const folder=join(directory,'folder-seed'),folderCache=join(folder,'_cacache');mkdirSync(join(folderCache,'_lastverified'),{recursive:true});
+  const folderArchive=join(directory,'folder.tar');execFileSync('tar',['-cf',folderArchive,'-C',folder,'_cacache']);
+  const folderRefused=join(directory,'folder-refused');
+  await expect(extract(folderArchive,folderRefused,lock,{os:'linux',cpu:'x64'})).rejects.toThrow(/marker must be a regular file/i);
+  expect(existsSync(folderRefused)).toBe(false);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
@@ -145,9 +214,9 @@ it('installs a real npm tarball with cached pinned dependencies offline and stil
  const npm=npmCli();
  const cacache=createRequire(npm)('cacache');
  const dependencyDir=join(directory,'dependency','package'),candidateDir=join(directory,'candidate','package');
- const consumer=join(directory,'consumer'),cache=join(directory,'cache');
+ const consumer=join(directory,'consumer'),sourceCache=join(directory,'producer-cache'),cache=join(directory,'consumer-cache');
  for(const path of [dependencyDir,candidateDir,consumer])mkdirSync(path,{recursive:true});
- const dependencyArchive=join(directory,'dependency.tgz'),candidateArchive=join(directory,'candidate.tgz');
+ const dependencyArchive=join(directory,'dependency.tgz'),candidateArchive=join(directory,'candidate.tgz'),seedArchive=join(directory,'seed.tar');
  const resolved='https://registry.npmjs.org/afbin-ci-fixture/-/afbin-ci-fixture-1.0.0.tgz';
  const output=[];
  try{
@@ -155,14 +224,17 @@ it('installs a real npm tarball with cached pinned dependencies offline and stil
   writeFileSync(join(dependencyDir,'index.cjs'),'module.exports=42;');
   execFileSync('tar',['-czf',dependencyArchive,'-C',join(directory,'dependency'),'package']);
   const bytes=readFileSync(dependencyArchive),integrity='sha512-'+createHash('sha512').update(bytes).digest('base64');
-  await cacache.put(join(cache,'_cacache'),'make-fetch-happen:request-cache:'+resolved,bytes,{metadata:{time:Date.now(),url:resolved,reqHeaders:{},resHeaders:{'content-type':'application/octet-stream'}}});
+  await cacache.put(join(sourceCache,'_cacache'),'make-fetch-happen:request-cache:'+resolved,bytes,{metadata:{time:Date.now(),url:resolved,reqHeaders:{},resHeaders:{'content-type':'application/octet-stream'}}});
   const manifestUrl='https://registry.npmjs.org/afbin-ci-fixture';
   const manifest={name:'afbin-ci-fixture','dist-tags':{latest:'1.0.0'},versions:{'1.0.0':{name:'afbin-ci-fixture',version:'1.0.0',dist:{tarball:resolved,integrity}}}};
-  await cacache.put(join(cache,'_cacache'),'make-fetch-happen:request-cache:'+manifestUrl,JSON.stringify(manifest),{metadata:{time:Date.now(),url:manifestUrl,reqHeaders:{accept:'application/json'},resHeaders:{'content-type':'application/json'}}});
+  await cacache.put(join(sourceCache,'_cacache'),'make-fetch-happen:request-cache:'+manifestUrl,JSON.stringify(manifest),{metadata:{time:Date.now(),url:manifestUrl,reqHeaders:{accept:'application/json'},resHeaders:{'content-type':'application/json'}}});
   const pkg={name:'afbin-ci-consumer',version:'1.0.0',dependencies:{'afbin-ci-fixture':'1.0.0'},scripts:{postinstall:`node -e "require('fs').writeFileSync('lifecycle-ran','yes')"`}};
   writeFileSync(join(candidateDir,'package.json'),JSON.stringify(pkg));
-  writeFileSync(join(candidateDir,'npm-shrinkwrap.json'),JSON.stringify({name:pkg.name,version:pkg.version,lockfileVersion:3,requires:true,packages:{'':pkg,'node_modules/afbin-ci-fixture':{version:'1.0.0',resolved,integrity}}}));
+  const lockText=JSON.stringify({name:pkg.name,version:pkg.version,lockfileVersion:3,requires:true,packages:{'':pkg,'node_modules/afbin-ci-fixture':{version:'1.0.0',resolved,integrity,os:[process.platform],cpu:[process.arch]}}});
+  writeFileSync(join(candidateDir,'npm-shrinkwrap.json'),lockText);
   execFileSync('tar',['-czf',candidateArchive,'-C',join(directory,'candidate'),'package']);
+  execFileSync('tar',['-cf',seedArchive,'-C',sourceCache,'_cacache']);
+  await seeds.extractValidatedNpmSeed(seedArchive,cache,lockText,{os:process.platform,cpu:process.arch});
   writeFileSync(join(consumer,'package.json'),'{}');
   const env={...process.env,HOME:join(directory,'home'),USERPROFILE:join(directory,'home'),npm_config_cache:cache,npm_config_registry:'https://registry.npmjs.org',npm_config_fetch_retries:'0'};
   await installNpmConsumer({npm,tarball:candidateArchive,cwd:consumer,env,seeded:true,onOutput:chunk=>output.push(chunk)});
@@ -203,12 +275,26 @@ it('prunes platform aliases without deleting shared npm content or breaking subs
  try{
   for(const [name,dep] of [['all',all],['linux-only',linux]]){
    for(const key of ['make-fetch-happen:request-cache:'+dep.resolved,`pacote:tarball:${name}@1.0.0`])await cacache.put(join(source,'_cacache'),key,bytes);
+   const manifest={name,versions:{'1.0.0':{name,version:'1.0.0',dist:{tarball:dep.resolved,integrity}}}};
+   await cacache.put(join(source,'_cacache'),'make-fetch-happen:request-cache:https://registry.npmjs.org/'+name,JSON.stringify(manifest));
   }
   const lock=JSON.stringify({packages:{'':{},'node_modules/all':all,'node_modules/linux-only':linux}});
   await seeds.packPlatformNpmSeeds(source,output,lock);
   const entries=await cacache.ls(join(output,'macOS-ARM64','_cacache'));
-  expect(Object.keys(entries)).toHaveLength(2);
+  expect(Object.keys(entries)).toHaveLength(3);
   expect(Object.keys(entries).every(key=>!key.includes('linux-only'))).toBe(true);
-  expect(await seeds.assertPublicNpmCache(join(output,'macOS-ARM64'),[all])).toBe(2);
+  expect(await seeds.assertPublicNpmCache(join(output,'macOS-ARM64'),[{...all,spec:'all@1.0.0'}])).toBe(3);
  }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('caches only Linux browser deb archives and still provisions the full browser dependency set on every consumer',()=>{
+ const cli=workflow().jobs.cli;expect(cli['timeout-minutes']).toBe(7);
+ const key=cli.steps.find(step=>step.id==='acceptance-apt-key'),cache=cli.steps.find(step=>step.id==='acceptance-apt');
+ expect(key).toBeDefined();expect(key.run).toContain('ImageOS');expect(key.run).toContain('ImageVersion');expect(key.run).toContain('playwright/browsers.json');
+ expect(cache.with.path).toBe('.ci-cache-key/acceptance-apt/*.deb');expect(cache.with.key).toContain('steps.acceptance-apt-key.outputs.key');
+ expect(cache.with['restore-keys']).toBeUndefined();expect(cache.if).toContain("runner.os == 'Linux'");
+ const install=cli.steps.find(step=>step.name==='Install Linux acceptance browser dependencies');
+ expect(install.run).toContain('linux-acceptance-deps.mjs');expect(install.run).toContain('playwright/cli.js');expect(install.if).not.toContain('cache-hit');
+ expect(install.if).toContain("matrix.phase == 'preview'");expect(install.if).toContain("matrix.phase == 'local'");
+ expect(cli.strategy.matrix.os).toEqual(['ubuntu-24.04','ubuntu-24.04-arm','macos-14','macos-15-intel','windows-2022']);
 });

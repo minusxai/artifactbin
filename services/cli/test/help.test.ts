@@ -21,6 +21,7 @@ import {DEFAULT_SERVER} from '../src/config';
 import {installSkills,skillTargets} from '../src/skill-install';
 import {runCli} from '../src/dispatch';
 import {CLI_VERSION} from '../src/version';
+import {diagnosticCatalog} from '../src/diagnostics';
 import {createTwoFilesPatch} from 'diff';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
 import {roffLiteral} from '../src/man';
@@ -600,4 +601,22 @@ test('workspace recovery teaching names explicit rebind, credential selection an
  assert.match(helpDocument('workspace'),/rebind --account current/);
  assert.match(helpDocument('publishing'),/last observed/);
  assert.match(helpDocument('publishing'),/no ownership transfer/);
+});
+
+
+test('image export help distinguishes local inputs from fresh published rendering',()=>{
+ const help=commandHelp('export');
+ assert.match(help,/registered IDs.*local files/);
+ assert.match(help,/artifact URLs.*published/);
+ assert.match(help,/--refresh.*published.*ID/);
+ assert.match(help,/local file paths.*refused/);
+});
+
+test('copyable dataset publish examples preserve current app grant defaults',()=>{
+ const publish=commands.find(command=>command.name==='push')!;
+ const datasets=publish.examples.map(example=>parseCommand(example.split(' ').slice(1))).filter(command=>command.flags.type==='dataset');
+ assert.ok(datasets.length,'help offers a dataset example');
+ for(const command of datasets)assert.equal(command.flags.access,undefined,'generic dataset example must not select legacy owner/editor-only access');
+ assert.match(diagnosticCatalog.dataset_read_only.meaning,/grant/i);
+ assert.match(diagnosticCatalog.dataset_read_only.fix,/afbin help apps/);
 });

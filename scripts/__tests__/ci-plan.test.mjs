@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
@@ -913,7 +913,7 @@ describe('CI job shape', () => {
   it('tests the exact universal npm artifact instead of compiling it again', () => {
     const job = ci().jobs['reference-compatibility'];
     expect(job.needs).toEqual(expect.arrayContaining(['plan', 'cli-pack']));
-    expect(job['runs-on']).toBe('ubuntu-24.04');
+    expect(job['runs-on']).toBe(ci().jobs.gates['runs-on']);
     const commands = job.steps.map(step => step.run ?? '');
     expect(commands.some(command => command.includes('build:binary'))).toBe(false);
     // Both conformance locations consume the current pack job's build, without rebuilding it.
@@ -1027,7 +1027,7 @@ describe('CI job shape', () => {
     expect(record.env.CI__EVENT).toBe('${{ github.event_name }}');
     expect(record.env.CI__BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
     const checkout = jobs.test.steps.find((step) => step.uses?.startsWith('actions/checkout'));
-    expect(checkout.with['fetch-depth']).toBe(0);
+    expect(checkout.with['fetch-depth']).toBe(2);
     const patch = jobs.test.steps.find((step) => (step.with?.name ?? '').startsWith('tested-patch-'));
     expect(patch.if).toBe("steps.tree.outputs.patch-id != ''");
     expect(patch.with.name).toBe('tested-patch-${{ steps.tree.outputs.patch-id }}');
@@ -1070,4 +1070,45 @@ it('requires the standalone Windows bootstrap verdict for releases including ver
   const results=Object.fromEntries(CI_JOBS.map(job=>[job,plan.jobs[job]?'success':'skipped']));
   for(const conclusion of ['failure','skipped'])expect(checkCiResults(plan,{...results,'cli-bootstrap':conclusion})).toContain('cli-bootstrap');
  }
+});
+
+
+it('records the same exact merge tree and patch from the rollup checkout depth', () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), 'ci-shallow-rollup-'));
+  const source = path.join(rootDir, 'source');
+  mkdirSync(source);
+  const git = (...args) => execFileSync('git', args, {cwd: source, encoding: 'utf8'}).trim();
+  try {
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.name', 'CI fixture');
+    git('config', 'user.email', 'mxmx_test_ci@example.com');
+    writeFileSync(path.join(source, 'file.txt'), 'base');
+    git('add', '.'); git('commit', '-q', '-m', 'initial');
+    git('checkout', '-q', '-b', 'feature');
+    writeFileSync(path.join(source, 'feature.txt'), 'feature');
+    git('add', '.'); git('commit', '-q', '-m', 'feature');
+    git('checkout', '-q', 'main');
+    writeFileSync(path.join(source, 'main.txt'), 'independent main change');
+    git('add', '.'); git('commit', '-q', '-m', 'main advances');
+    const base = git('rev-parse', 'HEAD');
+    git('merge', '--no-ff', '-q', '-m', 'synthetic PR merge', 'feature');
+    const head = git('rev-parse', 'HEAD');
+    const tree = git('rev-parse', 'HEAD^{tree}');
+    const diff = git('diff', '--no-renames', `${base}...HEAD`);
+    const patchId = execFileSync('git', ['patch-id', '--stable'], {input: diff, encoding: 'utf8'}).trim().split(/\s+/)[0];
+    const jobs = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')).jobs;
+    const depth = jobs.test.steps.find(step => step.uses?.startsWith('actions/checkout')).with['fetch-depth'];
+    expect(depth).toBe(2);
+    const clone = path.join(rootDir, 'clone');
+    execFileSync('git', ['clone', '-q', '--depth', String(depth), pathToFileURL(source).href, clone]);
+    expect(execFileSync('git', ['rev-parse', '--is-shallow-repository'], {cwd: clone, encoding: 'utf8'}).trim()).toBe('true');
+    const output = path.join(rootDir, 'output');
+    execFileSync(process.execPath, [script, 'record-tree'], {cwd: clone, encoding: 'utf8', env: {...process.env, GITHUB_RUN_ID: '373', GITHUB_SHA: head, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: '', CI__SOURCE_RUN: '373', CI__EVENT: 'pull_request', CI__BASE_SHA: base}});
+    const outputs = Object.fromEntries(readFileSync(output, 'utf8').split('\n').filter(Boolean)
+      .map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+    expect(outputs).toMatchObject({tree, 'patch-id': patchId});
+    expect(JSON.parse(readFileSync(path.join(clone, 'tested-tree/tested-tree.json'), 'utf8'))).toEqual({run_id: 373, head_sha: head, tree});
+    expect(JSON.parse(readFileSync(path.join(clone, 'tested-patch/tested-patch.json'), 'utf8'))).toEqual({run_id: 373, base});
+    expect(JSON.parse(readFileSync(path.join(clone, 'tested-run/tested-run.json'), 'utf8'))).toEqual({run_id: 373});
+  } finally { rmSync(rootDir, {recursive: true, force: true}); }
 });

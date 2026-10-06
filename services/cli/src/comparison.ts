@@ -21,7 +21,8 @@ export async function remoteStatus(workspace:Workspace,client:HttpClient,home?:s
   await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const tracking=workspace.tracking!;const observed:Record<string,TrackedFile>={};const files=[];
   for(const file of await inspectWorkspace(workspace)){
-   const base=file.tracked!.snapshot;
+   if(!file.tracked){files.push({path:file.path,status:file.status,remote:'not_published'});continue;}
+   const base=file.tracked.snapshot;
    const head=await client.request<Snapshot>(`/artifacts/${base.id}`);
    if(head.id!==base.id||typeof head.state!=='string')throw new CliError('invalid_response','Remote status requires a complete head snapshot.');
    observed[file.path]={...file.tracked!,observed:head};

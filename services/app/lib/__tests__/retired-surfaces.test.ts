@@ -17,7 +17,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { agentContract } from '@/lib/serving';
-import { llmsText } from '@/lib/serving';
+import { llmsText } from '@/lib/serving/agent-references.server';
 import { MARKUP_FIELD_GUIDANCE } from '@/lib/serving';
 import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
 import { JSX_TIER_COMPONENTS } from '@/lib/story/document/jsx-tier';

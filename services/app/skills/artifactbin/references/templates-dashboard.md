@@ -42,7 +42,9 @@ tile grid for every dashboard is the failure this page exists to prevent.
 - A positioned `<Grid>` holds tiles that readers drag and resize in edit
   mode: ONE `<Grid>` per section, GridItems in reading order (phones stack in
   source order), embeds fill their cell (`h` sizes them; never `height=` on a
-  `<Question>` inside a cell), one embed per cell. A flow Grid or plain HTML
+  `<Question>` inside a cell), one embed per cell. Use the Question `title` prop
+  for its heading; a separate sibling heading adds height and clips the chart.
+  A flow Grid or plain HTML
   for anything that should grow with content.
 - Trend cards are `minusx/trend@1` over a small ascending time series;
   `single_value` only where history is meaningless. The recipe's

@@ -33,14 +33,18 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404);
   const artifact = await getArtifactById(id);
   if (!artifact) return json({ error: 'not_found' }, 404);
-  const actor = await sessionActor(request);
+  // The standalone `/raw` reader is sandboxed to an opaque origin. Its `Origin:
+  // null` fetch is deliberately credential-blind, like GET /query: never let a
+  // cookie or bearer turn this cross-origin door into a session read.
+  const opaqueOrigin = request.headers.get('Origin') === 'null';
+  const actor = opaqueOrigin ? { viewer: null, tokenId: null } : await sessionActor(request);
   if (!(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404);
 
   // The query route's actor: the token id travels with the account (see app/a/[id]/query POST).
   const viewer: RoleActor = { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null };
   const authorize = async () => {
-    const current = await getArtifactById(id), currentActor = await sessionActor(request);
-    if (!current || current.edit_id !== artifact.edit_id || !(await canReadArtifact(current, currentActor.viewer))) throw new DatasetError('Document is unavailable', 404);
+    const current = await getArtifactById(id), currentActor = opaqueOrigin ? null : (await sessionActor(request)).viewer;
+    if (!current || current.edit_id !== artifact.edit_id || !(await canReadArtifact(current, currentActor))) throw new DatasetError('Document is unavailable', 404);
   };
   const refused = () => json({ error: 'not_found' }, 404, { 'Cache-Control': 'no-store' });
 
@@ -53,7 +57,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (error instanceof DatasetError) return refused();
     throw error;
   }
-  return json(overlay, 200, { 'Cache-Control': 'no-store', [REVALIDATE_ACTOR_HEADER]: '1' });
+  return json(overlay, 200, {
+    'Cache-Control': 'no-store',
+    ...(opaqueOrigin ? { 'Access-Control-Allow-Origin': '*' } : {}),
+    [REVALIDATE_ACTOR_HEADER]: '1',
+  });
 }
 
 const pick = <T>(from: Record<string, T> | undefined, names: ReadonlySet<string>): Record<string, T> =>

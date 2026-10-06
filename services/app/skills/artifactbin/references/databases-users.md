@@ -16,7 +16,6 @@ Save this resource as `people.yaml`:
 type: dataset
 title: Team tasks
 source: people.jsx
-access: readwrite
 ```
 
 Save the definition below as `people.jsx`. The Dataset definition belongs in

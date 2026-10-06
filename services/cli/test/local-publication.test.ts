@@ -18,6 +18,10 @@ import {snapshotDocument} from '../src/local';
 import {writeDocument} from '../src/document';
 import {createDocumentGraph,graphSource} from '../../app/lib/story/graph/document-graph';
 import {applyGraphPatch} from '../../app/lib/story/graph/document-graph-patch';
+import {encodeDocument} from '../../app/lib/story/document/document-codec';
+import {startPreview} from '../src/preview/session';
+import {localIdentities} from '../src/identities';
+import {localInputReferences} from '../src/preview/local-inputs';
 
 async function fixture(){
  const root=await realpath(await mkdtemp(join(tmpdir(),'afbin-publication-')));const home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
@@ -26,26 +30,31 @@ async function fixture(){
  await writeFile(join(cwd,'child.jsx'),'---\nid: loc002\n---\n<p id="text">One</p>');await writeFile(join(cwd,'rows.json'),'[{"link":"ref:loc002"}]');
  await registerLocalFiles(workspace,['doc.jsx','child.jsx']);
  const portable=await localWorkspaceState(cwd);portable.put(LOCAL_WORKSPACE_SCOPE,'draft-identity','rows.json',{id:'loc003'});
- const heads=new Map<string,any>(),versions=new Map<string,any>(),keys=new Map<string,any>();const calls:Array<{path:string;method:string;body:any}>=[];let lose=false,conflict=false,readEffect:(()=>Promise<void>)|undefined;
+ const heads=new Map<string,any>(),versions=new Map<string,any>(),keys=new Map<string,any>();const calls:Array<{path:string;method:string;body:any}>=[];let rejectCreate=false,rejectEdit=false,lose=false,conflict=false,readEffect:(()=>Promise<void>)|undefined;
  const request:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname,method=init?.method??'GET',body=JSON.parse(String(init?.body??'{}'));calls.push({path,method,body});
   const headers={'X-Artifactbin-Account':'usr_one'};
   if(path==='/api/artifacts/reservations')return Response.json({ids:Array.from({length:100},(_,i)=>`r${String(i).padStart(5,'0')}`)},{headers});
   if(path==='/api/artifacts'&&method==='POST'){
+   if(rejectCreate){rejectCreate=false;return Response.json({error:'invalid_sql',details:['Bad query']},{status:400,headers});}
    const key=new Headers(init?.headers).get('Idempotency-Key')!;if(keys.has(key))return Response.json(keys.get(key),{headers});
-   const id=body.reserved_id;const markup=body.markup?.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':body.image?'image':'dataset',...(body.image?{markup:null}:{}),...(markup?{markup,document:createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
+   const id=body.reserved_id;const markup=body.markup?.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':body.image?'image':'dataset',...(body.image?{markup:null}:{}),...(markup?{markup,document:body.forked_from?encodeDocument(markup):createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
   }
   const id=path.split('/')[3],head=heads.get(id);
+  if(method==='GET'&&path.endsWith('/content'))return Response.json([{name:'One',count:1}],{headers});
   if(method==='GET'&&path.includes('/versions/')){const archived=versions.get(id+':'+path.split('/').at(-1));return Response.json(archived??{error:'not_found'},{status:archived?200:404,headers});}
-  if(method==='GET'){await readEffect?.();return Response.json(head,{headers});}
+  if(method==='GET'){await readEffect?.();if(head?.markup&&head.document?.kind!=='graph')head.document=createDocumentGraph(head.markup,head.version);return Response.json(head,{headers});}
+  if(path.endsWith('/prepare'))return Response.json({}, {headers});
+  if(method==='PATCH'){const next={...head,...body,version:head.version+1,edit_id:'edit2',state:digest(id+'2')};heads.set(id,next);return Response.json(next,{headers});}
   if(path.endsWith('/edits')){
+   if(rejectEdit){rejectEdit=false;return Response.json({error:'invalid_sql',details:['1st ORDER BY term does not match any column in the result set']},{status:400,headers});}
    if(conflict)return Response.json({error:'doc_changed',detail:'Changed',current:head},{status:409,headers});
    const document=applyGraphPatch(head.document,head.version,body.document_update.patch);assert.ok(document);const next={...head,version:head.version+1,edit_id:'edit2',state:digest(id+'2'),markup:graphSource(document),document};heads.set(id,next);if(lose){lose=false;throw Error('lost reply');}return Response.json(next,{headers});
   }
   throw Error(`Unexpected ${method} ${path}`);
  };
  const client=new HttpClient({connection:{server:'https://example.com',token:'mxmx_test_publication'},home,account:'usr_one',fetch:request});
- return{root,workspace,client,heads,versions,calls,setReadEffect:(effect:()=>Promise<void>)=>{readEffect=effect;},setLost:()=>{lose=true;},setConflict:(value=true)=>{conflict=value;},cleanup:()=>rm(root,{recursive:true,force:true})};
+ return{root,workspace,client,heads,versions,calls,setRejectCreate:()=>{rejectCreate=true;},setRejectEdit:()=>{rejectEdit=true;},setReadEffect:(effect:()=>Promise<void>)=>{readEffect=effect;},setLost:()=>{lose=true;},setConflict:(value=true)=>{conflict=value;},cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 test('a pulled identity in a marked workspace updates its original and finalizes the authoring baseline',async()=>{
  const f=await fixture();try{
@@ -339,5 +348,116 @@ test('binary publication ignores a native snapshot null markup when synchronizin
   const count=f.calls.length;
   await publishLocalWorkspace(f.workspace,['picture.png'],f.client,{});
   assert.equal(f.calls.length,count,'retry needs neither another upload nor a markup parse');
+ }finally{await f.cleanup();}
+});
+
+test('a rejected first create accepts a corrected local proposal without duplicate or normalization conflict',async()=>{
+ const f=await fixture();try{
+  await writeFile(join(f.workspace.root,'child.jsx'),'---\nid: loc002\n---\n<p>One</p>');
+  f.setRejectCreate();await assert.rejects(publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{}),/invalid_sql/);
+  const corrected=(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Corrected');
+  await writeFile(join(f.workspace.root,'child.jsx'),corrected);
+  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  assert.equal(f.heads.size,1);assert.match([...f.heads.values()][0].markup,/Corrected/);
+  assert.equal(await readFile(join(f.workspace.root,'child.jsx'),'utf8'),corrected);
+ }finally{await f.cleanup();}
+});
+test('a published QA fork upgrades its legacy create snapshot through an authenticated read before ordinary editing',async()=>{
+ const f=await fixture();try{
+  await writeFile(join(f.workspace.root,'child.jsx'),'---\nid: loc002\nforked_from: old001\n---\n<p id="text">One</p>');
+  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  const head=[...f.heads.values()][0];assert.equal(head.document.kind,'jsx','fork creates retain the legacy representation until read');
+  const before=f.calls.length;
+  await writeFile(join(f.workspace.root,'child.jsx'),(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Corrected QA'));
+  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  assert.equal(f.heads.size,1);assert.match(f.heads.get(head.id).markup,/Corrected QA/);
+  assert.deepEqual(f.calls.slice(before).map(call=>({path:call.path,method:call.method})),[{path:'/api/artifacts/'+head.id,method:'GET'},{path:'/api/artifacts/'+head.id+'/edits',method:'POST'}]);
+ }finally{await f.cleanup();}
+});
+test('upgrading a fork snapshot cannot adopt a concurrent writer as the local authoring baseline',async()=>{
+ const f=await fixture();try{
+  await writeFile(join(f.workspace.root,'child.jsx'),'---\nid: loc002\nforked_from: old001\n---\n<p id="text">One</p>');
+  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  const head=[...f.heads.values()][0];head.markup='<p id="text">Concurrent</p>';head.document=encodeDocument(head.markup);head.version=2;head.edit_id='edit-other';head.state=digest('concurrent');
+  const proposal=(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Local');await writeFile(join(f.workspace.root,'child.jsx'),proposal);
+  const before=f.calls.length;
+  await assert.rejects(publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{}),{code:'state_conflict'});
+  assert.ok(f.calls.slice(before).every(call=>call.method==='GET'));assert.match(head.markup,/Concurrent/);
+  assert.equal(await readFile(join(f.workspace.root,'child.jsx'),'utf8'),proposal);
+ }finally{await f.cleanup();}
+});
+test('a pulled report can correct a rejected compound-query proposal without publication normalization conflict',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f);
+  const invalid='---\nid: '+head.id+'\nedit_id: '+head.edit_id+'\nhead_version: 1\nstate: '+head.state+'\n---\n<Helmet><Query name="pivot">{`SELECT team, sum(cups) AS total FROM coffee.rows GROUP BY team UNION ALL SELECT \'All teams\', sum(cups) FROM coffee.rows ORDER BY (team = \'All teams\'), total DESC`}</Query></Helmet><section id="report"><p id="text">Q2 coffee</p></section>';
+  await writeFile(join(f.workspace.root,'child.jsx'),invalid);f.setRejectEdit();
+  await assert.rejects(publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client,{}),/invalid_sql/);
+  assert.equal(await readFile(join(f.workspace.root,'child.jsx'),'utf8'),invalid);
+  const corrected=invalid.replace('SELECT team, sum(cups) AS total FROM coffee.rows GROUP BY team UNION ALL SELECT \'All teams\', sum(cups) FROM coffee.rows ORDER BY (team = \'All teams\'), total DESC','SELECT team, total FROM (SELECT team, sum(cups) AS total, 0 AS sortkey FROM coffee.rows GROUP BY team UNION ALL SELECT \'All teams\', sum(cups), 1 FROM coffee.rows) ORDER BY sortkey, total DESC');
+  await writeFile(join(f.workspace.root,'child.jsx'),corrected);
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client,{});
+  assert.equal(f.heads.size,1);assert.match(f.heads.get(head.id).markup,/ORDER BY sortkey/);
+  assert.ok(!f.calls.some(call=>call.path==='/api/artifacts'&&call.method==='POST'));
+ }finally{await f.cleanup();}
+});
+test('pulling a published offline dataset as YAML transfers its hidden publication identity before later edits',async()=>{
+ const f=await fixture();try{
+  await publishLocalWorkspace(f.workspace,['rows.json'],f.client,{});
+  const dataset=[...f.heads.values()].find(head=>head.format==='dataset');assert.ok(dataset);dataset.capabilities={edit:true};
+  const original=await readFile(join(f.workspace.root,'rows.json'));
+  await pull(await loadWorkspace(f.workspace.root,f.workspace.home),[dataset.id],f.client,{output:'data.yaml'});
+  const proposal=(await readFile(join(f.workspace.root,'data.yaml'),'utf8')).replace('title: null','title: Corrected dataset');
+  await writeFile(join(f.workspace.root,'data.yaml'),proposal);
+  const count=f.heads.size;
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['data.yaml'],f.client,{});
+  assert.equal(f.heads.size,count);assert.equal(f.heads.get(dataset.id).title,'Corrected dataset');
+  assert.deepEqual(await readFile(join(f.workspace.root,'rows.json')),original);
+  const tracked=(await loadWorkspace(f.workspace.root,f.workspace.home)).tracking!.files;
+  assert.equal(tracked['data.yaml'].id,dataset.id);assert.equal(tracked['data.yaml'].snapshot.version,2);
+  assert.equal(Object.values(tracked).filter(entry=>entry.id===dataset.id).length,1);
+  assert.equal((await localInputReferences(await loadWorkspace(f.workspace.root,f.workspace.home)))[dataset.id],'data.yaml','a pulled identity outranks its former publication alias');
+ }finally{await f.cleanup();}
+});
+test('unbound local readers refuse an ambiguous published reference across origins',async()=>{
+ const f=await fixture();try{
+  await publishLocalWorkspace(f.workspace,['rows.json'],f.client,{});
+  const dataset=[...f.heads.values()].find(value=>value.format==='dataset');assert.ok(dataset);
+  const copy=join(f.workspace.root,'.artifactbin','publications',digest('https://other.example').slice(0,24));await mkdir(copy,{recursive:true});
+  await writeFile(join(copy,'manifest.json'),JSON.stringify({format:1,server:'https://other.example',account:'usr_one',root:join(copy,'files'),inputs:{},ids:{loc002:dataset.id}}));
+  await assert.rejects(localInputReferences(f.workspace),{code:'ambiguous_reference'});
+  assert.equal((await localInputReferences(f.workspace,f.client.connection.server))[dataset.id],'rows.json');
+ }finally{await f.cleanup();}
+});
+test('a local capture reads its offline dataset after the bound parent acquires published reference IDs',async()=>{
+ const f=await fixture();let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(f.workspace.root,'rows.json'),'[{"cups":10},{"cups":20}]');
+  const head=await bindOriginal(f,'doc.jsx');
+  const proposed=writeDocument({...snapshotDocument(head),body:'<Helmet><Import name="coffee" src="ref:loc003" /><Query name="total">{`select sum(cups) as cups from coffee.rows`}</Query></Helmet><p id="text">Coffee report</p>'});
+  await writeFile(join(f.workspace.root,'doc.jsx'),proposed);
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['doc.jsx'],f.client,{});
+  const current=await loadWorkspace(f.workspace.root,f.workspace.home),bytes=await readFile(join(f.workspace.root,'doc.jsx'),'utf8');assert.match(bytes,/ref:r\d{5}/);
+  const dataset=[...f.heads.values()].find(value=>value.format==='dataset');assert.ok(dataset);
+  assert.equal((await localIdentities(current))[dataset.id],undefined,'discovery aliases must not become owned identities');
+  assert.equal((await localInputReferences(current,'https://other.example'))[dataset.id],undefined,'a different publication origin cannot supply the alias');
+  const before=f.calls.length;
+  session=await startPreview({root:current.root,home:current.home,files:['doc.jsx'],localFiles:await localIdentities(current),capture:true});
+  await session.document('doc.jsx');
+  const response=await fetch(session.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'doc.jsx',values:{}})});
+  assert.equal(response.status,200);const result=await response.json();assert.deepEqual(result.tables.total.rows,[{cups:30}]);
+  assert.equal(session.failure(),undefined);assert.equal(f.calls.length,before,'capture must use local rows without an authenticated remote fallback');
+  assert.equal(await readFile(join(f.workspace.root,'doc.jsx'),'utf8'),bytes);assert.equal(f.heads.size,2);
+ }finally{await session?.close();await f.cleanup();}
+});
+
+test('a bound author can edit normalized repeated nodes without rematching obsolete un-IDed input',async()=>{
+ const f=await fixture();try{
+  const head=await bindOriginal(f),file=join(f.workspace.root,'child.jsx');
+  await writeFile(file,writeDocument({...snapshotDocument(head),body:'<section><p>Same</p><p>Same</p></section>'}));
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client,{});
+  const accepted=await readFile(file,'utf8');assert.match(accepted,/id="[A-Za-z0-9]{4}"/);
+  await writeFile(file,accepted.replace('Same','Changed'));
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client,{});
+  assert.equal(f.heads.size,1);assert.match(f.heads.get(head.id).markup,/Changed/);assert.match(f.heads.get(head.id).markup,/Same/);
  }finally{await f.cleanup();}
 });

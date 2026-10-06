@@ -10,7 +10,7 @@ import { JSDOM } from 'jsdom';
 import { compilePage, declaredValues, generate } from '../compiler';
 import { loadCompilerBuild } from '../build.server';
 import type { CompileInput } from '../contract';
-import { shapeOf, diffShapes } from '@/lib/islands/__tests__/kit-parity';
+import { shapeOf, diffShapes, applyCurrentLayoutContracts } from '@/lib/islands/__tests__/kit-parity';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { compileDataflow, prepareCompile } from '@/lib/story/data/compile-dataflow';
 import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
@@ -50,7 +50,7 @@ const todays = (input: CompileInput, values: Record<string, unknown>): string =>
   const key = JSON.stringify({ nodes: input.nodes, values, glyphs: input.glyphs ?? {} });
   const recorded = oracle[key];
   if (recorded === undefined) throw new Error('no recorded React render for these nodes and values');
-  return recorded;
+  return applyCurrentLayoutContracts(recorded);
 };
 /** The compiled column's children against today's render of the same version at the same values. */
 const columnParity = (html: string, input: CompileInput, values: Record<string, unknown> = {}, drop: string[] = []): string[] => {
@@ -111,6 +111,21 @@ describe('a wrapper is today\'s render around its compiled children', () => {
     expect(page.islands.length).toBeGreaterThan(0);
     expect(columnParity(page.html, input, { who: 'Ada' })).toEqual([]);
     expect(dom(page.html).querySelector('.mx-doc #h')?.textContent).toBe('Hello Ada');
+  });
+
+  it('bounds each slide to the deck track while preserving its viewport-height recipe', async () => {
+    const source = '<Helmet><Query name="plot">{`select 1 as amount`}</Query></Helmet><SlideDeck id="d">'
+      + Array.from({ length: 5 }, (_, i) => `<Slide title="Slide ${i + 1}" id="s${i + 1}"><h2>Slide ${i + 1}</h2></Slide>`).join('')
+      + '<Slide title="Chart" id="s6"><Question data="$plot" viz={{"kind":"vega-lite","spec":{"mark":{"type":"bar"}}}} height="320px" /></Slide></SlideDeck>';
+    const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());
+    expect(page.unported).toEqual([]);
+    const slides = [...dom(page.html).querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
+    expect(slides).toHaveLength(6);
+    for (const slide of slides) {
+      expect(slide.classList.contains('w-full')).toBe(true);
+      expect(slide.classList.contains('min-w-0')).toBe(true);
+      expect(slide.classList.contains('min-h-[var(--mx-vh,760px)]')).toBe(true);
+    }
   });
 
   it('a data-bound deck: the rail thumbnails render as today\'s rail does (declared values, static faces) and the deck behaviour still drives the slides', async () => {

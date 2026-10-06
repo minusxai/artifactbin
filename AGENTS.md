@@ -60,7 +60,9 @@ queues or rerun unchanged code to hide a slow run. Report cold and warm timings 
 - **Bound investigation:** scoped `rg -l`/`rg -n`, output limits, targeted sections; skip fixtures,
   transcripts, generated assets and dependencies unless relevant; batch reads, never repeat a search.
 - Changing pinned docs/copy/errors: find their tests and gates (`buildQuickSheet`, `agentDiscovery`,
-  `renderDoc`, exact text) and update them together. PR bodies stay empty, with no descriptive PR
+  `renderDoc`, exact text) and update them together. Skill guide edits also run
+  `services/app/lib/__tests__/skill-tree.test.ts`: each rendered guide must stay within 8,192 bytes.
+  PR bodies stay empty, with no descriptive PR
   comments unless requested. Reuse only the task's own current dev server.
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a
@@ -109,6 +111,10 @@ From the repo root; keep this list current.
 
 ## Change checks
 
+- Kit renderer changes, including inline wrapper styles: run `npm run generate-story-ui-classes`
+  and review the generated diff before final CI. FAST regression checks are
+  `services/app/lib/story-ui/__tests__/recipe-classes.test.ts` and
+  `services/app/lib/story/__tests__/reader-sheet.test.ts`; type checking alone does not catch drift.
 - CLI releases: `npm run release:cli` in the CLI's PR, or the `Release afbin` dispatch (straight to
   main). `checks` refuses a CLI PR without a bump; a version-only diff packs npm and verifies native consumers; a tree PR
   CI passed is not re-tested on merge. [Steps](services/cli/README.md). Teaching is generated before

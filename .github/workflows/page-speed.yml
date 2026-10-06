@@ -65,7 +65,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -150,7 +150,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.base.outputs.found != 'true' && steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - if: steps.base.outputs.found != 'true'
@@ -171,9 +171,10 @@ jobs:
           git worktree add --detach .perf-base "$BASE"
           (cd .perf-base && node ../scripts/ci/ci.mjs lock-fingerprint)
           same=true
-          for f in .ci-cache-key/install.json services/app/scripts/copy-assets.mjs services/cli/scripts/prepare-pty.mjs; do
+          for f in .ci-cache-key/install.json services/app/scripts/copy-assets.mjs design-systems/fonts.json design-systems/font-assets/sources.json design-systems/lib/font-assets.mjs services/cli/scripts/prepare-pty.mjs; do
             cmp -s "$f" ".perf-base/$f" || same=false
           done
+          git diff --quiet "$BASE" -- design-systems/font-assets || same=false
           if [ "$same" = true ]; then
             cp -al node_modules .perf-base/node_modules
             for dir in services/*/node_modules; do cp -al "$dir" ".perf-base/$dir"; done

@@ -31,11 +31,23 @@ describe('report requests have an explicit page-type default', () => {
 
 describe('the markup skill teaches vocabulary before configuration', () => {
   const doc = renderDoc('artifactbin/references/markup.md', BASE);
+  const components = renderDoc('artifactbin/references/markup-components.md', BASE);
   it('carries the wrapper, the skeleton and both allowlists', () => {
     for (const needle of ['data-design="tw"', '## Skeleton', 'complete allowlist']) expect(doc).toContain(needle);
   });
   it('puts the Helmet/CSS/script configuration AFTER the skeleton', () => {
     expect(doc.indexOf('## `<Helmet>`')).toBeGreaterThan(doc.indexOf('## Skeleton'));
+  });
+  it('makes the reusable Accordion FAQ example discoverable from markup.md', () => {
+    expect(doc).toContain('[Accordion FAQ](markup-components.md).');
+    expect(components).toContain('<Accordion type="single" collapsible>');
+    expect(components).toContain('<AccordionItem value="shipping">');
+    expect(components).toContain('<AccordionTrigger>How long does shipping take?</AccordionTrigger>');
+    expect(components).toContain('<AccordionContent>Orders arrive in three to five business days.</AccordionContent>');
+  });
+  it('states the existing Helmet script child contract', () => {
+    expect(doc).toContain('exactly one template-literal child');
+    expect(doc).toContain('``<script>{`…`}</script>``');
   });
 });
 
@@ -85,5 +97,38 @@ describe('the brief — the one text every agent reads', () => {
     expect(data).toBeGreaterThan(example);
     expect(bodyRules).toBeGreaterThan(data);
     expect(theme).toBeGreaterThan(bodyRules);
+  });
+});
+
+
+it('keeps scrolly full-bleed bands inside the document while prose owns its padding', () => {
+  const doc = renderDoc('artifactbin/references/templates-scrolly.md', BASE);
+  expect(doc).toContain('unpadded siblings of padded prose sections');
+  expect(doc).toContain('Do not widen the document with negative margins');
+  expect(doc).toContain('className="@container text-foreground"');
+  expect(doc).toContain('className="mx-auto max-w-6xl px-6 py-16 @2xl:px-12"');
+  expect(doc).not.toContain('may run full-bleed (`-mx-6');
+});
+
+describe('native grid layouts bound evidence at phone width',()=>{
+  it('teaches zero-minimum tracks and shrinking children rather than clipping wide tables',()=>{
+    const guide=renderDoc('artifactbin/references/templates.md',BASE);
+    for(const term of ['minmax(0, 1fr)','grid-cols-1','min-w-0','overflow-x-auto','390px'])expect(guide).toContain(term);
+    const landing=renderDoc('artifactbin/references/templates-landing.md',BASE);
+    expect(landing).toContain('grid grid-cols-1 gap-8');
+  });
+});
+
+describe('new dataset examples preserve app grant defaults',()=>{
+  it('keeps accepted participants and Lambda examples on the current dataset access path',()=>{
+    const users=renderDoc('artifactbin/references/databases-users.md',BASE);
+    const yaml=users.match(/Save this resource as `people\.yaml`:[\s\S]*?```yaml\n([\s\S]*?)```/)?.[1];
+    expect(yaml).toBeDefined();
+    expect(yaml).not.toMatch(/^\s*(?:access|policy):/m);
+
+    const lambdas=renderDoc('artifactbin/references/lambdas.md',BASE);
+    const creation=lambdas.match(/CLI: `([^`]+)`/)?.[1];
+    expect(creation).toBe('afbin push sales.csv --type dataset --json');
+    expect(creation).not.toContain('--access');
   });
 });

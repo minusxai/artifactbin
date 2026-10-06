@@ -1,5 +1,6 @@
 import {documentMutationReply,adaptMutationOperationReply} from './mutation-operation';
 import {parseDocumentUpdate} from '@artifactbin/contracts';
+import {GRAPH_POLICY,graphIntegrity,graphNodes,graphSource} from '../story/graph/document-graph';
 import { applyEditFor } from './store';
 import {readableArtifact} from './read-access';
 import {MembershipError} from '../accounts/membership';
@@ -667,6 +668,17 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   if(Object.hasOwn(body,'document_update')){
     let documentUpdate=parseDocumentUpdate(body.document_update);
     if(!documentUpdate||!parseAnnotationOperations(documentUpdate.annotationOps??[])||annotationOps.length||['operations','text','source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
+    // A replacement has no locked graph to supply its structure. Check the
+    // existing graph invariants before SQL, so malformed clients cannot store
+    // a head that throws during hydration. Incremental commits keep their
+    // atomic dependency guards and do not traverse the whole document.
+    if(documentUpdate.replacement){
+      try{
+        if(documentUpdate.replacement.policy!==GRAPH_POLICY||graphIntegrity(documentUpdate.replacement).length)return null;
+        graphNodes(documentUpdate.replacement);
+        graphSource(documentUpdate.replacement);
+      }catch{return null;}
+    }
     if(documentUpdate.settings?.shares!==undefined){
       const shares=parseShareEntries(documentUpdate.settings.shares);if(shares instanceof Response)return null;
       documentUpdate={...documentUpdate,settings:{...documentUpdate.settings,shares}};

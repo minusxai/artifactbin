@@ -6,9 +6,9 @@ import {join,resolve,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
-import {mergeNpmDependencyCache} from '../../../scripts/lib/npm-dependency-cache.mjs';
+import {extractValidatedNpmSeed,mergeNpmDependencyCache} from '../../../scripts/lib/npm-dependency-cache.mjs';
 import {installNpmConsumer} from '../../../scripts/lib/npm-consumer-install.mjs';
-import {npmConsumerArgs} from './npm-consumer-args.mjs';
+import {npmConsumerArgs,npmInstallPhaseTimings} from './npm-consumer-args.mjs';
 import {runAcceptanceProcesses} from './acceptance-processes.mjs';
 import {cleanupFailedNativeConsumer} from './native-consumer-lifecycle.mjs';
 const ci=process.argv[2]==='--ci';
@@ -16,6 +16,9 @@ const installOnly=process.argv.includes('--install-only');
 const dependencyCacheIndex=process.argv.indexOf('--dependency-cache');
 const dependencyCache=dependencyCacheIndex===-1?null:process.argv[dependencyCacheIndex+1];
 if(dependencyCacheIndex!==-1&&(!ci||!dependencyCache||dependencyCache.startsWith('--')))throw Error('--dependency-cache needs a CI download-cache path.');
+const dependencySeedIndex=process.argv.indexOf('--dependency-seed');
+const dependencySeed=dependencySeedIndex===-1?null:process.argv[dependencySeedIndex+1];
+if(dependencySeedIndex!==-1&&(!ci||!dependencySeed||dependencySeed.startsWith('--')||dependencyCache))throw Error('--dependency-seed needs one CI archive and cannot be combined with --dependency-cache.');
 if(installOnly&&!ci)throw new Error('--install-only requires the CI candidate.');
 const repository=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const candidates=ci?(await readdir(join(repository,'npm-candidate'))).filter(file=>file.endsWith('.tgz')):[];
@@ -37,9 +40,15 @@ bootstrap.catch(()=>{});
 let nativeLoaded=false;
 try{
  await writeFile(join(root,'package.json'),'{}\n');
- const seeded=dependencyCache?await mergeNpmDependencyCache(dependencyCache,env.npm_config_cache):false;
+ let seeded=dependencyCache?await mergeNpmDependencyCache(dependencyCache,env.npm_config_cache):false;
+ if(dependencySeed){
+  const lockText=await readFile(join(repository,'services/cli/npm-shrinkwrap.json'),'utf8');
+  const result=await extractValidatedNpmSeed(dependencySeed,env.npm_config_cache,lockText,{os:process.platform,cpu:process.arch});
+  seeded=true;console.log('Npm seed phases (ms): '+JSON.stringify(result.phases));
+ }
  if(dependencyCache&&!seeded)throw Error('Expected verified npm download seed before offline consumer install');
  const {output:installOutput}=await installNpmConsumer({npm,tarball,cwd:root,env,seeded});
+ console.log('Npm install phases (ms): '+JSON.stringify(await npmInstallPhaseTimings(join(env.npm_config_cache,'_logs'))));
  assert.doesNotMatch(installOutput,/Rebuilding because|gyp info|gyp ERR/,'Supported native consumers must use prebuilt dependencies, without a compiler fallback');
  const cli=join(root,'node_modules/@afbin/cli');
  assert.ok(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
@@ -47,12 +56,12 @@ try{
  await assert.rejects(readdir(env.PLAYWRIGHT_BROWSERS_PATH));
  if(!installOnly){
  await writeFile(join(root,'rows.csv'),'amount\n10\n20\n');
- // Windows independently proves a cold standalone npx tarball in Restricted standard-user PS5.1.
- // This native consumer executes its exact installed candidate instead of staging a second copy.
- const args=npmConsumerArgs(tarball,process.platform);
+ // Unix Node22 lanes prove standalone npx; Windows has its Restricted standard-user proof.
+ // Node24 native lanes execute the freshly installed candidate without staging a second copy.
+ const args=npmConsumerArgs(tarball,process.platform,Number(process.versions.node.split('.')[0]));
  const online=JSON.parse(run(args));assert.ok(JSON.stringify(online).includes('10'));
  const offline=JSON.parse(run(['exec','--offline',...args.slice(1)]));assert.deepEqual(offline,online);
- if(process.platform==='win32')await assert.rejects(readdir(join(env.npm_config_cache,'_npx')),error=>error.code==='ENOENT','Windows native execution must not duplicate the candidate install');
+ if(!args.includes('--package'))await assert.rejects(readdir(join(env.npm_config_cache,'_npx')),error=>error.code==='ENOENT','Installed native execution must not duplicate the candidate install');
  const require=createRequire(join(cli,'package.json'));
  nativeLoaded=true;
  const sharp=require('sharp');const image=await sharp({create:{width:2,height:2,channels:3,background:'red'}}).png().toBuffer();assert.equal((await sharp(image).metadata()).width,2);

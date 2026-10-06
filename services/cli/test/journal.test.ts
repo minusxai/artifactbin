@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile,rm,symlink,readdir,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {digest,atomicWrite} from '../src/files';
 import {stageFiles,recoverFiles,stagedFiles,confinedPath} from '../src/journal';
 import {State} from '../src/state';
@@ -134,8 +134,21 @@ test('the CLI atomic writer preserves exclusive publication, bytes, modes and cl
  await atomicWrite(path,bytes,{exclusive:true,mode:0o700});assert.deepEqual(await readFile(path),bytes);
  if(process.platform!=='win32')assert.equal((await stat(path)).mode&0o777,0o700);
  await assert.rejects(atomicWrite(path,'refused replacement',{exclusive:true}),{code:'EEXIST'});
+ await assert.rejects(atomicWrite(path,bytes,{exclusive:true,reuseIdentical:true}),{code:'EEXIST'});
  assert.deepEqual(await readFile(path),bytes);assert.deepEqual(await readdir(root),['snapshot']);
  await atomicWrite(path,'complete replacement');assert.equal(await readFile(path,'utf8'),'complete replacement');
  if(process.platform!=='win32')assert.equal((await stat(path)).mode&0o777,0o600);
  assert.deepEqual(await readdir(root),['snapshot']);
+}));
+
+test('independent processes publish identical cache objects without leaving partial or temporary files',()=>fixture(async(_home,root)=>{
+ const path=join(root,'compiled-module');
+ const source=`import {atomicWrite} from ${JSON.stringify(new URL('../../utils/src/atomic-file.ts',import.meta.url).href)}; for(let i=0;i<12;i++)await atomicWrite(${JSON.stringify(path)},'complete compiled module',{reuseIdentical:true});`;
+ await Promise.all(Array.from({length:3},()=>new Promise<void>((resolve,reject)=>{
+  const child=spawn(process.execPath,['--import','tsx','--input-type=module','-e',source],{stdio:['ignore','ignore','pipe']});
+  let stderr='';child.stderr.on('data',chunk=>{stderr+=String(chunk);});
+  child.on('error',reject);child.on('exit',(code,signal)=>{if(code===0)resolve();else reject(new Error(`Publication child failed (${code??signal}): ${stderr}`));});
+ })));
+ assert.equal(await readFile(path,'utf8'),'complete compiled module');
+ assert.deepEqual(await readdir(root),['compiled-module']);
 }));

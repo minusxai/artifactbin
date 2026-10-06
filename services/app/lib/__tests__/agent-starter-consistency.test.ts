@@ -7,11 +7,18 @@ import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prom
 import { agentContract } from '@/lib/serving';
 import { existingPaste } from '@/lib/serving';
 import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
-import { agentDiscovery, llmsText } from '@/lib/serving';
+import { publicGuideText, llmsText } from '@/lib/serving/agent-references.server';
+import { GET as guideRoute } from '@/app/llms/[topic]/route';
+import { renderSkill } from '@/lib/skills/render';
+import { agentDiscovery } from '@/lib/serving';
 import { createArtifact } from '@/lib/artifacts';
-import { unauthorized } from '@/lib/http';
+import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
-import { createUser } from '@/lib/accounts';
+import { createUser, mintToken } from '@/lib/accounts';
+import { POST as createCommentRoute, GET as listCommentsRoute } from '@/app/api/artifacts/[id]/annotations/route';
+import { POST as actOnCommentRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
+import { createBrowserSessions } from '../../../browser/src/sessions';
+import type { Actor, BrowserSessionRequest } from '@artifactbin/contracts';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -97,6 +104,12 @@ describe('every agent-facing starter says the same thing', () => {
     expect(guide).toContain('Only verified email account sessions qualify');
     expect(guide).toContain('Authorization: Bearer <access_token>');
     expect(guide).toContain('patch.claims');
+    expect(guide).toContain('expectedVersion:snapshot.version');
+    expect(guide).toContain('document_update:prepared.document_update');
+    expect(guide).toContain('](http://localhost:3000/llms/http-authoring)');
+    expect(guide).toContain('](http://localhost:3000/llms/http-document-graph)');
+    expect(guide).not.toMatch(/\]\(http-(?:api|authoring|document-graph)\.md\)/);
+    expect(guide).not.toContain('{"csv":');
   });
 
   it('the ONE exception is the skill\'s prohibition, spelled exactly and only once', () => {
@@ -156,4 +169,92 @@ describe('what the brief and the contract teach next', () => {
     expect(contract).toContain('--yes --json');
     expect(contract).toContain('browser approval');
   });
+});
+
+
+describe('public HTTP authoring references', () => {
+  it('renders the existing reference sources with working public links and no template markers', () => {
+    for (const file of skillTree().files.filter(file => file.ref && file.dir === 'artifactbin')) {
+      const topic = file.file.replace(/\.md$/, '');
+      const actual = publicGuideText(topic, BASE);
+      const expected = renderSkill(file, {base:BASE}).replace(/\]\((?:references\/)?([a-z0-9-]+)\.md(#[^)\s]+)?\)/g,
+        (_match, name:string, hash:string|undefined) => `](${BASE}/llms/${['publishing','publishing-versions','publishing-datasets'].includes(name)?'http-api':name}${hash ?? ''})`);
+      expect(actual, topic).toBe(expected);
+      expect(actual, topic).not.toMatch(/\[\[|{%/);
+      for (const [, linkedTopic] of actual!.matchAll(/\]\(http:\/\/localhost:3000\/llms\/([a-z0-9-]+)/g)) {
+        expect(publicGuideText(linkedTopic!, BASE), `${topic} -> ${linkedTopic}`).not.toBeNull();
+      }
+    }
+  });
+
+  it('serves a public guide, substitutes the origin and refuses unknown or unsafe topics', async () => {
+    const response = await guideRoute(new Request(BASE + '/llms/http-authoring'), {params:Promise.resolve({topic:'http-authoring'})});
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe(MARKDOWN_CONTENT_TYPE);
+    expect(publicGuideText('http-api', BASE + '/')).toBe(publicGuideText('http-api', BASE));
+    expect(await response.text()).toBe(publicGuideText('http-authoring', BASE));
+    for (const topic of ['not-a-guide','../markup','Markup','markup.md','%2e%2e','../SKILL','']) {
+      expect(publicGuideText(topic, BASE), topic).toBeNull();
+      expect((await guideRoute(new Request(BASE + '/llms/unknown'), {params:Promise.resolve({topic})})).status, topic).toBe(404);
+    }
+  });
+
+  it('teaches source preparation before graph construction and links the format without an install', () => {
+    const text = llmsText(BASE);
+    expect(text.indexOf('## Prepare an edit from JSX')).toBeLessThan(text.indexOf('## Document graph wire contract'));
+    for (const topic of ['markup','markup-data','design-systems','templates']) expect(text).toContain(`${BASE}/llms/${topic}`);
+    expect(text).toContain('An HTTP client does not need Node or the CLI');
+  });
+});
+
+
+it('the published HTTP comment example creates, replies, resolves and reopens through real handlers', async () => {
+  const guide = llmsText(BASE);
+  const script = guide.match(/\/\/ BEGIN HTTP COMMENTS\n([\s\S]*?)\/\/ END HTTP COMMENTS/)?.[1];
+  expect(script, 'executable HTTP comment contract is published').toBeTruthy();
+  const user = await createUser({email:'http-comments-contract@example.com'});
+  const token = await mintToken('http-contract', user.id, undefined, {expiresInMs:null});
+  const artifact = await createArtifact('', user.id, {format:'markup', source:'<p id="message">Alpha</p>', content:'<p id="message">Alpha</p>', meta:{}} as never);
+  const localFetch = async (url:string, init?:RequestInit) => {
+    const path = new URL(url).pathname;
+    const annId = path.split('/')[5];
+    const req = request(path, {method:init?.method ?? 'GET', token:token.token, ...(init?.body ? {body:init.body, headers:{'Content-Type':'application/json'}} : {})});
+    const params = {params:Promise.resolve({id:artifact.id, ...(annId ? {annId} : {})})};
+    return annId ? actOnCommentRoute(req, params) : init?.method === 'POST' ? createCommentRoute(req, params) : listCommentsRoute(req, params);
+  };
+  const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+  const result = await new AsyncFunction('fetch','base','accessToken','artifactId','nodeId',script + '\nreturn {created,replied,resolved,reopened};')(localFetch, BASE, token.token, artifact.id, 'message');
+  expect(result.created.thread).toHaveLength(1);
+  expect(result.replied.thread).toHaveLength(2);
+  expect(result.resolved.status).toBe('resolved');
+  expect(result.reopened.status).toBe('open');
+  expect(result.reopened.revision).toBeGreaterThan(result.created.revision);
+  const stale = await actOnCommentRoute(request(`/api/artifacts/${artifact.id}/annotations/${result.created.id}`, {method:'POST',token:token.token,json:{reply:'stale duplicate',expected_revision:result.created.revision}}), {params:Promise.resolve({id:artifact.id,annId:result.created.id})});
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({error:'annotation_conflict',current_revision:result.reopened.revision});
+});
+
+
+it('the published browser example preserves a capacity refusal and only polls and closes accepted sessions', async () => {
+  const script = publicGuideText('http-api', BASE)!.match(/## Browser preview and interactive QA[\s\S]*?```js\n([\s\S]*?)```/)?.[1];
+  expect(script).toBeTruthy();
+  const sessions = createBrowserSessions(async () => ({run: async () => ({result:'screenshot',pages:[],attachments:[]}), close:async () => {}}));
+  const other: Actor = {credential:'bearer', userId:'another-owner'};
+  const actor: Actor = {credential:'bearer', userId:'example-owner'};
+  const operations: string[] = [];
+  const localFetch = async (_url: string, init: RequestInit) => {
+    const body=JSON.parse(String(init.body));operations.push(body.op);
+    return Response.json(await sessions.request({...body,actor} as BrowserSessionRequest));
+  };
+  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+  const run=()=>new AsyncFunction('fetch','base','accessToken','artifactId',script)(localFetch,BASE,'test-token','ab3cd9');
+  try {
+    for(const session_id of ['occupied-one','occupied-two'])await sessions.request({actor:other,op:'script',session_id,execution_id:'occupied',create:true,code:''});
+    await expect(run()).rejects.toThrow(/SESSION_CAPACITY.*None of them are yours/);
+    expect(operations).toEqual(['script']);
+    await sessions.request({actor:other,op:'close',session_id:'occupied-one'});
+    operations.length=0;
+    await expect(run()).resolves.toBeUndefined();
+    expect(operations[0]).toBe('script');expect(operations.at(-1)).toBe('close');
+  } finally {await sessions.close();}
 });

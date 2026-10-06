@@ -39,7 +39,8 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { documentFrame, DOCUMENT_FRAME, servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
-import { jsonRouteResponse } from './lib/json-route-response.mjs';
+import { jsonRouteResponse, createdDocumentResponse } from './lib/json-route-response.mjs';
+import { forkDestination } from './lib/fork-destination.mjs';
 import { lane } from './lib/lane.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
@@ -75,11 +76,34 @@ async function startLeg() {
       await page.route(`${BASE}/api/start`, async route => {
         finishStart(await jsonRouteResponse(route));
       }, { times: 1 });
-      await page.goto(`${BASE}/start?agent=1`, { waitUntil: 'load' });
-      await page.getByRole('button', { name: 'Copy agent instructions', exact: true }).click();
-      const startResult = await startRespP;
-      if (startResult.error) throw startResult.error;
-      const { response: startRes, body: started } = startResult;
+      const problems = [];
+      page.on('pageerror', error => problems.push(`page error: ${error.message}`));
+      page.on('requestfailed', request => {
+        const url = new URL(request.url());
+        if (url.origin === BASE) problems.push(`request failed: ${request.method()} ${url.pathname} ${request.failure()?.errorText}`);
+      });
+      page.on('response', response => {
+        const url = new URL(response.url());
+        if (url.origin === BASE && response.status() >= 400) problems.push(`HTTP ${response.status()}: ${url.pathname}`);
+      });
+      let startRes, started;
+      try {
+        await page.goto(`${BASE}/start?agent=1`, { waitUntil: 'load' });
+        let captureTimer;
+        const captured = await Promise.race([startRespP, new Promise((_, reject) => {
+          captureTimer = setTimeout(() => reject(new Error('Document creation response was not captured within 30 seconds')), 30000);
+        })]).finally(() => clearTimeout(captureTimer));
+        const result = createdDocumentResponse(captured);
+        startRes = result.response;
+        started = result.body;
+        await page.getByRole('button', { name: 'Copy agent instructions', exact: true }).click();
+      } catch (error) {
+        const current = new URL(page.url());
+        const visible = await page.locator('body').innerText({ timeout: 1000 }).catch(() => 'body unavailable');
+        const diagnostic = `${current.origin}${current.pathname}: ${visible.slice(0, 1000)}; ${problems.slice(0, 8).join('; ')}`;
+        check.note(diagnostic.replace(/mx_[A-Za-z0-9_-]+/g, '[redacted]'));
+        throw error;
+      }
       await page.waitForFunction(id => navigator.clipboard.readText().then(text => text.includes(`/a/${id}`)), started.id);
       const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 
@@ -523,43 +547,33 @@ async function forkLeg(owner) {
     await step('login returned them to the document with the fork confirm open', () => dialog.waitFor({ state: 'visible', timeout: 30000 }));
     check(!new URL(forker.url()).search.includes('intent='), 'the instruction is consumed: the address no longer carries it, so a refresh does not re-prompt');
     const forkEndpoint = `${BASE}/api/my/artifacts/${doc.id}/fork`;
-    let captureFork, captureTimer;
-    const capturedFork = new Promise((resolve, reject) => {
-      captureFork = value => { clearTimeout(captureTimer); resolve(value); };
-      captureTimer = setTimeout(() => reject(new Error('fork response did not arrive within 30 seconds')), 30000);
-    });
-    // Read the real response before delivering it: the UI immediately navigates, which can discard
-    // Chromium's response body before a waitForResponse caller can read it.
-    await forker.route(forkEndpoint, async (route) => {
-      if (route.request().method() !== 'POST' || route.request().postDataJSON()?.dry_run === true) return route.continue();
-      captureFork(await jsonRouteResponse(route));
-    });
-    const [forkDelivery] = await Promise.all([
-      capturedFork,
+    // Observe the actual browser POST, without proxying/replaying the mutation through
+    // route.fetch. Only its status is needed: navigation identifies the copy, and the
+    // authenticated read below verifies persisted identity and provenance.
+    const [forkResponse] = await Promise.all([
+      forker.waitForResponse(response => response.url() === forkEndpoint
+        && response.request().method() === 'POST'
+        && response.request().postDataJSON()?.dry_run !== true, { timeout: 30_000 }),
       forker.locator('[aria-label="Confirm fork"]').click(),
-    ]).finally(() => clearTimeout(captureTimer));
-    if (forkDelivery.error) throw new Error(`fork request failed: ${String(forkDelivery.error.message).split('\n')[0]}`);
-    const {response: forkResponse, body: forkResult} = forkDelivery;
+    ]);
     must(forkResponse.status() === 201, `fork creates the copy (${forkResponse.status()})`);
-    const copyPath = new URL(forkResult.url, BASE).pathname;
-    // Welcome is an intentional intermediate destination for this new account, not the copy's address.
-    // Only wait for commitment here: the copy's load can be interrupted by that redirect.
-    await forker.waitForURL((u) => u.pathname === copyPath
-      || (u.pathname === '/welcome' && new URL(u.searchParams.get('callbackUrl') ?? '', BASE).pathname === copyPath), { timeout: 30000, waitUntil: 'commit' }).catch((cause) => {
-        const current = new URL(forker.url());
-        const callback = current.searchParams.get('callbackUrl');
-        throw new Error(`fork did not arrive at ${copyPath}; path=${current.pathname}, callback=${callback ? new URL(callback, BASE).pathname : 'none'}`, { cause });
-      });
+    must(forkResponse.request().postData() === null, 'the browser forks with its unchanged no-options request');
+    // Welcome is an intentional intermediate destination for this new account.
+    // Observe committed navigation; its callback is the same canonical copy address.
+    await forker.waitForURL(u => !!forkDestination(u, doc.id), { timeout: 30_000, waitUntil: 'commit' }).catch(cause => {
+      throw new Error(`fork did not navigate to its new artifact; path=${new URL(forker.url()).pathname}`, { cause });
+    });
+    const {id: copyId, path: copyPath} = forkDestination(new URL(forker.url()), doc.id);
     check(copyPath.startsWith('/@'), `the copy is at its new owner's address (${copyPath})`);
 
     // ── 6. the copy is theirs, and says where it came from ──
-    const copyId = forkResult.id;
     // The new reader can still be navigating (or handing a new account to Welcome).
     // Use the browser context's authenticated request instead of its unloading page.
     const copyResponse = await forker.request.get(`${BASE}/api/my/artifacts/${copyId}`);
     check(copyResponse.ok(), `the fork owner can read the new copy (${copyResponse.status()})`);
     const copyRow = await copyResponse.json();
     check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);
+    check(copyRow.id === copyId, 'the persisted copy is the artifact the browser opened');
     check(copyRow.id !== doc.id, 'a new id — the original is untouched');
     // Let the copy navigation (and its possible Welcome redirect) settle, then confirm through Welcome like a person.
     await forker.waitForLoadState('networkidle');

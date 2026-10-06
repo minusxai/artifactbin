@@ -1,10 +1,15 @@
 import {it,expect} from 'vitest';
 import {mkdtemp,mkdir,writeFile,readFile,cp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {join,dirname} from 'node:path';
+import {createRequire} from 'node:module';
+import {spawnSync,execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {createServer} from 'node:http';
+import {createHash} from 'node:crypto';
 import {realpathSync} from 'node:fs';
-import {npmConsumerArgs} from '../../services/cli/scripts/npm-consumer-args.mjs';
+import {populateNpmSeed} from '../lib/npm-dependency-cache.mjs';
+import {npmConsumerArgs,npmConsumerInstallArgs,npmInstallPhaseTimings} from '../../services/cli/scripts/npm-consumer-args.mjs';
 const npmCli=process.env.npm_execpath??realpathSync(spawnSync('/bin/sh',['-c','command -v npm'],{encoding:'utf8'}).stdout.trim());
 const pack=new URL('../../services/cli/scripts/pack-release.mjs',import.meta.url);
 const transition=new URL('../../services/cli/scripts/transition-assets.mjs',import.meta.url);
@@ -34,18 +39,82 @@ it('packs a standalone locked npm tarball that installs outside its checkout',()
  const consumer=join(root,'consumer');await mkdir(consumer);
  const installed=spawnSync(process.execPath,[npmCli,'install','--prefix',consumer,'--offline','--no-audit','--no-fund',file],{env:{...process.env,npm_execpath:npmCli,npm_config_cache:join(root,'cache')},encoding:'utf8'});expect(installed.status,installed.stderr).toBe(0);
  const launched=spawnSync(process.execPath,[join(consumer,'node_modules/@afbin/cli/dist/afbin.mjs')],{encoding:'utf8'});expect(launched.stdout.trim()).toBe('fixture-0.1.0');
- // Windows native acceptance must execute the already-installed exact candidate, not stage it twice.
+ // Windows and second-runtime lanes execute the installed candidate; Unix Node22 retains standalone npx coverage.
  const environment={...process.env,npm_config_cache:join(root,'cache')};
  for(const platform of ['darwin','linux'])expect(npmConsumerArgs(file,platform)).toEqual(['exec','--yes','--package',file,'--','afbin','query','rows.csv','--json']);
- const online=npmConsumerArgs(file,'win32');
+ for(const platform of ['darwin','linux','win32'])expect(npmConsumerArgs(file,platform,24)).toEqual(['exec','--yes','--','afbin','query','rows.csv','--json']);
+ for(const [platform,nodeMajor] of [['win32',22],['darwin',24],['linux',24]]){
+ const online=npmConsumerArgs(file,platform,nodeMajor);
  for(const args of [online,['exec','--offline',...online.slice(1)]]){
   const execution=spawnSync(process.execPath,[npmCli,...args],{cwd:consumer,env:environment,encoding:'utf8'});
   expect(execution.status,execution.stderr).toBe(0);expect(execution.stdout.trim()).toBe('fixture-0.1.0');
  }
  await expect(readFile(join(root,'cache/_npx'),'utf8')).rejects.toMatchObject({code:'ENOENT'});
+ }
 
 }),30000);
 it('refuses build-machine runtime dependencies instead of packing a platform-specific npm release',()=>fixture(async(root,cli)=>{
  await mkdir(join(cli,'dist/runtime/node_modules/sharp'),{recursive:true});
  const result=packFixture(root,cli);expect(result.status).not.toBe(0);expect(result.stderr).toContain('build-machine');
 }),30000);
+
+it('installs seeded consumers offline with foreground lifecycle scripts, while unseeded installs stay online',()=>{
+ const seeded=npmConsumerInstallArgs('candidate.tgz',true);
+ expect(seeded).toContain('--offline');
+ expect(seeded).toContain('--foreground-scripts');
+ expect(seeded).not.toContain('--ignore-scripts');
+ expect(npmConsumerInstallArgs('candidate.tgz',false)).not.toContain('--offline');
+});
+
+it('reifies a locked dependency from npm-owned manifest and tarball seed with the registry unavailable and both lifecycle scripts enabled',()=>fixture(async(root,cli)=>{
+ const dependency=join(root,'dependency');await mkdir(dependency);
+ await writeFile(join(dependency,'package.json'),JSON.stringify({name:'mxmx-seed-fixture',version:'1.0.0',scripts:{postinstall:'node install.cjs'}}));
+ await writeFile(join(dependency,'install.cjs'),"require('node:fs').writeFileSync('lifecycle-ran','dependency');");
+ const packed=spawnSync(process.execPath,[npmCli,'pack','--ignore-scripts','--offline','--json'],{cwd:dependency,encoding:'utf8'});
+ expect(packed.status,packed.stderr).toBe(0);
+ const bytes=await readFile(join(dependency,JSON.parse(packed.stdout)[0].filename));
+ const integrity='sha512-'+createHash('sha512').update(bytes).digest('base64');
+ const server=createServer((request,response)=>{
+  if(request.url==='/mxmx-seed-fixture'){
+   response.writeHead(200,{'Content-Type':'application/json','Vary':'Accept'});response.end(JSON.stringify({name:'mxmx-seed-fixture','dist-tags':{latest:'1.0.0'},versions:{'1.0.0':{name:'mxmx-seed-fixture',version:'1.0.0',scripts:{postinstall:'node install.cjs'},dist:{tarball:url,integrity}}}}));
+  }else{response.writeHead(200,{'Content-Type':'application/octet-stream'});response.end(bytes);}
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const url='http://127.0.0.1:'+server.address().port+'/mxmx-seed-fixture-1.0.0.tgz';
+ const seed=join(root,'download-seed');
+ try {
+  await populateNpmSeed([{resolved:url,integrity,spec:'mxmx-seed-fixture@1.0.0'}],seed,args=>promisify(execFile)(process.execPath,[npmCli,...args,'--registry',new URL(url).origin]));
+  const keys=spawnSync(process.execPath,[npmCli,'cache','ls','--cache',seed],{encoding:'utf8'});
+  expect(keys.status,keys.stderr).toBe(0);
+  expect(keys.stdout.trim().split('\n').every(key=>key.startsWith('make-fetch-happen:request-cache:'))).toBe(true);
+ }
+ finally {await new Promise(resolve=>server.close(resolve));}
+ const manifest=JSON.parse(await readFile(join(cli,'package.json'),'utf8'));manifest.dependencies={'mxmx-seed-fixture':'1.0.0'};
+ await writeFile(join(cli,'package.json'),JSON.stringify(manifest));
+ await writeFile(join(cli,'scripts/prepare-pty.mjs'),"import{writeFileSync}from'node:fs';writeFileSync('lifecycle-ran','candidate');");
+ const lock=JSON.parse(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
+ lock.packages[''].dependencies=manifest.dependencies;
+ lock.packages['node_modules/mxmx-seed-fixture']={version:'1.0.0',resolved:url,integrity:'sha512-'+createHash('sha512').update(bytes).digest('base64'),hasInstallScript:true};
+ await writeFile(join(cli,'npm-shrinkwrap.json'),JSON.stringify(lock));
+ const result=packFixture(root,cli);expect(result.status,result.stderr).toBe(0);
+ const consumer=join(root,'fresh-consumer');await mkdir(consumer);await writeFile(join(consumer,'package.json'),'{}');
+ const installed=spawnSync(process.execPath,[npmCli,...npmConsumerInstallArgs(join(root,'packed/afbin-cli-0.1.0.tgz'),true)],{cwd:consumer,env:{...process.env,npm_config_cache:seed,npm_config_registry:new URL(url).origin,npm_config_fetch_retries:'0'},encoding:'utf8',timeout:15000});
+ expect(installed.status,installed.stdout+installed.stderr).toBe(0);
+ const phases=await npmInstallPhaseTimings(join(seed,'_logs'));
+ expect(phases.npm).toBeGreaterThan(0);expect(phases.reify).toBeGreaterThanOrEqual(0);
+ expect(await readFile(join(consumer,'node_modules/@afbin/cli/lifecycle-ran'),'utf8')).toBe('candidate');
+ const dependencyInstalled=dirname(createRequire(join(consumer,'node_modules/@afbin/cli/package.json')).resolve('mxmx-seed-fixture/package.json'));
+ expect(await readFile(join(dependencyInstalled,'lifecycle-ran'),'utf8')).toBe('dependency');
+}));
+
+it('reports only numeric allowlisted npm phase timings without paths or credentials',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-timing-'));
+ try {
+  await writeFile(join(directory,'install-timing.json'),JSON.stringify({timers:{npm:137600,'reify:unpack':100000,'build:run:postinstall':2000,'reify:/secret-path':99,'token':999},metadata:{token:'secret'}}));
+  expect(await npmInstallPhaseTimings(directory)).toEqual({npm:137600,'reify:unpack':100000,'build:run:postinstall':2000});
+  await writeFile(join(directory,'latest-timing.json'),JSON.stringify({timers:{npm:500,'reify:unpack':400}}));
+  expect(await npmInstallPhaseTimings(directory)).toEqual({npm:500,'reify:unpack':400});
+  expect(await npmInstallPhaseTimings(join(directory,'absent'))).toEqual({});
+  expect(npmConsumerInstallArgs('candidate.tgz',true)).toContain('--timing');
+ }finally{await rm(directory,{recursive:true,force:true});}
+});

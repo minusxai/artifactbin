@@ -179,7 +179,9 @@ export async function passTheWelcomePage(page, email) {
 
 /** Read the browser's authenticated identity without depending on page chrome. */
 export async function isSignedInAs(page, email) {
-  const response = await page.request.get(new URL('/api/page/session', page.url()).href);
+  // Match the other identity probes: one reset retry, never an HTTP-error retry.
+  // The successful response must still prove this exact account; a second reset fails.
+  const response = await page.request.get(new URL('/api/page/session', page.url()).href, { maxRetries: 1 });
   if (!response.ok()) return false;
   const session = await response.json();
   return session.kind === 'account' && session.user?.email === email;

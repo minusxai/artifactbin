@@ -597,8 +597,8 @@ it('names the reader\'s Join standing in the page data for persistent mutations'
  *   the reader's place across the reload a new version delivers, and carries their mode: the page's own
  *   behaviour (`@mx/page`), the same one a `/raw` copy runs. An interactive page loads it too (its
  *   reload keeps the place); the islands' module holds the stream there.
- * - `/raw?chrome=0` (the capture's render) carries no deck chrome — no slide rail, no present bar, no deck
- *   behaviour — exactly as today's renderer honours it; the story itself is the same.
+ * - `/raw?chrome=0` (the capture's render) hides the slide rail and present bar and omits deck
+ *   behaviour, preserving the compiled hydration hierarchy and immutable document bytes.
  * - A reader who holds a credential for the document — an account session, or a held connection (the
  *   guest owner who made it) — gets the page's credentialed doors (`signedIn` in the data island), so
  *   the store's write check answers for them, as today's reader page does; a guest does not.
@@ -657,9 +657,11 @@ describe('the compiled page behaves like today', () => {
   });
 
   describe('chrome=0 on a compiled /raw', () => {
-    it('drops the deck\'s rail, present bar and behaviour, keeping the document; without it the deck chrome is there', async () => {
+    it('hides deck controls and omits their behaviour while preserving the compiled hydration tree', async () => {
       const t = await mintToken('behaviour');
-      const markup = readFileSync(path.resolve(process.cwd(), '../../scripts/fixtures/page-speed/deck.jsx'), 'utf8');
+      const markup = readFileSync(path.resolve(process.cwd(), '../../scripts/fixtures/page-speed/deck.jsx'), 'utf8')
+        .replace('</Helmet>', '<Value name="caption" type="string" default="A live caption" /></Helmet>')
+        .replace('A deck for measuring slide load.', '{$caption}');
       const id = await publish(t.token, { title: 'Deck', markup });
       const raw = async (search: string) => {
         const res = await rawRoute(request(`/a/${id}/raw${search}`), { params: Promise.resolve({ id }) });
@@ -673,12 +675,23 @@ describe('the compiled page behaves like today', () => {
       expect([...full.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'))).toContain(deckScript);
 
       const capture = await raw('?reader=compiled&chrome=0');
-      expect(capture.querySelector('nav.mx-rail')).toBeNull();
-      expect(capture.querySelector('[aria-label="Slide controls"]')).toBeNull();
-      expect(capture.querySelector('.mx-deck')).toBeNull();
+      expect(capture.querySelector('.mx-deck > .mx-doc')).toBeTruthy();
+      for (const selector of ['nav.mx-rail', '[aria-label="Slide controls"]']) {
+        const control = capture.querySelector<HTMLElement>(selector);
+        expect(control).not.toBeNull();
+        expect(control?.hidden).toBe(true);
+        expect(control?.style.display).toBe('none');
+        expect(capture.defaultView!.getComputedStyle(control!).display).toBe('none');
+        expect(full.querySelector<HTMLElement>(selector)?.hidden).toBe(false);
+      }
       expect([...capture.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'))).not.toContain(deckScript);
-      // The same document, less its chrome.
+      // Preserve the column and inert hydration data byte for byte; only chrome visibility changes.
       expect(capture.querySelector('#mx-story-root .mx-doc')?.innerHTML).toBe(full.querySelector('#mx-story-root .mx-deck > .mx-doc')?.innerHTML);
+      const carriers = (doc: Document) => [...doc.querySelectorAll('script[data-mx-island-literals]')].map((script) => script.outerHTML);
+      expect(carriers(full).length).toBeGreaterThan(0);
+      expect(carriers(capture)).toEqual(carriers(full));
+      expect(full.getElementById(ISLAND_DATA_ID)).not.toBeNull();
+      expect(capture.getElementById(ISLAND_DATA_ID)?.outerHTML).toBe(full.getElementById(ISLAND_DATA_ID)?.outerHTML);
     });
   });
 });

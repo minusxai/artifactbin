@@ -82,7 +82,11 @@ export async function installBindings(workspace:Workspace,stage:Workspace,bindin
   if(prior&&marker?.file===tracked.file){manifest.ids[localId]=tracked.id;continue;}
   const baseline=await baselineOf(workspace,path,tracked)??binding.bytes;
   const target=await confinedPath(stage.root,path);await mkdir(dirname(target),{recursive:true});await atomicWrite(target,baseline);
-  await saveTracking(stage,{server:manifest.server,account:manifest.account,set:{[path]:tracked}});
+  // A published offline CSV/JSON can be explicitly pulled as typed YAML.
+  // Its authoring baseline has one new path, so the hidden projection must
+  // retire its former path too; keeping both corrupts tracking on reload.
+  const retired=Object.entries(stage.tracking?.files??{}).filter(([previous,entry])=>previous!==path&&entry.id===tracked.id).map(([previous])=>previous);
+  await saveTracking(stage,{server:manifest.server,account:manifest.account,set:{[path]:tracked},remove:retired});
   await clearConflict(stage.home,stage.root,tracked.id);
   manifest.ids[localId]=tracked.id;
   manifest.inputs[path]={localId,bytes:baseline.toString('base64'),hash:digest(baseline),ids:{...manifest.ids}};

@@ -16,6 +16,8 @@ const PAGE = `<html><head><style>
 </style></head><body style="margin:0"><main style="position:relative;width:600px">
 <img src="http://127.0.0.1:1/cross-origin.png" alt="">
 <div class="density"></div>
+<!-- Bare decks retain hidden rail miniature slides for hydration. -->
+<nav hidden style="display:none"><div data-mx-slide>cover miniature</div><div data-mx-slide>second miniature</div></nav>
 <div data-mx-slide style="height:100px;background:#c33">one</div>
 <div data-mx-slide style="height:100px;background:#3c3">two</div>
 <div data-mx-slide style="height:100px;background:#33c">three</div></main></body></html>`;
@@ -117,9 +119,15 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     const r=await svc.render({...base(),url:`${pages.base}/slow`,settleMs:0,timeoutMs:250});
     expect(!r.ok&&r.reason).toBe('failed');
   });
-  it('shoots one slide as jpg', async () => {
+  it('shoots the visible document slide as jpg, excluding hidden miniature slides', async () => {
     const r = await svc.render({ ...base(), format: 'jpg', capture: { slide: 2 } });
     expect(r.ok && r.mime).toBe('image/jpeg');
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    const { data, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
+    const at = (50 * info.width + 50) * info.channels;
+    expect(data[at + 1]).toBeGreaterThan(150);
+    expect(data[at]).toBeLessThan(80);
+    expect(data[at + 2]).toBeLessThan(80);
   });
   it('answers no_slide with the count', async () => {
     expect(await svc.render({ ...base(), capture: { slide: 9 } })).toEqual({ ok: false, reason: 'no_slide', slides: 3 });

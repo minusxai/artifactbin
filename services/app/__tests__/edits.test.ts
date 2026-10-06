@@ -1,3 +1,4 @@
+import {POST as prepareUpdateRoute} from '@/app/api/artifacts/[id]/prepare/route';
 import {beforeEach} from 'vitest';
 import {getArtifactById,type ArtifactRow} from '@/lib/artifacts';
 import {documentPublicationBody} from './prepared-document';
@@ -591,4 +592,77 @@ describe('version coalescing and the edits log', () => {
     expect(after.markup).toContain('.k{color:red}');
     expect(after.markup).toContain('var a = 1;');
   });
+});
+
+describe('direct HTTP source preparation',()=>{
+ it('prepares without writing, then submits an exact update to the supplied original',async()=>{
+  const t=await mint(),doc=await createMarkup(t.token);
+  const response=await prepareUpdateRoute(request(`/api/artifacts/${doc.id}/prepare`,{method:'POST',token:t.token,json:{source:doc.markup!.replace('alpha','ALPHA'),edit_id:doc.edit_id,expectedVersion:doc.version}}),params({id:doc.id}));
+  expect(response.status).toBe(200);const prepared=await response.json();
+  expect(prepared.document_update).toBeDefined();expect(prepared.edit_id).toBe(doc.edit_id);
+  expect((await read(t.token,doc.id)).markup).toBe(doc.markup);
+  const applied=await editRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:{edit_id:prepared.edit_id,document_update:prepared.document_update}}),params({id:doc.id}));
+  expect(applied.status).toBe(200);expect((await read(t.token,doc.id)).markup).toContain('ALPHA');
+ });
+ it('rejects a stale observation without modifying the original',async()=>{
+  const t=await mint(),doc=await createMarkup(t.token);
+  await edit(t.token,doc.id,{edit_id:doc.edit_id,source:doc.markup!.replace('beta','BETA')});
+  const stale=await prepareUpdateRoute(request(`/api/artifacts/${doc.id}/prepare`,{method:'POST',token:t.token,json:{source:doc.markup!.replace('alpha','ALPHA'),edit_id:doc.edit_id,expectedVersion:doc.version}}),params({id:doc.id}));
+  expect(stale.status).toBe(409);expect((await read(t.token,doc.id)).markup).toContain('BETA');expect((await read(t.token,doc.id)).markup).not.toContain('ALPHA');
+ });
+ it.each(['independent','overlapping'])('preserves graph conflict rules after preparing %s edits',async kind=>{
+  const t=await mint(),doc=await createMarkup(t.token);
+  const response=await prepareUpdateRoute(request(`/api/artifacts/${doc.id}/prepare`,{method:'POST',token:t.token,json:{source:doc.markup!.replace('alpha','ALPHA'),edit_id:doc.edit_id,expectedVersion:doc.version}}),params({id:doc.id}));
+  expect(response.status).toBe(200);const prepared=await response.json();
+  await edit(t.token,doc.id,{edit_id:doc.edit_id,source:doc.markup!.replace(kind==='independent'?'beta':'alpha','OTHER')});
+  const applied=await editRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:{edit_id:prepared.edit_id,document_update:prepared.document_update}}),params({id:doc.id}));
+  expect(applied.status).toBe(kind==='independent'?200:409);
+  const head=await read(t.token,doc.id);expect(head.markup).toContain('OTHER');
+  expect(head.markup!.includes('ALPHA')).toBe(kind==='independent');
+ });
+ it('refuses incomplete observations, invalid metadata and unsafe source without writing',async()=>{
+  const t=await mint(),doc=await createMarkup(t.token);
+  for(const body of [
+   {source:'<p>Change</p>',edit_id:doc.edit_id},
+   {source:'<p>Change</p>',expectedVersion:doc.version},
+   {source:'<p>Change</p>',metadata:{visibility:'public'},edit_id:doc.edit_id,expectedVersion:doc.version},
+   {source:'<p onClick="run()">Unsafe</p>',edit_id:doc.edit_id,expectedVersion:doc.version},
+  ]){
+   const response=await prepareUpdateRoute(request(`/api/artifacts/${doc.id}/prepare`,{method:'POST',token:t.token,json:body}),params({id:doc.id}));
+   expect(response.status).toBe(400);
+  }
+  expect((await read(t.token,doc.id)).edit_id).toBe(doc.edit_id);
+ });
+ it('validates dataset-backed source through the existing authoring context without writing',async()=>{
+  const t=await mint(),doc=await createMarkup(t.token);
+  const created=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:t.token,json:{dataset:[{value:2}],title:'Data'}}));
+  expect(created.status).toBe(201);const dataset=await created.json();
+  const source=`<Helmet><Import name="data" src="ref:${dataset.id}" /><Query name="rows">{\`SELECT * FROM data.rows\`}</Query></Helmet><div><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`;
+  const response=await prepareUpdateRoute(request(`/api/artifacts/${doc.id}/prepare`,{method:'POST',token:t.token,json:{source,edit_id:doc.edit_id,expectedVersion:doc.version,metadata:{title:'Prepared data'}}}),params({id:doc.id}));
+  expect(response.status,await response.clone().text()).toBe(200);const prepared=await response.json();
+  expect((await read(t.token,doc.id)).markup).toBe(doc.markup);
+  const applied=await editRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:{edit_id:prepared.edit_id,document_update:prepared.document_update}}),params({id:doc.id}));
+  expect(applied.status,await applied.clone().text()).toBe(200);
+  expect((await read(t.token,doc.id)).title).toBe('Prepared data');
+ });
+ it('retains source-only validation without returning an edit or modifying the head',async()=>{
+  const t=await mint(),doc=await createMarkup(t.token);
+  const response=await prepareUpdateRoute(request(`/api/artifacts/${doc.id}/prepare`,{method:'POST',token:t.token,json:{source:doc.markup!.replace('alpha','ALPHA')}}),params({id:doc.id}));
+  expect(response.status).toBe(200);const result=await response.json();
+  expect(result.valid).toBe(true);expect(result.document_update).toBeUndefined();
+  expect((await read(t.token,doc.id)).edit_id).toBe(doc.edit_id);
+ });
+ it('refuses invalid dataset-backed SQL during preparation and leaves the original untouched',async()=>{
+  const t=await mint(),doc=await createMarkup(t.token);
+  const created=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:t.token,json:{dataset:[{value:2}]}}));
+  const dataset=await created.json();
+  const source=`<Helmet><Import name="data" src="ref:${dataset.id}" /><Query name="rows">{\`SELECT nonexistent FROM data.rows\`}</Query></Helmet><div><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`;
+  const response=await prepareUpdateRoute(request(`/api/artifacts/${doc.id}/prepare`,{method:'POST',token:t.token,json:{source,edit_id:doc.edit_id,expectedVersion:doc.version}}),params({id:doc.id}));
+  expect(response.status).toBe(400);expect((await read(t.token,doc.id)).edit_id).toBe(doc.edit_id);
+ });
+ it('refuses another token to prepare an owned document',async()=>{
+  const t=await mint(),other=await mint(),doc=await createMarkup(t.token);
+  const refused=await prepareUpdateRoute(request(`/api/artifacts/${doc.id}/prepare`,{method:'POST',token:other.token,json:{source:'<p>Intrusion</p>',edit_id:doc.edit_id,expectedVersion:doc.version}}),params({id:doc.id}));
+  expect([403,404]).toContain(refused.status);expect((await read(t.token,doc.id)).markup).toBe(doc.markup);
+ });
 });

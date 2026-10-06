@@ -137,12 +137,12 @@ export function imageTag(playwrightVersion) {
 
 /**
  * The dependency volume's name. It is keyed like CI's install cache — the normalised lockfile and
- * the two postinstall scripts that write into it — plus the image, whose Node and toolchain decide
+ * the postinstall scripts and vendored font sources that write into it — plus the image, whose Node and toolchain decide
  * the native binaries inside it.
- * @param {{lock: string, copyAssets: string, preparePty: string, image: string}} inputs
+ * @param {{lock: string, copyAssets: string, fontAssets?: string, preparePty: string, image: string}} inputs
  */
-export function depsVolume({ lock, copyAssets, preparePty, image }) {
-  return `afbin-gate-deps-${sha(lock, copyAssets, preparePty, image).slice(0, 16)}`;
+export function depsVolume({ lock, copyAssets, fontAssets = '', preparePty, image }) {
+  return `afbin-gate-deps-${sha(lock, copyAssets, fontAssets, preparePty, image).slice(0, 16)}`;
 }
 
 /** A container name docker accepts, unique per runner process. */

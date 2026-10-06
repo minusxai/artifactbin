@@ -105,7 +105,8 @@ test('the shipped user guide supplies a usable typed dataset resource and source
   const resource=parseResourceFile(yaml);
   assert.equal(resource.type,'dataset');
   assert.equal(resource.source,'people.jsx');
-  assert.equal(resource.access,'readwrite');
+  assert.equal(resource.access,undefined,'shared examples keep automatic grant defaults');
+  assert.equal(resource.policy,undefined,'shared examples do not select a legacy policy');
   await writeFile(join(root,'people.jsx'),jsx);
   const payload=await resourceContent(resource,join(root,'people.yaml'),root);
   const dataset=parseDatasetDefinition(String(payload.dataset));

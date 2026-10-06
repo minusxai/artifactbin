@@ -44,19 +44,22 @@ to it.
   question across steps with progressive `viz` overrides (gray, then one
   series accented, then the domain zoomed). No sticky; the live reader
   handles the figure.
-- Scenes and bands may run full-bleed (`-mx-6 @2xl:-mx-12`); keep prose at a
-  readable measure and contain overflow. Motion beyond the kit is class-scoped `@keyframes` in the
-  Helmet style, reduced-motion guarded ([markup-motion.md](markup-motion.md)).
+- Full-bleed bands are unpadded siblings of padded prose sections. Keep the
+  outer wrapper unpadded, bands `w-full overflow-hidden`, and prose sections
+  `px-6 @2xl:px-12` at a readable measure. Do not widen the document with negative margins:
+  clipping a ticker's children does not contain a wider band. Motion beyond the kit is
+  class-scoped `@keyframes` in the Helmet style, reduced-motion guarded
+  ([markup-motion.md](markup-motion.md)).
 
 Skeleton of the runtime pieces (publishable as is; the conceit is yours):
 
   <Helmet><Import name="t" src="ref:trf123" /><Query name="daily">{`select day, transits from t.rows order by 1`}</Query></Helmet>
-  <div data-design="tw" className="@container px-6 text-foreground @2xl:px-12">
-    <section className="mx-auto max-w-6xl py-16">
+  <div data-design="tw" className="@container text-foreground">
+    <section className="mx-auto max-w-6xl px-6 py-16 @2xl:px-12">
       <h1 className="animate-fade-up t-display-xl">The strait went dark.</h1>
       <p className="animate-fade-up [animation-delay:200ms] mt-6 max-w-prose t-body-l">Setup in one sentence, second person.</p>
     </section>
-    <section className="mx-auto max-w-6xl py-16">
+    <section className="mx-auto max-w-6xl px-6 py-16 @2xl:px-12">
       <p className="t-label">Chapter 02</p>
       <h2 className="reveal-up mt-6 t-display-l">Nobody turned around.</h2>
       <div className="reveal-up mt-10 border border-border p-4">

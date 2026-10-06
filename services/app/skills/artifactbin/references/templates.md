@@ -61,3 +61,15 @@ source blocks. Never author x/y/h in flow mode. A deliberate vertical resize
 sets `minHeight` in pixels; omit it for automatic height. Content always grows
 past that minimum, and Auto height clears it. Default positioned Grid keeps
 x/y/w/h geometry for dashboards whose embeds fill fixed tiles.
+
+## Native CSS grids on phones
+
+A native CSS grid's implicit track can grow to a table's content width even
+when the table has a scrollbar. At 390px, use `grid-template-columns:
+minmax(0, 1fr)` and `min-width: 0; max-width: 100%` on its direct children.
+Utility equivalent: `grid grid-cols-1 gap-6 @3xl:grid-cols-2`, with
+`min-w-0 max-w-full` on each child. Apply the same constraint through nested
+grid/flex wrappers around evidence. DataTable already owns horizontal
+scrolling; ordinary HTML tables need a bounded `overflow-x-auto` wrapper.
+Check the last column is reachable at 390px. Clipping the page does not fix
+a wide track or make hidden columns usable.

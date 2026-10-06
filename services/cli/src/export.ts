@@ -78,8 +78,11 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
     * stored, and the tracked file on disk IS the head. So a version pins the
     * target to the published id and never to the local render.
     */
+   // Refresh explicitly selects published image rendering. Local paths always
+   // mean the bytes on disk and cannot silently refresh a different resource.
+   if(options.refresh&&ref.kind==='path')throw new CliError('invalid_flags',`--refresh cannot render a local file: ${input}.`,'Drop --refresh to render the local file, or export its published artifact URL (or published ID with --refresh).');
    const atVersion=ref.version!==undefined;
-   const path=ref.kind==='path'?ref.path:atVersion||/^https?:\/\//.test(input)?undefined:localFiles[ref.id];
+   const path=ref.kind==='path'?ref.path:atVersion||options.refresh||/^https?:\/\//.test(input)?undefined:localFiles[ref.id];
    if(atVersion&&path!==undefined)throw new CliError('unsupported_version_export',`${input} names a local file and a version.`,`Export the published id at that version, e.g. afbin export <id>@${ref.version} --format ${format}, or the file as it stands.`);
    targets.push({ref:input,format,render:true,...(ref.version!==undefined?{version:ref.version}:{}),...(path!==undefined?{path}:{id:ref.kind==='id'?ref.id:undefined})});
   }else targets.push({ref:input,format,render:false,...(ref.kind==='id'?{id:ref.id,...(ref.version?{version:ref.version}:{})}:{path:ref.path,...(ref.version?{version:ref.version}:{})})});
