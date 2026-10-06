@@ -196,3 +196,45 @@ it('reuses current-attempt waiting for prepared CLI packages without accepting o
  await expect(waitForCurrentArtifact({...options,artifacts:async()=>({artifacts:[current,{...current,id:5}]})})).rejects.toThrow(/Multiple current-attempt/);
  time=0;await expect(waitForCurrentArtifact({...options,timeout:5000,artifacts:async()=>({artifacts:[{...current,expired:true}]})})).rejects.toThrow(/timed out/);
 });
+
+it('recovers a real gh transport timeout within the original artifact deadline',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-gh-transport-')),calls=join(directory,'calls'),gh=join(directory,'gh');
+ writeFileSync(gh,`#!${process.execPath}
+const fs=require('node:fs');const file=${JSON.stringify(calls)};const count=fs.existsSync(file)?Number(fs.readFileSync(file,'utf8')):0;fs.writeFileSync(file,String(count+1));if(!count)setInterval(()=>{},1000);else console.log(JSON.stringify({ready:true}));
+`);chmodSync(gh,0o755);
+ try{
+  const result=await requestCurrentArtifact(['api','fixture'],{command:gh,deadline:Date.now()+5000,requestTimeout:1000,retryDelay:1});
+  expect(JSON.parse(result)).toEqual({ready:true});expect(readFileSync(calls,'utf8')).toBe('2');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+it('does not retry real gh authorization failures',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-gh-permanent-')),calls=join(directory,'calls'),gh=join(directory,'gh');
+ writeFileSync(gh,`#!${process.execPath}
+const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},'call\\n');console.error('HTTP 403 forbidden');process.exit(1);
+`);chmodSync(gh,0o755);
+ try{
+  await expect(requestCurrentArtifact(['api','fixture'],{command:gh,deadline:Date.now()+2000,retryDelay:1})).rejects.toThrow(/403/);
+  expect(readFileSync(calls,'utf8')).toBe('call\n');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+it('bounds transport retries and each request by the original deadline',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ let time=0,calls=0;const timeouts=[];
+ const options={deadline:200,now:()=>time,requestTimeout:30,retryDelay:5,request:(_command,_args,options)=>{calls++;timeouts.push(options.timeout);time+=options.timeout;throw Object.assign(Error('transport timed out'),{code:'ETIMEDOUT'});},sleep:async delay=>{time+=delay;}};
+ await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow(/transport timed out/);
+ expect(calls).toBe(3);expect(time).toBe(100);expect(timeouts).toEqual([30,30,30]);
+ calls=0;time=198;await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow(/artifact timed out/);expect(calls).toBe(1);expect(time).toBe(200);expect(timeouts.at(-1)).toBe(2);
+});
+it('does not accept a candidate after requests consume the artifact deadline',async()=>{
+ const {waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');let time=0;
+ await expect(waitForCurrentArtifact({startedAt:'2026-10-06T00:00:00Z',timeout:100,now:()=>time,jobs:async()=>{time=100;return{jobs:[]};},artifacts:async()=>({artifacts:[{name:'afbin-npm-release',created_at:'2026-10-06T00:01:00Z'}]})})).rejects.toThrow(/artifact timed out/);
+});
+
+it('leaves malformed API responses and non-transport process failures authoritative',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');let calls=0;
+ const options={deadline:Date.now()+1000,request:()=>{calls++;return '{not-json';}};
+ await expect((async()=>JSON.parse(await requestCurrentArtifact(['api','fixture'],options)))()).rejects.toThrow();expect(calls).toBe(1);
+ calls=0;await expect(requestCurrentArtifact(['api','fixture'],{...options,request:()=>{calls++;throw Object.assign(Error('output exceeded'),{code:'ENOBUFS'});}})).rejects.toThrow('output exceeded');expect(calls).toBe(1);
+});

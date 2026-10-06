@@ -1,23 +1,44 @@
 /** Overlap prerequisite preparation with packaging without reusing another run or attempt.
- * API errors fail visibly; only an artifact not uploaded yet is polled. */
+ * Only bounded transport failures retry; API/schema errors fail visibly. */
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {existsSync,writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as sleep} from 'node:timers/promises';
-export async function waitForCurrentArtifact({startedAt,artifacts,jobs,now=Date.now,sleep:pause=sleep,timeout=180000,childFailed=()=>false,jobName='CLI npm pack',artifactName='afbin-npm-release'}) {
- const start=Date.parse(startedAt),deadline=now()+timeout;
+const artifactTimeout=()=>Error('Current-attempt CLI artifact timed out');
+/** Three transport attempts share the caller's original readiness deadline.
+ * gh HTTP failures use exit status, not these native transport error codes. */
+export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:pause=sleep,request=execFileSync,command='gh',requestTimeout=30000,retryDelay=1000,encoding='utf8',maxBuffer=1024*1024}){
+ for(let attempt=0;attempt<3;attempt++){
+  const remaining=deadline-now();
+  if(remaining<=0)throw artifactTimeout();
+  try{
+   const result=request(command,args,{encoding,maxBuffer,timeout:Math.max(1,Math.min(requestTimeout,remaining))});
+   if(now()>=deadline)throw artifactTimeout();
+   return result;
+  }catch(error){
+   if(!['ETIMEDOUT','ECONNRESET','EAI_AGAIN'].includes(error.code))throw error;
+   if(now()>=deadline)throw artifactTimeout();
+   if(attempt===2)throw error;
+   await pause(Math.min(retryDelay,deadline-now()));
+  }
+ }
+}
+export async function waitForCurrentArtifact({startedAt,artifacts,jobs,now=Date.now,sleep:pause=sleep,timeout=180000,deadline=now()+timeout,childFailed=()=>false,jobName='CLI npm pack',artifactName='afbin-npm-release'}) {
+ const start=Date.parse(startedAt);
  if(!Number.isFinite(start))throw Error('Missing current-attempt start');
  while(now()<deadline){
   if(childFailed())throw Error('Standard-user bootstrap child failed before candidate arrival');
   const packing=(await jobs()).jobs.find(job=>job.name===jobName);
+  if(now()>=deadline)throw artifactTimeout();
   if(packing?.status==='completed'&&packing.conclusion!=='success')throw Error(`${jobName} failed; no candidate can be accepted`);
   const available=(await artifacts()).artifacts.filter(artifact=>artifact.name===artifactName&&!artifact.expired&&Date.parse(artifact.created_at)>=start);
+  if(now()>=deadline)throw artifactTimeout();
   if(available.length>1)throw Error('Multiple current-attempt candidates');
   if(available.length===1)return available[0];
-  await pause(5000);
+  await pause(Math.min(5000,deadline-now()));
  }
- throw Error('Current-attempt CLI artifact timed out');
+ throw artifactTimeout();
 }
 export function verifyArtifactArchive(bytes,digest){
  const actual='sha256:'+createHash('sha256').update(bytes).digest('hex');
@@ -30,13 +51,14 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const [repo,run,attempt,output,failedFile]=args;
   const artifactName=waitOnly?(output??'afbin-npm-release'):'afbin-npm-release';
   if(!/^[\w.-]+\/[\w.-]+$/.test(repo??'')||!/^\d+$/.test(run??'')||!/^\d+$/.test(attempt??'')||(!waitOnly&&!output)||! /^[\w.-]+$/.test(artifactName))throw Error('Pass repository, run, attempt and output zip (or --wait-only with optional artifact name)');
-  const api=(path)=>JSON.parse(execFileSync('gh',['api',`/repos/${repo}/actions/${path}`],{encoding:'utf8',timeout:30000}));
-  const current=api(`runs/${run}/attempts/${attempt}`);
-  const artifact=await waitForCurrentArtifact({artifactName,startedAt:current.run_started_at,jobs:()=>api(`runs/${run}/attempts/${attempt}/jobs?per_page=100`),artifacts:()=>api(`runs/${run}/artifacts?per_page=100`),childFailed:()=>Boolean(failedFile&&existsSync(failedFile))});
+  const deadline=Date.now()+180000;
+  const api=async(path)=>JSON.parse(await requestCurrentArtifact(['api',`/repos/${repo}/actions/${path}`],{deadline}));
+  const current=await api(`runs/${run}/attempts/${attempt}`);
+  const artifact=await waitForCurrentArtifact({deadline,artifactName,startedAt:current.run_started_at,jobs:()=>api(`runs/${run}/attempts/${attempt}/jobs?per_page=100`),artifacts:()=>api(`runs/${run}/artifacts?per_page=100`),childFailed:()=>Boolean(failedFile&&existsSync(failedFile))});
   if(waitOnly){
    console.log(`Ready: same-run, same-attempt npm artifact ${artifact.id}`);
   }else{
-  const bytes=execFileSync('gh',['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{maxBuffer:64*1024*1024,timeout:30000});
+  const bytes=await requestCurrentArtifact(['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{deadline,encoding:null,maxBuffer:64*1024*1024});
   verifyArtifactArchive(bytes,artifact.digest);
   writeFileSync(output,bytes);
   console.log(`Downloaded same-run, same-attempt npm artifact ${artifact.id}`);
