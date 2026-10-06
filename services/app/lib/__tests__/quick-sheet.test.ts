@@ -70,6 +70,7 @@ describe('the installed short skill',()=>{
   // The publishing guide naming ~/.artifactbin/state.sqlite is
   // agent-docs-batch-identity.test.ts's assertion, in the whole sentence.
   expect(sheet).toContain('YAML fence');
+  for(const term of ['self-contained HTML','kit JSX','Tailwind `className`'])expect(sheet.slice(0,sheet.indexOf('npm CLI:'))).toContain(term);
   expect(sheet).toContain('edit_id');
  });
  it('routes design and vocabulary before the chosen page type and design system',()=>{
@@ -95,7 +96,7 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('the design system carries the palette');
   expect(sheet).toContain('does not verify appearance');
   expect(sheet).toContain('For visual review');
-  for(const term of ['Files/registered IDs use local data, unchanged by server mutations','afbin export <artifact-url> --output out.png','ID with `--refresh`','fresh published image; refuses local paths','afbin help publishing-versions'])expect(sheet).toContain(term);
+  for(const term of ['Files/registered IDs use local data, unchanged by server mutations','afbin export <artifact-url> --output out.png','ID with `--refresh`','fresh published image; refuses local paths','references/publishing-versions.md'])expect(sheet).toContain(term);
   const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');
   for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });
