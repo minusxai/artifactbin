@@ -158,7 +158,7 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
   it('packs once, runs the same tarball on every supported OS/runtime, and publishes those bytes',()=>{
     const pack=ci.jobs['cli-pack'];
     expect(pack).toBeDefined();
-    expect(pack.permissions).toEqual({contents:'read','id-token':'write'});
+    expect(pack.permissions).toEqual({contents:'read','id-token':'write',actions:'read'});
     const signing=pack.steps.find(step=>step.run?.includes('npm-provenance.mjs sign'));
     expect(signing.if).toContain("github.event.pull_request.head.repo.full_name == github.repository");
     expect(signing.run).not.toContain('GITHUB_SHA=');
