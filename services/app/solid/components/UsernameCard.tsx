@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { pageDataChanged, profileChanged } from '@/web/page-data-events';
-import { PANEL, MicroLabel } from './ui';
+import { Button } from './ui';
 import { apiFetch } from '../lib/api';
 
 export const HANDLE_REFUSALS: Record<string, string> = { username_taken: 'that handle is taken — pick another', invalid_username: '3–32 characters: lowercase letters, numbers, underscore (no hyphens)' };
@@ -20,10 +20,9 @@ export function UsernameCard(props: { username: string | null }): JSX.Element {
     if (response.ok && body.username) { setValue(body.username); setStatus('saved'); pageDataChanged(); profileChanged(); return; }
     setStatus(HANDLE_REFUSALS[body.error ?? ''] ?? 'could not save that handle');
   };
-  return <section class={`${PANEL} p-4`}><MicroLabel>handle</MicroLabel>
-    <form class="mt-2 flex items-center gap-2" onSubmit={event => { event.preventDefault(); void save(); }}><span class="w-4 text-center font-mono text-sm text-muted">@</span><span class="min-w-0 flex-1 sm:max-w-72"><input aria-label="Username" autocomplete="off" spellcheck={false} value={value()} onInput={event => setValue(event.currentTarget.value)} class="w-full rounded-[4px] border border-edge bg-surface px-3 py-2 text-sm" /></span><button type="submit" aria-label="Save username" disabled={busy() || !value().trim()} class="rounded-[4px] border border-fg bg-fg px-3 py-1.5 font-mono text-xs font-semibold text-bg">save</button></form>
-    <p class="mt-2 ml-6 font-mono text-[11px] text-faint">your documents live at <span class="text-muted">/@{value() || 'handle'}/…</span></p>
-    <p class="mt-1 ml-6 font-mono text-xs leading-relaxed text-muted">Renaming is safe: links already shared keep working — every URL resolves by the document’s id and corrects itself to the new handle.</p>
-    <Show when={status()}><p role="status" class={`mt-2 ml-6 font-mono text-xs ${status() === 'saved' ? 'text-accent' : 'text-danger'}`}>{status()}</p></Show>
+  return <section class="min-w-0"><label for="profile-username" class="text-sm font-medium">Handle</label>
+    <form class="mt-3 flex items-center gap-2" onSubmit={event => { event.preventDefault(); void save(); }}><div class="flex h-9 min-w-0 flex-1 items-center rounded-[4px] border border-edge bg-surface focus-within:border-accent"><span aria-hidden="true" class="pl-3 font-mono text-sm text-faint">@</span><input id="profile-username" aria-label="Username" autocomplete="off" spellcheck={false} value={value()} onInput={event => setValue(event.currentTarget.value)} class="min-w-0 w-full border-0 bg-transparent px-2 py-2 text-sm outline-none" /></div><Button type="submit" aria-label="Save username" disabled={busy() || !value().trim()} class="h-9 shrink-0">Save</Button></form>
+    <p class="mt-1 text-xs leading-relaxed text-muted">Renaming is safe: links already shared keep working.</p>
+    <Show when={status()}><p role="status" class={`mt-2 text-xs ${status() === 'saved' ? 'text-accent' : 'text-danger'}`}>{status()}</p></Show>
   </section>;
 }
