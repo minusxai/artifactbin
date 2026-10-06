@@ -996,11 +996,16 @@ jobs:
           ./services/cli/scripts/test-node-bootstrap.ps1 -WaitForArtifact
 
   cli:
-    needs: [ plan, cli-pack ]
+    # Allocate runners and prepare tooling while the exact package is being built.
+    # The bounded wait below preserves the current run/attempt and archive digests.
+    needs: [ plan ]
     if: needs.plan.outputs.cli == 'true'
     name: CLI npm (${{ matrix.os }} Node ${{ matrix.node }} ${{ matrix.phase }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -1044,10 +1049,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: afbin-npm-release
-          path: npm-candidate
       # Registry blobs can survive a package version bump. Consumers still own a fresh HOME,
       # node_modules and npm exec state; the harness copies only _cacache in/out.
       - id: dependency-cache-key
@@ -1063,10 +1064,25 @@ jobs:
           # Older npm cache blobs remain safe: npm checks shrinkwrap integrity during fresh install.
           restore-keys: |
             npm-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node }}-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}
-          path: .
+      - name: Wait for exact current-attempt CLI artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Thirty consumers share one API quota; poll less often than the single bootstrap proof.
+          node scripts/lib/ci-artifact-wait.mjs "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" npm-candidate.zip "" afbin-npm-release 15000
+          node scripts/lib/ci-artifact-wait.mjs "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" npm-seed.zip "" "afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}" 15000
+      - name: Extract verified CLI artifacts on Unix
+        if: runner.os != 'Windows'
+        run: |
+          unzip -q npm-candidate.zip -d npm-candidate
+          unzip -q npm-seed.zip
+      - name: Extract verified CLI artifacts on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Expand-Archive -LiteralPath npm-candidate.zip -DestinationPath npm-candidate
+          Expand-Archive -LiteralPath npm-seed.zip -DestinationPath .
       - name: Merge verified public download blobs without replacing this consumer's own cache
         run: node scripts/lib/npm-dependency-cache.mjs merge-seed npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar "${{ steps.dependency-cache-key.outputs.path }}"
       # Unix bootstrap owns a separate fresh cache and is cheap enough to run alongside npm.

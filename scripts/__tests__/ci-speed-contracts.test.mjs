@@ -136,3 +136,14 @@ it('preserves GitHub artifact archive checksum verification',async()=>{
  expect(()=>verifyArtifactArchive(Buffer.from('tampered'),digest)).toThrow(/checksum/);
  expect(()=>verifyArtifactArchive(Buffer.from('abc'),undefined)).toThrow(/checksum/);
 });
+
+it('waits independently for the exact platform seed while rejecting old, expired and duplicate artifacts',async()=>{
+ const {waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ const name='afbin-npm-dependency-seed-Windows-X64';let time=0,calls=0;
+ const artifact={id:4,name,created_at:'2026-10-06T00:01:00Z'};
+ const options={name,startedAt:'2026-10-06T00:00:00Z',now:()=>time,sleep:async()=>{time+=5000;},jobs:async()=>({jobs:[{name:'CLI npm pack',status:'in_progress'}]}),artifacts:async()=>({artifacts:++calls===1?[{...artifact,id:1,created_at:'2026-10-05T00:00:00Z'},{...artifact,id:2,expired:true},{id:3,name:'afbin-npm-release',created_at:artifact.created_at}]:[artifact]})};
+ expect((await waitForCurrentArtifact(options)).id).toBe(4);expect(calls).toBe(2);
+ await expect(waitForCurrentArtifact({...options,artifacts:async()=>({artifacts:[artifact,{...artifact,id:5}]})})).rejects.toThrow(/Multiple/);
+ await expect(waitForCurrentArtifact({...options,jobs:async()=>({jobs:[{name:'CLI npm pack',status:'completed',conclusion:'failure'}]})})).rejects.toThrow(/pack failed/);
+ await expect(waitForCurrentArtifact({...options,artifacts:async()=>{throw Error('API unavailable');}})).rejects.toThrow('API unavailable');
+});
