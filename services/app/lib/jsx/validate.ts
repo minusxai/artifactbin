@@ -345,7 +345,7 @@ function iframeErrors(el: JsxElement): ValidationError[] {
   const value = src?.value.static && typeof src.value.json === 'string' ? src.value.json : null;
   if (value === null || !isHttpsUrl(value)) {
     errors.push({
-      message: '<iframe> needs src="https://…" — an https player or page. YouTube (www.youtube-nocookie.com), Vimeo (player.vimeo.com) and Loom (www.loom.com) frame by default; declare any other host with <meta name="csp-frame" content="https://…" /> in <Helmet>',
+      message: '<iframe> needs src="https://…" — an https player or page. Popular players and posts (YouTube, Vimeo, Loom, X, Instagram, TikTok, Spotify, Figma, CodePen and more) frame by default; declare any other host with <meta name="csp-frame" content="https://…" /> in <Helmet>',
       attr: 'src', tag: el.tag, start: src?.start ?? el.start, end: src?.end ?? el.end,
     });
   }
