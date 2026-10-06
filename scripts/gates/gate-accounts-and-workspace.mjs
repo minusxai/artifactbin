@@ -511,8 +511,13 @@ async function forkLeg(owner) {
     await forker.unroute(forkEndpoint);
     const copyPath = new URL(forkResult.url, BASE).pathname;
     // Welcome is an intentional intermediate destination for this new account, not the copy's address.
+    // Only wait for commitment here: the copy's load can be interrupted by that redirect.
     await forker.waitForURL((u) => u.pathname === copyPath
-      || (u.pathname === '/welcome' && new URL(u.searchParams.get('callbackUrl') ?? '', BASE).pathname === copyPath), { timeout: 30000 });
+      || (u.pathname === '/welcome' && new URL(u.searchParams.get('callbackUrl') ?? '', BASE).pathname === copyPath), { timeout: 30000, waitUntil: 'commit' }).catch((cause) => {
+        const current = new URL(forker.url());
+        const callback = current.searchParams.get('callbackUrl');
+        throw new Error(`fork did not arrive at ${copyPath}; path=${current.pathname}, callback=${callback ? new URL(callback, BASE).pathname : 'none'}`, { cause });
+      });
     check(copyPath.startsWith('/@'), `the copy is at its new owner's address (${copyPath})`);
 
     // ── 6. the copy is theirs, and says where it came from ──
