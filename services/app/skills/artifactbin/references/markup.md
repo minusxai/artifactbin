@@ -13,8 +13,8 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
 <!--/bundle:skip-->
 - **Static JSX only**: literal props (strings, numbers, booleans, arrays,
   `{{…}}` objects), plus safe signal conditions; no arbitrary expressions,
-  spreads or inline handlers (`onClick=` is
-  rejected; the Helmet script attaches handlers with `addEventListener`). In
+  spreads or inline handlers (`onClick=`). Attach handlers in a Helmet script
+  with `addEventListener`. In
   JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
   `<html>`/`<head>`/`<body>`.
 - **Style with Tailwind classes via `className`**, starting from a
@@ -54,20 +54,18 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
 Kit components ([[ components | length ]]):
 `[[ components | join(' ') ]]`
 
-Plus the embeds `Question` `Number` and Helmet's `Import` `Value` `Query`
-`Mutation` `Notify` `Context`; a name outside it is rejected with the registry echoed
-back. Unknown props are ignored; bindings and Column contracts are checked at
-publish.
+Plus embeds `Question` `Number` and Helmet's `Import` `Value` `Query`
+`Mutation` `Notify` `Context`. Unknown names are rejected with the registry;
+unknown props are ignored. Bindings and Column contracts are checked at publish.
 
 [Conditions and dialogs](markup-state.md).
 
 [Accordion FAQ](markup-components.md).
 
-**HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
-(prose, headings, lists, tables, links, media, the bare controls `input`
-`select` `textarea` `button` (themed), SVG): an unlisted tag returns `400`
-with `allowed_html_tags`. Only these are refused
-outright, no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
+**HTML tags** — [[ tags | length ]] allowed: prose, headings, lists, tables,
+links, media, themed `input` `select` `textarea` `button`, SVG. Unlisted tags
+return `400` with `allowed_html_tags`; these are refused without a list:
+[% for t in refusedTags %]`[[ t ]]` [% endfor %].
 
 ## `<Helmet>` — the document's own head
 
@@ -111,9 +109,8 @@ The `<script>` module uses Solid, npm libraries and exported components
   `csp-script|style|img|media|frame`; readers are asked — [scripts](markup-scripts.md).
 <!--/bundle:skip-->
 - **Theme tokens first**: `text-muted-foreground`, `bg-muted`, `border-border`,
-  `bg-background` follow the active theme; hardcoded palettes fight it. ONE
-  bespoke accent (`text-[#e2483d]`) is legitimate for the one bold moment —
-  it will not follow a later theme switch.
+  `bg-background` follow the theme. One custom accent (`text-[#e2483d]`) is
+  allowed; it stays fixed when the theme changes.
 - `theme`, `template` and `colorMode` are top-level fields of the YAML fence
   atop the file you push, not Helmet content. No page type named → pick
   it from the content's shape ([templates.md](templates.md)); torn → ask the user. `colorMode`
