@@ -9,7 +9,9 @@ import {HttpClient} from '../src/http';
 import {stateFor} from '../src/state-access';
 import {digest} from '../src/files';
 import {configDir,withPrivateStateHome} from '../src/config';
-import type {Workspace} from '../src/workspace';
+import {loadWorkspace,saveTracking,type Workspace} from '../src/workspace';
+import {snapshotDocument} from '../src/local';
+import {writeDocument} from '../src/document';
 import {createDocumentGraph,graphSource} from '../../app/lib/story/graph/document-graph';
 import {applyGraphPatch} from '../../app/lib/story/graph/document-graph-patch';
 
@@ -41,6 +43,23 @@ async function fixture(){
  const client=new HttpClient({connection:{server:'https://example.com',token:'mxmx_test_publication'},home,account:'usr_one',fetch:request});
  return{root,workspace,client,heads,versions,calls,setLost:()=>{lose=true;},setConflict:()=>{conflict=true;},cleanup:()=>rm(root,{recursive:true,force:true})};
 }
+test('a pulled identity in a marked workspace updates its original and finalizes the authoring baseline',async()=>{
+ const f=await fixture();try{
+  const markup='<p id="text">One</p>',head={id:'old001',version:1,edit_id:'edit1',state:digest('old0011'),format:'markup',markup,document:createDocumentGraph(markup,1),title:null,theme:null,template:null,visibility:'unlisted' as const,link_role:'viewer' as const,parent_id:null,capabilities:{edit:true}};
+  f.heads.set(head.id,head);
+  const accepted=Buffer.from(writeDocument(snapshotDocument(head)));
+  await saveTracking(f.workspace,{server:f.client.connection.server,account:'usr_one',set:{'child.jsx':{id:head.id,file:digest(accepted),url:'https://example.com/a/old001',snapshot:head}}});
+  await writeFile(join(f.workspace.root,'child.jsx'),accepted.toString().replace('One','Updated'));
+  await publishLocalWorkspace(await loadWorkspace(f.workspace.cwd,f.workspace.home),['child.jsx'],f.client,{});
+  assert.equal(f.heads.size,1,'must not create a duplicate');
+  assert.match(f.heads.get(head.id).markup,/Updated/);
+  assert.ok(!f.calls.some(call=>call.path==='/api/artifacts/reservations'||call.method==='POST'&&call.path==='/api/artifacts'));
+  const current=await loadWorkspace(f.workspace.cwd,f.workspace.home),bytes=await readFile(join(f.workspace.root,'child.jsx'));
+  assert.equal(current.tracking?.files['child.jsx']?.snapshot.version,2);
+  assert.equal(current.tracking?.files['child.jsx']?.file,digest(bytes));
+  const count=f.calls.length;await publishLocalWorkspace(current,['child.jsx'],f.client,{});assert.equal(f.calls.length,count);
+ }finally{await f.cleanup();}
+});
 test('local publication maps nested document and row references while retaining source, reuses identities, and survives workspace moves',async()=>{
  const f=await fixture();try{
   const before=await readFile(join(f.workspace.root,'doc.jsx'));
