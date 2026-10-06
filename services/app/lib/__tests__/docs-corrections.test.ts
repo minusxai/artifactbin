@@ -341,8 +341,10 @@ describe('external asset URLs in markup', () => {
   it('the web-fonts bullet says an @font-face url is imported too', () => {
     expect(flat(markup)).toContain('An `@font-face` `url(https://…)` in your `<style>` is imported the same way');
   });
-  it('an <iframe src> frames a player, its default hosts and the csp-frame meta named', () => {
-    expect(flat(markup)).toContain('`<iframe src="https://…" title="…" />` frames a player: YouTube (nocookie), Vimeo, Loom; others need `csp-frame`.');
+  it('an <iframe src> frames a provider embed URL, the default providers listed and the csp-frame meta named', () => {
+    expect(flat(markup)).toContain('`<iframe src="https://…" title="…" />` frames a provider\'s embed URL (not its share link); popular providers frame by default, others need `csp-frame`.');
+    expect(flat(markup)).toContain('X `platform.twitter.com/embed/Tweet.html?id=<status id>`');
+    expect(flat(markup)).toContain('Forms, booking tools and Google (Maps, Docs) are not default');
   });
   it('a DataTable column of image URLs is declared, and served from our copy', () => {
     expect(flat(markup)).toContain('kind: "image"');

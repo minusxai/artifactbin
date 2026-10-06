@@ -129,9 +129,32 @@ Galleries: [image bindings](markup-repeat.md).
   Web URLs also work and are served as written.
 - In parent markup only `<img src>` and `<File src>` take a URL;
   `srcSet`/`background` reject an external one. `href` is free.
-- `<iframe src="https://…" title="…" />` frames a player: YouTube
-  (nocookie), Vimeo, Loom; others need `csp-frame`.
+- `<iframe src="https://…" title="…" />` frames a provider's embed URL
+  (not its share link); popular providers frame by default, others need `csp-frame`.
 <!--bundle:skip-->
+- Embed URLs that frame by default. Posts have no intrinsic height: set
+  `height` (or an `h-*` class) to fit, since nothing resizes the frame.
+  - Video: `www.youtube-nocookie.com/embed/<id>`, `player.vimeo.com/video/<id>`,
+    `www.loom.com/embed/<id>`, `fast.wistia.net/embed/iframe/<id>`,
+    `www.dailymotion.com/embed/video/<id>`, `www.tiktok.com/embed/v2/<id>`.
+  - Posts: X `platform.twitter.com/embed/Tweet.html?id=<status id>`,
+    Instagram `www.instagram.com/p/<code>/embed`, Bluesky
+    `embed.bsky.app/embed/<did>/app.bsky.feed.post/<rkey>`, Reddit
+    `embed.reddit.com/r/<sub>/comments/<id>/<slug>/`, LinkedIn
+    `www.linkedin.com/embed/feed/update/<urn>`, Threads
+    `www.threads.net/@<user>/post/<code>/embed`.
+  - Audio: `open.spotify.com/embed/<track|album|playlist|episode>/<id>`,
+    `w.soundcloud.com/player/?url=<encoded track url>`,
+    `embed.music.apple.com/…`, `embed.podcasts.apple.com/…`.
+  - Code: `codepen.io/<user>/embed/<pen>`, `codesandbox.io/embed/<id>`,
+    `stackblitz.com/edit/<project>?embed=1`.
+  - Design: `embed.figma.com/design/<key>?embed-host=share`,
+    `miro.com/app/live-embed/<board>/`, `www.canva.com/design/<id>/view?embed`.
+  - Data and maps: `observablehq.com/embed/<notebook>`,
+    `public.tableau.com/views/<workbook>/<sheet>?:embed=true`,
+    `www.openstreetmap.org/export/embed.html?bbox=<w>,<s>,<e>,<n>`.
+  - Forms, booking tools and Google (Maps, Docs) are not default: declare
+    them with `csp-frame`, and readers are asked.
 - An image `src` also binds: `"$pick"`, or `"https://…/{$pick}.png"` to
   compose one — the only braced position; the first reader imports it.
 <!--/bundle:skip-->

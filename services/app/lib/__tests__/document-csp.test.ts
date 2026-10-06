@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildDocumentCsp } from '@/lib/story/styles/document-csp';
+import { FRAME_HOSTS } from '@/lib/story/styles/document-sources';
 
 const SELF = 'https://416233784b39.pages.example.com';
 const APP = 'https://app.example.com';
@@ -35,8 +36,8 @@ describe('buildDocumentCsp', () => {
     expect(directive(csp, 'font-src')).toBe("font-src 'self' data: https://fonts.gstatic.com");
     expect(directive(csp, 'img-src')).toBe("img-src 'self' https: data: blob: https://app.example.com/api/users/");
     expect(directive(csp, 'media-src')).toBe("media-src 'self' https: blob:");
-    // An author <iframe> frames the retired <Video> card's players by default; any other host is a `csp-frame` meta.
-    expect(directive(csp, 'frame-src')).toBe('frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com');
+    // An author <iframe> frames popular providers' embed origins by default; any other host is a `csp-frame` meta.
+    expect(directive(csp, 'frame-src')).toBe(`frame-src ${FRAME_HOSTS.join(' ')}`);
     expect(directive(csp, 'form-action')).toBe("form-action 'none'");
     expect(directive(csp, 'base-uri')).toBe("base-uri 'none'");
   });
@@ -49,6 +50,17 @@ describe('buildDocumentCsp', () => {
     expect(directive(policy, 'connect-src')).not.toContain('/api/users/');
   });
 
+  it('frames popular embed origins by default, never a form tool, Google or a whole https: scheme', () => {
+    const frames = directive(csp, 'frame-src')!.split(' ').slice(1);
+    for (const host of ['https://www.youtube-nocookie.com', 'https://platform.twitter.com', 'https://www.instagram.com', 'https://www.tiktok.com', 'https://open.spotify.com', 'https://embed.figma.com', 'https://codepen.io', 'https://observablehq.com']) {
+      expect(frames).toContain(host);
+    }
+    for (const host of ['https://www.google.com', 'https://docs.google.com', 'https://form.typeform.com', 'https://calendly.com', 'https:']) {
+      expect(frames).not.toContain(host);
+    }
+    expect(frames.every((host) => /^https:\/\/[a-z0-9.-]+$/.test(host))).toBe(true);
+  });
+
   it('is framed by the app alone, and needs no sandbox: its origin is its own', () => {
     expect(directive(csp, 'frame-ancestors')).toBe(`frame-ancestors ${APP}`);
     expect(csp).not.toMatch(/(^|; )sandbox/);
@@ -57,7 +69,7 @@ describe('buildDocumentCsp', () => {
   it('appends https origins a document declares, per directive — never a connection, which goes through its /fetch door — and refuses anything else', () => {
     const extended = buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: ['https://api.example.org'], script: ['https://cdn.example.org'], style: ['https://css.example.org'], img: ['https://img.example.org'], frame: ['https://embed.example.org'], media: ['https://media.example.org'] } });
     expect(directive(extended, 'font-src')!.split(' ').at(-1)).toBe('https://css.example.org');
-    expect(directive(extended, 'frame-src')).toBe('frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com https://embed.example.org');
+    expect(directive(extended, 'frame-src')).toBe(`frame-src ${FRAME_HOSTS.join(' ')} https://embed.example.org`);
     expect(directive(extended, 'media-src')!.split(' ').at(-1)).toBe('https://media.example.org');
     expect(directive(extended, 'connect-src')).toBe(directive(csp, 'connect-src'));
     expect(extended).not.toContain('https://api.example.org');
