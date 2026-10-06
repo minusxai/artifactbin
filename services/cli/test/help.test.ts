@@ -586,3 +586,12 @@ test('workspace recovery teaching names explicit rebind, credential selection an
  assert.match(helpDocument('publishing'),/last observed/);
  assert.match(helpDocument('publishing'),/no ownership transfer/);
 });
+
+
+test('image export help distinguishes local inputs from fresh published rendering',()=>{
+ const help=commandHelp('export');
+ assert.match(help,/registered IDs.*local files/);
+ assert.match(help,/artifact URLs.*published/);
+ assert.match(help,/--refresh.*published.*ID/);
+ assert.match(help,/local file paths.*refused/);
+});

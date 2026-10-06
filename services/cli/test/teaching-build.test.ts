@@ -41,6 +41,12 @@ test('teaching bootstraps without its output and repairs stale output determinis
   for(const instruction of ['.artifactbin','local-to-remote ID mapping','credentials remain'])assert.ok(publishingGuide.includes(instruction),instruction);
   assert.doesNotMatch(publishingGuide,/writes nothing into your working directory|publication preserves them/);
   assert.match(bundle.files['references/publishing-versions.md'],/\.jsx\.html/);
+  const exportGuide=bundle.files['references/publishing-versions.md'];
+  assert.match(exportGuide,/--refresh.*published.*ID/);
+  assert.match(exportGuide,/local file paths.*refused/);
+  assert.match(exportGuide,/local dataset files.*server mutations/);
+  assert.match(bundle.files['SKILL.md'],/export <artifact-url>/);
+
   assert.doesNotMatch(bundle.files['references/publishing-versions.md'],/It requires a published head/);
   assert.ok(authGuide.includes('CLI__DISABLE_AUTO_UPDATES=true'));
   assert.ok(authGuide.includes('at most hourly'));
