@@ -112,6 +112,7 @@ export function DocumentPage(): JSX.Element {
   const [mode, setMode] = createSignal<'light' | 'dark'>(page?.surface?.colorMode === 'dark' ? 'dark' : 'light');
   /** The editor's bar is on screen (it replaces the entry skeleton). */
   const [editorMounted, setEditorMounted] = createSignal(false);
+  const [editorCodeOpen, setEditorCodeOpen] = createSignal(false);
   /** The name the editor's title field last showed: the bar's title when editing ends. */
   const [editorTitle, setEditorTitle] = createSignal<string | null>(null);
   const [initialAnnotationSelection, setInitialAnnotationSelection] = createSignal<StoryEditSelection | null>(null);
@@ -351,7 +352,7 @@ export function DocumentPage(): JSX.Element {
     <div ref={host} aria-label="Artifact viewport" />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
-      <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>
+      <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc' && (!editing() || !editorCodeOpen())}>
         <div class="fixed left-6" style={{ top: `${APP_BAR_H + (editing() ? EDIT_BAR_H : 0) + 12}px` }}><CopyAgentButton id={id!} template="doc" /></div>
       </Show>
       <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
@@ -393,7 +394,7 @@ export function DocumentPage(): JSX.Element {
           onCommentsHost={setCommentsHost} titleHost={phone() ? null : titleHost()}
           sharingContent={sharingContent} onPwaEnabledChange={setPwaEnabled}
           onEditorMount={() => setEditorMounted(true)} onEditorReady={lifecycle.ready}
-          onTitleChange={setEditorTitle} />
+          onTitleChange={setEditorTitle} onCodeViewChange={setEditorCodeOpen} />
       </Suspense>
     </Show>
     <Show when={sharingOpen() && id}>

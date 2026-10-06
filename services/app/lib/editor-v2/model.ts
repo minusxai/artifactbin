@@ -123,6 +123,15 @@ export const editorSchema = new Schema({
       toDOM: (node) => ['div', domAttributes(node), 0],
     },
     text: { group: 'inline' },
+    /** Saved checklist state. Reader controls are disabled; the editor owns persistence. */
+    task_checkbox: {
+      attrs: { ...metadata, tag: { default: 'input' }, checked: { default: false } },
+      inline: true,
+      atom: true,
+      group: 'inline',
+      selectable: false,
+      toDOM: node => ['input', { ...domAttributes(node), type: 'checkbox', disabled: '', 'aria-label': 'Task completed', ...(node.attrs.checked ? { checked: '' } : {}) }],
+    },
     /** A childless inline element — a colour swatch, an icon box — is content the reader draws. */
     inline_atom: {
       attrs: metadata,
@@ -172,6 +181,7 @@ export function isProseTree(node: JsxNode): boolean {
 }
 const proseTrees = new WeakMap<JsxElement, boolean>();
 function proseTreeOf(node: JsxElement): boolean {
+  if (node.tag === 'input') return taskCheckbox(node);
   if (
     !blockTags.has(node.tag) &&
     !containerTags.has(node.tag) &&
@@ -185,10 +195,18 @@ function proseTreeOf(node: JsxElement): boolean {
   if (node.attributes.some((a) => !a.value.static || (a.name.length === 5 && a.name.toLowerCase() === 'style'))) return false;
   return node.children.every(isProseTree);
 }
+/** Only inert, static checkboxes join prose. Script/data-bound controls remain renderer-owned. */
+function taskCheckbox(node: JsxElement): boolean {
+  const value = (name: string) => { const v = node.attributes.find(a => a.name === name)?.value; return v?.static ? v.json : undefined; };
+  return !node.children.length && node.attributes.every(a => a.value.static && a.name.toLowerCase() !== 'style')
+    && value('type') === 'checkbox' && value('disabled') === true
+    && (value('checked') === undefined || typeof value('checked') === 'boolean');
+}
 function inline(nodes: JsxNode[], marks: Mark[] = []): EditorNode[] {
   return nodes.flatMap((n) => {
     if (n.type === 'text') return n.value ? [editorSchema.text(n.value, marks)] : [];
     if (n.type !== 'element') return [];
+    if (n.tag === 'input' && taskCheckbox(n)) return [editorSchema.nodes.task_checkbox.create({ source: sourceMetadata(n), checked: n.attributes.some(a => a.name === 'checked' && a.value.static && a.value.json === true) })];
     if (n.tag === 'br') return [editorSchema.nodes.hard_break.create({ source: sourceMetadata(n) }, null, marks)];
     if (!n.children.length) return [editorSchema.nodes.inline_atom.create({ tag: n.tag, source: sourceMetadata(n) }, null, marks)];
     return inline(n.children, [
@@ -274,7 +292,7 @@ function blocks(nodes: JsxNode[]): EditorNode[] {
       run = [];
     };
     for (const child of n.children) {
-      if (child.type === 'text' || (child.type === 'element' && (inlineTags.has(child.tag) || child.tag === 'br')))
+      if (child.type === 'text' || (child.type === 'element' && (inlineTags.has(child.tag) || child.tag === 'br' || (child.tag === 'input' && taskCheckbox(child)))))
         run.push(child);
       else {
         flush();
@@ -296,7 +314,7 @@ function element(tag: string, children: JsxNode[], original?: JsxElement | null)
     isComponent: /^[A-Z]/.test(tag),
     attributes: original?.attributes ?? [],
     children,
-    selfClosing: ['br', 'hr', 'img'].includes(tag),
+    selfClosing: ['br', 'hr', 'img', 'input'].includes(tag),
     start: 0,
     end: 0,
   };
@@ -310,6 +328,14 @@ export function sourceNodes(doc: EditorNode): JsxNode[] {
     }
     let source: JsxNode;
     if (n.isText) source = { type: 'text', value: n.text!, start: 0, end: 0 };
+    else if (n.type === editorSchema.nodes.task_checkbox) {
+      const checkbox = element('input', [], n.attrs.source);
+      checkbox.attributes = [...checkbox.attributes.filter(a => !['type', 'checked', 'disabled', 'aria-label'].includes(a.name)),
+        attr('type', 'checkbox'), attr('aria-label', 'Task completed'),
+        { name: 'disabled', value: { static: true, json: true }, start: 0, end: 0 },
+        { name: 'checked', value: { static: true, json: !!n.attrs.checked }, start: 0, end: 0 }];
+      source = checkbox;
+    }
     else
       source = element(
         n.type.name === 'hard_break' ? 'br' : n.type.name === 'horizontal_rule' ? 'hr' : n.attrs.tag,

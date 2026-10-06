@@ -20,6 +20,8 @@ vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', rol
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
 import { copyText } from '../lib/copy-text';
 vi.mock('@/web/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
+// The test exercises the real editor tabs; CodeMirror geometry is outside this page-level contract.
+vi.mock('../editor/SourceEditor', () => ({ default: () => <textarea aria-label="Markup source" /> }));
 
 import { DocumentPage } from '../pages/Document';
 
@@ -70,6 +72,22 @@ it('places the doc agent handoff in trusted document navigation, outside the pag
   expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
   fireEvent.click(trusted().getByRole('button', { name: 'Copy for agent' }));
   await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('template: doc')));
+});
+
+it('hides the agent handoff in Code and restores it in Artifact', async () => {
+  mockRole = 'owner'; mockTemplate = 'doc';
+  const existing = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>', compiledCss: null, authorCss: null });
+    return existing(input, init);
+  });
+  mount('/a/doc#edit');
+  const code = await trusted(1).findByRole('tab', { name: 'Edit the source' });
+  expect(trusted().getByRole('button', { name: 'Copy for agent' })).toBeInTheDocument();
+  fireEvent.click(code);
+  await waitFor(() => expect(trusted().queryByRole('button', { name: 'Copy for agent' })).toBeNull());
+  fireEvent.click(trusted(1).getByRole('tab', { name: 'Edit on the page' }));
+  expect(trusted().getByRole('button', { name: 'Copy for agent' })).toBeInTheDocument();
 });
 
 it.each([['owner', 'app'], ['commenter', 'doc']])('omits the small agent button for %s viewing %s', (role, template) => {
