@@ -48,13 +48,15 @@ jobs:
       api: ${{ steps.select.outputs.api }}
       gates: ${{ steps.select.outputs.gates }}
       cli: ${{ steps.select.outputs.cli }}
+      # A moved-base patch reuses test evidence but must package its current source tree.
+      cli-pack: ${{ steps.select.outputs.cli-pack }}
       cli-bootstrap: ${{ steps.select.outputs.cli-bootstrap }}
       reference-compatibility: ${{ steps.select.outputs.reference-compatibility }}
       # Not a job: whether the node job runs the CLI source suite (every CLI change, not only a release).
       cli-tests: ${{ steps.select.outputs.cli-tests }}
       # Not a job either: whether `checks` must refuse this PR for shipping the CLI without a version.
       cli-bump: ${{ steps.select.outputs.cli-bump }}
-      # The run that already tested this exact tree, when there is one; empty otherwise.
+      # The exact-tree package producer: prior run for tree reuse, current run for patch reuse.
       source-run: ${{ steps.select.outputs.source-run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -838,7 +840,7 @@ jobs:
         if: always()
         run: node scripts/lib/ci-elapsed.mjs ci-attempt.json "$GITHUB_STEP_SUMMARY"
 
-  # RELEASE ONLY. Selected when the CLI version changed (scripts/lib/ci-plan.mjs `cliRelease`).
+  # Pack for a release, or when a tested patch needs a package from its current source tree.
   # Native acceptance consumes one universal tarball; packaging starts independently of app checks.
   # Ordinary CLI changes remain guarded by the bundle build and source suite in the node job.
   cli-pack:
@@ -847,7 +849,7 @@ jobs:
       contents: read
       id-token: write
     needs: [ plan ]
-    if: needs.plan.outputs.cli == 'true'
+    if: needs.plan.outputs.cli-pack == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -882,7 +884,7 @@ jobs:
       - run: npm run build -w services/cli
       - run: npm run pack:release -w services/cli
       - name: Sign the actual build's npm provenance
-        if: github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: fromJSON(needs.plan.outputs.plan).cliRelease && github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         env:
           GITHUB_REPOSITORY_VISIBILITY: public
           AFBIN_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
@@ -890,7 +892,9 @@ jobs:
         run: |
           version=$(node -p "require('./services/cli/package.json').version")
           node scripts/ci/npm-provenance.mjs sign "services/cli/dist/packages/afbin-cli-$version.tgz" "$version"
+      # Consumer-only repacks must not advertise a new npm release to the publisher.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: fromJSON(needs.plan.outputs.plan).cliRelease
         with:
           name: afbin-npm-release
           path: |
@@ -903,11 +907,13 @@ jobs:
           retention-days: 14
       # Source-vs-installed proof needs both locations, not another compilation of the same tree.
       - name: Archive the source build for reference conformance
+        if: needs.plan.outputs.reference-compatibility == 'true'
         run: |
           tar --exclude='services/cli/dist/packages' -cf afbin-reference-build.tar \
             services/cli/dist services/app/dist services/app/lib/build-assets \
             services/app/public/islands services/app/public/libraries services/app/server/routes.generated.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: needs.plan.outputs.reference-compatibility == 'true'
         with:
           name: afbin-reference-build
           path: afbin-reference-build.tar

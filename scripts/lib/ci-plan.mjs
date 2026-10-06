@@ -94,18 +94,18 @@ export const CI_MODULES = {
  * ordinary CLI change gets the bundle build and the CLI source suite in the node job (`cliTests`).
  * The "Release afbin" workflow pushes the branch that flips the version.
  */
-export function planCi(paths, { full = false, cliRelease = false, versionOnly = false, nightly = false, testedRun = null } = {}) {
+export function planCi(paths, { full = false, cliRelease = false, versionOnly = false, nightly = false, testedRun = null, testedPatch = false } = {}) {
   const nothing = Object.fromEntries(CI_JOBS.map((job) => [job, false]));
   // A TREE THIS REPOSITORY ALREADY TESTED. PR CI recorded it under its own hash when every selected
   // job passed; the push that merges it is the same bytes, so there is nothing left to learn — not
   // even `checks`, whose whole cost would be paid to re-typecheck a tree that already typechecked.
-  if (testedRun) return { full: false, cliRelease, cliTests: false, jobs: nothing, nodeRoots: [], testedRun, selection: 'tested tree' };
+  if (testedRun) return { full: false, cliRelease, cliPack: testedPatch, cliTests: false, jobs: nothing, nodeRoots: [], testedRun, selection: testedPatch ? 'tested patch, current-tree package' : 'tested tree' };
   // The nightly exists so the release-only CLI matrix cannot rot unseen between releases (and so its
   // caches stay warm on the default branch, which is what makes a release build fast).
-  if (nightly) return { full: false, cliRelease: true, cliTests: false, jobs: { ...nothing, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'nightly CLI matrix' };
+  if (nightly) return { full: false, cliRelease: true, cliPack: true, cliTests: false, jobs: { ...nothing, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'nightly CLI matrix' };
   // A VERSION BUMP AND NOTHING ELSE: the code under it is the code that just passed. Pack the
   // npm artifact (with native acceptance), typecheck, and skip the suite the unchanged tree already answered.
-  if (versionOnly) return { full: false, cliRelease: true, cliTests: false, jobs: { ...nothing, checks: true, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'version-only release' };
+  if (versionOnly) return { full: false, cliRelease: true, cliPack: true, cliTests: false, jobs: { ...nothing, checks: true, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'version-only release' };
   const changed = new Set();
   // Scanner configuration and its contract tests never enter a product bundle.
   // Keep workflow checks; mixed source or unknown inputs retain their normal selection.
@@ -157,12 +157,12 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
     ...(affected.size || scannerContracts ? ['scripts/'] : []),
     ...[...affected].filter((module) => module !== 'cli').map((module) => `services/${module}/`),
   ].sort();
-  return { full, cliRelease, cliTests, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };
+  return { full, cliRelease, cliPack: jobs.cli, cliTests, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };
 }
 
 /** A selected job must succeed; only an unselected job may be skipped. */
 export function checkCiResults(plan, results) {
-  return CI_JOBS.filter((job) =>
+  return [...CI_JOBS, ...(plan.cliPack ? ['cli-pack'] : [])].filter((job) =>
     results[job] !== 'success' && !(plan.jobs[job] === false && results[job] === 'skipped'));
 }
 

@@ -224,6 +224,7 @@ if (mode === 'plan') {
     && isVersionOnlyBump(changedLines(range, paths));
   // Order matters: a version-only push must PACK its universal npm artifact, because the publisher uploads it
   // from this run. Only after that does a tree we already tested get to select nothing at all.
+  let testedPatch = false;
   let testedRun = !nightly && !versionOnly && env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
   // THE TREE MISSED: another PR moved the base before this one merged. The PATCH may still be
   // recognisable (`patchIdOf` is invariant to that), and safe to skip re-testing when nothing that
@@ -233,7 +234,10 @@ if (mode === 'plan') {
     const patchId = patchIdOf(range);
     if (patchId) {
       const candidate = await testedRunForPatch(patchId);
-      if (candidate && patchGapIsSafe(candidate.base, base, paths)) testedRun = String(candidate.run_id);
+      if (candidate && patchGapIsSafe(candidate.base, base, paths)) {
+        testedRun = String(candidate.run_id);
+        testedPatch = true;
+      }
     }
   }
   const plan = planCi(paths ?? [], {
@@ -245,6 +249,7 @@ if (mode === 'plan') {
     versionOnly,
     nightly,
     testedRun,
+    testedPatch,
   });
   // The refusal belongs on the PR, where the branch can still bump. Main never reds for it: by then
   // the only honest fix would be another commit on main, which is what the rule exists to prevent.
@@ -252,10 +257,11 @@ if (mode === 'plan') {
   console.log(JSON.stringify(plan, null, 2));
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT,
     `plan=${JSON.stringify(plan)}\n` + CI_JOBS.map((job) => `${job}=${plan.jobs[job]}\n`).join('')
-    + `cli-tests=${plan.cliTests}\n` + `cli-bump=${cliBump}\n` + `source-run=${plan.testedRun ?? ''}\n`);
+    + `cli-pack=${plan.cliPack}\n` + `cli-tests=${plan.cliTests}\n` + `cli-bump=${cliBump}\n` + `source-run=${testedPatch ? env.GITHUB_RUN_ID : plan.testedRun ?? ''}\n`);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY,
     `CI selection: ${plan.selection}\n\n`
-    + (plan.testedRun ? `tree ${treeOf(head)} tested by run ${plan.testedRun}\n\n` : '')
+    + (plan.testedRun ? `${testedPatch ? 'patch' : 'tree ' + treeOf(head)} tested by run ${plan.testedRun}\n\n` : '')
+    + (testedPatch ? `Current-tree package produced by run ${env.GITHUB_RUN_ID}\n\n` : '')
     + CI_JOBS.map((job) => `- [${plan.jobs[job] ? 'x' : ' '}] ${job}`).join('\n')
     + `\n\nNode test roots: ${plan.nodeRoots.join(', ') || 'all'}\n`);
 } else if (mode === 'node') {

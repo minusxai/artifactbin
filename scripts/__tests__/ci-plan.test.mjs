@@ -194,6 +194,36 @@ describe('a tree is tested once', () => {
   });
 });
 
+describe('current-tree packaging for reused patch checks',()=>{
+ it('selects only pack, requires its success, and keeps app-only publication disabled',()=>{
+  const plan=planCi(['services/app/x.ts'],{testedRun:'4242',testedPatch:true});
+  expect(plan.cliPack).toBe(true);
+  expect(plan.cliRelease).toBe(false);
+  expect(Object.values(plan.jobs).some(Boolean)).toBe(false);
+  const results=Object.fromEntries(CI_JOBS.map(job=>[job,'skipped']));
+  for(const outcome of ['failure','skipped'])expect(checkCiResults(plan,{...results,'cli-pack':outcome})).toContain('cli-pack');
+  expect(checkCiResults(plan,{...results,'cli-pack':'success'})).toEqual([]);
+  expect(planCi(['services/app/x.ts'],{testedRun:'4242'}).cliPack).toBe(false);
+  const release=planCi(['services/cli/package.json'],{testedRun:'4242',testedPatch:true,cliRelease:true});
+  expect(release.cliRelease).toBe(true);
+  expect(release.cliPack).toBe(true);
+  expect(release.jobs.cli).toBe(false);
+ });
+ it('runs pack from its own output instead of coupling it to the native matrix',()=>{
+  const jobs=yaml.parse(readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8')).jobs;
+  expect(jobs.plan.outputs['cli-pack']).toBe('${{ steps.select.outputs.cli-pack }}');
+  expect(jobs['cli-pack'].if).toBe("needs.plan.outputs.cli-pack == 'true'");
+  const release=jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-npm-release');
+  expect(release.if).toBe('fromJSON(needs.plan.outputs.plan).cliRelease');
+  expect(jobs['cli-pack'].steps.find(step=>step.name==="Sign the actual build's npm provenance").if).toContain("fromJSON(needs.plan.outputs.plan).cliRelease");
+  expect(jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-npm-packages').if).toBeUndefined();
+  const archive=jobs['cli-pack'].steps.find(step=>step.name==='Archive the source build for reference conformance');
+  const upload=jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-reference-build');
+  expect(archive.if).toBe("needs.plan.outputs.reference-compatibility == 'true'");
+  expect(upload.if).toBe(archive.if);
+ });
+});
+
 describe('the CLI ships with a version or it does not ship', () => {
   it('refuses CLI source and build scripts that carry no bump', () => {
     expect(cliBumpRequired(['services/cli/src/runner.ts'])).toBe(true);
@@ -383,6 +413,7 @@ describe('GitHub CI adapter', () => {
       const reused = await planOutputServed(cwd, env);
       expect(asked[0]).toBe(`/repos/minusxai/artifactbin/actions/artifacts?name=tested-tree-${tree}&per_page=100`);
       expect(reused['source-run']).toBe('4242');
+      expect(reused['cli-pack']).toBe('false');
       for (const job of CI_JOBS) expect(reused[job], job).toBe('false');
       // An expired artifact is not evidence, and neither is an API that will not answer.
       answer = { status: 200, body: { artifacts: [{ id: 7, expired: true, workflow_run: { id: 4242 } }] } };
@@ -465,14 +496,17 @@ describe('GitHub CI adapter', () => {
       await new Promise((resolve) => api.listen(0, '127.0.0.1', resolve));
       try {
         const env = {
-          CI__EVENT: 'push', CI__BEFORE_SHA: before, CI__HEAD_SHA: head,
+          CI__EVENT: 'push', CI__BEFORE_SHA: before, CI__HEAD_SHA: head, GITHUB_RUN_ID: '5000',
           GITHUB_REPOSITORY: 'minusxai/artifactbin', GH_TOKEN: 'mxmx_test_token',
           GITHUB_API_URL: `http://127.0.0.1:${api.address().port}`,
         };
         // Disjoint: B never touched services/app/x.ts. Safe to skip re-testing A's own patch.
         const reused = await planOutputServed(cwd, env);
-        expect(reused['source-run']).toBe('4242');
+        expect(reused['source-run']).toBe('5000');
+        expect(reused['cli-pack']).toBe('true');
         for (const job of CI_JOBS) expect(reused[job], job).toBe('false');
+        execFileSync(process.execPath, [script, 'record-tree'], { cwd, encoding: 'utf8', env: { ...process.env, GITHUB_RUN_ID: '5000', CI__SOURCE_RUN: reused['source-run'], CI__EVENT: 'push' } });
+        expect(JSON.parse(readFileSync(path.join(cwd, 'tested-run/tested-run.json'), 'utf8'))).toEqual({ run_id: 5000 });
       } finally {
         api.close();
       }
@@ -685,7 +719,7 @@ describe('GitHub CI adapter', () => {
 
 describe('required CI result', () => {
   const plan = () => planCi(['services/cli/src/runner.ts'], { cliRelease: true });
-  const results = (p) => Object.fromEntries(CI_JOBS.map((j) => [j, p.jobs[j] ? 'success' : 'skipped']));
+  const results = (p) => ({ ...Object.fromEntries(CI_JOBS.map((j) => [j, p.jobs[j] ? 'success' : 'skipped'])), 'cli-pack': p.cliPack ? 'success' : 'skipped' });
 
   it('accepts intentional skips and successful selected jobs', () => {
     const p = plan();
