@@ -7,7 +7,7 @@
  * document the reader may not read.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { agentCookie, useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as viewerRoute } from '@/app/a/[id]/viewer/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
@@ -41,9 +41,10 @@ describe('GET /a/:id/viewer', () => {
     const who = await owner();
     const id = await publish(who.token, { markup: MIXED });
     asSession({ id: who.user.id, email: who.user.email ?? '' });
-    const res = await viewerRoute(request(`/a/${id}/viewer`), params(id));
+    const res = await viewerRoute(request(`/a/${id}/viewer`, { origin: 'same' }), params(id));
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
     const overlay = (await res.json()) as ViewerOverlay;
     expect(overlay.viewer?.id).toBe(who.user.id);
     expect(Object.keys(overlay.results.tables)).toEqual(['me']);
@@ -58,6 +59,37 @@ describe('GET /a/:id/viewer', () => {
     const overlay = (await (await viewerRoute(request(`/a/${id}/viewer`), params(id))).json()) as ViewerOverlay;
     expect(overlay.viewer).toBeNull();
     expect(overlay.results.tables.me).toMatchObject({ rows: [{ who: 'guest' }] });
+  });
+
+  it('answers an opaque-origin frame anonymously despite owner credentials, and CORS-opens only that response', async () => {
+    const who = await owner();
+    const ds = await publish(who.token, { dataset: [{ choice: 'ramen' }] });
+    const id = await publish(who.token, { markup: `<Helmet><Import name="d" src="ref:${ds}" /><Query name="me">{\`select coalesce($_me.id, 'guest') as who\`}</Query><Mutation name="vote">{\`insert into d.rows (choice) values ('tacos')\`}</Mutation></Helmet><DataTable data="$me" height="120px" />` });
+    asSession({ id: who.user.id, email: who.user.email ?? '' });
+
+    const res = await viewerRoute(request(`/a/${id}/viewer`, {
+      origin: 'null', token: who.token, cookie: await agentCookie([who.tokenId]),
+    }), params(id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const overlay = (await res.json()) as ViewerOverlay;
+    expect(overlay.viewer).toBeNull();
+    expect(overlay.results.tables.me).toMatchObject({ rows: [{ who: 'guest' }] });
+    expect(overlay.results.mutationAccess?.vote).toEqual(expect.any(String));
+  });
+
+  it('keeps an owner credential on an opaque-origin request from disclosing a private document', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { visibility: 'private', markup: MIXED });
+    asSession({ id: who.user.id, email: who.user.email ?? '' });
+
+    const res = await viewerRoute(request(`/a/${id}/viewer`, {
+      origin: 'null', token: who.token, cookie: await agentCookie([who.tokenId]),
+    }), params(id));
+    expect(res.status).toBe(404);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    expect(await res.json()).toMatchObject({ error: 'not_found' });
   });
 
   it('runs at the page\'s $ values from the query string', async () => {
