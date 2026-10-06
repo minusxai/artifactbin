@@ -21,6 +21,7 @@ const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
 const creates = () => fetchCalls.filter((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
 
 describe('picking a block from the rail', () => {
+  beforeEach(() => { vi.spyOn(captureScreen, 'captureAvailable').mockReturnValue(true); });
   const PICKED: StoryEditSelection = {
     kind: 'text', path: '2.1', nodeId: 'node-2-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
     ancestors: [{ path: '2', tag: 'section', hint: 'max-w-2xl' }],
@@ -47,6 +48,15 @@ describe('picking a block from the rail', () => {
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, path: '2.2', nodeId: 'node-2-2' } });
     expect(screen.getByLabelText('Annotation comment')).toHaveValue('');
     expect(beginCapture).not.toHaveBeenCalled();
+  });
+
+  it('keeps Screenshot usable where the browser cannot capture this tab: the area tool still starts', async () => {
+    vi.spyOn(captureScreen, 'captureAvailable').mockReturnValue(false);
+    layer({ railOpen: true, editId: 'edit-current' }); await flush();
+    const button = screen.getByRole('button', { name: 'Screenshot' });
+    expect(button).toBeEnabled();
+    fireEvent.click(button); await flush();
+    expect(screen.getByRole('status', { name: 'Screenshot tool active' })).toBeInTheDocument();
   });
 
   it('requests sharing only from Screenshot, then captures the selected area', async () => {
