@@ -19,11 +19,30 @@ export interface ParityData { tables?: Record<string, TableResult>; values?: Rec
  * DOM. A markup the oracle never saw has no reference: add the case with an explicit expected shape instead.
  */
 let oracle: Record<string, string> | null = null;
+/** The shared Slide sizing contract was added after the retired React reader was captured. */
+export function applyCurrentSlideLayout(html: string): string {
+  if (!html.includes('data-mx-slide')) return html;
+  const root = new JSDOM(`<div id="__slide-layout-reference">${html}</div>`).window.document.getElementById('__slide-layout-reference')!;
+  for (const slide of root.querySelectorAll<HTMLElement>('[data-mx-slide]')) {
+    const classes = slide.getAttribute('class') ?? '';
+    if (/(?:^|\s)w-full(?:\s|$)/.test(classes) && /(?:^|\s)min-w-0(?:\s|$)/.test(classes)) continue;
+    // The captured classes already include the old static Slide recipe. Add the new sizing
+    // utilities beside that base recipe without re-running the merger over authored classes.
+    const current = classes.startsWith('relative flex ')
+      ? classes.replace(/^relative flex /, 'relative flex w-full min-w-0 ')
+      : classes.startsWith('relative ')
+        ? classes.replace(/^relative /, 'relative w-full min-w-0 ')
+        : classes;
+    slide.setAttribute('class', current);
+  }
+  return root.innerHTML;
+}
+
 export function reactRender(markup: string, data?: ParityData): string {
   oracle ??= JSON.parse(readFileSync(path.join(import.meta.dirname, 'fixtures', 'react-oracle.json'), 'utf8')) as Record<string, string>;
   const recorded = oracle[JSON.stringify({ markup, data: data ?? null })];
   if (recorded === undefined) throw new Error(`no recorded React render for ${JSON.stringify(markup).slice(0, 120)}`);
-  return recorded;
+  return applyCurrentSlideLayout(recorded);
 }
 
 export interface Shape { tag: string; attrs: Record<string, string>; text: string; kids: Shape[] }
