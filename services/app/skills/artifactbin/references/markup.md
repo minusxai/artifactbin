@@ -5,7 +5,7 @@ description: >-
 ---
 ## Start
 
-`markup` is **static JSX data**. Helmet scripts add behaviour.
+`markup` is **static JSX data**. Scripts add behaviour.
 
 <!--bundle:skip-->
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
@@ -49,7 +49,7 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
 ```
 <!--/bundle:skip-->
 
-## Component vocabulary
+## Component vocabulary (the complete allowlist)
 
 Kit components ([[ components | length ]]):
 `[[ components | join(' ') ]]`
@@ -75,7 +75,7 @@ At most ONE per document: a `<Helmet>` holds one each of `<title>`, `<style>`
 and `<script>`; any number of metas and data declarations (`<Import>`, etc.;
 [data](markup-data.md)). It may appear anywhere; it is hoisted.
 
-`<Context src="ref:<documentId>" />` links a Doc; see [context](templates-doc.md#context).
+`<Context src="ref:<documentId>" />` links a Doc ([context](templates-doc.md#context)).
 
 ```jsx
 <Helmet>
