@@ -647,6 +647,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return page(c);
   });
   // The tour for people.
+  app.get('/docs', (c) => {
+    c.header('Vary', 'Accept');
+    c.header('Cache-Control', 'no-store');
+    return c.req.header('Accept')?.includes('text/html') ? c.redirect('/docs-human', 302) : apiNotFound(c);
+  });
   app.get('/docs-human', (c) => page(c));
   // Page data is finished JSON: brotli for a client that takes it (server/content-encoding).
   app.use('/api/page/*', dynamicEncoding());

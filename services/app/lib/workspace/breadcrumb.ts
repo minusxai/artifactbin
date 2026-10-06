@@ -72,8 +72,7 @@ export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
   // is not a page. Its name is the whole trail.
   if (path.startsWith('/a/')) return [{ label: named ?? 'artifact' }];
 
-  // `/docs-human` is the one docs page the app serves; every `/docs…` address
-  // is a 404 the shell never mounts under.
+  // Browser visits to `/docs` redirect here before the shell mounts.
   if (path === '/docs-human') return [{ label: 'docs' }];
 
   if (/^\/programs\/[^/]+\/edit$/.test(path)) return [{ label: named ?? 'edit program' }];
