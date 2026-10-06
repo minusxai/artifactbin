@@ -67,7 +67,7 @@ async function ready(page:Page){
 async function finishEditing(page:Page,fixtureKind:'data'|'prose'){
  const [saved]=await Promise.all([
   page.waitForResponse(response=>response.url().endsWith('/save')).then(async response=>{
-   assert.equal(response.status(),200,`Preview save failed (${response.status()}): ${await response.text()}`);
+   if(response.status()!==200)assert.fail(`Preview save failed (${response.status()}): ${await response.text()}`);
    return response;
   }),
   page.waitForNavigation({waitUntil:'load'}),
