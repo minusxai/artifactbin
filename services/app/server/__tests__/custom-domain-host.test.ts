@@ -512,6 +512,67 @@ describe('the settings API', () => {
     }
   });
 
+  it('maps exact custom paths to public documents, updates them and removes them without changing the homepage', async () => {
+    const w = await world();
+    settings.session = w.vivek.userId;
+    const save = (path: string, artifactId: string | null) => call('PATCH', '/api/my/domain', { path, artifactId });
+    expect((await call('PATCH', '/api/my/domain', { homepageArtifactId: w.post.id })).status).toBe(200);
+    expect((await save('/about', w.filed.id)).status).toBe(200);
+    expect((await save('/guides/start', w.local.id)).status).toBe(200);
+    expect(await (await call('GET', '/api/my/domain')).json()).toMatchObject({ domain: { homepageArtifactId: w.post.id, pathOverrides: [{ path: '/about', artifactId: w.filed.id }, { path: '/guides/start', artifactId: w.local.id }] } });
+    const mapped = await app().request(`${HOST}/about?capture=1`, { headers: { cookie: 'authjs.session-token=forged', authorization: 'Bearer forged' } });
+    expect(mapped.status).toBe(200);
+    expect(await mapped.text()).toContain(`<link rel="canonical" href="${HOST}/about">`);
+    noCookie(mapped);
+    const nested = await app().request(`${HOST}/guides/start`);
+    expect(nested.status).toBe(200);
+    expect(await nested.text()).toContain('Counter post');
+    const head = await app().request(`${HOST}/about`, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe('');
+    expect((await app().request(`${HOST}/about`, { method: 'POST' })).status).toBe(404);
+    expect((await app().request(`${HOST}/about/extra`)).status).toBe(404);
+    expect((await app().request(`${HOST}/${w.filed.id}`)).status).toBe(200);
+    expect(await (await app().request(`${APP}/a/${w.filed.id}/raw`)).text()).toContain(`<link rel="canonical" href="${HOST}/about">`);
+    expect((await save('/about', w.local.id)).status).toBe(200);
+    expect(await (await app().request(`${HOST}/about`)).text()).toContain('Counter post');
+    expect((await save('/about', null)).status).toBe(200);
+    expect((await app().request(`${HOST}/about`)).status).toBe(404);
+    expect(await (await app().request(`${HOST}/`)).text()).toContain('Hello from my blog');
+  });
+
+  it('rejects unsafe and reserved paths, ineligible documents and unauthenticated or cross-site writes', async () => {
+    const w = await world();
+    const save = (path: unknown, artifactId: unknown) => call('PATCH', '/api/my/domain', { path, artifactId });
+    expect((await save('/about', w.post.id)).status).toBe(401);
+    settings.session = w.vivek.userId;
+    for (const path of ['/', 'about', '//about', '/a/doc', '/api/test', '/assets/photo', '/islands/test', '/story/test', '/fonts/test', '/libraries/test', '/geojson/test', '/favicon.ico', '/about?x=1', '/about#top', '/%61', '/x/../about', '/x\\about', '/hello world', '/about/']) {
+      const refused = await save(path, w.post.id);
+      expect(refused.status, path).toBe(422);
+      expect(await refused.json()).toEqual({ error: 'invalid_path' });
+    }
+    expect((await save(42, w.post.id)).status).toBe(400);
+    expect((await save('/about', 42)).status).toBe(400);
+    for (const id of [w.quiet.id, w.secret.id, w.theirs.id, w.ds.id, w.folder.id, 'missing']) {
+      expect((await save('/about', id)).status, id).toBe(422);
+    }
+    const csrf = await app().request(`${APP}/api/my/domain`, { method: 'PATCH', headers: { origin: 'https://evil.example', 'content-type': 'application/json' }, body: JSON.stringify({ path: '/about', artifactId: w.post.id }) });
+    expect(csrf.status).toBe(403);
+    expect((await save('/about', w.post.id)).status).toBe(200);
+    const db = await getDb();
+    for (const mutation of ["visibility = 'private'", "visibility = 'unlisted'", 'deleted_at = now()', 'user_id = $2']) {
+      await db.query(`UPDATE artifacts SET ${mutation} WHERE id = $1`, mutation.includes('$2') ? [w.post.id, w.other.userId] : [w.post.id]);
+      expect((await app().request(`${HOST}/about`)).status, mutation).toBe(404);
+      await db.query("UPDATE artifacts SET visibility = 'public', deleted_at = NULL, user_id = $2 WHERE id = $1", [w.post.id, w.vivek.userId]);
+    }
+    settings.session = w.other.userId;
+    expect((await save('/about', w.theirs.id)).status).toBe(404);
+    settings.session = w.vivek.userId;
+    await removeDomain(w.vivek.userId);
+    await verified(w.vivek.userId);
+    expect((await app().request(`${HOST}/about`)).status).toBe(404);
+  });
+
   it('sets only an owned public document as homepage and serves it safely at the root', async () => {
     const w = await world();
     settings.session = w.vivek.userId;
@@ -559,6 +620,21 @@ describe('the settings API', () => {
     expect(crossSite.status).toBe(403);
     settings.session = w.other.userId;
     expect((await call('PATCH', '/api/my/domain', { homepageArtifactId: w.theirs.id })).status).toBe(404);
+  });
+
+  it('preserves concurrent path edits and limits new mappings while allowing existing ones to be changed or removed', async () => {
+    const w = await world();
+    settings.session = w.vivek.userId;
+    const save = (path: string, artifactId: string | null) => call('PATCH', '/api/my/domain', { path, artifactId });
+    const changes = await Promise.all([save('/first', w.post.id), save('/second', w.filed.id)]);
+    expect(changes.map(response => response.status)).toEqual([200, 200]);
+    expect(await (await call('GET', '/api/my/domain')).json()).toMatchObject({ domain: { pathOverrides: [{ path: '/first', artifactId: w.post.id }, { path: '/second', artifactId: w.filed.id }] } });
+    const paths = Object.fromEntries(Array.from({ length: 50 }, (_, index) => [`/page-${index}`, w.post.id]));
+    await (await getDb()).query('UPDATE custom_domains SET path_overrides = $2::jsonb WHERE user_id = $1', [w.vivek.userId, JSON.stringify(paths)]);
+    expect(await (await save('/extra', w.post.id)).json()).toEqual({ error: 'path_limit' });
+    expect((await save('/page-0', w.filed.id)).status).toBe(200);
+    expect((await save('/page-1', null)).status).toBe(200);
+    expect((await save('/extra', w.post.id)).status).toBe(200);
   });
 
   it('attaches, reports, verifies with a named failure, verifies, and removes', async () => {

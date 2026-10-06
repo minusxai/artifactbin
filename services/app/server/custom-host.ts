@@ -7,6 +7,7 @@
  *
  *   GET/HEAD /                      the owner's home page: their profile listing (lib/custom-domain-home)
  *   GET/HEAD /<id>[-<slug>]         a post: the owner's public document, bare
+ *   GET/HEAD /<custom-path>         an exact configured path to an owner's public document
  *   /a/<id>/query                   GET; POST only with the reader's local tables
  *   /a/<id>/mutate                  POST only for a `scope="local"` Mutation; OPTIONS
  *   /a/<id>/events, /events/frame   GET
@@ -35,7 +36,7 @@ import { ACTOR_HEADER, BUILD_ASSET_PATH } from '@artifactbin/contracts';
 import { isBuildAssetPath } from '@artifactbin/utils';
 import { getArtifactById, declarationsForRow } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL } from '@/lib/platform';
-import { customHostCandidate, domainHomepage, ownerForHost, servesDocument, servesEmbeddedArtifact, servesWebAsset } from '@/lib/serving';
+import { customHostCandidate, domainHomepage, domainPath, ownerForHost, servesDocument, servesEmbeddedArtifact, servesWebAsset } from '@/lib/serving';
 import { DOMAIN_HOME_CSP, renderDomainHome, type ProfileListingData } from '@/lib/serving';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -306,6 +307,14 @@ export function customHostBoundary(options: CustomHostOptions = {}): MiddlewareH
       return;
     }
     if (path === '/' && readable) return withoutCookies(await home(request, hostname, ownerId, stylesheets));
+    if (readable) {
+      const mapping = await domainPath(ownerId, path);
+      if (mapping) {
+        if (!mapping.artifact) return notFound();
+        const guest = await asGuest(request);
+        return withoutCookies(await runWithRequest(guest, async () => (request.method === 'HEAD' ? rawHead : rawGet)(guest, { params: Promise.resolve({ id: mapping.artifact!.id }), domain: { hostname, ownerId, path } })));
+      }
+    }
     if (readable) {
       const bytes = await embedded(request, path, ownerId);
       if (bytes) return withoutCookies(bytes);

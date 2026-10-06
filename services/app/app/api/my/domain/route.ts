@@ -8,11 +8,14 @@
  *          shown even while the flag is off, so it can still be removed.
  * POST   { hostname } → 201 the pending domain with its two records;
  *          400 invalid_hostname, 409 taken / limit, 403 disabled.
+ * PATCH  { homepageArtifactId } selects the homepage; { path, artifactId }
+ *          sets one exact custom path, or removes it when artifactId is null.
+ *          Both admit only this account's live public markup documents.
  * DELETE → 204, whatever the flag says.
  */
 import { auth } from '@/auth';
 import { CUSTOM_DOMAINS_TARGET } from '@/lib/platform';
-import { attachDomain, domainHomepageOptions, setDomainHomepage, domainOf, domainResolver, removeDomain } from '@/lib/serving';
+import { attachDomain, domainHomepageOptions, setDomainHomepage, setDomainPath, domainOf, domainResolver, removeDomain } from '@/lib/serving';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -50,12 +53,18 @@ export async function DELETE(request: Request) {
   return new Response(null, { status: 204, headers: NO_STORE });
 }
 
-/** A null selection restores the default listing; only owned public documents can be selected. */
+/** Cookie-authenticated publishing settings. Null removes a path or restores the homepage listing. */
 export async function PATCH(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return unauthorized(request);
   if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403, NO_STORE);
   const body = await readJson(request);
+  if (body && 'path' in body) {
+    if (typeof body.path !== 'string' || !(body.artifactId === null || typeof body.artifactId === 'string') || 'homepageArtifactId' in body) return json({ error: 'invalid_path' }, 400, NO_STORE);
+    const result = await setDomainPath(session.user.id, body.path, body.artifactId);
+    if ('error' in result) return json(result, result.error === 'not_found' ? 404 : 422, NO_STORE);
+    return json(result, 200, NO_STORE);
+  }
   if (!body || !(body.homepageArtifactId === null || typeof body.homepageArtifactId === 'string')) return json({ error: 'invalid_homepage' }, 400, NO_STORE);
   const result = await setDomainHomepage(session.user.id, body.homepageArtifactId);
   if ('error' in result) return json(result, result.error === 'not_found' ? 404 : 422, NO_STORE);

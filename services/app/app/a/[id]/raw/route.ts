@@ -70,20 +70,11 @@ const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title>
  * a footer back to the app, and a self-canonical on the domain; every
  * capture, archive and editing switch on the URL is ignored.
  */
-export interface DomainPost { hostname: string; ownerId: string; homepage?: boolean }
+export interface DomainPost { hostname: string; ownerId: string; homepage?: boolean; path?: string }
 
 const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
 
-
-/**
- * A POST ON ITS OWNER'S CUSTOM DOMAIN (server/custom-host). Only the host
- * boundary sets it — the router passes params alone — so no request can ask
- * for this mode. It renders the reader copy with no reader chrome and no doors,
- * a footer back to the app, and a self-canonical on the domain; every
- * capture, archive and editing switch on the URL is ignored.
- */
-export interface DomainPost { hostname: string; ownerId: string; homepage?: boolean }
 
 /**
  * THE STORY FRAGMENT (`GET /a/:id/story`, app/a/[id]/story): the compiled document's newest version as
@@ -370,7 +361,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           head: chrome
             ? {
               description: row.description,
-              canonical: domain?.homepage ? `https://${domain.hostname}/` : await canonicalDocumentUrl(artifact),
+              canonical: domain?.homepage ? `https://${domain.hostname}/` : domain?.path ? `https://${domain.hostname}${domain.path}` : await canonicalDocumentUrl(artifact),
               social: { title: displayTitle(row), description: row.description, image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}` },
               help: reader ? agentDiscovery(base) : null,
             }

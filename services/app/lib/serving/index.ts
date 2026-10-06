@@ -16,6 +16,7 @@ export { BASEMAP_ALLOWED, BASEMAP_UPSTREAM } from './basemap';
 export { DOMAIN_HOME_CSP, linkedStylesheets, renderDomainHome } from './custom-domain-home';
 export type { ProfileListingData } from './custom-domain-home';
 export { attachDomain, canonicalDocumentUrl, customHostCandidate, domainHomepage, domainHomepageOptions, setDomainHomepage, domainOf, domainPostUrl, domainResolver, isServable, normalizeHostname, ownerForHost, recheckDomains, removeDomain, servesDocument, servesEmbeddedArtifact, servesWebAsset, setDomainResolver, startDomainRecheck, verifiedHostOf, verifyDomain } from './custom-domains';
+export { domainPath, setDomainPath } from './custom-domains';
 export type { CaaRecord, DomainResolver } from './custom-domains';
 export { mintExportKey, verifyExportKey } from './export-read-key';
 export { GITHUB_EXTERNAL_URL } from './github-star';
