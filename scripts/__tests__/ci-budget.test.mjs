@@ -208,7 +208,7 @@ it('creates a fresh seed with bounded npm cache operations instead of selecting 
   expect(calls.every(args=>args.includes('--ignore-scripts')&&args.includes('--userconfig'))).toBe(true);
   const steps=workflow().jobs['cli-pack'].steps;expect(steps.some(step=>step.id==='npm-seed-key')).toBe(true);
   expect(steps.some(step=>step.run?.includes('prepare-seed'))).toBe(true);
-  expect(steps.filter(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).map(step=>step.with.name)).toEqual(['Linux-X64','Linux-ARM64','macOS-X64','macOS-ARM64','Windows-X64'].map(platform=>'afbin-npm-dependency-seed-'+platform));
+  expect(steps.filter(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).map(step=>step.with.name)).toEqual(['Windows-X64','Linux-X64','Linux-ARM64','macOS-X64','macOS-ARM64'].map(platform=>'afbin-npm-dependency-seed-'+platform));
   expect(workflow().jobs.cli.steps.find(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).with.name).toBe('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
@@ -221,5 +221,22 @@ it('warns rather than fails when a PR consumer includes a long prerequisite wait
   const result=spawnSync('bash',['-c',step.run],{cwd:directory,encoding:'utf8',env:{PATH:directory+':'+process.env.PATH,BUDGET_S:'240',GITHUB_REPOSITORY:'test/repo',GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1',GITHUB_EVENT_NAME:'pull_request',GITHUB_STEP_SUMMARY:summary}});
   expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('::warning::');expect(result.stdout).toContain('259s');
   expect(readFileSync(summary,'utf8')).toContain('259');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('packs independent platform seeds with bounded concurrent npm processes',async()=>{
+ const {packPlatformNpmSeeds}=await import('../lib/npm-dependency-cache.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-pack-concurrency-')),source=join(directory,'source');
+ const {mkdir,writeFile}=await import('node:fs/promises');await mkdir(join(source,'_cacache/index-v5'),{recursive:true});
+ const url='https://registry.npmjs.org/a/-/a-1.tgz',integrity='sha512-test';
+ await writeFile(join(source,'_cacache/index-v5/entry'),'hash\t'+JSON.stringify({key:'make-fetch-happen:request-cache:'+url,integrity})+'\n');
+ const lock=JSON.stringify({packages:{'':{},'node_modules/a':{resolved:url,integrity}}});
+ let active=0,max=0;const archives=[];
+ try {
+  await packPlatformNpmSeeds(source,join(directory,'output'),lock,{concurrency:2,run:async(command,args)=>{
+   active++;max=Math.max(max,active);await new Promise(resolve=>setTimeout(resolve,10));
+   if(command==='tar'){archives.push(args[1]);await writeFile(args[1],'test archive');}active--;
+  }});
+  expect(max).toBe(2);expect(archives).toHaveLength(5);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });

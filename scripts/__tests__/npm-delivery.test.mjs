@@ -9,7 +9,7 @@ import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import {realpathSync} from 'node:fs';
 import {populateNpmSeed} from '../lib/npm-dependency-cache.mjs';
-import {npmConsumerArgs,npmConsumerInstallArgs} from '../../services/cli/scripts/npm-consumer-args.mjs';
+import {npmConsumerArgs,npmConsumerInstallArgs,npmInstallPhaseTimings} from '../../services/cli/scripts/npm-consumer-args.mjs';
 const npmCli=process.env.npm_execpath??realpathSync(spawnSync('/bin/sh',['-c','command -v npm'],{encoding:'utf8'}).stdout.trim());
 const pack=new URL('../../services/cli/scripts/pack-release.mjs',import.meta.url);
 const transition=new URL('../../services/cli/scripts/transition-assets.mjs',import.meta.url);
@@ -97,7 +97,19 @@ it('reifies a locked dependency from npm-owned manifest and tarball seed with th
  const consumer=join(root,'fresh-consumer');await mkdir(consumer);await writeFile(join(consumer,'package.json'),'{}');
  const installed=spawnSync(process.execPath,[npmCli,...npmConsumerInstallArgs(join(root,'packed/afbin-cli-0.1.0.tgz'),true)],{cwd:consumer,env:{...process.env,npm_config_cache:seed,npm_config_registry:new URL(url).origin,npm_config_fetch_retries:'0'},encoding:'utf8',timeout:15000});
  expect(installed.status,installed.stdout+installed.stderr).toBe(0);
+ const phases=await npmInstallPhaseTimings(join(seed,'_logs'));
+ expect(phases.npm).toBeGreaterThan(0);expect(phases.reify).toBeGreaterThanOrEqual(0);
  expect(await readFile(join(consumer,'node_modules/@afbin/cli/lifecycle-ran'),'utf8')).toBe('candidate');
  const dependencyInstalled=dirname(createRequire(join(consumer,'node_modules/@afbin/cli/package.json')).resolve('mxmx-seed-fixture/package.json'));
  expect(await readFile(join(dependencyInstalled,'lifecycle-ran'),'utf8')).toBe('dependency');
 }));
+
+it('reports only numeric allowlisted npm phase timings without paths or credentials',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-timing-'));
+ try {
+  await writeFile(join(directory,'install-timing.json'),JSON.stringify({timers:{npm:137600,'reify:unpack':100000,'build:run:postinstall':2000,'reify:/secret-path':99,'token':999},metadata:{token:'secret'}}));
+  expect(await npmInstallPhaseTimings(directory)).toEqual({npm:137600,'reify:unpack':100000,'build:run:postinstall':2000});
+  expect(await npmInstallPhaseTimings(join(directory,'absent'))).toEqual({});
+  expect(npmConsumerInstallArgs('candidate.tgz',true)).toContain('--timing');
+ }finally{await rm(directory,{recursive:true,force:true});}
+});

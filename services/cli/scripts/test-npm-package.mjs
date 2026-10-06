@@ -8,7 +8,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {mergeNpmDependencyCache} from '../../../scripts/lib/npm-dependency-cache.mjs';
 import {installNpmConsumer} from '../../../scripts/lib/npm-consumer-install.mjs';
-import {npmConsumerArgs} from './npm-consumer-args.mjs';
+import {npmConsumerArgs,npmInstallPhaseTimings} from './npm-consumer-args.mjs';
 import {runAcceptanceProcesses} from './acceptance-processes.mjs';
 import {cleanupFailedNativeConsumer} from './native-consumer-lifecycle.mjs';
 const ci=process.argv[2]==='--ci';
@@ -40,6 +40,7 @@ try{
  const seeded=dependencyCache?await mergeNpmDependencyCache(dependencyCache,env.npm_config_cache):false;
  if(dependencyCache&&!seeded)throw Error('Expected verified npm download seed before offline consumer install');
  const {output:installOutput}=await installNpmConsumer({npm,tarball,cwd:root,env,seeded});
+ console.log('Npm install phases (ms): '+JSON.stringify(await npmInstallPhaseTimings(join(env.npm_config_cache,'_logs'))));
  assert.doesNotMatch(installOutput,/Rebuilding because|gyp info|gyp ERR/,'Supported native consumers must use prebuilt dependencies, without a compiler fallback');
  const cli=join(root,'node_modules/@afbin/cli');
  assert.ok(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));

@@ -986,6 +986,14 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: needs.plan.outputs.cli == 'true'
         with:
+          name: afbin-npm-dependency-seed-Windows-X64
+          path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-Windows-X64.tar
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: needs.plan.outputs.cli == 'true'
+        with:
           name: afbin-npm-dependency-seed-Linux-X64
           path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-Linux-X64.tar
           compression-level: 0
@@ -1012,14 +1020,6 @@ jobs:
         with:
           name: afbin-npm-dependency-seed-macOS-ARM64
           path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-macOS-ARM64.tar
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 1
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: needs.plan.outputs.cli == 'true'
-        with:
-          name: afbin-npm-dependency-seed-Windows-X64
-          path: .ci-cache-key/npm-platform-seeds/npm-dependency-seed-Windows-X64.tar
           compression-level: 0
           if-no-files-found: error
           retention-days: 1

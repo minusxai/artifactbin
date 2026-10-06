@@ -5,6 +5,7 @@ import {cp,mkdir,readdir,readFile,writeFile} from 'node:fs/promises';
 import {execFile,execFileSync} from 'node:child_process';
 import {readFileSync,appendFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
+import {availableParallelism} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 /** Universal public seed archives depend on the pinned graph, not the candidate version or Node ABI. */
@@ -135,7 +136,9 @@ export async function assertPublicNpmCache(directory,dependencies){
  if(seenManifests.size!==manifestNames.size)throw Error('Incomplete npm seed manifests');
  return records;
 }
-export async function packPlatformNpmSeeds(source,output,lockText){
+export async function packPlatformNpmSeeds(source,output,lockText,{concurrency=Math.min(3,availableParallelism()),run}={}){
+ if(!Number.isInteger(concurrency)||concurrency<1||concurrency>3)throw Error('Expected one to three seed packing workers');
+ const invoke=run??((command,args)=>new Promise((resolve,reject)=>execFile(command,args,error=>error?reject(error):resolve())));
  await assertPublicNpmCache(source);
  // Use the producing npm's own cache API. CLI cache clean deletes shared content
  // and stops at the first missing alias, so it cannot safely prune platform entries.
@@ -148,18 +151,21 @@ export async function packPlatformNpmSeeds(source,output,lockText){
   else for(const line of (await readFile(file,'utf8')).split('\n').filter(Boolean))records.push(JSON.parse(line.slice(line.indexOf('\t')+1)));
  }};
  await visit(join(source,'_cacache','index-v5'));
- for(const [runnerOs,runnerArch,os,cpu] of seedPlatforms){
+ const pack=async([runnerOs,runnerArch,os,cpu])=>{
   const dependencies=npmSeedDependencies(lockText,{os,cpu});
   const stage=join(output,`${runnerOs}-${runnerArch}`);await mergeNpmDependencyCache(source,stage);
   const excluded=records.filter(record=>!seedContainsUrl(npmCacheUrl(record.key),dependencies)).map(record=>record.key);
   // Remove only index entries; npm verify collects blobs after remaining references are known.
   await Promise.all([...new Set(excluded)].map(key=>cacache.rm.entry(join(stage,'_cacache'),key)));
-  execFileSync('npm',['cache','verify','--cache',stage],{stdio:'pipe'});
+  await invoke('npm',['cache','verify','--cache',stage]);
   const count=await assertPublicNpmCache(stage,dependencies);
   const archive=join(output,`npm-dependency-seed-${runnerOs}-${runnerArch}.tar`);
-  execFileSync('tar',['-cf',archive,'-C',stage,'_cacache']);
+  await invoke('tar',['-cf',archive,'-C',stage,'_cacache']);
   console.log(`Public npm seed ${runnerOs}/${runnerArch}: ${count} verified records; ${readFileSync(archive).length} bytes`);
- }
+ };
+ // Independent stages never share mutable npm content. Bound concurrent child
+ // processes to the runner's CPU capacity instead of blocking five times in turn.
+ for(let offset=0;offset<seedPlatforms.length;offset+=concurrency)await Promise.all(seedPlatforms.slice(offset,offset+concurrency).map(pack));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const [first,second,third,fourth,fifth]=process.argv.slice(2);
