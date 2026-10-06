@@ -39,7 +39,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { documentFrame, DOCUMENT_FRAME, servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
-import { jsonRouteResponse } from './lib/json-route-response.mjs';
+import { jsonRouteResponse, createdDocumentResponse } from './lib/json-route-response.mjs';
 import { forkDestination } from './lib/fork-destination.mjs';
 import { lane } from './lib/lane.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
@@ -76,11 +76,34 @@ async function startLeg() {
       await page.route(`${BASE}/api/start`, async route => {
         finishStart(await jsonRouteResponse(route));
       }, { times: 1 });
-      await page.goto(`${BASE}/start?agent=1`, { waitUntil: 'load' });
-      await page.getByRole('button', { name: 'Copy agent instructions', exact: true }).click();
-      const startResult = await startRespP;
-      if (startResult.error) throw startResult.error;
-      const { response: startRes, body: started } = startResult;
+      const problems = [];
+      page.on('pageerror', error => problems.push(`page error: ${error.message}`));
+      page.on('requestfailed', request => {
+        const url = new URL(request.url());
+        if (url.origin === BASE) problems.push(`request failed: ${request.method()} ${url.pathname} ${request.failure()?.errorText}`);
+      });
+      page.on('response', response => {
+        const url = new URL(response.url());
+        if (url.origin === BASE && response.status() >= 400) problems.push(`HTTP ${response.status()}: ${url.pathname}`);
+      });
+      let startRes, started;
+      try {
+        await page.goto(`${BASE}/start?agent=1`, { waitUntil: 'load' });
+        let captureTimer;
+        const captured = await Promise.race([startRespP, new Promise((_, reject) => {
+          captureTimer = setTimeout(() => reject(new Error('Document creation response was not captured within 30 seconds')), 30000);
+        })]).finally(() => clearTimeout(captureTimer));
+        const result = createdDocumentResponse(captured);
+        startRes = result.response;
+        started = result.body;
+        await page.getByRole('button', { name: 'Copy agent instructions', exact: true }).click();
+      } catch (error) {
+        const current = new URL(page.url());
+        const visible = await page.locator('body').innerText({ timeout: 1000 }).catch(() => 'body unavailable');
+        const diagnostic = `${current.origin}${current.pathname}: ${visible.slice(0, 1000)}; ${problems.slice(0, 8).join('; ')}`;
+        check.note(diagnostic.replace(/mx_[A-Za-z0-9_-]+/g, '[redacted]'));
+        throw error;
+      }
       await page.waitForFunction(id => navigator.clipboard.readText().then(text => text.includes(`/a/${id}`)), started.id);
       const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 

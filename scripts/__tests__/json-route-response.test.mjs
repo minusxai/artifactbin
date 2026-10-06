@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { createServer } from 'node:http';
 import { request } from 'playwright';
-import { jsonRouteResponse } from '../gates/lib/json-route-response.mjs';
+import { jsonRouteResponse, createdDocumentResponse } from '../gates/lib/json-route-response.mjs';
 
 it('reads JSON and delivers the same HTTP response with its status and cookie headers', async () => {
   const server = createServer((_req, res) => {
@@ -49,4 +49,35 @@ it('reports a failed fetch and aborts its browser request without replaying the 
   expect(outcome.error).toBe(error);
   expect(calls).toBe(1);
   expect(aborts).toBe(1);
+});
+
+
+it('reports failed creation before a caller waits for document controls and never replays it', async () => {
+  let requests = 0;
+  const server = createServer((_req, res) => {
+    requests++;
+    res.writeHead(503, {'content-type': 'application/json'});
+    res.end(JSON.stringify({error: 'unavailable'}));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const client = await request.newContext();
+  try {
+    const response = await client.post(`http://127.0.0.1:${server.address().port}/api/start`);
+    const captured = await jsonRouteResponse({fetch: async () => response, fulfill: async () => {}, abort: async () => {}});
+    expect(() => createdDocumentResponse(captured)).toThrow('Document creation returned HTTP 503');
+    expect(requests).toBe(1);
+  } finally {
+    await client.dispose();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+it('requires a real artifact identity and preserves the original transport error', () => {
+  const response = {status: () => 201};
+  expect(createdDocumentResponse({response, body: {id: 'abc123'}}).body.id).toBe('abc123');
+  for (const id of [undefined, '', 1, '../other']) {
+    expect(() => createdDocumentResponse({response, body: {id}})).toThrow('Document creation returned no valid artifact ID');
+  }
+  const error = Error('creation transport reset');
+  expect(() => createdDocumentResponse({error})).toThrow(error);
 });

@@ -10,3 +10,13 @@ export async function jsonRouteResponse(route) {
     return { error };
   }
 }
+
+/** Validate creation before a gate waits for controls on the new document. No replay. */
+export function createdDocumentResponse(result) {
+  if (result.error) throw result.error;
+  if (result.response.status() !== 201) throw new Error(`Document creation returned HTTP ${result.response.status()}`);
+  if (typeof result.body?.id !== 'string' || !/^[A-Za-z0-9]+$/.test(result.body.id)) {
+    throw new Error('Document creation returned no valid artifact ID');
+  }
+  return result;
+}
