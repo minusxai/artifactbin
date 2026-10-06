@@ -1,5 +1,6 @@
 /** The admitted /raw response is a compiled document with a scoped sandbox. */
 import { describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -76,8 +77,18 @@ describe('/a/:id/raw compiled markup', () => {
     const withChrome = await raw(deck).then((response) => response.text());
     expect(withChrome).toContain('Slide controls');
     const bare = await raw(deck, '?chrome=0').then((response) => response.text());
-    expect(bare).not.toContain('Slide controls');
-    expect(bare).toContain('One');
+    const full = new JSDOM(withChrome).window.document;
+    const capture = new JSDOM(bare).window.document;
+    expect(capture.querySelector('.mx-deck > .mx-doc')).toBeTruthy();
+    for (const selector of ['nav.mx-rail', '[aria-label="Slide controls"]']) {
+      const control = capture.querySelector<HTMLElement>(selector);
+      expect(control).not.toBeNull();
+      expect(control?.hidden).toBe(true);
+      expect(capture.defaultView!.getComputedStyle(control!).display).toBe('none');
+      expect(full.querySelector<HTMLElement>(selector)?.hidden).toBe(false);
+    }
+    expect(capture.querySelector('.mx-doc')?.innerHTML).toBe(full.querySelector('.mx-doc')?.innerHTML);
+    expect(capture.querySelector('.mx-doc')?.textContent).toContain('One');
   });
 });
 

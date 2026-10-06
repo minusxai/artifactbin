@@ -104,7 +104,7 @@ export default async function(input) {
 
 Bindings are Solid accessors, not `.value`: read `monthly()`, `monthly.loading()` and `monthly.error()`. Set signals before awaiting dependent queries' `.ready`. Rejected queries/mutations throw; do not swallow failures and report success.
 
-The shared page runtime has no DOM, Node process, filesystem, shell or arbitrary fetch. Only `page` and `solid-js` imports are allowed; no dynamic imports, require, CDNs or DOM libraries. Return JSON-serializable output within server limits. Execute and inspect terminal status before claiming success. Test writes on authorized disposable data; caller identity controls dataset permissions. Keep credentials out of source/input.
+The shared page runtime exposes no document, window, Node process, filesystem, shell or arbitrary fetch. Only `page` and `solid-js` imports are allowed; no dynamic imports, require, CDNs or DOM libraries. Return JSON-serializable output within server limits. Execute and inspect terminal status before claiming success. Test writes on authorized disposable data; caller identity controls dataset permissions. Keep credentials out of source/input.
 
 ## Native programs and schedules
 

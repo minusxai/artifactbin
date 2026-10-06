@@ -367,13 +367,22 @@ await section('decks', async () => {
     check(await frame.evaluate(() => document.querySelector('[aria-label="Slide position"]').innerText.trim()) === '2 / 3',
       'the counter tracks position');
 
-    // The CAPTURE render — what /export screenshots — carries no chrome at all.
+    // Capture hides chrome but retains the compiled hierarchy required by hydration.
     const capture = await fetch(`${B}/a/${navDeck.id}/raw?chrome=0`, {
       headers: { Authorization: `Bearer ${navDeck.token}` },
     });
     check(capture.status === 200, 'the owner can read the capture render');
     const bare = await capture.text();
-    check(!bare.includes('Slide controls') && !bare.includes('mx-rail'), 'the capture render (?chrome=0) has no chrome');
+    await page.goto(`${B}/a/${navDeck.id}/raw?chrome=0`, { waitUntil: 'load' });
+    await page.waitForFunction(() => !document.getElementById('mx-story-data') || document.documentElement.hasAttribute('data-mx-ready'));
+    for (const selector of ['nav.mx-rail', '[aria-label="Slide controls"]']) {
+      const control = page.locator(selector);
+      check(await control.count() === 1 && !await control.isVisible(), `capture chrome is retained for hydration but invisible (${selector})`);
+    }
+    check(await page.locator('.mx-deck > .mx-doc').count() === 1
+      && await page.locator('.mx-doc [data-mx-slide]').count() === 3
+      && await page.locator('.mx-doc').innerText().then((text) => text.includes('The Cover Slide')),
+    'capture hydration preserves the deck hierarchy and visible document');
     check(bare.includes('The Cover Slide'), 'and still carries the document');
     await page.close();
   }

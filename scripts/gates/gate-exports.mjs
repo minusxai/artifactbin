@@ -81,7 +81,7 @@ check(deck.status === 200, `published the deck (${deck.status})`);
 if (field.status !== 200) throw new Error(`seed failed: ${field.status} ${field.detail}`);
 
 // ── 1 + 2: the deck's pictures, over plain HTTP ─────────────────────────────
-async function deckLeg() {
+async function deckLeg(browser) {
   // `whole` is both the slice comparison's full deck and the format set's PNG.
   const whole = await shot(deck.id, '?format=png');
   const [one, two, jpg, card, tall] = await Promise.all([
@@ -119,7 +119,20 @@ async function deckLeg() {
   // would pass the first half.
   const capture = await fetch(`${BASE}/a/${deck.id}/raw?chrome=0`);
   const bare = await capture.text();
-  check(!bare.includes('Slide controls'), 'the capture render carries no navigation chrome');
+  const page = await browser.newPage({ viewport: { width: 1600, height: 840 } });
+  try {
+    await page.goto(`${BASE}/a/${deck.id}/raw?chrome=0`, { waitUntil: 'load' });
+    await page.waitForFunction(() => !document.getElementById('mx-story-data') || document.documentElement.hasAttribute('data-mx-ready'));
+    for (const selector of ['nav.mx-rail', '[aria-label="Slide controls"]']) {
+      const control = page.locator(selector);
+      check(await control.count() === 1 && !await control.isVisible(), `capture navigation is retained for hydration but invisible (${selector})`);
+    }
+    check(await page.locator('.mx-deck > .mx-doc').count() === 1
+      && await page.locator('.mx-doc').innerText().then((text) => text.includes('First slide')),
+    'capture hydration preserves the deck hierarchy and visible content');
+  } finally {
+    await page.close();
+  }
   check(capture.status === 200 && bare.includes('First slide'), `and still carries the document (${capture.status})`);
 }
 
@@ -204,7 +217,7 @@ async function socialLeg(browser) {
 const browser = await launchChromium();
 const leg = (name, run) => run().catch((error) => check(false, `${name} could not finish (${String(error?.stack ?? error).split('\n').slice(0, 4).join(' | ')})`));
 try {
-  await Promise.all([leg('the deck leg', deckLeg), leg('the social preview leg', () => socialLeg(browser))]);
+  await Promise.all([leg('the deck leg', () => deckLeg(browser)), leg('the social preview leg', () => socialLeg(browser))]);
 } finally {
   await browser.close();
 }
