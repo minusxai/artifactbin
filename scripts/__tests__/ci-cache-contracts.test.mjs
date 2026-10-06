@@ -286,3 +286,15 @@ it('prunes platform aliases without deleting shared npm content or breaking subs
   expect(await seeds.assertPublicNpmCache(join(output,'macOS-ARM64'),[{...all,spec:'all@1.0.0'}])).toBe(3);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
+
+it('caches only Linux browser deb archives and still provisions the full browser dependency set on every consumer',()=>{
+ const cli=workflow().jobs.cli;expect(cli['timeout-minutes']).toBe(7);
+ const key=cli.steps.find(step=>step.id==='acceptance-apt-key'),cache=cli.steps.find(step=>step.id==='acceptance-apt');
+ expect(key).toBeDefined();expect(key.run).toContain('ImageOS');expect(key.run).toContain('ImageVersion');expect(key.run).toContain('playwright/browsers.json');
+ expect(cache.with.path).toBe('.ci-cache-key/acceptance-apt/*.deb');expect(cache.with.key).toContain('steps.acceptance-apt-key.outputs.key');
+ expect(cache.with['restore-keys']).toBeUndefined();expect(cache.if).toContain("runner.os == 'Linux'");
+ const install=cli.steps.find(step=>step.name==='Install Linux acceptance browser dependencies');
+ expect(install.run).toContain('linux-acceptance-deps.mjs');expect(install.run).toContain('playwright/cli.js');expect(install.if).not.toContain('cache-hit');
+ expect(install.if).toContain("matrix.phase == 'preview'");expect(install.if).toContain("matrix.phase == 'local'");
+ expect(cli.strategy.matrix.os).toEqual(['ubuntu-24.04','ubuntu-24.04-arm','macos-14','macos-15-intel','windows-2022']);
+});

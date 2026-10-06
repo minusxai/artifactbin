@@ -1073,7 +1073,7 @@ jobs:
     if: needs.plan.outputs.cli == 'true'
     name: CLI npm (${{ matrix.os }} Node ${{ matrix.node }} ${{ matrix.phase }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 7
     permissions:
       contents: read
       actions: read
@@ -1133,10 +1133,22 @@ jobs:
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci/npm-acceptance/node_modules/playwright/browsers.json') }}
       # Windows/macOS ship Chromium dependencies; --with-deps needlessly installed
       # Windows Media Foundation for 44s although these headless proofs do not record video.
+      # Archives only: every fresh Linux runner still refreshes signed metadata and runs dpkg.
+      - name: Name Linux browser archive cache
+        id: acceptance-apt-key
+        if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux'
+        run: |
+          echo "key=apt-acceptance-v1-${{ runner.os }}-${{ runner.arch }}-${ImageOS:?}-${ImageVersion:?}-${{ hashFiles('scripts/ci/npm-acceptance/node_modules/playwright/browsers.json') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: acceptance-apt
+        if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux'
+        with:
+          path: .ci-cache-key/acceptance-apt/*.deb
+          key: ${{ steps.acceptance-apt-key.outputs.key }}
       - name: Install Linux acceptance browser dependencies
         if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux'
         working-directory: services/cli
-        run: node ../../scripts/ci/npm-acceptance/node_modules/playwright/cli.js install-deps chromium
+        run: node ../../scripts/ci/linux-acceptance-deps.mjs "${{ github.workspace }}/.ci-cache-key/acceptance-apt" ../../scripts/ci/npm-acceptance/node_modules/playwright/cli.js
       # Tooling and download/browser caches prepare while this run packs the candidate.
       # The shared bounded waiter rejects other attempts and failed producers.
       - name: Wait for this attempt's packed candidate
