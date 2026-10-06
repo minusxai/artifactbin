@@ -56,10 +56,12 @@ it('supports keyboard expansion and selection and cancellation makes no write', 
   const reports = screen.getByLabelText('Move to Reports');
   reports.focus();
   fireEvent.keyDown(reports, {key: 'ArrowRight'});
+  expect(reports).toHaveFocus();
   fireEvent.keyDown(reports, {key: 'ArrowRight'});
   expect(screen.getByLabelText('Move to 2026')).toHaveFocus();
   fireEvent.keyDown(screen.getByLabelText('Move to 2026'), {key: 'Enter'});
   expect(screen.getByLabelText('Move to 2026')).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByLabelText('Move to 2026')).toHaveFocus();
   fireEvent.click(screen.getByRole('button', {name: 'Close folder picker'}));
   expect(onClose).toHaveBeenCalledOnce();
   expect(onMove).not.toHaveBeenCalled();
@@ -73,4 +75,9 @@ it('keeps the selected destination and shows an error when a move fails', async 
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not move');
   expect(screen.getByLabelText('Move to Design')).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByRole('button', {name: 'Move here'})).toBeEnabled();
+});
+
+it('renders outside the card so transformed shelf rows cannot clip the dialog', () => {
+  render(() => <div data-testid="card" style={{transform: 'translateY(0)'}}><MoveToFolderDialog title="Sales" artifactId="sales" currentParentId={null} folders={folders} onMove={async () => true} onClose={() => {}} /></div>);
+  expect(screen.getByTestId('card')).not.toContainElement(screen.getByRole('dialog', {name: 'Move Sales'}));
 });
