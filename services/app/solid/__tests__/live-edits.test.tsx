@@ -508,7 +508,8 @@ describe('a refused save tells the author what to fix', () => {
     act(() => { hook.result.queue({ source: '<p>a</p>' }); });
     await act(async () => { await vi.advanceTimersByTimeAsync(600); });
 
-    expect(hook.result.state.status).toBe('not saved (invalid_refs)');
+    expect(hook.result.state.status).toContain('references');
+    expect(hook.result.state.status).not.toContain('invalid_refs');
   });
 });
 
@@ -666,4 +667,39 @@ it('a drain sends newer work queued behind a refused commit instead of stopping 
  expect(sourceOf(JSON.parse(fetchMock.mock.calls[1][1].body))).toBe('<p>fixed</p>');
  expect(hook.result.state.status).toBe('');
  expect(hook.result.isIdle()).toBe(true);
+});
+
+
+describe('editing access can change while a draft is open', () => {
+ it('explains a non-disclosing 404 and preserves the refused draft', async () => {
+  fetchMock.mockResolvedValueOnce(errResponse(404,{error:'not_found'}));
+  const {hook,adopted}=setup();
+  act(()=>hook.result.queue({source:'<p>private local draft</p>'}));
+  await act(async()=>{await hook.result.flushNow();});
+  expect(hook.result.state.status).toContain('editing access');
+  expect(hook.result.state.status).toContain('Copy');
+  expect(hook.result.state.status).not.toContain('not_found');
+  expect(adopted).toEqual([]);
+  fetchMock.mockResolvedValueOnce(okResponse({edit_id:'edit-2',version:2,markup:'<p>Initial</p>'}));
+  await act(async()=>{await hook.result.recover('retry');});
+  const posts=fetchMock.mock.calls.filter((call:any)=>call[1]?.method==='POST');
+  expect(posts).toHaveLength(2);
+  expect(sourceOf(JSON.parse(posts[1][1].body))).toBe('<p>private local draft</p>');
+ });
+ it('keeps the draft and offers safe guidance when the editable head is unavailable', async () => {
+  fetchMock.mockResolvedValueOnce(errResponse(404,{error:'not_found'}));
+  const {hook,adopted}=setup();
+  act(()=>hook.result.queue({source:'<p>private local draft</p>'}));
+  await act(async()=>{await hook.result.flushNow();});
+  fetchMock.mockResolvedValueOnce(errResponse(404,{error:'not_found'}));
+  await act(async()=>{await hook.result.recover('server');});
+  expect(hook.result.state.status).toContain('Copy');
+  expect(hook.result.state.status).toContain('refresh');
+  expect(adopted).toEqual([]);
+  fetchMock.mockResolvedValueOnce(okResponse({edit_id:'edit-2',version:2,markup:'<p>Initial</p>'}));
+  await act(async()=>{await hook.result.recover('retry');});
+  const posts=fetchMock.mock.calls.filter((call:any)=>call[1]?.method==='POST');
+  expect(posts).toHaveLength(2);
+  expect(sourceOf(JSON.parse(posts[1][1].body))).toBe('<p>private local draft</p>');
+ });
 });
