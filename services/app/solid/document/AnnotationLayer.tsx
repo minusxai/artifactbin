@@ -50,6 +50,7 @@ import { positionedComposer } from './AnnotationComposerPosition';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';
 import { RailChrome } from './AnnotationRail';
 import { AnnotationThread } from './AnnotationThread';
+import { captureAvailable } from '@/lib/capture/screen';
 import { createCommentCapture } from './CommentCapture';
 import { CommentMarkdownField } from './CommentMarkdown';
 import { PersonMentionProvider } from './PersonMention';
@@ -325,7 +326,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   /*
    * OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is about to leave one. Not for a
-   * rail opened FOR A THREAD, not while a composer is open, not under the editor (`pickOnOpen`),
+   * rail opened FOR A THREAD, not while a composer is open, not when the page says so (`pickOnOpen`:
+   * the editor's narrow comments sheet, which covers the document),
    * and not on a phone, whose sheet covers the document. Closing the rail ends the pick it opened,
    * unless a pick is what put the sheet away. DECLARED BEFORE the handed-in selection below, so a
    * rail opening together with a selection ends with the composer, not the pick.
@@ -607,7 +609,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
 
   const beginScreenshot = async () => {
-    if (!props.editId || imagesUnavailable) return;
+    if (screenshotUnavailable()) return;
     beginPick('area');
     const preparation = capture.start(); // Only this explicit gesture requests sharing.
     void loadScreenshotEditor().catch(() => {});
@@ -617,7 +619,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   onMount(() => { if (props.pickRequested && props.pickOnOpen !== false) startPick(); });
   const endPick = () => { resumeSelectAfterCompose = false; capture.reset(); setPick(null); };
   const toggleSelect = () => pick() === 'block' ? endPick() : beginPick('block');
-  const screenshotUnavailable = () => imagesUnavailable ?? (!props.editId ? 'Screenshots need a saved document.' : null);
+  // Chrome only exposes tab capture on secure origins (https or localhost), never plain http.
+  const screenshotUnavailable = () => imagesUnavailable ?? (!props.editId ? 'Screenshots need a saved document.'
+    : !captureAvailable() ? 'Screenshots need Chrome on a secure page (https or localhost).' : null);
 
   const topOffset = () => props.topOffset ?? 0;
   // The collapsed identity mark is small enough for phones too; its click opens the same rail as a sheet.
