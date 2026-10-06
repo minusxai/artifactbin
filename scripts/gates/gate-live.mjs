@@ -11,7 +11,7 @@
  *   votes      three readers on the same data: one votes, one watches the same document, one holds a DIFFERENT
  *              document over the same dataset; both watchers redraw with no reload and the watcher's own pick
  *              survives; closing the dataset stops the button (formerly gate-live-data).
- *   share      the share menu makes a dataset writable, and the owner's framed document writes through its own
+ *   share      the Sharing tab makes a dataset writable, and the owner's framed document writes through its own
  *              door (formerly gate-live-data).
  *   agent      an agent rewrites a shared link: a hydrating document is morphed in place (chart element kept,
  *              never navigated, place kept); a prose one too; the reader's dark mode outlives both kinds of
@@ -192,7 +192,7 @@ async function votesLeg() {
 /*
  * THE OWNER'S FRAMED WRITE and browser sharing control. The opaque-origin relay (mx:mutate through the page) is
  * gone: a document on its own origin posts to its own door with the pages session cookie
- * (lib/serving/pages-origin), owner or not. The same page proves the share menu can make a dataset writable.
+ * (lib/serving/pages-origin), owner or not. The same page proves the Sharing tab can make a dataset writable.
  */
 async function shareLeg() {
   const { run } = lane(check, 'share');
@@ -217,12 +217,11 @@ async function shareLeg() {
     const page = await ctx.newPage();
     await becomeOwner(page, BASE, owner.token);
 
-    // The dataset is still read-only: the share menu makes it writable here.
+    // The dataset is still read-only: its Sharing tab makes it writable here.
     await page.goto(`${BASE}/a/${ds2.id}`, { waitUntil: 'load' });
-    await openArtifactControls(page);
-    await page.getByLabel('Share').click();
+    await page.getByRole('tab', { name: 'Sharing', exact: true }).click();
     const toggle = page.getByLabel('Make read & write');
-    // The popover loads its state over the network, so WAIT rather than sampling:
+    // The panel loads its state over the network, so WAIT rather than sampling:
     // a bare isVisible() here races the fetch and reports a false negative.
     const rowShown = await toggle.waitFor({ state: 'visible', timeout: 8000 }).then(() => true, () => false);
     check(rowShown, 'the writes row appears for a dataset owner');
@@ -515,7 +514,7 @@ async function readerLeg() {
 
 const started = Date.now();
 // The share leg runs alone first: alongside the reader and watched legs its owner's guest session read as `anon` on
-// the dataset page (/api/page/session) and the Share control never appeared — reproduced on a host server and in
+// the dataset page (/api/page/session) and the sharing controls never appeared — reproduced on a host server and in
 // the gate container, cause not yet established; the original sequential gate never met it.
 await shareLeg();
 await Promise.all([votesLeg(), agentHydrates(), agentProse(), agentMode(), agentProseMode(), watchedLeg(), readerLeg()]);

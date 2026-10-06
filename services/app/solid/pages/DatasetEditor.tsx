@@ -1,13 +1,14 @@
 /* @jsxImportSource solid-js */
 import { runtimeId } from '@/lib/story-runtime/runtime-id';
-import AssetPageHeader from "../components/AssetPageHeader";
+import { AssetWorkspace, type AssetSection } from '../components/AssetWorkspace';
+import WorkspaceShell from '../components/WorkspaceShell';
 import StepHeader from "../components/StepHeader";
-import PageChrome from "../components/PageChrome";
-import ShareLink from "../components/ShareLink";
+import { DocumentSharing } from '../document/DocumentSharing';
+import { DatasetImport } from '../components/DatasetImport';
 import { DatasetPolicies } from "../components/DatasetPolicies";
-import { createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import { Navigate, useParams } from "@solidjs/router";
-import { ChevronDown, ChevronRight, Database, DatabasePlus, Plus, Play, Code2 } from "lucide-solid";
+import { ChevronDown, ChevronRight, Plus, Play, Code2 } from "lucide-solid";
 import { Button, Input, PANEL } from "../components/ui";
 import { CatalogRows, DatasetExplorer, type CatalogPreview, type CatalogQuery } from "../components/DatasetCatalogView";
 import { DatasetWhitelist, type SourceDraft } from "../components/DatasetWhitelist";
@@ -78,12 +79,13 @@ export function DatasetEditorPage({
   const {
     session
   } = useSession();
-  const [section, setSection] = createSignal<"actions" | "data" | "source">(id ? "actions" : "source");
+  const [section, setSection] = createSignal<AssetSection>("source");
   const originalDefinition = {
     current: null as string | null
   };
   const [title, setTitle] = createSignal("");
   const [kind, setKind] = createSignal<DatasetCatalog["kind"]>("stored");
+  const [storedInput, setStoredInput] = createSignal<"csv" | "sheet" | "json">(id ? "json" : "csv");
   const [connection, setConnection] = createSignal(initialConnection());
   const [password, setPassword] = createSignal("");
   const [sources, setSources] = createSignal<SourceDraft[]>([]);
@@ -505,34 +507,42 @@ export function DatasetEditorPage({
     originalDefinition.current = serializeDatasetDefinition(buildCatalog(connection(), false));
   });
   if (!id && session() && !session()?.user) return <Navigate href={`/login?callbackUrl=${encodeURIComponent(id ? `/a/${id}/edit` : "/datasets/new")}`} />;
-  const share = (className: string) => <ShareLink artifactId={id} title={title()} format="dataset" datasetKind={kind()} editable class={className} url={`/a/${id}`} />;
-  return <>
-      {id && <PageChrome authed={!!session()?.user} anon={session()?.kind === "anon"} title={title()} label="Artifact controls">
-          {!loading() && !loadFailed() && <section aria-label="Document actions">
-              <h2 class="mb-2 text-xs text-muted">Artifact</h2>
-              {share("w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-raised")}
-            </section>}
-        </PageChrome>}
-      <main class="workspace-page">
-        <AssetPageHeader icon={id ? Database : DatabasePlus} eyebrow="Dataset workspace" title={id ? title() || "Edit dataset" : "Create a dataset"} link={id ? {
-        href: `/a/${id}`,
-        label: "View dataset",
-        text: "view dataset"
+  const [policySaveTarget, setPolicySaveTarget] = createSignal<HTMLElement>();
+  const saveDataset = () => void run("save", async () => {
+    const savedTitle = title().trim();
+    if (!savedTitle) throw new Error("Enter a dataset title.");
+    const configured = kind() === "postgres" ? await ensureConnection() : connection();
+    const dataset = serializeDatasetDefinition(buildCatalog(configured));
+    setTitle(savedTitle);
+    const metadataOnly = Boolean(id && dataset === originalDefinition.current);
+    const data = await apiRequest<{
+      id: string;
+    }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : "/api/my/artifacts", metadataOnly ? "PATCH" : id ? "PUT" : "POST", metadataOnly ? {
+      title: savedTitle,
+      expectedState: state()
+    } : {
+      dataset,
+      title: savedTitle,
+      ...(id ? {
+        expectedVersion: version(),
+        expectedState: state()
       } : {
-        href: "/assets",
-        label: "Back to assets",
-        text: "all assets"
-      }} actions={id && !loading() && !loadFailed() ? <>
-                <span class="rounded-full border border-edge px-2.5 py-1 text-xs text-muted">
-                  {kind() === "stored" ? "Stored data" : "PostgreSQL"}
-                </span>
-                {share("inline-flex items-center gap-2 rounded-lg border border-edge bg-surface px-4 py-2 text-sm hover:border-accent [&>span]:inline")}
-              </> : undefined} />
-        {!loading() && !loadFailed() && <nav aria-label="Dataset workspace" class="mb-7 flex gap-1 overflow-x-auto border-b sm:gap-5 border-edge">
-            {([...(id && kind() === "stored" ? [["actions", "Data actions"]] : []), ["source", "Source & models"], ["data", "Data preview"]] as Array<[ReturnType<typeof section>, string]>).map(([key, label]) => <button type="button" aria-current={section() === key ? "page" : undefined} class={`shrink-0 border-b-2 px-1 pb-3 text-xs font-medium sm:text-sm ${section() === key ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`} onClick={() => setSection(key)}>
-                {label}
-              </button>)}
-          </nav>}
+        visibility: session()?.user ? "private" : "unlisted"
+      })
+    });
+    await onSaved?.();
+    // Cross the app entry after consumers have read the save response.
+    // A same-task document navigation can discard its body in Chromium.
+    await new Promise(resolve => setTimeout(resolve, 250));
+    window.location.assign(`/a/${data.id}`);
+  });
+  const content =
+      <AssetWorkspace workspace="Dataset" tabs={loading() || loadFailed() ? [] : ['source', 'data', ...(id && kind() === 'stored' ? ['actions' as const] : []), ...(id ? ['sharing' as const] : [])]} active={section()} onSelect={setSection}
+        actions={id && !loading() && !loadFailed() ? <div class="flex items-center gap-3 py-1">
+          <a href={`/a/${id}`} aria-label="Cancel editing" class="px-2 py-1 font-mono text-xs text-muted hover:text-fg">Cancel</a>
+          <span hidden={section() !== 'actions'} ref={setPolicySaveTarget} />
+          <span hidden={section() === 'actions' || section() === 'sharing'}><Button aria-label="Save dataset" disabled={!title().trim() || Boolean(busy()) || sourceText() !== null} onClick={saveDataset}>{busy() === 'save' ? 'Saving…' : 'Save'}</Button></span>
+        </div> : undefined}>
         {error() && <p role="alert" aria-label="Dataset error" class="rounded border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
             {error()}
           </p>}
@@ -541,20 +551,25 @@ export function DatasetEditorPage({
           </p> : <>
             <div hidden={section() !== "source"} class="mx-auto max-w-4xl space-y-6">
               <fieldset disabled={Boolean(busy()) || sourceText() !== null} class="min-w-0 space-y-6">
-                <Field name="Dataset title">
-                  <Input aria-label="Dataset title" value={title()} onInput={e => setTitle(e.target.value)} placeholder="Weekly sales" />
+                <Field name="Dataset title (required)">
+                  <Input required aria-label="Dataset title" value={title()} onInput={e => setTitle(e.target.value)} placeholder="Weekly sales" />
                 </Field>
                 <section aria-label="Raw data" class={`${PANEL} overflow-hidden rounded-xl`}>
                   <StepHeader n={1} title="Raw data">
-                    Where the rows come from: JSON rows pasted into named tables, or a PostgreSQL database read live.
+                    Import CSV or Google Sheets, paste JSON rows, or connect to PostgreSQL.
                   </StepHeader>
-                  <div role="tablist" aria-label="Raw data source" class="flex gap-5 border-b border-edge px-4 sm:px-5">
-                    {([["stored", "Dataset JSON"], ["postgres", "PostgreSQL"]] as Array<[DatasetCatalog["kind"], string]>).map(([key, label]) => <button type="button" role="tab" aria-label={label} aria-selected={kind() === key} disabled={Boolean(id)} onClick={() => setKind(key)} class={`-mb-px shrink-0 border-b-2 px-1 py-3 text-xs font-medium disabled:cursor-default ${kind() === key ? "border-accent text-fg" : "border-transparent text-muted enabled:hover:text-fg disabled:opacity-50"}`}>
+                  <div role="tablist" aria-label="Raw data source" class="flex gap-4 overflow-x-auto border-b border-edge px-4 sm:gap-5 sm:px-5">
+                    {([["csv", "CSV"], ["sheet", "Google Sheets"], ["json", "JSON"], ["postgres", "PostgreSQL"]] as const).map(([key, label]) => {
+                      const selected = () => kind() === "postgres" ? key === "postgres" : key === storedInput();
+                      return <button type="button" role="tab" aria-label={label} aria-selected={selected()} disabled={Boolean(id) && (key === "postgres") !== (kind() === "postgres")} onClick={() => {
+                        setKind(key === "postgres" ? "postgres" : "stored");
+                        if (key !== "postgres") setStoredInput(key);
+                      }} class={`-mb-px shrink-0 border-b-2 px-1 py-3 text-xs font-medium disabled:cursor-default ${selected() ? "border-accent text-fg" : "border-transparent text-muted enabled:hover:text-fg disabled:opacity-50"}`}>
                         {label}
-                      </button>)}
+                      </button>;
+                    })}
                   </div>
-                  {/* One height for both tabs, so switching does not move the
-                    * steps below. What does not fit scrolls inside. */}
+                  {/* Keep source controls at a stable height; added tables scroll below them. */}
                   <div class="h-[22rem] overflow-y-auto p-4 sm:p-5">
                     {kind() === "postgres" ? <section aria-label="Dataset connection" class="space-y-4">
                         <p class="text-xs text-muted">
@@ -619,16 +634,22 @@ export function DatasetEditorPage({
                         {connectionFeedback()!.message}
                       </p>}
                       </section> : <section aria-label="Stored tables editor" class="space-y-4">
-                        <p class="text-xs text-muted">
-                          Add JSON rows to a named table. Step 2 can query it right away as schema.table; the rows are stored when you {id ? "save" : "create"} the dataset. Existing rows are retained unless you replace them.
-                        </p>
-                        {!stored().length && <div class="rounded border border-dashed border-edge p-5 text-center">
-                            <Database size={20} class="mx-auto mb-2 text-faint" />
-                            <p class="text-sm text-muted">No tables yet.</p>
-                            <p class="mt-1 text-xs text-faint">
-                              Add a table, name it, and paste rows as a JSON array, for example [{"{"}&quot;id&quot;: 1{"}"}].
-                            </p>
-                          </div>}
+                        {storedInput() !== "json" && <DatasetImport source={storedInput() === "sheet" ? "sheet" : "csv"} disabled={Boolean(busy())} onBusyChange={value => setBusy(value ? "import" : "")} onImported={(rows, suggestedName) => {
+                          const schema = defaultSchema() || "public";
+                          const base = suggestedName.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'table';
+                          const stem = /^[a-z_]/.test(base) ? base : `table_${base}`;
+                          const names = new Set([...stored().filter(table => table.schema === schema).map(table => table.name), ...models().filter(model => model.schema === schema).map(model => model.cell.name)]);
+                          let name = stem;
+                          for (let suffix = 2; names.has(name); suffix++) name = `${stem}_${suffix}`;
+                          setStored(items => [...items, { key: runtimeId(), schema, name, rows: JSON.stringify(rows, null, 2), retained: false }]);
+                        }} />}
+                        {storedInput() === "json" && <div class="space-y-3">
+                          <p class="text-xs text-muted">Add a table and paste a JSON array of objects, for example [{"{"}&quot;id&quot;: 1{"}"}].</p>
+                          <Button aria-label="Add JSON table" variant="ghost" onClick={() => setStored(items => [...items, {
+                            key: runtimeId(), schema: defaultSchema() || "public", name: "", rows: "", retained: false
+                          }])}>Add JSON table</Button>
+                        </div>}
+                        {!!stored().length && <p class="text-xs font-medium text-fg">Tables in this dataset · {stored().length}</p>}
                     {stored().map((table, index) => <div class="space-y-3 border-t border-edge pt-4">
                         <div class="grid gap-3 sm:grid-cols-2">
                           <Field name="Schema">
@@ -654,15 +675,6 @@ export function DatasetEditorPage({
                           Remove table
                         </Button>
                       </div>)}
-                    <Button aria-label="Add JSON table" variant="ghost" onClick={() => setStored(items => [...items, {
-                    key: runtimeId(),
-                    schema: defaultSchema() || "public",
-                    name: "",
-                    rows: "",
-                    retained: false
-                  }])}>
-                      Add JSON table
-                    </Button>
                       </section>}
                   </div>
                 </section>
@@ -781,8 +793,14 @@ export function DatasetEditorPage({
               </header>
               <DatasetExplorer catalog={explorerCatalog()} query={previewDraft} paginate={false} />
             </div>
+            <Show when={id && section() === 'sharing'}>
+              <div class="mx-auto max-w-2xl space-y-4 rounded-lg border border-edge bg-surface p-5 sm:p-6">
+                <DocumentSharing id={id!} title={title()} owner={false} editable variant="embedded" format="dataset" datasetKind={kind()} onDataActions={() => setSection('actions')} />
+                <p class="text-xs text-muted">Sharing changes save immediately.</p>
+              </div>
+            </Show>
             {id && kind() === "stored" && <div hidden={section() !== "actions"}>
-                <DatasetPolicies artifactId={id} expanded />
+                <DatasetPolicies artifactId={id} expanded saveTarget={policySaveTarget()} />
               </div>}
             <div hidden={section() !== "source"} class="mx-auto mt-6 max-w-4xl space-y-6">
               <details class={`group ${PANEL} overflow-hidden rounded-xl`}>
@@ -845,40 +863,17 @@ export function DatasetEditorPage({
               </section>
                 </div>
               </details>
-              <div class="flex items-center gap-4">
-                <Button aria-label="Save dataset" disabled={Boolean(busy()) || sourceText() !== null} onClick={() => void run("save", async () => {
-              const configured = kind() === "postgres" ? await ensureConnection() : connection();
-              const dataset = serializeDatasetDefinition(buildCatalog(configured));
-              const metadataOnly = Boolean(id && dataset === originalDefinition.current);
-              const data = await apiRequest<{
-                id: string;
-              }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : "/api/my/artifacts", metadataOnly ? "PATCH" : id ? "PUT" : "POST", metadataOnly ? {
-                title: title(),
-                expectedState: state()
-              } : {
-                dataset,
-                title: title(),
-                ...(id ? {
-                  expectedVersion: version(),
-                  expectedState: state()
-                } : {
-                  visibility: session()?.user ? "private" : "unlisted"
-                })
-              });
-              await onSaved?.();
-              // Cross the app entry after consumers have read the save response.
-              // A same-task document navigation can discard its body in Chromium.
-              await new Promise(resolve => setTimeout(resolve, 250));
-              window.location.assign(`/a/${data.id}`);
-            })}>
-                  {busy() === "save" ? "Saving…" : id ? "Save changes" : "Create dataset"}
+              {!id && <div class="flex items-center gap-4">
+                <Button aria-label="Save dataset" disabled={!title().trim() || Boolean(busy()) || sourceText() !== null} onClick={saveDataset}>
+                  {busy() === "save" ? "Saving…" : "Create dataset"}
                 </Button>
                 {busy() && <span role="status" class="text-sm text-muted">
                     Working…
                   </span>}
-              </div>
+              </div>}
             </div>
           </>}
-      </main>
-    </>;
+      </AssetWorkspace>;
+  // Direct dataset edit URLs need the same layout and styles as /datasets/new.
+  return id ? <WorkspaceShell>{content}</WorkspaceShell> : content;
 }

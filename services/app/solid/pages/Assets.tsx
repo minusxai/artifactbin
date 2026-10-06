@@ -9,6 +9,7 @@ import ChevronRight from 'lucide-solid/icons/chevron-right';
 import Globe from 'lucide-solid/icons/globe';
 import Search from 'lucide-solid/icons/search';
 import type { AssetSelection, WorkspaceAssets } from '@/lib/workspace/inventory';
+import { displayTitle } from '@/lib/story/document/title';
 import type { ShelfRow } from '@/lib/workspace/shelf';
 import { MicroLabel, PANEL, FormatBadge, timeAgo } from '../components/ui';
 import { RowActions } from '../components/Shelf';
@@ -33,6 +34,7 @@ export function AssetsPage(): JSX.Element {
   const [removed, setRemoved] = createSignal<string[]>([]);
   createEffect(() => { const data = page.data(); const owner = session()?.user?.id; if (data && owner) setPrevious({ owner, data }); });
   const data = () => page.data() ?? (previous()?.owner === session()?.user?.id ? previous()?.data ?? null : null);
+  const assets = createMemo(() => (data()?.assets ?? []).filter(asset => !removed().includes(asset.id)).map(asset => ({ ...asset, title: displayTitle(asset) })));
   const selected = () => selection();
   const toggle = (kind: 'formats' | 'visibilities', value: string) => setSelection((current) => ({ ...current, page: 0,
     [kind]: current[kind].includes(value) ? current[kind].filter((item) => item !== value) : [...current[kind], value],
@@ -56,7 +58,7 @@ export function AssetsPage(): JSX.Element {
         </div>
         <Show when={(data()?.assets.length ?? 0) > 0 || selected().query || selected().formats.length || selected().visibilities.length} fallback={<p class="px-4 py-8 text-center font-mono text-xs text-faint">no assets yet</p>}>
           <table class="w-full border-collapse text-left text-sm"><thead class="hidden sm:table-header-group"><tr><For each={['title', 'type', 'ver', 'updated', '']}>{label => <th class="px-4 py-2.5"><MicroLabel>{label}</MicroLabel></th>}</For></tr></thead><tbody>
-            <For each={(data()?.assets ?? []).filter(asset => !removed().includes(asset.id))}>{(asset) => <tr class="border-t border-edge"><td class="w-full max-w-0 px-4 py-2.5"><span class="flex items-center gap-2"><a aria-label={`Open ${asset.title ?? 'Untitled'}`} href={asset.url} class="min-w-0 flex-1 truncate font-semibold text-fg hover:text-accent">{asset.title ?? 'Untitled'}</a><Show when={asset.visibility === 'public'}><Globe aria-label={`${asset.title ?? 'Untitled'} is public`} size={13} class="text-accent" /></Show></span></td><td class="px-4 py-2.5"><FormatBadge format={asset.format} /></td><td class="px-4 py-2.5"><span class="rounded border border-edge px-1.5 font-mono text-[10px] text-faint">v{asset.version}</span></td><td class="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-muted">{timeAgo(asset.updated_at)}</td><td class="px-4 py-2.5"><RowActions row={asset as ShelfRow} level="full" folders={(data()?.folders ?? []) as ShelfRow[]} childCount={0} showEdit={false} onRemoved={id => setRemoved(current => [...current, id])} onChanged={() => void page.refresh(true)} /></td></tr>}</For>
+            <For each={assets()}>{(asset) => <tr class="border-t border-edge"><td class="w-full max-w-0 px-4 py-2.5"><span class="flex items-center gap-2"><a aria-label={`Open ${asset.title}`} href={asset.url} class="min-w-0 flex-1 truncate font-semibold text-fg hover:text-accent">{asset.title}</a><Show when={asset.visibility === 'public'}><Globe aria-label={`${asset.title} is public`} size={13} class="text-accent" /></Show></span></td><td class="px-4 py-2.5"><FormatBadge format={asset.format} /></td><td class="px-4 py-2.5"><span class="rounded border border-edge px-1.5 font-mono text-[10px] text-faint">v{asset.version}</span></td><td class="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-muted">{timeAgo(asset.updated_at)}</td><td class="px-4 py-2.5"><RowActions row={asset as ShelfRow} level="full" folders={(data()?.folders ?? []) as ShelfRow[]} childCount={0} showEdit={false} onRemoved={id => setRemoved(current => [...current, id])} onChanged={() => void page.refresh(true)} /></td></tr>}</For>
           </tbody></table>
           <Show when={pageCount() > 1}><div class="flex items-center justify-between border-t border-edge px-4 py-2"><span aria-label="Page range" class="font-mono text-[10px] text-faint">{pageIndex() * (data()?.perPage ?? 50) + 1}-{Math.min((pageIndex() + 1) * (data()?.perPage ?? 50), data()?.total ?? 0)} of {data()?.total}</span><span class="flex gap-2"><button type="button" aria-label="Previous page" disabled={pageIndex() === 0} onClick={() => setSelection((current) => ({ ...current, page: pageIndex() - 1 }))}><ChevronLeft size={14} /></button><button type="button" aria-label="Next page" disabled={pageIndex() + 1 >= pageCount()} onClick={() => setSelection((current) => ({ ...current, page: pageIndex() + 1 }))}><ChevronRight size={14} /></button></span></div></Show>
         </Show>

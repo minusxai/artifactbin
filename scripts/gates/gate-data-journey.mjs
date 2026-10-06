@@ -510,8 +510,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
       const grant = await policyOwner.request.put(`${B}/api/my/artifacts/${policyDataset.id}/sharing`, { data: { shares: [{ email: SECOND_EMAIL, role: 'editor' }] } });
       assert.equal(grant.status(), 200);
       await editor.goto(`${B}/a/${policyDataset.id}/edit`);
-      await editor.getByRole('button', { name: 'Open artifact controls', exact: true }).click();
-      await editor.getByRole('dialog', { name: 'Artifact controls' }).getByRole('button', { name: 'Share', exact: true }).click();
+      await editor.getByRole('tab', { name: 'Sharing', exact: true }).click();
       const recipient = 'mxmx_test_policy_recipient@example.com';
       await editor.getByLabel('Invite email').fill(recipient);
       await editor.getByLabel('Add email').click();
@@ -524,8 +523,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
         if (shares.some(s => s.email === recipient && s.role === 'editor')) break;
       }
       assert(shares.some(s => s.email === recipient && s.role === 'editor'), `the recipient is stored as an editor (${JSON.stringify(shares)})`);
-      await editor.getByLabel('Close sharing', { exact: true }).click();
-      await editor.getByLabel('Dismiss artifact controls').click();
+      await editor.getByRole('tab', { name: 'Data actions', exact: true }).click();
       await editor.getByLabel('Allow insert', { exact: true }).check();
       await editor.getByLabel('Add insert check condition', { exact: true }).click();
       await editor.getByLabel('insert check.1.1 value', { exact: true }).fill('"blocked"');
@@ -558,7 +556,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     });
     await step('persistence: the dataset title saves and the editor leaves /edit', async () => {
       await editor.reload();
-      await editor.getByRole('button', { name: 'Source & models', exact: true }).click();
+      await editor.getByRole('tab', { name: 'Source & models', exact: true }).click();
       await editor.getByLabel('Dataset title', { exact: true }).fill('Updated policy dataset');
       await editor.getByLabel('Save dataset', { exact: true }).click();
       await editor.getByRole('link', { name: 'Edit dataset', exact: true }).waitFor();
@@ -833,7 +831,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
       await owner.getByLabel('Expose schema support', { exact: true }).uncheck();
       await openAdvanced(owner);
       await owner.getByLabel('Default schema', { exact: true }).selectOption('models');
-      await owner.getByRole('button', { name: 'Data preview', exact: true }).click();
+      await owner.getByRole('tab', { name: 'Data preview', exact: true }).click();
       await owner.getByLabel('SQL view', { exact: true }).click();
       await owner.getByLabel('Dataset SQL', { exact: true }).fill('select * from models.region_totals');
       await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 200, { sql: 'select * from models.region_totals' });
@@ -842,7 +840,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
       const deniedDraft = await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 400, { sql: 'select * from sales.orders' });
       assert.ok(deniedDraft.error);
       assert.equal(await owner.getByLabel('Dataset SQL', { exact: true }).inputValue(), 'select * from sales.orders');
-      await owner.getByRole('button', { name: 'Source & models', exact: true }).click();
+      await owner.getByRole('tab', { name: 'Source & models', exact: true }).click();
       await openAdvanced(owner);
       await owner.getByLabel('Edit dataset source', { exact: true }).click();
       const source = await owner.getByLabel('Dataset source', { exact: true }).inputValue();

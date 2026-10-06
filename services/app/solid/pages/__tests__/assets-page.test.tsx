@@ -36,6 +36,15 @@ it('links to upload and dataset creation and searches assets', async () => {
   await waitFor(() => expect(table).not.toHaveTextContent('Research Map.svg'));
 });
 
+it.each([null, '', '   '])('keeps an asset with title %j visibly linked', async title => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ...payload, assets: [{ ...payload.assets[0], title }], total: 1 })));
+  open();
+  const link = await screen.findByRole('link', { name: 'Open Untitled' });
+  expect(link).toHaveTextContent('Untitled');
+  expect(link).toHaveAttribute('href', '/a/data_1');
+  expect(screen.getByLabelText('More actions for Untitled')).toBeInTheDocument();
+});
+
 it('paginates on the server and resets the page when searching', async () => {
   const fetchMock = vi.fn(async (url: string) => {
     const params = new URL(String(url), 'http://localhost').searchParams;

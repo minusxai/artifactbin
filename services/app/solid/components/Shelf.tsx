@@ -21,7 +21,7 @@ import { Tooltip } from './Tooltip';
 import { ConfirmDialog } from './ConfirmDialog';
 import RowMenu from './RowMenu';
 import ShareLink from './ShareLink';
-import { DialogShell } from '@/solid/components/DialogShell';
+import { MoveToFolderDialog } from './MoveToFolderDialog';
 import { apiFetch } from '../lib/api';
 
 type Actions = 'none' | 'share' | 'full';
@@ -63,7 +63,6 @@ export function RowActions(props: { row: ShelfRow; level: Actions; folders: Shel
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [moving, setMoving] = createSignal(false);
-  const [moveFilter, setMoveFilter] = createSignal('');
   const [sharing, setSharing] = createSignal(false);
   const [renaming, setRenaming] = createSignal(false);
   const [draft, setDraft] = createSignal('');
@@ -77,13 +76,10 @@ export function RowActions(props: { row: ShelfRow; level: Actions; folders: Shel
   };
   const move = async (id: string | null) => {
     const result = await writeBrowserArtifact(props.row.id, { parent_id: id }).catch(() => null);
-    if (result?.ok) { setParentId(id); setMoving(false); setMoveFilter(''); props.onChanged(); pageDataChanged(); }
+    if (!result?.ok) return false;
+    setParentId(id); setMoving(false); props.onChanged(); pageDataChanged();
+    return true;
   };
-  const closeMove = () => { setMoving(false); setMoveFilter(''); };
-  const shownFolders = createMemo(() => {
-    const q = moveFilter().trim().toLowerCase();
-    return q ? props.folders.filter(f => nameOf(f).toLowerCase().includes(q)) : props.folders;
-  });
   const remove = async () => {
     setBusy(true); setError(null);
     const result = await fetch(`/api/my/artifacts/${props.row.id}`, { method: 'DELETE' }).catch(() => null);
@@ -105,7 +101,7 @@ export function RowActions(props: { row: ShelfRow; level: Actions; folders: Shel
         <Show when={sharing()}><ShareLink artifactId={props.row.id} title={nameOf(props.row)} format={props.row.format} editable url={props.row.url} startOpen onClose={() => setSharing(false)} /></Show>
       </span>
     </Show>
-    <Show when={moving()}><DialogShell onClose={closeMove} initialFocus="[autofocus]"><div role="dialog" aria-label={`Move ${nameOf(props.row)}`} class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"><div class="w-full max-w-sm rounded border border-edge bg-surface p-4"><h2 class="mb-3 font-mono text-sm">Move {nameOf(props.row)}</h2><input aria-label="Filter folders" placeholder="filter folders" autofocus value={moveFilter()} onInput={event => setMoveFilter(event.currentTarget.value)} class="mb-2 w-full rounded-[4px] border border-edge bg-transparent px-2 py-1.5 font-mono text-xs text-fg focus:border-accent focus:outline-none" /><div class="max-h-64 overflow-y-auto"><button type="button" aria-label="Move to root" aria-current={parentId() === null ? 'location' : undefined} onClick={() => void move(null)} class="block w-full px-2 py-1 text-left">root</button><For each={shownFolders()}>{folder => <button type="button" aria-label={`Move to ${nameOf(folder)}`} aria-current={parentId() === folder.id ? 'location' : undefined} disabled={folder.id === props.row.id || (folder.ancestor_ids ?? []).includes(props.row.id)} onClick={() => void move(folder.id)} class="block w-full px-2 py-1 text-left disabled:opacity-40">{nameOf(folder)}</button>}</For><Show when={moveFilter() && shownFolders().length === 0}><p class="px-2 py-1 font-mono text-xs text-faint">no folder matches</p></Show></div><button type="button" aria-label="Close folder picker" onClick={closeMove} class="mt-3 text-xs text-muted">Cancel</button></div></div></DialogShell></Show>
+    <Show when={moving()}><MoveToFolderDialog title={nameOf(props.row)} artifactId={props.row.id} currentParentId={parentId()} folders={props.folders} onMove={move} onClose={() => setMoving(false)} /></Show>
     <Show when={confirm()}><ConfirmDialog title={`Delete ${nameOf(props.row)}?`} description={props.childCount ? `Delete ${nameOf(props.row)} and the ${props.childCount} item${props.childCount === 1 ? '' : 's'} inside it? They go to the trash, and you can restore them any time.` : `Delete ${nameOf(props.row)}? It goes to the trash, and you can restore it any time.`} action="Delete" confirmLabel="Confirm delete" danger busy={busy()} error={error()} onCancel={() => setConfirm(false)} onConfirm={() => void remove()} /></Show>
   </>;
 }

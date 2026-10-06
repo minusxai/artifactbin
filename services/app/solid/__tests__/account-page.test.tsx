@@ -51,7 +51,7 @@ it('keeps a failed path edit available to correct and reports the refusal', asyn
   expect(await screen.findByRole('alert')).toHaveTextContent('Choose a path');
   expect(screen.getByRole('textbox', { name: 'Custom path' })).toHaveValue('/api/test');
 });
-it('loads the account handle late while keeping the photo and data controls mounted', async () => {
+it('loads the account handle late while keeping profile controls without the retired data uploader', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
     if (url === '/api/page/account') { await new Promise(resolve => setTimeout(resolve, 5)); return Response.json({ username: 'owner', image: '/api/users/usr_1/avatar?v=1' }); }
@@ -67,7 +67,9 @@ it('loads the account handle late while keeping the photo and data controls moun
   await waitFor(() => expect((screen.getByRole('textbox', { name: 'Username' }) as HTMLInputElement).value).toBe('owner'));
   expect(view.container.querySelector('img[src="/api/users/usr_1/avatar?v=1"]')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
-  expect(screen.getByLabelText('Upload a CSV')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Data' })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Upload a CSV')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Google Sheet URL')).not.toBeInTheDocument();
   expect(screen.getByText(/afbin CLI connection/)).toBeInTheDocument();
 });
 
@@ -108,27 +110,6 @@ it('requires confirmation before revoking a connection', async () => {
   expect(calls).not.toContain('DELETE /api/my/tokens/tok_1');
   fireEvent.click(screen.getByRole('button', { name: 'Confirm revoke' }));
   await waitFor(() => expect(calls).toContain('DELETE /api/my/tokens/tok_1'));
-});
-
-it('publishes an uploaded CSV with the account session and shows its reference', async () => {
-  const calls: Array<{ url: string; init?: RequestInit }> = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push({ url: String(url), init });
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/domain') return Response.json({ enabled: false, target: null, targetAddresses: [], domain: null });
-    if (url === '/api/my/tokens') return Response.json({ tokens: [] });
-    if (url === '/api/my/artifacts') return Response.json({ id: 'data_1', title: 'numbers', columns: [{ name: 'value', type: 'integer' }], rowCount: 1 });
-    if (url === '/a/data_1/raw') return Response.json([{ value: 2 }]);
-    return Response.json({});
-  }));
-  window.history.replaceState(null, '', '/account');
-  render(() => <App />);
-  const file = await screen.findByLabelText('CSV file') as HTMLInputElement;
-  fireEvent.change(file, { target: { files: [new File(['value\n2'], 'numbers.csv', { type: 'text/csv' })] } });
-  await waitFor(() => expect(calls.some(call => call.url === '/api/my/artifacts' && call.init?.method === 'POST')).toBe(true));
-  expect(await screen.findByRole('button', { name: 'Copy dataset reference' })).toHaveTextContent('ref:data_1');
 });
 
 it('bounds connections to five rows and separates inactive history', async () => {

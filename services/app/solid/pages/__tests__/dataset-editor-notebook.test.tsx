@@ -17,7 +17,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('dataset editor — the notebook', () => {
   it.each(['metaKey', 'ctrlKey'])('runs the focused notebook cell with %s+Enter while plain Enter stays editable', async modifier => {
-    editor(); await discover(); click('Add notebook cell');
+    editor(); change('Dataset title', 'Orders'); await discover(); click('Add notebook cell');
     change('Cell name 1', 'orders_preview'); change('Cell SQL 1', 'select id from sales.orders');
     const sql = screen.getByLabelText('Cell SQL 1');
     fireEvent.keyDown(sql, { key: 'Enter' });
@@ -31,13 +31,13 @@ describe('dataset editor — the notebook', () => {
   });
 
   it.each([{repeat:true},{isComposing:true},{keyCode:229}])('does not run a notebook shortcut during repeated or composing key events: %j', async extra => {
-    editor(); await discover(); click('Add notebook cell'); change('Cell SQL 1','select id from sales.orders');
+    editor(); change('Dataset title', 'Orders'); await discover(); click('Add notebook cell'); change('Cell SQL 1','select id from sales.orders');
     fireEvent.keyDown(screen.getByLabelText('Cell SQL 1'),{key:'Enter',metaKey:true,...extra});
     expect(state.calls.filter(c => c.url.endsWith('/notebook/preview'))).toHaveLength(0);
   });
 
   it('runs the focused cell once and ignores shortcuts while another run is pending or source is open', async () => {
-    editor(); await discover(); await addCell('base','select id from sales.orders'); click('Add notebook cell'); change('Cell SQL 2','select * from base');
+    editor(); change('Dataset title', 'Orders'); await discover(); await addCell('base','select id from sales.orders'); click('Add notebook cell'); change('Cell SQL 2','select * from base');
     let finish!: (response:Response)=>void; state.notebookReply=()=>new Promise(resolve=>{finish=resolve;});
     fireEvent.keyDown(screen.getByLabelText('Cell SQL 2'),{key:'Enter',ctrlKey:true});
     await waitFor(() => expect(state.calls.filter(c=>c.url.endsWith('/notebook/preview'))).toHaveLength(2));
@@ -61,7 +61,7 @@ describe('dataset editor — the notebook', () => {
   });
 
   it('runs chained cells independently of the whitelist and retains stable IDs through insertion', async () => {
-    editor(); await discover(); await addCell('raw_orders', 'select id from sales.orders');
+    editor(); change('Dataset title', 'Orders'); await discover(); await addCell('raw_orders', 'select id from sales.orders');
     await addCell('totals', 'select count(*) id from raw_orders', 2);
     const payload = state.calls.filter(c => c.url.endsWith('/notebook/preview')).at(-1)?.body;
     expect(payload.notebook.cells.map((cell: any) => cell.name)).toEqual(['raw_orders', 'totals']);
@@ -73,7 +73,7 @@ describe('dataset editor — the notebook', () => {
   });
 
   it('invalidates edited and downstream outputs, restores selected columns by name on rerun', async () => {
-    editor(); await discover(); state.previewColumns = [{name:'id',type:'number'},{name:'old',type:'string'}];
+    editor(); change('Dataset title', 'Orders'); await discover(); state.previewColumns = [{name:'id',type:'number'},{name:'old',type:'string'}];
     await addCell('base', 'select id from sales.orders'); await addCell('totals', 'select * from base', 2); click('Expose cell 2');
     change('Cell SQL 1', 'select id, 1 as added from sales.orders');
     expect(screen.queryByLabelText('Cell preview 2')).not.toBeInTheDocument(); expect(screen.getByLabelText('Expose cell 2')).toBeDisabled();
@@ -93,7 +93,7 @@ describe('dataset editor — the notebook', () => {
   });
 
   it('auto-names inserted cells and runs the requested prefix despite an unfinished later cell', async () => {
-    editor(); await discover(); await addCell('base', 'select id from sales.orders'); click('Add notebook cell');
+    editor(); change('Dataset title', 'Orders'); await discover(); await addCell('base', 'select id from sales.orders'); click('Add notebook cell');
     expect(screen.getByLabelText('Cell name 2')).toHaveValue('query_1'); click('Run cell 1');
     await waitFor(() => expect(state.calls.filter(c => c.url.endsWith('/notebook/preview'))).toHaveLength(2));
     expect(state.calls.filter(c => c.url.endsWith('/notebook/preview')).at(-1)?.body.notebook.cells).toHaveLength(1);
@@ -110,7 +110,7 @@ describe('dataset editor — the notebook', () => {
   });
 
   it('saves a fresh model-only notebook after an unchanged source roundtrip', async () => {
-    editor(); await discover();
+    editor(); change('Dataset title', 'Orders'); await discover();
     await addCell('raw_orders','select id from sales.orders');
     await addCell('region_totals','select count(*) id from raw_orders',2);
     click('Expose cell 2'); change('Default schema','models');
@@ -131,7 +131,7 @@ describe('dataset editor — the notebook', () => {
   });
 
   it('keeps final SQL explicit and retains the authored input after errors', async () => {
-    editor(); await selectOrders(); click('SQL view'); const before = state.calls.filter(c => c.url === '/api/my/datasets/preview').length;
+    editor(); change('Dataset title', 'Orders'); await selectOrders(); click('SQL view'); const before = state.calls.filter(c => c.url === '/api/my/datasets/preview').length;
     change('Dataset SQL', 'select count(*) id from orders'); expect(state.calls.filter(c => c.url === '/api/my/datasets/preview')).toHaveLength(before);
     await waitFor(() => expect(screen.getByLabelText('Run dataset SQL')).toBeEnabled()); click('Run dataset SQL'); await waitFor(() => expect(state.calls.filter(c => c.url === '/api/my/datasets/preview').at(-1)?.body.sql).toBe('select count(*) id from orders'));
     change('Dataset SQL','select forbidden from orders'); await waitFor(() => expect(screen.getByLabelText('Refresh dataset')).toBeEnabled()); click('Refresh dataset');
@@ -141,7 +141,7 @@ describe('dataset editor — the notebook', () => {
   });
 
   it('does not rerun final SQL when notebook presentation or an unexposed draft changes', async () => {
-    editor(); await selectOrders(); await addCell('helper', 'select id from sales.orders');
+    editor(); change('Dataset title', 'Orders'); await selectOrders(); await addCell('helper', 'select id from sales.orders');
     click('SQL view'); change('Dataset SQL','select id from orders'); await waitFor(() => expect(screen.getByLabelText('Run dataset SQL')).toBeEnabled()); click('Run dataset SQL');
     await waitFor(() => expect(screen.getByLabelText('Refresh dataset')).toBeEnabled());
     const before=state.calls.filter(c => c.url === '/api/my/datasets/preview').length;

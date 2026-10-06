@@ -11,6 +11,7 @@ import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { InboxProvider } from '@/solid/lib/notifications';
 import { ArtifactDataPage, type DataAnswer } from '@/solid/pages/ArtifactData';
+import type { DatasetAccessPolicy } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/story/datasets/dataset-usage';
 
@@ -22,14 +23,17 @@ class FakeEventSource {
 }
 const catalog = (name = 'rows'): DatasetCatalog => ({ kind: 'stored', defaultSchema: 'public', refreshSeconds: 0, tables: [{ schema: 'public', name, columns: [{ name: 'region', type: 'string' }] }] } as unknown as DatasetCatalog);
 let pageAnswers: unknown[] = [];
+let policy: DatasetAccessPolicy | null;
 beforeEach(() => {
   streams.length = 0; pageAnswers = [];
+  policy = {version: 1, enforcement: 'enabled', tables: [{table: {schema: 'public', name: 'rows'}, insert_permissions: [{role: 'viewer', permission: {columns: '*', check: {}}}]}]};
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.endsWith('/tables')) return Response.json({ rows: [{ region: 'North' }], columns: [{ name: 'region', type: 'string' }], refreshedAt: '2026-09-30T00:00:00.000Z' });
     if (url.endsWith('/events/frame')) return Response.json({ editId: 'e2', version: 2, by: null, format: 'dataset', title: 'Regional sales', source: null, dataPreview: null });
     if (url.startsWith('/api/page/artifact/')) return Response.json(pageAnswers.shift() ?? {});
+    if (url.endsWith('/policy')) return Response.json({policy, revision: 1, tables: [], writtenBy: []});
     if (url.endsWith('/sharing')) return Response.json({ visibility: 'public', linkRole: 'viewer', shares: [] });
     return Response.json({});
   }));
@@ -105,7 +109,7 @@ it('explores a catalogued dataset, and the owner may edit it and copy its refere
   fireEvent.click(panel.getByRole('button', { name: 'Copy dataset reference' }));
   expect(writeText).toHaveBeenCalledWith(datasetQuerySnippet('art001', catalog()));
   expect(panel.getByRole('button', { name: 'Copy dataset reference' })).toHaveTextContent('copied dataset reference');
-  expect(within(panel.getByLabelText('Owner actions')).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+  expect(within(panel.getByLabelText('Owner actions')).queryByRole('button', { name: 'Share' })).toBeNull();
 });
 
 it('keeps the owner affordances from readers and hands an editor sharing without ownership', () => {
@@ -120,7 +124,8 @@ it('keeps the owner affordances from readers and hands an editor sharing without
   panel = controls();
   expect(panel.queryByLabelText('Owner actions')).toBeNull();
   expect(panel.queryByRole('button', { name: 'Copy dataset reference' })).toBeNull();
-  expect(panel.getByRole('button', { name: 'Share' })).toBeInTheDocument();
+  expect(panel.queryByRole('button', { name: 'Share' })).toBeNull();
+  expect(screen.getByRole('tab', {name: 'Sharing'})).toBeInTheDocument();
 });
 
 it('follows a dataset on its live stream: a new version re-reads the page and adopts its catalog', async () => {
@@ -139,4 +144,110 @@ it('photographs a capture without opening a live stream, its image read with the
   expect(screen.getByRole('main')).toContainElement(image);
   expect(image).toHaveAttribute('src', '/a/art001/raw?key=123.abc');
   expect(streams).toHaveLength(0);
+});
+
+it('gives dataset viewers the workspace layout with read-only data tabs and sharing', async () => {
+  open(answer('dataset', { catalog: catalog() }, 'owner'));
+  expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Regional sales', level: 1 })).toBeNull();
+  expect(within(screen.getByLabelText('Page bar')).getByLabelText('Current page')).toHaveTextContent('Regional sales');
+  const tabs = within(screen.getByRole('tablist', { name: 'Dataset workspace' }));
+  expect(tabs.getAllByRole('tab').map(button => button.textContent)).toEqual(['Data preview', 'Data actions', 'Sharing']);
+  expect(tabs.getByRole('tab', { name: 'Data preview' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getAllByRole('link', { name: 'Edit dataset' })).toHaveLength(1);
+  fireEvent.click(tabs.getByRole('tab', { name: 'Data actions' }));
+  expect(await screen.findByLabelText('Read-only data actions')).toBeVisible();
+  expect(await screen.findByText('public.rows')).toBeVisible();
+  expect(screen.getByText('insert · viewer')).toBeVisible();
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/policy'))).toHaveLength(1);
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Save access policies' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Edit JSON / YAML' })).toBeNull();
+  expect(screen.queryByLabelText('Dataset title')).toBeNull();
+});
+
+it('does not fetch private policy details for a dataset reader', async () => {
+  open(answer('dataset', { catalog: catalog() }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Data actions' }));
+  expect(screen.getByText('Data action rules are visible to dataset editors.')).toBeInTheDocument();
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/policy'))).toBe(false);
+  expect(screen.queryByRole('link', { name: 'Edit dataset' })).toBeNull();
+});
+
+it('keeps captures free of workspace navigation and mutation rules', () => {
+  open(answer('dataset', {catalog: catalog(), captureKey: '123.abc'}, 'owner'));
+  expect(screen.queryByRole('navigation', {name: 'Workspace'})).toBeNull();
+  expect(screen.queryByRole('tablist', {name: 'Dataset workspace'})).toBeNull();
+  expect(screen.getByLabelText('Dataset catalog')).toBeInTheDocument();
+});
+
+it.each([
+  [undefined, 'No additional table restrictions. Granted actions apply to all tables.'],
+  [[], 'No table writes are allowed.'],
+] as const)('explains v2 grants and table restrictions without editing them (%s)', async (tables, message) => {
+  policy = {version: 2, allow: [{actions: ['insert', 'update'], from: {artifactOwner: '$owner'}}], ...(tables ? {tables: [...tables]} : {})};
+  open(answer('dataset', {catalog: catalog()}, 'owner'));
+  fireEvent.click(screen.getByRole('tab', {name: 'Data actions'}));
+  expect(await screen.findByText(message)).toBeVisible();
+  expect(screen.getByText('insert, update')).toBeVisible();
+  expect(screen.getByText('Apps owned by the dataset owner')).toBeVisible();
+  expect(within(screen.getByLabelText('Read-only data actions')).queryByRole('button')).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/policy')).every(([, options]) => !options?.method || options.method === 'GET')).toBe(true);
+});
+
+it('does not offer head policy inspection on an archived dataset', () => {
+  open({...answer('dataset', {catalog: catalog()}, 'owner'), archived: {version: 1, head: 2}});
+  fireEvent.click(screen.getByRole('tab', {name: 'Data actions'}));
+  expect(screen.getByText('Data action rules are visible to dataset editors.')).toBeVisible();
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/policy'))).toBe(false);
+  expect(screen.queryByRole('link', {name: 'Edit dataset'})).toBeNull();
+});
+
+it.each(['owner', 'editor'] as const)('lets a dataset %s manage sharing directly from view mode', async role => {
+  open(answer('dataset', {catalog: catalog()}, role));
+  fireEvent.click(screen.getByRole('tab', {name: 'Sharing'}));
+  expect(await screen.findByLabelText('Make private')).toBeVisible();
+  expect(screen.getByLabelText('Invite email')).toBeVisible();
+  expect(screen.queryByRole('dialog', {name: 'Sharing'})).toBeNull();
+  fireEvent.click(screen.getByRole('link', {name: 'Manage access policies'}));
+  expect(screen.getByRole('tab', {name: 'Data actions'})).toHaveAttribute('aria-selected', 'true');
+  expect(await screen.findByLabelText('Read-only data actions')).toBeVisible();
+});
+
+it('gives a dataset reader link sharing without fetching or editing private sharing settings', () => {
+  open(answer('dataset', {catalog: catalog()}));
+  fireEvent.click(screen.getByRole('tab', {name: 'Sharing'}));
+  expect(screen.getByRole('button', {name: 'Copy link'})).toBeVisible();
+  expect(screen.queryByLabelText('Make private')).toBeNull();
+  expect(screen.queryByLabelText('Invite email')).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/sharing'))).toBe(false);
+});
+
+it.each(['image', 'pdf', 'file', 'viz', 'dataset'])('keeps workspace navigation on %s asset pages', format => {
+  open(answer(format));
+  const workspace = screen.getByRole('navigation', {name: 'Workspace'});
+  expect(within(workspace).getByRole('link', {name: 'Assets'})).toHaveAttribute('href', '/assets');
+  expect(screen.getAllByRole('main')).toHaveLength(1);
+  if (format !== 'dataset') {
+    const tabs = within(screen.getByRole('tablist', {name: 'Asset workspace'}));
+    expect(tabs.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Asset', 'Sharing']);
+    expect(tabs.getByRole('tab', {name: 'Asset'})).toHaveAttribute('aria-selected', 'true');
+  }
+});
+
+it.each(['image', 'pdf', 'file', 'viz', 'dataset'])('leaves workspace navigation out of %s captures', format => {
+  open(answer(format, {captureKey: '123.abc'}));
+  expect(screen.queryByRole('navigation', {name: 'Workspace'})).toBeNull();
+  expect(screen.getAllByRole('main')).toHaveLength(1);
+  expect(streams).toHaveLength(0);
+});
+
+it.each(['image', 'pdf', 'file', 'viz'])('embeds sharing for a %s owner and returns to the asset', async format => {
+  open(answer(format, {}, 'owner'));
+  fireEvent.click(screen.getByRole('tab', {name: 'Sharing'}));
+  expect(await screen.findByLabelText('Make private')).toBeVisible();
+  expect(screen.getByRole('region', {name: 'Sharing'})).toBeVisible();
+  expect(screen.queryByRole('dialog', {name: 'Sharing'})).toBeNull();
+  fireEvent.click(screen.getByRole('tab', {name: 'Asset'}));
+  expect(screen.queryByRole('region', {name: 'Sharing'})).toBeNull();
 });
