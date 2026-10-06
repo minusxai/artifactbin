@@ -39,7 +39,7 @@ const call = async body => {const r=await fetch(base+'/api/browser-sessions',{me
 const session_id=crypto.randomUUID(), execution_id=crypto.randomUUID();
 let accepted=false;
 try {
-  const receipt=await call({op:'script',session_id,execution_id,create:true,code:`const page=await context.newPage();await page.goto('/a/${artifactId}');await page.getByRole('heading').first().waitFor();await output.image(await page.screenshot());`});
+  const receipt=await call({op:'script',session_id,execution_id,create:true,code:`const page=await context.newPage();await page.setViewportSize({width:390,height:844});await page.goto('/a/${artifactId}');await page.getByRole('heading').first().waitFor();await output.image(await page.screenshot());`});
   if(receipt.session_id!==session_id||receipt.execution_id!==execution_id||!['queued','running','completed'].includes(receipt.status))throw Error('Session was not accepted');
   accepted=true;
   let s=receipt;

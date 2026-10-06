@@ -24,7 +24,8 @@ npm CLI: local files/browser approval, guests allowed. Direct HTTP: email auth, 
 - Preserve its identity: keep `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork: copy and remove those five fields.
 - Questions: source first; render only if needed.
 - Copy: plain words, short sentences; preserve facts and caveats. [Copy guidance](references/copy.md).
-- Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. Files/registered IDs use local data, unchanged by server mutations. Published data: `afbin export <artifact-url> --output out.png` or ID with `--refresh` (fresh published image; refuses local paths). For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
+- Publishing does not verify appearance. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. Files/registered IDs use local data, unchanged by server mutations. Published data: `afbin export <artifact-url> --output out.png` or ID with `--refresh` (fresh published image; refuses local paths). The design system supplies palette and type.
+- Check a new page at 390px before replying (`afbin help live-sessions`); fix overflow, clipped navigation and unreachable controls.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 
 `afbin -h` and `afbin help <topic>` work offline; `afbin help` prints this file’s location.
