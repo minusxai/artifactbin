@@ -109,6 +109,8 @@ it('reports only numeric allowlisted npm phase timings without paths or credenti
  try {
   await writeFile(join(directory,'install-timing.json'),JSON.stringify({timers:{npm:137600,'reify:unpack':100000,'build:run:postinstall':2000,'reify:/secret-path':99,'token':999},metadata:{token:'secret'}}));
   expect(await npmInstallPhaseTimings(directory)).toEqual({npm:137600,'reify:unpack':100000,'build:run:postinstall':2000});
+  await writeFile(join(directory,'latest-timing.json'),JSON.stringify({timers:{npm:500,'reify:unpack':400}}));
+  expect(await npmInstallPhaseTimings(directory)).toEqual({npm:500,'reify:unpack':400});
   expect(await npmInstallPhaseTimings(join(directory,'absent'))).toEqual({});
   expect(npmConsumerInstallArgs('candidate.tgz',true)).toContain('--timing');
  }finally{await rm(directory,{recursive:true,force:true});}
