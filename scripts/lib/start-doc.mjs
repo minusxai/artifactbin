@@ -68,7 +68,14 @@ export async function becomeOwner(page, base, token) {
  * held cookie proves guest ownership; the account session performs the merge. */
 export async function mergeGuestIntoAccount(page, base, token) {
   await becomeOwner(page, base, token);
-  const response = await page.request.get(`${base}/api/page/session`);
+  return verifiedAccountSession(page.request, base);
+}
+
+/** Verify the account after the browser established its guest connection. */
+export async function verifiedAccountSession(request, base) {
+  // Like the owner SSR read, allow one ECONNRESET on Playwright's shared socket.
+  // Verified guest adoption is idempotent; HTTP errors and a second reset still fail.
+  const response = await request.get(`${base}/api/page/session`, { maxRetries: 1 });
   if (!response.ok() || (await response.json()).kind !== 'account') {
     throw new Error(`guest merge requires a verified account (${response.status()})`);
   }
