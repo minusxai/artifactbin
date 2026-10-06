@@ -44,7 +44,7 @@ export function unauthorized(request: Request): Response {
   return json(
     {
       error: 'unauthorized',
-      help: `Retry through afbin: npx --yes @afbin/cli@latest auth --server ${base}. Prepare Node: ${base}/chat/ensure-node.sh; Windows: ${base}/chat/ensure-node.ps1. CLI browser approval allows guests; direct HTTP requires email sign-in.`,
+      help: `Retry through afbin: afbin auth --server ${base}. If \`afbin\` is not installed, run \`npx --yes @afbin/cli@latest setup\` once (Windows PowerShell: \`npx.cmd --yes @afbin/cli@latest setup\`); it installs the \`afbin\` command and the agent skills.`,
       guide: `${base}/llms.txt`,
     },
     401,

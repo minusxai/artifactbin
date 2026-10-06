@@ -164,7 +164,7 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
     <Show when={connection()}><p role="status" class="mb-2 text-sm text-muted">{connection()}</p></Show>
     <Show when={error()}><p role="alert" class="mb-2 text-sm text-red-500">{error()}</p></Show>
     <div style={{ 'max-width': mobile() ? '420px' : undefined }}>
-      <Show when={ended()}><p role="status" class="mb-3 rounded border border-edge bg-surface p-4 text-sm">Session ended (exit {info()?.exitCode}). Start a new session with npx --yes @afbin/cli@latest remote to reconnect.</p></Show>
+      <Show when={ended()}><p role="status" class="mb-3 rounded border border-edge bg-surface p-4 text-sm">Session ended (exit {info()?.exitCode}). Start a new session with afbin remote to reconnect.</p></Show>
       <div class="overflow-x-auto rounded border border-edge bg-[#111214] p-2" hidden={ended()}><div ref={container} aria-label="Remote terminal" style={{ height: 'min(58dvh, 650px)', 'min-height': '240px' }} /></div>
       <div class="mt-2 flex flex-wrap gap-2" aria-label="Terminal scroll controls" hidden={ended()}>
         <button class="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal?.scrollPages(-1)}>Scroll up</button>
@@ -204,7 +204,7 @@ function InstallInstructions(): JSX.Element {
     <p class="text-xs text-muted">Windows: run both commands in PowerShell; npx.cmd works without changing script execution policy.</p>
     <p class="text-xs text-muted">Use the command below to sign in to this server and start your installed agent.</p>
     <div><label for="remote-harness" class="mb-2 block text-sm">Choose your agent</label><select id="remote-harness" value={harness()} onChange={(event) => setHarness(event.currentTarget.value)} class="w-full rounded border border-edge bg-surface p-2 text-sm"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="pi">Pi</option><option value="opencode">OpenCode</option></select></div>
-    <CopyCommand label="Start a session" command={`npx --yes @afbin/cli@latest remote --server '${origin}' ${harness()}`}  />
+    <CopyCommand label="Start a session" command={`afbin remote --server '${origin}' ${harness()}`}  />
     <p class="text-xs text-muted">Your agent must already be installed. Type @ in an artifact comment to mention an online session.</p>
   </div>;
 }

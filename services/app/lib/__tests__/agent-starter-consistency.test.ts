@@ -16,7 +16,9 @@ import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
-const INSTALLER = `npx --yes @afbin/cli@latest`;
+const INSTALLER = `npx --yes @afbin/cli@latest setup`;
+/** The canonical bootstrap sentence: the one place the npm spelling appears in a document. */
+const BOOTSTRAP = 'If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills.';
 
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
@@ -67,6 +69,13 @@ describe('every agent-facing starter says the same thing', () => {
     for (const [name, text] of await surfaces()) expect(text, name).toContain(INSTALLER);
   });
 
+  it('(b) spells npm only as that one setup line; every other command is `afbin <command>`', async () => {
+    for (const [name, text] of await surfaces()) {
+      expect(text.split('npx --yes @afbin/cli@').length - 1, name).toBe(1);
+      for (const [, command] of text.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command, name).toBe('setup');
+    }
+  });
+
   it('(c) names none of the retired vocabulary', async () => {
     const offences: string[] = [];
     for (const [name, text] of await surfaces()) {
@@ -113,8 +122,10 @@ describe('every agent-facing starter says the same thing', () => {
 describe('what the brief and the contract teach next', () => {
   const brief = renderTree(skillTree(), 'https://artifactbin.dev').find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
 
-  it('teaches automatic sign-in, browser approval and the private configuration location, without a setup step', () => {
-    expect(brief).toContain('@afbin/cli@latest <command>');
+  it('teaches automatic sign-in, browser approval, the private configuration location and the one-time setup line', () => {
+    expect(brief).toContain(BOOTSTRAP);
+    expect(brief.split('npx --yes @afbin/cli@').length - 1).toBe(1);
+    expect(brief).not.toContain('shorthand');
     expect(brief).toContain('references/npm-local.md');
     expect(brief).toMatch(/automatic|authenticates itself|signs you in/i);
     expect(brief).toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
@@ -134,7 +145,9 @@ describe('what the brief and the contract teach next', () => {
 
   it('spells local help, origin-scoped browser setup and the current private config directory', () => {
     const contract = agentContract('https://example.test');
-    expect(contract).toContain('@afbin/cli@latest auth --server https://example.test');
+    expect(contract).toContain('`afbin auth --server https://example.test`');
+    expect(contract).toContain(BOOTSTRAP);
+    expect(contract).toContain('`afbin help`');
     expect(contract).toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
     expect(contract).toContain('--yes --json');
     expect(contract).toContain('browser approval');

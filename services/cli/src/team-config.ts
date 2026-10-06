@@ -95,8 +95,8 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
 export function serverInstructions(settings:TeamSettings):string[]{
  return [
   `Prepare Node/npm if needed: ${settings.origin}/chat/ensure-node.sh (macOS/Linux), ${settings.origin}/chat/ensure-node.ps1 (Windows PowerShell).`,
-  `Install agent skills for this host: npx --yes @afbin/cli@latest setup --server ${settings.origin}`,
-  `Teammates point their client at this server:  npx --yes @afbin/cli@latest config set host ${settings.origin}`,
+  `Install the afbin command and agent skills for this host (once): npx --yes @afbin/cli@latest setup --server ${settings.origin}`,
+  `Teammates point their client at this server:  afbin config set host ${settings.origin}`,
   usesDevOutbox(settings.origin)
    ?`Login codes are NOT emailed from a loopback URL: each one prints here as "[dev-mail] otp email=… code=…" and is appended to ${settings.env.EMAIL__DEV_OUTBOX_PATH}.`
    :loginDelivery(settings.env),

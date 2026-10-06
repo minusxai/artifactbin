@@ -69,8 +69,13 @@ test('update help and npm recovery copy name the npm install',()=>{
  assert.match(commandHelp('update'),/Install the latest afbin through npm and refresh agent skills\./);
  assert.doesNotMatch(commandHelp('update'),/next launch/);
  assert.equal(diagnosticCatalog.cli_npm_required?.meaning,'afbin now installs through npm. Run npx --yes @afbin/cli@latest setup once, then use afbin.');
- assert.match(diagnosticCatalog.cli_update_required!.fix,/npx --yes @afbin\/cli@latest/);
- assert.match(diagnosticCatalog.cli_update_required!.fix,/npx.cmd/);
+ assert.equal(diagnosticCatalog.cli_update_required!.fix,'Run afbin update, then retry the command.');
+ // The errors reference is one document: npm appears once there, as cli_npm_required's setup line.
+ const catalog=Object.values(diagnosticCatalog).map(entry=>entry.meaning+' '+entry.fix).join('\n');
+ assert.equal(catalog.split('npx --yes @afbin/cli@').length-1,1);
+ for(const [,command] of catalog.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g))assert.equal(command,'setup');
+ assert.match(diagnosticCatalog.compatible_release_unavailable!.fix,/afbin update/);
+ assert.match(diagnosticCatalog.unmanaged_installation!.fix,/setup/);
  assert.doesNotMatch(diagnosticCatalog.compatible_release_unavailable!.fix,/afbin update --dry-run reports what it resolved/);
 });
 

@@ -32,8 +32,10 @@ test('teaching bootstraps without its output and repairs stale output determinis
   const bundle=JSON.parse(content);
   assert.ok(bundle.files['SKILL.md']);assert.ok(bundle.files['references/remote-review.md']);
   const authGuide=bundle.files['references/publishing-auth.md'];
-  for(const instruction of ['npx --yes @afbin/cli@latest','npx.cmd','ensure-node.sh','ensure-node.ps1','never replaces a running executable','`afbin update` installs the version the server names (else the latest) globally through npm','~/.artifactbin/npm'])assert.ok(authGuide.includes(instruction),instruction);
+  for(const instruction of ['If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills.','If an old `afbin` reports `cli_npm_required`, run the setup line once.','afbin.cmd','ensure-node.sh','ensure-node.ps1','never replaces a running executable','`afbin update` installs the version the server names (else the latest) globally through npm','~/.artifactbin/npm'])assert.ok(authGuide.includes(instruction),instruction);
   assert.doesNotMatch(authGuide,/only prints the command for your next launch|launching the explicit npm command shown/);
+  assert.doesNotMatch(authGuide,/shorthand|@afbin\/cli@latest <command>/);
+  assert.equal(authGuide.split('npx --yes @afbin/cli@').length-1,1);
   assert.doesNotMatch(authGuide,/verified installer|published SHA-256|replaces that executable|Standalone installs check|chat\/install\.sh/);
   const publishingGuide=bundle.files['references/publishing.md'];
   for(const instruction of ['.artifactbin','local-to-remote ID mapping','credentials remain'])assert.ok(publishingGuide.includes(instruction),instruction);

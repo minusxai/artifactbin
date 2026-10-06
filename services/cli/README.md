@@ -2,7 +2,7 @@
 
 Publish and edit artifacts through local files, with offline help and validation. Mirror a local terminal with `afbin remote`.
 
-Command examples use `afbin` as shorthand for `npx --yes @afbin/cli@latest` (`npx.cmd` on Windows); use that npm invocation unless you installed a development link.
+Install it once as described in [Install and authenticate](#install-and-authenticate); every example below is `afbin <command>`.
 
 ## Preview and host
 
@@ -44,7 +44,7 @@ Windows x64, PowerShell 5.1 or 7:
 ```powershell
 Invoke-RestMethod https://app.artifactbin.dev/chat/ensure-node.ps1 | Invoke-Expression
 npx.cmd --yes @afbin/cli@latest setup
-npx.cmd --yes @afbin/cli@latest preview report.jsx
+afbin.cmd preview report.jsx
 ```
 
 macOS arm64/x64 and Linux arm64/x64 (glibc, bash or zsh):
@@ -52,14 +52,14 @@ macOS arm64/x64 and Linux arm64/x64 (glibc, bash or zsh):
 ```sh
 afbin_node_setup="$(mktemp)" && curl -fsSL https://app.artifactbin.dev/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
 npx --yes @afbin/cli@latest setup
-npx --yes @afbin/cli@latest preview report.jsx
+afbin preview report.jsx
 ```
 
-The Windows `.cmd` spelling runs under ordinary Restricted PowerShell without changing execution policy. The Unix helper must be sourced so this terminal receives PATH immediately. If a download fails, install Node LTS from https://nodejs.org/en/download and rerun the npx command.
+`setup` installs the `afbin` command and the agent skills; run it once. The Windows `.cmd` spellings (`npx.cmd`, `afbin.cmd`) run under ordinary Restricted PowerShell without changing execution policy. The Unix helper must be sourced so this terminal receives PATH immediately. If a download fails, install Node LTS from https://nodejs.org/en/download and rerun the setup line. If an old `afbin` reports `cli_npm_required`, run the setup line once.
 
-There is one afbin distribution: `@afbin/cli` on npm. No standalone executable. `setup` installs the `afbin` command globally through npm and `afbin update` installs the latest package; neither replaces a running process. `@latest` resolves the latest published package when launched online; it does not update a running process hourly. Close a running preview before restarting with a newer package. Pin a version for reproducible use (`npx --yes @afbin/cli@VERSION ...`). Warm the npm cache and Chromium before disconnecting, then use `npm exec --offline --yes --package=@afbin/cli@VERSION -- afbin ...`. A cold cache cannot install offline. Package installation does not download Chromium; rendering downloads it on first use.
+There is one afbin distribution: `@afbin/cli` on npm. No standalone executable. `setup` installs the `afbin` command globally through npm and `afbin update` installs the version the selected server names (else the latest); neither replaces a running process. Close a running preview before restarting with a newer package. For a pinned or offline run, warm the npm cache and Chromium before disconnecting, then use `npm exec --offline --yes --package=@afbin/cli@VERSION -- afbin ...`. A cold cache cannot install offline. Package installation does not download Chromium; rendering downloads it on first use.
 
-Existing standalone installs migrate themselves: their updater downloads a small bootstrap that installs the npm package on its next run and removes itself. To migrate now, run `npx --yes @afbin/cli@latest setup`; it backs up and removes the old executable. Do not run the old uninstall script first.
+Existing standalone installs migrate themselves: their updater downloads a small bootstrap that installs the npm package on its next run and removes itself. To migrate now, run the setup line above; it backs up and removes the old executable. Do not run the old uninstall script first.
 
 The default remote server is `https://app.artifactbin.dev`. Explicit `--server`,
 `ARTIFACTBIN_URL`, and saved host settings still take precedence. Credentials remain
@@ -95,7 +95,7 @@ For automation, use `setup --yes --json --harness pi --harness opencode`, or `--
 A pending browser approval returns its URL and expiry; approve it and rerun setup. `--yes` does not
 approve the browser or imply `--force`. No noninteractive prompt waits for input.
 
-Connected commands may show an update notice at most hourly; notices never install or replace software. Local commands and pinned invocations make no update-check request. A compatible old package continues normally. An incompatible request fails before applying changes and reports the required version with the npx command to run. `@latest` is launch-time npm resolution, not background installation.
+Connected commands may show an update notice at most hourly; notices never install or replace software. Local commands and pinned invocations make no update-check request. A compatible old package continues normally. An incompatible request fails before applying changes and reports the required version; `afbin update` installs it.
 
 A server must deploy its new release pointer after the release has published before users discover it.
 

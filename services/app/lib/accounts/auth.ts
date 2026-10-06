@@ -173,7 +173,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     if(npmRequired)return npmRequired;
     // Old clients inspect this header before JSON errors: keep required protocol in the body
     // so a future incompatible server cannot mask its concrete npm launch instruction.
-    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,required_version:cliRelease.version,hint:`Run npx --yes @afbin/cli@${cliRelease.version} <command>, then retry with the current write contract.`}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-CLI-Version':cliRelease.version}});
+    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,required_version:cliRelease.version,hint:'Run afbin update, then retry.'}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-CLI-Version':cliRelease.version}});
     const account=actor.userId??actor.id;
     const expectedAccount=request.headers.get('X-Artifactbin-Account');
     if(expectedAccount&&!await matchesWorkspaceAccount(expectedAccount,account))return json({error:'account_mismatch',hint:'Use the credentials for this workspace account.'},409);

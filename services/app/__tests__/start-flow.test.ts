@@ -93,7 +93,8 @@ describe('POST /api/start', () => {
     expect(res.headers.get('set-cookie')).toContain('HttpOnly');
 
     expect(body.prompt).toBe(existingPaste(BASE, body.id));
-    expect(body.prompt).toContain('npx --yes @afbin/cli@latest help');
+    expect(body.prompt).toContain('npx --yes @afbin/cli@latest setup once');
+    expect(body.prompt).toContain('Run afbin help first, then afbin auth ');
     expect(body.prompt).not.toContain('mx_');
     expect(body.prompt).not.toContain('/tokens/new');
     expect(body.prompt).toContain("\n\n---\n\nLet's build an artifact for " );

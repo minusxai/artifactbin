@@ -205,7 +205,7 @@ describe('CLI and HTTP discovery',()=>{
   expect(text.split('\n')[0]).toMatch(/^artifactbin: .*npm CLI or direct HTTP API\.$/);
   expect(text).toContain('npx --yes @afbin/cli@latest');expect(text).toContain('http://localhost:3000/a/<id>');
   expect(text).toContain('@afbin/cli@latest setup');
-  expect(text).toContain('@afbin/cli@latest help');expect(text).toContain('/chat/ensure-node.sh');expect(text).not.toMatch(/releases\/download|npm install/);
+  expect(text).toContain('afbin help');expect(text).not.toContain('@afbin/cli@latest help');expect(text).toContain('/chat/ensure-node.sh');expect(text).not.toMatch(/releases\/download|npm install/);
   // MCP and /docs/ on this text are retired-surfaces.test.ts's row for the one-pager.
   expect(Buffer.byteLength(text.split('## Direct HTTP API')[0]!)).toBeLessThan(2048);
   expect(text).toContain('/api/authentication/token');

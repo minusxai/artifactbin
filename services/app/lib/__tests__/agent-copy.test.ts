@@ -10,7 +10,7 @@ import { DEFAULT_SERVER } from '@artifactbin/contracts';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Prepare Node if needed: https://x.test/chat/ensure-node.sh (macOS/Linux), https://x.test/chat/ensure-node.ps1 (Windows). Run npx --yes @afbin/cli@latest help first, then npx --yes @afbin/cli@latest auth https://x.test/a/ab3cd9 --server https://x.test. Windows uses npx.cmd. Approve in the browser that created this artifact; guest access is fine. Pass --server https://x.test to every afbin server command.\n\n---\n\nLet's build an artifact for ";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. If afbin is not installed, prepare Node (https://x.test/chat/ensure-node.sh; Windows: https://x.test/chat/ensure-node.ps1), then run npx --yes @afbin/cli@latest setup once (Windows: npx.cmd); it installs afbin and its skills. Run afbin help first, then afbin auth https://x.test/a/ab3cd9 --server https://x.test. Approve in the browser that created this artifact; guest access is fine. Pass --server https://x.test to every afbin server command.\n\n---\n\nLet's build an artifact for ";
 
 describe('the tokenless paste', () => {
   it('existing: the link plus how to reach afbin, and never a token', () => {
@@ -20,7 +20,9 @@ describe('the tokenless paste', () => {
     // by agent-starter-consistency.test.ts's case (c), over all of them.
   });
   it('carries the installer, so an agent that lacks afbin can get it', () => {
-    expect(existingPaste(B, ID)).toContain('npx --yes @afbin/cli@latest help');
+    expect(existingPaste(B, ID)).toContain('npx --yes @afbin/cli@latest setup once (Windows: npx.cmd)');
+    expect(existingPaste(B, ID)).toContain('Run afbin help first');
+    expect(existingPaste(B, ID).split('@afbin/cli@').length - 1).toBe(1);
     expect(existingPaste(B, ID)).toContain('https://x.test/chat/ensure-node.sh');
   });
   it.each(['https://x.test', 'http://127.0.0.1:45407/'])('selects the handed-over server for every remote command: %s', (base) => {
@@ -28,7 +30,7 @@ describe('the tokenless paste', () => {
   });
   it.each([DEFAULT_SERVER, `${DEFAULT_SERVER}/`])('keeps the handoff short on the host a fresh CLI already defaults to: %s', (base) => {
     expect(existingPaste(base, ID)).not.toContain('--server');
-    expect(existingPaste(base, ID)).toContain(`@afbin/cli@latest auth ${DEFAULT_SERVER}/a/${ID}`);
+    expect(existingPaste(base, ID)).toContain(`then afbin auth ${DEFAULT_SERVER}/a/${ID}.`);
   });
   it('keeps the handoff concise and leaves a separated brief for the user', () => {
     const prompt = existingPaste('http://127.0.0.1:45407', ID);
