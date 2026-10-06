@@ -508,7 +508,6 @@ async function forkLeg(owner) {
       forker.locator('[aria-label="Confirm fork"]').click(),
     ]);
     must(forkResponse.status() === 201, `fork creates the copy (${forkResponse.status()})`);
-    await forker.unroute(forkEndpoint);
     const copyPath = new URL(forkResult.url, BASE).pathname;
     // Welcome is an intentional intermediate destination for this new account, not the copy's address.
     // Only wait for commitment here: the copy's load can be interrupted by that redirect.

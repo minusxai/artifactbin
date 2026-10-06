@@ -103,14 +103,11 @@ try{
  // `b` stays a clean reader for the rest of this run.
  await a.getByRole('button',{name:'Edit',exact:true}).click();
  await a.waitForFunction(()=>document.getElementById('text')?.isContentEditable);
- await a.locator('#text').dblclick();
- await a.locator('#text').evaluate(element=>{
-  // Focus the editor, then select concrete text offsets. A Range across paragraph
-  // boundaries can be normalized to the caret by ProseMirror before native typing.
-  (element.closest('[contenteditable="true"]') as HTMLElement).focus();
-  const text=document.createTreeWalker(element,NodeFilter.SHOW_TEXT).nextNode()!;
-  const selection=getSelection()!;selection.removeAllRanges();selection.setBaseAndExtent(text,0,text,text.textContent!.length);
- });
+ // Select through the focused editor's native keyboard path so ProseMirror's selection agrees
+ // with the browser. A programmatic DOM range can be normalized before typing on macOS.
+ const paragraphEditor=a.getByRole('textbox',{name:'Document text',exact:true}).filter({has:a.locator('#text')});
+ await paragraphEditor.click();
+ await paragraphEditor.press('ControlOrMeta+A');
  await a.waitForFunction(()=>getSelection()?.toString()==='Draft paragraph');
  await a.keyboard.insertText('Browser saved paragraph');
  await a.waitForFunction(()=>document.getElementById('text')?.textContent==='Browser saved paragraph');
