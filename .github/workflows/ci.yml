@@ -1120,11 +1120,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
-      # Every consumer receives the complete platform seed from this attempt. A second
-      # persistent npm cache only duplicated restore/save and cache-copy work.
-      - id: dependency-cache-path
-        shell: bash
-        run: printf 'path=%s\n' "$RUNNER_TEMP/npm-consumer-downloads" >> "$GITHUB_OUTPUT"
+      # Every consumer receives the complete platform seed from this attempt; the
+      # acceptance script extracts it once into its unique fresh npm cache.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         if: matrix.phase == 'preview' || matrix.phase == 'local'
         id: acceptance-browser
@@ -1158,16 +1155,14 @@ jobs:
         with:
           name: afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}
           path: .
-      - name: Verify the complete platform seed before isolated offline installation
-        run: node scripts/lib/npm-dependency-cache.mjs merge-seed npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar "${{ steps.dependency-cache-path.outputs.path }}" "${{ runner.os }}" "${{ runner.arch }}"
       # Unix bootstrap owns a separate fresh cache and is cheap enough to run alongside npm.
       # Windows Restricted bootstrap runs on its own required runner above.
       - name: Same-tarball native npm and warmed offline acceptance
         if: matrix.phase == 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --dependency-cache "${{ steps.dependency-cache-path.outputs.path }}" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
+        run: npm run test:npm-package -w services/cli -- --ci --dependency-seed "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
       - name: Install the same candidate for experience checks
         if: matrix.phase != 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-cache "${{ steps.dependency-cache-path.outputs.path }}"
+        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-seed "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar"
       - name: Installed npm runtime boundary, terminal exit and declarations
         if: matrix.phase == 'runtime'
         working-directory: services/cli

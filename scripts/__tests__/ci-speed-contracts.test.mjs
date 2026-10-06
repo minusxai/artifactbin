@@ -167,7 +167,7 @@ it('prepares all consumer prerequisites before waiting for the same-run candidat
  const job=workflow().jobs.cli,steps=job.steps;
  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
  const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs'));
- expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='dependency-cache-path'));
+ expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
  expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='acceptance-browser'));
  expect(steps[waiting].run).toContain('--wait-only');
  expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');

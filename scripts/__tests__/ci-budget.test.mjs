@@ -141,11 +141,10 @@ it('shares only verified npm download blobs, never installed modules or npx stat
 });
 it('warms only normal matrix download blobs while keeping the standard-user bootstrap cold',()=>{
  const jobs=workflow().jobs,steps=jobs.cli.steps;
- const path=steps.find(step=>step.id==='dependency-cache-path');
- expect(path).toBeDefined();
  expect(steps.some(step=>step.id==='dependency-cache')).toBe(false);
- expect(steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--dependency-cache');
- expect(steps.find(step=>step.name==='Install the same candidate for experience checks').run).toContain('--dependency-cache');
+ expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
+ expect(steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--dependency-seed');
+ expect(steps.find(step=>step.name==='Install the same candidate for experience checks').run).toContain('--dependency-seed');
  expect(jobs['cli-bootstrap'].steps.some(step=>step.id==='dependency-cache')).toBe(false);
 });
 

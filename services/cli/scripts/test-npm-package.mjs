@@ -6,7 +6,7 @@ import {join,resolve,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
-import {mergeNpmDependencyCache} from '../../../scripts/lib/npm-dependency-cache.mjs';
+import {extractValidatedNpmSeed,mergeNpmDependencyCache} from '../../../scripts/lib/npm-dependency-cache.mjs';
 import {installNpmConsumer} from '../../../scripts/lib/npm-consumer-install.mjs';
 import {npmConsumerArgs,npmInstallPhaseTimings} from './npm-consumer-args.mjs';
 import {runAcceptanceProcesses} from './acceptance-processes.mjs';
@@ -16,6 +16,9 @@ const installOnly=process.argv.includes('--install-only');
 const dependencyCacheIndex=process.argv.indexOf('--dependency-cache');
 const dependencyCache=dependencyCacheIndex===-1?null:process.argv[dependencyCacheIndex+1];
 if(dependencyCacheIndex!==-1&&(!ci||!dependencyCache||dependencyCache.startsWith('--')))throw Error('--dependency-cache needs a CI download-cache path.');
+const dependencySeedIndex=process.argv.indexOf('--dependency-seed');
+const dependencySeed=dependencySeedIndex===-1?null:process.argv[dependencySeedIndex+1];
+if(dependencySeedIndex!==-1&&(!ci||!dependencySeed||dependencySeed.startsWith('--')||dependencyCache))throw Error('--dependency-seed needs one CI archive and cannot be combined with --dependency-cache.');
 if(installOnly&&!ci)throw new Error('--install-only requires the CI candidate.');
 const repository=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const candidates=ci?(await readdir(join(repository,'npm-candidate'))).filter(file=>file.endsWith('.tgz')):[];
@@ -37,7 +40,12 @@ bootstrap.catch(()=>{});
 let nativeLoaded=false;
 try{
  await writeFile(join(root,'package.json'),'{}\n');
- const seeded=dependencyCache?await mergeNpmDependencyCache(dependencyCache,env.npm_config_cache):false;
+ let seeded=dependencyCache?await mergeNpmDependencyCache(dependencyCache,env.npm_config_cache):false;
+ if(dependencySeed){
+  const lockText=await readFile(join(repository,'services/cli/npm-shrinkwrap.json'),'utf8');
+  const result=await extractValidatedNpmSeed(dependencySeed,env.npm_config_cache,lockText,{os:process.platform,cpu:process.arch});
+  seeded=true;console.log('Npm seed phases (ms): '+JSON.stringify(result.phases));
+ }
  if(dependencyCache&&!seeded)throw Error('Expected verified npm download seed before offline consumer install');
  const {output:installOutput}=await installNpmConsumer({npm,tarball,cwd:root,env,seeded});
  console.log('Npm install phases (ms): '+JSON.stringify(await npmInstallPhaseTimings(join(env.npm_config_cache,'_logs'))));
