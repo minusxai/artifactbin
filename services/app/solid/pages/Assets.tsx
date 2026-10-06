@@ -1,7 +1,7 @@
+import WorkspaceHeading from '../components/WorkspaceHeading';
 /* @jsxImportSource solid-js */
 import { createEffect, createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
-import Database from 'lucide-solid/icons/database';
 import DatabasePlus from 'lucide-solid/icons/database-plus';
 import FileUp from 'lucide-solid/icons/file-up';
 import ChevronLeft from 'lucide-solid/icons/chevron-left';
@@ -40,16 +40,13 @@ export function AssetsPage(): JSX.Element {
   const pageCount = () => Math.max(1, Math.ceil((data()?.total ?? 0) / (data()?.perPage ?? 50)));
   const pageIndex = () => data()?.page ?? selected().page;
   return <Show when={!session() || session()?.user} fallback={<Navigate href="/login?callbackUrl=/assets" />}>
-    <main class="mx-auto mt-8 max-w-[80rem] px-4 pb-24 sm:px-6">
-      <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <Database aria-hidden="true" class="size-3 stroke-[1.8] text-accent" />
-        <MicroLabel>assets</MicroLabel>
-        <span class="font-mono text-[10px] text-faint">the material documents are built from</span>
+    <main class="workspace-page">
+      <WorkspaceHeading title="Assets" description="The material documents are built from.">
         <div class="ml-auto flex items-center gap-2">
           <a href="/files/new" aria-label="Upload file" class="inline-flex items-center gap-1.5 rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent"><FileUp aria-hidden="true" size={13} />Upload file</a>
           <a href="/datasets/new" aria-label="Create dataset" class="inline-flex items-center gap-1.5 rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent"><DatabasePlus aria-hidden="true" size={13} />Create dataset</a>
         </div>
-      </div>
+      </WorkspaceHeading>
       <Show when={!data()} fallback={<section aria-label="Assets" aria-busy={page.pending()} class={PANEL}>
         <Show when={page.error()}><button type="button" aria-label="Retry assets" onClick={() => void page.refresh(true)}>Could not refresh assets. Retry</button></Show>
         <div class="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">

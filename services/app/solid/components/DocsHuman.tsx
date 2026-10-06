@@ -2,7 +2,7 @@
 /** The human docs — the tour of the product. */
 import FlowSchematic from './FlowSchematic';
 import GetStarted from './GetStarted';
-import { FormatBadge, LINK, PAGE_COLUMN } from './ui';
+import { FormatBadge, LINK } from './ui';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import DesignSystemSpecimen from './DesignSystemSpecimen';
 
@@ -46,7 +46,7 @@ const TEMPLATES = [
 export default function DocsHuman() {
 
   return (
-    <main class={`${PAGE_COLUMN} mt-8 pb-24`}>
+    <main class="workspace-page">
       <h1 class="text-base font-semibold">
         <span class="text-accent">&gt;</span> how this works
       </h1>

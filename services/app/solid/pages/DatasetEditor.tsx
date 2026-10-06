@@ -513,7 +513,7 @@ export function DatasetEditorPage({
               {share("w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-raised")}
             </section>}
         </PageChrome>}
-      <main class="mx-auto w-full min-w-0 max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
+      <main class="workspace-page">
         <AssetPageHeader icon={id ? Database : DatabasePlus} eyebrow="Dataset workspace" title={id ? title() || "Edit dataset" : "Create a dataset"} link={id ? {
         href: `/a/${id}`,
         label: "View dataset",

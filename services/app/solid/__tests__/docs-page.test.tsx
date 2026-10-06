@@ -14,6 +14,7 @@ it('serves the human tour with current templates, live design systems, install c
   window.history.replaceState(null, '', '/docs-human');
   render(() => <App />);
   const main = await screen.findByRole('main');
+  expect(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('link', { name: 'Human docs' })).toHaveAttribute('aria-current', 'page');
   for (const system of STORY_SYSTEMS) {
     expect(main).toHaveTextContent(system.label);
     expect(main.querySelector(`[data-design-specimen="${system.name}"] img`)).toHaveAttribute('src', `/design-systems/${system.name}${system.defaultMode === 'dark' ? '-dark' : ''}.webp`);

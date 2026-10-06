@@ -2,6 +2,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { MemoryRouter, Route } from '@solidjs/router';
 import { FolderPage } from '@/solid/pages/Folder';
 import type { FolderPage as FolderData } from '@/lib/workspace/folders';
 import type { AccountWorkspace } from '@/lib/workspace/dashboard';
@@ -50,7 +51,7 @@ it('keeps an empty folder actionable for writers and quiet for viewers', () => {
 it('mounts the owner listing and workspace rail without recursive updates', () => {
   const data = folder();
   const workspace = { artifacts: data.rows, shared: [], stats: { artifacts: 2, assets: 0, views: 0 }, views: {}, viewsOverTime: [], likes: 0, likesOverTime: [], followers: 0, forks: 0 } as unknown as AccountWorkspace;
-  render(() => <FolderPage folder={data} role="owner" workspace={workspace} />);
+  render(() => <MemoryRouter><Route path="*" component={() => <FolderPage folder={data} role="owner" workspace={workspace} />} /></MemoryRouter>);
   expect(screen.getByLabelText('Folder workspace')).toBeInTheDocument();
   expect(screen.getByLabelText('Open Doc aaa111')).toBeInTheDocument();
   expect(screen.getByLabelText('Dashboard metrics')).toBeInTheDocument();

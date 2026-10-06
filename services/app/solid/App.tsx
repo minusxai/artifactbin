@@ -3,6 +3,7 @@
 import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Navigate, Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { useParams, useLocation } from '@solidjs/router';
+import WorkspaceShell from './components/WorkspaceShell';
 import { SessionProvider } from './lib/session';
 import { usePageIntentPreload } from './lib/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
@@ -44,6 +45,7 @@ function IntentPreload(): JSX.Element {
 
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
+  const workspaceRoute = () => ['/assets', '/trash', '/schedules', '/chat', '/notifications', '/account', '/docs-human', '/datasets/new', '/files/new', '/programs/new'].includes(location.pathname);
   const servedDocument = !!servedDocumentFrame();
   const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
@@ -61,7 +63,7 @@ function Root(props: RouteSectionProps): JSX.Element {
       <ChromeVisibilityContext.Provider value={setShowChrome}>
         <Show when={!documentRoute() && showChrome()}><PageChrome /></Show>
         <ErrorBoundary fallback={(_, reset) => <main class="mx-auto max-w-5xl px-4 py-10" role="alert">Could not load this page. <button aria-label="Retry loading page" onClick={reset}>Retry</button></main>}>
-          <Suspense fallback={<PendingPage />}>{props.children}</Suspense>
+          <Show when={workspaceRoute()} fallback={<Suspense fallback={<PendingPage />}>{props.children}</Suspense>}><WorkspaceShell><Suspense fallback={<PendingPage />}>{props.children}</Suspense></WorkspaceShell></Show>
         </ErrorBoundary>
       </ChromeVisibilityContext.Provider>
     </OnboardingGate>

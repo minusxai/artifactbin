@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { SessionProvider } from '@/solid/lib/session';
@@ -70,7 +70,7 @@ it('keeps the working shelf before the account dashboard and links to assets, tr
   const view = open();
   const shelf = await screen.findByLabelText('Shelf');
   const dashboard = await screen.findByLabelText('Dashboard');
-  expect(view.container.querySelector('main')?.className).toContain('max-w-[80rem]');
+  expect(view.container.querySelector('main')?.className).toContain('workspace-home');
   expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
   expect(screen.getByLabelText('Assets')).toHaveAttribute('href', '/assets');
@@ -162,4 +162,16 @@ it('keeps the claim result while an empty library fills on refresh', async () =>
   current = { ...current, artifacts: [doc('a')] };
   window.dispatchEvent(new Event(REFRESH_EVENT)); await screen.findByLabelText('Open Doc a');
   expect(screen.getByLabelText('Claim result')).toHaveTextContent(/Added/);
+});
+
+it('puts creation and all workspace destinations in the left navigation, separate from stats', async () => {
+  homeFetch({ ...core }); open();
+  const nav = await screen.findByRole('navigation', { name: 'Workspace' });
+  expect(within(nav).getByRole('button', { name: 'Create' })).toBeInTheDocument();
+  for (const [name, href] of Object.entries({ Artifacts: '/', Assets: '/assets', Trash: '/trash', Schedules: '/schedules', 'Connected agents': '/chat', Notifications: '/notifications' })) {
+    expect(within(nav).getByRole('link', { name })).toHaveAttribute('href', href);
+  }
+  expect(within(nav).getByRole('link', { name: 'Artifacts' })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByLabelText('Dashboard rail')).not.toContainElement(nav);
+  expect(screen.getByLabelText('Dashboard rail')).not.toContainElement(screen.getByRole('button', { name: 'Create' }));
 });
