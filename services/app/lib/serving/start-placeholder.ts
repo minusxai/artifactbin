@@ -14,7 +14,7 @@
 const WAITING_LINE = 'Waiting for your agent…';
 /** For a reader that keeps only the page's TEXT (a fetch tool that renders HTML to markdown drops the
  * head tags and the tail comment): the way on, in the document itself. Screen-reader-only for people. */
-const AGENT_LINE = "Agents: edit this document with the afbin CLI — read /llms.txt on this site, then afbin pull this page's URL.";
+const AGENT_LINE = "Agents: edit this document with the afbin CLI or direct HTTP API — read /llms.txt on this site for both paths.";
 const ACTIONABLE_LINE = 'Paste what you copied into your coding agent.';
 /** Source gains generated node IDs during compilation. Match the fixed starter
  * text only on its first version; never show setup over an agent's first edit. */

@@ -135,9 +135,10 @@ import * as r131 from '@/app/email/[id]/route';
 import * as r132 from '@/app/getting-started.md/route';
 import * as r133 from '@/app/health/route';
 import * as r134 from '@/app/llms.txt/route';
-import * as r135 from '@/app/people/[id]/route';
-import * as r136 from '@/app/tiles/[...tile]/route';
-import * as r137 from '@/app/workspace/[id]/route';
+import * as r135 from '@/app/llms/[topic]/route';
+import * as r136 from '@/app/people/[id]/route';
+import * as r137 from '@/app/tiles/[...tile]/route';
+import * as r138 from '@/app/workspace/[id]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -276,7 +277,8 @@ export const ROUTES: RouteEntry[] = [
   { path: "/getting-started.md", dir: "/getting-started.md", methods: ["GET"], module: r132 },
   { path: "/health", dir: "/health", methods: ["GET"], module: r133 },
   { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r134 },
-  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r135 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r136 },
-  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r137 },
+  { path: "/llms/:topic", dir: "/llms/[topic]", methods: ["GET"], module: r135 },
+  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r136 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r137 },
+  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r138 },
 ];

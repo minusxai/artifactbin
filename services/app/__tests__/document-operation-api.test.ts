@@ -107,5 +107,18 @@ it('the published direct HTTP example edits JSX with an email bearer, reserved i
   const edited=await post('/api/artifacts/'+id+'/edits',{edit_id:snapshot.edit_id,document_update},auth);expect(edited.status,await edited.clone().text()).toBe(200);
   const head=await(await read()).json();expect(head.markup).toBe('<p id="message">Updated HTTP text 😀</p>');expect(head.version).toBe(snapshot.version+1);
   const stale=await post('/api/artifacts/'+id+'/edits',{edit_id:snapshot.edit_id,document_update},auth);expect(stale.status).toBe(409);expect((await(await read()).json()).markup).toBe(head.markup);
+  // Execute the recommended source-authoring guide verbatim with the same email bearer.
+  const sourceCode=/```js\n(\/\/ BEGIN HTTP SOURCE EDIT[\s\S]*?\/\/ END HTTP SOURCE EDIT)\n```/.exec(guide)?.[1];
+  expect(sourceCode,'HTTP guide needs an executable source preparation example').toBeTruthy();
+  const fresh=await post('/api/artifacts',{markup:body.markup,title:'Source example'},auth);
+  expect(fresh.status).toBe(201);const original=await fresh.json();
+  const run=runInNewContext('(async()=>{'+sourceCode+'\n;return edited;})',{
+   fetch:(url:string,init:RequestInit)=>host.fetch(new Request(url,init)),base,artifactId:original.id,accessToken:auth.authorization.slice('Bearer '.length),
+  }) as ()=>Promise<Record<string,unknown>>;
+  const sourceEdited=await run();expect(sourceEdited.id).toBe(original.id);
+  const sourceHead=await(await host.fetch(new Request(base+'/api/artifacts/'+original.id,{headers:auth}))).json();
+  expect(sourceHead.markup).toBe('<p id="message">Updated HTTP text</p>');
+  expect(sourceHead.title).toBe('Updated HTTP example');expect(sourceHead.version).toBe(original.version+1);
+
  }finally{await drainPreparedPageWarmups();await drainSnapshotRevalidations();await host.close();await rm(directory,{recursive:true,force:true});}
 });

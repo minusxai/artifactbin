@@ -176,7 +176,14 @@ export async function finishLocalPush(workspace:Workspace,paths:string[],options
 async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean,dryRun=false):Promise<PushPlan>{
  if(!plan.file.document||!plan.id||['create','missing','none'].includes(plan.mode))return plan;
  let head=plan.file.tracked?.snapshot;
- if(force||!head?.document)head=await client.request<Snapshot>(`/artifacts/${plan.id}`);
+ // A fork's create response can retain a legacy JSX storage tree. The
+ // authenticated read migrates it to the editable graph without changing its
+ // identity or edit conditions; a truthy document is not necessarily a graph.
+ if(force||!head||(head.document as DocumentGraph|undefined)?.kind!=='graph'){
+  const baseline=head;
+  head=await client.request<Snapshot>(`/artifacts/${plan.id}`);
+  if(!force&&baseline&&(head.id!==baseline.id||head.version!==baseline.version||head.state!==baseline.state||head.edit_id!==baseline.edit_id))throw new CliError('state_conflict','The remote artifact changed while upgrading its authoring snapshot.','Inspect afbin diff --remote and reconcile the retained local proposal before publishing.',{head},3);
+ }
  const native=['dataset','viz','image','pdf','file'].includes(head.format??'');
  const document=(native?createDocumentGraph('',head.version):head.document) as DocumentGraph|undefined;
  if(document?.kind!=='graph')throw new CliError('invalid_response','The artifact has no editable JSONB snapshot.');

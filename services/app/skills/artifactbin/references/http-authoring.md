@@ -4,13 +4,50 @@ description: Direct JSX creation, artifact ID reservations and an executable gra
 ---
 ## Direct JSX creation and graph editing
 
-The HTTP API accepts the same JSX creation and prepared editing contracts used by the browser and CLI. HTTP clients can produce these JSON bodies themselves; no CLI invocation or installation is required. This section is also served in `/llms.txt`.
+HTTP accepts the browser/CLI JSX creation and prepared-edit contracts directly, without CLI installation. This guide is also served in `/llms.txt`.
+
+Author with [JSX markup](markup.md), [data, SQL and actions](markup-data.md), [design systems](design-systems.md) and [templates](templates.md); these are public HTTP references.
 
 For a new document, `POST /api/artifacts` with `{"markup":"<p id=\"message\">Alpha</p>","title":"HTTP example","visibility":"unlisted"}`. Give every body element a persistent `id`; preserve it when editing/moving that element. Creation validates JSX and returns its artifact identity/URL. To allocate identities before creation, `POST /api/artifacts/reservations` with `Idempotency-Key: http_authoring_batch_001` and `{}` returns 100 IDs. Reuse that nonce for pool replay, and send one unconsumed ID as `reserved_id` in the create body, with a separate create `Idempotency-Key`. These are artifact IDs, distinct from element IDs and graph node keys. Reuse the exact create body/key after an uncertain response; do not allocate another identity blindly. `X-Artifactbin-Account`, when pinning a workspace, must be the account observed on this server's authenticated response.
 
-Read [the graph wire contract](http-document-graph.md) before deriving a patch. The example below preserves its observed revisions and identity; full guide contents are also served together in `/llms.txt`.
+For `<script type="server">`, see [server handlers and runs](lambdas.md): publish JSX, invoke `POST /api/artifacts/:id/runs`, read `/api/runs/:runId` status/events. No CLI is needed.
 
-Here is a complete wire-body builder for an inert paragraph's single plain-text child. It changes text while preserving element and graph identity, and computes both UTF-8 and UTF-16 deltas. Its restrictions deliberately exclude JSX syntax/entities, structural edits and compiler-dependent nodes. The actual endpoint test executes this exact block with a real email-authenticated bearer; it also proves stale replay is refused.
+## Prepare an edit from JSX
+
+For ordinary JSX edits, read the original, edit its `markup` preserving element IDs, prepare the complete source against the observed head, then submit the returned update unchanged. Preparation reuses the browser/CLI compiler without saving. No CLI, bundled code or manual graph construction is needed.
+
+```js
+// BEGIN HTTP SOURCE EDIT
+const headers = {'Content-Type':'application/json', Authorization:'Bearer ' + accessToken};
+async function jsonRequest(path, method = 'GET', body) {
+  const response = await fetch(base + path, {method, headers,
+    ...(body === undefined ? {} : {body:JSON.stringify(body)})});
+  if (!response.ok) throw Error(await response.text());
+  return response.json();
+}
+const path = '/api/artifacts/' + artifactId;
+const snapshot = await jsonRequest(path);
+// Replace this example with your complete edited JSX, retaining existing IDs.
+const source = snapshot.markup.replace('Alpha', 'Updated HTTP text');
+const prepared = await jsonRequest(path + '/prepare', 'POST', {
+  source, edit_id:snapshot.edit_id, expectedVersion:snapshot.version,
+  metadata:{title:'Updated HTTP example'}
+});
+const edited = await jsonRequest(path + '/edits', 'POST', {
+  edit_id:prepared.edit_id, document_update:prepared.document_update
+});
+// END HTTP SOURCE EDIT
+```
+
+A preparation request must include both `edit_id` and `expectedVersion` from the same read. Stale observations return `409 doc_changed`; read again and reconcile your intended changes with the current source. Do not silently overwrite. Once prepared, `/edits` independently checks permissions and graph dependencies: independent changes can merge, overlapping changes return 409. Invalid JSX, references or SQL return a validation error before any edit is applied. Optional `metadata` accepts only title, description, theme, template and colorMode. Sharing and dataset policy are separate operations.
+
+A source-only `/prepare` request remains a validation-only authoring-context API for clients that already construct their own updates; it returns `{valid:true,datasetBindings?}` without a `document_update`.
+
+## Advanced graph editing
+
+Read [the graph wire contract](http-document-graph.md) before deriving patches; it is also served in `/llms.txt`.
+
+This builder edits an inert paragraph's single plain-text child, preserving IDs and computing UTF-8/UTF-16 deltas. It excludes JSX syntax/entities, structural edits and compiler-dependent nodes. Endpoint tests execute this block and reject stale replay.
 
 ```js
 // BEGIN HTTP TEXT EDIT
@@ -63,7 +100,7 @@ function buildPlainTextUpdate(snapshot, nodeId, before, after) {
 // END HTTP TEXT EDIT
 ```
 
-After creating the example paragraph, this uses only standard HTTP/fetch and JSON, with no afbin imports:
+Apply it with standard fetch/JSON:
 
 ```js
 const headers = {'Content-Type':'application/json', Authorization:'Bearer ' + accessToken};
@@ -81,6 +118,5 @@ const edited = await fetch(base + '/api/artifacts/' + artifactId + '/edits', {
 if (!edited.ok) throw Error(await edited.text());
 ```
 
-For arbitrary JSX, prepare the full final candidate on the client: parse/normalize/stamp stable IDs, validate the composite markup and dependencies, derive its graph and exact patch/read/selector/claim set. `POST /api/artifacts/<id>/prepare` with `{"source":"<complete candidate JSX>"}` validates authoring context (references, SQL, icons/fonts) and returns `{valid:true,datasetBindings?}`. Attach returned dataset bindings to the update; the commit rechecks their ownership and revisions. This endpoint neither edits the target nor turns raw source into a graph patch. The source implementation of this protocol is `prepareClientDocumentPublication` in `services/app/lib/story/graph/document-update-client.ts`, with wire types in `services/contracts/src/document-update.ts`; HTTP clients may implement the contract in any language.
-
+For arbitrary JSX, use source preparation. Advanced clients may use `prepareClientDocumentPublication` (`services/app/lib/story/graph/document-update-client.ts`) with `services/contracts/src/document-update.ts` wire types, or implement that contract.
 For an intentional whole replacement, the same update has `whole:true`, a full `replacement` schema-3 graph and the observed base version; include the `$root` subtree dependency and use current IDs for surviving elements. Whole replacements consume the observed head and do not merge silently. Moves retain element IDs and internal graph keys; insertion uses fresh keys and claims unused element IDs. Annotation remapping requires `annotationOps` with exact observed text maps; sharing/parent changes require their observed revisions/parent IDs. Do not hand-wave these dependencies for a more complex edit.

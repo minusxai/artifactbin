@@ -57,9 +57,12 @@ export function parseDocumentUpdate(value:unknown):DocumentUpdate|null {
  if(!Array.isArray(p.reads)||!p.reads.every(r=>object(r)&&typeof r.key==='string'&&['selfVersion','childrenVersion','subtreeVersion'].includes(String(r.facet))&&integer(r.version)))return null;
  if(!Array.isArray(p.selections)||!p.selections.every(s=>object(s)&&typeof s.selector==='string'&&strings(s.keys)))return null;
  if(!Array.isArray(p.claims)||!p.claims.every(c=>object(c)&&typeof c.id==='string'&&(c.version===null||integer(c.version))))return null;
- for(const n of Object.values(p.inserted)){
-  if(!object(n)||!strings(n.children)||!strings(n.parts)||!strings(n.selectors)||!Array.isArray(n.refs)||!Array.isArray(n.partUnits)||!n.partUnits.every(integer)||!['bytes','units','subtreeUnits','selfVersion','childrenVersion','subtreeVersion'].every(k=>integer(n[k]))||!(n.parent===null||typeof n.parent==='string')||typeof n.prose!=='boolean'||!(n.ast===null||object(n.ast)))return null;
- }
+ const node=(n:unknown)=>object(n)&&strings(n.children)&&strings(n.parts)&&n.parts.length===n.children.length+1&&strings(n.selectors)&&Array.isArray(n.refs)&&n.refs.every(r=>object(r)&&typeof r.id==='string'&&typeof r.kind==='string')&&Array.isArray(n.partUnits)&&n.partUnits.every(integer)&&['bytes','units','subtreeUnits','selfVersion','childrenVersion','subtreeVersion'].every(k=>integer(n[k]))&&(n.parent===null||typeof n.parent==='string')&&typeof n.prose==='boolean'&&(n.ast===null||object(n.ast));
+ if(!Object.values(p.inserted).every(node))return null;
+ // SQL materializes touched nodes only; an omitted write would otherwise
+ // leave new child references pointing at nodes that were never stored.
+ const touched=new Set(p.touched);
+ if([...Object.keys(p.inserted),...Object.keys(p.updated)].some(key=>!touched.has(key)))return null;
  for(const write of Object.values(p.updated)){
   if(!object(write)||typeof write.self!=='boolean'||typeof write.children!=='boolean'||!Array.isArray(write.patches)||write.patches.length>1024)return null;
   for(const op of write.patches){
@@ -70,6 +73,7 @@ export function parseDocumentUpdate(value:unknown):DocumentUpdate|null {
   }
  }
  if(value.replacement!==undefined&&(!object(value.replacement)||value.whole!==true||value.replacement.kind!=='graph'||value.replacement.schema!==3||!object(value.replacement.nodes)||!object(value.replacement.claimedIds)||!integer(value.replacement.bytes)||value.replacement.bytes>MAX_DOCUMENT_BYTES))return null;
+ if(object(value.replacement)&&object(value.replacement.nodes)&&!Object.values(value.replacement.nodes).every(node))return null;
  if(value.settings!==undefined){
   if(!object(value.settings))return null;
   const s=value.settings;

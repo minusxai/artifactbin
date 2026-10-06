@@ -1,10 +1,10 @@
 ---
 name: lambdas
-description: Execute server handlers in ordinary artifacts with afbin runs.
+description: Execute published server handlers through HTTP runs or afbin runs.
 ---
 # Artifact server handlers
 
-An ordinary published JSX artifact can carry one `<script type="server">` in its Helmet that default-exports an async function. Use the same sharing, Imports, Values, Queries and Mutations as a page. The function executes headlessly on the runner, not in the reader's browser. An optional untyped `<script>` (or `type="module"`) is a separate browser module; server source is excluded from the reader bundle. There is no separate `type: lambda` metadata.
+Published JSX can carry one `<script type="server">` in Helmet, default-exporting an async function. It executes headlessly, excluded from the browser bundle. Imports, Values, Queries, Mutations and sharing work as for a page; there is no `type: lambda` metadata. An untyped or module script is separate browser code.
 
 ## Create, publish, run
 
@@ -34,15 +34,44 @@ afbin runs status <runId> --json
 afbin runs events <runId> --after 0 --json
 ```
 
-`start` returns `{runId}` after admission, not completion. Poll `status` until `completed`, `failed`, `cancelled` or `interrupted`. Read `output` and `receipt`; a successful CLI call only means the request succeeded, not that the program completed successfully. The receipt records the terminal reason, timing and observed service requests/usage; unknown measurements are null. An empty events list is valid when the program emitted no events; use status and the receipt to confirm completion. Events are bounded JSON pages: pass `nextSequence` as `--after` and continue when `hasMore` is true. `afbin runs cancel <runId>` requests cancellation; poll status to observe cleanup.
+`--request` supplies the stable request ID described below; `--input -` reads JSON from stdin and omitted input is null. IDs, same-server URLs and registered files are accepted. Publish changes before running. `afbin runs cancel <runId>` requests cancellation; poll status for termination. Both transports share the lifecycle and permissions below.
 
-`--request` is required: choose one stable ID per intended execution. After a timeout or lost response, retry with the SAME artifact, published version, input and request ID. Changed content with that ID is a conflict. Use a new ID only for an intentional new run. Omitted input is null; `--input -` reads JSON from stdin. Artifact IDs, same-server URLs and registered files are accepted; publish changes before running. The server pins the published source for execution. Existing permissions still apply to datasets and mutations.
+Legacy untyped default-exporting scripts remain invocable. Republish with `type="server"` to exclude handler source from the browser module; always mark new server handlers explicitly.
 
-Legacy Lambda artifacts with an untyped default-exporting script remain invocable for compatibility. Republish them with `type="server"` to remove their handler from the browser module. New artifacts should always mark server code explicitly. Use `afbin runs start` to invoke the published handler, `afbin runs status` to inspect its result, `afbin runs events` to replay output and `afbin runs cancel` to stop it. The server selects the published source, version and caller identity. Sharing the artifact does not grant execution without authentication or additional dataset permissions.
+## Run through HTTP
+
+Create JSX through `POST /api/artifacts` ([HTTP authoring](http-authoring.md)), then run its returned ID. Use an email-authenticated bearer ([HTTP API](http-api.md)); no CLI is needed.
+
+```js
+// BEGIN HTTP RUN
+const headers = {'Content-Type':'application/json', Authorization:'Bearer ' + accessToken};
+async function runRequest(path, method = 'GET', body) {
+  const response = await fetch(base + path, {method, headers,
+    ...(body === undefined ? {} : {body:JSON.stringify(body)})});
+  if (!response.ok) throw Error(await response.text());
+  return response.json();
+}
+const {runId} = await runRequest('/api/artifacts/' + artifactId + '/runs', 'POST', {
+  requestId:'greeting-1', input:{name:'Ada'}
+});
+const status = await runRequest('/api/runs/' + runId);
+const page = await runRequest('/api/runs/' + runId + '/events?after=0&limit=100');
+// Call only when this execution is no longer wanted.
+async function cancelRun() {
+  return runRequest('/api/runs/' + runId + '/cancel', 'POST', {});
+}
+// END HTTP RUN
+```
+
+Start returns HTTP 202 with `{runId}` on admission, not completion. Omit optional cancellation for normal execution; poll status until `completed`, `failed`, `cancelled` or `interrupted`, then inspect `output` and `receipt`. Receipts record terminal reason, timing and observed requests/usage; unknown measurements are null. Events return `{events,nextSequence,hasMore}`: continue with `after=nextSequence` while `hasMore`. Empty events are valid. Cancellation returns `{ok:true}` on request; poll for actual termination.
+
+`requestId` is required, nonempty, at most 128 characters. Retry uncertain admission with the SAME artifact, input, request ID and unchanged published version. Changed execution content with that ID returns `start_conflict`; reconcile instead of launching another run. New intentional executions need new IDs. The server pins published source/version and caller identity: do not supply `userId`, `program` or an invented version fence. Omitted input is null. Native `program` JSON input is limited to 8192 UTF-8 bytes; ordinary handlers use configured runner limits.
+
+Authentication and artifact read permission are required. Native programs are owner-only. Status/events/cancel belong to the caller who started the run. Sharing grants neither authentication nor extra dataset permissions. Request identity protects admission retries, not arbitrary handler side effects. Scheduler dispatch leases are internal server fences, not client fields.
 
 ## Declared data in the program
 
-Replace `abc123` with the dataset ID returned by `afbin push sales.csv --type dataset --access readwrite --json`. Its `rows` table in this example has `region`, `month` and `revenue` columns. Do not invent a table or columns: inspect the actual dataset first with `afbin query`.
+Replace `abc123` with your dataset ID (CLI: `afbin push sales.csv --type dataset --access readwrite --json`). Inspect actual tables/columns first. This example assumes `rows(region,month,revenue)`.
 
 ```jsx
 <Helmet>
@@ -73,11 +102,9 @@ export default async function(input) {
 <main><h1>Regional sales operation</h1></main>
 ```
 
-These are Solid accessors, not `.value` properties. `monthly()` reads rows, `monthly.loading()` and `monthly.error()` expose state. Unlike a browser's seeded first paint, a runner may start before its queries finish: await `monthly.ready` before reading. Set a signal before awaiting the dependent query. Rejected queries and mutations throw; don't report success after catching and ignoring a failure.
+Bindings are Solid accessors, not `.value`: read `monthly()`, `monthly.loading()` and `monthly.error()`. Set signals before awaiting dependent queries' `.ready`. Rejected queries/mutations throw; do not swallow failures and report success.
 
-The runner shares the page binding implementation; it does not expose `document`, `window`, Node `process`, filesystem, shell or arbitrary network `fetch`. Imports are restricted to `page` and `solid-js`; no dynamic imports, require, CDN modules or DOM libraries. Return JSON-serializable output. Run limits are enforced by the server. Browser-only scripts are not Lambdas merely because they publish successfully: execute the actual artifact and inspect its terminal status before claiming it works.
-
-Test writes only against your authorized disposable data. A run executes with its caller's identity; sharing the artifact never grants extra dataset write permission. Keep credentials out of the program and input.
+The shared page runtime has no DOM, Node process, filesystem, shell or arbitrary fetch. Only `page` and `solid-js` imports are allowed; no dynamic imports, require, CDNs or DOM libraries. Return JSON-serializable output within server limits. Execute and inspect terminal status before claiming success. Test writes on authorized disposable data; caller identity controls dataset permissions. Keep credentials out of source/input.
 
 ## Native programs and schedules
 
@@ -87,7 +114,7 @@ A saved native command is an artifact of type `program`, with a JSON definition:
 {"version":1,"command":["node","-e","console.log(process.env.ARTIFACTBIN_INPUT)"],"compute":{"vcpu":1,"memoryMiB":2048,"ttlSeconds":600}}
 ```
 
-Programs run in the configured external runtime (Modal in the hosted deployment). Their persisted home is `/home/runner`; installed tools and image files live outside it. A program must finish before another invocation of the same named program can start. Input is JSON in `ARTIFACTBIN_INPUT`, limited to 8 KiB for command environment transport. Large state belongs in the database through AF, and program files/configuration that need to survive belong in the home directory. Definition `env` is non-secret configuration; authenticate interactively in the sandbox instead of publishing login credentials. Reading a shared program does not grant permission to execute it with another person's credentials: native execution is owner-only. Ordinary artifact server handlers continue to run in lightweight V8 isolates, without creating a Modal sandbox.
+Native programs run in the configured external runtime (Modal when hosted), with persisted home `/home/runner`; tools/images live outside it. Same named programs cannot overlap. Input arrives as JSON in `ARTIFACTBIN_INPUT` (8 KiB limit). Keep large state in AF's database and persistent files in home. Definition `env` is non-secret configuration; sign in interactively rather than publish credentials. Native execution is owner-only, even for shared artifacts. Ordinary handlers use lightweight V8 isolates, without Modal sandboxes.
 
 Scheduling uses the same HTTP API from the UI and npm CLI:
 
@@ -100,6 +127,6 @@ afbin schedule run <scheduleId> --json
 afbin schedule history <scheduleId> --json
 ```
 
-Use five-field cron expressions (one-minute resolution), with an explicit IANA timezone such as `America/New_York`. Schedules reference the live artifact; each new attempt loads its current published definition. They never select a fixed artifact version. An admitted execution retains the code it loaded so an uncertain submission can be retried with the same request identity. Missed automatic times coalesce into one occurrence, and a schedule does not overlap its own executions. Confirmed execution failures can retry with configured backoff and a maximum attempt count; the default is one attempt. Automatic retries and user programs must tolerate repeated side effects. A lost response is an admission retry, not permission to launch a second execution.
+Use five-field cron (one-minute resolution) with an IANA timezone. Schedules load current published code per attempt, not a fixed version; admitted executions retain their loaded code. Retry uncertain submission with the same request identity. Missed times coalesce and schedules do not overlap their own executions. Failure retries use configured backoff/maximum attempts (default one); handlers must tolerate repeated side effects.
 
-Every app instance runs the same timer, coordinated through SQL occurrence uniqueness and fenced dispatch leases. No external cron service is required. Pausing or deleting stops future and unsubmitted work; already submitted work is observed until completion. Use the Run cancellation API to stop an execution. History records occurrences, attempts, errors, run identities and terminal results. A request-identity conflict pauses the schedule until explicitly resumed. Bounded parallel dispatch prevents one slow submission from blocking unrelated schedules.
+App replicas coordinate timers through SQL uniqueness and fenced dispatch leases; no external cron is needed. Pause/delete stops future and unsubmitted work; submitted work remains observed until completion. Cancel through the Run API. History records occurrences, attempts, errors, run IDs and results. Identity conflicts pause scheduling until resumed. Bounded dispatch keeps slow submissions from blocking unrelated schedules.

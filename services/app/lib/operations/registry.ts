@@ -228,7 +228,7 @@ const updateArtifactOp: Operation = {
   input: { id: z.string(), document_update:z.json().optional(),edit_id:z.string().optional(),expectedVersion: z.number().int().positive().optional(), expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional(), ...CONTENT_FIELDS },
   annotations: { idempotent: true },
   example: {
-    input: { id: 'aB3xK9', csv:'name,value\nExample,2', expectedVersion: 1, expectedState: 'a'.repeat(64) },
+    input: { id: 'aB3xK9', dataset:[{name:'Example',value:2}], expectedVersion: 1, expectedState: 'a'.repeat(64) },
   },
   errors: [
     NOT_FOUND,

@@ -1,3 +1,4 @@
+import { llmsText } from '@/lib/serving/agent-references.server';
 /**
  * The brief (`skills/artifactbin/SKILL.md`) is the ONE file a harness reads on
  * its own: its description is always in context, its body loads on trigger,
@@ -12,7 +13,7 @@ import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/a
 import { gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, skillExample, skillTree } from '../skills';
-import { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, llmsText } from '@/lib/serving';
+import { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead } from '@/lib/serving';
 
 const BASE = 'https://artifactbin.dev';
 

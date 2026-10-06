@@ -224,7 +224,9 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       const shotOpts = { timeout, ...(req.format === 'jpg' ? { type: 'jpeg' as const, quality: req.quality ?? 85 } : { type: 'png' as const }) };
       const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
-        const slides = surface.locator('[data-mx-slide]');
+        // Bare readers retain hidden rail miniatures for hydration. Number only
+        // rendered slides; Playwright's visibility includes offscreen content.
+        const slides = surface.locator('[data-mx-slide]:visible');
         const count = await slides.count();
         if (req.capture.slide > count) throw new NoSlideError(count);
         const one = slides.nth(req.capture.slide - 1);

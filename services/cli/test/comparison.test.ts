@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {compare} from '../src/comparison';
+import {compare,remoteStatus} from '../src/comparison';
 import {loadWorkspace} from '../src/workspace';
+import {registerLocalFiles} from '../src/local-workspace';
 import {HttpClient} from '../src/http';
 import {digest} from '../src/files';
 import {writeDocument} from '../src/document';
@@ -18,6 +19,22 @@ async function fixture(run:(home:string,root:string)=>Promise<void>){
  await mkdir(home);await mkdir(root);
  try{await run(home,await realpath(root));}finally{await rm(base,{recursive:true,force:true});}
 }
+test('remote status includes new local files without treating them as remote snapshots',()=>fixture(async(home,root)=>{
+ const snapshot={id:'abc123',version:1,edit_id:'edit1',state:digest('state1'),format:'markup',markup:'<p>Accepted</p>'};
+ const local=writeDocument({metadata:{id:snapshot.id,edit_id:snapshot.edit_id,head_version:1,state:snapshot.state},body:snapshot.markup});
+ await writeFile(join(root,'doc.jsx'),local);await writeFile(join(root,'rows.csv'),'name,count\nOne,1\n');
+ await writeRecord(home,root,'workspace',root,{server:'https://example.com',account:'user'});
+ await writeRecord(home,root,'tracked','doc.jsx',{id:snapshot.id,url:'https://example.com/a/'+snapshot.id,file:digest(local),snapshot});
+ await registerLocalFiles(await loadWorkspace(root,home),['rows.csv']);
+ const calls:string[]=[];
+ const client=new HttpClient({connection:{server:'https://example.com',token:'mxmx_test_status'},fetch:async input=>{calls.push(new URL(String(input)).pathname);return Response.json(snapshot);}});
+ const result=await remoteStatus(await loadWorkspace(root,home),client);
+ assert.deepEqual(calls,['/api/artifacts/abc123']);
+ assert.deepEqual(result.files.find(file=>file.path==='rows.csv'),{path:'rows.csv',status:'new',remote:'not_published'});
+ assert.equal(result.files.find(file=>file.path==='doc.jsx')?.remote,'unchanged');
+ assert.equal(await readFile(join(root,'rows.csv'),'utf8'),'name,count\nOne,1\n');
+ assert.deepEqual((await loadWorkspace(root,home)).tracking!.files['doc.jsx'].snapshot,snapshot);
+}));
 test('historical diff caches fetched immutable content without changing the accepted base or working file',()=>fixture(async(home,root)=>{
   const snapshot={id:'abc123',version:2,edit_id:'edit2',state:digest('state2'),format:'markup',markup:'<p id="p001">Current</p>'};
   const local=writeDocument({metadata:{id:'abc123',edit_id:'edit2',head_version:2,state:snapshot.state},body:snapshot.markup});

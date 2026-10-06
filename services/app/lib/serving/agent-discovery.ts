@@ -16,17 +16,12 @@ import path from 'node:path';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import {AGENT_HELP_TITLE,type AgentDiscovery} from './agent-discovery-tags';
 export {AGENT_HELP_TITLE,agentDiscovery,agentDiscoveryHead,type AgentDiscovery} from './agent-discovery-tags';
-const BASE_TAG='[[ base ]]';
 let source:string|null=null;
-function llmsSource():string{
- return source??=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/llms.txt'),'utf8')+'\n'
-  +['http-api','http-document-graph','http-authoring'].map(name=>readFileSync(path.resolve(process.cwd(),'skills/artifactbin/references/'+name+'.md'),'utf8').replace(/^---\n[\s\S]*?\n---\n/,'')).join('\n');
+export function llmsSource():string{
+ return source??=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/llms.txt'),'utf8');
 }
-const origin=(base:string)=>base.replace(/\/$/,'');
 /** The one sentence that says what artifactbin is: line 1 of llms.txt. */
 export function agentBlurb():string{return llmsSource().split('\n')[0]!.trim();}
-/** The served one-pager, on the caller's base. */
-export function llmsText(base:string):string{return llmsSource().split(BASE_TAG).join(origin(base));}
 /** The pointer again, as the page's last line: what a tail-keeping reader sees. */
 export function agentDiscoveryTail(help:AgentDiscovery):string{
  return `<!-- ${AGENT_HELP_TITLE}: ${escapeHtml(help.url)}. ${escapeHtml(help.instruction)} -->`;

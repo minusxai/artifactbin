@@ -3,13 +3,12 @@ import {readFile,stat} from 'node:fs/promises';
 import {join,resolve,relative,isAbsolute,dirname,sep,basename} from 'node:path';
 import type {LocalHtmlOptions} from './local-html-options';
 import {loadWorkspace} from './workspace';
-import {localIdentities} from './identities';
 import {parseDocument} from './document';
 import {confinedPath} from './journal';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE,registerLocalFiles,withLocalLock} from './local-workspace';
 import {digest} from './files';
 import {CliError} from './errors';
-import {localInputPath,readLocalDataset} from './preview/local-inputs';
+import {localInputPath,localInputReferences,readLocalDataset} from './preview/local-inputs';
 import {previewAnnotations} from './preview/annotations';
 import {previewGraph,referenceIds} from './preview/graph';
 import {fileContentType} from '../../app/lib/story/assets/file-types';
@@ -42,7 +41,7 @@ export async function prepareLocalHtml(options:LocalHtmlOptions){
  if((await stat(await confinedPath(workspace.root,path))).size>MAX_BYTES)throw new CliError('export_too_large','The local document exceeds 25 MB.');
  await registerLocalFiles(workspace,[relative(workspace.cwd,join(workspace.root,path))]);
  return withLocalLock(workspace.root,async()=>{
-  const localFiles=await localIdentities(workspace),source=await readFile(await confinedPath(workspace.root,path),'utf8'),document=parseDocument(source);
+  const localFiles=await localInputReferences(workspace),source=await readFile(await confinedPath(workspace.root,path),'utf8'),document=parseDocument(source);
   if(!path.toLowerCase().endsWith('.jsx'))throw new CliError('unsupported_export','HTML export requires a JSX document.');
   const checked=validateMarkupStructure(document.body),parsed=parseJsx(document.body);
   if(!parsed.ok||checked.errors.length)throw new CliError('invalid_document','The local document is invalid: '+checked.errors.map(error=>error.message).join('; '));

@@ -14,8 +14,27 @@ import {parseResourceFile,readResourceSource} from '../resource-file';
 import {confinedPath} from '../journal';
 import {readOptional} from '../files';
 import {CliError} from '../errors';
+import {localIdentities} from '../identities';
+import {publicationCopies} from '../workspace-rebind';
+import {normalizeServer} from '../config';
+import type {Workspace} from '../workspace';
 
 const isResourceFile=(path:string)=>/\.ya?ml$/i.test(path);
+
+/** Read-only discovery after publication rewrites a parent's refs. Aliases are
+ * local inputs, never owned identities or authority to write a remote artifact. */
+export async function localInputReferences(workspace:Workspace,server=workspace.tracking?.server):Promise<Record<string,string>>{
+ const owned=await localIdentities(workspace),aliases:Record<string,string>={};
+ for(const {manifest} of await publicationCopies(workspace)){
+  if(server&&normalizeServer(manifest.server)!==normalizeServer(server)||workspace.tracking&&manifest.account!==workspace.tracking.account)continue;
+  for(const [localId,publishedId] of Object.entries(manifest.ids)){
+   const path=owned[localId];if(!path||owned[publishedId])continue;
+   if(aliases[publishedId]&&aliases[publishedId]!==path)throw new CliError('ambiguous_reference',`Published reference ${publishedId} names more than one local input.`,'Select its publication server before previewing.');
+   aliases[publishedId]=path;
+  }
+ }
+ return {...owned,...aliases};
+}
 
 /** The workspace-relative file holding a reference's content, or undefined when only the host has it. */
 export async function localInputPath(root:string,path:string):Promise<string|undefined>{
