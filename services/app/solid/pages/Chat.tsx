@@ -215,15 +215,16 @@ function InstallInstructions(): JSX.Element {
 function ManagedRunSetup(props:{onCreated:(session:RemoteSessionInfo)=>void}):JSX.Element {
   const [name,setName]=createSignal('my-agent'),[command,setCommand]=createSignal('bash'),[key,setKey]=createSignal('');
   const [busy,setBusy]=createSignal(false),[error,setError]=createSignal(''),[progress,setProgress]=createSignal('');
-  const controller=new AbortController();let disposed=false;
-  onCleanup(()=>{disposed=true;controller.abort();});
+  let activeController:AbortController|undefined;let disposed=false;
+  onCleanup(()=>{disposed=true;activeController?.abort();});
+  const stopWaiting=()=>{activeController?.abort(new DOMException('Stopped waiting','AbortError'));setError('Stopped waiting. Your hosted box may still be stopping. Check your sessions before starting again.');};
   const start=async(event:SubmitEvent)=>{
-    event.preventDefault();if(busy())return;setBusy(true);setError('');setProgress('');
+    event.preventDefault();if(busy())return;setBusy(true);setError('');setProgress('');const controller=new AbortController();activeController=controller;
     try {
       const body=JSON.stringify({requestId:crypto.randomUUID?.()??Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join(''),name:name(),command:[command()],...(key().trim()?{sshPublicKey:key().trim()}:{}),compute:{vcpu:1,memoryMiB:2048,ttlSeconds:3600}});
-      const result=await startManagedRun({body,signal:controller.signal,onPending:()=>{if(!disposed)setProgress('Finishing the previous hosted box…');}});
+      const result=await startManagedRun({body,signal:controller.signal,onPending:(elapsed)=>{if(!disposed)setProgress(elapsed>=30_000?'The previous hosted box is still stopping. This can take several minutes; you can keep waiting or check your sessions.':'Finishing the previous hosted box…');}});
       props.onCreated(result.session);
-    }catch(reason){if(!disposed&&!(reason instanceof DOMException&&reason.name==='AbortError'))setError(reason instanceof Error?reason.message:'Could not start your agent');}finally{if(!disposed){setBusy(false);setProgress('');}}
+    }catch(reason){if(!disposed&&!(reason instanceof DOMException&&reason.name==='AbortError'))setError(reason instanceof Error?reason.message:'Could not start your agent');}finally{if(activeController===controller)activeController=undefined;if(!disposed){setBusy(false);setProgress('');}}
   };
   return <form class="mb-5 space-y-3 rounded border border-edge p-3" onSubmit={start}>
     <h2 class="font-semibold">Run your agent on a hosted box</h2>
@@ -232,6 +233,7 @@ function ManagedRunSetup(props:{onCreated:(session:RemoteSessionInfo)=>void}):JS
     <label class="block text-sm">SSH public key (optional)<textarea aria-label="SSH public key" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={key()} onInput={e=>setKey(e.currentTarget.value)} placeholder="ssh-ed25519 …" /></label>
     <p class="text-xs text-muted">1 vCPU · 2 GiB RAM · up to 1 hour. Sign in to your agent in the terminal. Your home files are retained for the same box name.</p>
     <button class="rounded bg-accent px-3 py-2 text-bg disabled:opacity-40" disabled={busy()}>{busy()?'Starting…':'Start hosted box'}</button>
+    <Show when={busy()}><button type="button" class="rounded border border-edge px-3 py-2" onClick={stopWaiting}>Stop waiting</button></Show>
     <Show when={progress()}><p role="status" class="text-sm">{progress()}</p></Show>
     <Show when={error()}><p role="alert" class="text-sm text-red-500">{error()}</p></Show>
   </form>;
@@ -265,7 +267,7 @@ export function ChatPage(): JSX.Element {
     <WorkspaceHeading title="Connected agents" description="Your agents, on your machine or hosted for you." />
     <Show when={error()}><p role="alert" class="mb-4 text-sm">{error()} <Show when={error().startsWith('Sign in')}><a href={`/login?callbackUrl=${encodeURIComponent(`/chat${id() ? `?session=${id()}` : ''}`)}`} class="underline">Sign in</a></Show></p></Show>
     <div class="flex flex-col gap-6 md:flex-row"><aside class="shrink-0 md:w-80">
-      <For each={visibleSessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {session.exitCode !== null && session.exitCode !== undefined ? 'Ended' : session.online ? 'Online' : session.runId&&session.activity==='starting'?'Starting':'Offline'}</span></button>}</For>
+      <For each={visibleSessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {session.runId ? session.activity==='starting'?'Starting':session.activity==='working'?'Running':session.activity==='stopping'?'Stopping':session.activity==='stopped'?'Ended':session.activity==='unknown'?'Unavailable':'Offline' : session.exitCode !== null && session.exitCode !== undefined ? 'Ended' : session.online ? 'Online' : 'Offline'}</span></button>}</For>
       <Show when={previousCount() > 0}><button type="button" aria-expanded={historyExpanded()} class="mb-4 w-full rounded border border-edge px-3 py-2 text-left text-sm text-muted" onClick={() => setHistoryExpanded((value) => !value)}>{historyExpanded() ? 'Hide' : 'Show'} previous sessions ({previousCount()})</button></Show>
       <Show when={id()}><button type="button" aria-expanded={setupExpanded()} aria-controls="cli-setup" class="mt-2 flex w-full items-center justify-between rounded border border-edge px-3 py-2 text-sm md:hidden" onClick={() => setSetupExpanded((value) => !value)}>CLI setup <span aria-hidden="true">{setupExpanded() ? '−' : '+'}</span></button></Show>
       <Show when={managed()}><ManagedRunSetup onCreated={session=>{page.seed({sessions:[...sessions().filter(s=>s.id!==session.id),session]});setParams({session:session.id});}} /></Show>
