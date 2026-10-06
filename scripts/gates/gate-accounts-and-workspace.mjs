@@ -714,9 +714,10 @@ async function foldersLeg(owner) {
       await o.waitForSelector('[aria-label="Filter folders"]', { timeout: 15000 });
     });
     check((await o.locator('[aria-label="Move to Field Notes"]').count()) === 1, 'the picker offers the account’s folders by name');
+    await o.getByLabel('Move to root', { exact: true }).click();
     await Promise.all([
       o.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/artifacts/${live.id}/edits`) && r.status() === 200, { timeout: 15000 }),
-      o.locator('[aria-label="Move to root"]').first().click(),
+      o.getByRole('button', { name: 'Move here', exact: true }).click(),
     ]);
     const moved = await o.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), live.id);
     check(moved.parent_id === null, 'moving to root really files it at the root');
