@@ -199,8 +199,12 @@ it('creates a fresh seed with bounded npm cache operations instead of selecting 
  let active=0,max=0;const calls=[];
  try {
   await populateNpmSeed(dependencies,directory,async(args)=>{calls.push(args);active++;max=Math.max(max,active);await new Promise(resolve=>setTimeout(resolve,2));active--;});
-  expect(max).toBeLessThanOrEqual(1);expect(calls).toHaveLength(3);
-  expect(calls.flatMap(args=>args.slice(2,args.indexOf('--cache')))).toEqual(dependencies.map(npmSeedRequest));
+  expect(max).toBeLessThanOrEqual(8);expect(calls).toHaveLength(22);
+  const downloads=calls.filter(args=>args[0]==='cache'),manifests=calls.filter(args=>args[0]==='view');
+  expect(downloads).toHaveLength(3);
+  expect(downloads.flatMap(args=>args.slice(2,args.indexOf('--cache')))).toEqual(dependencies.map(d=>d.resolved));
+  expect(manifests.map(args=>args[1])).toEqual(dependencies.map(npmSeedRequest));
+  expect(manifests.every(args=>args.includes('--json'))).toBe(true);
   expect(calls.every(args=>args.includes('--ignore-scripts')&&args.includes('--userconfig'))).toBe(true);
   const steps=workflow().jobs['cli-pack'].steps;expect(steps.some(step=>step.id==='npm-seed-key')).toBe(true);
   expect(steps.some(step=>step.run?.includes('prepare-seed'))).toBe(true);

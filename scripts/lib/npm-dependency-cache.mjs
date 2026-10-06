@@ -69,11 +69,14 @@ export async function populateNpmSeed(dependencies,directory,run){
  const userconfig=join(directory,'user.npmrc'),globalconfig=join(directory,'global.npmrc');
  await writeFile(userconfig,'');await writeFile(globalconfig,'');
  const invoke=run??(args=>new Promise((resolve,reject)=>execFile('npm',args,{cwd:directory,env:{PATH:process.env.PATH,HOME:directory}},error=>error?reject(error):resolve())));
- // npm cache add fetches each pinned package's packument and tarball. Bound batches to eight,
- // including optional native dependencies for every target platform; never install.
- // Exact name@version also caches npm-owned packuments needed by fresh install resolution.
+ // Cache manifests with npm view and pinned bodies with cache add URL. Cache add
+ // name@version creates pacote aliases without a public URL; those do not belong
+ // in the strictly public seed. Both commands use npm's own cache writer.
+ const options=['--cache',directory,'--userconfig',userconfig,'--globalconfig',globalconfig,'--ignore-scripts','--no-audit','--no-fund'];
  for(let offset=0;offset<dependencies.length;offset+=8){
-  await invoke(['cache','add',...dependencies.slice(offset,offset+8).map(npmSeedRequest),'--cache',directory,'--userconfig',userconfig,'--globalconfig',globalconfig,'--ignore-scripts','--no-audit','--no-fund']);
+  const batch=dependencies.slice(offset,offset+8);
+  await Promise.all(batch.map(d=>invoke(['view',d.spec??npmSeedRequest(d),'--json',...options])));
+  await invoke(['cache','add',...batch.map(d=>d.resolved),...options]);
  }
 }
 export async function assertPublicNpmCache(directory,dependencies){

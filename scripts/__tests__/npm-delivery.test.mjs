@@ -8,6 +8,7 @@ import {promisify} from 'node:util';
 import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import {realpathSync} from 'node:fs';
+import {populateNpmSeed} from '../lib/npm-dependency-cache.mjs';
 import {npmConsumerArgs,npmConsumerInstallArgs} from '../../services/cli/scripts/npm-consumer-args.mjs';
 const npmCli=process.env.npm_execpath??realpathSync(spawnSync('/bin/sh',['-c','command -v npm'],{encoding:'utf8'}).stdout.trim());
 const pack=new URL('../../services/cli/scripts/pack-release.mjs',import.meta.url);
@@ -72,13 +73,18 @@ it('reifies a locked dependency from npm-owned manifest and tarball seed with th
  const integrity='sha512-'+createHash('sha512').update(bytes).digest('base64');
  const server=createServer((request,response)=>{
   if(request.url==='/mxmx-seed-fixture'){
-   response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify({name:'mxmx-seed-fixture','dist-tags':{latest:'1.0.0'},versions:{'1.0.0':{name:'mxmx-seed-fixture',version:'1.0.0',scripts:{postinstall:'node install.cjs'},dist:{tarball:url,integrity}}}}));
+   response.writeHead(200,{'Content-Type':'application/json','Vary':'Accept'});response.end(JSON.stringify({name:'mxmx-seed-fixture','dist-tags':{latest:'1.0.0'},versions:{'1.0.0':{name:'mxmx-seed-fixture',version:'1.0.0',scripts:{postinstall:'node install.cjs'},dist:{tarball:url,integrity}}}}));
   }else{response.writeHead(200,{'Content-Type':'application/octet-stream'});response.end(bytes);}
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const url='http://127.0.0.1:'+server.address().port+'/mxmx-seed-fixture-1.0.0.tgz';
  const seed=join(root,'download-seed');
- try {await promisify(execFile)(process.execPath,[npmCli,'cache','add','mxmx-seed-fixture@1.0.0','--registry',new URL(url).origin,'--cache',seed,'--ignore-scripts','--no-audit','--no-fund']);}
+ try {
+  await populateNpmSeed([{resolved:url,integrity,spec:'mxmx-seed-fixture@1.0.0'}],seed,args=>promisify(execFile)(process.execPath,[npmCli,...args,'--registry',new URL(url).origin]));
+  const keys=spawnSync(process.execPath,[npmCli,'cache','ls','--cache',seed],{encoding:'utf8'});
+  expect(keys.status,keys.stderr).toBe(0);
+  expect(keys.stdout.trim().split('\n').every(key=>key.startsWith('make-fetch-happen:request-cache:'))).toBe(true);
+ }
  finally {await new Promise(resolve=>server.close(resolve));}
  const manifest=JSON.parse(await readFile(join(cli,'package.json'),'utf8'));manifest.dependencies={'mxmx-seed-fixture':'1.0.0'};
  await writeFile(join(cli,'package.json'),JSON.stringify(manifest));
