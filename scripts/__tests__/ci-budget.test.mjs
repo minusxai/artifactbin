@@ -31,6 +31,8 @@ it('installs isolated acceptance tooling only for experience checks before consu
  expect(native.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').if).toBe("matrix.phase == 'native'");
  const runtimes=native.filter(step=>step.uses?.startsWith('actions/setup-node@'));
  expect(runtimes.map(step=>step.with['node-version'])).toEqual(['22.22.3','${{ matrix.node }}']);
+ expect(runtimes[0].if).toBe("matrix.phase != 'native'");
+ expect(runtimes[1].if).toBeUndefined();
  expect(native.indexOf(runtimes[1])).toBeGreaterThan(install);
 });
 
