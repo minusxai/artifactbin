@@ -126,6 +126,22 @@ function Write-StandardOutput([string]$Path,[ref]$Printed) {
     $Printed.Value++
   }
 }
+function Write-StandardFailure {
+  # Only owned child diagnostics: bounded output, with inherited runner secrets removed.
+  foreach($name in @('failed.json','bootstrap.stdout','bootstrap.stderr')) {
+    $path=Join-Path $root $name
+    if(!(Test-Path $path)){continue}
+    try {
+      $text=(Get-Content $path -Tail 60 | Out-String)
+      foreach($secret in @($password,$env:GH_TOKEN)) {
+        if($secret){$text=$text.Replace($secret,'[redacted]')}
+      }
+      if($text.Length -gt 8192){$text=$text.Substring(0,8192)+'[truncated]'}
+      Write-Host ('Standard-user child diagnostic: '+$name)
+      Write-Host $text
+    } catch { Write-Host ('Could not read standard-user child diagnostic: '+$name) }
+  }
+}
 function Wait-StandardExit([Diagnostics.Process]$Process,[int]$Timeout,[string]$OutputPath='') {
   $clock=[Diagnostics.Stopwatch]::StartNew();$printed=0;$heartbeat=15
   while(!$Process.WaitForExit(1000)) {
@@ -158,7 +174,7 @@ try {
       # and installs official Node as its own fresh non-admin user while packaging runs.
       $archive=Join-Path $root 'candidate.zip'
       & node scripts/lib/ci-artifact-wait.mjs $env:GITHUB_REPOSITORY $env:GITHUB_RUN_ID $env:GITHUB_RUN_ATTEMPT $archive (Join-Path $root 'failed.json')
-      if($LASTEXITCODE -ne 0){throw 'Waiting for exact current-run package failed'}
+      if($LASTEXITCODE -ne 0){Write-StandardFailure;throw 'Waiting for exact current-run package failed'}
       $download=Join-Path $root 'download'
       Expand-Archive -Path $archive -DestinationPath $download
       $candidates=@(Get-ChildItem $download -Filter '*.tgz')

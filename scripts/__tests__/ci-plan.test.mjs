@@ -913,7 +913,7 @@ describe('CI job shape', () => {
   it('tests the exact universal npm artifact instead of compiling it again', () => {
     const job = ci().jobs['reference-compatibility'];
     expect(job.needs).toEqual(expect.arrayContaining(['plan', 'cli-pack']));
-    expect(job['runs-on']).toBe('ubuntu-24.04');
+    expect(job['runs-on']).toBe(ci().jobs.gates['runs-on']);
     const commands = job.steps.map(step => step.run ?? '');
     expect(commands.some(command => command.includes('build:binary'))).toBe(false);
     // Both conformance locations consume the current pack job's build, without rebuilding it.

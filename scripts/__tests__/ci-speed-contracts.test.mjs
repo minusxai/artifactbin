@@ -121,6 +121,16 @@ it('overlaps the same standard-user bootstrap with pack instead of waiting to cr
  const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
  expect(source.indexOf("$process=Start-StandardProcess $encoded 'bootstrap'")).toBeLessThan(source.indexOf('ci-artifact-wait.mjs'));
  expect(source.indexOf("$phase='wait for exact current-run candidate'")).toBeLessThan(source.indexOf("$phase='standard-user online npx query'"));
+ // A child can fail before the package arrives; preserve its cause before parent cleanup.
+ const early=source.match(/if\(\$LASTEXITCODE -ne 0\)\{([^}]*Waiting for exact current-run package failed[^}]*)\}/)?.[1];
+ expect(early).toBeDefined();
+ expect(early.indexOf('Write-StandardFailure')).toBeGreaterThanOrEqual(0);
+ expect(early.indexOf('Write-StandardFailure')).toBeLessThan(early.indexOf('throw'));
+ const diagnostics=source.slice(source.indexOf('function Write-StandardFailure'),source.indexOf('function Wait-StandardExit'));
+ for(const file of ['failed.json','bootstrap.stdout','bootstrap.stderr'])expect(diagnostics).toContain(file);
+ expect(diagnostics).toContain('-Tail 60');expect(diagnostics).toContain('Substring(0,8192)');
+ expect(diagnostics).toContain('$password,$env:GH_TOKEN');expect(diagnostics).toContain(".Replace($secret,'[redacted]')");
+
 });
 it('waits only for current-attempt artifacts and fails on packaging failures or deadline',async()=>{
  const {waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
