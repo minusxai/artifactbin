@@ -22,20 +22,39 @@ The CLI has a separate authentication entry: `afbin auth` opens browser approval
 - `POST /api/artifacts`: create from a supported content field; for example `{"dataset":[{"name":"Example","value":2}],"title":"Example"}`.
 - `PUT /api/artifacts/<id>`: update datasets/media conditionally. Include observed `expectedVersion` and `expectedState` with the new content. A 409 requires reconciliation.
 - `POST /api/artifacts/<id>/prepare`: send complete edited JSX as `source` plus observed `edit_id` and `expectedVersion`; receive `document_update` without saving. Submit that exact update with its `edit_id` to `POST /api/artifacts/<id>/edits`. Preserve element IDs and reconcile a 409 rather than overwriting.
-- Dataset policy changes use `GET /api/artifacts/<id>/policy` to observe `policy_revision`, then a separate `PUT /api/artifacts/<id>/policy` with `policy` and `expectedPolicyRevision`; do not combine policy with content.
+- Dataset policy changes use `GET /api/artifacts/<id>/policy` to observe `revision`, then a separate `PUT /api/artifacts/<id>/policy` with `policy` and `expectedPolicyRevision`; do not combine policy with content.
 - Markup changes require a prepared `document_update` graph with observed reads/claims and stable node identity. Raw replacement markup does not replace that contract. Read [direct JSX authoring](http-authoring.md) and [the graph wire contract](http-document-graph.md) to prepare it without invoking the CLI.
 - `GET/POST /api/artifacts/<id>/annotations`: read/create comments; document permissions still apply. Creation requires a body and node or quote anchor.
 - `DELETE /api/artifacts/<id>`: move to trash.
 
 Inspect non-success JSON and follow its recovery instructions. After an uncertain mutation, reconcile its receipt/current head before attempting another write.
 
+## Browser preview and interactive QA
+
+For browser QA, use `POST /api/browser-sessions`; no local Chrome is needed. Send the email bearer and an existing `artifactId`. Sessions default to your identity; `viewer` is fixed at creation. Scripts run for at most 20 seconds.
+
+```js
+const headers = {Authorization:'Bearer ' + accessToken,'Content-Type':'application/json'};
+const call = async body => {const r=await fetch(base+'/api/browser-sessions',{method:'POST',headers,body:JSON.stringify(body)});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
+const session_id=crypto.randomUUID(), execution_id=crypto.randomUUID();
+try {
+  await call({op:'script',session_id,execution_id,create:true,code:`const page=await context.newPage();await page.goto('/a/${artifactId}');await page.getByRole('heading').first().waitFor();await output.image(await page.screenshot());`});
+  let s;
+  for(let end=Date.now()+20000;Date.now()<end;){s=await call({op:'status',session_id,execution_id});if(!['queued','running'].includes(s.status))break;await new Promise(r=>setTimeout(r,250));}
+  if(s?.status!=='completed')throw Error(s?.error?.code||s?.status||'timeout');
+  // s.attachments[0].base64 is the PNG screenshot.
+} finally {await call({op:'close',session_id});}
+```
+
+- A saved page action uses `POST /api/artifacts/<page-id>/mutate` with `{"name":"vote","args":{"choice":"ramen"}}`. The stored `<Mutation>` supplies its SQL and context; the API rechecks page access, dataset policy and any required membership. A public or unlisted link does not grant writes. Direct SQL against a dataset ID is a separate path and may return 403 even to its owner under the default policy. See [actions](markup-data.md#declarations-helmet-only) and [dataset rules](apps.md#dataset-rules).
+
 ## Comments: create, reply, resolve and reopen
 
-Use the email-authenticated bearer above, with permission to comment on the document; guest credentials cannot comment. Read `GET /api/artifacts/<id>` for its open annotations, or `GET /api/artifacts/<id>/annotations?status=all` for open and resolved threads. Listings return `{annotations,next_cursor}`; follow `next_cursor` with the same filters. Each root thread has `id`, `revision`, `status` and `thread` (its comments).
+Use the email bearer and document comment permission; guests cannot comment. `GET /api/artifacts/<id>/annotations?status=all` lists open and resolved threads as `{annotations,next_cursor}`; follow the cursor. Each thread has `id`, `revision`, `status` and `thread`.
 
-Create with `POST /api/artifacts/<id>/annotations` and `{"body":"Please clarify this","node_id":"message"}`. `node_id` is an existing persistent element ID in the stored JSX, not a graph key. Alternatively send `{"body":"Please clarify this","quote":"unique text from the document"}`; the quote must identify one current anchor. Creation accepts `body`, `node_id`, `quote` and optional `range`; it returns the created thread (201). It does not require document `edit_id` or `expectedVersion` fields. A stale or ambiguous anchor requires reading the current source and choosing a valid node/unique quote again.
+Create with `POST /api/artifacts/<id>/annotations` and `{"body":"Please clarify this","node_id":"message"}`; `node_id` is a persistent ID in stored JSX. Or send a unique current `quote`. Creation accepts optional `range`, returns the thread (201), and needs no document `edit_id` or `expectedVersion`. Re-read source if an anchor is stale or ambiguous.
 
-Reply or change state with **POST** `/api/artifacts/<id>/annotations/<annotation_id>` (the root thread's ID): `{"reply":"Done","expected_revision":2}`, `{"resolve":true,"expected_revision":2}`, or `{"reopen":true,"expected_revision":2}`. You can combine a reply with one transition, for example `{"reply":"Fixed","resolve":true,"expected_revision":2}`. Never combine resolve and reopen. Each successful response is the updated thread; use its returned revision for the next action. `expected_revision` is optional in the wire contract, but send the last observed thread revision to prevent stale actions. It is a conversation fence, not the document version. A `409 annotation_conflict` includes `current_revision`; re-read the conversation and reconcile before retrying. No reply or state transition was applied.
+Reply or transition with **POST** `/api/artifacts/<id>/annotations/<annotation_id>` using the root ID and last `expected_revision`. Send `reply`, `resolve:true` or `reopen:true`; a reply may combine with one transition, never resolve and reopen together. Use each returned revision. A `409 annotation_conflict` includes `current_revision`; re-read and reconcile before retrying.
 
 This executable example uses an existing `artifactId` and its `nodeId`, plus `base` and the private `accessToken` from email authentication:
 
@@ -56,9 +75,9 @@ const reopened = await commentRequest(threadPath, {reopen:true, expected_revisio
 // END HTTP COMMENTS
 ```
 
-For creation or thread actions, an optional `Idempotency-Key` makes retries of the exact same request recover its receipt; keep the key and body unchanged after an uncertain response, rather than creating a duplicate comment/reply. Ordinary comment actions do not need remote review `request_id`, `phase` or remote session/proof headers. Comments are stored separately from JSX and do not replace document source.
+An optional `Idempotency-Key` recovers an uncertain create/reply; retry with the same key and body. Comment actions do not need remote review headers. Comments are separate from JSX.
 
-Local preview, comments, import and export use your files without these remote endpoints. Downloaded `.jsx.html` edits stay local. Publishing is an explicit remote operation. Before disconnecting, prepare the npm package cache and required browser assets; the HTTP API itself requires access to the selected server.
+Local file and CLI commands do not call these endpoints. Publishing is explicit; HTTP requires access to the selected server.
 
 
 For direct JSX creation, reservation and executable editing examples, read [HTTP authoring](http-authoring.md). The exact wire fields and concurrency obligations are in [document graphs](http-document-graph.md). All three HTTP guides are served together in `/llms.txt`.
