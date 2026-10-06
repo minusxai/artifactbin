@@ -2,7 +2,7 @@
 .workspace-shell { --workspace-rail-width: 258px; display: grid; grid-template-columns: 208px minmax(0, 1fr); min-height: calc(100svh - 44px); font-family: var(--font-sans); }
 .workspace-home { margin: 0; padding: 0; max-width: none; }
 .workspace-nav { position: sticky; z-index: 40; top: 44px; height: calc(100svh - 44px); display: flex; flex-direction: column; padding: 28px 16px 20px; border-right: 1px solid var(--color-edge); background: var(--color-surface); }
-.workspace-create > button { height: 42px; border-radius: 7px; font-family: var(--font-sans); font-size: 14px; color: white; box-shadow: 0 2px 4px #0000000a; transition: filter 150ms, transform 150ms; }
+.workspace-create > button { height: 36px; border-radius: 5px; font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: white; transition: filter 150ms, transform 150ms; }
 .workspace-create > button:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .workspace-create [role='menu'] { min-width: 190px; animation: workspace-menu 140ms ease-out; }
 .workspace-artifact-menu { position: relative; }
