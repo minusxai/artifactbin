@@ -109,3 +109,12 @@ it('keeps scrolly full-bleed bands inside the document while prose owns its padd
   expect(doc).toContain('className="mx-auto max-w-6xl px-6 py-16 @2xl:px-12"');
   expect(doc).not.toContain('may run full-bleed (`-mx-6');
 });
+
+describe('native grid layouts bound evidence at phone width',()=>{
+  it('teaches zero-minimum tracks and shrinking children rather than clipping wide tables',()=>{
+    const guide=renderDoc('artifactbin/references/templates.md',BASE);
+    for(const term of ['minmax(0, 1fr)','grid-cols-1','min-w-0','overflow-x-auto','390px'])expect(guide).toContain(term);
+    const landing=renderDoc('artifactbin/references/templates-landing.md',BASE);
+    expect(landing).toContain('grid grid-cols-1 gap-8');
+  });
+});

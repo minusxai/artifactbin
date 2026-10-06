@@ -48,8 +48,8 @@ Skeleton of the runtime pieces (publishable as is; the opening is yours):
 
   <Helmet><Value name="session" type="string" /></Helmet>
   <div data-design="tw" className="@container px-6 py-12 text-foreground @2xl:px-12">
-    <header className="grid gap-8 @3xl:grid-cols-[3fr_2fr] @3xl:items-center">
-      <div>
+    <header className="grid grid-cols-1 gap-8 @3xl:grid-cols-[3fr_2fr] @3xl:items-center">
+      <div className="min-w-0">
         <p className="t-label">After Hours · Four Fridays in October</p>
         <h1 className="t-display-xl mt-4">Forty seats, one lamp, no phones.</h1>
         <p className="t-body-l mt-5 max-w-prose">Doors at seven, music at eight, twenty-five a seat.</p>
