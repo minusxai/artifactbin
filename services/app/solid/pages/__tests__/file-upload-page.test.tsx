@@ -96,7 +96,7 @@ describe('the file upload page', () => {
   it('shows the first lines of a text file', async () => {
     open();
     choose(new File(['name,qty\nbolt,4\n'], 'parts.csv', { type: 'text/csv' }));
-    expect(await screen.findByLabelText('Preview of parts.csv')).toHaveTextContent('name,qty bolt,4');
+    await waitFor(() => expect(screen.getByLabelText('Preview of parts.csv')).toHaveTextContent('name,qty bolt,4'));
   });
 
   it('gives a type the browser cannot show an icon card with a download', async () => {

@@ -24,6 +24,7 @@ import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { pageDataChanged } from '@/web/page-data-events';
 import { PageChrome, useChromeVisibility } from '../components/PageChrome';
 import { DatasetCatalogView } from '../components/DatasetCatalogView';
+import { FileViewer, fileKindOf } from '../components/FileViewer';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkArtifact } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
@@ -41,8 +42,8 @@ export interface DataAnswer {
     /** The data tiers' content: a viz recipe's source, a dataset's legacy rows (JSON) — null for readers where withheld. */
     source?: string | null; dataPreview: string; columns: Array<{ name: string; type?: string }>;
     catalog?: DatasetCatalog;
-    /** pdf / file: the two facts a person picks a file by. */
-    bytes?: number; pages?: number | null;
+    /** pdf / file: the two facts a person picks a file by, and a stored file's own name (its viewer's extension). */
+    bytes?: number; pages?: number | null; filename?: string;
     author?: { username: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
   };
 }
@@ -96,6 +97,9 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
   const content = () => live()?.dataPreview ?? surface.dataPreview;
   // The image renders from ./raw; a new version remounts it so the browser asks again.
   const rawKey = () => live()?.editId ?? surface.editId;
+  // A capture has no session: it reads the bytes with the capture's own key, as its page was.
+  const fileName = () => format === 'pdf' ? `${title()}.pdf` : surface.filename ?? title();
+  const rawUrl = () => `/a/${id}/raw${capture ? `?key=${encodeURIComponent(surface.captureKey!)}` : ''}`;
   const rows = () => safeRows(content());
   const columns = () => surface.columns.length ? surface.columns : Object.keys(rows()[0] ?? {}).map((name) => ({ name, type: undefined as string | undefined }));
 
@@ -127,19 +131,23 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
     <main class="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">
       <Show when={format === 'image'}>
         {/* A capture has no session: its image is read with the capture's own key, as its page was. */}
-        <Show when={rawKey()} keyed>{(_version) => <img src={`/a/${id}/raw${capture ? `?key=${encodeURIComponent(surface.captureKey!)}` : ''}`} alt={title()} class="mt-4 max-w-full rounded-[6px] border border-edge" />}</Show>
+        <Show when={rawKey()} keyed>{(_version) => <img src={rawUrl()} alt={title()} class="mt-4 max-w-full rounded-[6px] border border-edge" />}</Show>
       </Show>
       <Show when={format === 'pdf' || format === 'file'}>
-        {/* A file is not something the app renders: the browser does, at /raw. This is the two facts a
-            person picks a file by and the link that opens it — the same card <File> draws in a document. */}
-        <div class="mt-4 rounded-[6px] border border-edge bg-surface p-4">
+        {/* The two facts a person picks a file by and the link that opens it — the same card <File> draws
+            in a document — over the viewer its extension picks, reading the bytes from /raw. */}
+        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[6px] border border-edge bg-surface p-4">
           <p class="font-sans text-xs text-muted" aria-label={format === 'pdf' ? 'PDF summary' : 'File summary'}>
             {format === 'pdf' ? 'PDF' : 'File'}{surface.bytes ? ` · ${formatFileSize(surface.bytes)}` : ''}{surface.pages ? ` · ${surface.pages} page${surface.pages === 1 ? '' : 's'}` : ''}
           </p>
-          <a aria-label={format === 'pdf' ? 'Open the PDF' : 'Download file'} href={`/a/${id}/raw`} target="_blank" rel="noopener noreferrer" class="mt-2 inline-block font-sans text-sm underline underline-offset-2">
+          <a aria-label={format === 'pdf' ? 'Open the PDF' : 'Download file'} href={rawUrl()} target="_blank" rel="noopener noreferrer" class="ml-auto inline-block font-sans text-sm underline underline-offset-2">
             {format === 'pdf' ? 'Open' : 'Download'} {title()}
           </a>
         </div>
+        {/* A file with no viewer (a zip, a spreadsheet) is the card above and nothing else. */}
+        <Show when={fileKindOf(fileName()) !== 'other' && rawKey()} keyed>{(_version) => <div class="mt-4">
+          <FileViewer tall name={fileName()} size={surface.bytes ?? 0} url={rawUrl()} pdfUrl={format === 'pdf' ? rawUrl() : null} />
+        </div>}</Show>
       </Show>
       <Show when={format === 'dataset' && catalog()}>{(shown) => <DatasetCatalogView id={id} catalog={shown()} canEdit={canEdit()} />}</Show>
       <Show when={format === 'dataset' && !catalog()}>

@@ -67,6 +67,23 @@ it('summarizes a pdf and a stored file with the link that opens them', () => {
   expect(screen.getByRole('link', { name: 'Download file' })).toHaveTextContent('Download notes');
 });
 
+it('opens a stored file in the viewer its extension picks, reading the bytes from its raw address', async () => {
+  open(answer('pdf', { bytes: 1100, pages: 3, title: 'Quarterly review' }));
+  expect(screen.getByTitle('Quarterly review.pdf')).toHaveAttribute('src', '/a/art001/raw');
+  cleanup();
+  open(answer('file', { bytes: 120, filename: 'clip.mp4', title: 'clip' }));
+  expect(screen.getByLabelText('clip.mp4').tagName).toBe('VIDEO');
+  expect(screen.getByLabelText('clip.mp4')).toHaveAttribute('src', '/a/art001/raw');
+  cleanup();
+  vi.mocked(fetch).mockImplementation(async (input) => new Response(String(input) === '/a/art001/raw' ? 'month,revenue\n2026-01,120' : '{}'));
+  open(answer('file', { bytes: 24, filename: 'sales.csv', title: 'sales' }));
+  expect(await screen.findByText(/month,revenue/)).toHaveAccessibleName('Preview of sales.csv');
+  cleanup();
+  open(answer('file', { bytes: 12, filename: 'bundle.zip', title: 'bundle' }));
+  expect(screen.getByLabelText('File summary')).toBeInTheDocument();
+  expect(screen.queryByLabelText('File summary of bundle.zip')).not.toBeInTheDocument();
+});
+
 it('shows a viz recipe as its source and a legacy dataset as a bounded table with missing cells marked', () => {
   open(answer('viz', { dataPreview: '{"mark":"bar"}' }));
   expect(screen.getByText('{"mark":"bar"}').tagName).toBe('PRE');
