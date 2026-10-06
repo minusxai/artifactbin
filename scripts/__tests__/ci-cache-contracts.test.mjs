@@ -30,6 +30,12 @@ it('gives every browser a disjoint immutable cache that the main warmer also pop
   const chromium=jobs[name].steps.find(step=>step.id==='playwright');
   expect(chromium.with).toEqual(warm.find(step=>step.id==='browser-chromium').with);
  }
+ // Reference conformance uses the same runner/browser prerequisite as Chromium-only gates.
+ const reference=jobs['reference-compatibility'];
+ expect(reference['runs-on']).toBe(jobs.gates['runs-on']);
+ expect(reference.steps.find(step=>step.id==='browser-chromium').with).toEqual(warm.find(step=>step.id==='browser-chromium').with);
+ const referenceInstall=reference.steps.find(step=>step.run?.includes('npx playwright install'));
+ expect(referenceInstall.run).toBe('npx playwright install chromium');
  const selection=jobs.gates.steps.findIndex(step=>step.id==='gate-browsers');
  expect(selection).toBeLessThan(jobs.gates.steps.findIndex(step=>step.id==='browser-chromium'));
  const install=warm.find(step=>step.run?.includes('install --with-deps chromium firefox webkit'));

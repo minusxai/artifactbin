@@ -1194,7 +1194,7 @@ jobs:
     needs: [ plan, cli-pack ]
     if: needs.plan.outputs.reference-compatibility == 'true'
     name: CLI distributions against ID-first host (${{ matrix.proof }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     # Distinct identity and database hosts share the same current-run build, not CPUs.
     strategy:
@@ -1221,12 +1221,15 @@ jobs:
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
         working-directory: .
+      # Share the pinned Chromium prerequisite with Chromium-only gates and the main warmer.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: browser-chromium
         with:
           path: |
-            ~/.cache/ms-playwright
-            ~/Library/Caches/ms-playwright
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+            ~/.cache/ms-playwright/chromium-*
+            ~/.cache/ms-playwright/chromium_headless_shell-*
+            ~/.cache/ms-playwright/ffmpeg-*
+          key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       # The current run's pack job built these source entrypoints and their app assets together.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -1244,7 +1247,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/afbin-packages" "$RUNNER_TEMP/afbin-consumer"
           cp "$GITHUB_WORKSPACE"/npm-candidate/*.tgz "$RUNNER_TEMP/afbin-packages/"
           npm install --prefix "$RUNNER_TEMP/afbin-consumer" --no-audit "$RUNNER_TEMP"/afbin-packages/*.tgz
-      - run: npx playwright install --with-deps chromium
+      # This runner policy already supplies Chromium libraries, as for Chromium-only gates.
+      # Keep binary installation on cache misses; avoid an unrelated apt update/upgrade.
+      - run: npx playwright install chromium
         working-directory: .
       # CLI host build already compiled the app; bundle only the gate server now.
       - name: Build OSS host
