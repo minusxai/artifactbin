@@ -30,6 +30,7 @@ afterEach(async () => {
   await vi.dynamicImportSettled();
   vi.unstubAllGlobals();
   window.history.replaceState(null, '', '/');
+
 });
 
 describe('Solid shell', () => {

@@ -72,7 +72,7 @@ export const GATE_SPECS = Object.freeze([
   // collab-roles 14s, exports 34s.
   // Builds a chart by clicking, reloads, edits again, then a session-only owner and a grid (beside the journey).
   // The slow-network rebind leg was dropped (it repeated the refused-switch leg).
-  { name: 'viz-editor', needsMail: true, seconds: 57, timeoutMs: 150_000 },
+  { name: 'viz-editor', needsMail: true, serialGroup: 'clipboard', seconds: 57, timeoutMs: 150_000 },
   // One journey: the former annotations and comment-targets gates (two lanes in one browser, the fold leg alone).
   { name: 'comments', needsMail: false, seconds: 19, timeoutMs: 60_000 },
   // One journey: the former collab-edit and link-access gates — four signed-in people and a logged-out visitor.
