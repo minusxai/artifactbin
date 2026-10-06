@@ -960,7 +960,7 @@ describe('CI job shape', () => {
     for (const upload of uploads) expect(Number(upload.with['retention-days']), upload.with.name).toBeGreaterThanOrEqual(7);
   });
 
-  it('reports every job duration, and on a pull request fails the run over budget', () => {
+  it('reports every job duration and enforces timing on the complete required chain', () => {
     const { jobs } = ci();
     // Folded into the roll-up (`test`), which already waits on every job that does work: one runner and
     // one setup fewer than the separate `job timings` job it was. Not `notify-consumer` (it waits on
@@ -973,25 +973,26 @@ describe('CI job shape', () => {
     expect(jobs.test.if).toBe('always()');
     const step = jobs.test.steps.find((candidate) => (candidate.run ?? '').includes('/actions/runs/'));
     expect(step.if).toBe('always()');
-    // A summary on main, a gate on a pull request — where the branch can still be fixed.
-    expect(step['continue-on-error']).toBe("${{ github.event_name != 'pull_request' }}");
+    // Per-job durations are diagnostics on both PRs and main; the chain owns timing failures.
+    expect(step['continue-on-error']).toBe(true);
     // Reading the run's own job list needs a scope the workflow does not grant by default.
     expect(jobs.test.permissions.actions).toBe('read');
     expect(jobs.test.permissions.contents).toBe('read');
     const report = step.run;
     expect(report).toContain('GITHUB_STEP_SUMMARY');
     expect(report).toContain('/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs');
-    expect(report).toContain('exit 1');
+    expect(report).not.toContain('exit 1');
+    expect(report).toContain('::warning::');
     // The roll-up is still running while it reads the list; it does not measure itself.
     expect(report).toContain('select(.name != "test")');
     // The slowest STEP is named, because "gates took 300s" is not something anyone can act on.
     expect(report).toContain('.steps[]');
     expect(Number(step.env.BUDGET_S)).toBeLessThanOrEqual(240);
-    // After the roll-up's verdict and before the tested tree is recorded: an over-budget pull request
-    // never leaves the artifact that IS the pass.
+    // Diagnostics follow functional checks. The complete chain gate runs before evidence is recorded.
     const at = (text) => jobs.test.steps.findIndex((candidate) => (candidate.run ?? '').includes(text));
     expect(jobs.test.steps.indexOf(step)).toBeGreaterThan(at('scripts/ci/ci.mjs check'));
     expect(jobs.test.steps.indexOf(step)).toBeLessThan(at('scripts/ci/ci.mjs record-tree'));
+    expect(at('scripts/lib/ci-elapsed.mjs')).toBeLessThan(at('scripts/ci/ci.mjs record-tree'));
     // Never a job of its own in the planner's list.
     expect(CI_JOBS).not.toContain('timings');
   });
