@@ -75,3 +75,18 @@ it('admits changed program and compute for a finished box while preserving its n
  status='completed';const replacement=await create('after-finish',['codex'],2);expect(replacement.status).toBe(202);
  expect((await replacement.json()).session.id).toBe(original.session.id);expect(starts).toHaveLength(2);expect(starts[1]).toMatchObject({name:'box:reused-box',command:['codex'],compute:{vcpu:2,memoryMiB:2048}});
 });
+
+it('keeps stopping truthful and retries same-name admission only after teardown completes',async()=>{
+ const db=await harness.db(),{runner,starts}=fixture(),deps={enabled:true,runner,db};setServices({runner});
+ let status:'running'|'cancelled'='running';runner.getRun=async({runId})=>({runId,status,output:null,receipt:null});
+ const create=()=>managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'restart-click',name:'restart-box',command:['codex']}}),'create',deps);
+ const first=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'original',name:'restart-box',command:['bash']}}),'create',deps);
+ const {session}=await first.json(),registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
+ try{
+  await agents.stop('alice',session.id);
+  expect((await agents.view('alice',session.id,-1)).session).toMatchObject({online:false,activity:'stopping'});
+  const pending=await create();expect(pending.status).toBe(409);expect(await pending.json()).toMatchObject({error:'box_restart_pending'});expect(pending.headers.get('Retry-After')).toBe('1');expect(starts).toHaveLength(1);
+  status='cancelled';expect((await agents.view('alice',session.id,-1)).session.activity).toBe('stopped');
+  const replacement=await create();expect(replacement.status).toBe(202);expect((await replacement.json()).session.id).toBe(session.id);expect(starts).toHaveLength(2);expect(starts[1]?.command).toEqual(['codex']);
+ }finally{registry.clear();}
+});

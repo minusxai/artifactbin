@@ -833,6 +833,55 @@ async function foldersLeg(owner) {
   await strangerCtx.close();
 }
 
+// ── hosted restart recovery: compiled-browser coverage against a deterministic transport fixture ──
+async function hostedRestartLeg(owner) {
+  const { must, run } = lane(check, 'hosted-restart');
+  const page = await owner.newPage();
+  const session = {
+    id: `mxmx_test_restart_${stamp}`, runId: `mxmx_test_run_${stamp}`, name: 'mxmx-test-restart',
+    harness: 'codex', cwd: '/home/runner', machine: 'Hosted', online: true, controller: 'web',
+    cols: 100, rows: 30, exitCode: null, managed: true, activity: 'working',
+  };
+  const bodies = [];
+  try {
+    await run(async () => {
+      await page.route('**/api/run-capabilities', route => route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify({ version: 1, managedProcesses: true }),
+      }));
+      await page.route('**/api/runs', async route => {
+        bodies.push(route.request().postDataJSON());
+        if (bodies.length === 1) {
+          await route.fulfill({ status: 409, headers: { 'Retry-After': '0.5' }, contentType: 'application/json', body: JSON.stringify({ error: 'box_restart_pending' }) });
+        } else {
+          await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ runId: session.runId, session }) });
+        }
+      });
+      await page.route('**/api/remote/sessions**', route => {
+        const url = new URL(route.request().url());
+        const body = url.pathname === '/api/remote/sessions'
+          ? { sessions: [] }
+          : { session, seq: 0, generation: session.runId, frames: [], snapshot: 'Synthetic hosted terminal ready\r\n' };
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      });
+      await page.goto(`${BASE}/chat`, { waitUntil: 'load' });
+      await page.getByRole('textbox', { name: 'Box name' }).waitFor({ state: 'visible' });
+      await page.getByRole('button', { name: 'Start hosted box', exact: true }).click();
+      await page.getByText('Finishing the previous hosted box…', { exact: true }).waitFor({ state: 'visible' });
+      check(await page.getByRole('textbox', { name: 'Box name' }).isDisabled(), 'the submitted box name stays frozen during teardown');
+      check(await page.getByRole('combobox', { name: 'Hosted program' }).isDisabled(), 'the submitted program stays frozen during teardown');
+      check(await page.getByRole('textbox', { name: 'SSH public key' }).isDisabled(), 'the submitted SSH key stays frozen during teardown');
+      await page.getByRole('button', { name: `Open ${session.name}`, exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
+      await page.waitForFunction(name => [...document.querySelectorAll('button[aria-pressed="true"]')].some(button => button.getAttribute('aria-label') === `Open ${name}`), session.name);
+      must(bodies.length === 2, `one explicit restart-pending response is followed by one admission (${bodies.length} requests)`);
+      check(JSON.stringify(bodies[0]) === JSON.stringify(bodies[1]), 'the retry reuses the exact request body and request id');
+      check(typeof bodies[0]?.requestId === 'string' && bodies[0].requestId.length > 0, 'the click carries one stable request id');
+      check(!(await page.locator('body').innerText()).includes('box_restart_pending'), 'the internal pending code is not shown as an error');
+    });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── cli: portable CLI/HTTP acceptance against this host — scripts/gates/lib/cli-conformance.mjs, shared with the
 // standalone scripts/gate-cli-conformance.mjs a downstream deployment runs against its own host.
 const cliLeg = () => cliConformance({ base: BASE, check, stamp, sink, context });
@@ -842,7 +891,7 @@ await Promise.all([
   startLeg(),
   doorLeg(),
   claimLeg(),
-  workspaceOwner().then((owner) => owner && Promise.all([forkLeg(owner), foldersLeg(owner)])),
+  workspaceOwner().then((owner) => owner && Promise.all([forkLeg(owner), foldersLeg(owner), hostedRestartLeg(owner)])),
   cliLeg(),
 ]);
 check.note(`six legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
