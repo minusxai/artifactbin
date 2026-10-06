@@ -773,7 +773,9 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
   it('packs once and installs the uploaded universal npm artifact for native acceptance', () => {
     const {jobs}=yaml.parse(readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8'));
     expect(jobs['cli-pack'].steps.some(step=>step.run?.includes('pack:release'))).toBe(true);
-    expect(jobs.cli.needs).toContain('cli-pack');
+    expect(jobs.cli.needs).toEqual(['plan']);
+    expect(jobs.test.needs).toContain('cli-pack');
+    expect(jobs.cli.steps.find(step=>step.name==='Wait for exact current-attempt CLI artifacts').run).toContain('ci-artifact-wait.mjs');
     expect(jobs.cli.steps.some(step=>step.run?.includes('test:npm-package'))).toBe(true);
     expect(jobs.cli.steps.some(step=>step.run?.includes('build:binary'))).toBe(false);
   });
@@ -926,7 +928,7 @@ describe('CI job shape', () => {
     expect(download).toBeGreaterThan(extract);
     expect(commands.some(command=>command.includes('npm install --prefix'))).toBe(true);
     expect(ci().jobs.cli.strategy.matrix.os).toContain('ubuntu-24.04');
-    expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-npm-release')?.with.path).toBe('npm-candidate');
+    expect(ci().jobs.cli.steps.find(step => step.name === 'Wait for exact current-attempt CLI artifacts')?.run).toContain('npm-candidate.zip');
   });
 
   it('runs the CLI suite once and native npm acceptance on every platform', () => {
