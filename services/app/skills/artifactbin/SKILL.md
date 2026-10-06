@@ -32,7 +32,7 @@ npm CLI: local files/browser approval, guests allowed. Direct HTTP: email auth, 
 
 ## Example
 
-Read `afbin help <page type>` before writing; avoid content flush to the viewport edge.
+Before writing, read `afbin help <page type>`; avoid content flush to the viewport edge.
 
 ```jsx
 [[ example ]]
