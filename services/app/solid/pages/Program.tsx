@@ -45,7 +45,7 @@ export function ProgramPage(props:{artifactId?:string;owner?:boolean}={}):JSX.El
  }catch(error){setError(error instanceof Error?error.message:'Could not save program.');}finally{setBusy(false);}};
  const invoke=async()=>{if(!id()||busy())return;setBusy(true);setError('');try{
   const requestId=pendingRunId??newRequestId();pendingRunId=requestId;
-  const started=await apiRequest<{runId:string}>(`/api/artifacts/${id()}/invoke`,'POST',{requestId,input:null});pendingRunId=undefined;
+  const started=await apiRequest<{runId:string}>(`/api/artifacts/${id()}/runs`,'POST',{requestId,input:null});pendingRunId=undefined;
   const refresh=async()=>{try{const state=await apiRequest<RunSnapshot>(`/api/runs/${started.runId}`,'GET',undefined,{signal:abort.signal});setRun(state);if(!['queued','running'].includes(state.status)&&poll){clearInterval(poll);poll=undefined;}}catch(error){if(!abort.signal.aborted){setError(error instanceof Error?error.message:'Could not read run status.');if(poll)clearInterval(poll);poll=undefined;}}};
   if(poll)clearInterval(poll);poll=setInterval(()=>void refresh(),2000);await refresh();
  }catch(error){setError(error instanceof Error?error.message:'Could not run program.');}finally{setBusy(false);}};

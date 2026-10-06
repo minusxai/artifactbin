@@ -9,7 +9,8 @@
  * hears no answer in time (the app's code has not run yet) takes the top to the app's address itself, which the
  * frame's sandbox allows on a reader's click (`allow-top-navigation-by-user-activation`).
  *
- * Left alone: a `#hash` within this document (the frame's own hash links and outline), another host or scheme, a
+ * A hash within this document stays in the frame despite the compiled page's top-navigation base.
+ * Left alone: another host or scheme, a
  * `download`, a link the author's script already handled (`defaultPrevented`), and any link in an editable region —
  * the browser follows no link while editing. A modified or middle click, or a `target` other than this tab, opens
  * the APP's address in a new tab instead of the document origin's.
@@ -71,7 +72,20 @@ export function followAppLinks(win: Window, appOrigin: string, answerMs = NAVIGA
     if (event.defaultPrevented) return;
     const link = linkOf(event);
     if (!link || link.hasAttribute('download') || editable(link)) return;
-    const href = appLinkPath(link.href, link.getAttribute('href'), win.location.href, appOrigin);
+    const raw = link.getAttribute('href');
+    // The compiled base defaults ordinary links to the top. A same-document anchor must instead
+    // scroll this running document, keeping its reader state and the surrounding app in place.
+    const destination = new URL(link.href, win.location.href);
+    const here = new URL(win.location.href);
+    if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
+      && (!link.target || link.target.toLowerCase() === '_self')
+      && destination.origin === here.origin && destination.pathname === here.pathname && destination.search === here.search
+      && (destination.hash || raw?.trim().startsWith('#'))) {
+      event.preventDefault();
+      win.location.hash = destination.hash || '#';
+      return;
+    }
+    const href = appLinkPath(link.href, raw, win.location.href, appOrigin);
     if (href === null) return;
     event.preventDefault();
     if (event.button === 1 || event.metaKey || event.ctrlKey || event.shiftKey || opensElsewhere(link)) {

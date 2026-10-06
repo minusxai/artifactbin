@@ -33,7 +33,7 @@ async function fixture(){
   if(path==='/api/artifacts/reservations')return Response.json({ids:Array.from({length:100},(_,i)=>`r${String(i).padStart(5,'0')}`)},{headers});
   if(path==='/api/artifacts'&&method==='POST'){
    const key=new Headers(init?.headers).get('Idempotency-Key')!;if(keys.has(key))return Response.json(keys.get(key),{headers});
-   const id=body.reserved_id;const markup=body.markup?.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':'dataset',...(markup?{markup,document:createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
+   const id=body.reserved_id;const markup=body.markup?.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':body.image?'image':'dataset',...(body.image?{markup:null}:{}),...(markup?{markup,document:createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
   }
   const id=path.split('/')[3],head=heads.get(id);
   if(method==='GET'&&path.includes('/versions/')){const archived=versions.get(id+':'+path.split('/').at(-1));return Response.json(archived??{error:'not_found'},{status:archived?200:404,headers});}
@@ -324,5 +324,20 @@ test('a different published fence typed during delivery is preserved with confir
   await deliverBound(workspace,bindings,manifest,async()=>{await writeFile(join(workspace.root,'child.jsx'),other);await observeDelivery('child.jsx',entry,accepted);});f.calls.length=0;
   await assert.rejects(finalizeBindings(workspace),/changed identity/);assert.deepEqual(await readFile(join(workspace.root,'child.jsx')),other);assert.ok((await localWorkspaceState(workspace.root)).list(LOCAL_WORKSPACE_SCOPE,'archive').some(row=>row.key.startsWith('publication-finalize/')));assert.equal(f.calls.length,0);
   await writeFile(join(workspace.root,'child.jsx'),frozen);await finalizeBindings(workspace);assert.deepEqual(await readFile(join(workspace.root,'child.jsx')),accepted);assert.equal(f.calls.length,0);
+ }finally{await f.cleanup();}
+});
+
+test('binary publication ignores a native snapshot null markup when synchronizing local comments',async()=>{
+ const f=await fixture();try{
+  const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAeklEQVR4nO3PUQkAIBTAwBfCiEY0oCH8OITBAtxm7fN1wwUNaEEDWtCAFjSgBQ1oQQNa0IAWNKAFDWhBA1rQgBY0oAUNaEEDWtCAFjSgBQ1oQQNa0IAWNKAFDWhBA1rQgBY0oAUNaEEDWtCAFjSgBQ1oQQNa0IAWNKAFDWhBA1rQgBY0oAUNaEEDWtCAFjSgBQ1oQQNa0IAWPHYBsljBD1B9RXYAAAAASUVORK5CYII=','base64');
+  await writeFile(join(f.workspace.root,'picture.png'),bytes);
+  await registerLocalFiles(f.workspace,['picture.png']);
+  const result=await publishLocalWorkspace(f.workspace,['picture.png'],f.client,{});
+  assert.equal(result.operations[0]?.status,'published');
+  assert.deepEqual(await readFile(join(f.workspace.root,'picture.png')),bytes);
+  assert.ok(f.calls.some(call=>call.body.image==='data:image/png;base64,'+bytes.toString('base64')));
+  const count=f.calls.length;
+  await publishLocalWorkspace(f.workspace,['picture.png'],f.client,{});
+  assert.equal(f.calls.length,count,'retry needs neither another upload nor a markup parse');
  }finally{await f.cleanup();}
 });

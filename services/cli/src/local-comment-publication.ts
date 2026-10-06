@@ -46,7 +46,7 @@ export async function publishLocalComments(workspace:Workspace,stage:Workspace,p
   await mutate(pending.identity as Record<string,unknown>,pending.path,pending.body as Record<string,unknown>,async()=>({body:pending.body,context:pending.context as Context}));
  }
  // Migrate legacy notes with the same production wire used by preview.
- for(const file of selected)if(stage.tracking?.files[file]?.snapshot.markup!==undefined){const source=parseDocument((await readFile(await confinedPath(workspace.root,file))).toString()).body;previewAnnotations(portable,LOCAL_WORKSPACE_SCOPE,file,source);}
+ for(const file of selected)if(typeof stage.tracking?.files[file]?.snapshot.markup==='string'){const source=parseDocument((await readFile(await confinedPath(workspace.root,file))).toString()).body;previewAnnotations(portable,LOCAL_WORKSPACE_SCOPE,file,source);}
  const threads=portable.list<StoredThread>(LOCAL_WORKSPACE_SCOPE,'preview-thread').map(row=>row.value).filter(thread=>selected.has(thread.file));
  const localThreads=new Map(threads.map(thread=>[thread.value.id,thread]));
  for(const record of store.list<Binding>(stage.root,'archive'))if(record.key.startsWith('local-comments/')&&selected.has(record.value.file)){
@@ -58,7 +58,7 @@ export async function publishLocalComments(workspace:Workspace,stage:Workspace,p
   }
  }
  for(const thread of threads){
-  const artifact=stage.tracking?.files[thread.file];if(!artifact||artifact.snapshot.markup===undefined)continue;
+  const artifact=stage.tracking?.files[thread.file];if(!artifact||typeof artifact.snapshot.markup!=='string')continue;
   let binding=store.get<Binding>(stage.root,'archive',key(thread.value.id))?.value;
   if(binding&&binding.artifactId!==artifact.id)throw new CliError('comment_conflict','The published thread belongs to another document identity.');
   for(const comment of thread.value.thread){

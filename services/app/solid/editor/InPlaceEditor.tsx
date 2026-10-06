@@ -286,7 +286,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     onCommentKey: () => { const current = edit?.selection(); if (current) props.onComment?.(current); },
     onImageDrop: (file, where) => imageDoors?.dropped(file, where),
     onImageReplaceRequest: (path) => imageDoors?.pick(path),
-    get editing() { return mode() === 'design' && !preview(); },
+    // App and Code share one draft session; only a historical version pauses it.
+    get editing() { return !preview(); },
     sourceRef: { get current() { return editorSource.current(); } },
     onSourceEdited: (next, render = false, group, selection) => {
       editorSource.apply(next, { origin: 'local', group, selection, redraw: render });
@@ -794,7 +795,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       </Show>
       <Show when={mode() === 'code'}>
         <div class="fixed bottom-0 z-20" style={{ top: `${barTop() + barH}px`, left: '0px', right: `${panelWidth()}px` }} aria-label="Source pane">
-          <SourceEditorPane value={source()} revision={editorSource.revision()} onChange={(text) => editorSource.apply(text, { origin: 'local' })}
+          <SourceEditorPane value={source()} revision={editorSource.revision()} onChange={(text) => editorSource.apply(text, { origin: 'local', group: 'typing:source', redraw: true })}
             initialSelection={scriptAt} reveal={scriptAt} />
         </div>
       </Show>
