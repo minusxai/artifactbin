@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -31,7 +32,10 @@ describe('avatarUrl (pure)', () => {
   it('addresses the serving route by id and carries the content hash as v', () => {
     const key = 'avatar/' + 'a'.repeat(64);
     expect(avatarVersion(key)).toBe('a'.repeat(64));
-    expect(avatarUrl({ id: 'usr_abc', image_key: key })).toBe(`${avatarPath('usr_abc')}?v=${'a'.repeat(64)}`);
+    const image = avatarUrl({ id: 'usr_abc', image_key: key })!;
+    const expected = new URL(`${avatarPath('usr_abc')}?v=${'a'.repeat(64)}`, PUBLIC_BASE_URL).href;
+    expect(image).toBe(expected);
+    expect(new URL(image, 'https://document.pages.example/').href).toBe(expected);
     expect(avatarPath('usr_abc')).toBe('/api/users/usr_abc/avatar');
   });
 });

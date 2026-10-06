@@ -33,12 +33,20 @@ describe('buildDocumentCsp', () => {
   it('pins styles, fonts, images, media, frames and the behaviour directives', () => {
     expect(directive(csp, 'style-src')).toBe("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
     expect(directive(csp, 'font-src')).toBe("font-src 'self' data: https://fonts.gstatic.com");
-    expect(directive(csp, 'img-src')).toBe("img-src 'self' https: data: blob:");
+    expect(directive(csp, 'img-src')).toBe("img-src 'self' https: data: blob: https://app.example.com/api/users/");
     expect(directive(csp, 'media-src')).toBe("media-src 'self' https: blob:");
     // An author <iframe> frames the retired <Video> card's players by default; any other host is a `csp-frame` meta.
     expect(directive(csp, 'frame-src')).toBe('frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com');
     expect(directive(csp, 'form-action')).toBe("form-action 'none'");
     expect(directive(csp, 'base-uri')).toBe("base-uri 'none'");
+  });
+
+  it('allows public avatar images from the app in HTTP development without granting app API connections', () => {
+    const app = 'http://app.lvh.me:3030';
+    const policy = buildDocumentCsp({ self: 'http://416233784b39.lvh.me:3030', app, id: 'Ab3xK9' });
+    expect(directive(policy, 'img-src')!.split(' ')).toContain(`${app}/api/users/`);
+    expect(directive(policy, 'connect-src')!.split(' ')).not.toContain(app);
+    expect(directive(policy, 'connect-src')).not.toContain('/api/users/');
   });
 
   it('is framed by the app alone, and needs no sandbox: its origin is its own', () => {

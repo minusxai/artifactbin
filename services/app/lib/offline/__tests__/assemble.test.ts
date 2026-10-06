@@ -16,6 +16,7 @@ import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/story/assets/asset-url';
+import { setAvatar } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
 import type { TableResult } from '@/lib/story/data/dataflow';
@@ -278,6 +279,20 @@ describe('a self-contained file', () => {
     for (const door of [`/a/${w.doc}/query`, '/mutate', '/events', '/api/']) expect(island).not.toContain(door);
     expect(file.island).not.toHaveProperty('queryUrl');
     expect(file.island).not.toHaveProperty('assetsUrl');
+  });
+
+  it('embeds canonical avatar URLs as image bytes, including people in the snapshot', async () => {
+    const owner = await account('avatar');
+    await setAvatar(owner.user.id, Buffer.from(PNG_B64, 'base64'), 'image/png');
+    const dataset = await create(owner.token.token, { dataset: [{ owner: owner.user.id }], columns: [{ name: 'owner', type: 'user' }] });
+    const id = await create(owner.token.token, { markup:
+      `<Helmet><Import name="tasks" src="ref:${dataset}" /><Query name="owners">{\`select owner from tasks.rows\`}</Query></Helmet>`
+      + '<UserImage userId="$_me.id" /><DataTable data="$owners" />' });
+    const file = await download(id, owner.actor);
+    expect(file.snapshot.state.people?.[owner.user.id]?.image).toMatch(/^data:image\/webp;base64,/);
+    const island = JSON.stringify(file.island);
+    expect(island).not.toContain('/api/users/');
+    expect(island).not.toMatch(/https?:[^"\s]*data:image/);
   });
 
   it('says a Mermaid document needs the mermaid bundle', async () => {
