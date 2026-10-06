@@ -28,6 +28,7 @@ import { launchChromium } from './lib/browser.mjs';
 import { documentLocator } from './lib/page-facts.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { mergeGuestIntoAccount, becomeOwner, startDocument } from '../lib/start-doc.mjs';
+import { parse as parseYaml } from 'yaml';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 // Printed AS IT HAPPENS, not collected and dumped at the end: this gate has a
@@ -63,10 +64,11 @@ const story = HELMET + `<div data-design="tw" className="@container p-8">` +
   `<h1 id="heading" className="text-3xl font-bold">Quarterly review</h1>` +
   `<p className="mt-2 text-base">A paragraph that must survive every chart edit.</p>` +
   `<Question title="Revenue" data="$sales" height="430px" /></div>`;
-await api(`/api/artifacts/${start.id}`, { method: 'PUT', body: JSON.stringify({ title: 'Review', markup: story, theme: 'manuscript' }) }, token);
+await api(`/api/artifacts/${start.id}`, { method: 'PUT', body: JSON.stringify({ title: 'Review', markup: story, theme: 'manuscript', template: 'doc' }) }, token);
 
 const b = await launchChromium();
 const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
+await p.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
 const frame = () => documentLocator(p);
 const frameText = async () => { const f = frame(); return f ? await f.locator('body').innerText().catch(() => '') : ''; };
 const marks = async () => { const f = frame(); return f ? await f.locator('svg.marks, canvas').count().catch(() => 0) : 0; };
@@ -278,6 +280,22 @@ await p.screenshot({ path: '/tmp/viz-editor-table.png' });
   await pick('Table', '$sales');
   const refused = await until(async () => /not saved/.test(await saveStatus(p)));
   check(refused, `the table switch alone is refused while the axes still name $costs columns (${await saveStatus(p)})`);
+  // Recovery must copy the current JSX and metadata even while this intermediate update is refused.
+  // The title and color-mode edits below are deliberately unsaved at the time of copying.
+  await p.locator('[aria-label="Title"]').fill('Unsaved recovery title');
+  await p.click('[aria-label="Color mode"]');
+  await p.click('[aria-label="Color mode dark"]');
+  await p.getByRole('button', { name: 'Copy draft' }).click();
+  const copiedDraft = await p.evaluate(async () => navigator.clipboard.readText());
+  const copiedParts = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(copiedDraft);
+  check(!!copiedParts, 'Copy draft is portable YAML-frontmatter JSX');
+  if (copiedParts) {
+    const copiedMetadata = parseYaml(copiedParts[1]);
+    check(copiedMetadata.title === 'Unsaved recovery title' && copiedMetadata.theme === 'manuscript'
+      && copiedMetadata.template === 'doc' && copiedMetadata.colorMode === 'dark', 'the copy contains current title, theme, template and color mode');
+    check(copiedParts[2].includes('A paragraph that must survive every chart edit.'), 'the exact current JSX body marker is preserved');
+    check(Object.keys(copiedMetadata).sort().join(',') === 'colorMode,template,theme,title', 'the recovery copy carries no remote identity or sharing grants');
+  }
   await p.waitForTimeout(1500); // the human pause: well past the batch window
   check(await waitForOption(p, 'X-Axis', 'region'), 'after the pause the axis pickers offer $sales columns');
   await pick('X-Axis', 'region');
