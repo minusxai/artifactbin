@@ -31,11 +31,11 @@ Inspect non-success JSON and follow its recovery instructions. After an uncertai
 
 ## Browser preview and interactive QA
 
-For browser QA, use `POST /api/browser-sessions`; no local Chrome is needed. Send the email bearer and an existing `artifactId`. Sessions default to your identity; `viewer` is fixed at creation. Scripts run for at most 20 seconds.
+For browser QA, use `POST /api/browser-sessions`; no local Chrome is needed. Use your email bearer; the script navigates to an existing `artifactId`. Sessions default to your identity; `viewer` is fixed at creation. Scripts run for at most 20 seconds.
 
 ```js
 const headers = {Authorization:'Bearer ' + accessToken,'Content-Type':'application/json'};
-const call = async body => {const r=await fetch(base+'/api/browser-sessions',{method:'POST',headers,body:JSON.stringify(body)});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
+const call = async body => {const r=await fetch(base+'/api/browser-sessions',{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
 const session_id=crypto.randomUUID(), execution_id=crypto.randomUUID();
 try {
   await call({op:'script',session_id,execution_id,create:true,code:`const page=await context.newPage();await page.goto('/a/${artifactId}');await page.getByRole('heading').first().waitFor();await output.image(await page.screenshot());`});
