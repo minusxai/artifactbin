@@ -169,6 +169,11 @@ export function autoUpdatePolicy(env:NodeJS.ProcessEnv=process.env):{enabled:boo
  return {enabled:!['true','1'].includes((env.CLI__DISABLE_AUTO_UPDATES??'').toLowerCase())&&!['0','false','off'].includes((env.CLI__AUTO_UPDATE??'').toLowerCase())&&!['true','1'].includes((env.npm_config_offline??'').toLowerCase())&&!pin&&env.ARTIFACTBIN_GLOBAL!=='off'&&!remoteContext(env),...(pin?{pin:validVersion(pin)?pin:'invalid'}:{})};
 }
 
+/** Separate credential stores still update one shared installation: its lock/throttle belong to the user home. */
+export function autoUpdateStateEnv(home:string,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
+ return {...env,ARTIFACTBIN_HOME:join(home,'.artifactbin')};
+}
+
 /** Managed remote children inherit scoped proof; never serialize these values into documents or logs. */
 export function remoteContext(env:NodeJS.ProcessEnv=process.env){
  const id=env.ARTIFACTBIN__REMOTE_SESSION,proof=env.ARTIFACTBIN__REMOTE_PROOF;

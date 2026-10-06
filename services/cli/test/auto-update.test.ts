@@ -126,3 +126,14 @@ test('npm subprocess is actually terminated on timeout',async()=>{
   assert.notEqual(result.code,0);assert.ok(Date.now()-started<5000,'a hung npm must return promptly');
  }finally{await f.clean();}
 });
+
+test('commands with separate credential-state directories still share the installation lock',async()=>{
+ const f=await fixture();let installs=0;let startFirst!:()=>void,startSecond!:()=>void,finishInstall!:()=>void;
+ const firstStarted=new Promise<void>(resolve=>startFirst=resolve),secondStarted=new Promise<void>(resolve=>startSecond=resolve),held=new Promise<void>(resolve=>finishInstall=resolve);
+ const npm:NpmRunner=async args=>{if(args[0]==='prefix')return {code:0,stdout:f.prefix+'\n',stderr:''};installs++;(installs===1?startFirst:startSecond)();await held;return {code:0,stdout:'',stderr:''};};
+ const make=(directory:string)=>automaticUpdate({...f,env:{...f.env,ARTIFACTBIN_HOME:join(f.home,directory)},npm,stderr:()=>{}});
+ try{
+  const one=make('account-a'),two=make('account-b');await one.observe(release);await two.observe(release);
+  const a=one.finish();await firstStarted;const b=two.finish();await Promise.race([secondStarted,b]);finishInstall();await Promise.all([a,b]);assert.equal(installs,1);
+ }finally{finishInstall?.();await f.clean();}
+});

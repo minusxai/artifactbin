@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,copyFile,symlink,rm} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
@@ -29,9 +29,18 @@ const entry=join(prefix,...(process.platform==='win32'?[]:['lib']),'node_modules
 let server;
 try{
  await mkdir(env.HOME,{recursive:true});
- // Install the actual tested package into a global prefix, using its already populated native-consumer cache.
- const initial=await npm(['install','-g','--prefix',prefix,'--install-links','--offline','--no-audit','--no-fund',pkg]);
- assert.equal(initial.code,0,initial.stderr);
+ // Reuse the already installed candidate: exact CLI bytes in a private global layout, with
+ // dependencies linked as separate global packages. npm preserves unrelated global packages;
+ // the actual upgrade below replaces only this fixture's CLI. No second full dependency install.
+ const manifest=await readFile(join(pkg,'package.json'),'utf8'),originalBytes=await readFile(installed);
+ await mkdir(dirname(entry),{recursive:true});await copyFile(installed,entry);
+ await writeFile(join(dirname(entry),'../package.json'),manifest);
+ const modules=resolve(dirname(entry),'../../..');
+ for(const name of Object.keys(JSON.parse(manifest).dependencies??{})){
+  const target=join(modules,name);await mkdir(dirname(target),{recursive:true});
+  await symlink(resolve(pkg,'../..',name),target,process.platform==='win32'?'junction':'dir');
+ }
+ assert.deepEqual(await readFile(entry),originalBytes);
  const fixture=join(root,'release');await mkdir(fixture);
  await writeFile(join(fixture,'package.json'),JSON.stringify({name:'@afbin/cli',version:future,type:'module',bin:{afbin:'dist/afbin.mjs'}}));
  await mkdir(join(fixture,'dist'));
@@ -61,7 +70,9 @@ try{
  assert.equal(updated.code,0,updated.stderr);assert.deepEqual(JSON.parse(updated.stdout),profile);assert.ok(registryRequests>0);assert.match(updated.stderr,/Updated afbin to 99\.0\.0/);
  assert.equal(JSON.parse(await readFile(join(dirname(entry),'../package.json'),'utf8')).version,future);
  const next=await child(process.execPath,[entry,'--version']);assert.equal(next.code,0,next.stderr);assert.equal(next.stdout.trim(),future);
- console.log(JSON.stringify({result:'PASS',platform:process.platform,node:process.version,checks:['tested global npm package','env opt-out','result before real npm download','real exact-version npm upgrade','next invocation updated']}));
+ assert.deepEqual(await readFile(installed),originalBytes,'the shared native consumer must remain unchanged');
+ assert.equal(await readFile(join(pkg,'package.json'),'utf8'),manifest);
+ console.log(JSON.stringify({result:'PASS',platform:process.platform,node:process.version,checks:['tested CLI bytes in global prefix','env opt-out','result before real npm download','real exact-version npm upgrade','next invocation updated']}));
 }finally{
  if(server?.listening)await new Promise(accept=>server.close(accept));
  await rm(root,{recursive:true,force:true});
