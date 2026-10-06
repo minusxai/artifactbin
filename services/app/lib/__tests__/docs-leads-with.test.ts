@@ -99,3 +99,13 @@ describe('the brief — the one text every agent reads', () => {
     expect(theme).toBeGreaterThan(bodyRules);
   });
 });
+
+
+it('keeps scrolly full-bleed bands inside the document while prose owns its padding', () => {
+  const doc = renderDoc('artifactbin/references/templates-scrolly.md', BASE);
+  expect(doc).toContain('unpadded siblings of padded prose sections');
+  expect(doc).toContain('Do not widen the document with negative margins');
+  expect(doc).toContain('className="@container text-foreground"');
+  expect(doc).toContain('className="mx-auto max-w-6xl px-6 py-16 @2xl:px-12"');
+  expect(doc).not.toContain('may run full-bleed (`-mx-6');
+});
