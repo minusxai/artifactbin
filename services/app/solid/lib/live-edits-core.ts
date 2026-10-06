@@ -102,6 +102,25 @@ export interface LiveEditsCore {
   dispose(): void;
 }
 
+function refusedSaveMessage(error: string | undefined, status: number): string {
+  if (status === 404 || error === 'not_found') {
+    return 'Your editing access may have changed or the document may no longer be available. Copy your draft before refreshing.';
+  }
+  if (error === 'invalid_refs') {
+    return 'One or more references could not be resolved. Check the references and try saving again.';
+  }
+  return 'The server could not save this change. Your draft is preserved.';
+}
+
+function requestFailureMessage(error: unknown, recovery = false): string {
+  if (error instanceof TypeError) return 'Could not reach the server. Your draft is preserved; try again when connected.';
+  if (recovery && error instanceof Error && /latest document/i.test(error.message)) {
+    return 'Could not load the editable version. Copy your draft, then refresh to reopen the document.';
+  }
+  if (recovery) return 'Could not recover the editable version. Copy your draft, then refresh to reopen the document.';
+  return error instanceof Error ? error.message : 'Document validation failed';
+}
+
 function mergePending(first: PendingChange | null, second: PendingChange | null): PendingChange {
   return {
     ...first,
@@ -292,7 +311,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
           const more = (body.details?.length ?? 0) - 1;
           setState((s) => ({
             ...s,
-            status: first ? `not saved — ${first}${more > 0 ? ` (+${more} more)` : ''}` : `not saved (${body.error ?? res.status})`,
+            status: first ? `not saved — ${first}${more > 0 ? ` (+${more} more)` : ''}` : `not saved — ${refusedSaveMessage(body.error, res.status)}`,
             pending: false,
           }));
         }
@@ -306,7 +325,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
         if (prepared) pending = mergePending(change, pending);
         setState((s) => ({
           ...s,
-          status: prepared ? 'offline — will retry' : `not saved — ${error instanceof Error ? error.message : 'Document validation failed'}`,
+          status: prepared ? 'offline — will retry' : `not saved — ${requestFailureMessage(error)}`,
           pending: false,
         }));
       } finally {
@@ -431,7 +450,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
         await flush();
       }
     } catch (error) {
-      setState((s) => ({ ...s, status: `not saved — ${error instanceof Error ? error.message : 'recovery failed'}`, pending: false }));
+      setState((s) => ({ ...s, status: `not saved — ${requestFailureMessage(error, true)}`, pending: false }));
     }
   };
 

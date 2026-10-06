@@ -6,6 +6,7 @@ import { STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_DOCUMENT_MESSAGE, 
 import { fakeBackend } from '@/test/helpers/artifact-backend';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { screen, within } from '@testing-library/dom';
+import { parse } from 'yaml';
 import type { PendingChange } from '../create-live-edits';
 
 /** Every change the editor hands to persistence, in order (the real live-edits core still runs behind it). */
@@ -61,13 +62,33 @@ afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, '', '
 
 function mountEditor(source = SOURCE, backend = fakeBackend()) {
   const runtime = fakeRuntime();
-  const art = { id: 'doc12345', version: 3, edit_id: 'edit-3', title: 'A note', theme: null, template: null, colorMode: null, markup: source };
+  const art = { id: 'doc12345', version: 3, edit_id: 'edit-3', title: 'A note', theme: null, template: null, colorMode: null, markup: source,
+    document: { schema: 3 as const, kind: 'graph' as const, policy: '', nodes: {}, claimedIds: {}, bytes: 0 } };
   const view = render(() => <Router><Route path="/" component={() => (
     <InPlaceEditor art={art} backend={backend} runtimeRef={runtime.runtimeRef} sessionNonce={NONCE} />
   )} /></Router>);
   runtime.emit({ type: STORY_EDIT_READY_MESSAGE });
   return { ...runtime, view };
 }
+
+it('copies the current source and unsaved metadata after a refused save', async () => {
+  let copied = '';
+  const backend = fakeBackend({}, { commitEdit: vi.fn(async () => ({ ok: false as const, status: 404, body: { error: 'not_found' } as never })) });
+  vi.stubGlobal('navigator', { clipboard: { writeText: async (text: string) => { copied = text; } } });
+  const { view } = mountEditor(SOURCE, backend);
+
+  fireEvent.input(view.getByRole('textbox', { name: 'Title' }), { target: { value: 'Unsaved recovery title' } });
+  fireEvent.click(view.getByRole('tab', { name: 'Edit the source' }));
+  fireEvent.input(await view.findByRole('textbox', { name: 'Markup source' }), { target: { value: '<p>Retained body</p>' } });
+  await view.findByRole('alert');
+  fireEvent.click(view.getByRole('button', { name: 'Copy draft' }));
+  await vi.waitFor(() => expect(copied).toContain('Retained body'));
+
+  const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(copied);
+  expect(match).not.toBeNull();
+  expect(parse(match![1]!)).toMatchObject({ title: 'Unsaved recovery title' });
+  expect(match![2]).toBe('<p>Retained body</p>');
+});
 
 const drafts = (sent: Array<Record<string, unknown>>) => sent.filter((m) => m.type === STORY_DOCUMENT_MESSAGE).map((m) => m.source);
 

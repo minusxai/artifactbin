@@ -84,6 +84,7 @@ import { Tooltip } from '../components/Tooltip';
 import { FeatureGate } from '../components/FeatureGate';
 import MobileSheet, { createIsPhoneViewport } from '../components/MobileSheet';
 import { copyText } from '../lib/copy-text';
+import { recoverableDraft } from './recoverable-draft';
 
 const INSPECTOR_LABEL = { chart: 'Chart inspector', number: 'Number inspector', diagram: 'Diagram inspector' } as const;
 const INSPECT_LABEL = { chart: 'Edit chart', number: 'Edit number', diagram: 'Edit diagram' } as const;
@@ -306,6 +307,15 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       commitStructural(removeJsxNodeAtPath(editorSource.current(), bodyPathToSourcePath(editorSource.current(), selection.path)));
     },
   });
+  const copyRecoverableDraft = async () => {
+    // Flush in-place typing before taking the snapshot. A refused save does not make that draft
+    // disposable, so still copy the current editor state if the runtime cannot acknowledge it.
+    try { await inPlace.commitPending(); } catch { /* preserve and copy the visible draft */ }
+    const copied = await copyText(recoverableDraft(editorSource.current(), {
+      title: title(), theme: theme(), template: art.template, colorMode: colorMode(),
+    }));
+    if (!copied) setHistoryError('Could not copy. Open the source editor to select and copy your draft.');
+  };
   edit = inPlace;
 
   createEffect(() => {
@@ -726,7 +736,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           <p>{live.state.status}</p>
           <div class="mt-2 flex flex-wrap gap-3">
             <button type="button" onClick={() => void live.recover('retry')}>Retry save</button>
-            <button type="button" onClick={() => void copyText(editorSource.current()).then((ok) => { if (!ok) setHistoryError('Could not copy. Open the source editor to select and copy your draft.'); })}>Copy draft</button>
+            <button type="button" onClick={() => void copyRecoverableDraft()}>Copy draft</button>
             <button type="button" onClick={() => setDiscardDraft(true)}>Use server version</button>
           </div>
           <Show when={discardDraft()}>
