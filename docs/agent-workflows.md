@@ -46,7 +46,7 @@ output unfiltered: an already populated `node_modules` can hide a missing lock e
 The [CI speed contract](../AGENTS.md#ci-speed-contract) measures one attempt's complete required-check
 chain, not its longest job. GitHub's attempt `run_started_at` is the start; the final required rollup
 is the finish. This includes dependency queues, setup and receipt uploads. The builtin-only
-`scripts/lib/ci-elapsed.mjs` enforces a hard failure above 480 seconds on both PRs and main, with
+`scripts/lib/ci-elapsed.mjs` enforces a hard failure above 300 seconds on both PRs and main, with
 180/240-second target and normal-limit diagnostics. Per-job durations above 240 seconds warn on PRs
 and main; legitimate preparation waits remain included. The complete chain owns the hard timing failure.
 A receipt is evidence only from a successful run.
