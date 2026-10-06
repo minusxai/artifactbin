@@ -166,12 +166,7 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(pack.steps.some(step=>step.run?.includes('pack:release'))).toBe(true);
     const matrix=ci.jobs.cli;
     expect(matrix.needs).toEqual(['plan']);
-    expect(matrix.permissions).toEqual({contents:'read',actions:'read'});
-    const wait=matrix.steps.find(step=>step.name==='Wait for exact current-attempt CLI artifacts');
-    expect(wait.run).toContain('ci-artifact-wait.mjs');
-    expect(wait.run).toContain('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
-    expect(matrix.steps.indexOf(matrix.steps.find(step=>step.id==='dependency-cache'))).toBeLessThan(matrix.steps.indexOf(wait));
-    expect(matrix.steps.indexOf(wait)).toBeLessThan(matrix.steps.indexOf(matrix.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance')));
+    expect(matrix.steps.some(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'))).toBe(true);
     expect(matrix.strategy.matrix.node).toEqual(['22.22.3','24.21.0']);
     expect(matrix.strategy.matrix.os).toContain('windows-2022');
     expect(matrix.strategy.matrix.phase).toEqual(['native','runtime','preview','local']);
@@ -184,13 +179,10 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
       expect(matrix.steps.find(step => step.name === name)?.if,name).toBe("matrix.phase == 'preview' || matrix.phase == 'local'");
     }
     expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase != 'native'");
-    for(const job of ['reference-compatibility']){
+    for(const job of ['cli','reference-compatibility']){
       const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
       expect(download,job).toBeDefined();
     }
-    expect(wait.run).toContain('npm-candidate.zip');
-    expect(matrix.steps.find(step=>step.name==='Extract verified CLI artifacts on Unix').run).toContain('npm-candidate');
-    expect(matrix.steps.find(step=>step.name==='Extract verified CLI artifacts on Windows').run).toContain('npm-candidate');
     expect(ci.jobs).not.toHaveProperty('cli-preview');
     expect(matrix.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
     const release=readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8');

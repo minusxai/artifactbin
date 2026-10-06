@@ -22,7 +22,8 @@ NEVER after an individual edit, "just to check" or mid-task:** gate containers, 
 Measure the complete required-check chain from the workflow attempt's `run_started_at` through
 its final rollup, including runner setup, dependency waits and artifact uploads. Aim below **3 minutes**;
 normal maximum is below **4 minutes**. CI fails above **5 minutes** on PRs and main. Individual job times,
-parallel-job sums and full workflow durations are different metrics. Optional cache warming and
+parallel-job sums and full workflow durations are different metrics. Per-job durations above four
+minutes produce diagnostics, not timing failures; the complete chain owns the hard five-minute limit. Optional cache warming and
 post-check downstream release notifications are outside this required-check chain; report their tails separately.
 Investigate the critical path and repeated work; never raise the budget, skip required coverage, subtract
 queues or rerun unchanged code to hide a slow run. Report cold and warm timings separately.

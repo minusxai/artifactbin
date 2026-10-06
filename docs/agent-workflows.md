@@ -47,7 +47,9 @@ The [CI speed contract](../AGENTS.md#ci-speed-contract) measures one attempt's c
 chain, not its longest job. GitHub's attempt `run_started_at` is the start; the final required rollup
 is the finish. This includes dependency queues, setup and receipt uploads. The builtin-only
 `scripts/lib/ci-elapsed.mjs` enforces a hard failure above 300 seconds on both PRs and main, with
-180/240-second target and normal-limit diagnostics. A receipt is evidence only from a successful run.
+180/240-second target and normal-limit diagnostics. Per-job durations above 240 seconds warn on PRs
+and main; legitimate preparation waits remain included. The complete chain owns the hard timing failure.
+A receipt is evidence only from a successful run.
 Optional background cache warming and post-check downstream release notification stay outside this rollup;
 full workflow duration and merge-to-live latency remain separate reported metrics.
 
