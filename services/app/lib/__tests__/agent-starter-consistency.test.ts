@@ -24,6 +24,7 @@ const BOOTSTRAP = 'If `afbin` is not installed, run `npx --yes @afbin/cli@latest
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['token','mint','claim'];
 const httpDiscovery=(name:string)=>name==='skills/artifactbin/llms.txt'||name==='lib/agent-discovery meta';
+const linkedInstaller = (name: string) => name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt');
 
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
 const ALLOWED_SENTENCE = 'never mint or print tokens';
@@ -66,12 +67,13 @@ describe('every agent-facing starter says the same thing', () => {
   });
 
   it('(b) carries the installer, so an agent without the binary is never stuck', async () => {
-    for (const [name, text] of await surfaces()) expect(text, name).toContain(INSTALLER);
+    for (const [name, text] of await surfaces()) expect(text, name).toContain(linkedInstaller(name) ? `${BASE}/llms.txt` : INSTALLER);
+    expect(llmsText(BASE)).toContain(INSTALLER);
   });
 
   it('(b) spells npm only as that one setup line; every other command is `afbin <command>`', async () => {
     for (const [name, text] of await surfaces()) {
-      expect(text.split('npx --yes @afbin/cli@').length - 1, name).toBe(1);
+      expect(text.split('npx --yes @afbin/cli@').length - 1, name).toBe(linkedInstaller(name) ? 0 : 1);
       for (const [, command] of text.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command, name).toBe('setup');
     }
   });

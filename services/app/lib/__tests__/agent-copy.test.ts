@@ -10,7 +10,7 @@ import { DEFAULT_SERVER } from '@artifactbin/contracts';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. If afbin is not installed, prepare Node (https://x.test/chat/ensure-node.sh; Windows: https://x.test/chat/ensure-node.ps1), then run npx --yes @afbin/cli@latest setup once (Windows: npx.cmd); it installs afbin and its skills. Run afbin help first, then afbin auth https://x.test/a/ab3cd9 --server https://x.test. Approve in the browser that created this artifact; guest access is fine. Pass --server https://x.test to every afbin server command.\n\n---\n\nLet's build an artifact for ";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place.\n\nIf afbin is not installed, install and set it up first: https://x.test/llms.txt\nRun afbin help first. Approve access in your browser. Pass --server https://x.test to every afbin server command.\n\n---\n\nLet's build an artifact for ";
 
 describe('the tokenless paste', () => {
   it('existing: the link plus how to reach afbin, and never a token', () => {
@@ -19,22 +19,23 @@ describe('the tokenless paste', () => {
     // `/tokens/new` and any mention of a token at all are banned on this very surface
     // by agent-starter-consistency.test.ts's case (c), over all of them.
   });
-  it('carries the installer, so an agent that lacks afbin can get it', () => {
-    expect(existingPaste(B, ID)).toContain('npx --yes @afbin/cli@latest setup once (Windows: npx.cmd)');
+  it('links to installation instructions instead of embedding the installer', () => {
+    expect(existingPaste(B, ID)).toContain('If afbin is not installed, install and set it up first:');
     expect(existingPaste(B, ID)).toContain('Run afbin help first');
-    expect(existingPaste(B, ID).split('@afbin/cli@').length - 1).toBe(1);
-    expect(existingPaste(B, ID)).toContain('https://x.test/chat/ensure-node.sh');
+    expect(existingPaste(B, ID)).toContain('https://x.test/llms.txt');
+    expect(existingPaste(B, ID)).not.toMatch(/ensure-node|npx|@afbin\/cli/);
   });
   it.each(['https://x.test', 'http://127.0.0.1:45407/'])('selects the handed-over server for every remote command: %s', (base) => {
     expect(existingPaste(base, ID)).toContain(`Pass --server ${base.replace(/\/$/, '')} to every afbin server command`);
   });
   it.each([DEFAULT_SERVER, `${DEFAULT_SERVER}/`])('keeps the handoff short on the host a fresh CLI already defaults to: %s', (base) => {
     expect(existingPaste(base, ID)).not.toContain('--server');
-    expect(existingPaste(base, ID)).toContain(`then afbin auth ${DEFAULT_SERVER}/a/${ID}.`);
+    expect(existingPaste(base, ID)).toContain(`${DEFAULT_SERVER}/a/${ID}`);
+    expect(existingPaste(base, ID)).toContain('Approve access in your browser.');
   });
   it('keeps the handoff concise and leaves a separated brief for the user', () => {
     const prompt = existingPaste('http://127.0.0.1:45407', ID);
-    expect(prompt.length).toBeLessThan(650);
+    expect(prompt.length).toBeLessThan(400);
     expect(prompt).toContain("\n\n---\n\nLet's build an artifact for " );
   });
   it('a trailing slash on the base does not double up', () => {

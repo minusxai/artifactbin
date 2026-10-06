@@ -1,8 +1,9 @@
 /* @jsxImportSource solid-js */
-import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createSignal, onMount, Show, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import Copy from 'lucide-solid/icons/copy';
 import { existingPaste } from '@/lib/serving/agent-copy';
+import { ARTIFACT_STARTERS } from '@/lib/workspace/artifact-starters';
 import { copyText } from '../lib/copy-text';
 
 /**
@@ -11,25 +12,28 @@ import { copyText } from '../lib/copy-text';
  */
 export function StarterInstructions(props: { id: string; template?: string | null; onContinueBlank?: () => void; converting?: boolean; conversionError?: string }): JSX.Element {
   let instructions!: HTMLTextAreaElement;
+  const fitInstructions = () => {
+    instructions.style.height = 'auto';
+    instructions.style.height = `${instructions.scrollHeight + 2}px`;
+  };
+  onMount(fitInstructions);
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
+  const typeName = () => ARTIFACT_STARTERS.find(starter => starter.template === props.template)?.label.toLowerCase() ?? 'artifact';
   const [draft, setDraft] = createSignal<string | null>(null);
   const [state, setState] = createSignal<'idle' | 'copied' | 'error'>('idle');
   const prompt = () => draft() ?? existingPaste(origin, props.id, props.template);
   const copy = async () => {
     setState(await copyText(prompt()) ? 'copied' : 'error');
   };
-  onMount(() => {
-    const frame = requestAnimationFrame(() => instructions.focus({ preventScroll: true }));
-    onCleanup(() => cancelAnimationFrame(frame));
-  });
   return <section aria-label="Agent instructions" class="mx-auto flex min-h-[75svh] w-full max-w-2xl flex-col justify-center gap-5 px-6 py-20 text-fg">
     <div>
-      <h1 class="text-2xl font-semibold tracking-tight">Your artifact is ready for your agent!</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">Your {typeName()} is ready for your agent!</h1>
       <p class="mt-2 text-sm text-muted">Copy this into your coding agent and tell it what to build.</p>
     </div>
-    <textarea aria-label="Agent instructions" ref={instructions} rows={10} spellcheck={false} value={prompt()}
-      onInput={(event) => { setDraft(event.currentTarget.value); setState('idle'); }}
-      class="w-full resize-y rounded-md border border-edge bg-raised p-4 font-mono text-xs leading-relaxed text-muted focus:border-accent focus:outline-none" />
+    <textarea ref={instructions} aria-label="Agent instructions" rows={8} spellcheck={false} value={prompt()}
+      onInput={(event) => { setDraft(event.currentTarget.value); setState('idle'); fitInstructions(); }}
+      class="w-full resize-y rounded-md border border-edge bg-surface p-4 font-mono text-xs leading-relaxed text-muted focus:border-accent focus:outline-none" />
+    <p class="-mt-2 font-sans text-xs text-muted">New to afbin? <a href={`${origin}/llms.txt`} target="_blank" rel="noopener noreferrer" class="underline decoration-edge-bright underline-offset-4 hover:text-fg">Installation instructions</a></p>
     <button type="button" aria-label="Copy agent instructions" disabled={!origin} onClick={() => void copy()} class="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-accent px-5 py-3 text-sm font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50">
       <Show when={state() === 'copied'} fallback={<Copy size={18} aria-hidden="true" />}><Check size={18} aria-hidden="true" /></Show>
       {state() === 'copied' ? 'Copied — paste into your agent' : 'Copy agent instructions'}

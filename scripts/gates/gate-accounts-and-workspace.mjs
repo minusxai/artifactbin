@@ -89,7 +89,7 @@ async function startLeg() {
       check(!/\/start\?k=/.test(prompt), 'and carries no start link');
       check(prompt.length < 600 && prompt.includes("\n\n---\n\nLet's build an artifact for "), `and includes a short editable brief (${prompt.length} chars)`);
       check(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
-      check(prompt.includes('/chat/ensure-node.sh') && prompt.includes('/chat/ensure-node.ps1') && prompt.includes('npx --yes @afbin/cli@latest setup') && prompt.includes('afbin help'), 'and says how to prepare Node, install afbin through npm and run it');
+      check(prompt.includes('/llms.txt') && !prompt.includes('ensure-node') && prompt.includes('afbin help'), 'and links to installation instructions while keeping the handoff short');
 
       // The retired doors (the start-link brief, its claim door, the public anonymous mint) answering 404 are HTTP
       // facts with no browser in them: services/app/server/__tests__/docs-human.test.ts asserts them on the app server.
