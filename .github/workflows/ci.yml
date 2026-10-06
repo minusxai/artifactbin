@@ -731,18 +731,9 @@ jobs:
         env:
           CI__NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci/ci.mjs check
-      # WHAT THIS RUN ACTUALLY COST — and, on a pull request, whether it may cost that.
-      #
-      # The table was toothless on purpose, and that was right while the budget was a wish. It is not a
-      # wish any more: merge → production has to fit in seven minutes, and a job that runs long is what
-      # spends them. So on a PULL REQUEST a job over its budget fails this run, and the message names
-      # the step that took the longest, because "gates took 300s" is not something anyone can act on.
-      # On main it stays a summary: a push has nothing left to fix, and a slow runner there would turn
-      # this into a red merge button teaching everyone to re-run.
-      #
-      # Every required job has the same four-minute ceiling, including native npm acceptance.
-      # `always()`: the table is most useful on a run that failed. Before the tested tree is recorded, so
-      # a pull request over budget never leaves a tested-tree artifact behind (the artifact IS the pass).
+      # Per-job diagnostics remain useful, but the chain is the speed contract:
+      # attempt start -> final required rollup, including setup and waits between needs.
+      # Target <3 minutes, normal maximum <4; >5 fails on both PR and main.
       - name: every job's wall clock, over-budget named
         if: always()
         # A summary on main, a gate on a pull request.
@@ -795,6 +786,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           while IFS= read -r line; do echo "::error::$line"; done < over-budget.txt
           if [ "$over" -gt 0 ] && [ "${GITHUB_EVENT_NAME}" = pull_request ]; then exit 1; fi
+      - name: Required-check chain before recording evidence
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > ci-attempt.json
+          node scripts/lib/ci-elapsed.mjs ci-attempt.json "$GITHUB_STEP_SUMMARY"
       # On a pull request the checkout is refs/pull/N/merge — the tree a squash merge produces, which
       # is the tree the push to main will carry, PROVIDED no other PR moves the base in between. When
       # one does, the tree no longer matches, but the PATCH (recorded here too, when this is a pull
@@ -833,6 +832,11 @@ jobs:
           path: tested-run/tested-run.json
           retention-days: 14
           overwrite: true
+      # Include the rollup's own receipt uploads. Receipt consumers require a successful run,
+      # so a late budget failure cannot certify a slow run as tested evidence.
+      - name: Final required-check chain including evidence uploads
+        if: always()
+        run: node scripts/lib/ci-elapsed.mjs ci-attempt.json "$GITHUB_STEP_SUMMARY"
 
   # RELEASE ONLY. Selected when the CLI version changed (scripts/lib/ci-plan.mjs `cliRelease`).
   # Native acceptance consumes one universal tarball; packaging starts independently of app checks.
