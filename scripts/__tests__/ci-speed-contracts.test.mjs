@@ -69,3 +69,26 @@ it('requires one isolated cold Windows bootstrap whenever the native CLI matrix 
  expect(jobs['notify-consumer'].needs).toContain('cli-bootstrap');
  expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain("runner.os != 'Windows'");
 });
+it('restores normalized tooling and content-verified reader builds before release packing',()=>{
+ const jobs=workflow().jobs,pack=jobs['cli-pack'].steps;
+ const install=pack.find(step=>step.id==='install'),reference=jobs['reference-compatibility'].steps.find(step=>step.id==='install');
+ expect(install?.with).toEqual(reference.with);
+ expect(pack.find(step=>step.run==='npm ci')?.if).toBe("steps.install.outputs.cache-hit != 'true'");
+ const reader=pack.find(step=>step.id==='test-builds');
+ expect(reader?.with.path).toContain('node_modules/.cache/build-islands.json');
+ expect(pack.indexOf(reader)).toBeLessThan(pack.findIndex(step=>step.run==='npm run build -w services/cli'));
+});
+it('hands the source build from the current pack run to reference proof without recompiling',()=>{
+ const jobs=workflow().jobs,pack=jobs['cli-pack'].steps,reference=jobs['reference-compatibility'].steps;
+ const archive=pack.find(step=>step.name==='Archive the source build for reference conformance');
+ expect(archive?.run).toContain('services/cli/dist');
+ expect(archive?.run).toContain('services/app/lib/build-assets');
+ const upload=pack.find(step=>step.with?.name==='afbin-reference-build');
+ const download=reference.find(step=>step.with?.name==='afbin-reference-build');
+ expect(upload?.with.path).toBe('afbin-reference-build.tar');
+ expect(download?.with['run-id']).toBeUndefined();
+ expect(download?.with.path).toBe('.');
+ expect(reference.some(step=>step.run==='npm run build -w services/cli')).toBe(false);
+ expect(reference.some(step=>step.run==='tar -xf afbin-reference-build.tar')).toBe(true);
+ expect(pack.indexOf(archive)).toBeGreaterThan(pack.findIndex(step=>step.run==='npm run pack:release -w services/cli'));
+});

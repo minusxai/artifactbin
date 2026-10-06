@@ -855,7 +855,30 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      - run: npm ci
+      # Share the same normalized, version-insensitive tooling cache as other Linux jobs.
+      # This does not warm the fresh npm caches used by native consumer acceptance.
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      # Markers validate every actual build input before reusing these prepared assets.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-builds-v1-${{ runner.os }}-
       - run: npm run build -w services/cli
       - run: npm run pack:release -w services/cli
       - name: Sign the actual build's npm provenance
@@ -878,6 +901,18 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
+      # Source-vs-installed proof needs both locations, not another compilation of the same tree.
+      - name: Archive the source build for reference conformance
+        run: |
+          tar --exclude='services/cli/dist/packages' -cf afbin-reference-build.tar \
+            services/cli/dist services/app/dist services/app/lib/build-assets \
+            services/app/public/islands services/app/public/libraries services/app/server/routes.generated.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-reference-build
+          path: afbin-reference-build.tar
+          if-no-files-found: error
+          retention-days: 1
       # Downstream hosts consume this same universal tarball after the run's tested receipt.
       # Pack owns the release alias even for nightly/version-only selection.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -1025,8 +1060,12 @@ jobs:
             ~/.cache/ms-playwright
             ~/Library/Caches/ms-playwright
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      - run: npm run build -w services/cli
-        working-directory: .
+      # The current run's pack job built these source entrypoints and their app assets together.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: afbin-reference-build
+          path: .
+      - run: tar -xf afbin-reference-build.tar
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: afbin-npm-release
