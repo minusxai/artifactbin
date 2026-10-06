@@ -99,6 +99,8 @@ const CUSTOM_DOMAINS: Table = {
     { name: 'missing_since', type: 'TIMESTAMPTZ' },
     // A public document to serve at /; null keeps the profile listing.
     { name: 'homepage_artifact_id', type: 'TEXT' },
+    // Exact custom paths -> public artifact ids; removed with the domain.
+    { name: 'path_overrides', type: 'JSONB', notNull: true, default: "'{}'::jsonb" },
   ],
   primaryKey: ['user_id'],
   indexes: [

@@ -118,3 +118,7 @@ it('optional comment view state stays with app-owned annotations', () => {
   expect(declared()['app.annotations']).toBe('app');
   expect(renderedSchema().schema).toContain('view_state JSONB');
 });
+it('custom-domain path overrides belong to the domain and migrate existing accounts', () => {
+ expect(renderedSchema().schema).toContain("path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb");
+ expect(renderedSchema().schema).toContain('ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS path_overrides JSONB');
+});

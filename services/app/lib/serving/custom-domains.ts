@@ -56,6 +56,7 @@ export interface AttachedDomain {
   verifiedAt: string | null;
   missingSince: string | null;
   homepageArtifactId: string | null;
+  pathOverrides: Array<{ path: string; artifactId: string }>;
 }
 export type AttachRefusal = 'disabled' | 'invalid_hostname' | 'taken' | 'limit';
 export type VerifyRefusal = 'disabled' | 'not_found' | 'taken' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
@@ -77,6 +78,7 @@ interface DomainRow {
   verified_at: Date | string | null;
   missing_since: Date | string | null;
   homepage_artifact_id: string | null;
+  path_overrides: Record<string, string>;
 }
 
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -136,10 +138,11 @@ function view(row: DomainRow): AttachedDomain {
     verifiedAt: isoOrNull(row.verified_at),
     missingSince: isoOrNull(row.missing_since),
     homepageArtifactId: row.homepage_artifact_id,
+    pathOverrides: Object.entries(row.path_overrides).sort(([a], [b]) => a.localeCompare(b)).map(([path, artifactId]) => ({ path, artifactId })),
   };
 }
 
-const COLUMNS = 'hostname, user_id, token, status, verified_at, missing_since, homepage_artifact_id';
+const COLUMNS = 'hostname, user_id, token, status, verified_at, missing_since, homepage_artifact_id, path_overrides';
 
 async function rowForUser(userId: string): Promise<DomainRow | null> {
   const db = await getDb();
@@ -404,6 +407,40 @@ export async function domainHomepage(ownerId: string): Promise<ArtifactRow | nul
   return row ?? null;
 }
 
+/** Exact, case-sensitive paths. Runtime doors are reserved so a mapping cannot break a document. */
+function validCustomPath(path: string): boolean {
+  return path.length <= 200 && /^\/[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*$/.test(path)
+    && !/^\/(?:a|api|assets|islands|story|fonts|libraries|geojson)(?:\/|$)/i.test(path);
+}
+
+/** One path at a time: atomic edits preserve other mappings, even when settings are open in two tabs. */
+export async function setDomainPath(ownerId: string, path: string, artifactId: string | null): Promise<AttachedDomain | { error: 'not_found' | 'invalid_path' | 'invalid_document' | 'path_limit' }> {
+  if (!validCustomPath(path)) return { error: 'invalid_path' };
+  const db = await getDb();
+  const result = await db.query<DomainRow>(`UPDATE custom_domains
+    SET path_overrides = CASE WHEN $3::text IS NULL THEN path_overrides - $2::text ELSE jsonb_set(path_overrides, ARRAY[$2::text], to_jsonb($3::text)) END
+    WHERE user_id = $1 AND ($3::text IS NULL OR (
+      EXISTS (SELECT 1 FROM artifacts WHERE ${OWNER_POSTS_SQL} AND id = $3)
+      AND (path_overrides ? $2::text OR (SELECT count(*) FROM jsonb_object_keys(path_overrides)) < 50)
+    )) RETURNING ${COLUMNS}`, [ownerId, path, artifactId]);
+  if (result.rows[0]) return view(result.rows[0]);
+  const domain = await rowForUser(ownerId);
+  if (!domain) return { error: 'not_found' };
+  if (!(path in domain.path_overrides) && Object.keys(domain.path_overrides).length >= 50) return { error: 'path_limit' };
+  return { error: 'invalid_document' };
+}
+
+/** A configured path claims its URL even when its document becomes unavailable: it must then be 404. */
+export async function domainPath(ownerId: string, path: string): Promise<{ artifact: ArtifactRow | null } | null> {
+  if (!validCustomPath(path)) return null;
+  const db = await getDb();
+  const domain = await rowForUser(ownerId);
+  const id = domain?.path_overrides[path];
+  if (!id) return null;
+  const artifact = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE ${OWNER_POSTS_SQL} AND id = $2`, [ownerId, id])).rows[0] ?? null;
+  return { artifact };
+}
+
 /**
  * An uploaded image (or file, or PDF) the host may serve at `/a/<id>/raw`:
  * one of the owner's public documents REFERENCES it (`meta.refs`, what
@@ -446,7 +483,11 @@ export function domainPostUrl(hostname: string, row: Pick<ArtifactRow, 'id' | 't
 export async function canonicalDocumentUrl(row: Pick<ArtifactRow, 'id' | 'title' | 'user_id' | 'visibility' | 'format'>): Promise<string> {
   if (row.user_id && row.visibility === 'public' && row.format === 'markup') {
     const domain = await rowForUser(row.user_id);
-    if (domain?.status === 'verified') return domain.homepage_artifact_id === row.id ? `https://${domain.hostname}/` : domainPostUrl(domain.hostname, row);
+    if (domain?.status === 'verified') {
+      if (domain.homepage_artifact_id === row.id) return `https://${domain.hostname}/`;
+      const path = Object.keys(domain.path_overrides).sort().find(path => domain.path_overrides[path] === row.id);
+      return path ? `https://${domain.hostname}${path}` : domainPostUrl(domain.hostname, row);
+    }
   }
   return `${PUBLIC_BASE_URL.replace(/\/+$/, '')}${canonicalArtifactPath(row, await ownerUsername(row.user_id))}`;
 }

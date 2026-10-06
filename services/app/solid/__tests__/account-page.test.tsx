@@ -3,8 +3,54 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
+import { CustomDomainCard } from '@/solid/components/CustomDomainCard';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
+
+it('creates, edits and removes a custom path while preserving homepage settings', async () => {
+  const paths = new Map<string, string>();
+  const saves: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === 'PATCH') {
+      const body = JSON.parse(String(init.body));
+      saves.push(body);
+      if (body.artifactId === null) paths.delete(body.path); else paths.set(body.path, body.artifactId);
+      return Response.json({});
+    }
+    return Response.json({ enabled: true, target: 'edge.example.net', targetAddresses: [], homepageOptions: [{ id: 'doc_1', title: 'About us' }, { id: 'doc_2', title: 'Our story' }], domain: { hostname: 'blog.example.com', status: 'verified', txtName: '_verify.blog.example.com', txtValue: 'proof', target: 'edge.example.net', verifiedAt: null, missingSince: null, homepageArtifactId: 'doc_2', pathOverrides: Array.from(paths, ([path, artifactId]) => ({ path, artifactId })) } });
+  }));
+  render(() => <CustomDomainCard />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Add custom path' }));
+  fireEvent.input(screen.getByRole('textbox', { name: 'Custom path' }), { target: { value: '/about' } });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Path document' }), { target: { value: 'doc_1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
+  expect(await screen.findByRole('link', { name: '/about' })).toHaveAttribute('href', 'https://blog.example.com/about');
+  expect(saves).toEqual([{ path: '/about', artifactId: 'doc_1' }]);
+  expect(screen.getByRole('combobox', { name: 'Domain homepage' })).toHaveValue('doc_2');
+  fireEvent.click(screen.getByRole('button', { name: 'Edit path /about' }));
+  expect(screen.getByRole('combobox', { name: 'Path document' })).toHaveValue('doc_1');
+  fireEvent.change(screen.getByRole('combobox', { name: 'Path document' }), { target: { value: 'doc_2' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
+  await waitFor(() => expect(saves).toHaveLength(2));
+  await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Path document' })).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Remove path /about' }));
+  await waitFor(() => expect(saves).toEqual([{ path: '/about', artifactId: 'doc_1' }, { path: '/about', artifactId: 'doc_2' }, { path: '/about', artifactId: null }]));
+  await waitFor(() => expect(screen.queryByRole('link', { name: '/about' })).not.toBeInTheDocument());
+});
+
+it('keeps a failed path edit available to correct and reports the refusal', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === 'PATCH') return Response.json({ error: 'invalid_path' }, { status: 422 });
+    return Response.json({ enabled: true, target: 'edge.example.net', targetAddresses: [], homepageOptions: [{ id: 'doc_1', title: 'About us' }], domain: { hostname: 'blog.example.com', status: 'verified', txtName: '_verify.blog.example.com', txtValue: 'proof', target: 'edge.example.net', verifiedAt: null, missingSince: null, homepageArtifactId: null, pathOverrides: [] } });
+  }));
+  render(() => <CustomDomainCard />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Add custom path' }));
+  fireEvent.input(screen.getByRole('textbox', { name: 'Custom path' }), { target: { value: '/api/test' } });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Path document' }), { target: { value: 'doc_1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Choose a path');
+  expect(screen.getByRole('textbox', { name: 'Custom path' })).toHaveValue('/api/test');
+});
 it('loads the account handle late while keeping the photo and data controls mounted', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });

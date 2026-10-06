@@ -798,6 +798,7 @@ CREATE TABLE IF NOT EXISTS app.custom_domains (
   verified_at TIMESTAMPTZ,
   missing_since TIMESTAMPTZ,
   homepage_artifact_id TEXT,
+  path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb,
   PRIMARY KEY (user_id)
 );
 
@@ -816,6 +817,8 @@ ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
 ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS missing_since TIMESTAMPTZ;
 
 ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS homepage_artifact_id TEXT;
+
+ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_verified_host ON app.custom_domains (hostname) WHERE status = 'verified';
 
