@@ -48,7 +48,7 @@ test('invalid_schedule HTTP refusal keeps its code and explains how to correct t
   const code=await runCli(['schedule','create','--artifact','abc123','--cron','nonsense','--timezone','Bad/Zone','--server',origin,'--json'],{cwd:h.root,home:h.home,env:{},interactive:false,stdout:value=>out.push(value),stderr:value=>err.push(value)});
   assert.equal(code,1);const answer=JSON.parse(out.at(-1)!);
   assert.equal(answer.error.code,'invalid_schedule');assert.equal(answer.error.details.error,'invalid_schedule');assert.equal(answer.error.details.http_status,400);
-  assert.match(answer.error.message,/five cron fields.*IANA timezone.*retry bounds/i);assert.match(answer.error.fix,/five cron fields.*IANA timezone/i);
+  assert.match(answer.error.message,/five cron fields.*IANA timezone.*retry backoff/i);assert.match(answer.error.fix,/five cron fields.*IANA timezone/i);
   assert.match(err.join(''),/five cron fields/i);assert.doesNotMatch(err.join(''),/invalid_schedule: invalid_schedule/);
  }finally{await h.cleanup();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });
