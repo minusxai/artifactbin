@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * `/:user/*` — a pretty artifact alias (solid/pages/Profile.tsx ProfileAliasRoute). Same id-anchored
+ * `/:user/*` — a pretty artifact alias (solid/pages/ProfileAliasRoute.tsx). Same id-anchored
  * grammar as the React twin (web/pages/Profile.tsx): the rest path resolves to an id or it is a
  * uniform 404 (there is no profile sub-page below the handle — see the profile API's own doc
  * comment). A resolved folder or data tier renders here; a document a client navigation found crosses to
@@ -30,9 +30,9 @@ it('renders the folder for an id-shaped rest path', async () => {
   await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports'));
 });
 
-it('is the uniform 404 when the rest path names no id — nesting is not in the address', () => {
+it('is the uniform 404 when the rest path names no id — nesting is not in the address', async () => {
   at('/@bob/not-an-artifact');
-  expect(screen.getByLabelText('Not found')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Not found')).toBeInTheDocument();
 });
 
 it('renders a data tier here: an image alias is the data page, not a crossing', async () => {

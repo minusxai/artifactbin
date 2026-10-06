@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createSignal, For, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation, useParams } from '@solidjs/router';
 import { Folder, LayoutGrid, List, Search } from 'lucide-solid';
 import { canonicalArtifactPath } from '@/lib/http/urls';
