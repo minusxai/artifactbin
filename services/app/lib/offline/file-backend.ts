@@ -421,6 +421,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
       if (unreadable) throw new BackendRequestError(unreadable, 422);
       return head();
     },
+    documentFrame: async () => null,
 
     async commitEdit({ document_update: update }) {
       if (unreadable) return { ok: false, status: 422, body: { error: 'invalid_jsx', details: [{ message: unreadable }] } as unknown as FlushResponse };

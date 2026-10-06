@@ -25,7 +25,7 @@ import {parseRowRef} from './row-scope';
 
 interface RefUse {
   id: string;
-  kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset';
+  kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset' | 'document';
   /** A dataset reached through SQL — an `<Import src="ref:<id>">` or a connected database's `<Query source="ref:<id>">` — not a rendered position. */
   via?: 'sql';
   /** For recipe binding validation: the viz envelope + `data` ref carried by the same element. */
@@ -89,6 +89,11 @@ export function collectRefUses(source: string): RefUse[] | null {
   const uses: RefUse[] = [];
   walk(parsed.nodes, (el) => {
     const tag = el.tag;
+    if (el.isComponent && tag === 'Context') {
+      const id = refId(attrValue(el, 'src'));
+      if (id) uses.push({ id, kind: 'document' });
+      return;
+    }
     // An <Import> names the dataset (or folder) its tables are read from, and
     // a <Query source=…> the connected database it runs inside
     // (lib/story/data/dataflow.ts). Real refs: they resolve through the loader like
@@ -209,7 +214,7 @@ export function findExternalSubresources(source: string): ValidationError[] {
  * one reads its children as `<name>.rows`, and a <Mutation> that writes it is
  * refused (a listing is computed; there is nothing there to write).
  */
-const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf', file:'file', folder: 'dataset' };
+const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { markup: 'document', dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf', file:'file', folder: 'dataset' };
 
 const colKind = (t: DatasetColumn['type']): 'quantitative' | 'temporal' | 'nominal' =>
   t === 'number' ? 'quantitative' : (t === 'date' || t === 'timestamp') ? 'temporal' : 'nominal';

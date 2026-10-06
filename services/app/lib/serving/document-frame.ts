@@ -26,8 +26,8 @@ export interface DocumentFrame {
   head: { title: string; description: string | null; image: string };
 }
 
-const FRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-downloads';
-const FRAME_ALLOW = 'fullscreen; clipboard-write';
+export const FRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-downloads';
+export const FRAME_ALLOW = 'fullscreen; clipboard-write';
 const GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 /** The frame is the viewport under the app bar: it scrolls inside, the bar and the rail stay above and beside. */

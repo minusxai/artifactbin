@@ -16,6 +16,10 @@ import { EditorToolbar, EditorViewTabs } from './EditorChrome';
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import { firstHeadingTitle } from '@/lib/story/document/title';
 import { scriptExportLocation } from '@/lib/story/document/script-export-location';
+import { contextRefOf } from '@/lib/story/document/helmet';
+import { writeContextRef } from '@/lib/story/document/context';
+import ContextPanel from './ContextPanel';
+import BookOpen from 'lucide-solid/icons/book-open';
 import { Portal } from 'solid-js/web';
 import { useBeforeLeave } from '@solidjs/router';
 import ChartColumn from 'lucide-solid/icons/chart-column';
@@ -181,7 +185,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   });
   const [dataflowState, setDataflowState] = createSignal<DataflowState | null>(art.dataflow?.state ?? null);
   const [imageError, setImageError] = createSignal<string | null>(null);
-  const [contentView, setContentView] = createSignal<'data' | 'files' | 'sharing' | 'pwa' | null>(null);
+  const [contentView, setContentView] = createSignal<'data' | 'files' | 'sharing' | 'pwa' | 'context' | null>(null);
   const queriesOpen = () => contentView() === 'data';
   const [queryFocus, setQueryFocus] = createSignal<string | null>(null);
   const [dataflowPending, setDataflowPending] = createSignal(false);
@@ -217,6 +221,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     commitPending: async () => { await edit?.commitPending(); },
   });
   const source = editorSource.source;
+  const contextId = createMemo(() => contextRefOf(source()));
   // Held typing goes out when the caret leaves its text or a paragraph breaks; leaving drops it.
   onMount(() => {
     const flushSoon = () => { queueMicrotask(() => showInDocument.flush()); };
@@ -696,6 +701,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     { key: 'design', label: 'Artifact', aria: 'Edit on the page', tip: 'edit on the page', icon: <Paintbrush size={12} />, active: mode() === 'design' && contentView() === null, choose: () => { chooseMode('design'); setContentView(null); } },
     { key: 'code', label: 'Code', aria: 'Edit the source', tip: 'edit the source', icon: <Code size={12} />, active: mode() === 'code', choose: () => { chooseMode('code'); setContentView(null); } },
     ...(queryNotebook().length > 0 ? [{ key: 'data', label: 'Data', aria: 'Show data', tip: "the document's queries", icon: <Database size={12} />, active: queriesOpen(), choose: () => { const was = queriesOpen(); setContentView('data'); chooseMode('design'); if (!was) inPlace.select(null); } }] : []),
+    { key: 'context', label: 'Context', aria: 'Show context', tip: 'Supporting document', icon: <BookOpen size={12} />, active: contentView() === 'context', choose: () => { setContentView('context'); chooseMode('design'); inPlace.select(null); } },
     ...(pwaEnabled() ? [{ key: 'pwa', label: 'PWA', aria: 'Show PWA settings', tip: 'PWA settings', icon: <Smartphone size={12} />, active: contentView() === 'pwa', choose: async () => { if (await live.flushForNavigation(() => inPlace.commitPending(true))) { setContentView('pwa'); chooseMode('design'); inPlace.select(null); } } }] : []),
     ...((art.refs ?? []).some(ref => ref.kind !== 'dataset') ? [{ key: 'files', label: 'Files', aria: 'Show files', tip: 'Files', icon: <Files size={12} />, active: contentView() === 'files', choose: () => { setContentView('files'); chooseMode('design'); inPlace.select(null); } }] : []),
     ...(props.sharingContent ? [{ key: 'sharing', label: 'Sharing', aria: 'Show sharing', tip: 'Sharing', icon: <Share2 size={12} />, active: contentView() === 'sharing', choose: () => { setContentView('sharing'); chooseMode('design'); inPlace.select(null); } }] : []),
@@ -857,6 +863,11 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
         <aside aria-label="PWA" class="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6" style={{ top: `${barTop() + barH}px`, left: '0px', right: '0px' }}>
           <PwaSettingsPanel id={art.id} title={shownTitle()} source={source()} onChange={commitStructural} onUpload={uploadImage} beforeInstall={() => live.flushForNavigation(() => inPlace.commitPending(true))} />
         </aside>
+      </Show>
+      <Show when={mode() === 'design' && !preview() && contentView() === 'context'}>
+        <div class="fixed bottom-0 z-20 bg-surface" style={{ top: `${barTop() + barH}px`, left: '0px', right: `${panelWidth()}px` }}>
+          <ContextPanel id={contextId()} backend={backend} onChange={id => commitStructural(writeContextRef(source(), id))} />
+        </div>
       </Show>
       <Show when={mode() === 'design' && !preview() && (contentView() === 'files' || contentView() === 'sharing')}>
         <aside aria-label={contentView() === 'files' ? 'Files' : 'Sharing settings'} class="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6"

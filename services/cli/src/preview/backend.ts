@@ -16,6 +16,7 @@ export function createPreviewBackend(file:string,onSaved:(document:PreviewDocume
  return {
   mode:'offline',unavailable,
   load:()=>editor('load'),
+  documentFrame:async()=>null,
   commitEdit:async input=>{
    try{const result:EditAnswer=await editor('commit',input);if(result.ok)await refresh();return result;}
    catch(error){if(error instanceof BackendRequestError)return {ok:false,status:error.status,body:{error:error.message,edit_id:input.edit_id,markup:null,version:0,details:[{message:error.message}]}};throw error;}

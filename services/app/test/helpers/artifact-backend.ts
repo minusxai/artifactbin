@@ -26,6 +26,7 @@ export function fakeBackend(
     mode: Object.keys(missing).length ? 'offline' : 'online',
     unavailable: (feature) => missing[feature] ?? null,
     load: vi.fn(async () => null),
+    documentFrame: vi.fn(async () => null),
     commitEdit: vi.fn(async () => ({ ok: false, status: 503, body: {} as never })),
     prepare: vi.fn(async () => ({})),
     previewCss: vi.fn(async () => { throw new Error('no stylesheet'); }),

@@ -184,6 +184,8 @@ export interface ArtifactBackend {
   // ── the document ──────────────────────────────────────────────────────────
   /** The editor's load (GET /api/my/artifacts/<id>). Null when refused; rejects when unreachable. */
   load(): Promise<ArtifactHead | null>;
+  /** Fresh, access-checked frame URL for another document; null when unavailable. */
+  documentFrame(ref: string): Promise<string | null>;
   /** Commit one edit batch (POST /edits). Resolves with the same answer shape use-live-edits reads today. */
   commitEdit(input: { edit_id: string; document_update: DocumentUpdate }): Promise<EditAnswer>;
   /** Server authoring context for edits that need it (POST /prepare). Rejects with the server's diagnostics. */

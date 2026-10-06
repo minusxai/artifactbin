@@ -211,6 +211,7 @@ function validateElement(
    * is told where it goes instead of only that it is unknown.
    */
   const HELMET_ONLY_COMPONENTS: Record<string, string> = {
+    Context: '<Context> belongs directly in <Helmet>: <Context src="ref:<documentId>" /> links a supporting document without rendering it in the body.',
     Notify: '<Notify> is a notification declaration and belongs directly in <Helmet>, beside the Mutation named by on=.',
     Param: '<Param> is retired. Declare the value in <Helmet> — <Value name="region" type="string" /> — and bind a NATIVE control to it in the body: <select value="$region" options="$regions" /> (options from a <Query>), <input type="range" value="$n" />, <input type="checkbox" checked="$flag" />. Reference it in SQL as $region.',
     Value: '<Value> is a data declaration and belongs in <Helmet>: <Helmet><Value name="…" type="…" /></Helmet>; refer to it as "$name" from the body.',

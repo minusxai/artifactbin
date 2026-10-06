@@ -11,6 +11,7 @@ const APP = path.resolve(import.meta.dirname, '../../..');
 const CONE = [
   'solid/editor/ArtifactEditor.tsx',
   'solid/editor/InPlaceEditor.tsx',
+  'solid/editor/ContextPanel.tsx',
   'solid/editor/create-in-place-edit.ts',
   'solid/editor/create-live-artifact.ts',
   'solid/editor/create-versions.ts',

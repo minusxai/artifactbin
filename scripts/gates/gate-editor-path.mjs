@@ -109,6 +109,12 @@ try {
         { region: 'EU', month: '2026-02-01', revenue: 150 }, { region: 'NA', month: '2026-02-01', revenue: 210 },
       ] }),
     })).json();
+    const contextResponse = await fetch(`${base}/api/artifacts`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${human.token}` },
+      body: JSON.stringify({ title: 'Sales methodology', template: 'doc', markup: '<h1>Sales methodology</h1><p id="context-note">Revenue excludes refunds.</p>' }),
+    });
+    must(contextResponse.status === 201, 'the companion is an ordinary document');
+    const contextDoc = await contextResponse.json();
     const humanMarkup = `<Helmet>
 <Value name="region" type="string" />
 <Import name="sales_data" src="ref:${dataset.id}" /><Query name="sales">{\`select * from sales_data.rows where $region is null or region = $region\`}</Query>
@@ -144,6 +150,38 @@ try {
     const documentOrigin = new URL(humanFrame.url()).origin;
     check((await humanFrame.locator('svg.marks, canvas').count()) > 0, 'embeds render inside the editor');
     check((await humanPage.locator('[aria-label="Save"]').count()) === 0, 'the editor has no Save button');
+
+    // Context reads a regular Doc, and its own editor changes what the tab shows next time.
+    check(await humanFrame.getByText('Revenue excludes refunds.').count() === 0, 'context stays out of the main presentation');
+    await humanPage.getByRole('tab', { name: 'Show context' }).click();
+    await expect(humanPage.getByText('No additional context', { exact: true })).toBeVisible();
+    await humanPage.getByRole('button', { name: 'Add context', exact: true }).click();
+    await humanPage.getByRole('textbox', { name: 'Artifact link' }).fill(`${base}/a/${contextDoc.id}`);
+    await humanPage.getByRole('button', { name: 'Add context', exact: true }).click();
+    const companion = humanPage.frameLocator('iframe[title="Context document"]');
+    await expect(companion.getByText('Revenue excludes refunds.')).toBeVisible();
+    const opened = humanPage.waitForEvent('popup');
+    await humanPage.getByRole('link', { name: 'Open document' }).click();
+    const contextPage = await opened;
+    await contextPage.waitForLoadState('domcontentloaded');
+    check(contextPage.url().includes(contextDoc.id), 'Open document goes to the companion artifact');
+    await contextPage.goto(`${base}/a/${contextDoc.id}#edit`);
+    const contextFrame = await documentFrame(contextPage);
+    await contextFrame.getByRole('textbox', { name: 'Document text' }).first().waitFor({ timeout: 30000 });
+    await contextFrame.getByText('Revenue excludes refunds.', { exact: true }).click();
+    await contextFrame.locator('#context-note').fill('Revenue excludes refunds and internal accounts.');
+    await contextPage.getByRole('button', { name: 'Exit edit mode' }).click();
+    await expect(contextPage.getByRole('tab', { name: 'Edit the source' })).toHaveCount(0, { timeout: 20000 });
+    await contextPage.close();
+    await humanPage.getByRole('tab', { name: 'Edit on the page' }).click();
+    await humanPage.getByRole('tab', { name: 'Show context' }).click();
+    await expect(companion.getByText('Revenue excludes refunds and internal accounts.')).toBeVisible({ timeout: 20000 });
+    check(true, 'the Context tab shows the latest independently edited Doc');
+    await humanPage.getByRole('button', { name: 'Change context' }).click();
+    await humanPage.getByRole('button', { name: 'Remove context' }).click();
+    await expect(humanPage.getByText('No additional context', { exact: true })).toBeVisible();
+    check(true, 'a companion can be added by link and removed from the permanent Context tab');
+    await humanPage.getByRole('tab', { name: 'Edit on the page' }).click();
 
     // Versions are the edit panel's History tab on a wide window — the panel
     // is up for the whole session, so what must hold is that the list clears
