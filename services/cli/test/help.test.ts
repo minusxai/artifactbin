@@ -12,6 +12,7 @@ import {mkdir,mkdtemp,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {commands,commandHelp,parseCommand} from '../src/commands';
+import {collectionFilters} from '../src/collection-filters';
 import {colorSupport,createStyle,stripAnsi,visibleWidth,highlightDiff,highlightJson} from '../src/style';
 import {COMMAND_GROUPS,overviewScreen,commandScreen,summary} from '../src/help-screen';
 import {briefDocument,helpBundle,helpTopics,helpDocument,localSkillFiles,manPage,skillFilesFor} from '../src/teaching';
@@ -71,6 +72,18 @@ test('the overview lists every bundled help topic, and each listed topic can be 
   assert.ok(text.split(/[\s,]+/).includes(topic),`missing topic ${topic}`);
   assert.ok(helpDocument(topic).length,`empty help ${topic}`);
  }
+});
+test('the documented filters topic lists the supported fields and values by collection',()=>{
+ const text=helpDocument('filters');
+ for(const filter of ['list','search=','visibility=private|unlisted|public','relationship=all|owned|shared',
+  'comment','state=open|resolved|all','author=','log','since=','until='])assert.ok(text.includes(filter),filter);
+ assert.deepEqual(collectionFilters('list',['search=Quarterly','visibility=private','relationship=owned']),
+  {search:'Quarterly',visibility:'private',relationship:'owned'});
+ assert.deepEqual(collectionFilters('comment',['state=all','author=reviewer']),{state:'all',author:'reviewer'});
+ assert.deepEqual(collectionFilters('log',['author=reviewer','since=2026-01-01','until=2026-01-02']),
+  {author:'reviewer',since:'2026-01-01',until:'2026-01-02'});
+ assert.ok(localSkillFiles['references/filters.md'].includes('search=<text>'));
+ assert.match(commandHelp('list'),/afbin help filters/);
 });
 test('a command screen carries usage, every flag the parser accepts, and the examples',()=>{
  for(const command of commands){
@@ -141,8 +154,10 @@ test('interactive help prints the screens; automation, --json and --output keep 
   assert.deepEqual(await run(['-h'],{interactive:true,columns:100}),{code:0,text:overviewScreen(plain)});
   assert.deepEqual(await run(['push','-h'],{interactive:true,columns:100}),{code:0,text:commandScreen('push',plain)});
   assert.deepEqual(await run(['help','push'],{interactive:true,columns:100}),{code:0,text:commandScreen('push',plain)});
+  assert.deepEqual(await run(['help','filters'],{interactive:true,columns:100}),{code:0,text:helpDocument('filters')});
   assert.deepEqual(await run(['help'],{interactive:true,color:true,columns:100}),{code:0,text:overviewScreen({color:true,depth:'16',columns:100})});
   assert.deepEqual(await run(['help'],{interactive:false}),{code:0,text:briefDocument()});
+  assert.deepEqual(await run(['help','filters'],{interactive:false}),{code:0,text:helpDocument('filters')});
   assert.deepEqual(await run(['push','-h'],{interactive:false}),{code:0,text:commandHelp('push')});
   assert.deepEqual(await run(['help','brief'],{interactive:true}),{code:0,text:briefDocument()});
   assert.deepEqual(await run(['help','brief'],{interactive:false}),{code:0,text:briefDocument()});
