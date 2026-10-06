@@ -29,7 +29,8 @@ export function npmSeedDependencies(lockText,{os,cpu}={}){
  for(const [path,dependency] of Object.entries(lock.packages??{})){
   if(!path||!supports(dependency.os,os)||!supports(dependency.cpu,cpu))continue;
   if(!publicUrl(dependency.resolved)||!dependency.integrity)throw Error('Expected pinned public registry dependency');
-  dependencies.set(dependency.resolved,{resolved:dependency.resolved,integrity:dependency.integrity});
+  const name=new URL(dependency.resolved).pathname.split('/-/')[0].slice(1);
+  dependencies.set(dependency.resolved,{resolved:dependency.resolved,integrity:dependency.integrity,...(dependency.version?{spec:name+'@'+dependency.version}:{})});
  }
  if(!dependencies.size)throw Error('Empty npm seed dependency graph refused');
  return [...dependencies.values()];
@@ -70,12 +71,14 @@ export async function populateNpmSeed(dependencies,directory,run){
  const invoke=run??(args=>new Promise((resolve,reject)=>execFile('npm',args,{cwd:directory,env:{PATH:process.env.PATH,HOME:directory}},error=>error?reject(error):resolve())));
  // npm cache add fetches each pinned package's packument and tarball. Bound batches to eight,
  // including optional native dependencies for every target platform; never install.
+ // Exact name@version also caches npm-owned packuments needed by fresh install resolution.
  for(let offset=0;offset<dependencies.length;offset+=8){
   await invoke(['cache','add',...dependencies.slice(offset,offset+8).map(npmSeedRequest),'--cache',directory,'--userconfig',userconfig,'--globalconfig',globalconfig,'--ignore-scripts','--no-audit','--no-fund']);
  }
 }
 export async function assertPublicNpmCache(directory,dependencies){
  const expected=dependencies&&new Map(dependencies.map(d=>[d.resolved,d.integrity])),seen=new Set();
+ const manifestNames=new Set((dependencies??[]).filter(d=>d.spec).map(d=>d.spec.slice(0,d.spec.lastIndexOf('@')))),seenManifests=new Set();
  const check=value=>{
   if(!value||typeof value!=='object')return;
   for(const [key,item] of Object.entries(value)){
@@ -116,12 +119,17 @@ export async function assertPublicNpmCache(directory,dependencies){
    if(expected.has(url)){
     if(expected.get(url)!==integrity)throw Error('Npm seed integrity differs from consumer shrinkwrap');
     seen.add(url);
-   }else if(!seedContainsUrl(url,dependencies))throw Error('Npm seed contains a dependency outside the consumer shrinkwrap');
+   }else {
+    if(!seedContainsUrl(url,dependencies))throw Error('Npm seed contains a dependency outside the consumer shrinkwrap');
+    const name=decodeURIComponent(new URL(url).pathname.slice(1));
+    if(manifestNames.has(name))seenManifests.add(name);
+   }
   }
   records++;
  }
  if(!records)throw Error('Empty public npm seed refused');
  if(expected&&seen.size!==expected.size)throw Error('Incomplete npm seed');
+ if(seenManifests.size!==manifestNames.size)throw Error('Incomplete npm seed manifests');
  return records;
 }
 export async function packPlatformNpmSeeds(source,output,lockText){

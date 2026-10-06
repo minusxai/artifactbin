@@ -1,10 +1,14 @@
 import {it,expect} from 'vitest';
 import {mkdtemp,mkdir,writeFile,readFile,cp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {join,dirname} from 'node:path';
+import {createRequire} from 'node:module';
+import {spawnSync,execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {createServer} from 'node:http';
+import {createHash} from 'node:crypto';
 import {realpathSync} from 'node:fs';
-import {npmConsumerArgs} from '../../services/cli/scripts/npm-consumer-args.mjs';
+import {npmConsumerArgs,npmConsumerInstallArgs} from '../../services/cli/scripts/npm-consumer-args.mjs';
 const npmCli=process.env.npm_execpath??realpathSync(spawnSync('/bin/sh',['-c','command -v npm'],{encoding:'utf8'}).stdout.trim());
 const pack=new URL('../../services/cli/scripts/pack-release.mjs',import.meta.url);
 const transition=new URL('../../services/cli/scripts/transition-assets.mjs',import.meta.url);
@@ -49,3 +53,45 @@ it('refuses build-machine runtime dependencies instead of packing a platform-spe
  await mkdir(join(cli,'dist/runtime/node_modules/sharp'),{recursive:true});
  const result=packFixture(root,cli);expect(result.status).not.toBe(0);expect(result.stderr).toContain('build-machine');
 }),30000);
+
+it('installs seeded consumers offline with foreground lifecycle scripts, while unseeded installs stay online',()=>{
+ const seeded=npmConsumerInstallArgs('candidate.tgz',true);
+ expect(seeded).toContain('--offline');
+ expect(seeded).toContain('--foreground-scripts');
+ expect(seeded).not.toContain('--ignore-scripts');
+ expect(npmConsumerInstallArgs('candidate.tgz',false)).not.toContain('--offline');
+});
+
+it('reifies a locked dependency from npm-owned manifest and tarball seed with the registry unavailable and both lifecycle scripts enabled',()=>fixture(async(root,cli)=>{
+ const dependency=join(root,'dependency');await mkdir(dependency);
+ await writeFile(join(dependency,'package.json'),JSON.stringify({name:'mxmx-seed-fixture',version:'1.0.0',scripts:{postinstall:'node install.cjs'}}));
+ await writeFile(join(dependency,'install.cjs'),"require('node:fs').writeFileSync('lifecycle-ran','dependency');");
+ const packed=spawnSync(process.execPath,[npmCli,'pack','--ignore-scripts','--offline','--json'],{cwd:dependency,encoding:'utf8'});
+ expect(packed.status,packed.stderr).toBe(0);
+ const bytes=await readFile(join(dependency,JSON.parse(packed.stdout)[0].filename));
+ const integrity='sha512-'+createHash('sha512').update(bytes).digest('base64');
+ const server=createServer((request,response)=>{
+  if(request.url==='/mxmx-seed-fixture'){
+   response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify({name:'mxmx-seed-fixture','dist-tags':{latest:'1.0.0'},versions:{'1.0.0':{name:'mxmx-seed-fixture',version:'1.0.0',scripts:{postinstall:'node install.cjs'},dist:{tarball:url,integrity}}}}));
+  }else{response.writeHead(200,{'Content-Type':'application/octet-stream'});response.end(bytes);}
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const url='http://127.0.0.1:'+server.address().port+'/mxmx-seed-fixture-1.0.0.tgz';
+ const seed=join(root,'download-seed');
+ try {await promisify(execFile)(process.execPath,[npmCli,'cache','add','mxmx-seed-fixture@1.0.0','--registry',new URL(url).origin,'--cache',seed,'--ignore-scripts','--no-audit','--no-fund']);}
+ finally {await new Promise(resolve=>server.close(resolve));}
+ const manifest=JSON.parse(await readFile(join(cli,'package.json'),'utf8'));manifest.dependencies={'mxmx-seed-fixture':'1.0.0'};
+ await writeFile(join(cli,'package.json'),JSON.stringify(manifest));
+ await writeFile(join(cli,'scripts/prepare-pty.mjs'),"import{writeFileSync}from'node:fs';writeFileSync('lifecycle-ran','candidate');");
+ const lock=JSON.parse(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
+ lock.packages[''].dependencies=manifest.dependencies;
+ lock.packages['node_modules/mxmx-seed-fixture']={version:'1.0.0',resolved:url,integrity:'sha512-'+createHash('sha512').update(bytes).digest('base64'),hasInstallScript:true};
+ await writeFile(join(cli,'npm-shrinkwrap.json'),JSON.stringify(lock));
+ const result=packFixture(root,cli);expect(result.status,result.stderr).toBe(0);
+ const consumer=join(root,'fresh-consumer');await mkdir(consumer);await writeFile(join(consumer,'package.json'),'{}');
+ const installed=spawnSync(process.execPath,[npmCli,...npmConsumerInstallArgs(join(root,'packed/afbin-cli-0.1.0.tgz'),true)],{cwd:consumer,env:{...process.env,npm_config_cache:seed,npm_config_registry:new URL(url).origin,npm_config_fetch_retries:'0'},encoding:'utf8',timeout:15000});
+ expect(installed.status,installed.stdout+installed.stderr).toBe(0);
+ expect(await readFile(join(consumer,'node_modules/@afbin/cli/lifecycle-ran'),'utf8')).toBe('candidate');
+ const dependencyInstalled=dirname(createRequire(join(consumer,'node_modules/@afbin/cli/package.json')).resolve('mxmx-seed-fixture/package.json'));
+ expect(await readFile(join(dependencyInstalled,'lifecycle-ran'),'utf8')).toBe('dependency');
+}));

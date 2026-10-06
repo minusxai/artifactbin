@@ -133,6 +133,9 @@ it('shares only verified npm download blobs, never installed modules or npx stat
   expect(await mergeNpmDependencyCache(source,target)).toBe(true);
   expect(readFileSync(join(target,'_cacache','blob'),'utf8')).toBe('content');
   expect(existsSync(join(target,'_npx'))).toBe(false);
+  writeFileSync(join(target,'_cacache','blob'),'stale index');
+  expect(await mergeNpmDependencyCache(source,target)).toBe(true);
+  expect(readFileSync(join(target,'_cacache','blob'),'utf8')).toBe('content');
   expect(await mergeNpmDependencyCache(join(directory,'absent'),target)).toBe(false);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
@@ -162,6 +165,15 @@ it('refuses credential/private seed metadata',async()=>{
   writeFileSync(join(index,'entry'),[pinned,removed,{...removed,integrity:null}].map(value=>'checksum\t'+JSON.stringify(value)+'\n').join(''));
   expect(await assertPublicNpmCache(directory,[{resolved:record.metadata.url,integrity:pinned.integrity}])).toBe(1);
   await expect(assertPublicNpmCache(directory,[{resolved:record.metadata.url,integrity:'sha512-wrong'}])).rejects.toThrow(/integrity/);
+  const tarball={key:'make-fetch-happen:request-cache:https://registry.npmjs.org/is-number/-/is-number-1.0.0.tgz',integrity:'sha512-tarball',metadata:{url:'https://registry.npmjs.org/is-number/-/is-number-1.0.0.tgz'}};
+  writeFileSync(join(index,'entry'),[record,tarball].map(value=>'checksum\t'+JSON.stringify(value)+'\n').join(''));
+  const dependency={resolved:tarball.metadata.url,integrity:tarball.integrity,spec:'is-number@1.0.0'};
+  expect(await assertPublicNpmCache(directory,[dependency])).toBe(1);
+  writeFileSync(join(index,'entry'),'checksum\t'+JSON.stringify(tarball)+'\n');
+  await expect(assertPublicNpmCache(directory,[dependency])).rejects.toThrow(/manifest/);
+  writeFileSync(join(index,'entry'),[record,tarball].map(value=>'checksum\t'+JSON.stringify(value)+'\n').join(''));
+  await expect(assertPublicNpmCache(directory,[{...dependency,spec:'other@1.0.0'}])).rejects.toThrow(/integrity/);
+
   store({...record,metadata:{...record.metadata,reqHeaders:{authorization:'secret-test'}}});await expect(assertPublicNpmCache(directory)).rejects.toThrow(/Credential/);
   store({...record,key:'make-fetch-happen:request-cache:https://private.example/package'});await expect(assertPublicNpmCache(directory)).rejects.toThrow(/Non-public/);
  }finally{rmSync(directory,{recursive:true,force:true});}
