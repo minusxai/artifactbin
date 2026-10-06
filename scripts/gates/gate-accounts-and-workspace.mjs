@@ -491,6 +491,16 @@ async function forkLeg(owner) {
     const dialog = forker.getByRole('dialog', { name: 'Fork this artifact?', exact: true });
     await step('login returned them to the document with the fork confirm open', () => dialog.waitFor({ state: 'visible', timeout: 30000 }));
     check(!new URL(forker.url()).search.includes('intent='), 'the instruction is consumed: the address no longer carries it, so a refresh does not re-prompt');
+    const forkEndpoint = `${BASE}/api/my/artifacts/${doc.id}/fork`;
+    let forkResult;
+    // Read the real response before delivering it: the UI immediately navigates, which can discard
+    // Chromium's response body before a waitForResponse caller can read it.
+    await forker.route(forkEndpoint, async (route) => {
+      if (route.request().method() !== 'POST' || route.request().postDataJSON()?.dry_run === true) return route.continue();
+      const response = await route.fetch();
+      forkResult = await response.json();
+      await route.fulfill({ response });
+    });
     const [forkResponse] = await Promise.all([
       forker.waitForResponse((response) => response.request().method() === 'POST'
         && new URL(response.url()).pathname === `/api/my/artifacts/${doc.id}/fork`
@@ -498,7 +508,7 @@ async function forkLeg(owner) {
       forker.locator('[aria-label="Confirm fork"]').click(),
     ]);
     must(forkResponse.status() === 201, `fork creates the copy (${forkResponse.status()})`);
-    const forkResult = await forkResponse.json();
+    await forker.unroute(forkEndpoint);
     const copyPath = new URL(forkResult.url, BASE).pathname;
     // Welcome is an intentional intermediate destination for this new account, not the copy's address.
     await forker.waitForURL((u) => u.pathname === copyPath
