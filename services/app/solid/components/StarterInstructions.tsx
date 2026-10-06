@@ -9,12 +9,12 @@ import { copyText } from '../lib/copy-text';
  * First-party starter chrome. The paste is public, tokenless
  * text; copying it must not require an owner session or imply permission to edit the document.
  */
-export function StarterInstructions(props: { id: string; onContinueBlank?: () => void; converting?: boolean; conversionError?: string }): JSX.Element {
+export function StarterInstructions(props: { id: string; template?: string | null; onContinueBlank?: () => void; converting?: boolean; conversionError?: string }): JSX.Element {
   let instructions!: HTMLTextAreaElement;
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const [draft, setDraft] = createSignal<string | null>(null);
   const [state, setState] = createSignal<'idle' | 'copied' | 'error'>('idle');
-  const prompt = () => draft() ?? existingPaste(origin, props.id);
+  const prompt = () => draft() ?? existingPaste(origin, props.id, props.template);
   const copy = async () => {
     setState(await copyText(prompt()) ? 'copied' : 'error');
   };

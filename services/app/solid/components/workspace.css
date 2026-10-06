@@ -1,10 +1,13 @@
 /* Workspace surfaces are scoped here; document readers retain their own appearance. */
 .workspace-shell { --workspace-rail-width: 258px; display: grid; grid-template-columns: 208px minmax(0, 1fr); min-height: calc(100svh - 44px); font-family: var(--font-sans); }
 .workspace-home { margin: 0; padding: 0; max-width: none; }
-.workspace-nav { position: sticky; top: 44px; height: calc(100svh - 44px); display: flex; flex-direction: column; padding: 28px 16px 20px; border-right: 1px solid var(--color-edge); background: var(--color-surface); }
+.workspace-nav { position: sticky; z-index: 40; top: 44px; height: calc(100svh - 44px); display: flex; flex-direction: column; padding: 28px 16px 20px; border-right: 1px solid var(--color-edge); background: var(--color-surface); }
 .workspace-create > button { height: 42px; border-radius: 7px; font-family: var(--font-sans); font-size: 14px; color: white; box-shadow: 0 2px 4px #0000000a; transition: filter 150ms, transform 150ms; }
 .workspace-create > button:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .workspace-create [role='menu'] { min-width: 190px; animation: workspace-menu 140ms ease-out; }
+.workspace-artifact-menu { position: relative; }
+.workspace-type-flyout { position: absolute; left: 100%; top: -5px; width: 208px; padding-left: 8px; }
+@media (max-width: 700px) { .workspace-type-flyout { position: static; width: 100%; padding: 4px 0 4px 12px; } }
 .workspace-nav-label, .workspace-eyebrow { margin: 29px 12px 10px; font-family: var(--font-mono); font-size: 9px; font-weight: 500; letter-spacing: .13em; text-transform: uppercase; color: var(--color-faint); }
 .workspace-nav-links { display: flex; flex-direction: column; gap: 4px; }
 .workspace-nav-link { display: flex; align-items: center; gap: 11px; min-height: 40px; padding: 9px 12px; border-radius: 6px; color: var(--color-muted); font-size: 13px; text-decoration: none; transition: background 150ms, color 150ms; }
@@ -17,6 +20,7 @@
 .workspace-nav-footer .workspace-nav-link { min-height: 36px; padding: 6px 10px; gap: 9px; font-size: 12px; }
 .workspace-nav-footer .workspace-nav-link > svg { width: 16px; height: 16px; margin: 0 4px; }
 .workspace-nav-footer .workspace-account { min-height: 36px; }
+.workspace-tagline { text-align: center; margin: 12px 10px 0; color: var(--color-faint); font-family: var(--font-mono); font-size: 8px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
 .workspace-account-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .workspace-account-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-count { display: inline-flex; align-items: center; justify-content: center; min-width: 19px; height: 19px; margin-left: auto; padding: 0 4px; border-radius: 999px; background: #d99a161c; color: #ac7305; font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }

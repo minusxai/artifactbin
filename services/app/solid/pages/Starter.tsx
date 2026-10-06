@@ -46,6 +46,7 @@ export interface StarterAnswer {
     heading?: string | null; visibility?: Visibility; hasInvitedUsers?: boolean; openAnnotations?: number;
     author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: { label: string; href: string | null } | null } | null;
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null;
+    template?: string | null;
   };
 }
 
@@ -120,7 +121,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   const chooseMode = (next: 'light' | 'dark') => { chooseTheme(next); setMode(next); };
 
   return <>
-    <DocumentChrome id={id} title={title} author={surface.author ?? null} follow={answer.follow ?? null}
+    <DocumentChrome id={id} template={surface.template} title={title} author={surface.author ?? null} follow={answer.follow ?? null}
       like={answer.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={() => surface.openAnnotations ?? 0}
       canEdit={editable} canFork owner={owner} visibility={surface.visibility} hasInvitedUsers={surface.hasInvitedUsers}
       panel={panel} setPanel={setPanel} mode={mode} onMode={chooseMode}
@@ -143,7 +144,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     </TrustedUi>
     {/* The starter sits on the app's own dotted page, under the bar. */}
     <div aria-label="Artifact viewport" class="relative min-h-screen">
-      <StarterInstructions id={id} onContinueBlank={editable ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
+      <StarterInstructions id={id} template={surface.template} onContinueBlank={editable && !surface.template ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
     </div>
   </>;
 }

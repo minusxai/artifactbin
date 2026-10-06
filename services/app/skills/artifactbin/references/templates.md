@@ -1,7 +1,7 @@
 ---
 name: templates
 description: >-
-  The seven page types and when each fits; then read only the chosen one.
+  The page types and when each fits; then read only the chosen one.
 ---
 ## Read first
 
@@ -13,7 +13,7 @@ didn't pick are noise:
 - `[[ t.name ]]` — [[ t.description ]] → [`templates-[[ t.name ]].md`](templates-[[ t.name ]].md)
 [% endfor %]
 
-Choosing: when the ask names a page type (slides → `deck`, an operating view
+Choosing: when the ask names a page type (a quick document or notes → `doc`, slides → `deck`, an operating view
 → `dashboard`, an implementation or rollout plan → `plan`, a report, article,
 briefing or long read → `editorial`, a tool people operate → `app`, an offering to choose
 → `landing`, a story told by scrolling → `scrolly`), pick it. When it is NOT

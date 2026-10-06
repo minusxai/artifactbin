@@ -331,7 +331,7 @@ export function DocumentPage(): JSX.Element {
     <DocumentPeople id={id!} initialOpen revision={membershipRevision()} onChange={() => setMembershipRevision((n) => n + 1)} /></Show>
   </div>;
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<NotFoundPage />}>
-    <DocumentChrome id={id!} title={() => (!editing() && editorTitle()) || shownTitle()} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
+    <DocumentChrome id={id!} template={live()?.template ?? page!.surface?.template} title={() => (!editing() && editorTitle()) || shownTitle()} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
       like={page!.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={openAnnotationCount}
       archived={page!.archived ?? null} editing={editing} canEdit={editable()} canFork={!archivedNow()} owner={isOwner()}
       install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={page!.surface?.hasInvitedUsers}

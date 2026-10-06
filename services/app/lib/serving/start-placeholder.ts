@@ -19,7 +19,9 @@ const ACTIONABLE_LINE = 'Paste what you copied into your coding agent.';
 /** Source gains generated node IDs during compilation. Match the fixed starter
  * text only on its first version; never show setup over an agent's first edit. */
 export const isStartPlaceholder = (source: string | null, version: number): boolean =>
-  version === 1 && !!source?.includes(AGENT_LINE) && source.includes(WAITING_LINE);
+  version === 1 && !!source && (source.includes(AGENT_LINE) && source.includes(WAITING_LINE) || /^<article\s+id="artifact-starter"\s*(?:\/>|>\s*<\/article>)$/.test(source.trim()));
+/** No setup UI is saved in a typed starter. The app owns its agent instructions. */
+export const EMPTY_ARTIFACT_MARKUP = '<article id="artifact-starter"></article>';
 export const START_PLACEHOLDER_MARKUP =
   '<div data-design="tw" className="@container flex min-h-[var(--mx-vh,760px)] flex-col items-center justify-center gap-4 px-6 text-center">' +
   '<h1 className="text-2xl font-semibold tracking-tight">Untitled</h1>' +

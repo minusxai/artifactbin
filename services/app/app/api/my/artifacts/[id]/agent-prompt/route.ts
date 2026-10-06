@@ -22,5 +22,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // Anonymous browser sessions have no account token for an agent to reuse.
   if (!actor.viewer?.userId) return json({ error: 'sign_in_required' }, 409);
   const base = baseUrl(request);
-  return json({ id: row.id, url: `${base}/a/${row.id}`, prompt: existingPaste(base, row.id) }, 201);
+  return json({ id: row.id, url: `${base}/a/${row.id}`, prompt: existingPaste(base, row.id, row.meta.template as string | null) }, 201);
 }

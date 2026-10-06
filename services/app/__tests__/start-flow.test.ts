@@ -20,6 +20,9 @@ import { getArtifactById } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/serving';
 import { mintToken } from '@/lib/accounts';
 import { createUser } from '@/lib/accounts';
+import { POST as createBrowserArtifact } from '@/app/api/my/artifacts/route';
+import { artifactStarter } from '@/lib/workspace/artifact-starters';
+import { isStartPlaceholder } from '@/lib/serving/start-placeholder';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
@@ -34,6 +37,28 @@ const start = async (opts: Parameters<typeof request>[1] = {}): Promise<Start> =
   (await (await startRoute(request('/api/start', { method: 'POST', ...opts }))).json()) as Start;
 
 describe('POST /api/start', () => {
+  it('creates private typed starters through the browser API without saving setup UI', async () => {
+    const user = await createUser({ email: 'mxmx_test_starters@example.com' });
+    const actor = { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true };
+    for (const template of ['doc', 'deck'] as const) {
+      const response = await createBrowserArtifact(request('/api/my/artifacts', { method: 'POST', actor, json: artifactStarter(template) }));
+      expect(response.status).toBe(201);
+      const { id } = await response.json();
+      const row = (await getArtifactById(id))!;
+      expect(row.meta.template).toBe(template);
+      expect(row.user_id).toBe(user.id);
+      expect(row.visibility).toBe('private');
+      expect(row.source).not.toContain('Copy agent instructions');
+      expect(row.source).not.toContain('Waiting for your agent');
+      expect(isStartPlaceholder(row.source, row.version)).toBe(template !== 'doc');
+      if (template === 'doc') {
+        expect(row.meta.theme).toBe('meridian');
+        expect(row.source).toContain('data-placeholder="Headline"');
+        expect(row.source).not.toContain('>Headline<');
+      }
+    }
+  });
+
   it('creates an editable blank report only when explicitly requested, retaining owner and privacy', async () => {
     const user = await createUser({ email: 'blank-owner@example.com' });
     const res = await startRoute(request('/api/start?mode=blank', { method: 'POST', actor: { credential: 'session', userId: user.id, email: user.email!, emailVerified: true } }));

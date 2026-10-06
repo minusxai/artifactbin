@@ -62,7 +62,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   const repairs = repaired ? [repaired.repair] : [];
   /** What the door changed, for the reply — absent when it changed nothing. */
 
-  const theme = body.theme ?? null;
+  const theme = body.theme ?? (body.template === 'doc' ? 'meridian' : null);
   // Retired names are rejected BY NAME with a hint naming the successor —
   // stored rows alias forward at read time (resolveStoredStoryDesign), but a
   // NEW publish must learn the live vocabulary, same pattern as the retired

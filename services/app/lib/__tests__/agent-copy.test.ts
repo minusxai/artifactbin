@@ -40,6 +40,11 @@ describe('the tokenless paste', () => {
   it('a trailing slash on the base does not double up', () => {
     expect(existingPaste('https://x.test/', ID)).toBe(STARTER);
   });
+  it('names the selected page type when provided', () => {
+    expect(existingPaste(B, ID, 'doc')).toContain('template: doc');
+    expect(existingPaste(B, ID, 'deck')).toContain('template: deck');
+    expect(existingPaste(B, ID, 'deck')).toContain('/a/ab3cd9');
+  });
   it('is the module\'s only export — the start-link paste and the claim relay are gone', () => {
     expect(Object.keys(agentCopy)).toEqual(['existingPaste']);
   });
