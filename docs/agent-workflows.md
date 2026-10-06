@@ -41,6 +41,21 @@ started. Browser gates run in containers via `scripts/gate-container.mjs`, up to
 After merging lockfile changes, regenerate the lock if needed and run `npm ci --dry-run`. Read install
 output unfiltered: an already populated `node_modules` can hide a missing lock entry.
 
+## CI timing evidence
+
+The [CI speed contract](../AGENTS.md#ci-speed-contract) measures one attempt's complete required-check
+chain, not its longest job. GitHub's attempt `run_started_at` is the start; the final required rollup
+is the finish. This includes dependency queues, setup and receipt uploads. The builtin-only
+`scripts/lib/ci-elapsed.mjs` enforces a hard failure above 300 seconds on both PRs and main, with
+180/240-second target and normal-limit diagnostics. A receipt is evidence only from a successful run.
+Optional background cache warming and post-check downstream release notification stay outside this rollup;
+full workflow duration and merge-to-live latency remain separate reported metrics.
+
+When investigating a miss, retain attempt timestamps and each critical-path step's timing. Separate
+cold transfers/installs from warm runs. Reduce serial work or safely share immutable inputs before
+changing shard counts. Keep required coverage and exact-tree provenance; improving one job is not proof
+that the complete chain improved. Record observed timings and remaining misses in the handoff.
+
 ## Local loop
 
 Work up the tiers, and stop at the cheapest one that can still be wrong:
