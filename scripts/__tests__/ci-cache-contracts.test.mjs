@@ -161,8 +161,9 @@ it('rejects incomplete or wrong-platform archives before copying a seed into the
 
 it('extracts a verified platform archive directly into empty independent consumer caches',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-direct-seed-extract-'));
- const source=join(directory,'seed'),index=join(source,'_cacache','index-v5'),archive=join(directory,'seed.tar');
+ const source=join(directory,'seed'),cacheRoot=join(source,'_cacache'),index=join(cacheRoot,'index-v5'),archive=join(directory,'seed.tar');
  mkdirSync(index,{recursive:true});
+ writeFileSync(join(cacheRoot,'_lastverified'),'npm-cache-ok\n');
  const dependency={version:'1.0.0',resolved:'https://registry.npmjs.org/a/-/a-1.0.0.tgz',integrity:'sha512-a',os:['linux'],cpu:['x64']};
  const lock=JSON.stringify({name:'@afbin/cli',packages:{'':{name:'@afbin/cli'},'node_modules/a':dependency}});
  const deps=seeds.npmSeedDependencies(lock,{os:'linux',cpu:'x64'}),manifestUrl='https://registry.npmjs.org/a';
@@ -181,6 +182,7 @@ it('extracts a verified platform archive directly into empty independent consume
   expect(result.records).toBe(2);
   expect(result.phases).toEqual({inspectMs:expect.any(Number),extractMs:expect.any(Number),validateMs:expect.any(Number)});
   expect(readFileSync(join(first,'_cacache','index-v5','entry'),'utf8')).toBe(readFileSync(join(index,'entry'),'utf8'));
+  expect(readFileSync(join(first,'_cacache','_lastverified'),'utf8')).toBe('npm-cache-ok\n');
   expect(existsSync(archive+'.seed')).toBe(false);
   await extract(archive,second,lock,{os:'linux',cpu:'x64'});
   writeFileSync(join(first,'_cacache','index-v5','entry'),'consumer mutation');
@@ -194,11 +196,16 @@ it('extracts a verified platform archive directly into empty independent consume
   expect(existsSync(wrongPlatform)).toBe(false);
   const linked=join(directory,'linked-seed'),linkedIndex=join(linked,'_cacache','index-v5');mkdirSync(linkedIndex,{recursive:true});
   writeFileSync(join(linkedIndex,'entry'),readFileSync(join(index,'entry')));
-  symlinkSync('../../outside',join(linked,'_cacache','escape'));
+  symlinkSync('outside',join(linked,'_cacache','_lastverified'));
   const linkedArchive=join(directory,'linked.tar');execFileSync('tar',['-cf',linkedArchive,'-C',linked,'_cacache']);
   const refused=join(directory,'refused');
   await expect(extract(linkedArchive,refused,lock,{os:'linux',cpu:'x64'})).rejects.toThrow(/link or unsupported/i);
   expect(existsSync(refused)).toBe(false);
+  const folder=join(directory,'folder-seed'),folderCache=join(folder,'_cacache');mkdirSync(join(folderCache,'_lastverified'),{recursive:true});
+  const folderArchive=join(directory,'folder.tar');execFileSync('tar',['-cf',folderArchive,'-C',folder,'_cacache']);
+  const folderRefused=join(directory,'folder-refused');
+  await expect(extract(folderArchive,folderRefused,lock,{os:'linux',cpu:'x64'})).rejects.toThrow(/marker must be a regular file/i);
+  expect(existsSync(folderRefused)).toBe(false);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 

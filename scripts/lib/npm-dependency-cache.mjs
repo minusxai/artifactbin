@@ -150,7 +150,9 @@ function inspectNpmSeedArchive(archive){
   const parts=normalized.split('/');
   if(name.includes('\\')||normalized.startsWith('/')||parts[0]!=='_cacache'||parts.some(part=>part===''||part==='.'||part==='..'||!/^[A-Za-z0-9._-]+$/.test(part)))
    throw Error('Npm seed archive path refused');
-  if(parts.length>1&&!['content-v2','index-v5','tmp'].includes(parts[1]))throw Error('Unexpected npm seed cache tree');
+  if(parts.length===2&&parts[1]==='_lastverified'){
+   if(kind!=='-'||name.endsWith('/'))throw Error('Npm seed cache marker must be a regular file');
+  }else if(parts.length>1&&!['content-v2','index-v5','tmp'].includes(parts[1]))throw Error('Unexpected npm seed cache tree');
   if((kind==='d')!==name.endsWith('/'))throw Error('Npm seed archive entry type mismatch');
   if(seen.has(normalized))throw Error('Duplicate npm seed archive path refused');
   seen.add(normalized);if(normalized==='_cacache'&&kind==='d')root=true;
