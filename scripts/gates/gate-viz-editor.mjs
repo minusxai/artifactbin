@@ -24,7 +24,7 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { launchChromium } from './lib/browser.mjs';
+import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
 import { documentLocator } from './lib/page-facts.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { mergeGuestIntoAccount, becomeOwner, startDocument } from '../lib/start-doc.mjs';
@@ -66,10 +66,14 @@ const story = HELMET + `<div data-design="tw" className="@container p-8">` +
   `<Question title="Revenue" data="$sales" height="430px" /></div>`;
 await api(`/api/artifacts/${start.id}`, { method: 'PUT', body: JSON.stringify({ title: 'Review', markup: story, theme: 'manuscript', template: 'doc' }) }, token);
 
-// The gate app uses a loopback HTTP alias; emulate production HTTPS for its clipboard API.
-const b = await launchChromium({ args: [`--unsafely-treat-insecure-origin-as-secure=${B}`] });
+// Owner handoff redirects the loopback base to the app alias. Both must emulate production HTTPS.
+const appClipboardUrl = new URL(B);
+appClipboardUrl.hostname = `app.${PAGES_HOST}`;
+const clipboardOrigins = [...new Set([new URL(B).origin, appClipboardUrl.origin])];
+// The full browser honors the secure-origin flag; Chromium's headless shell does not.
+const b = await launchChromium({ channel: 'chromium', headless: true, args: [`--unsafely-treat-insecure-origin-as-secure=${clipboardOrigins.join(',')}`] });
 const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
-await p.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
+for (const origin of clipboardOrigins) await p.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
 const frame = () => documentLocator(p);
 const frameText = async () => { const f = frame(); return f ? await f.locator('body').innerText().catch(() => '') : ''; };
 const marks = async () => { const f = frame(); return f ? await f.locator('svg.marks, canvas').count().catch(() => 0) : 0; };
@@ -287,6 +291,7 @@ await p.screenshot({ path: '/tmp/viz-editor-table.png' });
   await p.click('[aria-label="Color mode"]');
   await p.click('[aria-label="Color mode dark"]');
   await p.getByRole('button', { name: 'Copy draft' }).click();
+  await p.waitForFunction(() => navigator.clipboard.readText().then(text => text.includes('Unsaved recovery title')));
   const copiedDraft = await p.evaluate(async () => navigator.clipboard.readText());
   const copiedParts = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(copiedDraft);
   check(!!copiedParts, 'Copy draft is portable YAML-frontmatter JSX');
