@@ -31,7 +31,7 @@ function TextField(p: Props & { multiline?: boolean }) {
   const label = str(p['aria-label']) ?? str(p.label);
   const field = { 'aria-label': label, placeholder: str(p.placeholder), required: p.required === true || undefined, autofocus: p.autoFocus === true || undefined,
     disabled: !active(p), readOnly: !nameOf(p) || undefined };
-  const input = (e: InputEvent) => { const n = nameOf(p); if (n) island.setValue(n, (e.target as HTMLInputElement).value, { debounce: true }); };
+  const input = (e: InputEvent) => { const n = nameOf(p); if (n) island.setValue(n, coerceScalarInput(island.valueType(n), (e.target as HTMLInputElement).value), { debounce: true }); };
   return <Shell authored={p} extra={['type','required','autoFocus','rows','readOnly','name','run','aria-label','multiline']}>
     {/* A textarea's value is its content, as React serves it (no `value` attribute); the live value is the property. */}
     {p.multiline ? <textarea {...field} {...({ 'prop:value': v() } as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)} textContent={untrack(v)} on:input={input} rows={typeof p.rows === 'number' ? p.rows : 3} class={join(fieldClass,'min-w-64 resize-y py-2 leading-normal')} /> :

@@ -68,3 +68,16 @@ test('SSR-baked SQL export retains the literal carriers its offline browser modu
   assert.match(html,/<script type="application\/json" data-mx-island-literals=/);
  }finally{process.chdir(cwd);}
 }));
+
+test('a Dossier data app exports offline with its own packaged font faces',()=>fixture(async(root,home)=>{
+ await writeFile(join(root,'rows.csv'),'amount\n10\n20\n');
+ const workspace=await loadWorkspace(root,home),ids=await registerLocalFiles(workspace,['rows.csv']);
+ await writeFile(join(root,'report.jsx'),`---\ntheme: dossier\ntemplate: app\n---\n<Helmet><Import name="orders" src="ref:${ids['rows.csv']}"/><Query name="total">{\`select sum(amount) as total from orders.rows\`}</Query></Helmet><main id="app"><h1 id="heading">Offline app</h1><Number data="$total" col="total" agg="sum"/></main>`);
+ const cwd=process.cwd();try{
+  const file=readArtifactFileHtml((await exportLocalHtml({cwd:root,home,path:'report.jsx'},resolve('../app'))).toString());
+  assert.match(file.css.base,/font-family: "Archivo"/);
+  assert.match(file.css.base,/data:font\/woff2;base64,/);
+  assert.doesNotMatch(file.css.base,/fonts\.gstatic\.com/);
+  assert.deepEqual(file.snapshot.state.tables.total!.rows,[{total:30}]);
+ }finally{process.chdir(cwd);}
+}));

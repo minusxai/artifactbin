@@ -414,6 +414,7 @@ CREATE TABLE IF NOT EXISTS app.member_notifications (
   seen_revision INTEGER NOT NULL DEFAULT 0,
   first_update_id TEXT,
   source_event_id TEXT,
+  agent_label TEXT,
   PRIMARY KEY (id)
 );
 
@@ -442,6 +443,8 @@ ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS seen_revision INTE
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS first_update_id TEXT;
 
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS source_event_id TEXT;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS agent_label TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_member_notifications_recipient ON app.member_notifications (recipient_id, created_at);
 

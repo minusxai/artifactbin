@@ -60,6 +60,20 @@ describe('controls', () => {
     expect(island.setValue).toHaveBeenCalledWith('on', true, undefined);
   });
 
+  it('Input and Textarea write declared numeric values, including clearing to null', () => {
+    const island = fakeIsland({ amount: '125' });
+    island.valueType = () => 'number'; island.setValue = vi.fn();
+    const { host, dispose } = mount(island, () => <><Input label="Revenue" type="number" value="$amount" /><Textarea label="Amount" value="$amount" /></>);
+    try {
+      for (const field of host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) {
+        for (const [raw, expected] of [['138', 138], ['-2.5', -2.5], ['', null]] as const) {
+          field.value = raw; field.dispatchEvent(new Event('input', { bubbles: true }));
+          expect(island.setValue).toHaveBeenLastCalledWith('amount', expected, { debounce: true });
+        }
+      }
+    } finally { dispose(); }
+  });
+
   it('Segmented writes chosen values immediately', () => {
     const island = fakeIsland({ size: 'S' }); island.setValue = vi.fn();
     const { host, dispose } = mount(island, () => <Segmented label="Size" value="$size" options={['S','M']} />);

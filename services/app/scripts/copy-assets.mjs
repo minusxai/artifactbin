@@ -4,6 +4,7 @@
 // on postinstall; public/fonts is gitignored.
 import { createHash } from 'node:crypto';
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { SYSTEM_FONT_PACKAGES } from './system-font-packages.mjs';
 
 // THE APP'S CWD IS ITS PACKAGE DIR. Every path below is cwd-relative,
 // and CI runs this script from the repo root — so this process pins its own cwd
@@ -106,7 +107,7 @@ function packageFaces(pkg, css) {
     if (!src) throw new Error(`no woff2 source in ${pkg}/${css}: ${block}`);
     return {
       family: get('font-family').replace(/^'|'$/g, ''), style: get('font-style'), weight: get('font-weight'),
-      display: get('font-display'), unicodeRange: get('unicode-range'), file: src[1], format: src[2],
+      display: get('font-display'), unicodeRange: get('unicode-range'), stretch: get('font-stretch'), file: src[1], format: src[2],
     };
   });
 }
@@ -135,7 +136,20 @@ for (const { family, pkg, file, weight, style, preload } of FONT_FILES) {
   });
 }
 const app = APP_FONT_CSS.flatMap(({ pkg, css }) => packageFaces(pkg, css).map(({ file, ...face }) => ({ ...face, url: copyFont(pkg, file) })));
-const manifest = { families, app };
+// A design system uses the same package-owned delivery as the original themes. No network
+// fetch during install or export: the lockfile owns the binaries, and both readers name them.
+const systems = {};
+for (const { family, pkg, variable } of SYSTEM_FONT_PACKAGES) {
+  const available = readdirSync(packageDir(pkg));
+  const normal = available.includes('standard.css') ? 'standard.css' : 'index.css';
+  const italic = normal === 'standard.css' ? 'standard-italic.css' : 'wght-italic.css';
+  const styles = variable ? [normal, ...(available.includes(italic) ? [italic] : [])]
+    : available.filter(file => /^\d+(?:-italic)?\.css$/.test(file));
+  const faces = styles.flatMap(css => packageFaces(pkg, css)).filter(face => /-latin(?:-ext)?-/.test(face.file));
+  if (!faces.length) throw new Error(`no latin design-system faces for ${pkg}`);
+  systems[family] = faces.map(({ file, format: _format, ...face }) => ({ ...face, family, url: copyFont(pkg, file) }));
+}
+const manifest = { families, app, systems };
 // In the Docker builder this runs from npm ci BEFORE `COPY lib ./lib` — the
 // tree the manifest lives in does not exist yet (writeFileSync creates no
 // directories; the later COPY merges over it without deleting this file).

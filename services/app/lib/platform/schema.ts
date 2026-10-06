@@ -863,6 +863,7 @@ const MEMBER_NOTIFICATIONS: Table = {
   {name:'seen_revision',type:'INTEGER',notNull:true,default:'0'},
   {name:'first_update_id',type:'TEXT'},
   {name:'source_event_id',type:'TEXT'},
+  {name:'agent_label',type:'TEXT'}, // latest conversation actor's display snapshot; sender_id remains the access principal
  ],primaryKey:['id'],indexes:[{name:'idx_member_notifications_recipient',columns:['recipient_id','created_at']}],
 };
 const USER_BLOCKS: Table = {

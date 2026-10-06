@@ -120,6 +120,20 @@ describe('followAppLinks', () => {
     expect(frame.opened).toEqual([]);
   });
 
+  it('keeps a hash link inside its framed document even with the compiled top navigation base', () => {
+    const before = window.location.href;
+    cleanups.push(() => window.history.replaceState(null, '', before));
+    const base = document.createElement('base');
+    base.target = '_top';
+    document.head.append(base);
+    cleanups.push(() => base.remove());
+    const frame = framed('<a id="jump" href="#audit-part">Jump</a><h2 id="audit-part">Part</h2>');
+    frame.click('#jump');
+    expect(window.location.hash).toBe('#audit-part');
+    expect(frame.navigations()).toEqual([]);
+    expect(frame.top.location.href).toBe('');
+  });
+
   it('a modified click, a middle click or a link to another tab opens the APP\'s address in a new tab', () => {
     const frame = framed('<a id="plain" href="/a/B">B</a><a id="blank" href="/a/C" target="_blank">C</a>');
     frame.click('#plain', { metaKey: true });

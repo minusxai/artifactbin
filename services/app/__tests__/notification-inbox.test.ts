@@ -10,6 +10,7 @@ import {membershipInbox,updateMembershipInbox} from '@/lib/accounts';
 import {POST as delivery} from '@/app/api/internal/notifications/route';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 vi.mock('@/lib/platform/config',async original=>({...await original<typeof import('@/lib/platform/config')>(),INTERNAL_SERVICE_SECRET:'notification-test-service'}));
+import {notifyThread} from '@/lib/notifications/write';
 useAppHarness();
 async function fixture(){
  const sender=await createUser({email:'sender@example.com'}),recipient=await createUser({email:'recipient@example.com'}),token=await mintToken('test',sender.id);
@@ -55,4 +56,20 @@ it('leaving hides existing items and prevents queued delivery without changing l
  expect((await membershipInbox(f.actor)).notifications).toEqual([]);
  const response=await delivery(request('/api/internal/notifications',{method:'POST',headers:{[SERVICE_AUTH_HEADER]:'notification-test-service'},json:{recipientId:f.recipient.id,notificationId:'n0'}}));
  expect(await response.json()).toEqual({notification:null});
+});
+
+it('preserves the latest agent attribution while the unread conversation still targets its first update', async () => {
+ const f=await fixture();
+ await f.db.query('DELETE FROM mutation_notifications');
+ await f.db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'commenter')",[f.doc.id,f.recipient.id,f.recipient.email]);
+ await f.db.query(`INSERT INTO annotations(id,artifact_id,root_id,body,author_kind,author_user_id,author_label) VALUES
+ ('root',$1,NULL,'Question','human',$2,'Reader'),
+ ('human-reply',$1,'root','First answer','human',$3,'Sender'),
+ ('agent-reply',$1,'root','Agent answer','agent',$3,'afbin')`,[f.doc.id,f.recipient.id,f.sender.id]);
+ await f.db.transaction(tx=>notifyThread(tx,f.doc.id,'root',f.sender.id,'reply',false,'human-reply'));
+ await f.db.transaction(tx=>notifyThread(tx,f.doc.id,'root',f.sender.id,'reply',true,'agent-reply'));
+ const row=(await membershipInbox(f.actor)).notifications.find(n=>n.id===`thread:root:${f.recipient.id}`);
+ expect(row).toMatchObject({sender_id:f.sender.id,first_update_id:'human-reply',agent_label:'afbin'});
+ await f.db.transaction(tx=>notifyThread(tx,f.doc.id,'root',f.sender.id,'reply',false,'human-reply'));
+ expect((await membershipInbox(f.actor)).notifications.find(n=>n.id===`thread:root:${f.recipient.id}`)).toMatchObject({agent_label:null});
 });

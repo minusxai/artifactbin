@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Route, Router } from '@solidjs/router';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_TEXT_EDIT_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_TEXT_EDIT_MESSAGE } from '@/lib/story-runtime/contract';
 import { fakeBackend } from '@/test/helpers/artifact-backend';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { screen } from '@testing-library/dom';
@@ -22,6 +22,9 @@ vi.mock('../create-live-edits', async (importOriginal) => {
     },
   };
 });
+
+vi.mock('../SourceEditor', () => ({ default: (props: { value: string; onChange: (text: string) => void; readOnly?: boolean; ariaLabel?: string }) =>
+  <textarea aria-label={props.ariaLabel ?? 'Markup source'} value={props.value} readOnly={props.readOnly} on:input={event => props.onChange(event.currentTarget.value)} /> }));
 
 import InPlaceEditor from '../InPlaceEditor';
 
@@ -130,4 +133,19 @@ it('retries query preview when an intervening edit discards the pending result',
   finish(null);
   await vi.waitFor(() => expect(preview).toHaveBeenCalledTimes(2));
   expect(preview.mock.calls[1]![0]).toContain('Updated while loading');
+});
+
+it('source typing saves and redraws the same draft before returning to App', async () => {
+  const { sent, view } = mountEditor();
+  fireEvent.click(view.getByRole('tab', { name: 'Edit the source' }));
+  // Code is another editing surface: pausing the document makes it ignore its drafts and lets Done skip restoring the head.
+  expect(sent.filter(m => m.type === STORY_EDIT_MODE_MESSAGE && m.on === false)).toEqual([]);
+  const field = await view.findByRole('textbox', { name: 'Markup source' });
+  const next = '<p>Code draft accepted</p>';
+  fireEvent.input(field, { target: { value: next } });
+  expect(queued).toEqual([{ source: next }]);
+  await vi.waitFor(() => expect(drafts(sent)).toContain(next));
+  fireEvent.click(view.getByRole('tab', { name: 'Edit on the page' }));
+  expect(drafts(sent).at(-1)).toBe(next);
+  expect(queued).toHaveLength(1);
 });
