@@ -40,11 +40,24 @@ export function writeTracking(state:State,root:string,update:TrackingUpdate):voi
  for(const path of update.remove??[]){state.delete(root,'tracked',path);state.delete(root,'draft-identity',path);}
  for(const row of state.list<{id:string}>(root,'draft-identity'))if(taken.has(row.value.id)&&taken.get(row.value.id)!==row.key)state.delete(root,'draft-identity',row.key);
  for(const [path,entry] of Object.entries(update.set??{}))state.put(root,'tracked',path,entry);
+ if(root!==LOCAL_WORKSPACE_SCOPE)state.put(root,'archive','tracking-mirror/current',{server:normalizeServer(update.server),account:update.account});
 }
 /** Write tracking on its own, when no file change accompanies it. */
 export async function saveTracking(workspace:Workspace,update:TrackingUpdate):Promise<void>{
  const state=await stateFor(workspace.home);
  state.transaction(()=>writeTracking(state,workspace.root,{...update}));
+ await mirrorTracking(state,workspace.root,await readLocalWorkspaceState(workspace.root));
+}
+
+/** A durable home intent makes cross-store tracking synchronization replayable. */
+async function mirrorTracking(home:State,root:string,portable:State|null):Promise<void>{
+ const intent=home.get<WorkspaceRecord>(root,'archive','tracking-mirror/current')?.value;if(!intent||!portable)return;
+ portable.transaction(()=>{
+  for(const row of portable.list(LOCAL_WORKSPACE_SCOPE,'tracked'))portable.delete(LOCAL_WORKSPACE_SCOPE,'tracked',row.key);
+  const files=Object.fromEntries(home.list<TrackedFile>(root,'tracked').map(row=>[row.key,row.value]));
+  writeTracking(portable,LOCAL_WORKSPACE_SCOPE,{...intent,set:files});
+ });
+ home.delete(root,'archive','tracking-mirror/current');
 }
 
 const hash=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
@@ -54,11 +67,28 @@ export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Wo
  const state=await readState(home);
  const portableRoot=await findLocalWorkspace(cwd);
  const portable=portableRoot?await readLocalWorkspaceState(portableRoot):null;
- const legacy=state?.nearestWorkspace<WorkspaceRecord>(cwd);
+ const portableIntent=portable?.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current')?.value;
+ if(state&&portable&&portableRoot&&portableIntent){
+  const target=state,files=Object.fromEntries(portable.list<TrackedFile>(LOCAL_WORKSPACE_SCOPE,'tracked').map(row=>[row.key,row.value]));
+  target.transaction(()=>{
+   for(const row of target.list(portableRoot,'tracked'))target.delete(portableRoot,'tracked',row.key);
+   writeTracking(target,portableRoot,{...portableIntent,set:files});target.delete(portableRoot,'archive','tracking-mirror/current');
+  });
+  portable.delete(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current');
+ }
+ const activeState=state??(portableIntent?await readState(home):null);
+ const legacy=activeState?.nearestWorkspace<WorkspaceRecord>(cwd);
+ if(state&&portable&&legacy?.root===portableRoot)await mirrorTracking(state,legacy.root,portable);
  const found=legacy&&(!portableRoot||legacy.root===portableRoot)?legacy:portableRoot&&portable?.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)?{root:portableRoot,value:portable.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)!.value}:null;
+ if(state&&portable&&legacy?.root===portableRoot&&!portable.list(LOCAL_WORKSPACE_SCOPE,'archive').some(row=>row.key.startsWith('publication-finalize/')||row.key==='workspace-rebind/current')){
+  const pin=portable.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)?.value;
+  const local=Object.fromEntries(portable.list<TrackedFile>(LOCAL_WORKSPACE_SCOPE,'tracked').map(row=>[row.key,row.value]));
+  const cached=Object.fromEntries(state.list<TrackedFile>(legacy.root,'tracked').map(row=>[row.key,row.value]));
+  if(pin&&(pin.server!==legacy.value.server||pin.account!==legacy.value.account||JSON.stringify(local)!==JSON.stringify(cached)))throw new CliError('tracking_divergence','Home and portable authoring baselines disagree.','Preserve both stores; finish any interrupted push or explicit workspace rebind before proceeding.',{home_store:state.path,portable_store:portable.path},3);
+ }
  if(!found)return{home,root:portableRoot??cwd,cwd,tracking:null};
  const {root,value}=found;
- const trackingStore=legacy===found?state!:portable!;
+ const trackingStore=legacy===found?activeState!:portable!;
  const trackingScope=legacy===found?root:LOCAL_WORKSPACE_SCOPE;
  if(typeof value?.server!=='string'||typeof value.account!=='string')throw new CliError('invalid_tracking','The stored workspace record is incomplete.','Run afbin pull to re-establish tracking for this directory.');
  normalizeServer(value.server);

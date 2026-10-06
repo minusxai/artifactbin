@@ -1,9 +1,10 @@
+import {accountMismatch} from './account-diagnostic';
 import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,isLocalDevelopmentHost,normalizeOrigin} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
 import {CliError} from './errors.js';
 import {CLI_VERSION} from './version';
 import {validVersion} from './version-order';
-import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,type Connection} from './config.js';
+import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,observeCredentialAccount,type Connection} from './config.js';
 interface HttpOptions {onRelease?:(release:{version:string;protocol:number})=>Promise<void>;connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;aliases?:readonly string[];authenticate?:()=>Promise<Connection>}
 /**
  * THE SECOND READ-ONLY PREFLIGHT. A dry run may send nothing that writes, which is why the
@@ -102,11 +103,12 @@ export class HttpClient {
     throw new CliError('protocol_mismatch','The selected server requires a different CLI protocol.','Run afbin update, then retry.',validVersion(required)?{required_version:required}:undefined);
    }
    const account=response.headers.get('X-Artifactbin-Account');
-   if(account){if(this.account&&this.account!==account)throw new CliError('account_mismatch','The server account differs from this workspace.','Use the workspace account credentials.');this.account=account;}
+   if(response.ok&&account){if(this.account&&this.account!==account)throw accountMismatch(this.account,account,this.connection.server);if(!this.account&&!this.options.readOnly)try{await observeCredentialAccount(this.connection,account,this.options.home,this.options.env);}catch{/* Advisory cache failure cannot change a confirmed request outcome. */}this.account=account;}
    if(response.ok&&binary)return{bytes:Buffer.from(await response.arrayBuffer()),contentType:response.headers.get('Content-Type')??'application/octet-stream'};
    const data=method==='HEAD'?{}:await response.json().catch(()=>null);
    if(!response.ok){
     const code=typeof data?.error==='string'?data.error:`http_${response.status}`;
+    if(code==='account_mismatch')throw accountMismatch(data?.expected_account??this.account,data?.actual_account,this.connection.server,undefined,{...data,http_status:response.status});
     // A refusal without a message but with a list of details (a bad column, a refused SQL function)
     // names the details: the human line used to read "invalid_sql: Bad Request" and only --json
     // showed why (two pushes to learn "strptime is not allowed").

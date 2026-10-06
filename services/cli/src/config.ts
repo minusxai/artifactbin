@@ -155,6 +155,7 @@ export async function saveConnection(
   let profile: {url: string; alias?: string} = {url: server};
   try { profile = {...JSON.parse(await readFile(profilePath, 'utf8')), url: server}; }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  if ((profile as {credentialAccount?:{credential:string}}).credentialAccount?.credential!==digest(connection.token)) delete (profile as {credentialAccount?:unknown}).credentialAccount;
   await atomicWrite(profilePath, JSON.stringify(profile, null, 2) + '\n');
   const path = credentialPath(server, home, env);
   const values = { ARTIFACTBIN_URL: server, ARTIFACTBIN_TOKEN: connection.token,
@@ -188,4 +189,17 @@ export function remoteWorkerEnv(directory:string,separator:string,connection:Con
 /** Portable workspace state never follows the machine-wide ARTIFACTBIN_HOME override. */
 export function workspaceStateEnv(root: string): NodeJS.ProcessEnv {
  return {ARTIFACTBIN_HOME: join(root, ".artifactbin")};
+}
+
+/** Advisory identity, valid only for the credential that was actually verified. */
+export async function observeCredentialAccount(connection:Connection,account:string,home=homedir(),env:NodeJS.ProcessEnv=process.env):Promise<void>{
+ const dir=hostDirectory(connection.server,home,env);await privateDirectory(dir);
+ const path=join(dir,'profile.json');let profile:Record<string,unknown>={url:connection.server};
+ try{profile=JSON.parse(await readFile(path,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+ await atomicWrite(path,JSON.stringify({...profile,credentialAccount:{account,credential:digest(connection.token),observedAt:new Date().toISOString()}},null,2)+'\n');
+}
+export async function observedCredentialAccount(connection:Connection,home=homedir(),env:NodeJS.ProcessEnv=process.env):Promise<{account:string;observedAt:string}|null>{
+ try{const value=JSON.parse(await readFile(join(hostDirectory(connection.server,home,env),'profile.json'),'utf8')).credentialAccount;
+ return value?.credential===digest(connection.token)&&typeof value.account==='string'&&typeof value.observedAt==='string'?{account:value.account,observedAt:value.observedAt}:null;
+ }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}
 }

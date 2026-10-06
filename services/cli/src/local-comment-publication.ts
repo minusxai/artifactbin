@@ -1,3 +1,4 @@
+import {accountMismatch} from './account-diagnostic';
 /** Local discussions publish through the existing durable mutation journal. */
 import {readFile} from 'node:fs/promises';
 import type {AnnotationWire,AnnotationCommentWire} from '../../app/lib/annotations/store';
@@ -19,7 +20,7 @@ const key=(thread:string)=>'local-comments/'+thread;
 const hash=(comment:AnnotationCommentWire)=>digest(JSON.stringify([comment.body,comment.author.label]));
 const bodyFor=(comment:AnnotationCommentWire)=>comment.author.label&&comment.author.label!=='You'?`Offline note by ${comment.author.label} (unverified):\n\n${comment.body}`:comment.body;
 export async function publishLocalComments(workspace:Workspace,stage:Workspace,paths:string[],client:HttpClient,options:{force?:boolean}={}):Promise<Array<Record<string,unknown>>>{
- if(stage.tracking&&client.account&&stage.tracking.account!==client.account)throw new CliError('account_mismatch','Local comment publication belongs to another account.');
+ if(stage.tracking&&client.account&&stage.tracking.account!==client.account)throw accountMismatch(stage.tracking.account,client.account,client.connection.server,workspace);
  const portable=await localWorkspaceState(workspace.root),store=await stateFor(stage.home),selected=new Set(paths),operations:Array<Record<string,unknown>>=[];
  try{
  const finish=async(response:Record<string,unknown>,value:unknown)=>{

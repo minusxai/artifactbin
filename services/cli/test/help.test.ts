@@ -577,3 +577,12 @@ test('offline HTML import is a local command with safe JSX output',()=>{
  assert.match(commandHelp('import'),/without publishing/);
  assert.match(commandHelp('export'),/\.jsx\.html/);
 });
+
+test('workspace recovery teaching names explicit rebind, credential selection and last-observed pins',async()=>{
+ const {diagnosticCatalog}=await import('../src/diagnostics');
+ assert.match(diagnosticCatalog.workspace_account_mismatch!.fix,/auth --email/);
+ assert.match(diagnosticCatalog.workspace_account_mismatch!.fix,/workspace rebind --account current/);
+ assert.match(helpDocument('workspace'),/rebind --account current/);
+ assert.match(helpDocument('publishing'),/last observed/);
+ assert.match(helpDocument('publishing'),/no ownership transfer/);
+});

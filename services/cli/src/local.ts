@@ -1,3 +1,4 @@
+import {workspaceOwnership} from './workspace-ownership';
 import {isProgramFile} from './program-file';
 import {readConflicts} from './conflict-state';
 import type {ShareEntry} from '@artifactbin/contracts';
@@ -13,9 +14,9 @@ export function snapshotDocument(snapshot:Snapshot):LocalDocument{
   ...(snapshot.visibility?{visibility:snapshot.visibility}:{}),link:snapshot.link_role??'viewer',folder:snapshot.parent_id??null,
   edit_id:snapshot.edit_id,head_version:snapshot.version,state:snapshot.state},body:snapshot.markup??''};
 }
-export async function localStatus(workspace:Workspace,paths?:string[],home?:string,env?:NodeJS.ProcessEnv){
+export async function localStatus(workspace:Workspace,paths?:string[],home?:string,env?:NodeJS.ProcessEnv,server?:string){
  const conflicts=await readConflicts(workspace.home,workspace.root);
- return{remote:'last_observed',server:workspace.tracking?.server??null,files:(await inspectWorkspace(workspace,paths)).map(file=>({path:file.path,status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id??file.document?.metadata.id??file.resource?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})})),...(home!==undefined?{skills:await skillStatus(home,env)}:{})};
+ return{remote:'last_observed',server:workspace.tracking?.server??null,accounts:await workspaceOwnership(workspace,env,server),files:(await inspectWorkspace(workspace,paths)).map(file=>({path:file.path,status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id??file.document?.metadata.id??file.resource?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})})),...(home!==undefined?{skills:await skillStatus(home,env)}:{})};
 }
 export async function localDiff(workspace:Workspace,paths?:string[]){
  const files=await inspectWorkspace(workspace,paths);

@@ -1,4 +1,5 @@
 /** Portable authoring state. Identity and discussion belong to the folder; credentials remain at home. */
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile,lstat,realpath,link,unlink} from 'node:fs/promises';
 import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
@@ -45,9 +46,12 @@ export async function localWorkspaceState(root:string):Promise<State>{
 export async function readLocalWorkspaceState(root:string):Promise<State|null>{
  return await marker(root)?readState(root,workspaceStateEnv(root)):null;
 }
+const localLockOwners=new AsyncLocalStorage<ReadonlySet<string>>();
 export async function withLocalLock<T>(root:string,run:()=>Promise<T>):Promise<T>{
- await localWorkspaceState(root);
- return withLock(root,LOCAL_WORKSPACE_SCOPE,run,{},workspaceStateEnv(root));
+ root=await realpath(root);await localWorkspaceState(root);
+ if(localLockOwners.getStore()?.has(root))return run();
+ const owned=new Set(localLockOwners.getStore());owned.add(root);
+ return withLock(root,LOCAL_WORKSPACE_SCOPE,()=>localLockOwners.run(owned,run),{reentrant:false},workspaceStateEnv(root));
 }
 /** Same checksummed, recoverable journal as connected editing, with a location-independent scope. */
 export async function stageLocalFiles(root:string,changes:FileChange[],also?:(store:State)=>void):Promise<void>{
@@ -68,11 +72,11 @@ export async function localReferenceMap(root:string):Promise<Record<string,strin
  return result;
 }
 /** Registering is local and idempotent; no server reservation or account binding. */
-export async function registerLocalFiles(workspace:Workspace,inputs:string[]):Promise<Record<string,string>>{
+export async function registerLocalFiles(workspace:Workspace,inputs:string[],options:{intent?:'automatic'|'explicit'}={}):Promise<Record<string,string>>{
  return withLocalLock(workspace.root,async()=>{
   const {root}=workspace;await recoverLocalFiles(root);
   const known=await localReferenceMap(root),byPath=new Map(Object.entries(known).map(([id,path])=>[path,id]));
-  const assigned:Record<string,string>={},changes:FileChange[]=[];
+  const assigned:Record<string,string>={},trusted=new Map<string,boolean>(),changes:FileChange[]=[];
   for(const input of [...new Set(inputs)]){
    const full=await confinedPath(root,resolve(workspace.cwd,input)),path=relative(root,full).split(sep).join('/');
    if(path.split('/').includes('.artifactbin'))throw new CliError('invalid_path','Workspace state cannot be registered as document content.');
@@ -86,6 +90,7 @@ export async function registerLocalFiles(workspace:Workspace,inputs:string[]):Pr
    if(id&&known[id]&&known[id]!==path&&await readOptional(await confinedPath(root,known[id]!)))throw new CliError('duplicate_identity',`Both ${known[id]} and ${path} claim ${id}.`);
    if(!id){do{id=randomBytes(9).toString('base64').replace(/[^A-Za-z0-9]/g,'').slice(0,6);}while(id.length!==6||known[id]);}
    known[id]=path;byPath.set(path,id);assigned[path]=id;
+   trusted.set(path,!metadata?.id||options.intent!=='automatic'||(await localWorkspaceState(root)).get<{trusted?:boolean}>(LOCAL_WORKSPACE_SCOPE,'draft-identity',path)?.value.trusted===true);
    if(document&&!document.metadata.id)changes.push({path,before:digest(bytes),data:Buffer.from(writeDocument({...document,metadata:{...document.metadata,id}}))});
    if(resource&&!resource.id)changes.push({path,before:digest(bytes),data:Buffer.from(writeResourceFile({...resource,id}))});
   }
@@ -96,7 +101,7 @@ export async function registerLocalFiles(workspace:Workspace,inputs:string[]):Pr
    }
    for(const [path,id] of Object.entries(assigned)){
     for(const row of state.list<{id:string}>(LOCAL_WORKSPACE_SCOPE,'draft-identity'))if(row.value.id===id&&row.key!==path)state.delete(LOCAL_WORKSPACE_SCOPE,'draft-identity',row.key);
-    state.put(LOCAL_WORKSPACE_SCOPE,'draft-identity',path,{id});
+    state.put(LOCAL_WORKSPACE_SCOPE,'draft-identity',path,{id,trusted:trusted.get(path)});
    }
   });
   await recoverLocalFiles(root);return assigned;
@@ -119,7 +124,7 @@ export async function saveLocalFile(root:string,path:string,before:string,data:B
  });
 }
 
-interface LocalMove {from:string;to:string;id:string;hash:string}
+interface LocalMove {from:string;to:string;id:string;hash:string;trusted?:boolean}
 async function recoverLocalMove(root:string):Promise<void>{
  const store=await localWorkspaceState(root),pending=store.get<LocalMove>(LOCAL_WORKSPACE_SCOPE,'identity-move','current')?.value;if(!pending)return;
  assertLocalHistoryMove(store,pending.from,pending.to);
@@ -135,7 +140,7 @@ async function recoverLocalMove(root:string):Promise<void>{
  store.transaction(()=>{
   moveLocalHistory(store,pending.from,pending.to);
   const baseline=store.get(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+pending.from);if(baseline){store.put(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+pending.to,baseline.value,{data:baseline.data});store.delete(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+pending.from);}
-  store.delete(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.to,{id:pending.id});
+  store.delete(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.to,{id:pending.id,trusted:pending.trusted});
   const tracked=store.get(LOCAL_WORKSPACE_SCOPE,'tracked',pending.from);if(tracked){store.delete(LOCAL_WORKSPACE_SCOPE,'tracked',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'tracked',pending.to,tracked.value);}
   for(const kind of ['preview-comment','preview-thread'] as const)for(const row of store.list<{file:string}>(LOCAL_WORKSPACE_SCOPE,kind))if(row.value.file===pending.from)store.put(LOCAL_WORKSPACE_SCOPE,kind,row.key,{...row.value,file:pending.to});
   store.delete(LOCAL_WORKSPACE_SCOPE,'identity-move','current');
@@ -148,12 +153,12 @@ export async function moveLocalFile(workspace:Workspace,from:string,to:string):P
   to=relative(root,await confinedPath(root,resolve(workspace.cwd,to))).split(sep).join('/');
   if(from===to)return;
   if(to.split('/').includes('.artifactbin'))throw new CliError('invalid_path','Cannot move document content into workspace state.');
-  const id=store.get<{id:string}>(LOCAL_WORKSPACE_SCOPE,'draft-identity',from)?.value.id;
+  const identity=store.get<{id:string;trusted?:boolean}>(LOCAL_WORKSPACE_SCOPE,'draft-identity',from)?.value,id=identity?.id;
   if(!id)throw new CliError('unregistered_file','Register the source before moving it.');
   if(await readOptional(await confinedPath(root,to)))throw new CliError('file_exists','Move destination already exists.');
   const bytes=await readFile(await confinedPath(root,from));
   assertLocalHistoryMove(store,from,to);
   if(store.get(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+to))throw new CliError('move_conflict','The destination has another imported baseline. Choose a new path.');
-  store.put(LOCAL_WORKSPACE_SCOPE,'identity-move','current',{from,to,id,hash:digest(bytes)} satisfies LocalMove);await recoverLocalMove(root);
+  store.put(LOCAL_WORKSPACE_SCOPE,'identity-move','current',{from,to,id,hash:digest(bytes),trusted:identity?.trusted} satisfies LocalMove);await recoverLocalMove(root);
  });
 }

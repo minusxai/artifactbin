@@ -1,7 +1,10 @@
+import {accountMismatch} from './account-diagnostic';
+import {prepareBindings,assertBindingInputs,installBindings,deliverBound,finalizeBindings,projectBindingConflicts} from './publication-binding';
+import {withLocalLock} from './local-workspace';
 /**
- * Publication is a recoverable copy, never a conversion of an offline workspace.
- * Server fences, reserved identities and immutable pending writes belong only to
- * this copy. The existing push journal remains the single HTTP write protocol.
+ * Offline drafts publish through a recoverable projection and retain their local IDs.
+ * Published authoring files retain their remote identity and accepted baseline.
+ * The existing push journal remains the single HTTP write protocol.
  */
 import {mkdir,readFile} from 'node:fs/promises';
 import {dirname,extname,join,relative,resolve,sep} from 'node:path';
@@ -138,7 +141,9 @@ async function dependencies(workspace:Workspace,paths:string[],identities:Record
   active.add(path);for(const dependency of edges.get(path)??[])order(dependency);active.delete(path);done.add(path);ordered.push(path);
  };
  for(const path of edges.keys())order(path);
- return{paths:ordered,sources:[...sources].filter(path=>!edges.has(path))};
+ // A resource's companion belongs to that resource, even when explicitly
+ // registered/selected alongside it. It never acquires a second remote identity.
+ return{paths:ordered.filter(path=>!sources.has(path)),sources:[...sources]};
 }
 async function saveManifest(path:string,manifest:Publication):Promise<void>{
  await atomicWrite(path,JSON.stringify(manifest,null,2)+'\n');
@@ -162,13 +167,27 @@ function mappedBytes(path:string,bytes:Buffer,ids:Record<string,string>,remote?:
  return bytes;
 }
 export async function publishLocalWorkspace(workspace:Workspace,paths:string[],client:HttpClient,options:Options={}):Promise<LocalPublicationResult>{
- const identities=await localIdentities(workspace),graph=await dependencies(workspace,paths,identities),ordered=graph.paths;
- if(options.dryRun)return{dry_run:true,local_only:true,operations:ordered.map(path=>({path,status:'would_publish'}))};
+ if(options.dryRun)return publishProjection(workspace,paths,client,options);
+ return withLocalLock(workspace.root,()=>withLock(workspace.home,workspace.root,async()=>{
+  await finalizeBindings(workspace);workspace=await loadWorkspace(workspace.cwd,workspace.home);
+  return publishProjection(workspace,paths,client,options);
+ }));
+}
+async function publishProjection(workspace:Workspace,paths:string[],client:HttpClient,options:Options):Promise<LocalPublicationResult>{
  const publication=join(workspace.root,'.artifactbin','publications',digest(client.connection.server).slice(0,24));
  await confinedPath(workspace.root,publication);
  const manifestPath=join(publication,'manifest.json'),home=join(publication,'private'),root=join(publication,'files');
  const existing=await readOptional(manifestPath),stored:Publication|undefined=existing?JSON.parse(existing.toString()):undefined;
- if(stored&&(stored.format!==1||typeof stored.server!=='string'||!client.sameServer(stored.server)||typeof stored.account!=='string'||!stored.account))throw new CliError('account_mismatch','This publication copy is bound to a different server or account.');
+ const identities=await localIdentities(workspace),aliases:Record<string,string>={};
+ // Canonicalized bound parents refer to published IDs; their offline children
+ // still own local IDs. Manifest aliases are discovery only, never ownership.
+ for(const [localId,remoteId] of Object.entries(stored?.ids??{}))if(identities[localId]&&!identities[remoteId])aliases[remoteId]=identities[localId]!;
+ const graph=await dependencies(workspace,paths,{...aliases,...identities}),ordered=graph.paths;
+ if(options.dryRun)return{dry_run:true,local_only:true,operations:ordered.map(path=>({path,status:'would_publish'}))};
+
+ if(stored&&(stored.format!==1||typeof stored.server!=='string'||typeof stored.account!=='string'||!stored.account))throw new CliError('invalid_journal','This publication copy has invalid ownership metadata.');
+ if(workspace.tracking&&!client.sameServer(workspace.tracking.server))throw new CliError('wrong_server','The authoring baseline belongs to another server.');
+ if(stored&&!client.sameServer(stored.server))throw new CliError('wrong_server','This publication copy belongs to another server.');
  if(stored&&client.account!==stored.account){
   const previousAccount=client.account;client.account=stored.account;
   try{
@@ -180,9 +199,12 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
  if(!client.account)await client.request('/artifacts?limit=1');
  if(!client.account)throw new CliError('account_required','Publication requires an authenticated account.');
  let manifest:Publication=stored??{format:1,server:client.connection.server,account:client.account,root,inputs:{},ids:{}};
- if(manifest.format!==1||!client.sameServer(manifest.server)||manifest.account!==client.account)throw new CliError('account_mismatch','This publication copy is bound to a different server or account.');
+ if(manifest.format!==1)throw new CliError('invalid_journal','Invalid publication format.');
+  if(!client.sameServer(manifest.server))throw new CliError('wrong_server','This publication copy belongs to another server.');
+  if(manifest.account!==client.account)throw accountMismatch(manifest.account,client.account,client.connection.server,workspace);
  const imported:Array<{path:string;localId:string;head:Snapshot;base:Snapshot;baseline:ImportedBaseline}>=[];
  const portable=await readLocalWorkspaceState(workspace.root),pathIds=Object.fromEntries(Object.entries(identities).map(([id,path])=>[path,id]));
+ let bindings=await prepareBindings(workspace,ordered,pathIds,manifest,client);
  for(const path of ordered){
   const baseline=portable?.get<ImportedBaseline>(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+path)?.value;
   if(!baseline)continue;
@@ -195,10 +217,13 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
   const base=await importedAuthoringBase(head,baseline,path,client);
   imported.push({path,localId,head,base,baseline});
  }
+ await assertBindingInputs(workspace,bindings);
  await mkdir(root,{recursive:true,mode:0o700});
  return withPrivateStateHome(home,join(home,'.artifactbin'),()=>withLock(home,publication,async()=>{
   const latest=await readOptional(manifestPath);if(latest)manifest=JSON.parse(latest.toString());
-  if(manifest.format!==1||!client.sameServer(manifest.server)||manifest.account!==client.account)throw new CliError('account_mismatch','This publication copy is bound to a different server or account.');
+  if(manifest.format!==1)throw new CliError('invalid_journal','Invalid publication format.');
+  if(!client.sameServer(manifest.server))throw new CliError('wrong_server','This publication copy belongs to another server.');
+  if(manifest.account!==client.account)throw accountMismatch(manifest.account,client.account,client.connection.server,workspace);
   // The state store travels with the workspace. Only its scope contains an
   // absolute path; rebase it before ordinary journal recovery or discovery.
   const state=await stateFor(home);if(manifest.root!==root){state.rebaseScope(manifest.root,root);manifest={...manifest,root};await saveManifest(manifestPath,manifest);}
@@ -212,8 +237,13 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
   }
   if(imported.length){await saveManifest(manifestPath,manifest);stage=await loadWorkspace(root,home);}
   if(await readPendingRequest(home,root)){
-   await push(stage,[],client,{});stage=await loadWorkspace(root,home);
+   await deliverBound(workspace,bindings,manifest,()=>push(stage,[],client,{}));await finalizeBindings(workspace);workspace=await loadWorkspace(workspace.cwd,workspace.home);stage=await loadWorkspace(root,home);bindings=await prepareBindings(workspace,ordered,pathIds,manifest,client);
   }
+  await assertBindingInputs(workspace,bindings);
+  const frozen:Record<string,Buffer>={};
+  for(const path of ordered)frozen[path]=bindings.find(binding=>binding.path===path)?.bytes??await readFile(await confinedPath(workspace.root,path));
+  for(const path of graph.sources){const source=bindings.find(binding=>binding.source?.path===path)?.source;frozen[path]=source?Buffer.from(source.bytes,'base64'):await readFile(await confinedPath(workspace.root,path));}
+  await installBindings(workspace,stage,bindings,manifest);await saveManifest(manifestPath,manifest);stage=await loadWorkspace(root,home);
   const reverse=Object.fromEntries(Object.entries(identities).map(([id,path])=>[path,id]));
   const stageIds=await localIdentities(stage);
   for(const path of ordered){
@@ -231,24 +261,24 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
   // path spelling and rewrite only resource addresses inside the source copy.
   for(const path of graph.sources){
    const target=await confinedPath(root,path);await mkdir(dirname(target),{recursive:true});
-   const bytes=await readFile(await confinedPath(workspace.root,path));await atomicWrite(target,bytes);
+   const bytes=frozen[path]!;await atomicWrite(target,bytes);
   }
   // Materialize unassigned copies first so addFiles can recover its own
   // reservation pool after an interruption. Never carry a local fence to HTTP.
   for(const path of ordered){
-   const target=await confinedPath(root,path),bytes=await readFile(await confinedPath(workspace.root,path));
-   if(!await readOptional(target)){await mkdir(dirname(target),{recursive:true});await atomicWrite(target,mappedBytes(path,bytes,manifest.ids));}
+   const target=await confinedPath(root,path),bytes=frozen[path]!;
+   if(!Object.values(await localIdentities(stage)).includes(path)){await mkdir(dirname(target),{recursive:true});await atomicWrite(target,mappedBytes(path,bytes,manifest.ids));}
   }
   const registered=Object.fromEntries(Object.entries(await localIdentities(stage)).map(([id,path])=>[path,id]));
   const assigned={...registered,...await addFiles(stage,ordered.filter(path=>!registered[path]).map(path=>join(root,path)),client)};
   for(const [path,id] of Object.entries(assigned))if(reverse[path.split(sep).join('/')])manifest.ids[reverse[path.split(sep).join('/')]!]=id;
   await saveManifest(manifestPath,manifest);stage=await loadWorkspace(root,home);
   for(const path of graph.sources){
-   const target=await confinedPath(root,path),bytes=await readFile(await confinedPath(workspace.root,path));
+   const target=await confinedPath(root,path),bytes=frozen[path]!;
    await atomicWrite(target,isDatasetFile(path)?mappedBytes(path,bytes,manifest.ids):extname(path).toLowerCase()==='.jsx'?Buffer.from(rewriteMarkup(bytes.toString(),manifest.ids)):bytes);
   }
   for(const path of ordered){
-   const bytes=await readFile(await confinedPath(workspace.root,path)),hash=digest(bytes),previous=manifest.inputs[path];if(previous?.hash===hash&&JSON.stringify(previous.ids??{})===JSON.stringify(manifest.ids))continue;
+   const bytes=frozen[path]!,hash=digest(bytes),previous=manifest.inputs[path];if(previous?.hash===hash&&JSON.stringify(previous.ids??{})===JSON.stringify(manifest.ids))continue;
    const target=await confinedPath(root,path),remote=await readFile(target);let mapped=mappedBytes(path,bytes,manifest.ids,remote);
    if(previous&&extname(path).toLowerCase()==='.jsx'){
     const base=parseDocument(mappedBytes(path,Buffer.from(previous.bytes,'base64'),previous.ids??manifest.ids,remote).toString());const local=parseDocument(mapped.toString()),confirmed=parseDocument(remote.toString());
@@ -272,8 +302,12 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
   // Persist the frozen local input before HTTP: retries recover exactly these
   // bytes, then stage newer local changes against the confirmed remote head.
   await saveManifest(manifestPath,manifest);
-  const result=await push(await loadWorkspace(root,home),ordered.map(path=>join(root,path)),client,options);
-  try{const comments=await publishLocalComments(workspace,await loadWorkspace(root,home),ordered,client,options);return{...result,operations:[...result.operations,...comments],publication_copy:relative(workspace.root,publication),local_source_preserved:true};}
-  catch(error){if(error instanceof CliError)throw new CliError(error.code,error.message,error.fix,{...(error.details&&typeof error.details==='object'?error.details:{}),completed_operations:[...result.operations,...((error.details as {completed_operations?:Array<Record<string,unknown>>}|undefined)?.completed_operations??[])],publication_copy:relative(workspace.root,publication),local_source_preserved:true},error.exitCode);throw error;}
+  let result:Awaited<ReturnType<typeof push>>;
+  await assertBindingInputs(workspace,bindings);
+  try{result=await deliverBound(workspace,bindings,manifest,()=>push(stage,ordered.map(path=>join(root,path)),client,options));}
+  catch(error){await projectBindingConflicts(workspace,stage,bindings);throw error;}
+  await finalizeBindings(workspace);
+  try{const comments=await publishLocalComments(workspace,await loadWorkspace(root,home),ordered,client,options);return{...result,operations:[...result.operations,...comments],publication_copy:relative(workspace.root,publication),local_source_preserved:bindings.length===0};}
+  catch(error){if(error instanceof CliError)throw new CliError(error.code,error.message,error.fix,{...(error.details&&typeof error.details==='object'?error.details:{}),completed_operations:[...result.operations,...((error.details as {completed_operations?:Array<Record<string,unknown>>}|undefined)?.completed_operations??[])],publication_copy:relative(workspace.root,publication),local_source_preserved:bindings.length===0},error.exitCode);throw error;}
  }));
 }

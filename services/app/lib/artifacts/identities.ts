@@ -10,7 +10,7 @@ export async function reserveIds(actor:TokenActor,batch:string,workspaceAccount?
  // Preserve the original guest batch namespace after verified adoption, even
  // when the account already allocated a different pool with the same nonce.
  const current=owner(actor);
- if(workspaceAccount&&!await matchesWorkspaceAccount(workspaceAccount,current))throw new CreationReplay({status:409,body:{error:'account_mismatch'}});
+ if(workspaceAccount&&!await matchesWorkspaceAccount(workspaceAccount,current))throw new CreationReplay({status:409,body:{error:'account_mismatch',expected_account:workspaceAccount,actual_account:current}});
  const namespace=workspaceAccount||current;
  return(await getDb()).transaction(async tx=>{
   const inserted=await tx.query('INSERT INTO id_reservation_batches(owner,batch) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING batch',[namespace,batch]);

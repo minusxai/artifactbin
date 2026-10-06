@@ -7,7 +7,7 @@ interface ScreenOptions extends StyleOptions {columns?:number}
 export const COMMAND_GROUPS:ReadonlyArray<readonly [string,readonly string[]]>=[
  ['Local files',['add','mv','import','preview','pull','push','fork','status','diff','validate']],
  ['Published resources',['list','log','export','query','runs','schedule','delete','comment','invite','join','members','mention','open','sessions','testuser']],
- ['Setup and help',['setup','config','serve','auth','update','remote','help']],
+ ['Setup and help',['setup','config','workspace','serve','auth','update','remote','help']],
 ];
 const TAGLINE='Artifactbin: Google docs for agents';
 /** Derive every displayed topic from the bundled help so new guides remain discoverable. */

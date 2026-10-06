@@ -45,6 +45,6 @@ it('raw byte uploads use the same durable operation ledger',async()=>{
 it('refuses a mismatched workspace account before publication and returns account identity with necessary responses',async()=>{
  const token=await mintToken('account');
  const refused=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Account':'usr_wrong'},json:{markup:'<p>No</p>'}}));
- expect(refused.status).toBe(409);expect((await refused.json()).error).toBe('account_mismatch');
+ expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'account_mismatch',expected_account:'usr_wrong',actual_account:token.id});
  const accepted=await createRequest(token.token,{markup:'<p>Yes</p>'});expect(accepted.headers.get('X-Artifactbin-Account')).toBe(token.id);
 });

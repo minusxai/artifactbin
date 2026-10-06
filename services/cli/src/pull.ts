@@ -1,3 +1,5 @@
+import {assertBoundPullIdle,refreshPulledBindings} from './publication-binding';
+import {findLocalWorkspace,withLocalLock,readLocalWorkspaceState,stageLocalFiles,recoverLocalFiles,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 import {programFileBytes} from './program-file';
 import {rowsCsv} from './tabular';
 import type {ArtifactResourceFile} from '@artifactbin/contracts';
@@ -14,7 +16,7 @@ import {digest,localBackup,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles,type FileChange} from './journal';
 import {withLock} from './state';
 import {archivePendingRequest,clearPendingRequest,readPendingRequest} from './pending-request';
-import {baselineOf,loadWorkspace,writeTracking,type TrackedFile,type Workspace,type Snapshot} from './workspace';
+import {baselineOf,saveTracking,loadWorkspace,writeTracking,type TrackedFile,type Workspace,type Snapshot} from './workspace';
 import {HttpClient} from './http';
 import {reconcileDocument} from './reconcile';
 import {stat} from 'node:fs/promises';
@@ -114,6 +116,16 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
   if(!options.dryRun){await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   const pending=await readPendingRequest(workspace.home,workspace.root);
   const targets=await preparePull(workspace,args,!!options.force,client.connection.server,options.output,client.aliases);
+  if(!options.dryRun)await assertBoundPullIdle(workspace,client,targets.map(target=>target.id));
+  if(!options.dryRun){
+   const portable=await readLocalWorkspaceState(workspace.root),staged=portable?.list(LOCAL_WORKSPACE_SCOPE,'staged-file')??[];
+   if(staged.length){
+    const paths=new Set(targets.flatMap(target=>target.path?[target.path,...(workspace.tracking?.files[target.path]?.source?[workspace.tracking.files[target.path]!.source!.path]:[])]:[]));
+    if(!options.force||staged.some(row=>!paths.has(row.key)))throw new CliError('pending_recovery','A portable file commit is pending.','Recover it with push, or pull --force the same artifact to archive its local proposal.',undefined,3);
+    portable!.transaction(()=>{for(const row of staged){portable!.put(LOCAL_WORKSPACE_SCOPE,'archive','pulled-staged/'+digest(JSON.stringify(row.value))+'/'+row.key,row.value,{data:row.data});portable!.delete(LOCAL_WORKSPACE_SCOPE,'staged-file',row.key);}});
+   }
+  }
+
   const pendingId=pending?.request.path.match(/^\/artifacts\/([A-Za-z0-9]{6,12})(?:\/edits)?$/)?.[1];
   if(pending&&(!options.force||options.dryRun||!pendingId||!targets.some(target=>target.id===pendingId)))throw new CliError('pending_recovery','Recover the pending write with afbin push before pulling.','An ambiguous conditional write may instead be resolved with pull --force on the same artifact; its proposal is archived first.');
   const files:FileChange[]=[];const tracked:Record<string,TrackedFile>={};const untracked:string[]=[];
@@ -185,14 +197,26 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
   const recovery=pending?await archivePendingRequest(workspace.home,workspace.root,pending,await readOptional(await confinedPath(workspace.root,pending.file.path))):undefined;
   if(files.length){
    const update={server:workspace.tracking?.server??client.connection.server,account:workspace.tracking?.account??client.account!,set:tracked,remove:untracked};
-   await stageFiles(workspace.home,workspace.root,files,state=>writeTracking(state,workspace.root,update));
-   await recoverFiles(workspace.home,workspace.root);
+   const portable=await readLocalWorkspaceState(workspace.root);
+   if(portable){
+    await stageLocalFiles(workspace.root,files,state=>{
+     writeTracking(state,LOCAL_WORKSPACE_SCOPE,update);
+     state.put(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current',{server:update.server,account:update.account});
+    });
+    await recoverLocalFiles(workspace.root);
+    await saveTracking(workspace,update);
+    portable.delete(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current');
+   }else{
+    await stageFiles(workspace.home,workspace.root,files,state=>writeTracking(state,workspace.root,update));
+    await recoverFiles(workspace.home,workspace.root);
+   }
+   await refreshPulledBindings(workspace,update.server,update.account,tracked);
    for(const target of targets)await clearConflict(workspace.home,workspace.root,target.id);
    if(pending)await clearPendingRequest(workspace.home,workspace.root);
   }
   return{...(options.dryRun?{dry_run:true}:{}),...(recovery?{recovered_request:recovery}:{}),operations};
  };
- return options.dryRun?run():withLock(workspace.home,workspace.root,run);
+ return options.dryRun?run():await findLocalWorkspace(workspace.root)?withLocalLock(workspace.root,()=>withLock(workspace.home,workspace.root,run)):withLock(workspace.home,workspace.root,run);
 }
 function defaultExtension(snapshot:Snapshot):string{
  if(snapshot.format==='program')return '.program.json';
