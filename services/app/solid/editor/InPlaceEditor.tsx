@@ -137,6 +137,8 @@ export interface InPlaceEditorProps {
   onEditorReady?: () => void;
   /** The name the title field shows (the typed title, else the first heading): the breadcrumb's once editing ends. */
   onTitleChange?: (title: string) => void;
+  /** Lets page-level overlays follow the editor's source tab, including a restored tab. */
+  onCodeViewChange?: (open: boolean) => void;
 }
 
 export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
@@ -164,6 +166,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     try { return window.location.hash === '#edit' && window.sessionStorage.getItem(viewKey) === 'code' ? 'code' : 'design'; }
     catch { return 'design'; }
   })());
+  createEffect(() => props.onCodeViewChange?.(mode() === 'code'));
   const chooseMode = (next: 'design' | 'code') => {
     setMode(next);
     try { window.sessionStorage.setItem(viewKey, next); } catch { /* storage can be unavailable */ }

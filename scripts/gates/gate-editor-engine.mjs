@@ -397,6 +397,34 @@ try {
   await doc().getByText('Remote changed', { exact: true }).waitFor();
   check(await doc().locator('.ProseMirror').count() === 0, 'a saved document reloads READ-ONLY');
   check(errors.length === 0, `and the browser reported no error on the way (${errors.slice(0, 2).join('; ') || 'none'})`);
+  must((await api('', { method: 'PUT', body: JSON.stringify({ markup: '<article><p id="task">Task</p><p id="fence">Code</p><p id="quote">Quote</p></article>' }) })).status === 200, 'the markdown shortcut fixture publishes');
+  await page.goto('about:blank');
+  await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
+  await doc().getByRole('textbox', { name: 'Document text' }).first().waitFor();
+  await range('task', 0);
+  await page.keyboard.type('[] ');
+  await doc().getByRole('checkbox', { name: 'Task completed' }).check();
+  await stored(s => /\bchecked\s*\/>/.test(s), 'checkbox toggles save their checked state');
+  await range('fence', 0);
+  await page.keyboard.type('```');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('# literal');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('  code');
+  await stored(s => /<pre id="fence"># literal\n  codeCode<\/pre>/.test(s), 'fenced code keeps literal markers and indented newlines');
+  await range('quote', 0);
+  await page.keyboard.type('> ');
+  await stored(s => /<blockquote[^>]*><p id="quote">Quote<\/p><\/blockquote>/.test(s), 'blockquote shortcut persists');
+  await page.getByRole('button', { name: 'Exit edit mode' }).click();
+  await page.reload();
+  const savedTask = doc().getByRole('checkbox', { name: 'Task completed' });
+  await savedTask.waitFor();
+  check(await savedTask.isChecked() && await savedTask.isDisabled(), 'reader reload displays saved checkboxes read-only');
+  await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
+  await doc().getByRole('textbox', { name: 'Document text' }).first().waitFor();
+  await doc().getByRole('checkbox', { name: 'Task completed' }).uncheck();
+  await stored(s => /checked=\{false\}/.test(s), 'reopened checklist remains editable');
+  await page.getByRole('button', { name: 'Exit edit mode' }).click();
   const extended =
     '<div className="p-10"><Grid mode="flow" id="three"><GridItem id="c1" w={4}><p id="a1">one</p></GridItem><GridItem id="c2" w={4}><p id="a2">two</p></GridItem><GridItem id="c3" w={4}><p id="a3">three</p></GridItem></Grid><table><tbody><tr><td><p id="cell1">first cell</p></td><td><p id="cell2">second cell</p></td></tr></tbody></table>' +
     Array.from(
