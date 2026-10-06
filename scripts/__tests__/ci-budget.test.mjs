@@ -7,12 +7,14 @@ import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
 import {measureCiElapsed} from '../lib/ci-elapsed.mjs';
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
-it('gives every required job the same four-minute budget',()=>{
+it('reports four-minute per-job diagnostics while the complete chain owns the hard limit',()=>{
  const jobs=workflow().jobs,step=jobs.test.steps.find(step=>step.env?.BUDGET_S);
  expect(step.env.BUDGET_S).toBe('240');expect(step.env).not.toHaveProperty('SLOW_BUDGET_S');
  expect(step.run).not.toContain('SLOW_BUDGET_S');
  expect(step.run).toContain('budget="$BUDGET_S"');
- expect(step.run).toContain('exit 1');
+ expect(step.run).not.toContain('exit 1');
+ expect(step.run).toContain('::warning::');
+ expect(step['continue-on-error']).toBe(true);
  expect(jobs['cli-pack'].name).toBe('CLI npm pack');
 });
 it('installs isolated acceptance tooling only for experience checks before consumer runtime selection',()=>{
@@ -201,5 +203,16 @@ it('creates a fresh seed with bounded npm cache operations instead of selecting 
   expect(steps.some(step=>step.run?.includes('prepare-seed'))).toBe(true);
   expect(steps.filter(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).map(step=>step.with.name)).toEqual(['Linux-X64','Linux-ARM64','macOS-X64','macOS-ARM64','Windows-X64'].map(platform=>'afbin-npm-dependency-seed-'+platform));
   expect(workflow().jobs.cli.steps.find(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).with.name).toBe('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('warns rather than fails when a PR consumer includes a long prerequisite wait',()=>{
+ const step=workflow().jobs.test.steps.find(step=>step.env?.BUDGET_S),directory=mkdtempSync(join(tmpdir(),'afbin-job-time-warning-'));
+ const summary=join(directory,'summary.md');
+ writeFileSync(join(directory,'gh'),"#!/bin/sh\nprintf '%s\\n' '259\tCLI npm Windows preview\tsuccess\tWait for current attempt 65s'\n",{mode:0o755});
+ try{
+  const result=spawnSync('bash',['-c',step.run],{cwd:directory,encoding:'utf8',env:{PATH:directory+':'+process.env.PATH,BUDGET_S:'240',GITHUB_REPOSITORY:'test/repo',GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1',GITHUB_EVENT_NAME:'pull_request',GITHUB_STEP_SUMMARY:summary}});
+  expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('::warning::');expect(result.stdout).toContain('259s');
+  expect(readFileSync(summary,'utf8')).toContain('259');
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
