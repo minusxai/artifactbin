@@ -62,6 +62,11 @@
  */
 export const STORY_COLUMN_CSS = `
 .mx-doc { flex: 1 1 auto; min-width: 0; container-type: inline-size; overflow-x: clip; }
+.mx-doc--document { box-sizing: border-box; width: 100%; max-width: 816px; margin-inline: auto; padding: 48px 24px 96px; overflow-wrap: anywhere; }
+/* ProseMirror gives blank paragraphs a caret line with a temporary <br>.
+   Keep that line in the reader and exports too, without adding editor DOM to
+   saved source. Low specificity lets authored sizing keep taking precedence. */
+:where(.mx-doc--document p:empty) { min-height: 1lh; }
 `;
 
 /**

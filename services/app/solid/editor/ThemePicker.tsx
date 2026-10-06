@@ -63,8 +63,8 @@ export function ModeChip(props: { mode: 'light' | 'dark' | null; themeDefault: '
   ];
   return <AnchoredPanel label="Color modes" open={isOpen()} onOpenChange={setOpen} class="flex w-max flex-col p-1" tooltip="The mode the document opens in"
     trigger={(attrs) => <button type="button" aria-label="Color mode" ref={(el) => attrs.ref?.(el)} onClick={() => attrs.onClick()} aria-haspopup="true" aria-expanded={isOpen()}
-      class="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-1.5 font-mono text-xs text-fg hover:bg-raised sm:px-2">
-      <span class="normal-case opacity-60">Mode:</span><span>{props.mode ?? props.themeDefault}</span><ChevronDown size={12} class="shrink-0 opacity-60" />
+      class="inline-flex h-7 w-full cursor-pointer items-center gap-2 rounded-[4px] px-2 font-mono text-[11px] text-fg hover:bg-raised">
+      <span class="capitalize">{props.mode ?? props.themeDefault}</span><ChevronDown size={12} class="ml-auto shrink-0 text-faint" />
     </button>}>
     <For each={options()}>{(o) => <button type="button" aria-label={o.aria} aria-pressed={props.mode === o.value}
       onClick={() => { setOpen(false); props.onPick(o.value); }}
@@ -76,8 +76,8 @@ export function ModeChip(props: { mode: 'light' | 'dark' | null; themeDefault: '
 
 export function TemplateChip(props: { template: string | null }): JSX.Element {
   return <Show when={props.template}>
-    <span aria-label="Template" class="inline-flex h-6 items-center gap-1.5 rounded-[4px] border border-edge px-2 font-mono text-xs text-fg capitalize">
-      <span class="normal-case opacity-60">Template:</span>{props.template}
+    <span aria-label={`Page type: ${props.template}`} class="inline-flex items-center rounded-[4px] border border-edge bg-raised px-2 py-0.5 font-mono text-[10px] text-fg capitalize">
+      {props.template}
     </span>
   </Show>;
 }
@@ -99,8 +99,8 @@ export default function ThemePicker(props: { value: StoryDesignName | null; colo
         class="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg"><X size={14} stroke-width={1.8} /></button>
     </div>}
     trigger={(attrs) => <button type="button" aria-label="Design system" ref={(el) => attrs.ref?.(el)} onClick={() => attrs.onClick()} aria-haspopup="true" aria-expanded={open()}
-      class="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-1.5 font-mono text-xs text-fg hover:bg-raised sm:px-2">
-      <ThemeDot theme={props.value} colorMode={props.colorMode} /><span class="opacity-60">Design system:</span><span>{designLabel(props.value)}</span><ChevronDown size={12} class="shrink-0 opacity-60" />
+      class="inline-flex h-7 w-full cursor-pointer items-center gap-2 rounded-[4px] px-2 font-mono text-[11px] text-fg hover:bg-raised">
+      <ThemeDot theme={props.value} colorMode={props.colorMode} /><span class="truncate">{designLabel(props.value)}</span><ChevronDown size={12} class="ml-auto shrink-0 text-faint" />
     </button>}>
     <For each={STORY_SYSTEMS}>{(system) => <button type="button" aria-label={`Design system ${system.label}`} aria-pressed={props.value === system.name}
       onClick={() => pick(system.name)}

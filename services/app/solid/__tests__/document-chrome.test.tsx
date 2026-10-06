@@ -15,7 +15,10 @@ let mockTitle: string | null = 'A copy';
 let mockArchived: { version: number; head: number } | null = null;
 let served: HTMLElement | null = null;
 let mockCsp: Record<string, unknown> | undefined;
-vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+let mockTemplate: string | null = null;
+vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
+import { copyText } from '../lib/copy-text';
 vi.mock('@/web/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 
 import { DocumentPage } from '../pages/Document';
@@ -25,6 +28,7 @@ beforeEach(() => {
   mockTitle = 'A copy';
   mockArchived = null;
   mockCsp = undefined;
+  mockTemplate = null;
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
@@ -59,6 +63,21 @@ const panelRoot = (): HTMLElement => {
   return hosts.find((root) => root.querySelector('[aria-label="Close panel"]')) ?? document.body;
 };
 const controls = () => within(panelRoot()).getByRole('region', { name: 'Artifact controls' });
+
+it('places the doc agent handoff in trusted document navigation, outside the page bar', async () => {
+  mockRole = 'owner'; mockTemplate = 'doc';
+  mount();
+  expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
+  fireEvent.click(trusted().getByRole('button', { name: 'Copy for agent' }));
+  await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('template: doc')));
+});
+
+it.each([['owner', 'app'], ['commenter', 'doc']])('omits the small agent button for %s viewing %s', (role, template) => {
+  mockRole = role; mockTemplate = template;
+  mount();
+  expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
+  expect(trusted().queryByRole('button', { name: 'Copy for agent' })).toBeNull();
+});
 
 it('adopts the served frame into the page instead of rendering the document', () => {
   const { host, frame } = mount();

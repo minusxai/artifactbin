@@ -1,3 +1,4 @@
+import WorkspaceHeading from '../components/WorkspaceHeading';
 /* @jsxImportSource solid-js */
 /**
  * THE TRASH — what this account has deleted and not yet lost.
@@ -87,11 +88,8 @@ export function TrashPage(): JSX.Element {
 
   return (
     <Show when={!signedOut()} fallback={<Navigate href="/login?callbackUrl=/trash" />}>
-      <main class="mx-auto mt-8 max-w-6xl px-4 pb-24 sm:px-6">
-        <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <MicroLabel>trash</MicroLabel>
-          <span class="font-mono text-[10px] text-faint">deleted artifacts can be restored</span>
-        </div>
+      <main class="workspace-page">
+        <WorkspaceHeading title="Trash" description="Deleted artifacts can be restored." />
 
         <section aria-label="Trash" class={PANEL}>
           <Show when={page.error()}>

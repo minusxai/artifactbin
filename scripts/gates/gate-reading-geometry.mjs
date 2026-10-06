@@ -1162,5 +1162,42 @@ await section('no sideways scroll', async () => {
   await mctx.close();
 });
 
+await section('doc blank lines match editing', async () => {
+  const st = await startDocument(BASE);
+  const response = await fetch(`${BASE}/api/artifacts/${st.id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
+    body: JSON.stringify({ template: 'doc', theme: 'meridian', markup:
+      '<article data-design="tw"><h1 id="title">Blank line spacing</h1><p id="before">Before</p><p id="blank1"></p><p id="blank2"></p><p id="after">After two blank lines</p><ul><li>List item</li></ul><p id="blank3"></p><h2 id="section">Next section</h2></article>' }),
+  });
+  if (!check(response.ok, 'doc spacing fixture publishes')) return;
+  const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  try {
+    await becomeOwner(page, BASE, st.token);
+    await page.goto(`${BASE}/a/${st.id}`, { waitUntil: 'load' });
+    const doc = documentLocator(page);
+    await doc.locator('#after').waitFor();
+    const measure = async () => (await documentFrame(page)).evaluate(async () => {
+      await document.fonts.ready;
+      const top = document.getElementById('title').getBoundingClientRect().top;
+      return ['blank1', 'blank2', 'after', 'blank3', 'section'].map(id => {
+        const box = document.getElementById(id).getBoundingClientRect();
+        return { id, y: box.top - top, height: box.height };
+      });
+    });
+    const reading = await measure();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await doc.getByRole('textbox', { name: 'Document text' }).first().waitFor();
+    const editing = await measure();
+    await page.getByRole('button', { name: 'Exit edit mode' }).click();
+    await doc.locator('.ProseMirror').waitFor({ state: 'detached' });
+    const done = await measure();
+    for (const [index, block] of reading.entries()) {
+      check(Math.abs(block.y - editing[index].y) < 1 && Math.abs(block.height - editing[index].height) < 1
+        && Math.abs(block.y - done[index].y) < 1,
+      `${block.id}: blank-line height and following content match before, during and after editing`);
+    }
+  } finally { await page.close(); }
+});
+
 await browser.close();
 check.done();

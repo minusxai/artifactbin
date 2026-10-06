@@ -4,9 +4,10 @@
  * mocks but fetch), the browser-history router, and each route arriving as its own lazy module.
  */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
+import { REFRESH_EVENT } from '@/web/page-data-events';
 
 let session: unknown;
 let calls: string[];
@@ -25,6 +26,65 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
 describe('Solid shell', () => {
+  it('refreshes restored page data on browser Back without refetching on an ordinary pageshow', async () => {
+    let title = 'Before creation';
+    const existing = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => String(input) === '/api/page/trash'
+      ? Response.json({ files: [{ id: 'doc_1', title, format: 'markup', version: 1, deleted_at: '2026-09-05T06:00:00.000Z' }] })
+      : existing(input, init));
+    window.history.replaceState(null, '', '/trash');
+    render(() => <App />);
+    await vi.dynamicImportSettled();
+    const table = await screen.findByRole('table');
+    expect(table).toHaveTextContent('Before creation');
+    title = 'After creation';
+    fireEvent(window, new PageTransitionEvent('pageshow', { persisted: false }));
+    expect(table).toHaveTextContent('Before creation');
+    fireEvent(window, new PageTransitionEvent('pageshow', { persisted: true }));
+    await waitFor(() => expect(table).toHaveTextContent('After creation'));
+  });
+
+  it('shows live agent and unread notification counts in the sidebar', async () => {
+    let online = true;
+    let unread = 3;
+    const existing = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input) === '/api/remote/sessions') return new Response(JSON.stringify({ sessions: [
+        { id: 'online', online, exitCode: null },
+        { id: 'starting', online: false, runId: 'run_1', activity: 'starting', exitCode: null },
+        { id: 'offline', online: false, exitCode: null },
+        { id: 'ended', online: true, exitCode: 0 },
+      ] }));
+      if (String(input) === '/api/my/people') return new Response(JSON.stringify({ notifications: [], blocks: [], unread, next: null }));
+      return existing(input, init);
+    });
+    window.history.replaceState(null, '', '/trash');
+    render(() => <App />);
+    await vi.dynamicImportSettled();
+    const nav = await screen.findByRole('navigation', { name: 'Workspace' });
+    expect(await within(nav).findByLabelText('2 connected agents')).toHaveTextContent('2');
+    expect(await within(nav).findByLabelText('3 unread notifications')).toHaveTextContent('3');
+    online = false;
+    unread = 0;
+    fireEvent(window, new Event(REFRESH_EVENT));
+    expect(await within(nav).findByLabelText('1 connected agent')).toHaveTextContent('1');
+    await waitFor(() => expect(within(nav).queryByLabelText('3 unread notifications')).not.toBeInTheDocument());
+    expect(within(nav).queryByLabelText('0 unread notifications')).not.toBeInTheDocument();
+  });
+
+  it.each([null, '/api/users/usr_1/avatar?v=1'])('shows account identity in the footer with photo %s', async image => {
+    session = { user: { id: 'usr_1', email: 'owner@example.com', username: 'owner', image }, kind: 'account', onboarded: true };
+    window.history.replaceState(null, '', '/trash');
+    render(() => <App />);
+    await screen.findByRole('table');
+    const account = within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('link', { name: 'Account settings' });
+    expect(account).toHaveAttribute('href', '/account');
+    await waitFor(() => expect(account).toHaveTextContent('owner@example.com'));
+    expect(account).not.toHaveTextContent('Account settings');
+    if (image) expect(account.querySelector('img')).toHaveAttribute('src', image);
+    else expect(account.querySelector('[data-face-initial]')).toHaveTextContent('O');
+  });
+
   it('mounts /trash under the session and publishes its rows only once the session has a scope', async () => {
     window.history.replaceState(null, '', '/trash');
     render(() => <App />);
@@ -33,11 +93,12 @@ describe('Solid shell', () => {
     expect(calls.filter(url => url === '/api/page/session' || url === '/api/page/trash')).toEqual(['/api/page/session', '/api/page/trash']);
     expect(screen.getByRole('banner', { name: 'Page bar' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Current page' })).toHaveTextContent('trash');
+    expect(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('link', { name: 'Trash' })).toHaveAttribute('aria-current', 'page');
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const menu = screen.getByRole('navigation', { name: 'Menu' });
     expect(menu).toHaveClass('right-3', 'top-14');
     expect(menu).not.toHaveClass('left-0', 'inset-y-0');
-    expect(screen.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications');
+    expect(within(menu).getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications');
     fireEvent.click(screen.getByRole('button', { name: 'Open page controls' }));
     expect(screen.getByRole('group', { name: 'Color mode' })).toBeInTheDocument();
   });

@@ -57,10 +57,14 @@ describe('GET /a/:id (the document itself)', () => {
     const text = await llms.text();
     expect(text.split('\n')[0]).toBe(agentBlurb());
     expect(agentBlurb()).toMatch(/^artifactbin: .*npm CLI or direct HTTP API\.$/);
-    expect(text).toContain(`npx --yes @afbin/cli@latest`);
-    expect(text).toContain(`${BASE}/chat/ensure-node.ps1`);
-    expect(text).toContain('@afbin/cli@latest setup');
-    expect(text).toContain('npx.cmd --yes @afbin/cli@latest');
+    expect(text).toContain(`${BASE}/getting-started.md`);
+    expect(text).not.toContain('@afbin/cli@latest setup');
+    const gettingStarted = await app.request(`${BASE}/getting-started.md`);
+    expect(gettingStarted.status).toBe(200);
+    const setup = await gettingStarted.text();
+    expect(setup).toContain('npx --yes @afbin/cli@latest setup');
+    expect(setup).toContain(`${BASE}/chat/ensure-node.ps1`);
+    expect(setup).toContain('npx.cmd --yes @afbin/cli@latest setup');
     expect(text).toContain('POST '+BASE+'/api/auth/email-otp/send-verification-otp');
     expect(text).toContain('POST '+BASE+'/api/auth/sign-in/email-otp');
     expect(text).toContain('POST '+BASE+'/api/authentication/token');

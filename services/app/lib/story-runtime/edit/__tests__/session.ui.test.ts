@@ -73,6 +73,20 @@ function drop(target: Element, file: File, clientY: number) {
 }
 
 describe('edit session', () => {
+  it('updates a doc outline from live source, including its title, without replacing the editor', async () => {
+    const { root } = await open('<article id="doc"><h1 id="title"></h1><p id="body"></p></article>',
+      '<div class="mx-reading"><nav class="mx-outline" hidden></nav><div class="mx-doc mx-doc--document"><article id="doc" data-mx-ast="0"><h1 id="title" data-mx-ast="0.0"></h1><p id="body" data-mx-ast="0.1"></p></article></div></div>');
+    const editor = root.querySelector('.ProseMirror');
+    session!.setNodes(parseJsxOrThrow('<article id="doc"><h1 id="title">My notes</h1><h2 id="body">Next steps</h2></article>').nodes);
+    expect([...root.querySelectorAll('.mx-outline-row')].map(row => row.textContent)).toEqual(['My notes', 'Next steps']);
+    expect(root.querySelector('.mx-outline')?.hasAttribute('hidden')).toBe(false);
+    expect(root.querySelector('.ProseMirror')).toBe(editor);
+    session!.setNodes(parseJsxOrThrow('<article id="doc"><h1 id="title">Renamed</h1><p id="body">Body</p></article>').nodes);
+    expect([...root.querySelectorAll('.mx-outline-row')].map(row => row.textContent)).toEqual(['Renamed']);
+    session!.setNodes(parseJsxOrThrow('<article id="doc"><h1 id="title"></h1><p id="body"></p></article>').nodes);
+    expect(root.querySelectorAll('.mx-outline-row')).toHaveLength(0);
+    expect(root.querySelector('.mx-outline')?.hasAttribute('hidden')).toBe(true);
+  });
   it('posts the ready message, every message with the session nonce', async () => {
     const { posted } = await open(SOURCE, DOM);
     expect(posted[0]).toMatchObject({ type: 'mx:edit-ready', nonce: 'test-nonce' });
@@ -252,4 +266,3 @@ describe('edit session', () => {
     expect([native.anchorOffset, native.focusOffset]).toEqual([0, 5]);
   });
 });
-

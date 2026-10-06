@@ -157,6 +157,8 @@ export interface CompiledPage {
   outline: readonly OutlineEntry[];
   /** The plan template uses the wider reading wrapper. */
   outlinePlan: boolean;
+  /** Docs keep the navigation host even before their first heading is typed. */
+  outlineDoc?: boolean;
   /**
    * The story element's inner HTML with every island rendered in its DECLARED
    * state (no rows): static parts final, islands as skeletons. Served only when

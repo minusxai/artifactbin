@@ -131,11 +131,12 @@ import * as r127 from '@/app/basemap/[...path]/route';
 import * as r128 from '@/app/connect/import/route';
 import * as r129 from '@/app/connect/inspect/route';
 import * as r130 from '@/app/email/[id]/route';
-import * as r131 from '@/app/health/route';
-import * as r132 from '@/app/llms.txt/route';
-import * as r133 from '@/app/people/[id]/route';
-import * as r134 from '@/app/tiles/[...tile]/route';
-import * as r135 from '@/app/workspace/[id]/route';
+import * as r131 from '@/app/getting-started.md/route';
+import * as r132 from '@/app/health/route';
+import * as r133 from '@/app/llms.txt/route';
+import * as r134 from '@/app/people/[id]/route';
+import * as r135 from '@/app/tiles/[...tile]/route';
+import * as r136 from '@/app/workspace/[id]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -270,9 +271,10 @@ export const ROUTES: RouteEntry[] = [
   { path: "/connect/import", dir: "/connect/import", methods: ["POST"], module: r128 },
   { path: "/connect/inspect", dir: "/connect/inspect", methods: ["POST"], module: r129 },
   { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r130 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r131 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r132 },
-  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r133 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r134 },
-  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r135 },
+  { path: "/getting-started.md", dir: "/getting-started.md", methods: ["GET"], module: r131 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r132 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r133 },
+  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r134 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r135 },
+  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r136 },
 ];

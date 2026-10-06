@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { assembleReaderPage } from '../assembler';
+import { documentStyleSheets } from '@/lib/story/styles/document-styles';
 import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
 
 const build = { id: 'b'.repeat(16), manifest: { 'solid-js': '/islands/solid-1111aaaa.js', 'solid-js/web': '/islands/web-2222bbbb.js', 'solid-js/store': '/islands/store-3333cccc.js', '@mx/rt': '/islands/rt-4444dddd.js', '@mx/boot': '/islands/boot-5555eeee.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
@@ -67,6 +68,25 @@ describe('assembleReaderPage', () => {
     expect(reading.children[0]?.outerHTML).toBe('<nav class="mx-outline" aria-label="Contents"><div class="mx-outline-label">Contents</div><button type="button" class="mx-outline-row" aria-label="Go to section 1: One &amp; all" data-mx-target="0.0">One &amp; all</button><button type="button" class="mx-outline-row mx-outline-sub" aria-label="Go to Part" data-mx-target="0.1">Part</button></nav>');
     expect(reading.children[1]?.className).toBe('mx-doc');
     expect(dom(assembleReaderPage(input())).querySelector('.mx-outline')).toBeNull();
+  });
+  it('keeps a hidden outline host in a blank doc so typing never reparents the focused column', () => {
+    const options = { compiled: compiled({ outlineDoc: true }), story: '<div class="mx-doc mx-doc--document"><h1></h1></div>' };
+    const doc = dom(assembleReaderPage(input(options)));
+    expect(doc.querySelector('.mx-reading > .mx-outline')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.mx-reading > .mx-doc--document')).toBeTruthy();
+    expect(dom(assembleReaderPage(input({ ...options, documentChrome: false }))).querySelector('.mx-outline')).toBeNull();
+  });
+  it('preserves a line of height for empty doc paragraphs in reading and capture output', () => {
+    for (const documentChrome of [true, false]) {
+      const doc = dom(assembleReaderPage(input({ documentChrome,
+        sheets: documentStyleSheets({ compiledCss: null, chrome: documentChrome, bare: false, theme: null, docFonts: { slots: {}, families: [] }, systemCss: '', authorCss: 'p { font-size: 16px; line-height: 24px; }' }),
+        story: '<div class="mx-doc mx-doc--document"><article><p id="blank"></p><p id="body">Text</p></article></div>',
+      })));
+      // jsdom resolves lh against its fallback metrics; the browser gate checks exact geometry.
+      expect(parseFloat(doc.defaultView!.getComputedStyle(doc.getElementById('blank')!).minHeight)).toBeGreaterThan(0);
+      expect(doc.defaultView!.getComputedStyle(doc.getElementById('body')!).minHeight).toBe('auto');
+      expect(doc.getElementById('blank')!.innerHTML).toBe('');
+    }
   });
   it('places the request\'s story, never re-rendering it: the story input is what appears', () => {
     const page = assembleReaderPage(input({ story: '<div class="mx-doc"><b id="with-data">$744,503</b></div>' }));

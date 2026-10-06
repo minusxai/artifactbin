@@ -8,7 +8,7 @@ import { DOMSerializer, type ResolvedPos } from 'prosemirror-model';
 import { EditorState, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
 import { splitListItem, sinkListItem, liftListItem } from 'prosemirror-schema-list';
-import { baseKeymap, chainCommands } from 'prosemirror-commands';
+import { baseKeymap, chainCommands, splitBlockAs } from 'prosemirror-commands';
 import { keymap } from 'prosemirror-keymap';
 import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { mergeIdentityMaps } from './annotation-map';
@@ -131,6 +131,15 @@ const exitEmptyListItem: Command = (state, dispatch) => {
   return liftListItem(editorSchema.nodes.list_item)(state, dispatch);
 };
 
+/** Layout containers remain intact on Enter; only an empty quotation may lift out.
+ * Headings share the paragraph node type, so explicitly start body text after their end. */
+const splitProse: Command = (state, dispatch) => {
+  const { $from, empty } = state.selection;
+  if (empty && !$from.parent.content.size && $from.depth > 1 && $from.node(-1).attrs.tag === 'blockquote') return false;
+  return splitBlockAs((node, atEnd) => atEnd && /^h[1-6]$/.test(node.attrs.tag)
+    ? { type: editorSchema.nodes.paragraph } : null)(state, dispatch);
+};
+
 /**
  * Several lines of plain text become one paragraph per line, and parsing collapses each line's edge
  * spaces like source whitespace. The text is literal: put back the first line's leading spaces (where it
@@ -182,7 +191,12 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         cursor = index + 1;
         const path = [parentPath, String(base + index)].filter(Boolean).join('.');
         const position = pos + offset;
-        decorations.push(Decoration.node(position, position + node.nodeSize, { 'data-mx-ast': path }));
+        const placeholder = original.attributes.find(a => a.name === 'data-placeholder')?.value;
+        decorations.push(Decoration.node(position, position + node.nodeSize, {
+          'data-mx-ast': path,
+          ...(node.isTextblock && node.content.size === 0 && placeholder?.static && typeof placeholder.json === 'string'
+            ? { 'data-mx-placeholder': placeholder.json } : {}),
+        }));
         const authored = source[index];
         if (authored.type === 'element' && !node.isTextblock)
           visit(node, authored.children, position + 1, path);
@@ -239,6 +253,7 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
             },
             splitListItem(editorSchema.nodes.list_item),
             exitEmptyListItem,
+            splitProse,
             baseKeymap.Enter,
           ),
           Tab: sinkListItem(editorSchema.nodes.list_item),

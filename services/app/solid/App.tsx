@@ -10,6 +10,8 @@ import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './lib/notifications';
 import { dropServedFrameOnRoute, servedDocumentFrame } from '@/web/served-frame';
 
+// Workspace menus and dialogs are not part of a document reader's startup bundle.
+const WorkspaceShell = lazy(() => import('./components/WorkspaceShell'));
 const TrashPage = lazy(() => import('./pages/Trash').then((m) => ({ default: m.TrashPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFoundPage })));
 const LoginPage = lazy(() => import('./pages/Login').then((m) => ({ default: m.LoginPage })));
@@ -19,6 +21,7 @@ const WelcomePage = lazy(() => import('./pages/Welcome').then((m) => ({ default:
 const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.NotificationsPage })));
 const AccountPage = lazy(() => import('./pages/Account').then((m) => ({ default: m.AccountPage })));
 const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.DocsPage })));
+const GettingStartedPage = lazy(() => import('./pages/GettingStarted').then((m) => ({ default: m.GettingStartedPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
 const ProfileAliasRoute = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfileAliasRoute })));
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
@@ -44,6 +47,7 @@ function IntentPreload(): JSX.Element {
 
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
+  const workspaceRoute = () => ['/assets', '/trash', '/schedules', '/chat', '/notifications', '/account', '/docs-human', '/getting-started', '/datasets/new', '/files/new', '/programs/new'].includes(location.pathname);
   const servedDocument = !!servedDocumentFrame();
   const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
@@ -61,7 +65,7 @@ function Root(props: RouteSectionProps): JSX.Element {
       <ChromeVisibilityContext.Provider value={setShowChrome}>
         <Show when={!documentRoute() && showChrome()}><PageChrome /></Show>
         <ErrorBoundary fallback={(_, reset) => <main class="mx-auto max-w-5xl px-4 py-10" role="alert">Could not load this page. <button aria-label="Retry loading page" onClick={reset}>Retry</button></main>}>
-          <Suspense fallback={<PendingPage />}>{props.children}</Suspense>
+          <Show when={workspaceRoute()} fallback={<Suspense fallback={<PendingPage />}>{props.children}</Suspense>}><Suspense fallback={<PendingPage />}><WorkspaceShell><Suspense fallback={<PendingPage />}>{props.children}</Suspense></WorkspaceShell></Suspense></Show>
         </ErrorBoundary>
       </ChromeVisibilityContext.Provider>
     </OnboardingGate>
@@ -107,6 +111,7 @@ export function App(): JSX.Element {
       <Route path="/notifications" component={NotificationsPage} />
       <Route path="/account" component={AccountPage} />
       <Route path="/docs-human" component={DocsPage} />
+      <Route path="/getting-started" component={GettingStartedPage} />
       <Route path="/:user" component={ProfilePage} />
       {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/Profile.tsx
         * ProfileAliasRoute); a sibling `/:user/:alias` route here would overlap it and win first for

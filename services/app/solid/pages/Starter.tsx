@@ -46,6 +46,7 @@ export interface StarterAnswer {
     heading?: string | null; visibility?: Visibility; hasInvitedUsers?: boolean; openAnnotations?: number;
     author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: { label: string; href: string | null } | null } | null;
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null;
+    template?: string | null;
   };
 }
 
@@ -143,7 +144,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     </TrustedUi>
     {/* The starter sits on the app's own dotted page, under the bar. */}
     <div aria-label="Artifact viewport" class="relative min-h-screen">
-      <StarterInstructions id={id} onContinueBlank={editable ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
+      <StarterInstructions id={id} template={surface.template} onContinueBlank={editable && !surface.template ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
     </div>
   </>;
 }

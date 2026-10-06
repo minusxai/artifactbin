@@ -18,6 +18,17 @@
 # always beat authored CSS — see the markup-motion reference.
 
 templates:
+  doc:
+    label: Document
+    description: A simple writing surface for notes, drafts, meeting minutes and everyday documents.
+    personality: >-
+      Quiet and direct. A readable text column with a headline and flowing body copy,
+      ordinary headings and lists. Start writing immediately; add structure only as the
+      content needs it. No cover, hero, table of contents or decorative section system.
+    beats:
+      - Headline (what the document is about)
+      - Body (paragraphs, notes or lists)
+      - Further sections (only when the writing needs them)
   editorial:
     label: Editorial
     description: Typeset document/report — an argument in measured prose, supported by numbered figures and navigable sections.

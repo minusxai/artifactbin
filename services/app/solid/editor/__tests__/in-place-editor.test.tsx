@@ -5,7 +5,7 @@ import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_TEXT_EDIT_MESSAGE } from '@/lib/story-runtime/contract';
 import { fakeBackend } from '@/test/helpers/artifact-backend';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
-import { screen } from '@testing-library/dom';
+import { screen, within } from '@testing-library/dom';
 import type { PendingChange } from '../create-live-edits';
 
 /** Every change the editor hands to persistence, in order (the real live-edits core still runs behind it). */
@@ -70,6 +70,18 @@ function mountEditor(source = SOURCE, backend = fakeBackend()) {
 }
 
 const drafts = (sent: Array<Record<string, unknown>>) => sent.filter((m) => m.type === STORY_DOCUMENT_MESSAGE).map((m) => m.source);
+
+it('offers image and Markdown insertion directly in the right panel', () => {
+  const { sent, view } = mountEditor();
+  const insert = within(view.getByRole('region', { name: 'Insert content' }));
+  fireEvent.click(insert.getByRole('button', { name: 'Insert image' }));
+  expect(screen.getByRole('dialog', { name: 'Insert image' })).toBeInTheDocument();
+  fireEvent.keyDown(document, { key: 'Escape' });
+  fireEvent.click(insert.getByRole('button', { name: 'Paste Markdown' }));
+  fireEvent.input(screen.getByRole('textbox', { name: 'Markdown to insert' }), { target: { value: '## Notes' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Insert Markdown' }));
+  expect(sent.at(-1)).toMatchObject({ type: 'mx:paste', kind: 'markdown', value: '## Notes' });
+});
 
 it('saves a design-system pick and redraws with its identity and default mode, then can undo it', () => {
   const { sent, view } = mountEditor();

@@ -4,9 +4,9 @@
  * No credential is ever shown to a person: the CLI's device approval (or an OAuth client's consent) is the only
  * door to one, a browser holds an httpOnly cookie and nothing in storage, and what a guest made follows them into
  * the account they verify. Each leg below is a different person, so they run at once in one browser (the
- * setup-guide leg in its own, for the system clipboard), over one mail sink:
+ * start-page leg in its own, for the system clipboard), over one mail sink:
  *
- *   start    the setup guide makes a document and copies a tokenless paste; HTTP creation hands out no
+ *   start    the guest start page makes a document and copies a tokenless paste; HTTP creation hands out no
  *            credential; the browser approves the CLI for its guest; the page fills in live when the agent
  *            writes (formerly gate-simpler-start).
  *   door     the OAuth consent screen in a real browser — no guest grant, a signed-out visitor sent to log in,
@@ -56,7 +56,7 @@ const sink = await startMailSink();
 const browser = await launchChromium();
 const context = () => browser.newContext({ viewport: { width: 1400, height: 950 } });
 
-// ── start: the setup guide, a guest, and the agent it connects ───────────────
+// ── start: the start page, a guest, and the agent it connects ───────────────
 async function startLeg() {
   const { must, run } = lane(check, 'start');
   // `navigator.clipboard` exists only in a secure context: the app is `app.lvh.me` over http, so this browser is told to
@@ -68,28 +68,33 @@ async function startLeg() {
     await run(async () => {
       const page = await own.newPage({ viewport: { width: 1280, height: 900 } });
       await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
-      await page.goto(`${BASE}/docs-human`, { waitUntil: 'load' });
-      const create = page.getByRole('button', { name: 'Create a live document for my agent', exact: true });
-      await create.waitFor();
-      const startRespP = page.waitForResponse((r) => r.url().includes('/api/start') && r.request().method() === 'POST', { timeout: 30_000 });
-      await create.click();
-      const startRes = await startRespP;
-      const started = await startRes.json();
+      // The start page immediately replaces the document. Capture the real server
+      // response before delivering it so navigation cannot discard Chromium's body.
+      let finishStart;
+      const startRespP = new Promise(resolve => { finishStart = resolve; });
+      await page.route(`${BASE}/api/start`, async route => {
+        finishStart(await jsonRouteResponse(route));
+      }, { times: 1 });
+      await page.goto(`${BASE}/start?agent=1`, { waitUntil: 'load' });
+      await page.getByRole('button', { name: 'Copy agent instructions', exact: true }).click();
+      const startResult = await startRespP;
+      if (startResult.error) throw startResult.error;
+      const { response: startRes, body: started } = startResult;
       await page.waitForFunction(id => navigator.clipboard.readText().then(text => text.includes(`/a/${id}`)), started.id);
       const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 
       const id = started.id;
-      must(!!id, 'the create button makes a real document');
+      must(!!id, 'the guest start page makes a real document');
       check(!('token' in started) && !('expiresAt' in started), 'and the API body hands out NO credential and no expiry');
       check(!/mx_/.test(JSON.stringify(started)), 'nothing token-shaped rides the response at all');
-      check(/HttpOnly/i.test((await startRes.allHeaders())['set-cookie'] ?? ''), 'guest ownership stays in an HttpOnly cookie');
+      check(/HttpOnly/i.test(startRes.headers()['set-cookie'] ?? ''), 'guest ownership stays in an HttpOnly cookie');
       // The COPIED paste is tokenless and points at afbin — the agent-facing surface carries no secret.
       check(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
       check(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
       check(!/\/start\?k=/.test(prompt), 'and carries no start link');
       check(prompt.length < 600 && prompt.includes("\n\n---\n\nLet's build an artifact for "), `and includes a short editable brief (${prompt.length} chars)`);
       check(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
-      check(prompt.includes('/chat/ensure-node.sh') && prompt.includes('/chat/ensure-node.ps1') && prompt.includes('npx --yes @afbin/cli@latest setup') && prompt.includes('afbin help'), 'and says how to prepare Node, install afbin through npm and run it');
+      check(prompt.includes('/getting-started.md') && !/ensure-node|afbin help|--server/.test(prompt), 'and links to the shared setup guide while keeping the handoff short');
 
       // The retired doors (the start-link brief, its claim door, the public anonymous mint) answering 404 are HTTP
       // facts with no browser in them: services/app/server/__tests__/docs-human.test.ts asserts them on the app server.

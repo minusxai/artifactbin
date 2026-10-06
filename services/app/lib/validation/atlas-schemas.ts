@@ -34,7 +34,7 @@ export type { StoryDesignName };
  * grammar, and the runtime behaviour that comes with it: the contents rail for
  * editorial and plan, present mode for a deck), orthogonal to the design.
  */
-export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly', 'dashboard', 'plan', 'app', 'landing'] as const;
+export const STORY_TEMPLATE_NAMES = ['doc', 'editorial', 'deck', 'scrolly', 'dashboard', 'plan', 'app', 'landing'] as const;
 export type StoryTemplateName = (typeof STORY_TEMPLATE_NAMES)[number];
 
 export const StoryContent = Type.Object({
@@ -60,7 +60,7 @@ export const StoryContent = Type.Object({
     'themes; omit/null for the neutral default. Components and utility classes are identical across themes ' +
     'and modes, only the tokens change.'))),
   template: Type.Optional(Nullable(StringEnum(STORY_TEMPLATE_NAMES,
-    "Story template (format:'jsx' only) — the document's structural genre: 'editorial' (long-read magazine " +
+    "Story template (format:'jsx' only) — the document's structural genre: 'doc' (simple notes and prose), 'editorial' (long-read magazine " +
     "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling), 'dashboard' " +
     '(a Grid of draggable KPI/chart tiles with minimal prose), plan (visual proposals, flows and milestones), ' +
     "'app' (a tool people operate: state, actions, outcomes), 'landing' (one offering, one next action). " +

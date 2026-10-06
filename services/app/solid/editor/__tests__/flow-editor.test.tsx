@@ -257,6 +257,34 @@ describe('markdown block shortcuts', () => {
   }
   const ID = 'e[0-9a-f]{32}';
 
+  it('keeps repeated Enter and markdown headings inside the document column', () => {
+    const e = editor('<article id="doc" className="max-w-3xl"><h1 id="title">Notes</h1><p id="body">Body</p></article>');
+    e.caret('end');
+    for (let i = 0; i < 5; i++) e.enter();
+    e.type('## Section');
+    const saved = nodes(e.store.current());
+    expect(saved).toHaveLength(1);
+    expect(e.view.container.querySelector('article > h2')?.textContent).toBe('Section');
+    e.enter();
+    e.type('Following paragraph');
+    expect(e.view.container.querySelector('article > h2 + p')?.textContent).toBe('Following paragraph');
+  });
+
+  it('keeps the converted heading selectable after the source echoes back', () => {
+    // The real mounter echoes saved nodes without replacing a matching engine document.
+    const [source, setSource] = createSignal(nodes('<article id="doc"><p id="section"></p></article>'));
+    let engine: EditorView | null = null;
+    const mounted = render(() => <FlowEditor nodes={source()} path="0" onChange={setSource} onView={v => { if (v) engine = v; }} />);
+    const v = engine! as EditorView;
+    for (const ch of '## Section') {
+      const { from, to } = v.state.selection;
+      const typing = () => v.state.tr.insertText(ch, from, to);
+      if (!v.someProp('handleTextInput', f => f(v, from, to, ch, typing))) v.dispatch(typing());
+    }
+    flushFlowView(v);
+    expect(mounted.container.querySelector('h2#section')?.getAttribute('data-mx-ast')).toBe('0.0');
+  });
+
   it.each([1, 2, 3, 4, 5, 6])('turns %i hash marks and a space at the start of a paragraph into that heading level', (level) => {
     const e = editor('<p id="a" className="mt-6 text-lg">Title</p>');
     e.caret('start');
