@@ -62,7 +62,7 @@ unknown props are ignored. Bindings and Column contracts are checked at publish.
 
 [Accordion FAQ](markup-components.md).
 
-**HTML tags** — [[ tags | length ]] allowed: prose, headings, lists, tables,
+**HTML tags** — [[ tags | length ]] are allowed: prose, headings, lists, tables,
 links, media, themed `input` `select` `textarea` `button`, SVG. Unlisted tags
 return `400` with `allowed_html_tags`; these are refused without a list:
 [% for t in refusedTags %]`[[ t ]]` [% endfor %].
