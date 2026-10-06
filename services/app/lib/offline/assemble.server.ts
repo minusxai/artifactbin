@@ -33,6 +33,7 @@ import { placeDataflow } from '@/lib/story/data';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { getDb } from '@/lib/platform/db';
+import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import type { JsxNode } from '@/lib/jsx';
 import { savedMentionStates } from '@/lib/accounts/membership';
@@ -135,7 +136,9 @@ function withoutSrcSets(nodes: JsxNode[]): JsxNode[] {
 const QUERY = String.raw`(?:\?[^\s"'()<>,\\]*)?`;
 const ASSET_RE = new RegExp(String.raw`/assets/([0-9a-f]{64})${QUERY}`, 'g');
 const RAW_RE = new RegExp(String.raw`/a/([A-Za-z0-9_-]+)/raw${QUERY}`, 'g');
-const AVATAR_RE = new RegExp(String.raw`/api/users/([A-Za-z0-9_%-]+)/avatar${QUERY}`, 'g');
+// Consume the canonical origin as well as legacy relative avatar paths; never a foreign URL's suffix.
+const avatarOrigin = new URL(PUBLIC_BASE_URL).origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const AVATAR_RE = new RegExp(String.raw`(?<![\w/:.-])(?:${avatarOrigin})?/api/users/([A-Za-z0-9_%-]+)/avatar${QUERY}`, 'g');
 const FONT_RE = /\/fonts\/([A-Za-z0-9._-]+\.woff2)/g;
 /** Any url() still naming this server, after the known addresses were folded in. */
 const ROOT_URL_RE = /url\(\s*(['"]?)\/(?!\/)/g;
@@ -162,7 +165,7 @@ class Inliner {
   ) {}
 
   private absolute(address: string): string {
-    return `${this.origin}${address}`;
+    return new URL(address, this.origin).href;
   }
 
   private charge(uri: string): string {

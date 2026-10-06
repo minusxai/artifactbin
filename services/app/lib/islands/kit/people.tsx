@@ -34,13 +34,19 @@ const AVATAR = 'group/avatar relative shrink-0 overflow-hidden rounded-full sele
 const FALLBACK = 'flex size-full items-center justify-center rounded-full bg-muted text-muted-foreground group-data-[size=sm]/avatar:text-xs';
 export function UserImage(p: Props) {
   const who = () => identity(p); const card = () => who().card; const size = () => p.size ?? 'sm'; const [failed,setFailed] = createSignal<string | null>(null);
+  let image: HTMLImageElement | undefined;
+  // A served image can fail before hydration attaches onError. Recover that settled failure too.
+  onMount(() => { if (image?.complete && image.naturalWidth === 0) setFailed(image.getAttribute('src')); });
+  const source = () => card()?.image === failed() ? null : card()?.image;
+  // The avatar owns its accessible name whether its picture or initial is visible.
+  const label = () => p.decorative ? undefined : card()?.name;
   const box = () => join('inline-flex shrink-0 align-middle',BOX[size()],p.className);
   return <Show when={hasId(who().id)} fallback={p.fallback ? <span data-slot="user-image" class={p.classes?.fallback ?? join('text-muted-foreground',p.className)} {...rest(p)}>{p.fallback}</span> : null}>
     <span data-slot="avatar" data-size="default" data-unknown={!card() ? '' : undefined} aria-hidden={p.decorative || !card() ? 'true' : undefined}
-      role={!p.decorative && card() && !card()?.image ? 'img' : undefined} aria-label={!p.decorative && card() && !card()?.image ? card()?.name : undefined}
+      role={label() ? 'img' : undefined} aria-label={label()}
       class={p.classes?.avatar ?? join(AVATAR,box())} style={card() && typeof who().id === 'string' ? { 'background-color': personFaceBackground(who().id as string) } : undefined} {...rest(p)}>
       <span data-slot="avatar-fallback" class={(card() ? p.classes?.initial : p.classes?.unknownInitial) ?? join(FALLBACK,card() && 'bg-transparent font-medium text-white',GLYPH[size()])}>{card() ? personInitial(card()!.name) : '?'}</span>
-      <Show when={card()?.image && failed() !== card()?.image}><img data-slot="avatar-image" class="absolute inset-0 aspect-square size-full object-cover" src={card()!.image!} alt={p.decorative ? '' : card()!.name} aria-hidden={p.decorative ? 'true' : undefined} onError={() => setFailed(card()!.image)} /></Show>
+      <Show when={source()}><img ref={image} data-slot="avatar-image" class="absolute inset-0 aspect-square size-full object-cover" src={source()!} alt="" aria-hidden="true" onError={e => setFailed(e.currentTarget.getAttribute('src'))} /></Show>
     </span>
   </Show>;
 }

@@ -1,3 +1,4 @@
+import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import {documentPublicationWithResources} from './prepared-document';
 import {patchMetadata} from './conditional-request';
 import {changeMembership} from '@/lib/accounts';
@@ -180,7 +181,7 @@ describe('native user fields',()=>{
   await db.query('UPDATE users SET username=$2, image_key=$3 WHERE id=$1',[member.user.id,'pictured','avatar/deadbeef']);
   const cards=await people(db,[member.user.id,owner.user.id,'usr_missing']);
   expect(cards[member.user.id]).toEqual({name:'pictured',handle:'pictured',image:avatarUrl({id:member.user.id,image_key:'avatar/deadbeef'})});
-  expect(cards[member.user.id]!.image).toBe(`/api/users/${member.user.id}/avatar?v=deadbeef`);
+  expect(cards[member.user.id]!.image).toBe(new URL(`/api/users/${member.user.id}/avatar?v=deadbeef`, PUBLIC_BASE_URL).href);
   expect(cards[owner.user.id]).toEqual({name:'host',handle:null,image:null});
   // Never invented: an id nobody has is simply absent, and the client says so.
   expect(cards['usr_missing']).toBeUndefined();

@@ -7,6 +7,7 @@
  * draws from the resolved cards, a diagram from the stored drawings.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { RECIPES as controlsRecipes } from '../kit/recipes/controls';
 import { RECIPES as peopleRecipes, peopleClasses } from '../kit/recipes/people';
@@ -15,7 +16,7 @@ import { RECIPES as mermaidRecipes } from '../kit/recipes/mermaid';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Input, Textarea, Segmented, Slider, Switch, DatePicker, BoundNative } from '../kit/controls';
-import { User, UserHandle, SignIn } from '../kit/people';
+import { User, UserImage, UserHandle, SignIn } from '../kit/people';
 import { Files } from '../kit/files';
 import { Mermaid } from '../kit/mermaid';
 
@@ -129,6 +130,39 @@ describe('people and files', () => {
       expect(host.querySelector('a[data-slot="sign-in"]')?.getAttribute('href')).toBe('/login?callbackUrl=%2Fa%2Fdoc%3Fregion%3DWest%23detail');
     } finally { window.history.replaceState({}, '', previous); }
   });
+  it('shows initials when an avatar failed before its error handler attached', () => {
+    const complete = vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
+    const width = vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(0);
+    const island = fakeIsland();
+    island.people = () => ({ usr_ada: { name: 'Ada', handle: 'ada', image: 'https://app.example/api/users/usr_ada/avatar?v=1' } });
+    const { host, dispose } = mount(island, () => <UserImage userId="usr_ada" />);
+    try {
+      expect(host.querySelector('img')).toBeNull();
+      expect(host.querySelector('[data-slot="avatar-fallback"]')?.textContent).toBe('A');
+      expect(host.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Ada');
+    } finally { dispose(); complete.mockRestore(); width.mockRestore(); }
+  });
+  it('keeps one accessible avatar name through picture failure and replacement', () => {
+    const [image, setImage] = createSignal<string | null>(null);
+    const island = fakeIsland();
+    island.people = () => ({ usr_ada: { name: 'Ada', handle: 'ada', image: image() } });
+    const { host, dispose } = mount(island, () => <UserImage userId="usr_ada" />);
+    const avatar = host.querySelector('[role="img"]');
+    try {
+      expect(avatar?.getAttribute('aria-label')).toBe('Ada');
+      setImage('https://app.example/first.webp');
+      expect(host.querySelector('img')?.getAttribute('alt')).toBe('');
+      expect(host.querySelector('img')?.getAttribute('aria-hidden')).toBe('true');
+      host.querySelector('img')!.dispatchEvent(new Event('error'));
+      expect(host.querySelector('img')).toBeNull();
+      expect(avatar?.textContent).toBe('A');
+      setImage('https://app.example/replacement.webp');
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('https://app.example/replacement.webp');
+      expect(host.querySelector('[role="img"]')).toBe(avatar);
+      expect(avatar?.getAttribute('aria-label')).toBe('Ada');
+    } finally { dispose(); }
+  });
+
   it('Files renders the file cards of its table', () => {
     const island = fakeIsland();
     island.table = () => ({ rows: [{ name: 'paper.pdf', size: 1234, url: '/a/x/raw' }], columns: [{ name: 'name', type: 'string' }, { name: 'size', type: 'number' }, { name: 'url', type: 'string' }] });

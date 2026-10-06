@@ -1,3 +1,4 @@
+import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 /**
  * THE PROFILE PICTURE'S THREE DOORS.
  *
@@ -56,7 +57,7 @@ describe('PUT /api/my/profile/image', () => {
     // The key is scoped to the person (lib/avatars); the ADDRESS still carries
     // only the hash, because `avatarVersion` reads the last segment.
     expect(row?.image_key).toBe(`avatar/${user.id}/${avatarVersion(row!.image_key!)}`);
-    expect(body).toEqual({ image: `/api/users/${user.id}/avatar?v=${avatarVersion(row!.image_key!)}` });
+    expect(body).toEqual({ image: new URL(`/api/users/${user.id}/avatar?v=${avatarVersion(row!.image_key!)}`, PUBLIC_BASE_URL).href });
   });
 
   it('is session-only and same-site only', async () => {
@@ -180,7 +181,7 @@ describe('GET/PATCH /api/my/profile', () => {
     await putImage(await png(60, 60));
     const version = avatarVersion((await getUserById(user.id))!.image_key!);
     expect(await (await getProfile(request('/api/my/profile'))).json()).toMatchObject({
-      image: `/api/users/${user.id}/avatar?v=${version}`,
+      image: new URL(`/api/users/${user.id}/avatar?v=${version}`, PUBLIC_BASE_URL).href,
     });
   });
 

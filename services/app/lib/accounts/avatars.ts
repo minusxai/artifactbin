@@ -19,6 +19,7 @@
  * invent a second address for one.
  */
 import sharp from 'sharp';
+import { PUBLIC_BASE_URL } from '../platform/config';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { getDb } from '../platform/db';
 import { objectKey, objectStore, type ObjectStore } from '../object-store/index';
@@ -31,12 +32,12 @@ export const avatarPath = (userId: string): string => `/api/users/${encodeURICom
 export const avatarVersion = (imageKey: string): string => imageKey.slice(imageKey.lastIndexOf('/') + 1);
 
 /**
- * The public URL of a person's picture, or null when they have none (the
+ * An absolute app URL: documents render on their own origin. Null when they have none (the
  * client draws a generated initial instead — never a broken image).
  */
 export function avatarUrl(row: { id: string; image_key: string | null }): string | null {
   if (!row.image_key) return null;
-  return `${avatarPath(row.id)}?v=${encodeURIComponent(avatarVersion(row.image_key))}`;
+  return new URL(`${avatarPath(row.id)}?v=${encodeURIComponent(avatarVersion(row.image_key))}`, PUBLIC_BASE_URL).href;
 }
 
 /**

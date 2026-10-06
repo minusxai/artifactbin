@@ -12,11 +12,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
 import { syncProfile } from '@/lib/accounts';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
-import { avatarUrl, setAvatar } from '@/lib/accounts';
+import { avatarUrl, avatarVersion, setAvatar } from '@/lib/accounts';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
 import { createTestUser, eraseTestUser } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
+import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
 import sharp from 'sharp';
 
@@ -103,10 +104,10 @@ describe('GET /api/page/session — user', () => {
     expect((await getUserById(user.id))?.username).toBeNull();
 
     await (await getDb()).query("UPDATE users SET username = 'sessionpic' WHERE id = $1", [user.id]);
-    await setAvatar(user.id, await png(), 'image/png');
+    const { key } = await setAvatar(user.id, await png(), 'image/png');
     const row = await getUserById(user.id);
     const image = avatarUrl(row!);
-    expect(image).toMatch(/^\/api\/users\//);
+    expect(image).toBe(new URL(`/api/users/${user.id}/avatar?v=${avatarVersion(key)}`, PUBLIC_BASE_URL).href);
     expect((await body()).user).toEqual({ id: user.id, email: user.email, username: 'sessionpic', image });
   });
 

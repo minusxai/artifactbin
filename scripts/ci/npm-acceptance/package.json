@@ -3,15 +3,20 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "typescript": "5.9.3",
-    "tsx": "4.23.11",
-    "@types/node": "22.20.2",
-    "parse5": "8.0.1",
-    "hono": "4.13.5",
-    "@hono/node-server": "2.1.1",
-    "sharp": "0.35.4",
-    "playwright": "npm:playwright-core@1.62.1",
     "@artifactbin/contracts": "file:../../../services/contracts",
-    "@artifactbin/utils": "file:../../../services/utils"
+    "@artifactbin/utils": "file:../../../services/utils",
+    "@hono/node-server": "2.1.1",
+    "@types/node": "22.20.2",
+    "acorn": "8.18.0",
+    "acorn-jsx": "5.3.2",
+    "d3-format": "3.1.2",
+    "hono": "4.13.5",
+    "parse5": "8.0.1",
+    "playwright": "npm:playwright-core@1.62.1",
+    "sharp": "0.35.4",
+    "topojson-client": "3.1.0",
+    "tsx": "4.23.11",
+    "typebox": "1.1.37",
+    "typescript": "5.9.3"
   }
 }
