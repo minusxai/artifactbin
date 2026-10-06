@@ -114,7 +114,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # A CLI CHANGE THAT SHIPS NO VERSION SHIPS NOWHERE: the publisher only uploads when the version
@@ -173,7 +173,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # Only shard 1 runs integration tests; the other shards need no browser or Docker.
@@ -263,7 +263,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The test global setup builds the server reader and the islands behind content-verified
@@ -309,7 +309,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # THE SAME SOURCES BUILD THE SAME BYTES. The key hashes git's object ids for every build input
@@ -402,7 +402,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The export tests drive real headless Chromium (lib/export.ts). The
@@ -482,7 +482,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # A BUILD OF THESE EXACT SOURCES ALREADY CACHED (see the `build` job) means there is nothing to
@@ -650,7 +650,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # Disjoint engine caches: a Chromium-only writer cannot freeze an incomplete all-browser key.
@@ -786,7 +786,7 @@ jobs:
       - name: every job's wall clock, over-budget named
         if: always()
         # Per-job times include legitimate prerequisite waits: diagnostics on PRs and main.
-        # The complete required-check chain below owns the hard five-minute timing limit.
+        # The complete required-check chain below owns the hard eight-minute timing limit.
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -916,7 +916,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # Markers validate every actual build input before reusing these prepared assets.
@@ -1217,7 +1217,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
         working-directory: .

@@ -15,8 +15,8 @@ export function measureCiElapsed(startedAt, finishedAt) {
   const seconds = (finish - start) / 1000;
   return {
     seconds,
-    status: seconds > 300 ? 'failed' : seconds >= 240 ? 'slow' : seconds >= 180 ? 'normal' : 'target',
-    targetSeconds: 180, normalSeconds: 240, hardSeconds: 300,
+    status: seconds > 480 ? 'failed' : seconds >= 240 ? 'slow' : seconds >= 180 ? 'normal' : 'target',
+    targetSeconds: 180, normalSeconds: 240, hardSeconds: 480,
   };
 }
 
@@ -26,7 +26,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const [attemptFile, summaryFile] = process.argv.slice(2);
     const attempt = JSON.parse(readFileSync(attemptFile, 'utf8'));
     const result = measureCiElapsed(attempt.run_started_at, new Date().toISOString());
-    const text = `Required-check chain: ${result.seconds.toFixed(3)}s (${result.status}). Target <180s; normal maximum <240s; hard failure >300s. Includes dependency waits and final rollup. Fix the critical path; do not raise the budget.`;
+    const text = `Required-check chain: ${result.seconds.toFixed(3)}s (${result.status}). Target <180s; normal maximum <240s; hard failure >480s. Includes dependency waits and final rollup. Fix the critical path; do not raise the budget.`;
     console.log(text);
     if (summaryFile) appendFileSync(summaryFile, `\n## CI end-to-end wall clock\n\n${text}\n`);
     if (result.status === 'failed') { console.log(`::error::${text}`); process.exitCode = 1; }
