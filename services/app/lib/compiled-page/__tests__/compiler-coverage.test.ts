@@ -57,6 +57,9 @@ const columnParity = (html: string, input: CompileInput, values: Record<string, 
   const column = dom(html).querySelector('.mx-doc')!;
   const react = new JSDOM(`<div>${todays(input, values)}</div>`).window.document.body.firstElementChild!;
   for (const root of [column, react]) for (const id of drop) root.querySelector(`#${id}`)?.remove();
+  // Width constraints are a deliberate addition to the static Slide recipe; the retired React
+  // oracle predates that reader sizing contract, so compare the slides' remaining rendered shape.
+  for (const root of [column, react]) for (const slide of root.querySelectorAll('[data-mx-slide]')) slide.classList.remove('w-full', 'min-w-0');
   return diffShapes(shapeOf(react), shapeOf(column));
 };
 
@@ -111,6 +114,21 @@ describe('a wrapper is today\'s render around its compiled children', () => {
     expect(page.islands.length).toBeGreaterThan(0);
     expect(columnParity(page.html, input, { who: 'Ada' })).toEqual([]);
     expect(dom(page.html).querySelector('.mx-doc #h')?.textContent).toBe('Hello Ada');
+  });
+
+  it('bounds each slide to the deck track while preserving its viewport-height recipe', async () => {
+    const source = '<Helmet><Query name="plot">{`select 1 as amount`}</Query></Helmet><SlideDeck id="d">'
+      + Array.from({ length: 5 }, (_, i) => `<Slide title="Slide ${i + 1}" id="s${i + 1}"><h2>Slide ${i + 1}</h2></Slide>`).join('')
+      + '<Slide title="Chart" id="s6"><Question data="$plot" viz={{"kind":"vega-lite","spec":{"mark":{"type":"bar"}}}} height="320px" /></Slide></SlideDeck>';
+    const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());
+    expect(page.unported).toEqual([]);
+    const slides = [...dom(page.html).querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
+    expect(slides).toHaveLength(6);
+    for (const slide of slides) {
+      expect(slide.classList.contains('w-full')).toBe(true);
+      expect(slide.classList.contains('min-w-0')).toBe(true);
+      expect(slide.classList.contains('min-h-[var(--mx-vh,760px)]')).toBe(true);
+    }
   });
 
   it('a data-bound deck: the rail thumbnails render as today\'s rail does (declared values, static faces) and the deck behaviour still drives the slides', async () => {
