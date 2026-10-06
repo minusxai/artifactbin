@@ -326,6 +326,16 @@ describe('markdown block shortcuts', () => {
     expect(e.view.container.querySelector('pre + p')?.textContent).toBe('After code');
   });
 
+  it('preserves code newlines and indentation when native typing changes the DOM', async () => {
+    const e = editor('<pre id="code"># literal\n  codeCode</pre>');
+    const text = e.view.container.querySelector('pre')!.firstChild!;
+    // Native browser input is read by ProseMirror's mutation observer, unlike command insertion.
+    text.nodeValue = '# literal\n  codeXCode';
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flushFlowView(e.v());
+    expect(e.store.current()).toBe('<pre id="code"># literal\n  codeXCode</pre>');
+  });
+
   it('wraps a paragraph in a blockquote and exits an empty quote', () => {
     const e = editor('<p id="quote"></p>');
     e.type('> Quoted');

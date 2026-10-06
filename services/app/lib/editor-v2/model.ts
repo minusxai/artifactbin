@@ -66,6 +66,10 @@ const SYNTHETIC_RUN_DOM = { 'data-mx-synthetic': '', style: 'display: contents' 
 const paragraph: NodeSpec = {
   group: 'block',
   content: 'inline*',
+  // All editable textblocks use pre-wrap. Preserve native DOM input verbatim;
+  // textblock() separately collapses authored prose whitespace on source import.
+  // In particular, a browser mutation must not turn a code newline into a space.
+  whitespace: 'pre',
   attrs: metadata,
   toDOM: (node) => (node.attrs.synthetic ? ['span', SYNTHETIC_RUN_DOM, 0] : [node.attrs.tag, domAttributes(node), 0]),
   parseDOM: [...blockTags].map((tag) => ({ tag, getAttrs: () => ({ tag }) })),

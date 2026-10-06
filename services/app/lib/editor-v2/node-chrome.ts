@@ -239,9 +239,19 @@ export function createNodeChrome(
       return;
     }
     const r = target.getBoundingClientRect();
+    const outside = gripOutside(target, r);
+    // An inset grip must not take clicks from a checklist or another control.
+    // Such blocks still have the explicit selection/keyboard path for moving.
+    if (!outside && [...target.querySelectorAll('input,button,select,textarea,a[href],[role="button"],[role="checkbox"]')].some(control => {
+      const c = control.getBoundingClientRect();
+      return c.width > 0 && c.height > 0 && c.left < r.left + GRIP && c.right > r.left && c.top < r.top + GRIP && c.bottom > r.top;
+    })) {
+      gripRoot.style.display = 'none';
+      return;
+    }
     Object.assign(gripRoot.style, {
       display: 'block',
-      left: `${gripOutside(target, r) ? r.left - GRIP : r.left}px`,
+      left: `${outside ? r.left - GRIP : r.left}px`,
       top: `${r.top}px`,
     });
   };
