@@ -43,7 +43,12 @@ export interface ThreeBundle {
   DirectionalLight: new (color: number, intensity: number) => Object3D;
   Vector3: new () => Vec3;
   Box3: new () => Box3;
-  GLTFLoader: new () => { parseAsync(data: ArrayBuffer, path: string): Promise<{ scene: Object3D }> };
+  GLTFLoader: new () => {
+    parseAsync(data: ArrayBuffer, path: string): Promise<{ scene: Object3D }>;
+    setMeshoptDecoder(decoder: unknown): unknown;
+  };
+  /** Decodes meshopt-compressed geometry; a glb that requires it cannot load without it. */
+  MeshoptDecoder: unknown;
   OrbitControls: new (camera: Object3D, element: HTMLElement) => {
     enableDamping: boolean;
     update(): void;

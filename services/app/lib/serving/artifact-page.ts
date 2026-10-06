@@ -301,9 +301,11 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     dataPreview,
     columns: meta.columns ?? [],
     ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:publicCatalogOf(artifact)!}:{}),
-    // A stored FILE is not a document the app can render, so its view is the
-    // two facts a person picks a file by plus the link that opens it.
+    // A stored FILE is not a document the app renders: its page shows the two
+    // facts a person picks a file by, the link that opens it, and the browser's viewer.
     ...(artifact.format === 'pdf' || artifact.format === 'file' ? { bytes: (meta as { bytes?: number }).bytes ?? 0, pages: (meta as { pages?: number }).pages ?? null } : {}),
+    // Its name picks the page's viewer (solid/components/FileViewer) by extension.
+    ...(artifact.format === 'file' && typeof (meta as { filename?: unknown }).filename === 'string' ? { filename: (meta as { filename: string }).filename } : {}),
     theme: design.theme,
     colorMode: design.colorMode,
     template: meta.template ?? null,

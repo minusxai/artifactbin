@@ -30,7 +30,10 @@ export default function ModelPreview(props: { source: Blob | string; title: stri
         scene.add(sun);
         const bytes = typeof source === 'string' ? await (await fetch(source)).arrayBuffer() : await source.arrayBuffer();
         if (disposed) return;
-        const { scene: model } = await new THREE.GLTFLoader().parseAsync(bytes, '');
+        const loader = new THREE.GLTFLoader();
+        // Optimized exports (gltfpack, gltf-transform) compress their geometry with meshopt.
+        loader.setMeshoptDecoder(THREE.MeshoptDecoder);
+        const { scene: model } = await loader.parseAsync(bytes, '');
         if (disposed) return;
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
