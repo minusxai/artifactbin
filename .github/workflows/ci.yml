@@ -1159,10 +1159,10 @@ jobs:
       # Windows Restricted bootstrap runs on its own required runner above.
       - name: Same-tarball native npm and warmed offline acceptance
         if: matrix.phase == 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --dependency-seed "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
+        run: npm run test:npm-package -w services/cli -- --ci --dependency-seed "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
       - name: Install the same candidate for experience checks
         if: matrix.phase != 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-seed "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar"
+        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-seed "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar"
       - name: Installed npm runtime boundary, terminal exit and declarations
         if: matrix.phase == 'runtime'
         working-directory: services/cli

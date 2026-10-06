@@ -60,7 +60,9 @@ queues or rerun unchanged code to hide a slow run. Report cold and warm timings 
 - **Bound investigation:** scoped `rg -l`/`rg -n`, output limits, targeted sections; skip fixtures,
   transcripts, generated assets and dependencies unless relevant; batch reads, never repeat a search.
 - Changing pinned docs/copy/errors: find their tests and gates (`buildQuickSheet`, `agentDiscovery`,
-  `renderDoc`, exact text) and update them together. PR bodies stay empty, with no descriptive PR
+  `renderDoc`, exact text) and update them together. Skill guide edits also run
+  `services/app/lib/__tests__/skill-tree.test.ts`: each rendered guide must stay within 8,192 bytes.
+  PR bodies stay empty, with no descriptive PR
   comments unless requested. Reuse only the task's own current dev server.
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a

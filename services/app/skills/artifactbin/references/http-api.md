@@ -13,7 +13,7 @@ Use your selected server, `[[ base ]]`, for all requests. JSON calls send `Conte
 3. `POST /api/authentication/token` with those cookies and the selected server's Origin. Only verified email account sessions qualify. The response contains `access_token`, `token_type: "Bearer"`, `expires_in` (seconds), and `scope: "artifacts"`.
 4. Use `Authorization: Bearer <access_token>` on this server's `/api` requests. Do not put bearer secrets in URLs, documents or logs. On expiry, repeat email authentication; this flow does not issue refresh tokens. `POST /api/auth/sign-out` closes the temporary session without revoking the separately issued bearer.
 
-The CLI has a separate authentication entry: `afbin auth` opens browser approval and may continue as a guest. A valid CLI capability can use HTTP internally; User-Agent or caller-provided headers do not determine whether a credential is allowed.
+CLI browser approval may allow guests; its capabilities can call HTTP internally. User-Agent and caller-supplied headers never authorize a credential.
 
 ## Operations
 
@@ -23,7 +23,7 @@ The CLI has a separate authentication entry: `afbin auth` opens browser approval
 - `PUT /api/artifacts/<id>`: update datasets/media conditionally. Include observed `expectedVersion` and `expectedState` with the new content. A 409 requires reconciliation.
 - `POST /api/artifacts/<id>/prepare`: send complete edited JSX as `source` plus observed `edit_id` and `expectedVersion`; receive `document_update` without saving. Submit that exact update with its `edit_id` to `POST /api/artifacts/<id>/edits`. Preserve element IDs and reconcile a 409 rather than overwriting.
 - Dataset policy changes use `GET /api/artifacts/<id>/policy` to observe `revision`, then a separate `PUT /api/artifacts/<id>/policy` with `policy` and `expectedPolicyRevision`; do not combine policy with content.
-- Markup changes require a prepared `document_update` graph with observed reads/claims and stable node identity. Raw replacement markup does not replace that contract. Read [direct JSX authoring](http-authoring.md) and [the graph wire contract](http-document-graph.md) to prepare it without invoking the CLI.
+- Markup edits preserve graph reads/claims and node identity; raw JSX does not replace that contract. See [JSX authoring](http-authoring.md) and [graph wire fields](http-document-graph.md).
 - `GET/POST /api/artifacts/<id>/annotations`: read/create comments; document permissions still apply. Creation requires a body and node or quote anchor.
 - `DELETE /api/artifacts/<id>`: move to trash.
 
@@ -59,7 +59,7 @@ Create with `POST /api/artifacts/<id>/annotations` and `{"body":"Please clarify 
 
 Reply or transition with **POST** `/api/artifacts/<id>/annotations/<annotation_id>` using the root ID and last `expected_revision`. Send `reply`, `resolve:true` or `reopen:true`; a reply may combine with one transition, never resolve and reopen together. Use each returned revision. A `409 annotation_conflict` includes `current_revision`; re-read and reconcile before retrying.
 
-This executable example uses an existing `artifactId` and its `nodeId`, plus `base` and the private `accessToken` from email authentication:
+Example: existing `artifactId` and `nodeId`, with `base` and private `accessToken` from email authentication:
 
 ```js
 // BEGIN HTTP COMMENTS
@@ -83,4 +83,4 @@ An optional `Idempotency-Key` recovers an uncertain create/reply; retry with the
 Local file and CLI commands do not call these endpoints. Publishing is explicit; HTTP requires access to the selected server.
 
 
-For direct JSX creation, reservation and executable editing examples, read [HTTP authoring](http-authoring.md). The exact wire fields and concurrency obligations are in [document graphs](http-document-graph.md). All three HTTP guides are served together in `/llms.txt`.
+[HTTP authoring](http-authoring.md) covers creation and edits; [document graphs](http-document-graph.md) defines wire fields and concurrency. These guides are in `/llms.txt`.

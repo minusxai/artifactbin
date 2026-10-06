@@ -74,6 +74,8 @@ it('reuses only public platform archives and still uploads them from the current
  const consumers=jobs.cli.steps.filter(step=>['Same-tarball native npm and warmed offline acceptance','Install the same candidate for experience checks'].includes(step.name));
  expect(consumers).toHaveLength(2);
  expect(consumers.every(step=>step.run.includes('--dependency-seed'))).toBe(true);
+ // npm -w changes cwd: hand the root-downloaded archive across that boundary absolutely.
+ expect(consumers.every(step=>step.run.includes('--dependency-seed "${{ github.workspace }}/'))).toBe(true);
  expect(consumers.every(step=>step.run.includes('npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar'))).toBe(true);
  expect(jobs.cli.steps.some(step=>step.run?.includes('merge-seed'))).toBe(false);
 });
