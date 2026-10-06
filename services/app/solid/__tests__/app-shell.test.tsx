@@ -42,6 +42,7 @@ describe('Solid shell', () => {
     });
     window.history.replaceState(null, '', '/trash');
     render(() => <App />);
+    await vi.dynamicImportSettled();
     const nav = await screen.findByRole('navigation', { name: 'Workspace' });
     expect(await within(nav).findByLabelText('2 connected agents')).toHaveTextContent('2');
     expect(await within(nav).findByLabelText('3 unread notifications')).toHaveTextContent('3');

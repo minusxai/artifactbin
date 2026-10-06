@@ -14,6 +14,7 @@ it('serves the human tour with current templates, live design systems and a link
   vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/page/session' ? Response.json({ user: null, kind: 'none', onboarded: true }) : Response.json({})));
   window.history.replaceState(null, '', '/docs-human');
   render(() => <App />);
+  await vi.dynamicImportSettled();
   const main = await screen.findByRole('main');
   expect(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('link', { name: 'Human docs' })).toHaveAttribute('aria-current', 'page');
   for (const system of STORY_SYSTEMS) {

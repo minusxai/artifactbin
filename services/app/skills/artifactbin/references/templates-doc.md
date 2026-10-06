@@ -4,6 +4,8 @@ description: A plain document for notes, drafts and everyday writing.
 ---
 ## Read first
 
+[[ template.description ]]
+
 Use `template: doc` for a quick document, meeting notes, a draft or an everyday
 text page. It is the simplest writing surface: one headline and a flowing body.
 Keep the selected type when filling a document someone created in the app.

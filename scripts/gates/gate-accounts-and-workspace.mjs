@@ -6,7 +6,7 @@
  * the account they verify. Each leg below is a different person, so they run at once in one browser (the
  * setup-guide leg in its own, for the system clipboard), over one mail sink:
  *
- *   start    the setup guide makes a document and copies a tokenless paste; HTTP creation hands out no
+ *   start    the guest start page makes a document and copies a tokenless paste; HTTP creation hands out no
  *            credential; the browser approves the CLI for its guest; the page fills in live when the agent
  *            writes (formerly gate-simpler-start).
  *   door     the OAuth consent screen in a real browser — no guest grant, a signed-out visitor sent to log in,
@@ -68,18 +68,16 @@ async function startLeg() {
     await run(async () => {
       const page = await own.newPage({ viewport: { width: 1280, height: 900 } });
       await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
-      await page.goto(`${BASE}/docs-human`, { waitUntil: 'load' });
-      const create = page.getByRole('button', { name: 'Create a live document for my agent', exact: true });
-      await create.waitFor();
       const startRespP = page.waitForResponse((r) => r.url().includes('/api/start') && r.request().method() === 'POST', { timeout: 30_000 });
-      await create.click();
+      await page.goto(`${BASE}/start?agent=1`, { waitUntil: 'load' });
       const startRes = await startRespP;
       const started = await startRes.json();
+      await page.getByRole('button', { name: 'Copy agent instructions', exact: true }).click();
       await page.waitForFunction(id => navigator.clipboard.readText().then(text => text.includes(`/a/${id}`)), started.id);
       const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 
       const id = started.id;
-      must(!!id, 'the create button makes a real document');
+      must(!!id, 'the guest start page makes a real document');
       check(!('token' in started) && !('expiresAt' in started), 'and the API body hands out NO credential and no expiry');
       check(!/mx_/.test(JSON.stringify(started)), 'nothing token-shaped rides the response at all');
       check(/HttpOnly/i.test((await startRes.allHeaders())['set-cookie'] ?? ''), 'guest ownership stays in an HttpOnly cookie');

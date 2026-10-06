@@ -3,7 +3,6 @@
 import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Navigate, Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { useParams, useLocation } from '@solidjs/router';
-import WorkspaceShell from './components/WorkspaceShell';
 import { SessionProvider } from './lib/session';
 import { usePageIntentPreload } from './lib/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
@@ -11,6 +10,8 @@ import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './lib/notifications';
 import { dropServedFrameOnRoute, servedDocumentFrame } from '@/web/served-frame';
 
+// Workspace menus and dialogs are not part of a document reader's startup bundle.
+const WorkspaceShell = lazy(() => import('./components/WorkspaceShell'));
 const TrashPage = lazy(() => import('./pages/Trash').then((m) => ({ default: m.TrashPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFoundPage })));
 const LoginPage = lazy(() => import('./pages/Login').then((m) => ({ default: m.LoginPage })));
@@ -64,7 +65,7 @@ function Root(props: RouteSectionProps): JSX.Element {
       <ChromeVisibilityContext.Provider value={setShowChrome}>
         <Show when={!documentRoute() && showChrome()}><PageChrome /></Show>
         <ErrorBoundary fallback={(_, reset) => <main class="mx-auto max-w-5xl px-4 py-10" role="alert">Could not load this page. <button aria-label="Retry loading page" onClick={reset}>Retry</button></main>}>
-          <Show when={workspaceRoute()} fallback={<Suspense fallback={<PendingPage />}>{props.children}</Suspense>}><WorkspaceShell><Suspense fallback={<PendingPage />}>{props.children}</Suspense></WorkspaceShell></Show>
+          <Show when={workspaceRoute()} fallback={<Suspense fallback={<PendingPage />}>{props.children}</Suspense>}><Suspense fallback={<PendingPage />}><WorkspaceShell><Suspense fallback={<PendingPage />}>{props.children}</Suspense></WorkspaceShell></Suspense></Show>
         </ErrorBoundary>
       </ChromeVisibilityContext.Provider>
     </OnboardingGate>

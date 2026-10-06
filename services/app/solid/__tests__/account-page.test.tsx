@@ -16,6 +16,7 @@ it('loads the account handle late while keeping the photo and data controls moun
   }));
   window.history.replaceState(null, '', '/account');
   const view = render(() => <App />);
+  await vi.dynamicImportSettled();
   expect(await screen.findByRole('button', { name: 'Upload a photo' })).toBeInTheDocument();
   await waitFor(() => expect((screen.getByRole('textbox', { name: 'Username' }) as HTMLInputElement).value).toBe('owner'));
   expect(view.container.querySelector('img[src="/api/users/usr_1/avatar?v=1"]')).toBeInTheDocument();
