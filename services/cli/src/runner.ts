@@ -1,4 +1,4 @@
-import {remoteRequestInput} from './remote-context';
+import {deliverRemoteInput} from './remote-input';
 import { randomBytes } from "node:crypto";
 import headless from "@xterm/headless";
 import serialize from "@xterm/addon-serialize";
@@ -218,13 +218,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
                 rows = item.rows!;
                 resizePty();
               } else if (item.kind === "input") {
-                const data = item.source==='comment'&&options.commentCommand?remoteRequestInput(item.data!,options.commentCommand):item.data!;
-                if (data.length > 1 && data.endsWith("\r")) {
-                  // TUIs can interpret text plus Enter in one burst as a multiline paste.
-                  child.write(data.slice(0, -1));
-                  await delay(200);
-                  if (exitCode === undefined) child.write("\r");
-                } else child.write(data);
+                await deliverRemoteInput(child.write.bind(child),item.data!,{source:item.source,command,managed:options.managed,commentCommand:options.commentCommand,canWrite:()=>exitCode===undefined});
               }
             }
             ack = item.id;
