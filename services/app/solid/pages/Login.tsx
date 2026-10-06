@@ -30,9 +30,20 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
   };
   const verify = async () => {
     setBusy(true); setError(null);
-    const response = await apiFetch('/api/auth/sign-in/email-otp', 'POST', { email: email(), otp: code() }).catch(() => null);
-    setBusy(false);
-    if (!response?.ok) { setError('That code isn’t right, or it expired. Request a new one.'); return; }
+    try {
+      const response = await apiFetch('/api/auth/sign-in/email-otp', 'POST', { email: email(), otp: code() });
+      if (!response.ok) {
+        setError(response.status >= 500
+          ? 'The server is temporarily unavailable. Your code is still here; try again.'
+          : 'That code isn’t right, or it expired. Request a new one.');
+        return;
+      }
+    } catch {
+      setError('Couldn’t reach the server. Your code is still here; try again.');
+      return;
+    } finally {
+      setBusy(false);
+    }
     if(props.onAuthenticated)props.onAuthenticated();
     else window.location.href = internalRedirectTarget(new URLSearchParams(window.location.search).get('callbackUrl'), window.location.origin);
   };
