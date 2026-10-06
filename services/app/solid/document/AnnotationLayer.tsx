@@ -739,7 +739,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           <For each={placedIds()}>{(id) => (
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={recentResolved()[id]?.remaining}
-                hovered={hoverId() === id} onOpen={() => openThread(id)} onHover={hoverUi} />
+                hovered={hoverId() === id} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi} />
             )}</Show>
           )}</For>
         </div>

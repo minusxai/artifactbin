@@ -39,7 +39,7 @@ export const COMMENT_PRESENTATION = {
   `.mx-taking-screenshot [data-mx-selection-actions], .mx-taking-screenshot [data-mx-annotate-band], .mx-taking-screenshot [data-mx-annotation-area] { visibility: hidden !important; }`,
   `.mx-taking-screenshot [data-mx-annotated], .mx-taking-screenshot [data-mx-annotate-selected], .mx-taking-screenshot [data-mx-annotate-pick-hover] { outline: none !important; }`,
   // Annotation paint must never replace an authored background or image.
-  `[data-mx-annotated]:not([data-mx-annotation-ranged]) { outline: 1px solid rgba(245, 158, 11, .45); outline-offset: 3px; }`,
+  `[data-mx-annotated]:not([data-mx-annotation-ranged]) { outline: 1px solid rgba(245, 158, 11, .15); outline-offset: 3px; }`,
   `[data-mx-annotation-open]:not([data-mx-annotation-ranged]), [data-mx-annotation-hover]:not([data-mx-annotation-ranged]) { ${SELECTION_PRESENTATION.selectedCss} }`,
   `[data-mx-annotate-selected] { ${SELECTION_PRESENTATION.selectedCss} }`,
   // The pick: a crosshair everywhere, and an outline on the block under it. The
@@ -51,13 +51,13 @@ export const COMMENT_PRESENTATION = {
   `[data-mx-annotate-pick-hover][data-mx-annotate-pick-hover] { ${SELECTION_PRESENTATION.selectedCss} }`,
 ].join('\n'),
   highlightFill: {
-  base: 'rgba(245, 158, 11, 0.28)',
+  base: 'rgba(245, 158, 11, 0.1)',
   hover: 'rgba(245, 158, 11, 0.42)',
   open: 'rgba(245, 158, 11, 0.52)',
 },
   bandStyle: { background: 'rgba(59, 130, 246, 0.10)', outline: 'rgba(59, 130, 246, 0.9)' },
   areaFill: {
-  base: { background: 'rgba(245, 158, 11, 0.12)', outline: '2px solid rgba(245, 158, 11, 0.6)' },
+  base: { background: 'rgba(245, 158, 11, 0.15)', outline: '2px solid rgba(245, 158, 11, 0.2)' },
   hover: { background: 'rgba(245, 158, 11, 0.2)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
   open: { background: 'rgba(245, 158, 11, 0.26)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
 },
