@@ -357,7 +357,8 @@ describe('DataTable', () => {
     expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
     // Today's DataTableAdapter wrapper holds the author identity; the kit table inside it is the helper's bare kit render.
     const wrapper = host.firstElementChild!;
-    expect(Object.fromEntries([...wrapper.attributes].map((a) => [a.name, a.value]))).toEqual({ id: 'dIQl', 'aria-label': 'DataTable embed', 'aria-busy': 'false', style: 'width:100%' });
+    expect((wrapper as HTMLElement).style.minWidth).toBe('0px');
+    expect(Object.fromEntries([...wrapper.attributes].map((a) => [a.name, a.value]))).toEqual({ id: 'dIQl', 'aria-label': 'DataTable embed', 'aria-busy': 'false', style: 'width:100%;min-width:0' });
     const grid = wrapper.querySelector('[data-slot="data-table"]')!;
     expect([grid.getAttribute('aria-label'), grid.hasAttribute('id')]).toEqual(['Data grid', false]);
     expect((grid.firstElementChild as HTMLElement).style.maxHeight).toBe('300px');
@@ -365,6 +366,10 @@ describe('DataTable', () => {
       .toEqual([['col', 'Sort by month', 'none', 'left'], ['col', 'Sort by revenue', 'none', 'right'], ['col', 'Sort by units', 'none', 'right']]);
     expect([...grid.querySelectorAll('tbody tr')].map((tr) => [tr.getAttribute('data-index'), [...tr.querySelectorAll('td')].map((td) => td.textContent)]))
       .toEqual([['0', ['2025-01-01', '120', '3']], ['1', ['2025-02-01', '160', '4']]]);
+  });
+  it('keeps grid fill while constraining the table wrapper', () => {
+    const { host } = mount(undefined, () => <DataTable data="$monthly" id="grid-table" inGridItem />);
+    expect(host.querySelector('#grid-table')?.getAttribute('style')).toBe('width:100%;height:100%;min-width:0');
   });
 });
 
@@ -736,7 +741,7 @@ describe('data widget parity with the live reader', () => {
   it('DataTable says why it has no table, inside today\'s adapter wrapper', () => {
     const ctx = island(); ctx.table = () => undefined; ctx.error = (n) => (n === 'monthly' ? 'boom' : undefined);
     const { host } = mount(ctx, () => <DataTable data="$monthly" id="t" />);
-    expect(attrsOf(host.firstElementChild)).toMatchObject({ id: 't', 'aria-label': 'DataTable embed', style: 'width:100%' });
+    expect(attrsOf(host.firstElementChild)).toMatchObject({ id: 't', 'aria-label': 'DataTable embed', style: 'width:100%;min-width:0' });
     expect(host.textContent).toBe('query "monthly" failed: boom');
   });
 });

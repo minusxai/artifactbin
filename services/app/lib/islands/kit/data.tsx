@@ -95,7 +95,7 @@ export function DataTable(props: DataTableProps) {
   const name = () => nameOf(props.data);
   const table = () => island.table(name());
   const busy = () => !!name() && island.pending(name());
-  const wrapper = () => (props.inGridItem ? 'width:100%;height:100%' : 'width:100%');
+  const wrapper = () => (props.inGridItem ? 'width:100%;height:100%;min-width:0' : 'width:100%;min-width:0');
   return <Show when={!!table()} fallback={
     <div {...rootProps(props)} aria-label="DataTable embed" class="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" {...attr('attr:style', wrapper())}>
       <Switch fallback={`data unavailable — "$${name()}" has no rows yet`}>
