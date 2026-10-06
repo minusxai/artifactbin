@@ -74,7 +74,7 @@ export class HttpClient {
    if(address===apiUrl&&this.options.onRelease){
     const version=response.headers.get('X-Artifactbin-CLI-Version'),wireProtocol=response.headers.get('X-Artifactbin-Protocol');
     const releaseProtocol=wireProtocol&&/^[1-9][0-9]*$/.test(wireProtocol)?Number(wireProtocol):NaN;
-    if(validVersion(version)&&Number.isSafeInteger(releaseProtocol))try{await this.options.onRelease({version,protocol:releaseProtocol});}catch{/* Notices cannot affect request success. */}
+    if(validVersion(version)&&Number.isSafeInteger(releaseProtocol))try{await this.options.onRelease({version,protocol:releaseProtocol});}catch{/* Release observations cannot affect request success. */}
    }
    if(imageExport&&response.status===302){
     const asset=new URL(response.headers.get('location')??'',url);

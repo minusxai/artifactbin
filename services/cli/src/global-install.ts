@@ -14,7 +14,7 @@ import {chmod,copyFile,lstat,mkdir,open,readFile,rename,unlink as unlinkFile,wri
 import {dirname,join,posix,win32} from 'node:path';
 import {configDir} from './config';
 
-export type NpmRunner=(args:string[],options:{env:NodeJS.ProcessEnv})=>Promise<{code:number;stdout:string;stderr:string}>;
+export type NpmRunner=(args:string[],options:{env:NodeJS.ProcessEnv;timeoutMs?:number})=>Promise<{code:number;stdout:string;stderr:string}>;
 export type InstallKind='package'|'dev';
 export interface GlobalInstallResult {status:'installed'|'failed';version:string;prefix:string;bin:string;on_path:boolean;fallback:boolean;reason?:string;path_line?:string}
 export type FoundAfbin={path:string;kind:'standalone'|'forwarder'|'npm'};
@@ -37,18 +37,32 @@ export function installKind(entry:string=process.argv[1]??''):InstallKind{
  * npm without a shell. Under npx (how setup runs) npm names its own CLI in npm_execpath, which this
  * Node runs directly; Windows refuses to spawn npm.cmd without a shell, so it uses npm's CLI beside node.
  */
-export const defaultNpm:NpmRunner=(args,{env})=>{
+export const defaultNpm:NpmRunner=(args,{env,timeoutMs})=>{
  const bundled=process.platform==='win32'?win32.join(dirname(process.execPath),'node_modules','npm','bin','npm-cli.js'):undefined;
  // Only npm's own CLI: under pnpm dlx or yarn dlx npm_execpath names that tool instead.
  const script=env.npm_execpath&&/(^|[\\/])npm(-cli)?\.c?js$/.test(env.npm_execpath)?env.npm_execpath:bundled&&existsSync(bundled)?bundled:undefined;
  const [file,argv]=script?[process.execPath,[script,...args]]:['npm',args];
  return new Promise(resolve=>{
-  execFile(file,argv,{env,maxBuffer:16*1024*1024,windowsHide:true},(error,stdout,stderr)=>{
+  execFile(file,argv,{env,maxBuffer:16*1024*1024,windowsHide:true,...(timeoutMs?{timeout:timeoutMs,killSignal:'SIGKILL' as const}:{})},(error,stdout,stderr)=>{
    const code=!error?0:typeof error.code==='number'?error.code:1;
    resolve({code,stdout:String(stdout??''),stderr:String(stderr??'')+(error&&typeof error.code==='string'?`\n${error.code==='ENOENT'?'npm was not found on PATH.':error.message}`:'')});
   });
  });
 };
+
+/** Auto-update only the running npm global installation, including setup's private fallback prefix. */
+export async function automaticInstallPrefix(options:{entry:string;home:string;env:NodeJS.ProcessEnv;platform?:string;npm:NpmRunner;timeoutMs:number}):Promise<string|undefined>{
+ if(installKind(options.entry)!=='package')return;
+ const platform=options.platform??process.platform,path=pathOf(platform);
+ const physical=(value:string)=>{try{return realpathSync(value);}catch{return path.resolve(value);}};
+ const entry=physical(options.entry);
+ const matches=(prefix:string)=>samePath(entry,physical(path.join(prefix,...(platform==='win32'?[]:['lib']),'node_modules','@afbin','cli','dist','afbin.mjs')),platform);
+ const privatePrefix=path.join(configDir(options.home,options.env),'npm');
+ if(matches(privatePrefix))return privatePrefix;
+ const result=await options.npm(['prefix','-g'],{env:options.env,timeoutMs:options.timeoutMs});
+ const prefix=result.stdout.trim();
+ if(result.code===0&&path.isAbsolute(prefix)&&matches(prefix))return prefix;
+}
 
 const pathOf=(platform:string)=>platform==='win32'?win32:posix;
 const pathEntries=(env:NodeJS.ProcessEnv,platform:string)=>{

@@ -39,6 +39,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { documentFrame, DOCUMENT_FRAME, servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
+import { jsonRouteResponse } from './lib/json-route-response.mjs';
 import { lane } from './lib/lane.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
@@ -492,21 +493,23 @@ async function forkLeg(owner) {
     await step('login returned them to the document with the fork confirm open', () => dialog.waitFor({ state: 'visible', timeout: 30000 }));
     check(!new URL(forker.url()).search.includes('intent='), 'the instruction is consumed: the address no longer carries it, so a refresh does not re-prompt');
     const forkEndpoint = `${BASE}/api/my/artifacts/${doc.id}/fork`;
-    let forkResult;
+    let captureFork, captureTimer;
+    const capturedFork = new Promise((resolve, reject) => {
+      captureFork = value => { clearTimeout(captureTimer); resolve(value); };
+      captureTimer = setTimeout(() => reject(new Error('fork response did not arrive within 30 seconds')), 30000);
+    });
     // Read the real response before delivering it: the UI immediately navigates, which can discard
     // Chromium's response body before a waitForResponse caller can read it.
     await forker.route(forkEndpoint, async (route) => {
       if (route.request().method() !== 'POST' || route.request().postDataJSON()?.dry_run === true) return route.continue();
-      const response = await route.fetch();
-      forkResult = await response.json();
-      await route.fulfill({ response });
+      captureFork(await jsonRouteResponse(route));
     });
-    const [forkResponse] = await Promise.all([
-      forker.waitForResponse((response) => response.request().method() === 'POST'
-        && new URL(response.url()).pathname === `/api/my/artifacts/${doc.id}/fork`
-        && response.request().postDataJSON()?.dry_run !== true, { timeout: 30000 }),
+    const [forkDelivery] = await Promise.all([
+      capturedFork,
       forker.locator('[aria-label="Confirm fork"]').click(),
-    ]);
+    ]).finally(() => clearTimeout(captureTimer));
+    if (forkDelivery.error) throw new Error(`fork request failed: ${String(forkDelivery.error.message).split('\n')[0]}`);
+    const {response: forkResponse, body: forkResult} = forkDelivery;
     must(forkResponse.status() === 201, `fork creates the copy (${forkResponse.status()})`);
     const copyPath = new URL(forkResult.url, BASE).pathname;
     // Welcome is an intentional intermediate destination for this new account, not the copy's address.

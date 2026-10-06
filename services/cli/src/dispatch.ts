@@ -16,7 +16,7 @@ import {serveTeam} from './host-runtime';
 import type {ServeOptions} from './serve-config';
 import { browserSessionCommand } from './browser-sessions';
 import {testUserCommand,viewerChoice} from './testuser';
-import {checkUpdateNotice} from './update-notice';
+import {automaticUpdate} from './auto-update';
 import {compareVersions,validVersion} from './version-order';
 import {accountPlan,listAccountCollection,localAccountCommand,remoteAccountCommand} from './account-workspace';
 import {forkResources} from './fork';
@@ -63,8 +63,15 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {/** Executable entry; defaults to the running CLI. */entry?:string;/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
+ const update=automaticUpdate({home:context.home??homedir(),env:context.env,entry:context.entry,npm:context.npm,stderr:context.stderr??(value=>process.stderr.write(value))});
+ const code=await dispatchCli(argv,context,update.observe);
+ if(code===0)await update.finish();
+ return code;
+}
+/** All command writes, recovery and output finish before the outer dispatcher can install a package. */
+async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType<typeof automaticUpdate>['observe']):Promise<number>{
  const stdout=context.stdout??(value=>process.stdout.write(value));const stderr=context.stderr??(value=>process.stderr.write(value));
  // Colour only reaches a real terminal: a supplied writer stays plain unless the caller asks for colour.
  const styleOptions:StyleOptions=context.color!==undefined?{color:context.color}:context.stdout||context.stderr?{color:false}:colorSupport(context.env??process.env,!!process.stdout.isTTY);
@@ -306,7 +313,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // got a bare 409 ("Use the credentials for this workspace account") that cost codex twenty steps of reading
   // login JavaScript. Name both origins and the way out before any request.
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
-  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,onRelease:release=>checkUpdateNotice({home,server:connection!.server,env:context.env,stderr,release}),account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'?{onRelease}:{}),account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(command==='workspace'){emit(await rebindWorkspace(workspace,client,{dryRun:!!flags['dry-run']}));return 0;}
   if(command==='schedule'){emit(await scheduleCommand(workspace,client,positionals,flags));return 0;}
   if(command==='runs'){

@@ -7,7 +7,7 @@ import {runAcceptanceProcesses,installedAcceptanceGroups} from './acceptance-pro
 const cli=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const installed=(await readFile(join(process.env.RUNNER_TEMP??tmpdir(),'npm-proof/installed-path.txt'),'utf8')).trim();
 const mode=process.argv[2];
-const modes={types:['scripts/test-npm-types.mjs',installed],runner:['--import','tsx','scripts/test-npm-runner-boundary.mjs',installed],terminal:['scripts/test-npm-terminal.mjs',installed],preview:['--import','tsx','scripts/test-preview.ts',installed],local:['scripts/test-npm-local-journey.mjs',installed]};
+const modes={'auto-update':['scripts/test-npm-auto-update.mjs',installed],types:['scripts/test-npm-types.mjs',installed],runner:['--import','tsx','scripts/test-npm-runner-boundary.mjs',installed],terminal:['scripts/test-npm-terminal.mjs',installed],preview:['--import','tsx','scripts/test-preview.ts',installed],local:['scripts/test-npm-local-journey.mjs',installed]};
 const groups=installedAcceptanceGroups(mode,process.argv.includes('--types'));
-if(groups.flat().some(name=>!modes[name]))throw new Error('Choose types, runner, terminal, preview, local, runtime or experience.');
+if(groups.flat().some(name=>!modes[name]))throw new Error('Choose types, runner, terminal, auto-update, preview, local, runtime or experience.');
 for(const selected of groups)await runAcceptanceProcesses(selected.map(label=>({label,command:process.execPath,args:modes[label],cwd:cli,env:process.env})));
