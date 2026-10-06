@@ -6,6 +6,7 @@ import {execFile,execFileSync} from 'node:child_process';
 import {readFileSync,appendFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {createRequire} from 'node:module';
 /** Universal public seed archives depend on the pinned graph, not the candidate version or Node ABI. */
 export function npmPlatformSeedCacheKey(lockText){
  const lock=JSON.parse(lockText);
@@ -125,6 +126,10 @@ export async function assertPublicNpmCache(directory,dependencies){
 }
 export async function packPlatformNpmSeeds(source,output,lockText){
  await assertPublicNpmCache(source);
+ // Use the producing npm's own cache API. CLI cache clean deletes shared content
+ // and stops at the first missing alias, so it cannot safely prune platform entries.
+ const npmRoot=execFileSync('npm',['root','-g'],{encoding:'utf8'}).trim();
+ const cacache=createRequire(join(npmRoot,'npm','package.json'))('cacache');
  await mkdir(output,{recursive:true});
  const records=[];
  const visit=async path=>{for(const entry of await readdir(path,{withFileTypes:true})){
@@ -136,9 +141,8 @@ export async function packPlatformNpmSeeds(source,output,lockText){
   const dependencies=npmSeedDependencies(lockText,{os,cpu});
   const stage=join(output,`${runnerOs}-${runnerArch}`);await mergeNpmDependencyCache(source,stage);
   const excluded=records.filter(record=>!seedContainsUrl(npmCacheUrl(record.key),dependencies)).map(record=>record.key);
-  // npm removes its own index entries; verify then collects unreferenced blobs.
-  // We never synthesize npm metadata or mutate shared content objects.
-  for(let offset=0;offset<excluded.length;offset+=100)execFileSync('npm',['cache','clean',...excluded.slice(offset,offset+100),'--cache',stage,'--force'],{stdio:'pipe'});
+  // Remove only index entries; npm verify collects blobs after remaining references are known.
+  await Promise.all([...new Set(excluded)].map(key=>cacache.rm.entry(join(stage,'_cacache'),key)));
   execFileSync('npm',['cache','verify','--cache',stage],{stdio:'pipe'});
   const count=await assertPublicNpmCache(stage,dependencies);
   const archive=join(output,`npm-dependency-seed-${runnerOs}-${runnerArch}.tar`);

@@ -9,6 +9,7 @@ import {createHash} from 'node:crypto';
 import yaml from 'yaml';
 import * as seeds from '../lib/npm-dependency-cache.mjs';
 import {installNpmConsumer} from '../lib/npm-consumer-install.mjs';
+const npmCli=()=>process.env.npm_execpath??join(execFileSync('npm',['root','-g'],{encoding:'utf8'}).trim(),'npm/bin/npm-cli.js');
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
 
 it('gives every browser a disjoint immutable cache that the main warmer also populates',()=>{
@@ -141,7 +142,7 @@ it('rejects incomplete or wrong-platform archives before copying a seed into the
 
 it('installs a real npm tarball with cached pinned dependencies offline and still runs lifecycle scripts',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-real-offline-install-'));
- const npm=process.env.npm_execpath;
+ const npm=npmCli();
  const cacache=createRequire(npm)('cacache');
  const dependencyDir=join(directory,'dependency','package'),candidateDir=join(directory,'candidate','package');
  const consumer=join(directory,'consumer'),cache=join(directory,'cache');
@@ -189,5 +190,25 @@ it('accepts only manifests for pinned public dependencies, including scoped pack
   await expect(seeds.assertPublicNpmCache(directory,[dependency])).rejects.toThrow(/integrity/);
   store([tarball,{...manifest,key:'make-fetch-happen:request-cache:https://registry.npmjs.org/unrelated'}]);
   await expect(seeds.assertPublicNpmCache(directory,[dependency])).rejects.toThrow(/outside/);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('prunes platform aliases without deleting shared npm content or breaking subsequent removals',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-pack-seeds-'));
+ const source=join(directory,'source'),output=join(directory,'output');
+ const cacache=createRequire(npmCli())('cacache');
+ const bytes=Buffer.from('shared pinned fixture'),integrity='sha512-'+createHash('sha512').update(bytes).digest('base64');
+ const all={version:'1.0.0',resolved:'https://registry.npmjs.org/all/-/all-1.0.0.tgz',integrity};
+ const linux={version:'1.0.0',resolved:'https://registry.npmjs.org/linux-only/-/linux-only-1.0.0.tgz',integrity,os:['linux'],cpu:['x64']};
+ try{
+  for(const [name,dep] of [['all',all],['linux-only',linux]]){
+   for(const key of ['make-fetch-happen:request-cache:'+dep.resolved,`pacote:tarball:${name}@1.0.0`])await cacache.put(join(source,'_cacache'),key,bytes);
+  }
+  const lock=JSON.stringify({packages:{'':{},'node_modules/all':all,'node_modules/linux-only':linux}});
+  await seeds.packPlatformNpmSeeds(source,output,lock);
+  const entries=await cacache.ls(join(output,'macOS-ARM64','_cacache'));
+  expect(Object.keys(entries)).toHaveLength(2);
+  expect(Object.keys(entries).every(key=>!key.includes('linux-only'))).toBe(true);
+  expect(await seeds.assertPublicNpmCache(join(output,'macOS-ARM64'),[all])).toBe(2);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
