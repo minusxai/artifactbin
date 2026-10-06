@@ -848,6 +848,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
     needs: [ plan ]
     if: needs.plan.outputs.cli-pack == 'true'
     runs-on: ubuntu-24.04
@@ -857,8 +858,20 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
+      # Seed cross-platform consumers with public registry blobs from a prior Linux install.
+      - id: npm-seed-key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/lib/npm-dependency-cache.mjs seed-key "$GITHUB_REPOSITORY" "$GITHUB_OUTPUT"
+          printf 'path=%s\n' "$(npm config get cache)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: steps.npm-seed-key.outputs.seed-key != ''
+        with:
+          path: ${{ steps.npm-seed-key.outputs.path }}
+          key: ${{ steps.npm-seed-key.outputs.seed-key }}
       # Share the same normalized, version-insensitive tooling cache as other Linux jobs.
-      # This does not warm the fresh npm caches used by native consumer acceptance.
+      # Installed consumer trees stay isolated; only verified public download blobs are shared.
       - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -881,6 +894,15 @@ jobs:
             node_modules/.cache/build-islands.json
           key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
           restore-keys: test-builds-v1-${{ runner.os }}-
+      - run: npm cache verify --cache "${{ steps.npm-seed-key.outputs.path }}"
+      - run: node scripts/lib/npm-dependency-cache.mjs pack-seed "${{ steps.npm-seed-key.outputs.path }}" npm-dependency-seed.tar
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-npm-dependency-seed
+          path: npm-dependency-seed.tar
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
       - run: npm run build -w services/cli
       - run: npm run pack:release -w services/cli
       - name: Sign the actual build's npm provenance
@@ -1003,14 +1025,35 @@ jobs:
         with:
           name: afbin-npm-release
           path: npm-candidate
+      # Registry blobs can survive a package version bump. Consumers still own a fresh HOME,
+      # node_modules and npm exec state; the harness copies only _cacache in/out.
+      - id: dependency-cache-key
+        shell: bash
+        run: |
+          node scripts/lib/npm-dependency-cache.mjs "${{ runner.os }}" "${{ runner.arch }}" "${{ matrix.node }}" "$GITHUB_OUTPUT"
+          printf 'path=%s\n' "$(npm config get cache)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: dependency-cache
+        with:
+          path: ${{ steps.dependency-cache-key.outputs.path }}/_cacache
+          key: ${{ steps.dependency-cache-key.outputs.key }}
+          # Older npm cache blobs remain safe: npm checks shrinkwrap integrity during fresh install.
+          restore-keys: |
+            npm-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node }}-
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: afbin-npm-dependency-seed
+          path: .
+      - name: Merge verified public download blobs without replacing this consumer's own cache
+        run: node scripts/lib/npm-dependency-cache.mjs merge-seed npm-dependency-seed.tar "${{ steps.dependency-cache-key.outputs.path }}"
       # Unix bootstrap owns a separate fresh cache and is cheap enough to run alongside npm.
       # Windows Restricted bootstrap runs on its own required runner above.
       - name: Same-tarball native npm and warmed offline acceptance
         if: matrix.phase == 'native'
-        run: npm run test:npm-package -w services/cli -- --ci ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
+        run: npm run test:npm-package -w services/cli -- --ci --dependency-cache "${{ steps.dependency-cache-key.outputs.path }}" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
       - name: Install the same candidate for experience checks
         if: matrix.phase != 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --install-only
+        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-cache "${{ steps.dependency-cache-key.outputs.path }}"
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         if: matrix.phase == 'preview' || matrix.phase == 'local'
         id: acceptance-browser

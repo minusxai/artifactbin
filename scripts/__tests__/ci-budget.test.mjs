@@ -120,3 +120,51 @@ it('exits nonzero for an over-limit attempt and missing start, but accepts a fre
   expect(run({created_at:'2020-01-01T00:00:00Z'}).status).toBe(1);
  } finally {rmSync(directory,{recursive:true,force:true});}
 });
+it('keys download blobs across candidate version bumps without ignoring dependency integrity or runtime',async()=>{
+ const {npmDependencyCacheKey}=await import('../lib/npm-dependency-cache.mjs');
+ const lock={name:'@afbin/cli',version:'0.4.11',lockfileVersion:3,packages:{'':{name:'@afbin/cli',version:'0.4.11',dependencies:{sharp:'1.0.0'}},'node_modules/sharp':{version:'1.0.0',integrity:'sha512-one',resolved:'https://registry.npmjs.org/sharp/-/sharp-1.0.0.tgz'}}};
+ const key=(input,runtime={os:'Windows',arch:'X64',node:'22.22.3'})=>npmDependencyCacheKey(JSON.stringify(input),runtime);
+ const bumped=structuredClone(lock);bumped.version=bumped.packages[''].version='0.4.12';
+ expect(key(lock)).toMatch(/^npm-dependencies-v1-Windows-X64-node22.22.3-/);
+ expect(key(bumped)).toBe(key(lock));
+ bumped.packages['node_modules/sharp'].integrity='sha512-two';expect(key(bumped)).not.toBe(key(lock));
+ expect(key(lock,{os:'Windows',arch:'X64',node:'24.21.0'})).not.toBe(key(lock));
+});
+it('shares only verified npm download blobs, never installed modules or npx state',async()=>{
+ const {mergeNpmDependencyCache}=await import('../lib/npm-dependency-cache.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-npm-cas-'));
+ const source=join(directory,'source'),target=join(directory,'target');
+ const {mkdirSync,existsSync}=await import('node:fs');
+ try{
+  mkdirSync(join(source,'_cacache'),{recursive:true});writeFileSync(join(source,'_cacache','blob'),'content');
+  mkdirSync(join(source,'_npx'));writeFileSync(join(source,'_npx','stale'),'wrong candidate');
+  expect(await mergeNpmDependencyCache(source,target)).toBe(true);
+  expect(readFileSync(join(target,'_cacache','blob'),'utf8')).toBe('content');
+  expect(existsSync(join(target,'_npx'))).toBe(false);
+  expect(await mergeNpmDependencyCache(join(directory,'absent'),target)).toBe(false);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+it('warms only normal matrix download blobs while keeping the standard-user bootstrap cold',()=>{
+ const jobs=workflow().jobs,steps=jobs.cli.steps;
+ const cache=steps.find(step=>step.id==='dependency-cache');
+ expect(cache).toBeDefined();
+ expect(steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--dependency-cache');
+ expect(steps.find(step=>step.name==='Install the same candidate for experience checks').run).toContain('--dependency-cache');
+ expect(jobs['cli-bootstrap'].steps.some(step=>step.id==='dependency-cache')).toBe(false);
+});
+
+it('selects an observed nonempty main registry cache and refuses credential/private seed metadata',async()=>{
+ const {selectNpmSeedCache,assertPublicNpmCache}=await import('../lib/npm-dependency-cache.mjs');
+ const key='node-cache-Linux-x64-npm-abc';
+ expect(selectNpmSeedCache([{key,ref:'refs/heads/main',sizeInBytes:31208860,createdAt:'2026-10-05'},{key:key+'empty',ref:'refs/heads/main',sizeInBytes:785,createdAt:'2026-10-06'}])).toBe(key);
+ const directory=mkdtempSync(join(tmpdir(),'afbin-npm-public-'));
+ const {mkdirSync}=await import('node:fs');
+ const index=join(directory,'_cacache','index-v5');mkdirSync(index,{recursive:true});
+ const record={key:'make-fetch-happen:request-cache:https://registry.npmjs.org/is-number',metadata:{url:'https://registry.npmjs.org/is-number'}};
+ const store=value=>writeFileSync(join(index,'entry'),'checksum\t'+JSON.stringify(value)+'\n');
+ try{
+  store(record);expect(await assertPublicNpmCache(directory)).toBe(1);
+  store({...record,metadata:{...record.metadata,reqHeaders:{authorization:'secret-test'}}});await expect(assertPublicNpmCache(directory)).rejects.toThrow(/Credential/);
+  store({...record,key:'make-fetch-happen:request-cache:https://private.example/package'});await expect(assertPublicNpmCache(directory)).rejects.toThrow(/Non-public/);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});

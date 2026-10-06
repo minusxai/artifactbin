@@ -954,7 +954,7 @@ describe('CI job shape', () => {
 
   it('keeps a merged PR\'s npm artifact downloadable for a week after the merge', () => {
     const uploads = Object.values(ci().jobs).flatMap((job) => job.steps ?? [])
-      .filter((step) => step.uses?.startsWith('actions/upload-artifact') && /^(afbin-npm-|tested-)/.test(step.with.name ?? ''));
+      .filter((step) => step.uses?.startsWith('actions/upload-artifact') && (/^(tested-)/.test(step.with.name ?? '') || ['afbin-npm-release','afbin-npm-packages'].includes(step.with.name)));
     expect(uploads.length).toBeGreaterThan(0);
     for (const upload of uploads) expect(Number(upload.with['retention-days']), upload.with.name).toBeGreaterThanOrEqual(7);
   });
