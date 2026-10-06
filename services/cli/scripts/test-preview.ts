@@ -52,6 +52,7 @@ function trackPage(page:Page,label:string){
    const event:Record<string,unknown>={page:label,type:'response',url:response.url(),status:response.status()};browserEvents.push(event);
    // A successful empty module has no browser error. Retain its byte count, never authored source.
    if(compiledModule)void response.body().then(bytes=>{event.bytes=bytes.byteLength;},error=>{event.bodyError=error instanceof Error?error.name:'unavailable';});
+   if(new URL(response.url()).pathname==='/save'&&response.status()>=400)void response.text().then(body=>{event.body=body;},error=>{event.bodyError=error instanceof Error?error.name:'unavailable';});
   }
  });
  return page;
@@ -65,7 +66,10 @@ async function ready(page:Page){
 /** Done persists then reloads: networkidle on the old document is not a readiness boundary. */
 async function finishEditing(page:Page,fixtureKind:'data'|'prose'){
  const [saved]=await Promise.all([
-  page.waitForResponse(response=>response.url().endsWith('/save')),
+  page.waitForResponse(response=>response.url().endsWith('/save')).then(async response=>{
+   assert.equal(response.status(),200,`Preview save failed (${response.status()}): ${await response.text()}`);
+   return response;
+  }),
   page.waitForNavigation({waitUntil:'load'}),
   page.getByRole('button',{name:'Done editing',exact:true}).click(),
  ]);

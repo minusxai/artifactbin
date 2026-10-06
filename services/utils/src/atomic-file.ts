@@ -2,6 +2,21 @@
 import {randomUUID} from 'node:crypto';
 import {link,open,readFile,rename,unlink} from 'node:fs/promises';
 import {dirname} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
+
+/** Windows reader/scanner sharing locks can deny replacement briefly; retry at most 775ms without deleting the target. */
+async function replaceAtomic(from: string, to: string): Promise<void> {
+  const waits = [25, 50, 100, 200, 400];
+  for (let attempt = 0; ; attempt++) {
+    try { await rename(from, to); return; }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const wait = waits[attempt];
+      if (process.platform !== 'win32' || (code !== 'EPERM' && code !== 'EBUSY') || wait === undefined) throw error;
+      await delay(wait);
+    }
+  }
+}
 
 async function syncDirectory(path: string): Promise<void> {
   // Windows does not expose directory fsync through Node.
@@ -30,10 +45,10 @@ export async function atomicWrite(path: string, data: string | Uint8Array, optio
         if (options.exclusive || (error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
         // Published cache objects may be held open on Windows. Identical bytes
         // need no replacement; do not mask failures of a genuine replacement.
-        if (!(await readFile(path)).equals(Buffer.from(data))) await rename(temporary, path);
+        if (!(await readFile(path)).equals(Buffer.from(data))) await replaceAtomic(temporary, path);
       }
       await removeTemporary(temporary);
-    } else await rename(temporary, path);
+    } else await replaceAtomic(temporary, path);
     await syncDirectory(dirname(path));
   } finally {
     await handle.close();
