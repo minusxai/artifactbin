@@ -843,6 +843,7 @@ async function hostedRestartLeg(owner) {
     harness: 'codex', cwd: '/home/runner', machine: 'Hosted', online: true, controller: 'web',
     cols: 100, rows: 30, exitCode: null, managed: true, activity: 'working',
   };
+  const starting = { ...session, online: false, activity: 'starting' };
   const bodies = [];
   try {
     await run(async () => {
@@ -851,7 +852,7 @@ async function hostedRestartLeg(owner) {
       }));
       await page.route('**/api/runs', async route => {
         bodies.push(route.request().postDataJSON());
-        if (bodies.length === 1) {
+        if (bodies.length <= 2) {
           await route.fulfill({ status: 409, headers: { 'Retry-After': '0.5' }, contentType: 'application/json', body: JSON.stringify({ error: 'box_restart_pending' }) });
         } else {
           await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ runId: session.runId, session }) });
@@ -860,8 +861,8 @@ async function hostedRestartLeg(owner) {
       await page.route('**/api/remote/sessions**', route => {
         const url = new URL(route.request().url());
         const body = url.pathname === '/api/remote/sessions'
-          ? { sessions: [] }
-          : { session, seq: 0, generation: session.runId, frames: [], snapshot: 'Synthetic hosted terminal ready\r\n' };
+          ? { sessions: bodies.length >= 3 ? [session] : [] }
+          : { session: starting, seq: 0, generation: session.runId, frames: [], snapshot: 'Starting your hosted box…\r\n' };
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
       });
       await page.goto(`${BASE}/chat`, { waitUntil: 'load' });
@@ -871,11 +872,21 @@ async function hostedRestartLeg(owner) {
       check(await page.getByRole('textbox', { name: 'Box name' }).isDisabled(), 'the submitted box name stays frozen during teardown');
       check(await page.getByRole('combobox', { name: 'Hosted program' }).isDisabled(), 'the submitted program stays frozen during teardown');
       check(await page.getByRole('textbox', { name: 'SSH public key' }).isDisabled(), 'the submitted SSH key stays frozen during teardown');
+      await page.getByRole('button', { name: 'Stop waiting', exact: true }).click();
+      await page.getByRole('alert').getByText('Stopped waiting. Your hosted box may still be stopping. Check your sessions before starting again.', { exact: true }).waitFor({ state: 'visible' });
+      check(bodies.length === 1, `stopping the browser wait does not submit a follow-up retry (${bodies.length} request(s))`);
+      await page.getByRole('button', { name: 'Start hosted box', exact: true }).waitFor({ state: 'visible' });
+      await page.getByRole('button', { name: 'Start hosted box', exact: true }).click();
+      await page.getByText('Finishing the previous hosted box…', { exact: true }).waitFor({ state: 'visible' });
       await page.getByRole('button', { name: `Open ${session.name}`, exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForFunction(name => [...document.querySelectorAll('button[aria-pressed="true"]')].some(button => button.getAttribute('aria-label') === `Open ${name}`), session.name);
-      must(bodies.length === 2, `one explicit restart-pending response is followed by one admission (${bodies.length} requests)`);
-      check(JSON.stringify(bodies[0]) === JSON.stringify(bodies[1]), 'the retry reuses the exact request body and request id');
-      check(typeof bodies[0]?.requestId === 'string' && bodies[0].requestId.length > 0, 'the click carries one stable request id');
+      await page.getByText('codex · Running', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByRole('status').filter({ hasText: 'Starting your hosted box…' }).waitFor({ state: 'visible' });
+      check(await page.getByRole('textbox', { name: 'Message to agent' }).isDisabled(), 'runner Running status does not enable input before the hosted terminal is ready');
+      must(bodies.length === 3, `a fresh click after Stop waiting retries one pending admission (${bodies.length} total requests)`);
+      check(JSON.stringify(bodies[1]) === JSON.stringify(bodies[2]), 'the retried click reuses its exact request body and request id');
+      check(typeof bodies[1]?.requestId === 'string' && bodies[1].requestId.length > 0, 'the click carries one stable request id');
+      check(bodies[0]?.requestId !== bodies[1]?.requestId, 'a later click uses a fresh request id after the user stops waiting');
       check(!(await page.locator('body').innerText()).includes('box_restart_pending'), 'the internal pending code is not shown as an error');
     });
   } finally {

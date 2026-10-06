@@ -1,5 +1,6 @@
 import {services} from '../platform/services';
 import {managedTerminalView,managedTerminalInput,stopManagedTerminal} from './managed-terminal';
+import {managedRunRosterStatus} from './managed-status';
 import {externalHostedProofHash} from './hosted-comments';
 import {hostedRemoteAgent} from './hosted-interface';
 import {isTerminalFeedback} from './terminal-input';
@@ -55,7 +56,7 @@ export class RemoteAgents {
    if(!registered)throw new RemoteError('Managed session conflicts with an existing agent',409);
   }
   const saved=(await db.query<AgentRow>("SELECT * FROM remote_agents WHERE owner=$1 AND COALESCE(info->>'removed','false')<>'true' ORDER BY seen_at DESC LIMIT 100",[owner])).rows;
-  await Promise.all(saved.filter(r=>r.info.runId).map(async r=>{try{const run=await services().runner.getRun({userId:owner,runId:r.info.runId!});r.info.online=['queued','running'].includes(run.status)&&r.active;}catch{r.info.online=false;}}));
+  await Promise.all(saved.filter(r=>r.info.runId).map(async r=>{try{const run=await services().runner.getRun({userId:owner,runId:r.info.runId!});Object.assign(r.info,managedRunRosterStatus(run.status,r.active,r.info.activity));}catch{r.info.online=false;r.info.activity='unknown';}}));
   const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,online:r.info.runId?r.info.online:defaultAgent?.id===r.id?defaultAgent.online:live.some(s=>s.id===r.id&&s.online)})),...(defaultAgent&&!saved.some(r=>r.id===defaultAgent.id)?[defaultAgent]:[])];
  }
  async read(owner:string,id:string){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.ensure(owner);const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);let online=false;try{online=this.relay.read(owner,id).online;}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
