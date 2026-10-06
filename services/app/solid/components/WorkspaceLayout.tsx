@@ -13,9 +13,10 @@ export function WorkspaceSkeleton(): JSX.Element {
 export default function WorkspaceLayout(props: { workspace: AccountWorkspace | AccountWorkspaceCore; insights?: AccountWorkspaceInsights | null; insightsError?: boolean; parentId?: string | null; label?: string; onCreated: () => void; children: JSX.Element }): JSX.Element {
   const loaded = () => props.insights === undefined && 'viewsOverTime' in props.workspace ? props.workspace : props.insights;
   return <div aria-label={props.label ?? 'Home workspace'} class="grid gap-y-3 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-x-10 lg:gap-y-0 xl:grid-cols-[minmax(0,1fr)_18rem]">
+    {/* Keep the rail in a separate grid row below all workspace shortcuts. */}
     <div class="lg:col-start-2 lg:row-start-1 lg:pl-6"><WorkspaceCreate parentId={props.parentId} onCreated={props.onCreated} /></div>
-    <div class="min-w-0 lg:col-start-1 lg:row-start-1">{props.children}</div>
-    <aside aria-label="Dashboard rail" class="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-24 lg:pl-6">
+    <div class="min-w-0 lg:col-start-1 lg:row-start-1 lg:row-span-2">{props.children}</div>
+    <aside aria-label="Dashboard rail" class="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-2 lg:mt-3 lg:border-t-0 lg:border-l lg:pt-3 lg:pl-6">
       <Show when={loaded()} fallback={<Show when={props.insightsError} fallback={<div aria-label="Loading workspace insights" role="status" aria-busy="true" class="min-h-80 motion-safe:animate-pulse"><span class="sr-only">Loading workspace insights</span><div class="h-32 rounded border border-edge bg-surface" /><div class="mt-6 h-40 rounded border border-edge bg-surface" /></div>}><div role="alert">Could not load workspace insights. <button type="button" aria-label="Retry workspace insights" onClick={props.onCreated}>Try again</button></div></Show>}>
         {insights => <Dashboard rows={props.workspace.artifacts.map(row => ({ ...row, views: insights().views?.[row.id] ?? ('views' in row ? row.views : 0) }))} stats={insights().stats} viewsOverTime={insights().viewsOverTime} likes={insights().likes} likesOverTime={insights().likesOverTime} followers={insights().followers} forks={insights().forks} />}
       </Show>

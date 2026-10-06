@@ -725,6 +725,18 @@ async function foldersLeg(owner) {
       await o.waitForSelector('[aria-label="Folders"]', { timeout: 20000 });
       await o.locator('[aria-label="Open folder Field Notes"]').waitFor({ timeout: 15000 });
     });
+    const expandDashboard = o.getByRole('button', { name: 'Expand dashboard', exact: true });
+    await expandDashboard.waitFor({ timeout: 10000 });
+    const dashboardHitTarget = await expandDashboard.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return !!target && (target === button || button.contains(target));
+    });
+    check(dashboardHitTarget, 'the Dashboard expand button owns its center hit target');
+    await expandDashboard.click();
+    await o.getByRole('dialog', { name: 'Expanded dashboard' }).waitFor({ timeout: 5000 });
+    check(new URL(o.url()).pathname === '/', 'expanding the Dashboard keeps the owner on Home');
+    await o.getByRole('button', { name: 'Close expanded dashboard', exact: true }).click();
     // Deleting a folder is deleting everything in it, so the row SAYS how much before anyone clicks.
     await o.locator('[aria-label="More actions for Field Notes"]').first().click();
     const del = o.locator('[aria-label="Delete Field Notes"]').first();
