@@ -55,7 +55,7 @@ function mount(path = '/a/doc') {
 }
 
 /** The page's trusted overlays: 0 the navigation layer (install, fork), 1 discussion (comments, editor, sharing). */
-const trusted = (index = 0) => within(document.querySelectorAll('[data-trusted-ui]')[index]!.shadowRoot as unknown as HTMLElement);
+const trusted = (index = 0) => within(document.querySelectorAll('[data-trusted-ui]')[index]!.shadowRoot!.querySelector<HTMLElement>('[data-trusted-ui-root]')!);
 /**
  * The app bar's open panel, wherever it is mounted: it rides the page's trusted overlay (lib/islands/trusted-portal) so it
  * paints in the top layer above the comments rail, which is itself a top-layer overlay.
@@ -82,7 +82,9 @@ it('hides the agent handoff in Code and restores it in Artifact', async () => {
     return existing(input, init);
   });
   mount('/a/doc#edit');
-  const code = await trusted(1).findByRole('tab', { name: 'Edit the source' });
+  // Wait for the real lazy editor module before querying its tabs, including a cold CI import.
+  await vi.dynamicImportSettled();
+  const code = trusted(1).getByRole('tab', { name: 'Edit the source' });
   expect(trusted().getByRole('button', { name: 'Copy for agent' })).toBeInTheDocument();
   fireEvent.click(code);
   await waitFor(() => expect(trusted().queryByRole('button', { name: 'Copy for agent' })).toBeNull());
