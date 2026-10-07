@@ -55,7 +55,7 @@ frame (after it has loaded and booted), where `window.page` lives; `page.url()`,
 
 Google Fonts is the only external resource exception for scripted sessions. The broker relays GETs to the shared
 `fonts.googleapis.com` and `fonts.gstatic.com` origins to an app-only `/api/internal` route; the app permits only the
-CSS2 stylesheet endpoint and Google font file paths, then fetches them with its existing DNS-pinned, redirect-checked,
+CSS stylesheet endpoints and Google font file paths, then fetches them with its existing DNS-pinned, redirect-checked,
 size- and time-bounded transport. The worker's cookies, authorization, actor and user agent never leave the broker.
 Other third-party requests remain refused, and the browser service keeps no public egress network.
 
