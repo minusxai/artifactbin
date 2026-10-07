@@ -83,6 +83,17 @@ function failureReason(stderr:string,code:number):string{
 }
 const permissionFailure=(stderr:string,platform:string)=>/\bEACCES\b/.test(stderr)||platform==='win32'&&/\bEPERM\b/.test(stderr);
 
+/** Read npm's Windows invocation without executing a discovered command. */
+export function npmShimTargets(shim:string,target:string):boolean{
+ const normalize=(value:string)=>value.replace(/[\\/]+/g,'/').toLowerCase();
+ const invocation=`"%_prog%" "%dp0%/${normalize(target)}" %*`;
+ const npmPrefix='endlocal & goto #_undefined_# 2>nul || title %comspec% & ';
+ return normalize(shim).split(/\r?\n/).some(line=>{
+  const command=line.trim().replace(/[ \t]+/g,' ');
+  return command===invocation||command===npmPrefix+invocation;
+ });
+}
+
 /** Reuse only a complete npm-owned install: package metadata, runnable entry and its generated command shim must agree. */
 async function hasInstalledVersion(prefix:string,version:string,platform:string,bin:string):Promise<boolean>{
  const path=pathOf(platform),packageRoot=path.join(prefix,...(platform==='win32'?[]:['lib']),'node_modules','@afbin','cli');
@@ -102,9 +113,9 @@ async function hasInstalledVersion(prefix:string,version:string,platform:string,
   const commandInfo=await lstat(bin);
   if(platform==='win32'){
    if(!commandInfo.isFile()||commandInfo.size===0)return false;
-   const shim=(await readFile(bin,'utf8')).replace(/[\\/]+/g,'/').toLowerCase();
-   const target=path.relative(path.dirname(bin),entry).replace(/[\\/]+/g,'/').toLowerCase();
-   return shim.split(/\r?\n/).some(line=>line.includes(`"%_prog%" "%dp0%/${target}" %*`));
+   const shim=await readFile(bin,'utf8');
+   const target=path.relative(path.dirname(bin),entry);
+   return npmShimTargets(shim,target);
   }
   return commandInfo.isSymbolicLink()&&samePath(realpathSync(bin),realpathSync(entry),platform);
  }catch{return false;}

@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm,stat,symlink,readdir} from 'node:fs/
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join,delimiter,win32} from 'node:path';
-import {installKind,globalInstall,findAfbinOnPath,retireAfbin,type NpmRunner} from '../src/global-install';
+import {installKind,globalInstall,npmShimTargets,findAfbinOnPath,retireAfbin,type NpmRunner} from '../src/global-install';
 
 /** A runner that records every npm invocation and answers from a script; it never spawns npm. */
 function recorder(answer:(args:string[])=>{code?:number;stdout?:string;stderr?:string}){
@@ -237,4 +237,16 @@ test('globalInstall reuses only a Windows npm shim that targets the matching pac
   const comment=await globalInstall({version:'1.2.3',home:win32.join(root,'home'),env:{Path:root},platform:'win32',npm});
   assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3']]);assert.equal(comment.status,'installed');
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test('npmShimTargets rejects commented or unrelated Windows command lines on every platform',()=>{
+ const target='node_modules/@afbin/cli/dist/afbin.mjs',command=`"%_prog%" "%dp0%/${target}" %*`;
+ assert.equal(npmShimTargets('@echo off\n'+command,target),true);
+ assert.equal(npmShimTargets('endlocal & goto #_undefined_# 2>nul || title %comspec% & '+command,target),true);
+ assert.equal(npmShimTargets('endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & '+command.replace('"%_prog%" ','"%_prog%"  '),target),true,'npm emits two spaces when shebang has no additional args');
+ assert.equal(npmShimTargets('echo '+command,target),false,'echoing a command is not executing it');
+ assert.equal(npmShimTargets('REM '+command,target),false,'REM is a comment, not a working command');
+ assert.equal(npmShimTargets('  :: '+command,target),false,'label comment is not a working command');
+ assert.equal(npmShimTargets(command.replace('@afbin/cli','other-package'),target),false);
 });
