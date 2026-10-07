@@ -45,7 +45,7 @@ test('update installs the pointer version through npm and then the selected skil
   const prefix=join(home,'npm');
   const npm=async(args:string[])=>{calls.push(args);if(args.includes('install'))await assert.rejects(stat(join(home,'.pi','agent','skills','artifactbin')),{code:'ENOENT'},'npm runs before skills');return {code:0,stdout:args[0]==='prefix'?prefix+'\n':'',stderr:''};};
   assert.equal(await runCli(['update','--json','--harness','pi','--server',SERVER],{home,cwd:home,env:{PATH:join(prefix,'bin')},interactive:false,fetch:pointer({version:'9.8.7',protocol:3}).fetch,npm,stdout:s=>out.push(s),stderr:s=>err.push(s)}),0,err.join(''));
-  assert.deepEqual(calls,[['install','-g','--no-fund','--no-audit','@afbin/cli@9.8.7'],['prefix','-g']]);
+  assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@9.8.7']]);
   const result=JSON.parse(out.join(''));
   assert.equal(result.version,'9.8.7');assert.equal(result.current,CLI_VERSION);
   assert.deepEqual(result.installed,{status:'installed',version:'9.8.7',prefix,bin:join(prefix,'bin','afbin'),on_path:true,fallback:false});
