@@ -202,3 +202,33 @@ it('switches native terminal layout without sending unsupported PTY resize contr
  resized();fireEvent.click(toggle);const desktop=await screen.findByRole('button',{name:'Switch to desktop'});await waitFor(()=>expect(desktop).toBeEnabled());
  expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(0);
 });
+
+it('can stop a hosted run whose terminal history is unavailable without removing its session',async()=>{
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ const session={id:'history-unavailable',runId:'still-running',name:'Retained shell',harness:'bash',machine:'Hosted',managed:true,online:false,activity:'unknown',exitCode:null,cols:80,rows:24};
+ const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>options?.method==='POST'?{ok:true}:url==='/api/remote/sessions'?{sessions:[session]}:url==='/api/run-capabilities'?{managedProcesses:true}:{session,seq:0,snapshot:'Earlier terminal output cannot be safely restored. Your hosted shell is still running.',frames:[]}}));
+ vi.stubGlobal('fetch',fetch);open(session.id);
+ fireEvent.click(await screen.findByRole('button',{name:'Stop agent'}));
+ await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/remote/sessions/history-unavailable',expect.objectContaining({method:'POST'})));
+ const stop=fetch.mock.calls.find(([,options])=>options?.method==='POST')!;
+ expect(JSON.parse(stop[1]!.body as string)).toEqual({type:'stop'});
+ expect(fetch.mock.calls.some(([,options])=>options?.method==='DELETE')).toBe(false);
+});
+
+it.each([
+ {activity:'stopping',exitCode:null,label:'Stop agent',disabled:true},
+ {activity:'stopped',exitCode:null,label:'Remove agent',disabled:false},
+ {activity:'stopped',exitCode:0,label:'Remove session',disabled:false},
+])('keeps hosted $activity recovery controls truthful (exit=$exitCode)',async({activity,exitCode,label,disabled})=>{
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ const session={id:'hosted-state',runId:'native-state',name:'Hosted state',harness:'bash',machine:'Hosted',managed:true,online:false,activity,exitCode,cols:80,rows:24};
+ const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>options?.method==='DELETE'?{ok:true}:url==='/api/remote/sessions'?{sessions:[session]}:url==='/api/run-capabilities'?{managedProcesses:false}:{session,seq:0,snapshot:'',frames:[]}}));
+ vi.stubGlobal('fetch',fetch);open(session.id);
+ const action=await screen.findByRole('button',{name:label});
+ if(disabled){expect(action).toBeDisabled();expect(action).toHaveTextContent('Stopping…');}
+ else{
+  expect(action).toBeEnabled();fireEvent.click(action);
+  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/remote/sessions/hosted-state',expect.objectContaining({method:'DELETE'})));
+ }
+ expect(fetch.mock.calls.some(([,options])=>options?.method==='POST')).toBe(false);
+});
