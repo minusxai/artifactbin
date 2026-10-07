@@ -19,6 +19,8 @@ import { copyText } from '../lib/copy-text';
 
 const REQUEST = 'Connect to afbin remote so I can @mention you in artifact comments.';
 const agentLabel = (name: string) => (({ claude: 'Claude Code', codex: 'Codex', pi: 'Pi', opencode: 'OpenCode' } as Record<string, string>)[name] ?? name);
+/** Shared eligibility for quick choices and the full mention picker. */
+export const canTagAgent = (session: RemoteSessionInfo) => !session.runId && (session.managed ? session.exitCode === null && session.activity !== 'stopped' : session.online);
 export interface MentionKeyboard { keyDown: (key: string) => boolean }
 
 export function CommentMentionPicker(props: {
@@ -36,7 +38,7 @@ export function CommentMentionPicker(props: {
   const sessionsUnavailable = props.backend.unavailable('remoteSessions');
   const peopleUnavailable = props.backend.unavailable('mentions');
   const matches = () => sessions().filter((session) =>
-    !session.runId && (session.managed ? session.exitCode === null && session.activity !== 'stopped' : session.online)
+    canTagAgent(session)
     && `${session.name} ${session.harness}`.toLowerCase().includes(props.query.toLowerCase()));
   const choose = (session: RemoteSessionInfo) => props.onSelect(remoteMention(session));
   const keyboard: MentionKeyboard = { keyDown(key) {
