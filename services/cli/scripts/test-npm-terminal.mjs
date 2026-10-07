@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
-import {mkdtemp,writeFile} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile} from 'node:fs/promises';
 import {removeTerminalWorkspace} from './terminal-workspace-cleanup.mjs';
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
@@ -12,7 +12,7 @@ assert.ok(process.argv[2],'Pass the installed npm afbin.mjs path.');
 const directory=await mkdtemp(join(tmpdir(),'afbin native terminal '));
 const boundedAppend=(previous,value)=>`${previous}${value}`.slice(-8192);
 const diagnosticText=value=>String(value??'').replaceAll('test-terminal-only','[redacted]').slice(-2000);
-let worker,output='',outputTail='',exitReceipt,registration,startupReceipt,workerSpawned=false,workerDisconnected=false,workerMessages=0,exchangeCount=0,nativeReady=false;
+let worker,output='',outputTail='',exitReceipt,registration,startupReceipt,lastExchange,workerSpawned=false,workerDisconnected=false,workerMessages=0,exchangeCount=0,nativeReady=false;
 const server=createServer(async(req,res)=>{
  try{
   assert.equal(req.headers.authorization,'Bearer test-terminal-only');
@@ -24,6 +24,7 @@ const server=createServer(async(req,res)=>{
   assert.equal(req.url,'/api/remote/sessions/npm-terminal/exchange');
   exchangeCount++;const chunk=body.output??'';output=boundedAppend(output,chunk);nativeReady ||= output.includes('NATIVE_READY')||(outputTail+chunk).includes('NATIVE_READY');outputTail=(outputTail+chunk).slice(-'NATIVE_READY'.length+1);if(body.exitCode!==undefined)exitReceipt=body.exitCode;
   const inputs=nativeReady&&!body.ack?[{id:1,kind:'input',data:'finish\r'}]:[];
+  lastExchange={ack:body.ack,outputLength:chunk.length,exitCode:body.exitCode??null,inputCount:inputs.length};
   res.end(JSON.stringify({controller:'local',inputs}));
  }catch(error){res.statusCode=500;res.end(JSON.stringify({error:'test_failure',message:error.message}));}
 });
@@ -31,9 +32,12 @@ await new Promise((yes,no)=>{server.once('error',no);server.listen(5020,'127.0.0
 try{
  const terminalProgram=join(directory,'terminal-program.mjs');
  await writeFile(terminalProgram,`import {createInterface} from 'node:readline';
+import {writeFileSync} from 'node:fs';
 const lines=createInterface({input:process.stdin});
+process.stdin.on('data',data=>writeFileSync(${JSON.stringify(join(directory,'input-received'))},data));
 console.log('NATIVE_READY');
 lines.once('line',line=>{
+ writeFileSync(${JSON.stringify(join(directory,'line-received'))},line);
  if(line!=='finish'){process.exitCode=2;lines.close();process.stdin.pause();return;}
  console.log('FINAL_NATIVE_OUTPUT');lines.close();process.stdin.pause();
  setTimeout(()=>{process.exitCode=7;},100);
@@ -46,10 +50,12 @@ lines.once('line',line=>{
  worker.once('spawn',()=>{workerSpawned=true;});worker.once('disconnect',()=>{workerDisconnected=true;});
  worker.on('message',message=>{workerMessages++;if(message.error)stderr=boundedAppend(stderr,message.error);else startupReceipt=message;});
  const completion=new Promise((yes,no)=>{
-  const deadline=setTimeout(()=>{
-   const diagnostic={stdout:diagnosticText(stdout),stderr:diagnosticText(stderr),relayOutput:diagnosticText(output),exitReceipt,
+  const deadline=setTimeout(async()=>{
+   const diagnostic={stdout:diagnosticText(stdout),stderr:diagnosticText(stderr),relayOutput:diagnosticText(output),exitReceipt,lastExchange,
+    lineReceived:await readFile(join(directory,'line-received'),'utf8').catch(()=>null),
+    inputReceived:await readFile(join(directory,'input-received'),'utf8').catch(()=>null),
     registrationReceived:Boolean(registration),registrationManaged:registration?.managed??null,registrationName:registration?.name??null,
-    startupReceipt:startupReceipt?{status:startupReceipt.status,phase:startupReceipt.phase,pid:startupReceipt.pid}:null,exchangeCount,
+    startupReceipt:startupReceipt?{status:startupReceipt.status,pid:startupReceipt.pid}:null,exchangeCount,
     workerSpawned,workerDisconnected,workerMessages,workerExitCode:worker.exitCode,workerSignalCode:worker.signalCode};
    worker.kill();no(new Error(`Native CLI worker did not exit naturally after 20s: ${JSON.stringify(diagnostic)}`));
   },20000);
