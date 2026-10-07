@@ -7,7 +7,7 @@ description: >-
 
 artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. Datasets/media are artifacts too.
 
-npm CLI: local files/browser approval, guests allowed. Direct HTTP: email auth, no CLI; [HTTP API](references/http-api.md).
+npm CLI: local files/browser approval, guests allowed. HTTP: email auth; [HTTP API](references/http-api.md).
 
 - If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills. [Setup details](references/npm-local.md).
 - Local preview; HTML: `.jsx.html`.
@@ -17,7 +17,7 @@ npm CLI: local files/browser approval, guests allowed. Direct HTTP: email auth, 
 - Read `afbin help <page type>` and choose ONE design system. Within six calls of the pull, push a first version with metadata, title, real opening copy and one substantive section; extend it in later pushes. Push confirms source acceptance; do not pull, diff or grep just to reconfirm it.
 - For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=1 --param status=Done` to update. Use its declared names/arguments; preserve its source.
 - Sessions are browser/UI QA for newly authored or changed `<Mutation>`, page-local state and row/cell actions. Use a live session (`afbin help live-sessions`) on each identity's isolated copy (`afbin help apps`), then the original `--as guest` (identity writes off). One session at a time. Stop once each works once per identity.
-- Local files: `afbin add <files> --json` assigns reference IDs; preview/push register named files. Push runs `afbin validate` and publishes unpublished IDs.
+- Local files: `afbin add <files> --json` assigns IDs; preview/push register files. Preview runs until Ctrl+C; never `preview && push`. Push separately to validate and publish.
 - Every body element has a persistent `id` for its lifetime. Move it with the same id; never reuse an id.
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.

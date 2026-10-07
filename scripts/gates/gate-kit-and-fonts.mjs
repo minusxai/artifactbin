@@ -103,7 +103,7 @@ const SCENE_CANVAS = '<canvas id="scene" width="400" height="300" />';
 
 const { STORY_THEMES } = await tsImport('../../services/app/lib/data/story/story-themes.ts', import.meta.url);
 const THEMES = [null, ...STORY_THEMES.map((t) => t.name)];
-const [kit, prose, popover, fixtures, fontDoc, themeDocs, sceneDoc, sceneProse, sceneCard] = await Promise.all([
+const [kit, prose, popover, fixtures, fontDoc, themeDocs, sceneDoc, sceneProse, sceneCard, redlineStats] = await Promise.all([
   // The kitchen sink's refs, then the document itself (lib/kitchen-sink-doc).
   kitchenSinkMarkup(publish).then((markup) => publish({ markup, theme: 'modernist', colorMode: 'dark', title: 'Kitchen sink (unified)' })),
   publish({ markup: '<Helmet><title>Prose</title></Helmet><h1 className="text-4xl">Just words</h1><p>No charts here.</p>' }),
@@ -114,6 +114,11 @@ const [kit, prose, popover, fixtures, fontDoc, themeDocs, sceneDoc, sceneProse, 
   publish({ title: 'Three.js library gate', markup: SCENE_HELMET + SCENE_CANVAS }),
   publish({ markup: '<h1>Ordinary prose</h1>' }),
   publish({ markup: SCENE_HELMET + `<Card><CardContent>${SCENE_CANVAS}</CardContent></Card>` }),
+  publish({ title: 'Responsive stat rows', theme: 'redline', markup:
+    '<div className="@container px-6"><Deck><Slide><h2>Two and three metrics</h2>'
+    + [2, 3].map(count => `<div id="redline-row-${count}" className="rl-stat-row">`
+      + Array.from({ length: count }, (_, index) => `<div className="rl-stat"><span className="t-label">Metric ${index + 1}</span><span className="t-numeral">120</span><span className="rl-stat-note">Measured today</span></div>`).join('') + '</div>').join('')
+    + '</Slide></Deck></div>' }),
 ]);
 console.log(`   kit: ${B}/a/${kit.id}`);
 
@@ -482,6 +487,33 @@ try {
     await popPage.close();
   }));
 
+  // Minimum-width system cards wrap within the reader surface on phones.
+  const statTasks = [390, 1440].map(width => () => leg(`Redline stats ${width}px`, async () => {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    try {
+      await page.goto(`${B}/a/${redlineStats.id}`);
+      const frame = await documentFrame(page);
+      await frame.waitForSelector('#redline-row-3');
+      const geometry = await frame.evaluate(() => {
+        const surface = document.querySelector('.mx-doc');
+        const rows = [2, 3].map(count => {
+          const row = document.getElementById(`redline-row-${count}`);
+          return { width: row.clientWidth, scroll: row.scrollWidth,
+            cards: [...row.children].map(card => {
+              const rect = card.getBoundingClientRect();
+              return { left: rect.left, right: rect.right, top: rect.top };
+            }) };
+        });
+        return { viewport: innerWidth, surface: surface && { width: surface.clientWidth, scroll: surface.scrollWidth }, rows };
+      });
+      check(!!geometry.surface && geometry.surface.scroll <= geometry.surface.width + 1, `${width}px: stat rows fit the reader surface (${JSON.stringify(geometry.surface)})`);
+      for (const row of geometry.rows) {
+        check(row.scroll <= row.width + 1 && row.cards.every(card => card.left >= -1 && card.right <= geometry.viewport + 1), `${width}px: all ${row.cards.length} stat cards remain visible`);
+        if (width === 1440) check(row.cards.every(card => Math.abs(card.top - row.cards[0].top) <= 1), `desktop: ${row.cards.length} stat cards stay on one row`);
+      }
+    } finally { await page.close(); }
+  }));
+
   // ── the compiled reader handover (was gate-hydration) ───────────────────────
   const READER_HEADER = 'x-mx-reader';
   /**
@@ -656,7 +688,7 @@ try {
   });
 
   // The long legs first, so the short ones fill in around them.
-  await pool(4, [kitTask, takeoverTask, libraryTask, ...staticTasks, proseTask, ...popoverTasks, ...themeTasks, ...shellTasks]);
+  await pool(4, [kitTask, takeoverTask, libraryTask, ...staticTasks, proseTask, ...popoverTasks, ...statTasks, ...themeTasks, ...shellTasks]);
 } finally {
   await Promise.allSettled([browser.close(), glBrowser.close()]);
 }
