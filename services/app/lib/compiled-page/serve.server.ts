@@ -510,10 +510,12 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
 
 /**
  * The page's doors as the compiled page uses them: keep the viewer overlay when the version's plan
- * or authored markup depends on the reader, so other pages do not ask a door they never use.
+ * or authored markup depends on the reader, so other pages do not ask a door they never use. Older
+ * retained compiles have no markup-dependency bit; keep their viewer door until the background
+ * upgrade determines whether it is needed.
  */
 export function doorsFor(compiled: CompiledPage, doors: CompiledReaderRequest['doors']): CompiledReaderRequest['doors'] {
-  if (!doors?.viewerUrl || compiled.readsViewerMarkup || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
+  if (!doors?.viewerUrl || compiled.readsViewerMarkup !== false || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
   const { viewerUrl: _unused, ...rest } = doors;
   return rest;
 }

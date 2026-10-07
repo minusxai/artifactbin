@@ -186,8 +186,11 @@ export interface CompiledPage {
   /** Framework-free behaviour chunks the page loads (`deck`), as specifiers into the shared manifest. */
   behaviors: string[];
   plan: DataPlan | null;
-  /** The authored markup reads `$_me`, even when no SQL query has viewer scope. */
-  readsViewerMarkup: boolean;
+  /**
+   * The authored markup reads `$_me`, even when no SQL query has viewer scope. Absent on older
+   * retained compiles until their background upgrade; the serving path keeps the viewer door then.
+   */
+  readsViewerMarkup?: boolean;
   links: LinkHints;
   /** Kit components rendered by the Solid kit, by where they render. */
   kit: { skeleton: string[]; islands: string[] };

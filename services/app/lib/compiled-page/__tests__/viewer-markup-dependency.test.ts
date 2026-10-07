@@ -61,4 +61,18 @@ describe('compiled viewer identity dependencies', () => {
     expect(compiled.readsViewerMarkup).toBe(false);
     expect(doorsFor(compiled, doors)).toEqual({ queryUrl: doors.queryUrl, assetsUrl: doors.assetsUrl });
   });
+
+  it('keeps the viewer door for a legacy compile with no markup-dependency metadata until upgrade', async () => {
+    const input = await inputOf('<Helmet><Query name="total">{`select 1 as n`}</Query></Helmet><main>{$_me.id ? <p>Owner controls</p> : <SignIn>Sign in to add tasks</SignIn>}</main>');
+    const compiled = await compilePage(input, loadCompilerBuild());
+    const legacy = { ...compiled };
+    delete legacy.readsViewerMarkup;
+    const doors = { queryUrl: '/a/abc/query', assetsUrl: '/a/abc/assets', viewerUrl: '/a/abc/viewer' };
+
+    expect(compiled.readsViewerMarkup).toBe(true);
+    const legacyDoors = doorsFor(legacy, doors);
+    expect(legacyDoors).toEqual(doors);
+    expect(wantsViewerOverlay({ signedIn: true, viewerUrl: legacyDoors?.viewerUrl } as IslandPageData, input.flow)).toBe(true);
+    expect(wantsViewerOverlay({ signedIn: false, viewerUrl: legacyDoors?.viewerUrl } as IslandPageData, input.flow)).toBe(false);
+  });
 });
