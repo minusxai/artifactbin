@@ -149,8 +149,9 @@ describe('testing identities in live sessions', () => {
 
 it('teaches the Riso fact-list selector contract with semantic dt/dd markup',()=>{
  const text=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/references/system-riso.md'),'utf8');
- expect(text).toContain('<dl className="ri-dl"><dt>');
- expect(text).toContain('<dd><Number data="$totals" col="kept_pct" suffix="%" /></dd>');
- expect(text).toContain('its rules style `<dt>` and `<dd>`');
+ expect(text).toContain('The compact fact list uses `<dl className="ri-dl">');
+ expect(text).toContain('<dt>Count</dt><dd><Number data="$totals" col="bikes" /></dd></dl>');
+ expect(text).toContain('runtime rules target `dt`/`dd`, not generic `div`/`span` wrappers');
+ expect(text).toContain('avoid 40px `t-numeral` in this list');
  expect(text).not.toContain('<div className="ri-dl">');
 });
