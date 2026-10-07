@@ -148,7 +148,7 @@ Template: editorial. The template owns the measure, the folio rhythm and figure 
 
 ### Scrolly · best
 
-Template: scrolly. The template owns the conceit, the step column and the sticky figure (sticky is set by the live reader); the system owns the step card and the figure, drawn in its hand.
+Template: scrolly. Chapters and their figures stay in ordinary document flow; the author supplies each chapter’s figure state and the system owns the step card and figure, drawn in its hand.
 
 ```jsx
 <div className="ds-tpl ds-tpl-scrolly">
