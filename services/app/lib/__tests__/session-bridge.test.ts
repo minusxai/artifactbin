@@ -11,7 +11,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACTOR_HEADER, ANONYMOUS, type Actor } from '@artifactbin/contracts';
+import { ACTOR_HEADER, ANONYMOUS, BROWSER_FONT_RESOURCE_PATH, type Actor } from '@artifactbin/contracts';
 import { actorOf, verifyActor } from '@artifactbin/utils';
 import { sessionBridge } from '@/lib/runtime';
 
@@ -66,6 +66,17 @@ describe('a browser session\'s page hop', () => {
     const guest = await bridge(new Request(`http://localhost:${port}/a/abc123`), ANONYMOUS);
     expect(await guest.text()).toContain('anonymous');
     expect(seen[2]!.actor).toEqual(ANONYMOUS);
+  });
+
+  it('keeps the internal font relay off the public auth boundary', async () => {
+    const owner: Actor = { credential: 'bearer', userId: 'usr_owner' };
+    const bridge = sessionBridge({ dev: true, port, secret: SECRET, app });
+    const before = seen.length;
+
+    const response = await bridge(new Request(`http://app${BROWSER_FONT_RESOURCE_PATH}`), owner);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ inProcess: true, actor: owner });
+    expect(seen).toHaveLength(before);
   });
 
   it('stays in-process in a deployment, and without a secret to sign with', async () => {
