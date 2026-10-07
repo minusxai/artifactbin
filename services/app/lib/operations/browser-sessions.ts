@@ -18,30 +18,55 @@ const id = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/);
  * through a fork, and deleting it is one act that erases everything it did.
  */
 const VIEWER = z.union([z.literal('guest'), z.object({ testuser: z.string().min(1) })]);
+/** The advertised operation fields are also the runtime allowlist. Zod strips
+ * extra request fields, so trusted actors can only come from the context or
+ * from resolving the caller's own named test user below. */
+const browserSessionInput = z.object({
+  op: z.enum(['script', 'status', 'close']),
+  session_id: id,
+  execution_id: id.optional(),
+  create: z.boolean().optional(),
+  code: z.string().max(65536).optional(),
+  viewer: VIEWER.optional(),
+});
 /** Session lifecycle has its own execution receipts, independent of artifact source mutations. */
 export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
   name: 'browser_session', title: 'Operate a live browser session',
   http: { method: 'POST', path: '/api/browser-sessions' },
   description: 'Run an async Playwright function body in a persistent isolated browser. A script returns an execution receipt immediately; poll status with its session_id and execution_id. Multiple artifact pages share one session. Existing effects survive script errors; lost sessions are never recreated or replayed automatically. The session browses as you unless the request that creates it names a viewer: "guest" fetches its pages signed out — how to see what a public reader sees, with a guest\'s writes refused — and {"testuser": "ID"} browses as one of your test users (testuser_create), which is how to be a SECOND person on a page. Fork the page as that test user first (fork_artifact with as), because a test user acts only inside its own sandbox. Who a session browses as is fixed when it is created; naming a different viewer later is refused.',
-  input: { op: z.enum(['script', 'status', 'close']), session_id: id, execution_id: id.optional(), create: z.boolean().optional(), code: z.string().max(65536).optional(), viewer: VIEWER.optional() },
+  input: browserSessionInput.shape,
   annotations: {},
   example: { input: { op: 'status', session_id: 'session-id' } },
   errors: [
+    { status: 400, code: 'invalid_operation', fix: 'Set op to "script", "status" or "close".' },
+    { status: 400, code: 'invalid_browser_session_input', fix: 'Pass a session_id made of 1–80 letters, digits, underscores or hyphens; execution_id and code are optional except that script requires both.' },
+    { status: 400, code: 'invalid_script', fix: 'For op "script", pass execution_id as a valid ID and code as a string of at most 65,536 characters.' },
     { status: 400, code: 'invalid_viewer', fix: 'Pass viewer "guest" or {"testuser": "ID"} on the request that CREATES the session, or omit it to browse as yourself.' },
     { status: 403, code: TESTUSER_ERRORS.notYours, fix: 'The viewer names a test user that is not yours. List your own with testuser_list, or mint one with testuser_create.' },
     { status: 403, code: TESTUSER_ERRORS.expired, fix: 'That test user has expired and been erased with everything it owned. Mint another with testuser_create and fork the page as it again.' },
   ],
   async run(ctx, input) {
+    const parsed = browserSessionInput.safeParse(input);
+    if (!parsed.success) {
+      // Keep the actionable validation order callers already receive: a
+      // malformed script is reported before viewer errors on that request.
+      if (input.op === 'script' && parsed.error.issues.some((issue) => ['execution_id', 'code'].includes(String(issue.path[0])))) {
+        return { status: 400, body: { error: 'invalid_script', message: 'script requires a valid execution_id and code (at most 65,536 characters)' } };
+      }
+      if (input.viewer !== undefined && !VIEWER.safeParse(input.viewer).success) {
+        return { status: 400, body: { error: 'invalid_viewer', message: 'viewer is "guest", {"testuser": "ID"} or absent; a session omitting it browses as you' } };
+      }
+      if (!['script', 'status', 'close'].includes(String(input.op))) {
+        return { status: 400, body: { error: 'invalid_operation', message: 'op must be "script", "status" or "close"' } };
+      }
+      return { status: 400, body: { error: 'invalid_browser_session_input', message: 'session_id must be a valid ID; execution_id and code must have the declared types' } };
+    }
+    const safeInput = parsed.data;
     const sessionService = services().browser.sessions;
     if (!sessionService) return { status: 503, body: { error: 'sessions_unavailable' } };
-    if (input.op === 'script' && (typeof input.execution_id !== 'string' || typeof input.code !== 'string')) return { status: 400, body: { error: 'invalid_script', message: 'script requires execution_id and code' } };
-    const asked = input.viewer === undefined ? undefined : VIEWER.safeParse(input.viewer);
-    if (asked && !asked.success) {
-      return { status: 400, body: { error: 'invalid_viewer', message: 'viewer is "guest", {"testuser": "ID"} or absent; a session omitting it browses as you' } };
-    }
-    const viewer: ViewerChoice | undefined = asked?.success ? asked.data : undefined;
+    const viewer: ViewerChoice | undefined = safeInput.viewer;
     const actor = { credential: 'bearer', ...ctx.actor } as Actor;
-    const sessionId = String(input.session_id);
+    const sessionId = safeInput.session_id;
     // Every call is a chance to notice the test users nobody will ever delete.
     // It can never fail the call: `status` is the disconnect-recovery path.
     await sweepTestUsers();
@@ -54,7 +79,7 @@ export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
      */
     let pageActor: Actor | undefined;
     let browsingAs: string | undefined;
-    if (input.op === 'script' && viewer && typeof viewer === 'object' && input.create === true) {
+    if (safeInput.op === 'script' && viewer && typeof viewer === 'object' && safeInput.create === true) {
       const resolved = await resolveTestUser(ctx.actor.userId ?? null, viewer.testuser);
       if (resolved === TESTUSER_ERRORS.notYours) return { status: 403, body: { error: TESTUSER_ERRORS.notYours, message: `${viewer.testuser} is not one of your test users. List them with testuser_list, or mint one with testuser_create.` } };
       if (resolved === TESTUSER_ERRORS.expired) return { status: 403, body: { error: TESTUSER_ERRORS.expired, message: `Test user ${viewer.testuser} has expired and been erased. Mint another with testuser_create.` } };
@@ -65,7 +90,7 @@ export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
       noteTestUserSession(resolved.id, sessionId, actor);
     }
 
-    const request = { ...input, actor, ...(pageActor ? { pageActor } : {}) } as BrowserSessionRequest;
+    const request = { ...safeInput, actor, ...(pageActor ? { pageActor } : {}) } as BrowserSessionRequest;
     const result = await sessionService.request(request);
     // The session never started, so nothing will ever close it: stop naming it
     // now rather than leaving a register entry a later erase would act on.
