@@ -111,7 +111,8 @@ From the repo root; keep this list current.
 
 ## Change checks
 
-- Kit renderer changes, including inline wrapper styles: run `npm run generate-story-ui-classes`
+- Kit renderer changes, including inline wrapper styles and any `EXTRA_CLASS_SOURCES` input
+  (such as `compiled-page/compiler.ts`): run `npm run generate-story-ui-classes`
   and review the generated diff before final CI. FAST regression checks are
   `services/app/lib/story-ui/__tests__/recipe-classes.test.ts` and
   `services/app/lib/story/__tests__/reader-sheet.test.ts`; type checking alone does not catch drift.
