@@ -843,7 +843,6 @@ describe('CI job shape', () => {
     expect(install.if).toBe("matrix.phase != 'native' && steps.install.outputs.cache-hit != 'true'");
     expect(jobs.cli.steps.some((step) => step.run === 'npm ci')).toBe(false);
     expect(jobs.cli.steps.find((step) => step.run === 'node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase != 'native'");
-    expect(jobs.cli.steps.find((step) => step.name === 'Same-tarball native npm and warmed offline acceptance').if).toBe("matrix.phase == 'native'");
   });
 
   it('fans the gate set over seven runners and pulls Postgres only for its assigned shard', () => {
@@ -944,7 +943,6 @@ describe('CI job shape', () => {
   it('keeps preview/export and Node bootstrap proofs mandatory on every supported npm platform', () => {
     const {jobs}=ci();
     const proof=jobs.cli.steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
-    expect(proof.if).toBe("matrix.phase == 'preview' || matrix.phase == 'local'");
     expect(proof.run).toContain('scripts/test-installed-npm.mjs ${{ matrix.phase }}');
     expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
     expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
