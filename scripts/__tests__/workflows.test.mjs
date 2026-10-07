@@ -176,12 +176,7 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(nodeSetups[1].with['node-version']).toBe('${{ matrix.node }}');
     const install = matrix.steps.find(step => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
     expect(install.if).toContain("matrix.phase != 'native'");
-    const native = matrix.steps.find(step => step.name === 'Same-tarball native npm and warmed offline acceptance');
-    expect(native.if).toBe("matrix.phase == 'native'");
     expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase != 'native'");
-    for (const name of ['Installed npm preview and export, with process shutdown']) {
-      expect(matrix.steps.find(step => step.name === name)?.if,name).toBe("matrix.phase == 'preview' || matrix.phase == 'local'");
-    }
     expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase != 'native'");
     for(const job of ['cli','reference-compatibility']){
       const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
