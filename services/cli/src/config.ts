@@ -208,3 +208,10 @@ export async function observedCredentialAccount(connection:Connection,home=homed
  return value?.credential===digest(connection.token)&&typeof value.account==='string'&&typeof value.observedAt==='string'?{account:value.account,observedAt:value.observedAt}:null;
  }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}
 }
+
+/** Restore only this managed Artifactbin scope before importing command dispatch. */
+export function restoreRemoteContext(context:{id:string;proof:string;home:string;server:string;connection?:Connection},env:NodeJS.ProcessEnv=process.env):void{
+ env.ARTIFACTBIN__REMOTE_SESSION=context.id;env.ARTIFACTBIN__REMOTE_PROOF=context.proof;
+ env.ARTIFACTBIN_HOME=context.home;env.ARTIFACTBIN_URL=context.server;
+ if(context.connection){env.ARTIFACTBIN_TOKEN=context.connection.token;env.ARTIFACTBIN__REMOTE_REFRESH_TOKEN=context.connection.refreshToken;env.ARTIFACTBIN__REMOTE_CLIENT_ID=context.connection.clientId;}
+}
