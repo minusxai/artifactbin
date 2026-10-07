@@ -65,6 +65,8 @@ export async function automaticInstallPrefix(options:{entry:string;home:string;e
 }
 
 const pathOf=(platform:string)=>platform==='win32'?win32:posix;
+const CLI_PACKAGE='@afbin/cli';
+const CLI_ENTRY='dist/afbin.mjs';
 const pathEntries=(env:NodeJS.ProcessEnv,platform:string)=>{
  const value=platform==='win32'?env.PATH??env.Path??Object.entries(env).find(([key])=>key.toLowerCase()==='path')?.[1]:env.PATH;
  return (value??'').split(platform==='win32'?';':':').filter(Boolean);
@@ -80,6 +82,44 @@ function failureReason(stderr:string,code:number):string{
  return (errors.length?errors:lines).slice(0,4).join(' ')||`npm exited with code ${code}.`;
 }
 const permissionFailure=(stderr:string,platform:string)=>/\bEACCES\b/.test(stderr)||platform==='win32'&&/\bEPERM\b/.test(stderr);
+
+/** Read npm's Windows invocation without executing a discovered command. */
+export function npmShimTargets(shim:string,target:string):boolean{
+ const normalize=(value:string)=>value.replace(/[\\/]+/g,'/').toLowerCase();
+ const invocation=`"%_prog%" "%dp0%/${normalize(target)}" %*`;
+ const npmPrefix='endlocal & goto #_undefined_# 2>nul || title %comspec% & ';
+ return normalize(shim).split(/\r?\n/).some(line=>{
+  const command=line.trim().replace(/[ \t]+/g,' ');
+  return command===invocation||command===npmPrefix+invocation;
+ });
+}
+
+/** Reuse only a complete npm-owned install: package metadata, runnable entry and its generated command shim must agree. */
+async function hasInstalledVersion(prefix:string,version:string,platform:string,bin:string):Promise<boolean>{
+ const path=pathOf(platform),packageRoot=path.join(prefix,...(platform==='win32'?[]:['lib']),'node_modules','@afbin','cli');
+ try{
+  const manifest=JSON.parse(await readFile(path.join(packageRoot,'package.json'),'utf8')) as {name?:unknown;version?:unknown;bin?:unknown};
+  if(manifest.name!==CLI_PACKAGE||manifest.version!==version||!manifest.bin||typeof manifest.bin!=='object'||Array.isArray(manifest.bin)||(manifest.bin as Record<string,unknown>).afbin!==CLI_ENTRY)return false;
+  const entry=path.join(packageRoot,...CLI_ENTRY.split('/'));
+  const root=path.resolve(packageRoot),resolved=path.resolve(entry),relative=path.relative(root,resolved);
+  if(!relative||relative.startsWith('..')||path.isAbsolute(relative))return false;
+  const entryInfo=await lstat(entry);
+  if(!entryInfo.isFile()||entryInfo.size===0||platform!=='win32'&&(entryInfo.mode&0o111)===0)return false;
+  const first=await open(entry,'r');
+  let shebang:string;
+  try{const bytes=Buffer.alloc(2);const {bytesRead}=await first.read(bytes,0,2,0);shebang=bytes.subarray(0,bytesRead).toString();}
+  finally{await first.close();}
+  if(shebang!=='#!')return false;
+  const commandInfo=await lstat(bin);
+  if(platform==='win32'){
+   if(!commandInfo.isFile()||commandInfo.size===0)return false;
+   const shim=await readFile(bin,'utf8');
+   const target=path.relative(path.dirname(bin),entry);
+   return npmShimTargets(shim,target);
+  }
+  return commandInfo.isSymbolicLink()&&samePath(realpathSync(bin),realpathSync(entry),platform);
+ }catch{return false;}
+}
 
 /**
  * npm install -g --no-fund --no-audit @afbin/cli@<version>. On a permission failure (EACCES, or EPERM on
@@ -97,15 +137,20 @@ export async function globalInstall(options:{version:string;home:string;env:Node
   return {status:'installed',version:options.version,prefix,bin,on_path,fallback,...(on_path?{}:{path_line})};
  };
  const failed=(reason:string,prefix='',fallback=false):GlobalInstallResult=>({status:'failed',version:options.version,prefix,bin:prefix?binFor(prefix):'',on_path:false,fallback,reason});
+ const prefixResult=await npm(['prefix','-g'],{env});
+ const globalPrefix=prefixResult.code===0?prefixResult.stdout.trim().split(/\r?\n/).pop()?.trim()??'':'';
+ if(globalPrefix&&path.isAbsolute(globalPrefix)&&await hasInstalledVersion(globalPrefix,options.version,platform,binFor(globalPrefix)))return finish(globalPrefix,false);
+ const privatePrefix=join(configDir(options.home,env),'npm');
+ if(privatePrefix&& !samePath(privatePrefix,globalPrefix,platform)&&await hasInstalledVersion(privatePrefix,options.version,platform,binFor(privatePrefix)))return finish(privatePrefix,true);
  const first=await npm(['install','-g','--no-fund','--no-audit',spec],{env});
  if(first.code===0){
-  const prefix=await npm(['prefix','-g'],{env});
+  const prefix=globalPrefix?{code:prefixResult.code,stdout:globalPrefix,stderr:prefixResult.stderr}:await npm(['prefix','-g'],{env});
   const value=prefix.stdout.trim().split(/\r?\n/).pop()?.trim()??'';
   return prefix.code===0&&value?finish(value,false):failed(`npm installed ${spec} but did not report its global prefix: ${failureReason(prefix.stderr,prefix.code)}`);
  }
  if(!permissionFailure(first.stderr,platform))return failed(failureReason(first.stderr,first.code));
  // The global prefix belongs to another user (Node from a system installer): use one under afbin's own state.
- const prefix=join(configDir(options.home,env),'npm');
+ const prefix=privatePrefix;
  try{await mkdir(prefix,{recursive:true});}catch(error){return failed(`Could not create ${prefix}: ${(error as Error).message}`,prefix,true);}
  const retry=await npm(['install','-g','--prefix',prefix,'--no-fund','--no-audit',spec],{env});
  return retry.code===0?finish(prefix,true):failed(failureReason(retry.stderr,retry.code),prefix,true);

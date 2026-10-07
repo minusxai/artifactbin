@@ -1,6 +1,6 @@
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,stat,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
@@ -148,7 +148,19 @@ describe('setup installs the afbin command through npm',()=>{
   const home=await mkdtemp(join(tmpdir(),prefix));const old=join(home,'old');const npmPrefix=join(home,'npm-global');
   await mkdir(old);await mkdir(join(npmPrefix,'bin'),{recursive:true});await writeFile(join(old,'afbin'),STANDALONE,{mode:0o755});
   const calls:string[][]=[];const out:string[]=[];const err:string[]=[];
-  const npm=async(args:string[])=>{calls.push(args);return args[0]==='prefix'?{code:0,stdout:npmPrefix+'\n',stderr:''}:{code:0,stdout:'',stderr:''};};
+  const npm=async(args:string[])=>{
+   calls.push(args);
+   if(args[0]==='prefix')return {code:0,stdout:npmPrefix+'\n',stderr:''};
+   const version=args.at(-1)?.split('@').at(-1)??'';
+   const packageRoot=join(npmPrefix,...(process.platform==='win32'?[]:['lib']),'node_modules','@afbin','cli');
+   const entry=join(packageRoot,'dist','afbin.mjs');
+   await mkdir(join(packageRoot,'dist'),{recursive:true});
+   await writeFile(join(packageRoot,'package.json'),JSON.stringify({name:'@afbin/cli',version,bin:{afbin:'dist/afbin.mjs'}}));
+   await writeFile(entry,'#!/usr/bin/env node\n',{mode:0o755});
+   if(process.platform==='win32')await writeFile(join(npmPrefix,'afbin.cmd'),`@ECHO off\r\n"%_prog%" "%dp0%\\node_modules\\@afbin\\cli\\dist\\afbin.mjs" %*\r\n`);
+   else await symlink(entry,join(npmPrefix,'bin','afbin'));
+   return {code:0,stdout:'',stderr:''};
+  };
   const context=(PATH:string,extra:Record<string,unknown>={})=>({home,cwd:home,env:{PATH},interactive:false,installKind:'package' as const,npm,stdout:(s:string)=>out.push(s),stderr:(s:string)=>err.push(s),fetch:async()=>{throw new Error('setup must stay offline');},...extra});
   return {home,old,npmPrefix,calls,out,err,npm,context};
  };
@@ -157,7 +169,7 @@ describe('setup installs the afbin command through npm',()=>{
   try{
    const {CLI_VERSION}=await import('../src/version');
    assert.equal(await runCli(['setup','--yes','--json','--harness','none'],f.context([join(f.npmPrefix,'bin'),join(f.old)].join(':'))),0,f.err.join(''));
-   assert.deepEqual(f.calls,[['install','-g','--no-fund','--no-audit',`@afbin/cli@${CLI_VERSION}`],['prefix','-g']]);
+   assert.deepEqual(f.calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit',`@afbin/cli@${CLI_VERSION}`]]);
    const result=JSON.parse(f.out.join(''));
    assert.deepEqual(result.global,{status:'installed',version:CLI_VERSION,prefix:f.npmPrefix,bin:join(f.npmPrefix,'bin','afbin'),on_path:true,fallback:false});
    assert.equal(result.retired.length,1);assert.equal(result.retired[0].path,join(f.old,'afbin'));assert.equal(result.retired[0].status,'removed');
@@ -166,13 +178,17 @@ describe('setup installs the afbin command through npm',()=>{
    await assert.rejects(stat(join(f.old,'afbin')),{code:'ENOENT'});
    // Human summary, with the npm command not on PATH: the old command forwards and the PATH line is printed.
    await writeFile(join(f.old,'afbin'),STANDALONE,{mode:0o755});f.out.length=0;
+   const callCount=f.calls.length;
    assert.equal(await runCli(['setup','--yes','--harness','none'],f.context(f.old)),0,f.err.join(''));
+   assert.deepEqual(f.calls.slice(callCount),[['prefix','-g']],'the next setup reuses the exact npm installation');
    const text=f.out.join('');
    assert.ok(text.includes(`! afbin command  ${join(f.npmPrefix,'bin','afbin')} — not on PATH: export PATH="${join(f.npmPrefix,'bin')}:$PATH"`),text);
    assert.ok(text.includes(`✓ Retired old afbin  ${join(f.old,'afbin')} (backup ${result.retired[0].backup}`),text);
    assert.equal(await readFile(join(f.old,'afbin'),'utf8'),`#!/bin/sh\nexec "${join(f.npmPrefix,'bin','afbin')}" "$@"\n`);
    f.out.length=0;
+   const secondCallCount=f.calls.length;
    assert.equal(await runCli(['setup','--yes','--harness','none'],f.context(`${join(f.npmPrefix,'bin')}:${f.old}`)),0);
+   assert.deepEqual(f.calls.slice(secondCallCount),[['prefix','-g']],'later setup calls still avoid npm reinstall');
    assert.ok(f.out.join('').includes(`✓ afbin command  ${join(f.npmPrefix,'bin','afbin')}`),f.out.join(''));
    await assert.rejects(stat(join(f.old,'afbin')),{code:'ENOENT'},'the forwarder goes once the npm command is on PATH');
   }finally{await rm(f.home,{recursive:true,force:true});}

@@ -258,3 +258,22 @@ it('leaves malformed API responses and non-transport process failures authoritat
  await expect((async()=>JSON.parse(await requestCurrentArtifact(['api','fixture'],options)))()).rejects.toThrow();expect(calls).toBe(1);
  calls=0;await expect(requestCurrentArtifact(['api','fixture'],{...options,request:()=>{calls++;throw Object.assign(Error('output exceeded'),{code:'ENOBUFS'});}})).rejects.toThrow('output exceeded');expect(calls).toBe(1);
 });
+
+it('recovers a real gh HTTP 502 while waiting for the same-attempt artifact',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-gh-http-transient-')),calls=join(directory,'calls'),gh=join(directory,'gh');
+ writeFileSync(gh,`#!${process.execPath}
+const fs=require('node:fs');const file=${JSON.stringify(calls)};const count=fs.existsSync(file)?Number(fs.readFileSync(file,'utf8')):0;fs.writeFileSync(file,String(count+1));if(!count){console.error('gh: Server Error (HTTP 502)');process.exit(1);}console.log(JSON.stringify({ready:true}));
+`);chmodSync(gh,0o755);
+ try{
+  expect(JSON.parse(await requestCurrentArtifact(['api','fixture'],{command:gh,deadline:Date.now()+5000,retryDelay:1}))).toEqual({ready:true});
+  expect(readFileSync(calls,'utf8')).toBe('2');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('bounds transient gh HTTP failures by the original deadline and three requests',async()=>{
+ const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');let time=0,calls=0;
+ const options={deadline:200,now:()=>time,retryDelay:5,requestTimeout:30,request:(_command,_args,options)=>{calls++;time+=options.timeout;throw Object.assign(Error('gh HTTP 503'),{status:1,stderr:Buffer.from('gh: Service Unavailable (HTTP 503)')});},sleep:async delay=>{time+=delay;}};
+ await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow('gh HTTP 503');expect(calls).toBe(3);expect(time).toBe(100);
+ calls=0;time=198;await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow(/artifact timed out/);expect(calls).toBe(1);expect(time).toBe(200);
+});

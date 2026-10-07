@@ -5,6 +5,8 @@ export const MARKUP_STYLE_RULE =
 
 /** Shared authoring guidance rendered in both the CLI skill and HTTP references. */
 export const URL_REPLY_RULE = 'URL-only requests get the URL alone.';
+export const NATIVE_TABLE_AUTHORING_RULE =
+  'DataTable and native HTML tables already own their scroll boxes. Avoid a pixel width or min-width on the table. At 390px, check .mx-doc fits and the last column is reachable. Recheck after the final edit.';
 export const PHONE_AUTHORING_RULE =
   'At 390px, fix overflow, clipping and unreachable controls. Use numeric roles for figures, text roles for prose; stack crowded stats.';
 

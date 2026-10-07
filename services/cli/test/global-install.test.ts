@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,rm,stat,symlink,readdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
-import {join,delimiter} from 'node:path';
-import {installKind,globalInstall,findAfbinOnPath,retireAfbin,type NpmRunner} from '../src/global-install';
+import {join,delimiter,win32} from 'node:path';
+import {installKind,globalInstall,npmShimTargets,findAfbinOnPath,retireAfbin,type NpmRunner} from '../src/global-install';
 
 /** A runner that records every npm invocation and answers from a script; it never spawns npm. */
 function recorder(answer:(args:string[])=>{code?:number;stdout?:string;stderr?:string}){
@@ -41,7 +41,7 @@ test('globalInstall runs npm install -g with the exact version and reads the glo
  const {calls,npm}=recorder(args=>args[0]==='prefix'?{stdout:'/usr/local\n'}:{});
  const env={PATH:['/usr/bin','/usr/local/bin/'].join(':')};
  const result=await globalInstall({version:'1.2.3',home:'/unused',env,platform:'linux',npm});
- assert.deepEqual(calls,[['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3'],['prefix','-g']]);
+ assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3']]);
  assert.deepEqual(result,{status:'installed',version:'1.2.3',prefix:'/usr/local',bin:'/usr/local/bin/afbin',on_path:true,fallback:false});
 });
 
@@ -52,7 +52,7 @@ test('globalInstall retries into the private user prefix on EACCES and prints a 
   const {calls,npm}=recorder(args=>args.includes('--prefix')?{}:{code:243,stderr:'npm error code EACCES\nnpm error syscall mkdir\nnpm error path /usr/lib/node_modules/@afbin\n'});
   const result=await globalInstall({version:'1.2.3',home:root,env:{PATH:'/usr/bin:/bin',ARTIFACTBIN_HOME:state},platform:'linux',npm});
   const prefix=join(state,'npm');
-  assert.deepEqual(calls,[['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3'],['install','-g','--prefix',prefix,'--no-fund','--no-audit','@afbin/cli@1.2.3']]);
+  assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3'],['install','-g','--prefix',prefix,'--no-fund','--no-audit','@afbin/cli@1.2.3']]);
   assert.equal(result.status,'installed');assert.equal(result.fallback,true);assert.equal(result.prefix,prefix);
   assert.equal(result.bin,join(prefix,'bin','afbin'));assert.equal(result.on_path,false);
   assert.equal(result.path_line,`export PATH="${join(prefix,'bin')}:$PATH"`);
@@ -66,7 +66,7 @@ test('globalInstall retries into the private user prefix on EACCES and prints a 
 test('globalInstall reports a non-permission failure without retrying',async()=>{
  const {calls,npm}=recorder(()=>({code:1,stderr:'npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/@afbin%2fcli/-/cli-9.9.9.tgz\n'}));
  const result=await globalInstall({version:'9.9.9',home:'/unused',env:{PATH:'/bin'},platform:'linux',npm});
- assert.equal(calls.length,1);assert.equal(result.status,'failed');assert.equal(result.fallback,false);
+ assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@9.9.9']]);assert.equal(result.status,'failed');assert.equal(result.fallback,false);
  assert.match(result.reason??'',/E404/);
 });
 
@@ -78,7 +78,7 @@ test('globalInstall on win32 names afbin.cmd in the prefix, compares PATH case-i
  try{
   const failing=recorder(args=>args.includes('--prefix')?{}:{code:1,stderr:'npm error code EPERM\n'});
   const fallback=await globalInstall({version:'1.2.3',home:root,env:{Path:'C:\\Windows'},platform:'win32',npm:failing.npm});
-  assert.equal(failing.calls.length,2);assert.equal(fallback.fallback,true);assert.match(fallback.bin,/afbin\.cmd$/);assert.equal(fallback.on_path,false);assert.ok(fallback.path_line);
+  assert.equal(failing.calls.length,3);assert.deepEqual(failing.calls[0],['prefix','-g']);assert.equal(fallback.fallback,true);assert.match(fallback.bin,/afbin\.cmd$/);assert.equal(fallback.on_path,false);assert.ok(fallback.path_line);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
@@ -158,4 +158,95 @@ test('retireAfbin keeps a locked executable and says how to finish',async()=>{
   assert.equal(result?.status,'kept');assert.equal(result?.reason,'Stop running afbin processes and rerun setup.');
   assert.ok(result?.backup);assert.deepEqual(await readFile(old),STANDALONE);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test('globalInstall reuses a complete exact-version npm installation without reinstalling',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-global-repeat-'));
+ try{
+  const pkg=join(root,'lib','node_modules','@afbin','cli');
+  await mkdir(join(pkg,'dist'),{recursive:true});await mkdir(join(root,'bin'));
+  await writeFile(join(pkg,'package.json'),JSON.stringify({name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}}));
+  await writeFile(join(pkg,'dist','afbin.mjs'),'#!/usr/bin/env node\nconsole.log("fixture");\n',{mode:0o755});
+  await symlink(join(pkg,'dist','afbin.mjs'),join(root,'bin','afbin'));
+  const {calls,npm}=recorder(args=>args[0]==='prefix'?{stdout:root+'\n'}:{});
+  const result=await globalInstall({version:'1.2.3',home:join(root,'home'),env:{PATH:join(root,'bin')},platform:'linux',npm});
+  assert.deepEqual(calls,[['prefix','-g']],'an already installed exact version needs no npm install');
+  assert.equal(result.status,'installed');assert.equal(result.on_path,true);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('globalInstall reuses an exact-version private fallback before retrying a denied global prefix',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-global-fallback-repeat-'));
+ try{
+  const state=join(root,'state'),prefix=join(state,'npm'),pkg=join(prefix,'lib','node_modules','@afbin','cli');
+  const entry=join(pkg,'dist','afbin.mjs'),bin=join(prefix,'bin','afbin');
+  await mkdir(join(pkg,'dist'),{recursive:true});await mkdir(join(prefix,'bin'),{recursive:true});
+  await writeFile(join(pkg,'package.json'),JSON.stringify({name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}}));
+  await writeFile(entry,'#!/usr/bin/env node\n',{mode:0o755});await symlink(entry,bin);
+  const {calls,npm}=recorder(args=>args[0]==='prefix'?{stdout:'/usr/local\n'}:{code:243,stderr:'npm error code EACCES\n'});
+  const result=await globalInstall({version:'1.2.3',home:root,env:{PATH:join(prefix,'bin'),ARTIFACTBIN_HOME:state},platform:'linux',npm});
+  assert.deepEqual(calls,[['prefix','-g']]);assert.equal(result.status,'installed');assert.equal(result.prefix,prefix);assert.equal(result.fallback,true);assert.equal(result.on_path,true);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('globalInstall repairs stale, malformed or miswired npm installs',async()=>{
+ const validManifest={name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}};
+ const cases:Array<{name:string;manifest?:typeof validManifest;manifestText?:string;entry?:string;missingEntry?:boolean;link?:string|false}>=[
+  {name:'wrong package name',manifest:{name:'someone-else',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}}},
+  {name:'stale version',manifest:{name:'@afbin/cli',version:'1.1.9',bin:{afbin:'dist/afbin.mjs'}}},
+  {name:'wrong bin mapping',manifest:{name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/other.mjs'}}},
+  {name:'malformed package JSON',manifestText:'{not valid JSON'},
+  {name:'missing entry',manifest:validManifest,missingEntry:true},
+  {name:'invalid entry shebang',manifest:validManifest,entry:'not an executable entry\n'},
+  {name:'empty entry',manifest:{name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}},entry:''},
+  {name:'wrong command link',manifest:{name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}},link:'wrong.mjs'},
+  {name:'missing command link',manifest:{name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}},link:false},
+ ];
+ for(const scenario of cases){
+  const root=await mkdtemp(join(tmpdir(),'afbin-global-repair-'));
+  try{
+   const pkg=join(root,'lib','node_modules','@afbin','cli'),entry=join(pkg,'dist','afbin.mjs'),bin=join(root,'bin','afbin');
+   await mkdir(join(pkg,'dist'),{recursive:true});await mkdir(join(root,'bin'));
+   await writeFile(join(pkg,'package.json'),scenario.manifestText??JSON.stringify(scenario.manifest));
+   if(!scenario.missingEntry)await writeFile(entry,scenario.entry??'#!/usr/bin/env node\n',{mode:0o755});
+   if(scenario.link!==false)await symlink(typeof scenario.link==='string'?join(pkg,'dist',scenario.link):entry,bin);
+   const {calls,npm}=recorder(args=>args[0]==='prefix'?{stdout:root+'\n'}:{});
+   const result=await globalInstall({version:'1.2.3',home:join(root,'home'),env:{PATH:join(root,'bin')},platform:'linux',npm});
+   assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3']],scenario.name);
+   assert.equal(result.status,'installed',scenario.name);
+  }finally{await rm(root,{recursive:true,force:true});}
+ }
+});
+
+test('globalInstall reuses only a Windows npm shim that targets the matching package entry',{skip:process.platform!=='win32'},async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-global-win-repeat-'));
+ try{
+  const pkg=win32.join(root,'node_modules','@afbin','cli'),entry=win32.join(pkg,'dist','afbin.mjs'),bin=win32.join(root,'afbin.cmd');
+  await mkdir(win32.join(pkg,'dist'),{recursive:true});
+  await writeFile(win32.join(pkg,'package.json'),JSON.stringify({name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}}));
+  await writeFile(entry,'#!/usr/bin/env node\n');
+  await writeFile(bin,`@ECHO off\r\n"%_prog%" "%dp0%\\${win32.relative(root,entry)}" %*\r\n`);
+  const {calls,npm}=recorder(args=>args[0]==='prefix'?{stdout:root+'\r\n'}:{});
+  const result=await globalInstall({version:'1.2.3',home:win32.join(root,'home'),env:{Path:root},platform:'win32',npm});
+  assert.deepEqual(calls,[['prefix','-g']]);assert.equal(result.status,'installed');assert.equal(result.on_path,true);
+  await writeFile(bin,'@ECHO off\r\n"%_prog%" "%dp0%\\node_modules\\someone-else\\dist\\afbin.mjs" %*\r\n');calls.length=0;
+  const repaired=await globalInstall({version:'1.2.3',home:win32.join(root,'home'),env:{Path:root},platform:'win32',npm});
+  assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3']]);assert.equal(repaired.status,'installed');
+  await writeFile(bin,`@ECHO off\r\nREM "%_prog%" "%dp0%\\${win32.relative(root,entry)}" %*\r\n`);calls.length=0;
+  const comment=await globalInstall({version:'1.2.3',home:win32.join(root,'home'),env:{Path:root},platform:'win32',npm});
+  assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3']]);assert.equal(comment.status,'installed');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test('npmShimTargets rejects commented or unrelated Windows command lines on every platform',()=>{
+ const target='node_modules/@afbin/cli/dist/afbin.mjs',command=`"%_prog%" "%dp0%/${target}" %*`;
+ assert.equal(npmShimTargets('@echo off\n'+command,target),true);
+ assert.equal(npmShimTargets('endlocal & goto #_undefined_# 2>nul || title %comspec% & '+command,target),true);
+ assert.equal(npmShimTargets('endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & '+command.replace('"%_prog%" ','"%_prog%"  '),target),true,'npm emits two spaces when shebang has no additional args');
+ assert.equal(npmShimTargets('echo '+command,target),false,'echoing a command is not executing it');
+ assert.equal(npmShimTargets('REM '+command,target),false,'REM is a comment, not a working command');
+ assert.equal(npmShimTargets('  :: '+command,target),false,'label comment is not a working command');
+ assert.equal(npmShimTargets(command.replace('@afbin/cli','other-package'),target),false);
 });
