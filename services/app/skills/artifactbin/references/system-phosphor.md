@@ -92,7 +92,7 @@ Kit components take Phosphor through the contract and come out square, green and
 › gate-hydration · worker-3 · 00:42</code></pre><button className="p-btn">view full log</button></div>
 ```
 
-Classes the runtime provides: `p-tint`, `p-dot`, `p-green`, `p-amber`, `p-sunk`, `p-rim`, `p-cursor`, `p-glow`, `p-glow-a`, `p-amber-fill`, `p-muted-fill`, `p-on-green`, `p-blink`, `p-muted`, `p-amber-ink`, `p-btn`, `p-btn-primary`, `p-btn-amber`, `p-tag`, `p-pass`, `p-run`, `p-fail`, `p-stat`, `p-stat-live`, `t-numeral`, `p-delta`, `p-up`, `p-callout`, `p-callout-pass`, `p-callout-warn`, `p-callout-fail`, `p-panel`, `t-label`, `p-panel-live`, `p-panel-head`, `p-log`, `p-prompt-line`, `p-prompt`, `h-fill`, `h-fill2`, `h-glow`, `h-ink`, `h-num`, `h-text`.
+Classes the runtime provides: `p-tint`, `p-dot`, `p-green`, `p-amber`, `p-sunk`, `p-rim`, `p-cursor`, `p-glow`, `p-glow-a`, `p-amber-fill`, `p-muted-fill`, `p-on-green`, `p-blink`, `p-muted`, `p-amber-ink`, `p-btn`, `p-btn-primary`, `p-btn-amber`, `p-tag`, `p-pass`, `p-run`, `p-fail`, `p-stat`, `t-numeral`, `p-stat-live`, `p-delta`, `p-up`, `p-callout`, `p-callout-pass`, `p-callout-warn`, `p-callout-fail`, `p-panel`, `t-label`, `p-panel-live`, `p-panel-head`, `p-log`, `p-prompt-line`, `p-prompt`, `h-fill`, `h-fill2`, `h-glow`, `h-ink`, `h-num`, `h-text`.
 
 ## The hand
 
