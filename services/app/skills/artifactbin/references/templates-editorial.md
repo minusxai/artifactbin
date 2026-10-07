@@ -46,8 +46,7 @@ evidence is staged. Pick ONE composition and build that.
   measure). A centered column is one composition; the system can also use
   margin notes, asymmetric evidence spreads, bands and distinct surfaces.
   Preserve source reading order and stack columns on narrow screens. Figures
-  and tables may widen within the document; the platform gives tables their
-  own scroll boxes. Keep the page itself free of horizontal overflow.
+  and tables may widen within the document. [[ nativeTableAuthoringRule ]]
 - Every figure is a `<figure>` with a FIG-numbered `<figcaption>`, numbered
   continuously. Charts are `<Question>` over a `<Query>` in `<Helmet>`,
   evidence 380 to 440px, a lone number 170 to 220px. Diagrams are inline

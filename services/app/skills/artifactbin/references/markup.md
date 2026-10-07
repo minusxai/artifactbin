@@ -20,6 +20,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
+- [[ nativeTableAuthoringRule ]]
 - Data (`<Import>`, `<Value>`, `<Query>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
   Editable dataset cells: [editing](markup-editing.md).
   <!--bundle:skip-->[maps](markup-maps.md) · <!--/bundle:skip-->[motion](markup-motion.md) · [svg](markup-svg.md).
@@ -151,8 +152,7 @@ Flow columns: [Grid](templates.md).
 <!--bundle:skip-->
 ## Do / Don't
 
-- DO cap body copy at `max-w-prose`; let CHARTS break wider. Every table is
-  already its own scroll box — never widen one with negative margins.
+- DO cap body copy at `max-w-prose`; let CHARTS break wider.
 - Three or more `<h2>` sections get a table of contents made from the
   headings — write `<h2>`s as short claims. Decks and `<Grid>` dashboards get none.
 

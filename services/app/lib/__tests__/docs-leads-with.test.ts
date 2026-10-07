@@ -113,7 +113,7 @@ it('keeps scrolly full-bleed bands inside the document while prose owns its padd
 describe('native grid layouts bound evidence at phone width',()=>{
   it('teaches zero-minimum tracks and shrinking children rather than clipping wide tables',()=>{
     const guide=renderDoc('artifactbin/references/templates.md',BASE);
-    for(const term of ['minmax(0, 1fr)','grid-cols-1','min-w-0','overflow-x-auto','390px'])expect(guide).toContain(term);
+    for(const term of ['minmax(0, 1fr)','grid-cols-1','min-w-0','scroll boxes','390px'])expect(guide).toContain(term);
     const landing=renderDoc('artifactbin/references/templates-landing.md',BASE);
     expect(landing).toContain('grid grid-cols-1 gap-8');
   });
@@ -131,4 +131,16 @@ describe('new dataset examples preserve app grant defaults',()=>{
     expect(creation).toBe('afbin push sales.csv --type dataset --json');
     expect(creation).not.toContain('--access');
   });
+});
+
+
+it('teaches the existing native table scroller consistently and requires QA after the final edit',()=>{
+ for(const name of ['markup','templates','templates-editorial']){
+  const guide=renderDoc(`artifactbin/references/${name}.md`,BASE);
+  expect(guide,name).toContain('native HTML tables already own their scroll boxes');
+  expect(guide,name).toContain('pixel width or min-width on the table');
+  expect(guide,name).toContain('last column');
+  expect(guide,name).toContain('Recheck after the final edit');
+  expect(guide,name).not.toContain('ordinary HTML tables need a bounded');
+ }
 });

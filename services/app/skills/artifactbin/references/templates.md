@@ -69,7 +69,5 @@ when the table has a scrollbar. At 390px, use `grid-template-columns:
 minmax(0, 1fr)` and `min-width: 0; max-width: 100%` on its direct children.
 Utility equivalent: `grid grid-cols-1 gap-6 @3xl:grid-cols-2`, with
 `min-w-0 max-w-full` on each child. Apply the same constraint through nested
-grid/flex wrappers around evidence. DataTable already owns horizontal
-scrolling; ordinary HTML tables need a bounded `overflow-x-auto` wrapper.
-Check the last column is reachable at 390px. Clipping the page does not fix
-a wide track or make hidden columns usable.
+grid/flex wrappers around evidence. [[ nativeTableAuthoringRule ]]
+Clipping the page does not fix a wide track or make hidden columns usable.
