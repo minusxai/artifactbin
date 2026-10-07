@@ -8,6 +8,7 @@ import {createAuthenticatedTransport} from '../authenticated-transport';
 import { describe, expect, it, vi } from 'vitest';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
+import { uploadDatasetImage } from '@/lib/story-runtime/image-upload';
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 const requestOf = (f: ReturnType<typeof vi.fn>) => {
@@ -31,6 +32,29 @@ describe('createFetchTransport', () => {
     // A simple GET: no custom headers (no preflight), and explicitly no credentials.
     expect(init?.method ?? 'GET').toBe('GET');
     expect(init?.credentials).toBe('omit');
+  });
+
+  it('appends the query request to URLs that already have parameters', async () => {
+    const f = vi.fn(async () => ok({ tables: {}, errors: {} }));
+    await createFetchTransport('/a/abc123/query?token=existing', f).run({}, ['sales']);
+    const { u, q } = requestOf(f);
+    expect(u.searchParams.get('token')).toBe('existing');
+    expect(q).toEqual({ values: {}, only: ['sales'], tz: ZONE });
+  });
+
+  it('resolves the default global fetch at request time', async () => {
+    const before = vi.fn(async () => ok({ tables: {}, errors: {} }));
+    const after = vi.fn(async () => ok({ tables: {}, errors: {} }));
+    vi.stubGlobal('fetch', before);
+    const transport = createFetchTransport('/a/abc123/query');
+    vi.stubGlobal('fetch', after);
+    try {
+      await transport.run({}, ['sales']);
+      expect(before).not.toHaveBeenCalled();
+      expect(after).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('run(): POSTs local table snapshots instead of placing them in a bounded URL', async () => {
@@ -114,6 +138,28 @@ describe('createFetchTransport', () => {
       ['/a/abc123/query', 'POST', 'same-origin'], ['/a/abc123/mutate', 'POST', 'same-origin'],
     ]);
     expect(JSON.parse(String(calls[0]![1].body))).toMatchObject({ values: { region: 'EU' }, only: ['sales'] });
+  });
+
+  it('uploads files only through the signed-in dataset door and reuses a file key on retry',async()=>{
+    const f=vi.fn(async()=>ok({ref:'dimg:abc234def456',url:'/a/abc123/datasets/data12/images/abc234def456'}));
+    const transport=createFetchTransport('/a/abc123/query',f,undefined,{session:true,credentials:'include'});
+    const file=new File(['png'], 'screen.png',{type:'image/png'});
+    const context=transport.image!;
+    await uploadDatasetImage(context,'data12','edit-key',file);
+    await uploadDatasetImage(context,'data12','edit-key',file);
+    const first=f.mock.calls[0] as unknown as [string,RequestInit],second=f.mock.calls[1] as unknown as [string,RequestInit];
+    expect(first[0]).toMatch(/\/a\/abc123\/datasets\/data12\/images$/);
+    expect(first[1]).toMatchObject({method:'POST',credentials:'include'});
+    const key1=(first[1].headers as Record<string,string>)['Idempotency-Key'],key2=(second[1].headers as Record<string,string>)['Idempotency-Key'];
+    expect(key1).toBe(key2);
+    expect(first[1].headers).toMatchObject({'X-Edit-Id':'edit-key'});
+    expect(first[1].body).toBe(file);
+    await expect(uploadDatasetImage(createFetchTransport('/a/abc123/query',f).image,'data12','edit-key',file)).rejects.toThrow(/signed-in/);
+  });
+
+  it('preserves actionable ACL failures from the image door',async()=>{
+    const context=createFetchTransport('/a/abc123/query',vi.fn(async()=>Response.json({detail:'No insert grant permits this upload'},{status:403})),undefined,{session:true}).image;
+    await expect(uploadDatasetImage(context,'data12','edit-key',new File(['x'],'x.png',{type:'image/png'}))).rejects.toThrow('No insert grant permits this upload');
   });
 });
 

@@ -27,6 +27,20 @@ describe('apiRequest', () => {
     expect(await apiRequest<{ id: string }>('/api/x', 'POST', { a: 1 })).toEqual({ id: 'a' });
     expect(fetchMock).toHaveBeenCalledWith('/api/x', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{"a":1}' });
   });
+  it('explains an owner-only policy refusal while retaining its conflict status', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'policy_locked', detail: 'Only its owner may replace this dataset content.' }), { status: 409 })));
+    await expect(apiRequest('/api/my/artifacts/example', 'PUT', {})).rejects.toMatchObject({ message: 'Only its owner may replace this dataset content.', status: 409 });
+  });
+  it.each([
+    [{ details: ['existing explanation'], detail: 'other', message: 'other', error: 'code' }, 'existing explanation'],
+    [{ details: ['', null], detail: '  ', message: 'Check the column names.', error: 'query_failed' }, 'Check the column names.'],
+    [{ details: { password: 'never stringify objects' }, detail: { password: 'never stringify objects' }, message: [], error: 'controlled_code' }, 'controlled_code'],
+    [{ details: [], detail: '', message: '', error: '' }, 'The request failed.'],
+    [null, 'The request failed.'],
+  ])('preserves useful safe server text and handles malformed or empty bodies: %j', async (body, message) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 400 })));
+    await expect(apiRequest('/api/x')).rejects.toMatchObject({ message, status: 400 });
+  });
   it('throws an ApiError carrying the server explanation and status', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'nope', details: ['bad field'] }), { status: 422 })));
     await expect(apiRequest('/api/x', 'PUT', {})).rejects.toMatchObject({ message: 'bad field', status: 422 });

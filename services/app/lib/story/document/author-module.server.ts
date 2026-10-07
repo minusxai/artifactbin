@@ -34,7 +34,7 @@ export const PAGE_SPECIFIER = 'page';
 export const PAGE_BINDERS = ['signal', 'query', 'mutation'] as const;
 type PageExport = (typeof PAGE_BINDERS)[number];
 /** Everything `page` exports: the binders, and `proxy(url)` (lib/islands/page-runtime pageProxyUrl), which takes any https URL. */
-export const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy', 'reviewState'] as const;
+export const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy', 'reviewState', 'uploadImage', 'imageUrl'] as const;
 
 /** The declared names by kind: `values` are scalar Values; `tables` are table Values (rows, like a Query). */
 export interface AuthorModuleNames { values: string[]; tables?: string[]; queries: string[]; mutations: string[] }
@@ -61,7 +61,11 @@ export function pageModuleSource(): string {
   return [
     `const b = globalThis[${JSON.stringify(PAGE_GLOBAL)}];`,
     `if (!b) throw new Error("the page module loads only inside a running document");`,
-    ...PAGE_EXPORTS.map((name) => `export const ${name} = (ref) => b.${name}(ref);`),
+    ...PAGE_BINDERS.map((name) => `export const ${name} = (ref) => b.${name}(ref);`),
+    `export const uploadImage = (importName, file) => b.uploadImage(importName, file);`,
+    `export const imageUrl = (importName, ref) => b.imageUrl(importName, ref);`,
+    `export const proxy = (url) => b.proxy(url);`,
+    `export const reviewState = (part) => b.reviewState(part);`,
   ].join('\n') + '\n';
 }
 

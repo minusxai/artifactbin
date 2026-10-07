@@ -25,6 +25,8 @@ import {isMissing,privateDirectory} from './files';
 export const HOME_SCOPE = 'home';
 export type StateKind =
   | 'remote-agent'      // key: server/session; private launch metadata and pending exit receipt (no credentials)
+  | 'claude-conversation' // key: server/relay-session; private resumable Claude identity and launch context
+  | 'claude-conversation-reservation' // key: server/Claude UUID; atomic explicit-resume launch reservation
   | 'identity-pool'
   | 'draft-identity'
   | 'identity-move'

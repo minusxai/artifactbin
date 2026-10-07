@@ -101,5 +101,6 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
         },
       }
       : {}),
+    image: session ? [queryUrl, fetchFn, credentials] as [string, FetchLike, RequestCredentials] : undefined,
   };
 }

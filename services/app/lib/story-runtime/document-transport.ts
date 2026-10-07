@@ -29,6 +29,5 @@ export function createDocumentTransport(
 ): QueryTransport | null {
   if (!queryUrl) return null;
   const parent = win.parent;
-  const framed = !!parent && parent !== win && parent !== win.self;
-  return createFetchTransport(queryUrl, fetchFn, mutateUrl, framed ? {} : options);
+  return createFetchTransport(queryUrl, fetchFn, mutateUrl, parent && parent !== win && parent !== win.self ? {} : options);
 }

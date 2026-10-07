@@ -20,10 +20,12 @@ const refused = async (script: string) => {
 };
 
 describe('the page module generator', () => {
-  it('exports signal, query, mutation, proxy and reviewState, each reading the runtime bindings by the name it is given', () => {
+  it('exports declared binders, proxy, reviewState and dataset image helpers from runtime bindings', () => {
     const source = pageModuleSource();
-    expect([...source.matchAll(/export const (\w+)/g)].map((m) => m[1])).toEqual(['signal', 'query', 'mutation', 'proxy', 'reviewState']);
-    expect(source).toContain('b.proxy(ref)');
+    expect([...source.matchAll(/export const (\w+)/g)].map((m) => m[1])).toEqual(['signal', 'query', 'mutation', 'uploadImage', 'imageUrl', 'proxy', 'reviewState']);
+    expect(source).toContain('b.proxy(url)');
+    expect(source).toContain('b.uploadImage(importName, file)');
+    expect(source).toContain('b.imageUrl(importName, ref)');
     expect(source).toContain(`globalThis[${JSON.stringify(PAGE_GLOBAL)}]`);
     expect(source).toContain('b.signal(ref)');
   });
@@ -97,7 +99,7 @@ describe('buildAuthorModule', () => {
   });
 
   it('refuses the retired per-name imports with the binder to use instead', async () => {
-    expect(await refused(`import { region } from 'page';`)).toMatch(/'page' exports signal, query, mutation, proxy, reviewState, not region; bind the declared name with const \[region, setRegion\] = signal\('\$region'\)/);
+    expect(await refused(`import { region } from 'page';`)).toMatch(/'page' exports signal, query, mutation, proxy, reviewState, uploadImage, imageUrl, not region; bind the declared name with const \[region, setRegion\] = signal\('\$region'\)/);
     expect(await refused(`import page from 'page';`)).toMatch(/import from 'page' by name/);
   });
 
