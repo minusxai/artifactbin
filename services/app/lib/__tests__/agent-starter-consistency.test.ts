@@ -112,6 +112,25 @@ describe('every agent-facing starter says the same thing', () => {
     expect(guide).not.toContain('{"csv":');
   });
 
+  it('CLI and HTTP teach the same reply and mobile authoring rules without sharing CLI authentication', () => {
+    const rules = [
+      'URL-only requests get the URL alone.',
+      'At 390px, fix overflow, clipping and unreachable controls. Use numeric roles for figures, text roles for prose; stack crowded stats.',
+    ];
+    const brief = buildQuickSheet(BASE);
+    const httpAuthoring = publicGuideText('http-authoring', BASE)!;
+    const discovery = llmsText(BASE);
+    for (const text of [httpAuthoring, discovery, brief]) {
+      for (const rule of rules) expect(text).toContain(rule);
+    }
+    for (const text of [httpAuthoring, discovery]) {
+      expect(text).not.toContain('Automatic browser approval also applies');
+      expect(text).not.toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
+    }
+    expect(discovery).toContain('guest browser approval is CLI-only');
+    expect(discovery).toContain('Direct HTTP clients require email authentication');
+  });
+
   it('the ONE exception is the skill\'s prohibition, spelled exactly and only once', () => {
     const skill = buildQuickSheet(BASE);
     expect(skill.split(ALLOWED_SENTENCE)).toHaveLength(2);

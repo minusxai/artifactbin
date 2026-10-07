@@ -310,7 +310,7 @@
    "weight": 600,
    "ls": "-0.02em",
    "sample": "$48,210",
-   "usage": "KPI figures. Tabular by nature: digits never jump.",
+   "usage": "Numeric KPI figures. Tabular by nature: digits never jump. For prose KPI values, use a text role such as t-title or t-body, rather than the large mono numeral.",
    "extra": "font-variant-numeric: tabular-nums"
   },
   {
@@ -451,7 +451,7 @@
  "tags_note": "Tags are the label role in caps. Status tags carry a glyph or a word with the colour, never colour alone.",
  "fields_note": "Fields sit on paper-raised with the 2px edge; the focus ring is cobalt with a paper gap. Labels are the label role above the field.",
  "stats": "<div className=\"v-stat\"><span className=\"t-label\">Revenue</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"revenue\" prefix=\"$\" format=\",.0f\" /></span><span className=\"v-delta v-up\">▲ 12% vs last week</span></div><div className=\"v-stat v-stat-accent\"><span className=\"t-label\">Annual plans</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"annual_share\" suffix=\"%\" /></span><span className=\"v-delta\">of growth</span></div>",
- "stats_note": "Stat is a label, a big mono numeral and a delta with a ▲/▼ glyph. One accented Stat per row, for the number that matters most. Figures come from data, never typed.",
+ "stats_note": "Stat is a label, a numeric figure and a delta with a ▲/▼ glyph. Use t-numeral for figures and a text role for prose values. Stack a crowded stats row at phone width and check every value fits at 390px. One accented Stat per row, for the number that matters most. Figures come from data, never typed.",
  "callouts": "<Alert><AlertTitle>No table called orderz</AlertTitle><AlertDescription>Did you mean orders?</AlertDescription></Alert><div className=\"v-callout v-callout-info\"><strong>Cobalt means information.</strong> A hint about the data, not an alarm.</div><div className=\"v-callout v-callout-positive\"><strong>Saved.</strong> Your view is shared with the team.</div><div className=\"v-callout v-callout-negative\"><strong>Query timed out after 5s.</strong> Add a date filter and run it again.</div>",
  "callouts_note": "A callout states the fact, then the fix. Status grounds are the soft tokens; the text stays ink.",
  "chart_comp_note": "Charts take the chart tokens in order: cobalt first, volt for the comparison. No gradient fills; direct labels where they fit.",

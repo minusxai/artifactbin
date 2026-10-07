@@ -38,7 +38,7 @@ Classes on any element. Headings take the display family without a class; a role
 | `t-body` | sans · 15px/22px · 400 | Default UI and reading text. |
 | `t-body-s` | sans · 13px/18px · 400 | Captions, helper text, dense table cells. |
 | `t-label` | sans · 12px/16px · 600 | Eyebrows, tab labels, tag text. Caps come from CSS, never the copy. |
-| `t-numeral` | mono · 40px/44px · 600 | KPI figures. Tabular by nature: digits never jump. |
+| `t-numeral` | mono · 40px/44px · 600 | Numeric KPI figures. Tabular by nature: digits never jump. For prose KPI values, use a text role such as t-title or t-body, rather than the large mono numeral. |
 | `t-mono` | mono · 13px/20px · 400 | Code, SQL, IDs, table numbers. |
 
 ## Colour
@@ -79,7 +79,7 @@ Kit components take Volta through the contract: paper grounds, volt primary, cob
 - **Buttons.** Kit buttons on the left; authored v-btn on the right with the 2px edge and hard shadow. One primary per view. Acid is reserved for AI-assisted actions, never destructive ones.
 - **Tags.** Tags are the label role in caps. Status tags carry a glyph or a word with the colour, never colour alone.
 - **Fields.** Fields sit on paper-raised with the 2px edge; the focus ring is cobalt with a paper gap. Labels are the label role above the field.
-- **Stat.** Stat is a label, a big mono numeral and a delta with a ▲/▼ glyph. One accented Stat per row, for the number that matters most. Figures come from data, never typed.
+- **Stat.** Stat is a label, a numeric figure and a delta with a ▲/▼ glyph. Use t-numeral for figures and a text role for prose values. Stack a crowded stats row at phone width and check every value fits at 390px. One accented Stat per row, for the number that matters most. Figures come from data, never typed.
 - **Callouts.** A callout states the fact, then the fix. Status grounds are the soft tokens; the text stays ink.
 - **Chart.** Charts take the chart tokens in order: cobalt first, volt for the comparison. No gradient fills; direct labels where they fit.
 - **Table.** Tables are ink on paper with hairline rows and mono figures; the hard edge belongs to the container, not to each cell.
