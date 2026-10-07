@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 import {setTimeout as sleep} from 'node:timers/promises';
 const artifactTimeout=()=>Error('Current-attempt CLI artifact timed out');
 /** Three transport attempts share the caller's original readiness deadline.
- * gh HTTP failures use exit status, not these native transport error codes. */
+ * Transient GitHub HTTP failures are read-only API failures, not schema or auth failures. */
 export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:pause=sleep,request=execFileSync,command='gh',requestTimeout=30000,retryDelay=1000,encoding='utf8',maxBuffer=1024*1024}){
  for(let attempt=0;attempt<3;attempt++){
   const remaining=deadline-now();
@@ -17,7 +17,8 @@ export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:p
    if(now()>=deadline)throw artifactTimeout();
    return result;
   }catch(error){
-   if(!['ETIMEDOUT','ECONNRESET','EAI_AGAIN'].includes(error.code))throw error;
+   const transientHttp=error.status===1&&/\bHTTP (?:429|500|502|503|504)\b/.test(String(error.stderr??''));
+   if(!['ETIMEDOUT','ECONNRESET','EAI_AGAIN'].includes(error.code)&&!transientHttp)throw error;
    if(now()>=deadline)throw artifactTimeout();
    if(attempt===2)throw error;
    await pause(Math.min(retryDelay,deadline-now()));
