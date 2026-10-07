@@ -16,7 +16,8 @@ it('registers external managed-agent mention metadata without granting a local r
  const session={id,name:'artifactbin',harness:'native',cwd:'/home/runner',machine:'External',cols:80,rows:24,online:true,exitCode:null,controller:'web' as const,createdAt:new Date().toISOString(),managed:true};
  setHostedRemoteAgent(hostedAgentClient('https://service.test',async()=>Response.json(session)));
  const agents=fresh();
- expect(await agents.list(owner)).toContainEqual(session);
+ expect(await agents.list(owner)).toContainEqual({...session,included:true});
+ expect(await agents.read(owner,id)).toMatchObject({included:true});
  expect(await agents.owns(owner,id)).toBe(true);
  expect(await agents.owns('other-owner',id)).toBe(false);
  const db=await getDb();

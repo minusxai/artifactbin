@@ -4,6 +4,8 @@ export const HOSTED_TERMINAL_SIZE={cols:100,rows:30} as const;
 export const HOSTED_HARNESSES=['claude','codex','pi','opencode'] as const;
 /** V0 remote-terminal protocol. PTY bytes stay on the user's machine until explicitly shared. */
 export interface RemoteSessionInfo {
+  /** Assigned by the app for the account’s included hosted agent, never inferred from its name. */
+  included?: boolean;
   /** App-owned managed Run mapping; never an authorization grant. */
   runId?: string;
   /** Native harness connected to the shared comment relay. Non-secret generation fence. */
