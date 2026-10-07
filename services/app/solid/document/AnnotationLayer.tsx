@@ -664,7 +664,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const openRow = (id: string) => annotations().find((row) => row.id === id);
   const resolvedRow = (id: string) => (resolvedList() ?? []).find((row) => row.id === id);
 
-  const railHeader = () => <div class="space-y-3 px-1">
+  const railHeader = () => <div class="space-y-2 border-b border-edge px-1 pb-3 font-sans">
     <div class="flex items-center justify-between">
       <h2 class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
       <button type="button" aria-label="Close comments" onClick={() => props.onRailOpenChange(false)} class="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"><X size={14} strokeWidth={1.8} /></button>
@@ -683,7 +683,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         </button>}
       </FeatureGate>
     </div>
-    <p class="text-xs text-muted">{capture.required() ? 'Share this tab, then drag an area.' : 'Click a block or highlight text. No screen sharing.'}</p>
+    <p class="text-[11px] leading-relaxed text-muted">{capture.required() ? 'Share this tab, then drag an area.' : 'Select a block or highlight text to comment.'}</p>
   </div>;
 
   const threadHandlers = (id: string, resolved: boolean) => ({

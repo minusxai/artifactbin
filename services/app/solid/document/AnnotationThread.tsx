@@ -121,7 +121,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     data-thread-id={props.a.id}
     data-hovered={props.hovered ? 'true' : undefined}
     onMouseEnter={() => props.onHover(props.a.id)}
-    onMouseLeave={() => props.onHover(null)}
+    onMouseLeave={(event) => { if (!event.currentTarget.matches(':focus-within')) props.onHover(null); }}
+    onFocusIn={() => props.onHover(props.a.id)}
+    onFocusOut={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !event.currentTarget.matches(':hover')) props.onHover(null); }}
     onClick={(event) => {
       const target = event.target as Element;
       // `[role="button"]`: the author line is a toggle, and collapsing a comment in a closed thread must not open it.
@@ -252,7 +254,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       </ul>
       <Show when={!props.open}>
         <button type="button" aria-label={props.resolved ? 'Show resolved conversation' : 'Open annotation thread'} aria-expanded={props.resolved ? false : undefined}
-          onClick={() => props.onOpen()} onFocus={() => props.onHover(props.a.id)} onBlur={() => props.onHover(null)}
+          onClick={() => props.onOpen()}
           class="flex w-full cursor-pointer items-center justify-between gap-2 border-t border-edge px-3 py-1.5 font-mono text-[10px] text-faint transition-colors hover:bg-raised hover:text-accent">
           <ThreadContinuation thread={props.a.thread} />
           <span class="shrink-0">open →</span>
@@ -261,9 +263,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       <Show when={props.open && !props.resolved}>
         <div class="border-t border-edge px-3 py-2">
           <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
-            label="Reply to annotation"
+            label="Reply to annotation" quickAgents
             value={reply()} onChange={(value) => { touched = true; setReply(value); }} onSubmit={() => void sendReply()}
-             rows={2} placeholder="reply…" />
+             rows={2} placeholder="Write a reply…" />
           <Show when={replyError()}><p role="alert" class="text-xs text-red-500">{replyError()}</p></Show>
           <div class="flex justify-end gap-2">
             <button type="button" aria-label="Cancel reply" onClick={() => { touched = true; setReply(''); props.onOpen(); }}
