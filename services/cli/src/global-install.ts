@@ -104,7 +104,7 @@ async function hasInstalledVersion(prefix:string,version:string,platform:string,
    if(!commandInfo.isFile()||commandInfo.size===0)return false;
    const shim=(await readFile(bin,'utf8')).replace(/[\\/]+/g,'/').toLowerCase();
    const target=path.relative(path.dirname(bin),entry).replace(/[\\/]+/g,'/').toLowerCase();
-   return shim.split(/\r?\n/).some(line=>line.includes(target)&&line.includes('%dp0%')&&/(?:%_prog%|node(?:\.exe)?)/i.test(line));
+   return shim.split(/\r?\n/).some(line=>line.includes(`"%_prog%" "%dp0%/${target}" %*`));
   }
   return commandInfo.isSymbolicLink()&&samePath(realpathSync(bin),realpathSync(entry),platform);
  }catch{return false;}

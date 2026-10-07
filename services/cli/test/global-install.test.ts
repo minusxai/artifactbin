@@ -191,10 +191,14 @@ test('globalInstall reuses an exact-version private fallback before retrying a d
 });
 
 test('globalInstall repairs stale, malformed or miswired npm installs',async()=>{
- const cases=[
+ const validManifest={name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}};
+ const cases:Array<{name:string;manifest?:typeof validManifest;manifestText?:string;entry?:string;missingEntry?:boolean;link?:string|false}>=[
   {name:'wrong package name',manifest:{name:'someone-else',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}}},
   {name:'stale version',manifest:{name:'@afbin/cli',version:'1.1.9',bin:{afbin:'dist/afbin.mjs'}}},
   {name:'wrong bin mapping',manifest:{name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/other.mjs'}}},
+  {name:'malformed package JSON',manifestText:'{not valid JSON'},
+  {name:'missing entry',manifest:validManifest,missingEntry:true},
+  {name:'invalid entry shebang',manifest:validManifest,entry:'not an executable entry\n'},
   {name:'empty entry',manifest:{name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}},entry:''},
   {name:'wrong command link',manifest:{name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}},link:'wrong.mjs'},
   {name:'missing command link',manifest:{name:'@afbin/cli',version:'1.2.3',bin:{afbin:'dist/afbin.mjs'}},link:false},
@@ -204,8 +208,8 @@ test('globalInstall repairs stale, malformed or miswired npm installs',async()=>
   try{
    const pkg=join(root,'lib','node_modules','@afbin','cli'),entry=join(pkg,'dist','afbin.mjs'),bin=join(root,'bin','afbin');
    await mkdir(join(pkg,'dist'),{recursive:true});await mkdir(join(root,'bin'));
-   await writeFile(join(pkg,'package.json'),JSON.stringify(scenario.manifest));
-   await writeFile(entry,scenario.entry??'#!/usr/bin/env node\n',{mode:0o755});
+   await writeFile(join(pkg,'package.json'),scenario.manifestText??JSON.stringify(scenario.manifest));
+   if(!scenario.missingEntry)await writeFile(entry,scenario.entry??'#!/usr/bin/env node\n',{mode:0o755});
    if(scenario.link!==false)await symlink(typeof scenario.link==='string'?join(pkg,'dist',scenario.link):entry,bin);
    const {calls,npm}=recorder(args=>args[0]==='prefix'?{stdout:root+'\n'}:{});
    const result=await globalInstall({version:'1.2.3',home:join(root,'home'),env:{PATH:join(root,'bin')},platform:'linux',npm});
@@ -229,5 +233,8 @@ test('globalInstall reuses only a Windows npm shim that targets the matching pac
   await writeFile(bin,'@ECHO off\r\n"%_prog%" "%dp0%\\node_modules\\someone-else\\dist\\afbin.mjs" %*\r\n');calls.length=0;
   const repaired=await globalInstall({version:'1.2.3',home:win32.join(root,'home'),env:{Path:root},platform:'win32',npm});
   assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3']]);assert.equal(repaired.status,'installed');
+  await writeFile(bin,`@ECHO off\r\nREM "%_prog%" "%dp0%\\${win32.relative(root,entry)}" %*\r\n`);calls.length=0;
+  const comment=await globalInstall({version:'1.2.3',home:win32.join(root,'home'),env:{Path:root},platform:'win32',npm});
+  assert.deepEqual(calls,[['prefix','-g'],['install','-g','--no-fund','--no-audit','@afbin/cli@1.2.3']]);assert.equal(comment.status,'installed');
  }finally{await rm(root,{recursive:true,force:true});}
 });
