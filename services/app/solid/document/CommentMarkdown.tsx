@@ -7,7 +7,6 @@ import Link2 from 'lucide-solid/icons/link-2';
 import List from 'lucide-solid/icons/list';
 import { parseMarkdownLite, type MdInline, type MdMarker, type MdNode } from '@/lib/annotations/markdown-lite';
 import { mountCommentEditor, type MentionQuery } from './comment-editor';
-import './comment-editor.css';
 import { isPersonMentionHref } from '@/lib/annotations/person-mentions';
 import { isSessionMentionHref } from '@/lib/annotations/session-mentions';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
