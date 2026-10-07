@@ -55,6 +55,8 @@ export function DocumentSharing(props: {
   /** The artifact's format: a dataset's sharing also answers who may WRITE it (the writes row). */
   format?: string;
   datasetKind?: DatasetCatalog['kind'];
+  /** Validated document dependencies; access remains independent of document sharing. */
+  refs?: ReadonlyArray<{ id: string; kind: string }>;
 }): JSX.Element {
   const canManage = () => props.owner || Boolean(props.editable);
   const [open, setOpen] = createSignal(props.variant === 'dialog');
@@ -119,10 +121,19 @@ export function DocumentSharing(props: {
   createEffect(() => { void props.version; setPreviewStatus('loading'); });
   /** The card's address, built only from an id of the artifact id's own allowlisted shape. */
   const previewSrc = () => ARTIFACT_ID_PATTERN.test(props.id) ? `/a/${props.id}/export?format=jpg&mode=card&v=${Number(props.version ?? 0)}&r=${CARD_RENDER_GENERATION}` : undefined;
+  const datasetRefs = () => (props.refs ?? []).filter(ref => ref.kind === 'dataset');
   const body = () => <>
     <button type="button" aria-label="Copy link" onClick={copy} class="mb-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[5px] border border-edge bg-raised px-3 py-2.5 text-muted hover:border-edge-bright hover:text-fg">
       <Show when={copied()} fallback={<LinkIcon size={11} />}><Check size={11} /></Show> {copied() ? 'copied' : 'copy link'}
     </button>
+    <Show when={canManage() && state() && state()!.visibility !== 'private' && datasetRefs().length > 0}>
+      <aside aria-label="Dataset access when sharing" class="mb-4 rounded-md border border-edge bg-raised p-3 leading-relaxed text-muted">
+        <p>This link shares the document, not access to its datasets. If a dataset is private, invite the reader there too, or make it unlisted if everyone with this link should be able to read it.</p>
+        <ul class="mt-2 space-y-1"><For each={datasetRefs()}>{ref => <li>
+          <a href={`/a/${encodeURIComponent(ref.id)}`} aria-label={`Review dataset ${ref.id} sharing`} class="text-accent underline underline-offset-2">Review dataset {ref.id}</a>
+        </li>}</For></ul>
+      </aside>
+    </Show>
     <Show when={props.onSocialPreview}><figure class="mx-auto mb-5 w-full max-w-xs"><figcaption class="mb-2 text-center text-[11px] text-muted">Social preview</figcaption>
       <div class="relative aspect-[40/21] w-full overflow-hidden rounded-md border border-edge bg-raised">
         <Show when={previewStatus() !== 'ready'}><div role="status" class="absolute inset-0 flex items-center justify-center text-[11px] text-muted">{previewStatus() === 'loading' ? 'Loading preview…' : 'Preview unavailable'}</div></Show>

@@ -147,3 +147,35 @@ it('refreshes the social thumbnail and loading state when the saved document ver
   expect(screen.getByText('Loading preview…')).toBeTruthy();
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+
+it('warns a document editor that a link does not grant dataset access and links its datasets', async () => {
+  const fetcher = vi.fn(async () => Response.json({ visibility: 'unlisted', linkRole: 'viewer', shares: [] }));
+  vi.stubGlobal('fetch', fetcher);
+  render(() => <DocumentSharing id="abc123" title="Report" owner variant="dialog"
+    refs={[{ id: 'ds1234', kind: 'dataset' }, { id: 'img123', kind: 'image' }]} />);
+  await waitFor(() => expect(screen.getByText(/This link shares the document, not access to its datasets/)).toBeTruthy());
+  expect(screen.getByRole('link', { name: 'Review dataset ds1234 sharing' })).toHaveAttribute('href', '/a/ds1234');
+  expect(screen.queryByRole('link', { name: /img123/ })).toBeNull();
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('keeps dataset sharing guidance out of private documents and reader views', async () => {
+  const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true };
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json(state)));
+  render(() => <DocumentSharing id="abc123" title="Report" owner variant="dialog"
+    refs={[{ id: 'ds1234', kind: 'dataset' }]} />);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Make private' })).toBeTruthy());
+  expect(screen.queryByText(/This link shares the document/)).toBeNull();
+});
+
+
+it('does not disclose dependency guidance or request ACLs to ordinary readers', () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  render(() => <DocumentSharing id="abc123" title="Report" owner={false} variant="dialog"
+    refs={[{ id: 'ds1234', kind: 'dataset' }]} />);
+  expect(screen.queryByRole('complementary', { name: 'Dataset access when sharing' })).toBeNull();
+  expect(screen.queryByRole('link', { name: /ds1234/ })).toBeNull();
+  expect(fetcher).not.toHaveBeenCalled();
+});

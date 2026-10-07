@@ -343,7 +343,7 @@ export function DocumentPage(): JSX.Element {
   };
   createEffect(() => { if (socialPreviewOpen() && !editorPart()) void loadEditorPart(); });
   const sharingContent = () => <div class="mx-auto max-w-3xl space-y-6">
-    <DocumentSharing id={id!} title={shownTitle()} owner={isOwner()} editable variant="embedded" version={currentVersion()} onSocialPreview={() => setSocialPreviewOpen(true)} />
+    <DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable variant="embedded" version={currentVersion()} onSocialPreview={() => setSocialPreviewOpen(true)} />
     <Show when={page?.surface?.membershipAvailable}><hr class="border-edge" />
     <DocumentPeople id={id!} initialOpen revision={membershipRevision()} onChange={() => setMembershipRevision((n) => n + 1)} /></Show>
   </div>;
@@ -413,7 +413,7 @@ export function DocumentPage(): JSX.Element {
       </Suspense>
     </Show>
     <Show when={sharingOpen() && id}>
-      <DocumentSharing id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} variant="dialog" version={currentVersion()}
+      <DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} variant="dialog" version={currentVersion()}
         onClose={() => setSharingOpen(false)} onSocialPreview={editable() ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />
     </Show>
     <Show when={socialPreviewOpen() && editorPart()}>{(part) => (
