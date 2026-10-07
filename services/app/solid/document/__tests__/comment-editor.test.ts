@@ -126,3 +126,10 @@ it('copies a selected badge as Markdown with its original destination',()=>{
   const slice=editor.view.state.doc.slice(1,2);
   expect(editor.view.someProp('clipboardTextSerializer',fn=>fn(slice,editor.view))).toBe(source);
 });
+it.each(['initial', 'late'] as const)('places the caret after an %s prefilled agent mention', mode => {
+  const prefix = `[@koala](/chat?session=${'a'.repeat(64)}) `;
+  const editor = mount(mode === 'initial' ? prefix : '');
+  if (mode === 'late') editor.sync(prefix);
+  editor.view.dispatch(editor.view.state.tr.insertText('Please review'));
+  expect(editor.onChange).toHaveBeenLastCalledWith(prefix + 'Please review');
+});

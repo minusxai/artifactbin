@@ -341,10 +341,12 @@ export function mountCommentEditor(
     publish();
     return true;
   };
+  const initialDoc = commentDocument(value);
   const view = new EditorView(mount, {
     state: EditorState.create({
       schema: commentSchema,
-      doc: commentDocument(value),
+      doc: initialDoc,
+      selection: TextSelection.atEnd(initialDoc),
       plugins: [
         keymap({
           "Mod-z": history(true),
@@ -451,10 +453,12 @@ export function mountCommentEditor(
     sync(next: string) {
       if (next === value || view.composing) return;
       value = next;
+      const doc = commentDocument(next);
       view.updateState(
         EditorState.create({
           schema: commentSchema,
-          doc: commentDocument(next),
+          doc,
+          selection: TextSelection.atEnd(doc),
           plugins: view.state.plugins,
         }),
       );
