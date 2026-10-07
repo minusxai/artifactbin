@@ -13,7 +13,7 @@
  *    the JSX `attr:style` form, which the compiler turns back into one — re-sets it through the
  *    CSSOM (`width: 100%;`).
  */
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, type JSX, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js';
 import { isServer } from 'solid-js/web';
 import type { createDataVirtualizer } from './data-virtualizer';
 import { useIsland } from '../context';
@@ -62,8 +62,8 @@ export function Number(props: { data: unknown; col?: string; agg?: NumberAgg; pr
 
 interface ColumnTemplate { col: string; id?: string; path?: string; ids?: string[]; props?: Record<string, unknown>; nodes?: unknown[] }
 /** A column's content, compiled: drawn in each row's cell with the row and where the cell sits (interpreter renderCell). */
-type CellContent = (row: Row, cell: CellScope) => import('solid-js').JSX.Element;
-interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; cells?: (CellContent | undefined)[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => import('solid-js').JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
+type CellContent = (row: Row, cell: CellScope) => JSX.Element;
+interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; cells?: (CellContent | undefined)[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
 const STATIC_ROWS = 50;
 const ROW_H = 33;
 function TimestampCell(props: { value: string }) {
@@ -82,6 +82,13 @@ const rowIdentity = (row: Row | undefined, key: string | undefined, index: numbe
   return value === null || value === undefined || (typeof value !== 'string' && typeof value !== 'number') ? `index:${index}` : `${typeof value}:${String(value)}`;
 };
 /** Where the pending lockup spins (QuestionEmbed `waiting`, DataTableAdapter's pending state). */
+/** Missing-data UI loads on demand; healthy tables never load its diagnostics. */
+function DataPlaceholder(props: { name: string; pending?: boolean; error?: string }) {
+  const [view, setView] = createSignal<(input: { name: string; pending?: boolean; error?: string }) => JSX.Element>(() => 'loading data…');
+  void import('./data-placeholder').then(module => setView(() => module.default)).catch(() => setView(() => () => 'Data unavailable.'));
+  return <>{view()(props)}</>;
+}
+
 const SPINNER = 'size-[22px] animate-spin rounded-full border-2 border-border border-t-primary motion-reduce:animate-none';
 const LOCKUP_LABEL = 'font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground';
 
@@ -98,11 +105,7 @@ export function DataTable(props: DataTableProps) {
   const wrapper = () => (props.inGridItem ? 'width:100%;height:100%;min-width:0' : 'width:100%;min-width:0');
   return <Show when={!!table()} fallback={
     <div {...rootProps(props)} aria-label="DataTable embed" class="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" {...attr('attr:style', wrapper())}>
-      <Switch fallback={`data unavailable — "$${name()}" has no rows yet`}>
-        <Match when={busy()}><span aria-hidden="true" class={SPINNER} /><span class={LOCKUP_LABEL}>loading data…</span></Match>
-        <Match when={!name()}>{'data unavailable — bind a declared table with data="$name"'}</Match>
-        <Match when={island.error(name())}>{error => `query "${name()}" failed: ${error()}`}</Match>
-      </Switch>
+      <DataPlaceholder name={name()} pending={busy()} error={island.error(name())} />
     </div>
   }>
     {/* Cell sessions show saving on an editable table; only a read-only table dims while it refreshes. */}
@@ -273,7 +276,7 @@ export function Question(props: QuestionProps) {
   };
   const envelope = createMemo(() => { const t = table(); return t ? questionEnvelope(props.viz ?? {}, t.columns, refData()) : null; });
   const state = () => (pending() ? 'pending' : undefined);
-  const empty = (message: string) => <div class="flex h-full w-full items-center justify-center p-4 text-sm text-muted-foreground" aria-label="Chart placeholder">{message}</div>;
+  const empty = (message: JSX.Element) => <div class="flex h-full w-full items-center justify-center p-4 text-sm text-muted-foreground" aria-label="Chart placeholder">{message}</div>;
   const sample = () => <Show when={table()?.truncated}><div aria-label="Sample notice" class="shrink-0 border-t border-border px-3 py-1 font-mono text-[11px] text-muted-foreground">showing the first {new Intl.NumberFormat().format(table()!.rows.length)} of {new Intl.NumberFormat().format(table()!.totalRows ?? table()!.rows.length)} rows</div></Show>;
   const single = () => {
     const t = table()!;
@@ -287,7 +290,7 @@ export function Question(props: QuestionProps) {
     <Switch>
       <Match when={!name}>{empty('data unavailable — bind a declared table with data="$name"')}</Match>
       <Match when={!table() && pending()}><div class="flex h-full w-full flex-col items-center justify-center gap-2.5 p-4" aria-label="Chart placeholder" data-mx-chart-state="pending"><span aria-hidden="true" class={SPINNER} /><span class={LOCKUP_LABEL}>loading data…</span></div></Match>
-      <Match when={!table() && island.error(name)}>{error => empty(`query "${name}" failed: ${error()}`)}</Match>
+      <Match when={!table() && island.error(name)}>{error => empty(<DataPlaceholder name={name} error={error()} />)}</Match>
       <Match when={!table()}>{empty(`data unavailable — "$${name}" has no rows yet`)}</Match>
       <Match when={kind() === 'single_value'}>
         <div class="flex h-full w-full flex-col items-start justify-center gap-1 p-4" aria-label="Single value" {...attr('data-mx-chart-state', state())}>

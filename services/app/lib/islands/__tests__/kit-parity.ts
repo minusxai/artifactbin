@@ -21,6 +21,9 @@ export interface ParityData { tables?: Record<string, TableResult>; values?: Rec
 let oracle: Record<string, string> | null = null;
 /** Shared reader layout contracts added after the retired React reader was captured. */
 export function applyCurrentLayoutContracts(html: string): string {
+  // The pending diagnostics chunk starts with readable text during SSR and initial hydration.
+  // It adds the same spinner after loading; settled tables never download that chunk.
+  html = html.replace(/(<div\b[^>]*aria-label="DataTable embed"[^>]*>)<span(?: data-hk="[^"]*")? aria-hidden="true" class="size-\[22px\] animate-spin rounded-full border-2 border-border border-t-primary motion-reduce:animate-none"><\/span><span(?: data-hk="[^"]*")? class="font-mono text-\[11px\] font-medium uppercase tracking-\[0\.08em\] text-muted-foreground">loading data…<\/span>/g, '$1loading data…');
   // Keep the DataTable upgrade confined to its identity-bearing adapter wrapper and preserve every
   // other captured byte. Its inner overflow container already owns horizontal scrolling.
   const withDataTableWidth = html.replace(/<div\b[^>]*\baria-label="DataTable embed"[^>]*>/g, (opening) => {
