@@ -169,7 +169,9 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
     <Show when={connection()}><p role="status" class="mb-2 text-sm text-muted">{connection()}</p></Show>
     <Show when={error()}><p role="alert" class="mb-2 text-sm text-red-500">{error()}</p></Show>
     <div style={{ 'max-width': mobile() ? '420px' : undefined }}>
-      <Show when={ended()}><p role="status" class="mb-3 rounded border border-edge bg-surface p-4 text-sm">Session ended (exit {info()?.exitCode}). Start a new session with afbin remote to reconnect.</p></Show>
+      <Show when={ended()}><p role="status" class="mb-3 rounded border border-edge bg-surface p-4 text-sm">Session ended (exit {info()?.exitCode}). {info()?.runId
+        ? 'Choose Start hosted box above with the same name to open a new terminal. Your home files are retained.'
+        : 'Start a new session with afbin remote to reconnect.'}</p></Show>
       <div class="overflow-x-auto rounded border border-edge bg-[#111214] p-2" hidden={ended()}><div ref={container} aria-label="Remote terminal" style={{ height: 'min(58dvh, 650px)', 'min-height': '240px' }} /></div>
       <div class="mt-2 flex flex-wrap gap-2" aria-label="Terminal scroll controls" hidden={ended()}>
         <button class="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal?.scrollPages(-1)}>Scroll up</button>

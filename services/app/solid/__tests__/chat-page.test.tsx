@@ -40,7 +40,9 @@ it('shows an ended session without terminal input controls', async () => {
   const session = { id: 'done', name: 'Claude', harness: 'claude', machine: 'laptop', online: false, controller: 'local', cols: 80, rows: 24, exitCode: 0 };
   vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url === '/api/remote/sessions' ? { sessions: [session] } : { session, seq: 1, snapshot: '', frames: [] } })));
   open('done');
-  expect(await screen.findByText(/Session ended \(exit 0\)/)).toBeInTheDocument();
+  const endedNotice = await screen.findByText(/Session ended \(exit 0\)/, { selector: '[role="status"]' });
+  expect(endedNotice).toBeInTheDocument();
+  expect(endedNotice).toHaveTextContent('Start a new session with afbin remote to reconnect.');
   expect(screen.getByRole('button', { name: 'Remove session' })).toBeEnabled();
   expect(screen.queryByRole('textbox', { name: 'Message to agent' })).toBeNull();
   expect(screen.getByText('claude · Ended')).toBeInTheDocument();
@@ -231,4 +233,14 @@ it.each([
   await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/remote/sessions/hosted-state',expect.objectContaining({method:'DELETE'})));
  }
  expect(fetch.mock.calls.some(([,options])=>options?.method==='POST')).toBe(false);
+});
+
+it('guides an ended hosted run back to Start hosted box with retained home files',async()=>{
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ const session={id:'hosted-ended-copy',runId:'ended-run',name:'Retained shell',harness:'bash',machine:'Hosted',managed:true,online:false,activity:'stopped',exitCode:0,cols:80,rows:24};
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:url==='/api/run-capabilities'?{version:1,managedProcesses:true}:{session,seq:0,snapshot:'',frames:[]}})));
+ open(session.id);const endedNotice=await screen.findByText(/Session ended \(exit 0\)/,{selector:'[role="status"]'});
+ expect(endedNotice).toHaveTextContent(/Start hosted box/);expect(endedNotice).toHaveTextContent(/same name/);expect(endedNotice).toHaveTextContent(/home files/i);
+ expect(endedNotice).not.toHaveTextContent('afbin remote');expect(screen.getByRole('button',{name:'Remove session'})).toBeEnabled();
+ expect(screen.getByRole('button',{name:'Start hosted box'})).toBeEnabled();
 });
