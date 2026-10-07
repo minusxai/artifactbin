@@ -24,6 +24,28 @@ export function inspectBundle(bundle,version,bytes,expected){
  if(!new RegExp(`^https://github\\.com/${repository}/actions/runs/${expected.run}/attempts/[0-9]+$`).test(invocation??''))throw Error('Provenance does not identify the selected build run');
  return subject;
 }
+/** Pinned npm10/sigstore3 builder adaptation: keep the ORIGINAL signed envelope
+ * alive while the official Rekor witness recovers a receipt lost after POST.
+ * This CI-only npm-internal exception leaves provenance generation and verification
+ * with npm; no untrusted location URL is fetched, only a checked UUID on its client. */
+export async function withRekorConflictRecovery(config,generate){
+ const original=config.createBundleBuilder;
+ config.createBundleBuilder=(...args)=>{
+  const builder=original(...args);
+  const witnesses=builder?.witnesses?.filter(witness=>witness.tlog);
+  if(witnesses?.length!==1)throw Error('Pinned Rekor witness changed');
+  const tlog=witnesses[0].tlog,rekor=tlog.rekor;
+  if(tlog.fetchOnConflict!==false||typeof rekor?.getEntry!=='function')throw Error('Pinned Rekor witness changed');
+  const fetchEntry=rekor.getEntry;
+  rekor.getEntry=uuid=>{
+   if(typeof uuid!=='string'||!/^(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{80})$/.test(uuid))throw Error('Invalid Rekor entry identity');
+   return fetchEntry.call(rekor,uuid);
+  };
+  tlog.fetchOnConflict=true;
+  return builder;
+ };
+ try{return await generate();}finally{config.createBundleBuilder=original;}
+}
 function officialSigner(signing=true){
  // setup-node 22.22.3 bundles npm 10.9.8. This deliberate npm-internal boundary is pinned;
  // fail visibly if that toolchain changes instead of silently generating a different format.
@@ -31,7 +53,11 @@ function officialSigner(signing=true){
  if(!(signing?['10.9.8']:['10.9.8','11.19.0']).includes(npmRequire('../package.json').version))throw Error('Provenance requires the pinned npm10.9.8 build or npm11.19.0 release toolchain');
  const official=npmRequire('../node_modules/libnpmpublish/lib/provenance.js');
  const sigstore=npmRequire('../node_modules/sigstore');
- return {generateProvenance:official.generateProvenance,verifyProvenance:async(subject,file)=>{
+ return {generateProvenance:async(subjects,options)=>{
+  if(npmRequire('../node_modules/sigstore/package.json').version!=='3.1.0')throw Error('Signing requires pinned sigstore3.1.0');
+  const config=npmRequire('../node_modules/sigstore/dist/config.js');
+  return withRekorConflictRecovery(config,()=>official.generateProvenance(subjects,options));
+ },verifyProvenance:async(subject,file)=>{
   const bundle=await official.verifyProvenance(subject,file);
   const statement=JSON.parse(Buffer.from(bundle.dsseEnvelope.payload,'base64').toString('utf8'));
   // Chain verification alone accepts other GitHub identities. Bind the certificate's
