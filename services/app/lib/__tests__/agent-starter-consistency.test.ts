@@ -224,6 +224,17 @@ describe('public HTTP authoring references', () => {
     for (const topic of ['markup','markup-data','design-systems','templates']) expect(text).toContain(`${BASE}/llms/${topic}`);
     expect(text).toContain('An HTTP client does not need Node or the CLI');
   });
+
+  it('teaches the HTTP workflow without duplicating its QA client and fits the production guide budget', () => {
+    const text = publicGuideText('http-authoring', 'https://app.artifactbin.dev')!;
+    expect(text).toContain('Use each link target as served; `.md` appears in source labels, while public guide URLs are extensionless.');
+    expect(text).toContain('Batch independent reads and edits; reserve time for one final response.');
+    expect(text).toContain('After required checks pass, do not repeat unchanged QA.');
+    expect(text).toContain('For DOM probes, use `page.evaluate`.');
+    expect(text).toContain('[copyable HTTP browser QA example](https://app.artifactbin.dev/llms/http-api#browser-preview-and-interactive-qa)');
+    expect(text).not.toContain('const session_id=crypto.randomUUID()');
+    expect(Buffer.byteLength(text)).toBeLessThan(8192);
+  });
 });
 
 

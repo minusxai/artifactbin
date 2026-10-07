@@ -109,5 +109,6 @@ describe('the committed outputs are what the generator emits now', () => {
   it('the catalogue and every system reference', () => {
     expect(read(path.join(REFS, 'design-systems.md'))).toBe(catalogueMd());
     for (const slug of ROSTER) expect(read(path.join(REFS, `system-${slug}.md`)), slug).toBe(systemMd(slug));
+    expect(read(path.join(REFS, 'system-redline.md'))).toContain('`rl-paper`, `rl-red`, `rl-ink` and `rl-on-*` classes set SVG fills only; they do not paint HTML slides. For HTML, use stage classes such as `rl-stage-red`, which set background and text colors.');
   });
 });
