@@ -41,6 +41,21 @@ describe('view-mode annotation geometry', () => {
     } finally {css.remove();}
   });
 
+  it('tints whole-node comments only while open, hovered, or selected', () => {
+    const anchor=document.querySelector('main p')!;
+    env.session.update(state('on'));
+    const original=getComputedStyle(anchor).boxShadow;
+    for(const attribute of ['data-mx-annotation-open','data-mx-annotation-hover','data-mx-annotate-selected']) {
+      anchor.setAttribute(attribute,'');
+      expect(getComputedStyle(anchor).boxShadow).toContain('inset');
+      document.documentElement.classList.add('mx-taking-screenshot');
+      expect(getComputedStyle(anchor).boxShadow).toBe(original);
+      document.documentElement.classList.remove('mx-taking-screenshot');
+      anchor.removeAttribute(attribute);
+      expect(getComputedStyle(anchor).boxShadow).toBe(original);
+    }
+  });
+
   it('owns its stylesheet by reference and restricts picking to the inline artifact root', () => {
     env.session.dispose();
     const root=document.querySelector('main')!;
