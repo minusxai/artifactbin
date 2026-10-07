@@ -129,7 +129,7 @@ export function Select(p: SelectProps) {
     <div ref={root} class="relative min-w-0" on:focusout={blur}><button ref={trigger} type="button" aria-label={p.label} aria-haspopup="listbox" aria-expanded={open()} disabled={!active()} on:click={() => open() ? close(true, true) : openList()} on:keydown={triggerKey}
       class={SELECT_TRIGGER}>
       <span class={selectJoin('truncate',current() === null && 'text-muted-foreground')}>{label()}</span><CHEVRON /></button>
-      <TrustedOverlay open={open}><Show when={open()}><Show when={Menu()}>{loaded => { const View = loaded(); return <View root={root} label={p.label} query={query()} multiple={multiple()} current={current()}
+      <TrustedOverlay open={open} anchor={() => root}><Show when={open()}><Show when={Menu()}>{loaded => { const View = loaded(); return <View root={root} label={p.label} query={query()} multiple={multiple()} current={current()}
         filtered={filtered()} highlight={highlight()} canCreate={canCreate()} popupRef={el => popup = el} searchRef={el => search = el}
         blur={blur} searchKey={searchKey} setQuery={q => { setQuery(q); setHighlight(filtered().length ? 0 : -1); }}
         setHighlight={setHighlight} choose={choose} selected={selected} create={create} done={() => close(true, true)} />; }}</Show></Show></TrustedOverlay>

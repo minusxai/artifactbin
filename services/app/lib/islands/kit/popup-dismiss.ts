@@ -17,11 +17,11 @@ export function popupDismiss(open: () => boolean, close: () => void, trigger: ()
       if (!node.includes(target!) && !node.includes(panel()!)) { close(); target?.focus(); }
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); cancel(); target?.focus(); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); target?.focus(); }
     };
     doc.addEventListener(OPEN, other);
     doc.addEventListener('pointerdown', away);
-    doc.addEventListener('keydown', escape);
+    doc.addEventListener('keydown', escape, true);
     onCleanup(() => {
       // A menu item that unmounts with its menu (to open a dialog) leaves focus on BODY; hand it back to the
       // trigger so whatever opens next remembers a live element to return to.
@@ -29,7 +29,7 @@ export function popupDismiss(open: () => boolean, close: () => void, trigger: ()
       if (target?.isConnected && (!active || active === doc.body)) target.focus();
       doc.removeEventListener(OPEN, other);
       doc.removeEventListener('pointerdown', away);
-      doc.removeEventListener('keydown', escape);
+      doc.removeEventListener('keydown', escape, true);
     });
   });
   return announce;

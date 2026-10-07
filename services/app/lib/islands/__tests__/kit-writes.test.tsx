@@ -29,6 +29,7 @@ import { ACCESS_PENDING } from '../kit/store-read';
 import { ACCESS_PENDING as STORE_ACCESS_PENDING } from '@/lib/story-runtime/store';
 import { validRowKey } from '@/lib/story/data/repeat-identity';
 import { Segmented } from '../kit/controls';
+import { Select, loadSelectPopup } from '../kit/select';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../kit/dialog';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
@@ -303,6 +304,27 @@ describe('<Segmented> options', () => {
 });
 
 describe('<DialogContent run> on the island store', () => {
+  it('dismisses a picker with Escape before dismissing its parent dialog', async () => {
+    await loadSelectPopup();
+    const { host, dispose } = mount(fakeIsland({ person: '' }), () => <Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Feedback"><Select label="Person" value="$person" options={['Ada']} /><DialogClose>Cancel</DialogClose></DialogContent></Dialog>);
+    document.body.append(host);
+    const dialog = host.querySelector('dialog')!;
+    dialog.showModal = () => dialog.setAttribute('open', '');
+    dialog.close = () => dialog.removeAttribute('open');
+    try {
+      host.querySelector<HTMLButtonElement>('button')!.click();
+      const trigger = dialog.querySelector<HTMLButtonElement>('[aria-label="Person"]')!;
+      trigger.click(); await Promise.resolve();
+      const search = dialog.querySelector<HTMLInputElement>('[role="searchbox"]')!;
+      expect(search).toBeTruthy();
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(dialog.open).toBe(true);
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(dialog.open).toBe(false);
+    } finally { dispose(); host.remove(); }
+  });
+
   const open = (host: HTMLElement) => { (host.querySelector('button') as HTMLButtonElement).click(); return document.querySelector('dialog') as HTMLDialogElement; };
 
   it('closes a native modal in its trusted portal before moving it home', () => {

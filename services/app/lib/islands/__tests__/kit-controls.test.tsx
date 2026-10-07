@@ -19,10 +19,41 @@ import { Input, Textarea, Segmented, Slider, Switch, DatePicker, BoundNative } f
 import { User, UserImage, UserHandle, SignIn } from '../kit/people';
 import { Files } from '../kit/files';
 import { Mermaid } from '../kit/mermaid';
+import { Select, loadSelectPopup } from '../kit/select';
 
 const mount = (island = fakeIsland(), view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={island}>{view()}</IslandProvider>, host); return { host, dispose }; };
 
 describe('controls', () => {
+  it('keeps picker popups inside their owning open native dialog', async () => {
+    await loadSelectPopup();
+    const island = fakeIsland({ person: '', when: '2026-09-28' });
+    island.setValue = vi.fn();
+    const { host, dispose } = mount(island, () => <dialog open aria-label="Feedback">
+      <Select label="Person" value="$person" options={['Ada', 'Grace']} />
+      <DatePicker label="Date" value="$when" />
+    </dialog>);
+    host.setAttribute('data-mx-inline-story', '');
+    const css = document.createElement('style'); css.setAttribute('data-mx-story-css', ''); host.append(css);
+    document.body.append(host);
+    try {
+      const modal = host.querySelector('dialog')!;
+      const trigger = modal.querySelector<HTMLButtonElement>('[aria-label="Person"]')!;
+      trigger.click();
+      await Promise.resolve();
+      const options = document.querySelector('[role="listbox"][aria-label="Person"]')!;
+      expect(options).toBeTruthy();
+      expect(options.closest('dialog')).toBe(modal);
+      (options.querySelector('[aria-label="Ada"]') as HTMLButtonElement).click();
+      expect(island.setValue).toHaveBeenCalledWith('person', 'Ada', undefined);
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      modal.querySelector<HTMLButtonElement>('[aria-label="Date"]')!.click();
+      const date = document.querySelector<HTMLButtonElement>('[aria-label="2026-09-29"]')!;
+      expect(date.closest('dialog')).toBe(modal);
+      date.click();
+      expect(island.setValue).toHaveBeenCalledWith('when', '2026-09-29', undefined);
+    } finally { dispose(); host.remove(); }
+  });
+
   // The live face (what a compiled page runs; kit-controls-live.test.tsx holds it byte for byte) stamps no
   // binding and leaves a bound field writable.
   it('Input, Textarea, Segmented, Slider, Switch and DatePicker render labelled, writable controls with no binding stamp', () => {

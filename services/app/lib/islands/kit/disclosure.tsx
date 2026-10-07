@@ -57,7 +57,7 @@ export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
       const home = document.createComment('popover-home'); holder.before(home);
       createEffect(() => {
         // In the document's story root when it is styled there (a framed document), as an unserved popover's portal.
-        const destination = ctx.open() ? overlayDestination(island) : null;
+        const destination = ctx.open() ? overlayDestination(island, ctx.trigger()) : null;
         if (destination) destination.append(holder);
         else home.parentNode?.insertBefore(holder, home.nextSibling);
       });
@@ -65,7 +65,7 @@ export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
     });
     return <div ref={holder} hidden={!ctx.open()}>{popper()}</div>;
   }
-  return <Show when={ctx.open()}><TrustedOverlay open={ctx.open}>{popper()}</TrustedOverlay></Show>;
+  return <Show when={ctx.open()}><TrustedOverlay open={ctx.open} anchor={ctx.trigger}>{popper()}</TrustedOverlay></Show>;
 }
 /**
  * The popover's placement, as the tooltip's: a fixed wrapper Radix's popper positions against the trigger (bottom,
