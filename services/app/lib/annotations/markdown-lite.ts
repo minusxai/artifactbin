@@ -103,6 +103,12 @@ export function safeHref(url: string): string | null {
  * of n backticks whose length differs at every position inside a run, so a
  * cache keyed by the needle can never hit. See `backtickClosers`.
  */
+function escapedAt(text: string, at: number): boolean {
+  let slashes = 0;
+  while (at > 0 && text[--at] === '\\') slashes++;
+  return slashes % 2 === 1;
+}
+
 class Scanner {
   private readonly exhausted = new Set<string>();
 
@@ -110,7 +116,8 @@ class Scanner {
 
   find(needle: string, from: number): number {
     if (this.exhausted.has(needle)) return -1;
-    const at = this.src.indexOf(needle, from);
+    let at = this.src.indexOf(needle, from);
+    while (at >= 0 && escapedAt(this.src, at)) at = this.src.indexOf(needle, at + needle.length);
     if (at === -1) this.exhausted.add(needle);
     return at;
   }
@@ -231,6 +238,10 @@ export function parseInline(src: string): MdInline[] {
 
   while (i < src.length) {
     const ch = src[i];
+
+    if (ch === '\\' && i + 1 < src.length && /[\\`*_\[\]()>.+#-]/.test(src[i + 1])) {
+      flush(i); pushText(out, src[i + 1]); i += 2; plain = i; continue;
+    }
 
     if (ch === '\n') {
       flush(i);
