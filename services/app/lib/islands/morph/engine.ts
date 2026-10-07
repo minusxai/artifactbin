@@ -112,8 +112,23 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
     const nextLiterals = next.querySelector<HTMLScriptElement>(`script[${LITERALS_ATTR}]`);
     const temporaryLiterals = nextLiterals ? doc.importNode(nextLiterals, true) : null;
     if (temporaryLiterals) doc.body.append(temporaryLiterals);
+    // Large constants (including FLOW) read the page-data carrier by id during import.
+    // Lend this version's carrier too; restore the old document if import cannot complete.
+    const currentData = doc.getElementById(ISLAND_DATA_ID);
+    const nextData = next.getElementById(ISLAND_DATA_ID);
+    const temporaryData = nextData ? doc.importNode(nextData, true) : null;
+    if (temporaryData) {
+      if (currentData) currentData.replaceWith(temporaryData);
+      else doc.body.append(temporaryData);
+    }
     try { incoming = await takeModule(seam, newModuleHref, importModule); }
-    finally { temporaryLiterals?.remove(); }
+    finally {
+      temporaryLiterals?.remove();
+      if (temporaryData) {
+        if (currentData) temporaryData.replaceWith(currentData);
+        else temporaryData.remove();
+      }
+    }
     if (incoming.FLOW && !store) throw refuse('the new version declares data the running islands have no store for');
     // The new module selected its own pinned resource. Fetch before touching the adopted tree:
     // a failure leaves the old document intact for the caller's reload path.

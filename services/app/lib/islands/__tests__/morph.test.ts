@@ -49,10 +49,11 @@ interface Served {
   region?: string;
   /** The column wrapper's id (a whole-document write can mint it anew). */
   wrapper?: string;
+  moduleData?: unknown[];
 }
 
 /** A compiled page as the assembler writes it (the parts the morph reads). */
-function served({ edit, lede = 'the first version', extra = '', islands = [['s0-', 'A', 'A'], ['s1-', 'B', 'B']], module = '/islands/d/aaaaaaaaaaaaaaaa.js', boot: bootUrl = '/islands/boot-1111.js', mode = 'light', sheets = { 'data-mx-tw': '.p-10{padding:2.5rem}' }, title = 'Live', region = 'All', wrapper = 'w' }: Served): string {
+function served({ edit, lede = 'the first version', extra = '', islands = [['s0-', 'A', 'A'], ['s1-', 'B', 'B']], module = '/islands/d/aaaaaaaaaaaaaaaa.js', boot: bootUrl = '/islands/boot-1111.js', mode = 'light', sheets = { 'data-mx-tw': '.p-10{padding:2.5rem}' }, title = 'Live', region = 'All', wrapper = 'w', moduleData }: Served): string {
   const islandHtml = islands.map(([rid, id, label]) => `<div data-hk="${rid}0000" id="${id}" data-mx-ast="2.${id}"><b>${label}:${region}</b></div>`).join('');
   return `<!doctype html><html class="${mode}"><head><title>${title}</title>`
     + (module ? `<link rel="modulepreload" href="${module}" crossorigin><link rel="modulepreload" href="${bootUrl}" crossorigin>` : '')
@@ -62,7 +63,7 @@ function served({ edit, lede = 'the first version', extra = '', islands = [['s0-
     + `<div id="mx-story-root" data-mx-inline-story="" data-mx-story-root="" class="${mode}"><div class="mx-doc"><div id="${wrapper}" data-mx-ast="0" class="p-10">`
     + `<h1 id="h" data-mx-ast="0.0">Live</h1><p id="lede" data-mx-ast="0.1">${lede}</p>${extra}<section id="s" data-mx-ast="0.2">${islandHtml}</section><p id="tail" data-mx-ast="0.3">tail</p>`
     + '</div></div></div>'
-    + (module ? `<script type="application/json" id="mx-story-data">${JSON.stringify({ values: { region }, results: null, signedIn: false, mermaidImages: {}, readOnly: null, edit })}</script><script type="module" src="/islands/page-1.js" crossorigin></script><script type="module" src="${module}" crossorigin></script>` : '<script type="module" src="/islands/page-1.js" crossorigin></script>')
+    + (module ? `<script type="application/json" id="mx-story-data">${JSON.stringify({ values: { region }, results: null, signedIn: false, mermaidImages: {}, readOnly: null, edit, ...(moduleData ? { moduleData } : {}) })}</script><script type="module" src="/islands/page-1.js" crossorigin></script><script type="module" src="${module}" crossorigin></script>` : '<script type="module" src="/islands/page-1.js" crossorigin></script>')
     + '</body></html>';
 }
 
@@ -237,6 +238,44 @@ describe('the live morph', () => {
     expect(replaceFlow).toHaveBeenCalledWith({ flow: moreFlow });
     expect(doc.store!.getValue('region')).toBe('East');
     expect(doc.store!.getValue('year')).toBe(2026);
+  });
+
+  it.each([true, false])('imports the incoming externalized flow while retaining reader values (existing carrier: %s)', async (hasCarrier) => {
+    load(served({ edit: 'e1', moduleData: [flow] }));
+    const doc = start();
+    doc.context.setValue('region', 'East');
+    const islandNode = $('A');
+    if (!hasCarrier) $('mx-story-data')!.remove();
+    const replaceFlow = vi.spyOn(doc.store!, 'replaceFlow');
+    const importModule = vi.fn(async () => {
+      const incomingFlow = JSON.parse($('mx-story-data')!.textContent!).moduleData[0] as CompiledDataflow;
+      boot({ ISLANDS: [['s0-', A, 'kA'], ['s1-', B, 'kB']], FLOW: incomingFlow });
+      return {};
+    });
+    await morph(window, { fetch: answer(served({ edit: 'e2', module: '/islands/d/cccccccccccccccc.js', moduleData: [moreFlow] })), importModule });
+    expect(replaceFlow).toHaveBeenCalledWith({ flow: moreFlow });
+    expect(doc.store!.getValue('region')).toBe('East');
+    expect(doc.store!.getValue('year')).toBe(2026);
+    expect($('A')).toBe(islandNode);
+    expect(JSON.parse($('mx-story-data')!.textContent!).moduleData).toEqual([moreFlow]);
+  });
+
+  it('restores the original carrier and document when the next module fails to import', async () => {
+    load(served({ edit: 'e1', moduleData: [flow] }));
+    const doc = start();
+    const original = $('mx-story-data');
+    const originalText = original!.textContent;
+    const islandNode = $('A');
+    const importModule = vi.fn(async () => {
+      expect(JSON.parse($('mx-story-data')!.textContent!).moduleData).toEqual([moreFlow]);
+      throw new Error('module unavailable');
+    });
+    await expect(morph(window, { fetch: answer(served({ edit: 'e2', module: '/islands/d/cccccccccccccccc.js', moduleData: [moreFlow] })), importModule })).rejects.toThrow('module unavailable');
+    expect($('mx-story-data')).toBe(original);
+    expect(original!.textContent).toBe(originalText);
+    expect($('A')).toBe(islandNode);
+    expect(doc.store!.flow).toEqual(flow);
+    expect(document.body.getAttribute('data-mx-live-edit')).toBe('e1');
   });
 
   it('an island inserted before the others: the kept islands answer to their new render ids, the new one hydrates', async () => {
