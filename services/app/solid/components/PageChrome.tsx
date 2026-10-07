@@ -41,7 +41,7 @@ const BAR_BUTTON = 'flex h-9 w-9 cursor-pointer items-center justify-center roun
 function Star(props: { mobile: boolean }): JSX.Element {
   let root!: HTMLSpanElement;
   createEffect(() => wireGithubStar(root));
-  return <span ref={root} data-mx-github-star="" class={`${props.mobile ? 'inline-flex sm:hidden' : 'hidden sm:inline-flex'} h-7 shrink-0 items-center text-fg print:hidden`} innerHTML={githubStarMarkup(!props.mobile)} />;
+  return <span ref={root} data-mx-github-star="" class={`${props.mobile ? 'inline-flex max-[380px]:hidden sm:hidden' : 'hidden sm:inline-flex'} h-7 shrink-0 items-center text-fg print:hidden`} innerHTML={githubStarMarkup(!props.mobile)} />;
 }
 
 /**
