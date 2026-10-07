@@ -131,10 +131,26 @@ describe('testing identities in live sessions', () => {
     expect(text).toContain('Stop once each `<Mutation>` has worked once per identity');
   });
 
+  it('checks inner reader surfaces and the visible phone screenshot, not only the document root', () => {
+    const text = live();
+    expect(text).toContain("document.querySelectorAll('.mx-doc')");
+    expect(text).toContain("document.querySelectorAll('[data-design]')");
+    expect(text).toContain('document.documentElement.clientWidth');
+    expect(text).toContain('Inspect the full-page screenshot at the actual long label and adjacent numeral');
+  });
+
   it('carries the same rule on the skill’s first page', () => {
     const writes = sheet.split('\n').find((b) => b.startsWith('- ') && b.includes('<Mutation>') && /live session/i.test(b))!;
     expect(writes).toContain('One session at a time');
     expect(writes).toContain('Stop once each works once per identity');
     expect(writes).not.toContain('until clean');
   });
+});
+
+it('teaches the Riso fact-list selector contract with semantic dt/dd markup',()=>{
+ const text=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/references/system-riso.md'),'utf8');
+ expect(text).toContain('<dl className="ri-dl"><dt>');
+ expect(text).toContain('<dd><Number data="$totals" col="kept_pct" suffix="%" /></dd>');
+ expect(text).toContain('its rules style `<dt>` and `<dd>`');
+ expect(text).not.toContain('<div className="ri-dl">');
 });

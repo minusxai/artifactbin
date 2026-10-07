@@ -76,6 +76,14 @@ Chart series order: blue, pink, yellow, key-2, positive. The three inks in print
 
 Kit components take Riso through the contract: paper and sheet grounds, blue primary, yellow secondary, pink ring, zero radius. The 2px key edge, the hard shadow and the turn are classes on authored elements: ri-card, ri-btn, ri-tag.
 
+Riso's `ri-dl` is a two-column grid; its rules style `<dt>` and `<dd>`. Keep that semantic structure instead of wrapping labels and values in generic `<div>`/`<span>` pairs:
+
+```jsx
+<dl className="ri-dl"><dt>Intake</dt><dd>Mon 02 Nov</dd><dt>Count</dt><dd><Number data="$totals" col="bikes" /></dd><dt>Kept</dt><dd><Number data="$totals" col="kept_pct" suffix="%" /></dd></dl>
+```
+
+Keep labels short beside numeric values; avoid 40px `t-numeral` in this compact list. At phone width, inspect the actual label and value in the screenshot.
+
 - **Buttons.** Kit buttons on the left; authored ri-btn on the right with the 2px key edge and the 6px slip. Blue is the primary. Pink is for the one playful action per page.
 - **Tags.** Tags are mono caps inside a 2px key edge, square. Status tags carry a pip or a word with the colour.
 - **Fields.** Fields are sheets with the key edge; the focus ring is pink. Labels are mono caps above the field.
