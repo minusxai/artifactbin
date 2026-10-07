@@ -193,8 +193,8 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
     <Show when={!previewing() && mention() && props.backend}>
       <CommentMentionPicker backend={props.backend!} artifactId={props.artifactId} query={mention()!.query} onSelect={chooseMention} onReady={(handle) => { keyboard = handle; }} />
     </Show>
-    <Show when={!previewing() && !mention()}>
-      <p class="mb-2 text-[10px] text-muted">{canMention() ? 'Type @ to mention an agent · ' : ''}Ctrl/⌘ + Enter to send</p>
+    <Show when={!previewing() && !mention() && canMention()}>
+      <p class="mb-2 text-[10px] text-muted">Type @ to mention an agent</p>
     </Show>
   </div>;
 }
