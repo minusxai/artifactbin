@@ -3,7 +3,7 @@ import {mkdir,open,readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import {join,delimiter} from 'node:path';
 import {runRemote} from './runner';
 import {HttpClient} from './http';
-import {remoteChildEnv,remoteWorkerEnv,type Connection} from './config';
+import {remoteChildEnv,remoteWorkerEnv,type Connection} from './config.js';
 import {createRemoteContextBridge} from './remote-context-bridge';
 import {REMOTE_CONTEXT_ARG} from './entry-args';
 import {REMOTE_REVIEW_POLICY,remoteArguments} from './remote-context';
