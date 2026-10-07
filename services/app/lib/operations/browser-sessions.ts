@@ -53,15 +53,18 @@ export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
       if (input.op === 'script' && parsed.error.issues.some((issue) => ['execution_id', 'code'].includes(String(issue.path[0])))) {
         return { status: 400, body: { error: 'invalid_script', message: 'script requires a valid execution_id and code (at most 65,536 characters)' } };
       }
+      if (parsed.error.issues.some((issue) => issue.path[0] === 'op')) {
+        return { status: 400, body: { error: 'invalid_operation', message: 'op must be "script", "status" or "close"' } };
+      }
       if (input.viewer !== undefined && !VIEWER.safeParse(input.viewer).success) {
         return { status: 400, body: { error: 'invalid_viewer', message: 'viewer is "guest", {"testuser": "ID"} or absent; a session omitting it browses as you' } };
-      }
-      if (!['script', 'status', 'close'].includes(String(input.op))) {
-        return { status: 400, body: { error: 'invalid_operation', message: 'op must be "script", "status" or "close"' } };
       }
       return { status: 400, body: { error: 'invalid_browser_session_input', message: 'session_id must be a valid ID; execution_id and code must have the declared types' } };
     }
     const safeInput = parsed.data;
+    if (safeInput.op === 'script' && (safeInput.execution_id === undefined || safeInput.code === undefined)) {
+      return { status: 400, body: { error: 'invalid_script', message: 'script requires execution_id and code' } };
+    }
     const sessionService = services().browser.sessions;
     if (!sessionService) return { status: 503, body: { error: 'sessions_unavailable' } };
     const viewer: ViewerChoice | undefined = safeInput.viewer;

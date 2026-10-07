@@ -162,6 +162,9 @@ describe('browser_session viewer', () => {
     const seen = record();
     const cases = [
       { input: { ...script, session_id: 'bad/id' }, error: 'invalid_browser_session_input' },
+      { input: { op: 'script', session_id: 'session-id', execution_id: 'execution-id', create: true }, error: 'invalid_script' },
+      { input: { op: 'script', session_id: 'session-id', create: true, code: 'return 1' }, error: 'invalid_script' },
+      { input: { op: 'script', session_id: 'session-id', create: true }, error: 'invalid_script' },
       { input: { ...script, execution_id: 7 }, error: 'invalid_script' },
       { input: { ...script, code: 7 }, error: 'invalid_script' },
       { input: { ...script, create: 'true' }, error: 'invalid_browser_session_input' },
@@ -172,6 +175,14 @@ describe('browser_session viewer', () => {
       expect(result.status, JSON.stringify(input)).toBe(400);
       expect(result.body.error, JSON.stringify(input)).toBe(error);
     }
+    expect(seen).toHaveLength(0);
+  });
+
+  it('returns a client error for a malformed operation value', async () => {
+    const seen = record();
+    const result = await operation.run(context, { op: { toString: null }, session_id: 'session-id' });
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('invalid_operation');
     expect(seen).toHaveLength(0);
   });
 
