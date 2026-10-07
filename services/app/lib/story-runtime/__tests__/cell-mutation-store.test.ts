@@ -18,6 +18,20 @@ describe('invocation-local cell mutations',()=>{
     await expect(store.mutate('edit')).rejects.toThrow('Read-only');
     expect(mutate).not.toHaveBeenCalled();
   });
+  it('notifies a mutation-only form when its first permission check fails and retries', async () => {
+    const run=vi.fn().mockRejectedValue(new Error('offline'));
+    const store=createDataflowStore({flow},{transport:{run,mutate:vi.fn(),page:vi.fn()}});
+    const seen:string[]=[];
+    store.subscribe(()=>seen.push(store.mutationUnavailable('edit')!));
+    store.start();
+    for(let i=0;i<5;i++) await Promise.resolve();
+    expect(seen).toContain('Access check failed. Reload.');
+    run.mockResolvedValue({tables:{},errors:{},mutationAccess:{edit:null}});
+    store.invalidateDatasets(['abc123']);
+    expect(seen.at(-1)).toBe('Checking edit access…');
+    for(let i=0;i<5;i++) await Promise.resolve();
+    expect(store.canMutate('edit')).toBe(true);
+  });
   it('sends different rows concurrently, tracks busy until both finish, and never writes overrides globally',async()=>{
     const done:Array<()=>void>=[];
     const mutate=vi.fn().mockImplementation(()=>new Promise(resolve=>done.push(()=>resolve({dataset:'abc123'}))));

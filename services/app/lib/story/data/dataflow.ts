@@ -774,3 +774,21 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
 /** True when the document declares nothing. */
 export const isEmptyDataflow = (flow: Dataflow): boolean =>
   flow.imports.length === 0 && flow.values.length === 0 && flow.queries.length === 0 && flow.mutations.length === 0 && !flow.notifications?.length;
+
+export type ControlOption = { value: string; label: string };
+
+/** One option contract for standalone and editable table-cell controls. */
+export function controlOptions(raw: unknown, table?: TableResult): ControlOption[] {
+  if (typeof raw === 'string' && refName(raw)) {
+    const [valueColumn, labelColumn] = table?.columns ?? [];
+    return table && valueColumn ? table.rows.map(row => {
+      const value = String(row[valueColumn.name] ?? '');
+      return { value, label: labelColumn ? String(row[labelColumn.name] ?? value) : value };
+    }) : [];
+  }
+  return Array.isArray(raw) ? raw.map(item => {
+    if (typeof item !== 'object' || item === null) return { value: String(item), label: String(item) };
+    const option = item as ControlOption;
+    return { value: String(option.value ?? ''), label: String(option.label ?? option.value ?? '') };
+  }) : [];
+}
