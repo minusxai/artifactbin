@@ -1,7 +1,8 @@
 import {seedOwnerJoin} from '@/lib/accounts';
 import {notificationArtifactAuthority,notificationSourceSchema} from '@/lib/notifications';
 import {expect,it,vi} from 'vitest';
-import {useAppHarness,request} from './harness';
+import {useAppHarness,request,setSession} from './harness';
+import {PATCH as patchInbox} from '@/app/api/my/people/route';
 import {POST as create} from '@/app/api/artifacts/route';
 import {createUser} from '@/lib/accounts';
 import {mintToken} from '@/lib/accounts';
@@ -10,7 +11,7 @@ import {membershipInbox,updateMembershipInbox} from '@/lib/accounts';
 import {POST as delivery} from '@/app/api/internal/notifications/route';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 vi.mock('@/lib/platform/config',async original=>({...await original<typeof import('@/lib/platform/config')>(),INTERNAL_SERVICE_SECRET:'notification-test-service'}));
-import {notifyThread} from '@/lib/notifications/write';
+import {notifyThread,recordNotification} from '@/lib/notifications/write';
 useAppHarness();
 async function fixture(){
  const sender=await createUser({email:'sender@example.com'}),recipient=await createUser({email:'recipient@example.com'}),token=await mintToken('test',sender.id);
@@ -29,6 +30,25 @@ it('projects a combined run card, the saved user actor, and revision acknowledgm
  expect(inbox.notifications[0]).toMatchObject({kind:'mutation',messages:['Task is Done','Review is ready'],actor:{kind:'user',userId:f.sender.id,viaAgent:true},mutation_run_id:'run'});
  expect(JSON.stringify(inbox)).not.toContain(f.token.id);expect(JSON.stringify(inbox)).not.toContain('schemaRevision');
  expect((await updateMembershipInbox(f.actor,{read:'n0',revision:1})).unread).toBe(0);
+});
+it('marks every notification read across pages and kinds, preserves history and isolates the recipient',async()=>{
+ const f=await fixture();
+ await f.db.transaction(async tx=>{
+  for(let i=0;i<51;i++)await recordNotification(tx,{id:`follow-${i}`,artifactId:null,recipientId:f.recipient.id,senderId:f.sender.id,kind:'follow',revision:3});
+  await recordNotification(tx,{id:'other',artifactId:null,recipientId:f.sender.id,senderId:f.recipient.id,kind:'follow'});
+ });
+ setSession({user:{id:f.recipient.id,email:f.recipient.email}});
+ const clear=()=>patchInbox(request('/api/my/people',{method:'PATCH',json:{readAll:true}}));
+ const response=await clear();expect(response.status).toBe(200);
+ const inbox=await response.json();expect(inbox.unread).toBe(0);expect(inbox.notifications).toHaveLength(50);expect(inbox.next).toBe(50);
+ expect((await membershipInbox(f.actor,50)).notifications).toHaveLength(2);
+ const rows=(await f.db.query<{revision:number;seen_revision:number;read_at:string}>('SELECT revision,seen_revision,read_at FROM member_notifications WHERE recipient_id=$1 UNION ALL SELECT revision,seen_revision,read_at FROM mutation_notifications WHERE recipient_id=$1',[f.recipient.id])).rows;
+ expect(rows).toHaveLength(52);for(const row of rows){expect(row.seen_revision).toBe(row.revision);expect(row.read_at).not.toBeNull();}
+ expect((await membershipInbox({userId:f.sender.id,tokenId:null})).unread).toBe(1);
+ expect((await clear()).status).toBe(200);
+ await f.db.transaction(tx=>recordNotification(tx,{id:'follow-0',artifactId:null,recipientId:f.recipient.id,senderId:f.sender.id,kind:'follow'}));
+ expect((await membershipInbox(f.actor)).unread).toBe(1);
+ setSession(null);expect((await clear()).status).toBe(401);
 });
 it('hides saved messages after any source or document revocation and either direction of blocking',async()=>{
  const f=await fixture();expect((await membershipInbox(f.actor)).notifications).toHaveLength(1);

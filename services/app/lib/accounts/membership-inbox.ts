@@ -20,12 +20,19 @@ export async function membershipInbox(actor:RoleActor,offset=0,onlyId:string|nul
  const blocks=(await db.query<{user_id:string;username:string|null}>('SELECT b.blocked_user_id AS user_id,u.username FROM user_blocks b JOIN users u ON u.id=b.blocked_user_id WHERE b.user_id=$1',[actor.userId])).rows;
  return {autoAccept:user.auto_accept_mentions,notifications:combined.slice(offset,offset+50),unread:combined.filter(n=>!n.read_at).length,next:combined.length>offset+50?offset+50:null,blocks};
 }
-export async function updateMembershipInbox(actor:RoleActor,input:{autoAccept?:boolean;read?:string;revision?:number;block?:string;unblock?:string}){
+export async function updateMembershipInbox(actor:RoleActor,input:{autoAccept?:boolean;read?:string;readAll?:boolean;revision?:number;block?:string;unblock?:string}){
  if(!actor.userId)throw new MembershipError('Sign in to update notifications');
  const db=await getDb();
  await db.transaction(async tx=>{
   const account=await tx.query("SELECT id FROM users WHERE id=$1 AND kind<>'guest' FOR UPDATE",[actor.userId]);if(!account.rows.length)throw new MembershipError('Sign in to update notifications');
   if(input.autoAccept!==undefined)await tx.query('UPDATE users SET auto_accept_mentions=$2 WHERE id=$1',[actor.userId,input.autoAccept]);
+  if(input.readAll){
+   // Acknowledge the current revisions across the whole inbox, including unloaded pages.
+   for(const table of ['member_notifications','mutation_notifications'] as const){
+    const changed=await tx.query<{id:string;revision:number}>(`UPDATE ${table} SET seen_revision=revision,read_at=now() WHERE recipient_id=$1 AND (seen_revision<revision OR read_at IS NULL) RETURNING id,revision`,[actor.userId]);
+    for(const row of changed.rows)await notificationChanged(tx,row.id,actor.userId!,row.revision,'read');
+   }
+  }
   if(input.read){
    const changed=await tx.query<{revision:number}>(`UPDATE member_notifications SET seen_revision=greatest(seen_revision,least(revision,$3)),read_at=CASE WHEN revision<=$3 THEN now() ELSE read_at END WHERE id=$1 AND recipient_id=$2 AND seen_revision<least(revision,$3) RETURNING revision`,[input.read,actor.userId,input.revision??1]);
    if(changed.rows[0])await notificationChanged(tx,input.read,actor.userId!,changed.rows[0].revision,'read');

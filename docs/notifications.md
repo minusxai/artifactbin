@@ -44,6 +44,12 @@ rows, invitation actions and revision-aware reading. Opening the menu observes
 only its initial visible revisions: an update arriving later stays unread.
 The live stream refreshes read, acceptance and removal state across tabs.
 
+Both surfaces offer **Mark all as read** while the inbox has unread items.
+`PATCH /api/my/people` with `{ "readAll": true }` acknowledges the signed-in
+account's current membership and mutation notification revisions in one
+transaction, including unloaded pages. It preserves history and pending
+invitations; later updates become unread again through the usual revision path.
+
 A comment link targets its thread and first unread comment, including resolved
 history. Actually viewing the update marks that revision read; a collapsed marker
 does not. A resolved open thread stays open. A collapsed resolved marker counts
