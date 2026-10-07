@@ -14,10 +14,17 @@ The CLI uses browser approval or email sign-in for remote work. Direct HTTP clie
 
 ## One local editing journey
 
-Write `report.jsx`, then run:
+Write `report.jsx`. Start preview by itself in one terminal:
 
 ```sh
 afbin preview report.jsx
+```
+
+Preview stays in the foreground until you press Ctrl+C. Do not chain it with `&&` (for example, `afbin preview report.jsx && afbin push report.jsx`) or pipe its persistent output to `tail`; the next command waits for preview to exit. Leave it running in Terminal 1 and use Terminal 2 for the commands below, or press Ctrl+C before continuing in Terminal 1. For automation, keep the child process handle and stop only that preview process.
+
+Continue the journey in Terminal 2 while preview runs, or in Terminal 1 after stopping preview:
+
+```sh
 afbin export report.jsx --format html
 afbin import ID-SLUG.jsx.html --output report.jsx
 afbin push report.jsx
@@ -25,7 +32,7 @@ afbin push report.jsx
 
 Replace `ID-SLUG.jsx.html` with the filename printed by export.
 
-Preview binds localhost and edits the source without sign-in or cloud requests. `--share` explicitly enables network access; anyone who can reach that server may edit. Close preview when finished.
+Preview binds localhost and edits the source without sign-in or cloud requests. `--share` explicitly enables network access; anyone who can reach that server may edit. Close preview with Ctrl+C when finished.
 
 HTML export defaults to `<artifact-id>-<URL-slug>.jsx.html`, a self-contained offline file that opens normally in a browser. Use the emitted filename, or pass `--output report.jsx.html` to choose an explicit name. Web downloads and browser Save use the same `.jsx.html` suffix. JSX source stays `.jsx`; PNG, CSV and other formats keep their own extensions. Save edits and comments from the offline browser before importing its downloaded file.
 

@@ -148,6 +148,60 @@ describe('browser_session viewer', () => {
     expect(seen).toHaveLength(0);
   });
 
+  it('rejects an unsupported HTTP session operation before contacting the browser service', async () => {
+    const seen = record();
+    for (const input of [{ op: 'list' }, { op: 'list', session_id: 'session-id' }]) {
+      const result = await operation.run(context, input);
+      expect(result.status).toBe(400);
+      expect(result.body.error).toBeTruthy();
+    }
+    expect(seen).toHaveLength(0);
+  });
+
+  it('rejects malformed declared session fields before contacting the browser service', async () => {
+    const seen = record();
+    const cases = [
+      { input: { ...script, session_id: 'bad/id' }, error: 'invalid_browser_session_input' },
+      { input: { op: 'script', session_id: 'session-id', execution_id: 'execution-id', create: true }, error: 'invalid_script' },
+      { input: { op: 'script', session_id: 'session-id', create: true, code: 'return 1' }, error: 'invalid_script' },
+      { input: { op: 'script', session_id: 'session-id', create: true }, error: 'invalid_script' },
+      { input: { ...script, execution_id: 7 }, error: 'invalid_script' },
+      { input: { ...script, code: 7 }, error: 'invalid_script' },
+      { input: { ...script, create: 'true' }, error: 'invalid_browser_session_input' },
+      { input: { op: 'status', session_id: 'session-id', execution_id: 7 }, error: 'invalid_browser_session_input' },
+    ];
+    for (const { input, error } of cases) {
+      const result = await operation.run(context, input);
+      expect(result.status, JSON.stringify(input)).toBe(400);
+      expect(result.body.error, JSON.stringify(input)).toBe(error);
+    }
+    expect(seen).toHaveLength(0);
+  });
+
+  it('returns a client error for a malformed operation value', async () => {
+    const seen = record();
+    const result = await operation.run(context, { op: { toString: null }, session_id: 'session-id' });
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('invalid_operation');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('keeps script validation ahead of viewer validation when both are invalid', async () => {
+    const seen = record();
+    const result = await operation.run(context, { ...script, code: 7, viewer: 'owner' });
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('invalid_script');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('does not forward caller-supplied trusted identity fields to the browser service', async () => {
+    const seen = record();
+    await operation.run(context, { ...script, actor: { credential: 'bearer', tokenId: 'tok_other', userId: 'usr_other' }, pageActor: { credential: 'bearer', tokenId: 'tok_other', userId: 'usr_other' } });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
+    expect(seen[0]).not.toHaveProperty('pageActor');
+  });
+
   // runOperation hands the body to run() unparsed, so the refusal has to live in the operation itself.
   it('refuses a viewer it cannot browse as, without reaching the session service', async () => {
     const seen = record();
