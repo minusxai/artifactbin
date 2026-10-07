@@ -157,8 +157,8 @@ try {
     'if((Get-ExecutionPolicy) -ne ''Restricted''){throw ''Fresh shell policy changed''}'
     '$command=(Get-Command afbin.cmd -CommandType Application).Source'
     'if($command -ne ''__BIN__''){throw ''Fresh shell resolved a different afbin command''}'
-    '$version=& afbin.cmd --version'
-    'if($LASTEXITCODE -ne 0 -or $version.Trim() -ne ''__VERSION__''){throw ''Fresh shell afbin version failed''}'
+    '$version=& afbin.cmd --version --json'
+    'if($LASTEXITCODE -ne 0 -or ($version | ConvertFrom-Json).version -ne ''__VERSION__''){throw ''Fresh shell afbin version failed''}'
     '$query=& afbin.cmd query ''__ROWS__'' --json'
     'if($LASTEXITCODE -ne 0 -or !(($query | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains(''10''))){throw ''Fresh shell SQL failed''}'
     'Write-Output ''PASS fresh-shell global version and local SQL'''
@@ -170,7 +170,7 @@ try {
   if($registry){if(!$registry.HasExited){$registry.Kill();$registry.WaitForExit()};$registry.Dispose()}
 }
 # Warmed offline/native behavior is proved by both Windows native matrix versions.
-[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","same-tarball-standard-user-npx","real-global-setup","claude-codex-skills","repeat-setup","customer-path-instruction","fresh-shell-global-version-sql"]}')
+[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","real-global-setup","claude-codex-skills","repeat-setup","customer-path-instruction","fresh-shell-global-version-sql"]}')
 '@
 $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
 $child=$child.Replace('__PUBLISHED_VERSION__',$PublishedVersion)
