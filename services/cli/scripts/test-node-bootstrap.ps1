@@ -112,7 +112,7 @@ if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){th
 # candidate. Dependencies reuse this user's just-populated cold-install cache.
 $phase='candidate registry startup'
 $registry=$null
-if(!$publishedVersion){$registry=Start-Process (Get-Command node.exe -CommandType Application).Source -ArgumentList @('"__ROOT__\windows-setup-registry.mjs"','"__ROOT__\candidate.tgz"','"__ROOT__\registry.json"') -PassThru -RedirectStandardOutput '__ROOT__\registry.stdout' -RedirectStandardError '__ROOT__\registry.stderr'}
+if(!$publishedVersion){$registry=Start-Process (Join-Path $private 'node.exe') -ArgumentList @('"__ROOT__\windows-setup-registry.mjs"','"__ROOT__\candidate.tgz"','"__ROOT__\registry.json"') -PassThru -RedirectStandardOutput '__ROOT__\registry.stdout' -RedirectStandardError '__ROOT__\registry.stderr'}
 try {
   if(!$publishedVersion){
   $deadline=[DateTime]::UtcNow.AddSeconds(15)
