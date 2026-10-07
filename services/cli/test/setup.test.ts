@@ -128,7 +128,7 @@ test('setup --server records a self-hosted origin as the default, once, and neve
   assert.match(out.join(''),/references\/http-api\.md/);
   out.length=0;
   assert.equal(await runCli(['help','npm-local','--json'],context),0,'installation help uses the recorded server without network');
-  assert.match(out.join(''),/self\.example\/chat\/ensure-node\.sh/,out.join('').slice(0,300));
+  assert.match(out.join(''),/self\.example\/chat\/install-node\.sh/,out.join('').slice(0,300));
   assert.doesNotMatch(out.join(''),/artifactbin\.dev/,'the public server is no longer this afbin\'s default');
   // A link on the recorded origin is this afbin's own server: no --server, no wrong_server.
   const hosts:string[]=[];const head={id:'abc123',version:1,edit_id:'edit1',state:digest('s1'),markup:'<p id="p001">Head</p>',format:'markup',title:'T',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};

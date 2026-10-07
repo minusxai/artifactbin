@@ -109,11 +109,11 @@ describe('llms.txt and the discovery head', () => {
 describe('npm setup keeps installed skills on the selected server',()=>{
   it.each(['https://docs.example','http://127.0.0.1:5001/'])('selects self-hosted origins on Unix and Windows: %s',(base)=>{
     const host=base.replace(/\/$/,'');
-    expect(afbinInstallCommand(base).split('\n')[1]).toBe(`npx --yes @afbin/cli@latest setup --server '${host}'`);
-    expect(afbinWindowsInstallCommand(base).split('\n')[1]).toBe(`npx.cmd --yes @afbin/cli@latest setup --server '${host}'`);
+    expect(afbinInstallCommand(base)).toBe(`curl -fsSL '${host}/chat/install.sh' | sh`);
+    expect(afbinWindowsInstallCommand(base)).toBe(`Invoke-RestMethod '${host}/chat/install.ps1' | Invoke-Expression`);
   });
   it.each([DEFAULT_SERVER,`${DEFAULT_SERVER}/`])('keeps the public setup command simple: %s',(base)=>{
-    expect(afbinInstallCommand(base).split('\n')[1]).toBe('npx --yes @afbin/cli@latest setup');
-    expect(afbinWindowsInstallCommand(base).split('\n')[1]).toBe('npx.cmd --yes @afbin/cli@latest setup');
+    expect(afbinInstallCommand(base)).toBe(`curl -fsSL '${DEFAULT_SERVER}/chat/install.sh' | sh`);
+    expect(afbinWindowsInstallCommand(base)).toBe(`Invoke-RestMethod '${DEFAULT_SERVER}/chat/install.ps1' | Invoke-Expression`);
   });
 });
