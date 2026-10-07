@@ -36,13 +36,15 @@ export function isDocumentPath(pathname: string): boolean {
  * saw. One prefix rather than a list, so the boundary cannot drift from what
  * is behind it.
  *
- * `INTERNAL_MINT_PATH` is the whole of that surface today: the token mint the
- * CLI's device approval spends (proxy routes/oauth `mintFor`). Nothing else
- * mints a credential, and nothing public does.
+ * `INTERNAL_MINT_PATH` is the only credential mint in that surface: the token
+ * mint the CLI's device approval spends (proxy routes/oauth `mintFor`). Other
+ * internal calls have their own constants and no public request reaches them.
  */
 export const INTERNAL_API_PREFIX = '/api/internal';
 export const INTERNAL_MINT_PATH = `${INTERNAL_API_PREFIX}/tokens`;
 export const INTERNAL_ARTIFACT_APPROVAL_PATH = `${INTERNAL_API_PREFIX}/artifact-approval`;
+/** App-only relay used by isolated scripted browser sessions for the two CSP-approved Google Fonts origins. */
+export const BROWSER_FONT_RESOURCE_PATH = `${INTERNAL_API_PREFIX}/browser-font-resource`;
 /** API audience allows an existing CLI connection to request an additional grant. */
 export const ARTIFACT_APPROVAL_PATH = '/api/agent-approvals';
 export function isInternalApiPath(pathname: string): boolean {

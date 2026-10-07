@@ -28,6 +28,10 @@ beforeAll(async () => {
         res.writeHead(302, { Location: '/ok.png' });
         res.end();
         return;
+      case '/redirect-path':
+        res.writeHead(302, { Location: '/outside-allowed-path.png' });
+        res.end();
+        return;
       case '/redirect-absolute':
         res.writeHead(301, { Location: `${base}/ok.png` });
         res.end();
@@ -110,6 +114,14 @@ describe('fetchWebResource', () => {
     lax();
     expect((await fetchWebResource(`${base}/redirect`, { maxBytes: 1000 })).bytes.equals(PNG)).toBe(true);
     expect((await fetchWebResource(`${base}/redirect-absolute`, { maxBytes: 1000 })).finalUrl).toBe(`${base}/ok.png`);
+  });
+
+  it('rechecks a caller URL policy after every redirect hop', async () => {
+    lax();
+    await expect(fetchWebResource(`${base}/redirect-path`, {
+      maxBytes: 1000,
+      allowUrl: url => url.pathname === '/redirect-path',
+    })).rejects.toMatchObject({ code: 'forbidden_host' });
   });
 
   it('refuses a redirect into the private network EVEN under a public-only policy', async () => {

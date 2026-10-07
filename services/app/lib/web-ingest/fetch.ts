@@ -39,6 +39,8 @@ interface FetchWebResourceOpts {
   userAgent?: string;
   /** Narrow the reachable hosts (e.g. the Google Fonts pair). Checked per hop. */
   allowHosts?: (hostname: string) => boolean;
+  /** Narrow the full resource URL (including path and query), rechecked after every redirect. */
+  allowUrl?: (url: URL) => boolean;
   timeoutMs?: number;
 }
 
@@ -92,7 +94,7 @@ const oneHop = (
   new Promise((resolve, reject) => {
     const remaining = deadline - Date.now();
     if (remaining <= 0) { reject(new WebIngestError('timeout', 'the fetch deadline passed')); return; }
-    if (opts.allowHosts && !opts.allowHosts(url.hostname)) {
+    if ((opts.allowHosts && !opts.allowHosts(url.hostname)) || (opts.allowUrl && !opts.allowUrl(url))) {
       reject(new WebIngestError('forbidden_host', `"${url.hostname}" is not an allowed source for this import`));
       return;
     }

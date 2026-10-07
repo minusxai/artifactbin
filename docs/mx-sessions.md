@@ -52,6 +52,13 @@ navigated by the page itself, so the frame is that origin. The pages cookie the 
 ticket is held by the broker and attached only to the pages origins; the worker's browser never holds it. On a page
 that frames a document, `page.evaluate`, `waitForFunction`, locators and selector actions resolve in the document
 frame (after it has loaded and booted), where `window.page` lives; `page.url()`, `goto` and `screenshot` stay the app page's.
+
+Google Fonts is the only external resource exception for scripted sessions. The broker relays GETs to the shared
+`fonts.googleapis.com` and `fonts.gstatic.com` origins to an app-only `/api/internal` route; the app permits only the
+CSS2 stylesheet endpoint and Google font file paths, then fetches them with its existing DNS-pinned, redirect-checked,
+size- and time-bounded transport. The worker's cookies, authorization, actor and user agent never leave the broker.
+Other third-party requests remain refused, and the browser service keeps no public egress network.
+
 Every hop revalidates the actor. Linux bubblewrap/user namespaces are required;
 unsupported hosts fail closed. A delegated cgroup v2 subtree bounds every worker
 to 1 GiB memory, 512 processes/threads, and one CPU. Set
