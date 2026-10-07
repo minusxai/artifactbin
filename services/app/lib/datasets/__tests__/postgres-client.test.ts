@@ -16,12 +16,14 @@ import { resetPgFixture, type PgFixture } from '@/test/helpers/pg-mock';
 const matchingCertificate = new X509Certificate(readFileSync(new URL('./fixtures/postgres-tls.pem', import.meta.url))).toLegacyObject();
 const wrongCertificate = new X509Certificate(readFileSync(new URL('./fixtures/postgres-tls-wrong.pem', import.meta.url))).toLegacyObject();
 
-const fixture = vi.hoisted((): { active: number; maximum: number; options?: unknown; blocked?: Promise<void>; release?: () => void } => ({ active: 0, maximum: 0 }));
+const fixture = vi.hoisted((): { active: number; maximum: number; options?: unknown; blocked?: Promise<void>; release?: () => void; queryError?: Error } => ({ active: 0, maximum: 0 }));
 vi.mock('pg', async () => (await import('@/test/helpers/pg-mock')).pgModule(fixture as PgFixture));
 vi.mock('../network', () => ({
   resolvePostgresHost: vi.fn(async (host: string) => (host.startsWith('[') ? host.slice(1, -1) : host.includes(':') ? host : '8.8.8.8')),
 }));
-import { discoverPostgres } from '../postgres';
+import { discoverPostgres, queryPostgres } from '../postgres';
+import {resolvePostgresHost} from '../network';
+import {DatasetError} from '../errors';
 
 const config = { host: 'fixture', port: 5432, database: 'fixture', username: 'fixture', password: 'secret', ssl: false };
 const options = () => fixture.options as ClientConfig | undefined;
@@ -63,6 +65,7 @@ it('limits connections to eight and rejects requests beyond its bounded queue', 
   const settled = await results;
   expect(settled.filter((result) => result.status === 'fulfilled')).toHaveLength(40);
   expect(settled.filter((result) => result.status === 'rejected')).toHaveLength(1);
+  expect(settled.find(result => result.status === 'rejected')).toMatchObject({reason:{status:503}});
   expect(fixture.maximum).toBe(8); expect(fixture.active).toBe(0);
 });
 
@@ -79,4 +82,29 @@ it('expires queued work and removes it before a slot becomes free', async () => 
   } finally { fixture.release!(); await completed; }
   expect((await completed).every((result) => result.status === 'fulfilled')).toBe(true);
   expect(fixture.active).toBe(0); expect(fixture.maximum).toBe(8);
+});
+
+it.each(['42703','22P02'])('returns a controlled sanitized dataset error for rejected PostgreSQL query %s',async code=>{
+ fixture.queryError=Object.assign(new Error('missing column in SELECT secret FROM private_host with password=private_password'),{code});
+ let failure:unknown;try{await discoverPostgres(config);}catch(error){failure=error;}
+ expect(failure).toBeInstanceOf(DatasetError);expect(failure).toMatchObject({status:400});
+ expect((failure as Error).message).not.toMatch(/secret|private_host|private_password|SELECT/);
+ expect((failure as Error).message).toContain('column names and value types');
+ expect(fixture.active).toBe(0);
+});
+
+it.each(['57014','ECONNRESET'])('returns sanitized retryable Postgres failures for %s',async code=>{
+ fixture.queryError=Object.assign(new Error('sensitive driver detail password=private_password'),{code});
+ await expect(discoverPostgres(config)).rejects.toMatchObject({status:503,message:expect.stringMatching(/retry/)});
+ expect(fixture.active).toBe(0);
+});
+
+it('turns failed host resolution into a safe retryable dataset error before opening a socket',async()=>{
+ vi.mocked(resolvePostgresHost).mockRejectedValueOnce(new Error('private_hostname private_password'));
+ await expect(discoverPostgres(config)).rejects.toMatchObject({status:503,message:'Postgres connection failed. Check connection settings and retry.'});
+ expect(fixture.options).toBeUndefined();expect(fixture.active).toBe(0);
+});
+it('returns a controlled error for invalid query bounds before allocating a connection',async()=>{
+ await expect(queryPostgres(config,'select 1',[],{limit:-1})).rejects.toMatchObject({status:400,message:'Invalid Postgres query bounds'});
+ expect(fixture.options).toBeUndefined();expect(fixture.active).toBe(0);
 });
