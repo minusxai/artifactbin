@@ -43,8 +43,6 @@ export function isDocumentPath(pathname: string): boolean {
 export const INTERNAL_API_PREFIX = '/api/internal';
 export const INTERNAL_MINT_PATH = `${INTERNAL_API_PREFIX}/tokens`;
 export const INTERNAL_ARTIFACT_APPROVAL_PATH = `${INTERNAL_API_PREFIX}/artifact-approval`;
-/** App-only relay used by isolated scripted browser sessions for the two CSP-approved Google Fonts origins. */
-export const BROWSER_FONT_RESOURCE_PATH = `${INTERNAL_API_PREFIX}/browser-font-resource`;
 /** API audience allows an existing CLI connection to request an additional grant. */
 export const ARTIFACT_APPROVAL_PATH = '/api/agent-approvals';
 export function isInternalApiPath(pathname: string): boolean {

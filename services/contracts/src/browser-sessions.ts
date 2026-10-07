@@ -4,6 +4,8 @@ import type { ViewerChoice } from './testusers';
 
 /** Forces revalidation of the captured session credential on every app request. */
 export const BROWSER_SESSION_HEADER = 'x-mx-browser-session';
+/** Private app relay path used by the isolated session worker for supported font resources. */
+export const BROWSER_FONT_RESOURCE_PATH = '/api/internal/browser-font-resource';
 
 export interface BrowserSessionPage { page_id: string; url: string; artifact_id?: string }
 export interface BrowserSessionAttachment { mime: 'image/png' | 'image/jpeg'; base64: string }
