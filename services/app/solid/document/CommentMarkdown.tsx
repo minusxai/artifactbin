@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { children as resolveChildren, createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import Bold from 'lucide-solid/icons/bold';
 import Code from 'lucide-solid/icons/code';
 import Italic from 'lucide-solid/icons/italic';
@@ -91,6 +91,7 @@ export interface CommentMarkdownFieldProps {
 }
 
 export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Element {
+  const context = resolveChildren(() => props.children);
   let mount!: HTMLDivElement;
   let editor: ReturnType<typeof mountCommentEditor> | undefined;
   let keyboard: MentionKeyboard | null = null;
@@ -117,9 +118,11 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   createEffect(()=>{const value=props.value;editor?.sync(value);});
   onCleanup(()=>editor?.destroy());
   return <div class={`min-w-0 ${props.class??''}`}>
-    {props.children}
-    <div role="toolbar" aria-label={`${props.label} formatting`} class="mb-1 flex items-center gap-0.5">
+    <div class="comment-editor-tools" classList={{'has-context': !!context()}}>
+    <Show when={context()}><div class="comment-editor-context">{context()}</div></Show>
+    <div role="toolbar" aria-label={`${props.label} formatting`} class="comment-editor-toolbar">
       <For each={TOOLBAR}>{tool=><Tooltip content={tool.hint}><button type="button" aria-label={tool.label} onMouseDown={event=>event.preventDefault()} onClick={()=>apply(tool.marker)} class={toolButton}><tool.Icon size={13} strokeWidth={1.8}/></button></Tooltip>}</For>
+    </div>
     </div>
     <Show when={linkOpen()}><div class="mb-2 flex gap-2"><input aria-label="Link URL" value={href()} onInput={event=>setHref(event.currentTarget.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();if(editor?.link(href()))setLinkOpen(false);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setLinkOpen(false);editor?.view.focus();}}} class="min-w-0 flex-1 rounded border border-edge bg-surface p-1 text-xs"/><button type="button" class="text-xs text-accent" onClick={()=>{if(editor?.link(href()))setLinkOpen(false);}}>Apply link</button></div></Show>
     <div ref={mount} style={{'--comment-min-height':`${Math.max(props.rows??3,2)*1.5+1.5}rem`}} />
