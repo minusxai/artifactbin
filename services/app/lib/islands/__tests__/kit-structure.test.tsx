@@ -247,7 +247,7 @@ describe('trusted overlay portal', () => {
     });
     it(`anchors Popover content to its trigger ${portalEnabled ? 'in the trusted portal' : 'in place'}`, async () => {
       const portal = portalEnabled ? document.createElement('div') : null;
-      const { host, dispose } = mount(() => <Popover><PopoverTrigger>Open</PopoverTrigger><PopoverContent>Popover body</PopoverContent></Popover>, portal);
+      const { host, dispose } = mount(() => <Popover><PopoverTrigger>Open</PopoverTrigger><PopoverContent style={{ "z-index": "70" }}>Popover body</PopoverContent></Popover>, portal);
       const rect = (left: number, top: number, width: number, height: number) => ({ x: left, y: top, left, top, width, height, right: left + width, bottom: top + height, toJSON: () => ({}) }) as DOMRect;
       const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
         return this.getAttribute('data-slot') === 'popover-trigger' ? rect(500, 300, 100, 30) : this.hasAttribute('data-radix-popper-content-wrapper') || this.getAttribute('data-slot') === 'popover-content' ? rect(0, 0, 288, 100) : rect(0, 0, 0, 0);
@@ -263,6 +263,8 @@ describe('trusted overlay portal', () => {
         await vi.waitFor(() => expect(wrapper.style.transform).toMatch(/px/));
         // Centred under the trigger (500 + 50 - 288 / 2) and 4px below it (300 + 30 + 4), never the viewport's corner.
         expect(wrapper.style.position).toBe('fixed');
+        // The positioned wrapper creates the stacking context; the panel's layer must reach it.
+        expect(wrapper.style.zIndex).toBe('70');
         expect(wrapper.style.transform).toBe('translate(406px, 334px)');
         expect(wrapper.querySelector('[data-slot="popover-content"]')?.getAttribute('data-side')).toBe('bottom');
       } finally { spy.mockRestore(); sizes.forEach(mock => mock.mockRestore()); dispose(); }

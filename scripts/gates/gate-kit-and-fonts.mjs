@@ -107,7 +107,7 @@ const [kit, prose, popover, fixtures, fontDoc, themeDocs, sceneDoc, sceneProse, 
   // The kitchen sink's refs, then the document itself (lib/kitchen-sink-doc).
   kitchenSinkMarkup(publish).then((markup) => publish({ markup, theme: 'modernist', colorMode: 'dark', title: 'Kitchen sink (unified)' })),
   publish({ markup: '<Helmet><title>Prose</title></Helmet><h1 className="text-4xl">Just words</h1><p>No charts here.</p>' }),
-  publish({ markup: '<h1 className="text-3xl">Popover</h1><p>Some text above.</p><div className="flex justify-end pt-24"><Popover><PopoverTrigger>Open popover</PopoverTrigger><PopoverContent>Popover body</PopoverContent></Popover></div><p className="pt-24">Text below.</p>', title: 'Popover placement' }),
+  publish({ markup: '<h1 className="text-3xl">Popover</h1><p>Some text above.</p><div className="flex justify-end pt-24"><Popover><PopoverTrigger>Open popover</PopoverTrigger><PopoverContent>Popover body<Button id="popover-owner-option">Owner choice</Button></PopoverContent></Popover></div><table className="relative z-10 w-full"><thead className="sticky top-0 z-10"><tr><th className="h-24">Owner table heading</th></tr></thead><tbody><tr><td>Table row</td></tr></tbody></table><p className="pt-24">Text below.</p>', title: 'Popover placement' }),
   publishPageSpeedFixtures(publish),
   publish({ title: 'Font gate', markup: FONT_MARKUP, theme: 'manuscript' }),
   Promise.all(THEMES.map(async (theme) => ({ theme, response: await send({ title: `Font gate ${theme ?? 'themeless'}`, markup: EVERY_FACE, visibility: 'unlisted', ...(theme ? { theme } : {}) }) }))),
@@ -489,6 +489,12 @@ try {
       check(Math.abs(box.c.t - (box.t.b + 4)) <= 2, `${tag}: popover sits just under its trigger (content top ${box.c.t}, trigger bottom ${box.t.b})`);
       check(box.c.r > box.t.l && box.c.l < box.t.r && box.c.l >= 0 && box.c.r <= viewport.width, `${tag}: popover overlaps its trigger's columns and stays on screen (${box.c.l}..${box.c.r})`);
       check(box.inStory, `${tag}: popover mounts inside the story root`);
+      const ownerOnTop = await popDoc.evaluate(() => {
+        const option = document.getElementById('popover-owner-option');
+        const rect = option?.getBoundingClientRect();
+        return !!option && !!rect && option.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
+      });
+      check(ownerOnTop, `${tag}: the owner option paints above the overlapping positioned table header`);
     }
     await popPage.close();
   }));
