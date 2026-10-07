@@ -10,12 +10,20 @@ export interface HostCapabilitiesOptions {
         apiKey?: string;
         models: string[];
         defaultModel: string;
+        /** Explicit Chat Completions dialect; Fireworks uses max_tokens. */
+        outputTokenField?: 'max_tokens' | 'max_completion_tokens';
+        /** Host ceiling and default for every inference call. */
+        maxOutputTokens?: number;
         headers?: (context: CapabilityContext) => Record<string, string>;
     };
 }
 /** All destination selection and auth happen here, outside the isolate. */
 export function hostCapabilities(options: HostCapabilitiesOptions): RunnerOptions['capabilities'] {
     if(options.ai){const target=new URL(options.ai.baseUrl);if(!['http:','https:'].includes(target.protocol)||target.username||target.password||target.search||target.hash)throw Error('invalid_ai_endpoint');}
+    const outputTokenField = options.ai?.outputTokenField ?? 'max_completion_tokens';
+    if (!['max_tokens', 'max_completion_tokens'].includes(outputTokenField)) throw Error('invalid_ai_output_token_field');
+    const hostOutputLimit = options.ai?.maxOutputTokens ?? 8192;
+    if (!Number.isSafeInteger(hostOutputLimit) || hostOutputLimit <= 0) throw Error('invalid_ai_output_limit');
     const streams = new Map<string, {
         runId: string;
         message: RunnerJson;
@@ -50,13 +58,17 @@ export function hostCapabilities(options: HostCapabilitiesOptions): RunnerOption
                 throw Error('ai_unavailable');
             const input = args as {
                 model?: string;
+                maxOutputTokens?: number;
                 context: Parameters<typeof openaiMessages>[0];
             };
             const model = input.model ?? ai.defaultModel;
             if (!ai.models.includes(model))
                 throw Error('model_not_allowed');
+            const requestedOutputLimit = input.maxOutputTokens === undefined ? hostOutputLimit : input.maxOutputTokens;
+            if (!Number.isSafeInteger(requestedOutputLimit) || requestedOutputLimit <= 0) throw Error('invalid_ai_output_limit');
+            const maxOutputTokens = Math.min(requestedOutputLimit, hostOutputLimit);
             const endpoint = new URL(ai.baseUrl.replace(/\/$/, '') + '/chat/completions');
-            const response = await fetch(endpoint, { method: 'POST', redirect: 'manual', signal: context.signal, headers: { 'content-type': 'application/json', ...(ai.apiKey ? { authorization: `Bearer ${ai.apiKey}` } : {}), ...ai.headers?.(context) }, body: JSON.stringify({ model, stream: true, stream_options: { include_usage: true }, messages: [...(input.context.systemPrompt ? [{ role: 'system', content: input.context.systemPrompt }] : []), ...openaiMessages(input.context)], tools: input.context.tools?.map((t: {
+            const response = await fetch(endpoint, { method: 'POST', redirect: 'manual', signal: context.signal, headers: { 'content-type': 'application/json', ...(ai.apiKey ? { authorization: `Bearer ${ai.apiKey}` } : {}), ...ai.headers?.(context) }, body: JSON.stringify({ model, [outputTokenField]: maxOutputTokens, stream: true, stream_options: { include_usage: true }, messages: [...(input.context.systemPrompt ? [{ role: 'system', content: input.context.systemPrompt }] : []), ...openaiMessages(input.context)], tools: input.context.tools?.map((t: {
                         name: string;
                         description?: string;
                         parameters: unknown;
