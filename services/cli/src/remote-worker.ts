@@ -4,7 +4,6 @@ import {remoteStateKey,type RemoteLocalState} from './remote-state';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {join,delimiter} from 'node:path';
 import {configDir,remoteChildEnv,remoteWorkerEnv,remotePermissionEnv} from './config';
-import {privateDirectory} from './files';
 import {HttpClient} from './http';
 import {runRemote} from './runner';
 import {createRemoteContextBridge} from './remote-context-bridge';
@@ -20,15 +19,21 @@ export async function remoteWorkerMain():Promise<void>{
  });
  const controller=new AbortController();let started=false;
  const parentGone=()=>{if(!started)controller.abort();};process.once('disconnect',parentGone);
- const root=join(configDir(input.home),'remote');await privateDirectory(root);
- const directory=await mkdtemp(join(root,'context-'));
- const state=await State.open(input.home);let stateKey:string|undefined;let exitCode=1;let bridge:Awaited<ReturnType<typeof createRemoteContextBridge>>|undefined;
+ const phase=(phase:string)=>{if(process.connected)process.send?.({type:'remote-startup',phase});};
+ phase('private-state');
+ const state=await State.open(input.home);
+ // State.open protects this parent. mkdtemp creates a fresh 0700 child on Unix and inherits its
+ // private ACL on Windows, avoiding a second PowerShell launch for a redundant nested boundary.
+ let directory:string;
+ try{phase('context');directory=await mkdtemp(join(configDir(input.home),'remote-context-'));}catch(error){state.close();throw error;}
+ let stateKey:string|undefined;let exitCode=1;let bridge:Awaited<ReturnType<typeof createRemoteContextBridge>>|undefined;
  const stopTimer=setInterval(()=>{if(stateKey&&state.get<RemoteLocalState>(HOME_SCOPE,'remote-agent',stateKey)?.value.stopRequested)controller.abort();},500);
  try{
   // Use this CLI build from the helper, even when a different afbin is installed globally.
   const invocation=[process.execPath,...process.execArgv,process.argv[1]!];
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
   const client=new HttpClient({connection:input.connection,home:input.home});
+  phase('relay');
   const code=await runRemote({client,command:input.command,args:input.args,name:input.name,cwd:input.cwd,interactive:false,managed:true,commentCommand:join(directory,'afbin'),signal:controller.signal,
    prepare:async session=>{
     if(process.platform!=='win32')bridge=await createRemoteContextBridge({id:session.id,proof:session.runnerKey,home:configDir(input.home),server:client.connection.server,connection:client.connection});

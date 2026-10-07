@@ -22,8 +22,8 @@ export async function managedTerminalView(owner:string,info:RemoteSessionInfo):P
  const key=ssh?.hostKey?.trim().split(/\s+/).slice(0,2).join(' ');
  const sshHostKey=host&&key?`${(ssh?.port??22)===22?host:`[${host}]:${ssh!.port}`} ${key}`:undefined;
  const sshCommand=ssh?.command??((ssh?.host||ssh?.hostname)&&ssh.username?`ssh -p ${ssh.port??22} ${ssh.username}@${ssh.host??ssh.hostname}`:undefined);
- const activity=finished?'stopped':info.activity==='stopping'?'stopping':'working';
- return {session:{...info,online:!finished&&activity!=='stopping',activity,...(sshCommand?{sshCommand}:{}),...(sshHostKey?{sshHostKey}:{})},generation:info.runId,seq:terminal.seq??terminal.snapshot.length,frames:[],snapshot:terminal.snapshot};
+ const activity=finished?'stopped':info.activity==='stopping'?'stopping':info.hostedGeneration?'starting':'working';
+ return {session:{...info,online:!finished&&activity!=='stopping'&&!info.hostedGeneration,activity,...(sshCommand?{sshCommand}:{}),...(sshHostKey?{sshHostKey}:{})},generation:info.runId,seq:terminal.seq??terminal.snapshot.length,frames:[],snapshot:terminal.snapshot};
 }
 export async function managedTerminalInput(owner:string,info:RemoteSessionInfo,text:string){
  const runner=services().runner;

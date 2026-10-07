@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,dirname} from 'node:path';
 import {launchRemote} from '../src/remote-launch';
 
 test('detached launch returns a registered receipt, passes credentials only through IPC and snapshots history without changing argv',async()=>{
@@ -63,6 +63,8 @@ test('real detached worker retains its PTY after launch returns and stops when t
  try{
   const result=await launchRemote({connection:{server:`http://127.0.0.1:${port}`,token:'test-only'},command:'/bin/sh',args:['-c','sleep 20 & echo $! > descendant.pid; sleep 0.3; echo ALIVE; wait'],cwd:dir,home:dir,env:{...process.env,ARTIFACTBIN_HOME:join(dir,'state')},worker:{command:process.execPath,args:['--import',fileURLToPath(new URL('../../../node_modules/tsx/dist/loader.mjs',import.meta.url)),fileURLToPath(new URL('../src/main.ts',import.meta.url)),'--internal-remote-worker']}});
   pid=result.pid;assert.equal(result.status,'starting');
+  const saved=await State.openReadOnly(dir,{ARTIFACTBIN_HOME:join(dir,'state')});
+  try{const row=saved!.get<{directory:string}>(HOME_SCOPE,'remote-agent',remoteStateKey(`http://127.0.0.1:${port}`,'real-worker'));assert.equal(dirname(row!.value.directory),join(dir,'state'),'context must inherit the already-protected state boundary');}finally{saved?.close();}
   for(let i=0;i<60&&!exited;i++)await delay(100);
   assert.ok(output.includes('ALIVE'));assert.equal(exited,true,'stop must terminate the managed child and relay its exit');
   const descendant=Number(await readFile(join(dir,'descendant.pid'),'utf8'));
