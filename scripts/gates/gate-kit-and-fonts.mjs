@@ -489,27 +489,33 @@ try {
    * DOMContentLoaded, before any island can have run. On the app page (which carries no story) it captures nothing.
    */
   const COMPILED_PROBE = () => {
-    const state = (window.__compiledTakeover = { story: null, served: [], staticNodes: [] });
+    const state = (window.__compiledTakeover = { story: null, served: [], staticNodes: [], guestSignIn: [] });
     document.addEventListener('DOMContentLoaded', () => {
       const story = document.querySelector('body > [data-mx-inline-story]');
       if (!story) return;
       state.story = story;
       state.served = [...story.querySelectorAll('*')];
+      // <SignIn> is server-rendered without the viewer, then intentionally removed for an
+      // authenticated reader when the island resolves `viewer()`. Keep that behavior explicit
+      // below instead of treating this guest-only control as immutable static markup.
+      state.guestSignIn = [...story.querySelectorAll('[data-slot="sign-in"]')];
       state.staticNodes = [...story.querySelectorAll('[data-mx-ast]')]
         // Floating content (a pinned-open tooltip or popover) is positioned at runtime: its style and side are the popper's.
-        .filter((node) => !node.closest('[data-hk^="s"], [aria-label="Question embed"], [aria-label="DataTable embed"], [data-mx-mermaid-state], [data-slot="avatar-fallback"], [data-slot="tabs-content"], [data-slot="tooltip-trigger"], [data-story-floating], [aria-busy]'))
+        .filter((node) => !node.closest('[data-slot="sign-in"], [data-hk^="s"], [aria-label="Question embed"], [aria-label="DataTable embed"], [data-mx-mermaid-state], [data-slot="avatar-fallback"], [data-slot="tabs-content"], [data-slot="tooltip-trigger"], [data-story-floating], [aria-busy]'))
         .map((node) => ({ node, attrs: [...node.attributes].map((attr) => [attr.name, attr.value]),
           text: [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('').trim() }));
     });
   };
   /** The verdict, read inside the document's frame: the served story is the one still running there. */
   const COMPILED_VERDICT = () => {
-    const { story, served, staticNodes } = window.__compiledTakeover ?? { story: null, served: [], staticNodes: [] };
+    const { story, served, staticNodes, guestSignIn } = window.__compiledTakeover ?? { story: null, served: [], staticNodes: [], guestSignIn: [] };
     return {
       captured: !!story, served: served.length,
       same: !!story && story.isConnected && document.querySelector('[data-mx-inline-story]') === story,
       lost: story ? served.filter((n) => !story.contains(n)).length : -1,
       staticNodes: staticNodes.length,
+      guestSignInServed: guestSignIn.length,
+      guestSignInRemaining: story ? guestSignIn.filter((n) => story.contains(n)).length : -1,
       ...(() => {
         const textOf = (node) => [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('').trim();
         const changed = staticNodes.filter(({ node, attrs, text }) => !story?.contains(node)
@@ -611,6 +617,10 @@ try {
     const verdict = await (await documentFrame(page)).evaluate(COMPILED_VERDICT);
     check(verdict.captured && verdict.staticNodes > 0 && verdict.staticChanged === 0,
       `static hydration ${fixture.key}: ${verdict.staticNodes} static nodes retained attributes and direct text (${verdict.staticChanged} changed${verdict.staticChangedFirst ? `; first: ${JSON.stringify(verdict.staticChangedFirst)}` : ''})`);
+    if (fixture.key === 'kitchen') {
+      check(verdict.guestSignInServed === 1 && verdict.guestSignInRemaining === 0,
+        `static hydration kitchen: owner hydration removes the server-rendered guest-only SignIn control (${verdict.guestSignInServed} served, ${verdict.guestSignInRemaining} remaining)`);
+    }
     check(errors.length === 0, `static hydration ${fixture.key}: no page errors (${errors[0] ?? ''})`);
     await page.close();
   }));
