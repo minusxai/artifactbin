@@ -74,6 +74,21 @@ describe('compilePage', () => {
     expect(dom(html).textContent).toContain(hostile);
     expect(html).not.toContain('</script><script>alert(1)</script>');
   });
+  it('changes module identity when externalized query SQL changes and keeps identical flows stable', async () => {
+    const source = (value: number) => `<Helmet><Value name="padding" type="string" default="${'x'.repeat(2000)}" /><Query name="sample">{\`select ${value} as value\`}</Query></Helmet><Number id="total" data="$sample" col="value" agg="sum" />`;
+    const build = async (value: number) => {
+      const input = await inputOf(source(value));
+      return buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow) });
+    };
+    const first = await build(1);
+    const changed = await build(2);
+    const identical = await build(1);
+    const flowOf = (html: string) => JSON.parse(dom(html).querySelector('[data-mx-module-data]')!.textContent!).moduleData.at(-1);
+    expect(flowOf(first.html)).not.toEqual(flowOf(changed.html));
+    expect(changed.module!.sha).not.toBe(first.module!.sha);
+    expect(identical.module!.sha).toBe(first.module!.sha);
+  });
+
   it('keeps notification definitions out of externalized reader flow data', async () => {
     const source = `<Helmet><Import name="sales" src="ref:SALES1" /><Value name="padding" type="string" default="${'x'.repeat(2000)}" /><Mutation name="change">{\`UPDATE sales.rows SET revenue = revenue + 1\`}</Mutation><Notify name="server_notice" on="change">{\`SELECT null AS "to", 'private-notification-sql' AS message\`}</Notify></Helmet><p>Public content</p>`;
     const input = await inputOf(source);

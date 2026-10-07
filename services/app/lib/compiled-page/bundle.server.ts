@@ -518,7 +518,13 @@ export async function browserModuleCode(islands: string, build: CompilerBuild, f
   });
   const extracted = await externalizeLiterals(compiled);
   const specifiers = [...direct].sort();
-  return { code: extracted.code, literals: extracted.literals, literalKey: extracted.key, specifiers, imports: preloadClosure(build, specifiers.map((s) => build.manifest[s]!)) };
+  // A large flow lives in the page carrier, outside the executable bytes. Its semantic
+  // identity must still change the module URL so live updates import and replace that flow.
+  // Append after literal extraction: extracting a digest string would externalize it again.
+  const code = flow && flowIndex !== undefined
+    ? `${extracted.code}\n/* reader-flow:${contentSha(JSON.stringify(readerDataflow(flow)))} */`
+    : extracted.code;
+  return { code, literals: extracted.literals, literalKey: extracted.key, specifiers, imports: preloadClosure(build, specifiers.map((s) => build.manifest[s]!)) };
 }
 
 /** Keep author literals in the page's inert JSON carrier, outside executable browser bytes. */
