@@ -44,6 +44,76 @@ A preparation request must include both `edit_id` and `expectedVersion` from the
 
 A source-only `/prepare` request remains a validation-only authoring-context API for clients that already construct their own updates; it returns `{valid:true,datasetBindings?}` without a `document_update`.
 
-## Advanced graph editing
 
-For graph patches, read the [document graph wire contract](http-document-graph.md). Ordinary JSX changes should use the source preparation flow above; this guide does not duplicate the graph client. Graph clients must preserve observed IDs, versions, read dependencies, claims and annotation mappings as defined by that contract.
+Read [the graph wire contract](http-document-graph.md) before deriving patches; it is also served in `/llms.txt`.
+
+This builder edits an inert paragraph's single plain-text child, preserving IDs and computing UTF-8/UTF-16 deltas. It excludes JSX syntax/entities, structural edits and compiler-dependent nodes. Endpoint tests execute this block and reject stale replay.
+
+```js
+// BEGIN HTTP TEXT EDIT
+function buildPlainTextUpdate(snapshot, nodeId, before, after) {
+  const graph = snapshot.document;
+  if (graph?.schema !== 3 || graph.kind !== 'graph') throw Error('Read a graph snapshot first');
+  if (/[<>{}&\u0000]/.test(after) || !after.isWellFormed()) throw Error('This example only edits inert plain text');
+  const selected = Object.entries(graph.nodes)
+    .filter(([, node]) => node.selectors.includes('id:' + nodeId))
+    .map(([key]) => key).sort();
+  if (selected.length !== 1) throw Error('Expected one persistent element ID');
+  const parentKey = selected[0], parent = graph.nodes[parentKey];
+  if (parent.children.length !== 1) throw Error('Expected one plain-text child');
+  const key = parent.children[0], node = graph.nodes[key];
+  if (!node.prose || node.children.length || node.ast?.roots[0]?.type !== 'text'
+      || node.ast.roots[0].value !== before || node.parts.length !== 1
+      || node.parts[0] !== before) throw Error('Observed text does not match');
+  const touched = [key], reads = [
+    {key, facet:'subtreeVersion', version:node.subtreeVersion},
+    {key:parentKey, facet:'childrenVersion', version:parent.childrenVersion}
+  ];
+  let ancestor = node.parent;
+  while (ancestor !== null) {
+    if (touched.includes(ancestor) || !graph.nodes[ancestor]) throw Error('Invalid ancestor chain');
+    touched.push(ancestor);
+    reads.push({key:ancestor, facet:'selfVersion', version:graph.nodes[ancestor].selfVersion});
+    ancestor = graph.nodes[ancestor].parent;
+  }
+  const delta = after.length - before.length;
+  const bytes = new TextEncoder().encode(after).length;
+  return {
+    schema:1,
+    patch:{
+      baseVersion:snapshot.version, reads,
+      selections:[{selector:'id:' + nodeId, keys:selected}],
+      inserted:{}, removed:[], claims:[], touched,
+      byteDelta:bytes - node.bytes,
+      unitDeltas:delta ? Object.fromEntries(touched.map(key => [key, delta])) : {},
+      updated:{[key]:{self:true, children:false, patches:[
+        {kind:'set', path:['ast','roots','0','value'], value:after},
+        {kind:'set', path:['parts','0'], value:after},
+        {kind:'set', path:['partUnits','0'], value:after.length},
+        {kind:'set', path:['units'], value:after.length},
+        {kind:'set', path:['bytes'], value:bytes}
+      ]}}
+    },
+    effects:{css:false, references:false}
+  };
+}
+// END HTTP TEXT EDIT
+```
+
+Apply it with standard fetch/JSON:
+
+```js
+const headers = {'Content-Type':'application/json', Authorization:'Bearer ' + accessToken};
+const snapshot = await (await fetch(base + '/api/artifacts/' + artifactId, {headers})).json();
+const document_update = buildPlainTextUpdate(snapshot, 'message', 'Alpha', 'Updated HTTP text');
+const prepared = await fetch(base + '/api/artifacts/' + artifactId + '/prepare', {
+  method:'POST', headers, body:JSON.stringify({source:'<p id="message">Updated HTTP text</p>'})
+});
+if (!prepared.ok) throw Error(await prepared.text());
+const resources = await prepared.json();
+if (resources.datasetBindings) document_update.datasetBindings = resources.datasetBindings;
+const edited = await fetch(base + '/api/artifacts/' + artifactId + '/edits', {
+  method:'POST', headers, body:JSON.stringify({edit_id:snapshot.edit_id, document_update})
+});
+if (!edited.ok) throw Error(await edited.text());
+```
