@@ -53,6 +53,13 @@ describe('the specs', () => {
 });
 
 describe('the committed outputs are what the generator emits now', () => {
+  it('lets Almanac outcome cards shrink to their desktop grid tracks', () => {
+    const css = renderRuntime().entries.find((entry) => entry.name === 'almanac').css;
+    const outcomeRule = css.match(/\.al-outcome\s*\{([^}]*)\}/)?.[1];
+    expect(outcomeRule).toMatch(/\bmin-width:\s*0;/);
+    expect(outcomeRule).not.toMatch(/\bmin-width:\s*200px;/);
+    expect(css).toMatch(/\.al-outcomes\s*\{[^}]*grid-template-columns:\s*1fr 1fr 1fr;/);
+  });
   it('retains cover grounds after comments and resolves every drawing token in both modes', () => {
     for (const slug of ROSTER) {
       const spec = loadSpec(slug);
