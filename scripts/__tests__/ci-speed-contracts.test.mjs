@@ -319,6 +319,7 @@ it('prepares all consumer prerequisites before waiting for the same-run candidat
  expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
  const candidate=steps.findIndex(step=>step.name==='Download the verified exact-version CLI candidate');
  expect(candidate).toBeGreaterThan(waiting);
+ expect(steps[candidate].shell).toBe('bash');
  expect(steps[candidate].env.GH_TOKEN).toBe('${{ github.token }}');
  expect(steps[candidate].env.SOURCE_SHA).toBe('${{ github.sha }}');
  expect(steps[candidate].env.REQUIRE_SIGNED_CANDIDATE).toContain('github.repository');
