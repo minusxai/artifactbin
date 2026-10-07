@@ -14,6 +14,33 @@ afterEach(() => { for (const dir of directories) fs.rmSync(dir, { recursive: tru
 const temporary = () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afbin served npm ')); directories.push(dir); return dir; };
 
 describe('served npm installer compatibility URLs', () => {
+  it.each(['/chat/install-node.sh', '/chat/install-node.ps1'])('serves the Node-only entry without installing afbin: %s', async route => {
+    const response = await app().request(route, { headers });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    const script = await response.text();
+    expect(script).toContain('24.21.0');
+    expect(script).not.toMatch(/npx(?:\.cmd)? --yes @afbin\/cli@latest setup --server/);
+    expect(script).toContain('Node');
+    if (route.endsWith('.sh')) expect(script).toContain('Open a new terminal');
+  });
+  it.each([false, true])('the Node-only shell checks the runtime and preserves failures (healthy=%s)', async healthy => {
+    const script = await (await app().request('/chat/install-node.sh', { headers })).text();
+    const dir = temporary(), bin = path.join(dir, 'tools'); fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, 'node'), `#!/bin/sh\nexit ${healthy ? 0 : 1}\n`, { mode: 0o755 });
+    for (const tool of ['npm', 'npx']) fs.writeFileSync(path.join(bin, tool), '#!/bin/sh\necho 11.0.0\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'curl'), '#!/bin/sh\nexit 22\n', { mode: 0o755 });
+    const run = spawnSync('/bin/bash', [], { input: script, encoding: 'utf8', env: { PATH: `${bin}:/usr/bin:/bin`, HOME: dir, BASH_ENV: '' }, timeout: 10000 });
+    if (healthy) {
+      expect(run.status, run.stderr).toBe(0);
+      expect(run.stdout).toContain('Open a new terminal');
+      expect(fs.existsSync(path.join(dir, '.profile'))).toBe(false);
+    } else {
+      expect(run.status).not.toBe(0);
+      expect(run.stderr).toContain('Node download failed');
+      expect(run.stdout).not.toContain('Open a new terminal');
+    }
+  });
   it.each(['/install.sh', '/chat/install.sh'])('prepares Node and selects this origin through the actual served shell: %s', async route => {
     const response = await app().request(route, { headers });
     expect(response.status).toBe(200);

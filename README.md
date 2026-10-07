@@ -4,21 +4,19 @@ Interactive documents for people and agents. Create local files, preview and edi
 
 ## Install and use
 
-macOS / Linux (bash or zsh):
+macOS / Linux:
 
 ```sh
-afbin_node_setup="$(mktemp)" && curl -fsSL https://app.artifactbin.dev/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
-npx --yes @afbin/cli@latest setup
+curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-Invoke-RestMethod https://app.artifactbin.dev/chat/ensure-node.ps1 | Invoke-Expression
-npx.cmd --yes @afbin/cli@latest setup
+Invoke-RestMethod https://app.artifactbin.dev/chat/install.ps1 | Invoke-Expression
 ```
 
-Run both commands once, in the same terminal. The helper reuses supported Node/npm or installs official Node LTS for your user; `setup` installs the `afbin` command and the agent skills. npm is the sole CLI distribution. Where PowerShell scripts are disabled, run `afbin.cmd` in place of `afbin`.
+Run one command for your platform. It reuses supported Node/npm or installs official Node LTS for your user, then installs afbin and agent skills. Open a new terminal afterward. npm is the sole CLI distribution. For Node only: `curl -fsSL https://app.artifactbin.dev/chat/install-node.sh | bash` (reopen the terminal), or `Invoke-RestMethod https://app.artifactbin.dev/chat/install-node.ps1 | Invoke-Expression`. With Node ready, `npx --yes @afbin/cli@latest setup` works directly (PowerShell: `npx.cmd --yes @afbin/cli@latest setup`). Where PowerShell scripts are disabled, use `afbin.cmd`.
 
 ```sh
 afbin add report.jsx sales.csv --json

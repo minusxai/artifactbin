@@ -9,7 +9,7 @@
 import {TEACHING_BASE} from './teaching-origin';
 export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
  approval_origin_mismatch:{meaning:'The selected server advertises its browser approval page on a different origin, and has not published that origin as another address of itself, so the pairing cannot be trusted for the selected origin.',fix:'Select the server by its public origin with --server; credentials are never sent to an origin you did not select.'},
- unmanaged_installation:{meaning:'This command needs the npm distribution.',fix:`Prepare Node with ${TEACHING_BASE}/chat/ensure-node.sh (Windows: ensure-node.ps1), then run the setup line under cli_npm_required once.`},
+ unmanaged_installation:{meaning:'This command needs the npm distribution.',fix:`Prepare Node with ${TEACHING_BASE}/chat/install-node.sh (Windows: install-node.ps1), then run the setup line under cli_npm_required once.`},
  compatible_release_unavailable:{meaning:'No published release matches the version and protocol the selected server named.',fix:'Retry after a compatible npm release is published, then run afbin update.'},
  outside_workspace:{meaning:'The destination is outside the workspace afbin runs in.',fix:'Write inside the workspace, e.g. --output shot.png, and move the file afterwards if it must live elsewhere.'},
  sql_in_argument:{meaning:'A query argument was SQL; arguments name the datasets or documents to query.',fix:'Put the SQL in a file and run afbin query <ref> --input query.sql, or pipe it: afbin query <ref> --input - < query.sql.'},

@@ -182,19 +182,19 @@ describe('README.md', () => {
     expect(readme().split('\n')[0]).toBe('# Artifactbin');
   });
   it('documents Node prerequisites, npm cloud and self-host workflows and development setup', () => {
-    expect(readme()).toContain(`curl -fsSL ${defaultServer()}/chat/ensure-node.sh`);
-    expect(readme()).toContain(`Invoke-RestMethod ${defaultServer()}/chat/ensure-node.ps1 | Invoke-Expression`);
+    expect(readme()).toContain(`curl -fsSL ${defaultServer()}/chat/install-node.sh`);
+    expect(readme()).toContain(`Invoke-RestMethod ${defaultServer()}/chat/install-node.ps1 | Invoke-Expression`);
     expect(readme()).toContain('npx --yes @afbin/cli@latest setup');
     expect(readme()).toContain('npx.cmd --yes @afbin/cli@latest setup');
     expect(readme()).toContain('reuses supported Node/npm or installs official Node LTS for your user');
     expect(readme()).toContain('npm is the sole CLI distribution');
-    expect(readme()).not.toContain('/chat/install.sh');
-    expect(readme()).not.toContain('/chat/install.ps1');
+    expect(readme()).toContain(`curl -fsSL ${defaultServer()}/chat/install.sh | sh`);
+    expect(readme()).toContain(`Invoke-RestMethod ${defaultServer()}/chat/install.ps1 | Invoke-Expression`);
     for (const command of ['preview report.jsx', 'push report.jsx', 'serve --dir ./artifactbin-data --port 7445', 'add report.jsx sales.csv --json']) {
       expect(readme()).toContain(`afbin ${command}`);
     }
     // npm appears only as the two setup lines (Unix and Windows); every other command is `afbin <command>`.
-    expect([...readme().matchAll(/npx(?:\.cmd)? --yes @afbin\/cli@\S+ (\S+)/g)].map((m) => m[1])).toEqual(['setup', 'setup']);
+    expect([...readme().matchAll(/npx(?:\.cmd)? --yes @afbin\/cli@\S+ ([a-z-]+)/g)].map((m) => m[1])).toEqual(['setup', 'setup']);
     expect(readme()).toContain('stable workspace-local IDs without uploading or signing in');
     expect(readme()).toContain('separate copy with remote IDs, preserving the originals and their local references');
     expect(readme()).toContain('Local preview continues independently after publication');

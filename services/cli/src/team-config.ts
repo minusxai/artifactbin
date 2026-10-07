@@ -94,7 +94,7 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
  */
 export function serverInstructions(settings:TeamSettings):string[]{
  return [
-  `Prepare Node/npm if needed: ${settings.origin}/chat/ensure-node.sh (macOS/Linux), ${settings.origin}/chat/ensure-node.ps1 (Windows PowerShell).`,
+  `Prepare Node/npm if needed: ${settings.origin}/chat/install-node.sh (macOS/Linux), ${settings.origin}/chat/install-node.ps1 (Windows PowerShell).`,
   `Install the afbin command and agent skills for this host (once): npx --yes @afbin/cli@latest setup --server ${settings.origin}`,
   `Teammates point their client at this server:  afbin config set host ${settings.origin}`,
   usesDevOutbox(settings.origin)

@@ -13,10 +13,10 @@ const origin=(base:string)=>base.replace(/\/$/,'');
 /** Shell quoting is platform-specific; keep even a supplied origin one argument. */
 const quoted=(value:string,windows=false):string=>`'${windows?value.replaceAll("'","''"):value.replaceAll("'",`'"'"'`)}'`;
 export const afbinServerFlag=(base:string,windows=false):string=>origin(base)===DEFAULT_SERVER?'':` --server ${quoted(origin(base),windows)}`;
-/** Prepare Node in this terminal, then install skills for the selected server. */
-export const afbinInstallCommand=(base:string):string=>`afbin_node_setup="$(mktemp)" && curl -fsSL ${quoted(`${origin(base)}/chat/ensure-node.sh`)} -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"\nnpx --yes @afbin/cli@latest setup${afbinServerFlag(base)}`;
-/** PowerShell uses .cmd to work under its default script execution policy. */
-export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${origin(base)}/chat/ensure-node.ps1`,true)} | Invoke-Expression\nnpx.cmd --yes @afbin/cli@latest setup${afbinServerFlag(base,true)}`;
+/** Complete setup on the serving host; the installer owns Node, npm and skill selection. */
+export const afbinInstallCommand=(base:string):string=>`curl -fsSL ${quoted(`${origin(base)}/chat/install.sh`)} | sh`;
+/** Inline PowerShell preserves current PATH and works under Restricted execution policy. */
+export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${origin(base)}/chat/install.ps1`,true)} | Invoke-Expression`;
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=origin(base);
  return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`};

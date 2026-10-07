@@ -4,8 +4,8 @@ description: Install Node and run afbin through npm, including prepared offline 
 ---
 ## Installation and local files
 
-- Prepare Node/npm once: `afbin_node_setup="$(mktemp)" && curl -fsSL [[ base ]]/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"`. Supported Node is reused; otherwise official LTS is installed for your user.
-- Windows PowerShell: `Invoke-RestMethod [[ base ]]/chat/ensure-node.ps1 | Invoke-Expression`. No execution-policy change. Where PowerShell scripts are disabled, run `afbin.cmd` in place of `afbin`.
+- Complete setup in one command: `curl -fsSL [[ base ]]/chat/install.sh | sh` (macOS/Linux), or `Invoke-RestMethod [[ base ]]/chat/install.ps1 | Invoke-Expression` (PowerShell). Open a new terminal afterward.
+- Node only: `curl -fsSL [[ base ]]/chat/install-node.sh | bash`, then reopen the terminal. Supported Node is reused; otherwise official LTS is checksum-verified and installed for your user. PowerShell: `Invoke-RestMethod [[ base ]]/chat/install-node.ps1 | Invoke-Expression`; no execution-policy change. Where scripts are disabled, use `afbin.cmd`.
 - If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills. `afbin update` installs a newer version. Pin an exact version for reproducibility: prepare its npm cache while connected, then run `npm exec --offline --yes --package @afbin/cli@<version> -- afbin <command>` offline. npm executes with your permissions; it is not a sandbox.
 - Local preview needs no credentials or cloud requests: `afbin preview report.jsx`. Source stays `.jsx`; offline downloads and HTML exports are self-contained `.jsx.html` files that open normally in a browser. Browser offline editing supports static markup/text; use local preview for compiler-dependent widgets. Publishing is explicit.
 - CLI browser sign-in allows guests. Direct HTTP API sign-in requires email and cannot continue as a guest.

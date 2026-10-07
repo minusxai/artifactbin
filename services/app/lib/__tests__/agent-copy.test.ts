@@ -14,6 +14,13 @@ const ID = 'ab3cd9';
 const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. If afbin is not installed, install and set it up first: https://x.test/getting-started.md\n\n---\n\nLet's build an artifact for ...";
 
 describe('the tokenless paste', () => {
+  it('offers one full installer command per platform on the selected host', () => {
+    const guide = gettingStartedMarkdown(B);
+    expect(guide).toContain("curl -fsSL 'https://x.test/chat/install.sh' | sh");
+    expect(guide).toContain("Invoke-RestMethod 'https://x.test/chat/install.ps1' | Invoke-Expression");
+    expect(guide).not.toContain('mktemp');
+    expect(guide).toContain('Open a new terminal');
+  });
   it('existing: the link plus how to reach afbin, and never a token', () => {
     expect(existingPaste(B, ID)).toBe(STARTER);
     expect(existingPaste(B, ID)).not.toContain('mx_');
