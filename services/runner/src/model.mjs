@@ -15,14 +15,21 @@ const assistant = () => ({
     stopReason: "stop",
     timestamp: Date.now(),
 });
+/** Bound useful output separately from repeated SSE metadata. The transport remains
+ * finite (eight times the output budget), including frames that produce no output. */
 export async function readModel(response, maxBytes = 1024 * 1024) {
     if (!response.ok)
         throw Error(`ai_http_${response.status}`);
     const message = assistant(), decoder = new TextDecoder("utf-8", { fatal: true }), tools = new Map();
-    let buffered = "", done = false, finish = false, received = 0;
+    let buffered = "", done = false, finish = false, received = 0, outputBytes = 0;
+    const encoder = new TextEncoder();
+    const consume = (text) => {
+        outputBytes += encoder.encode(text).byteLength;
+        if (outputBytes > maxBytes) throw Error("response_limit");
+    };
     for await (const bytes of response.body) {
         received += bytes.byteLength;
-        if (received > maxBytes)
+        if (received > maxBytes * 8)
             throw Error("response_limit");
         buffered += decoder.decode(bytes, { stream: true });
         let boundary;
@@ -54,12 +61,16 @@ export async function readModel(response, maxBytes = 1024 * 1024) {
                     choice.finish_reason === "tool_calls" ? "toolUse" : choice.finish_reason === "length" ? "length" : choice.finish_reason === "stop" ? "stop" : "error";
             }
             if (choice?.delta?.content) {
+                consume(choice.delta.content);
                 if (!message.content[0])
                     message.content.push({ type: "text", text: "" });
                 message.content[0].text += choice.delta.content;
             }
             for (const delta of choice?.delta?.tool_calls ?? []) {
                 const t = tools.get(delta.index) ?? { id: "", name: "", arguments: "" };
+                consume(delta.id ?? "");
+                consume(delta.function?.name ?? "");
+                consume(delta.function?.arguments ?? "");
                 t.id += delta.id ?? "";
                 t.name += delta.function?.name ?? "";
                 t.arguments += delta.function?.arguments ?? "";
