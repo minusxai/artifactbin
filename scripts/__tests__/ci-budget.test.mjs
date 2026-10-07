@@ -208,7 +208,9 @@ it('creates a fresh seed with bounded npm cache operations instead of selecting 
   const steps=workflow().jobs['cli-pack'].steps;expect(steps.some(step=>step.id==='npm-seed-key')).toBe(true);
   expect(steps.some(step=>step.run?.includes('prepare-seed'))).toBe(true);
   expect(steps.filter(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).map(step=>step.with.name)).toEqual(['Windows-X64','Linux-X64','Linux-ARM64','macOS-X64','macOS-ARM64'].map(platform=>'afbin-npm-dependency-seed-'+platform));
-  expect(workflow().jobs.cli.steps.find(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')).with.name).toBe('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
+  const download=workflow().jobs.cli.steps.find(step=>step.name==="Download and verify this attempt's platform seed");
+  expect(download?.run).toContain('ci-artifact-wait.mjs --extract');
+  expect(download?.run).toContain('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
