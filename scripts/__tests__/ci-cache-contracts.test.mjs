@@ -108,6 +108,16 @@ it('seeds only the same-run Windows bootstrap cache and leaves online cache-miss
  expect(candidateWait).toBeGreaterThan(-1);expect(candidateWait).toBeLessThan(seedCheck);expect(seedCheck).toBeLessThan(query);
 });
 
+it('repeats setup through the exact global install instead of re-resolving the candidate with npx',()=>{
+ const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ const repeat=source.slice(source.indexOf("$phase='repeat setup retains skills'"),source.indexOf("$phase='fresh-shell global afbin.cmd'"));
+ expect(repeat).toContain('Invoke-Candidate $setup.global.bin');
+ expect(repeat).toContain("@('setup','--harness','claude','--harness','codex','--yes','--json')");
+ expect(repeat).toContain("$repeat.global.status -ne 'installed'");
+ expect(repeat).toContain("$_.status -ne 'unchanged'");
+ expect(repeat).not.toContain("Invoke-Candidate 'npx.cmd'");
+});
+
 it('bounds and streams real consumer subprocesses, retaining failed installer output',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-install-contract-'));
  const script=join(directory,'npm.cjs'),tarball=join(directory,'candidate.tgz');

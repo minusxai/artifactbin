@@ -151,7 +151,10 @@ try {
     Invoke-Expression $setup.global.path_line
   }
   $phase='repeat setup retains skills'
-  $repeat=Invoke-Candidate 'npx.cmd' $setupArgs | ConvertFrom-Json
+  # Repeat the real setup command through the exact globally installed shim.
+  # Re-running npx with the same tarball adds a second candidate-resolution path
+  # without testing setup's idempotency any better.
+  $repeat=Invoke-Candidate $setup.global.bin @('setup','--harness','claude','--harness','codex','--yes','--json') | ConvertFrom-Json
   if($repeat.global.status -ne 'installed' -or @($repeat.installations | Where-Object {$_.status -ne 'unchanged'}).Count -ne 0){throw 'Repeat setup changed current skills or failed global installation'}
   # A genuinely new PowerShell process reconstructs Windows' persistent PATH;
   # prove the global shim, policy, version and local SQL without npx cache lookup.
