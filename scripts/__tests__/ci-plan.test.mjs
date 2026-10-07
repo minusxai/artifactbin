@@ -926,7 +926,11 @@ describe('CI job shape', () => {
     expect(download).toBeGreaterThan(extract);
     expect(commands.some(command=>command.includes('npm install --prefix'))).toBe(true);
     expect(ci().jobs.cli.strategy.matrix.os).toContain('ubuntu-24.04');
-    expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-npm-release')?.with.path).toBe('npm-candidate');
+    const candidate = ci().jobs.cli.steps.find(step => step.name === 'Download the verified exact-version CLI candidate');
+    expect(candidate?.shell).toBe('bash');
+    expect(candidate?.run).toContain('--extract-candidate');
+    expect(candidate?.run).toContain('afbin-npm-release');
+    expect(candidate?.run).toContain('$GITHUB_WORKSPACE/npm-candidate');
   });
 
   it('runs the CLI suite once and native npm acceptance on every platform', () => {
