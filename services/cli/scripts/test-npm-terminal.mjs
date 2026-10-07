@@ -49,7 +49,7 @@ lines.once('line',line=>{
   const deadline=setTimeout(()=>{
    const diagnostic={stdout:diagnosticText(stdout),stderr:diagnosticText(stderr),relayOutput:diagnosticText(output),exitReceipt,
     registrationReceived:Boolean(registration),registrationManaged:registration?.managed??null,registrationName:registration?.name??null,
-    startupReceipt:startupReceipt?{status:startupReceipt.status,pid:startupReceipt.pid}:null,exchangeCount,
+    startupReceipt:startupReceipt?{status:startupReceipt.status,phase:startupReceipt.phase,pid:startupReceipt.pid}:null,exchangeCount,
     workerSpawned,workerDisconnected,workerMessages,workerExitCode:worker.exitCode,workerSignalCode:worker.signalCode};
    worker.kill();no(new Error(`Native CLI worker did not exit naturally after 20s: ${JSON.stringify(diagnostic)}`));
   },20000);
