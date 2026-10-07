@@ -86,8 +86,12 @@ function PopoverPopper(p: { ctx: PopupState; side?: Side; align?: Align; sideOff
     });
     onCleanup(() => { live = false; stop(); setPlaced(undefined); });
   });
-  createEffect(() => { const side = placed()?.side; const align = placed()?.align; const content = wrapper()?.firstElementChild; if (!content) return; if (side) { content.setAttribute('data-side', side); content.setAttribute('data-align', align ?? 'center'); } else { content.removeAttribute('data-side'); content.removeAttribute('data-align'); } });
-  return <div ref={setWrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>{p.children}</div>;
+  createEffect(() => { const side = placed()?.side; const align = placed()?.align; const element = wrapper(); const content = element?.firstElementChild; if (!element || !content) return;
+    // The fixed, transformed wrapper owns the stacking context. A z-index on its panel alone
+    // cannot rise above a positioned table/header beside it. Mirror the authored panel layer.
+    const layer = getComputedStyle(content).zIndex; element.style.zIndex = layer && layer !== 'auto' ? layer : '50';
+    if (side) { content.setAttribute('data-side', side); content.setAttribute('data-align', align ?? 'center'); } else { content.removeAttribute('data-side'); content.removeAttribute('data-align'); } });
+  return <div ref={setWrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content', 'z-index': '50' }}>{p.children}</div>;
 }
 type PopupState = State & { trigger: () => HTMLElement | undefined; setTrigger: (el: HTMLElement) => void; panel: () => HTMLElement | undefined; setPanel: (el: HTMLElement) => void; announce: () => void };
 /**
