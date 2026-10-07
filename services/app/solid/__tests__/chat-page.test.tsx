@@ -169,12 +169,12 @@ it('keeps connection commands on demand without installation instructions', asyn
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })));
   open('');
   expect(screen.queryByRole('heading', {name:'Connected Agents'})).toBeNull();
-  expect(screen.getByRole('region', {name:'Connected local agents'})).toHaveTextContent('No connected local agents');
+  expect(screen.getByRole('region', {name:'Local agents'})).toHaveTextContent('No connected local agents');
   expect(screen.getByRole('region', {name:'Cloud agents'})).toHaveTextContent('No cloud agents yet');
   expect(screen.queryByText('Install CLI')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Claude Code' })).toBeNull();
   const trigger = sidebar().getByRole('button', {name:'Connect your agent'});
-  expect(screen.getByRole('region', {name:'Connected local agents'})).toContainElement(trigger);
+  expect(screen.getByRole('region', {name:'Local agents'})).toContainElement(trigger);
   trigger.focus();
   fireEvent.click(trigger);
   expect(screen.getByRole('dialog', {name:'Connect your agent'})).toHaveAttribute('aria-modal','true');
@@ -450,7 +450,7 @@ it('keeps the included agent visible offline and identifies it without treating 
  open('included');
  expect(await screen.findByRole('button',{name:'Open afbin'})).toHaveTextContent('Included for free');
  expect(screen.getByRole('region',{name:'Cloud agents'})).toContainElement(screen.getByRole('button',{name:'Open afbin'}));
- expect(screen.getByRole('region',{name:'Connected local agents'})).toContainElement(screen.getByRole('button',{name:'Open My Pi'}));
+ expect(screen.getByRole('region',{name:'Local agents'})).toContainElement(screen.getByRole('button',{name:'Open My Pi'}));
  expect(screen.getByRole('button',{name:'Open My Pi'})).not.toHaveTextContent('Included');
  expect(screen.getByText(/Your included Pi agent/)).toBeInTheDocument();
  expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeDisabled();
