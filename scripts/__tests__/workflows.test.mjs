@@ -185,10 +185,11 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     const seedDownload=matrix.steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
     expect(seedDownload).toBeUndefined();
     expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase != 'native'");
-    for(const job of ['cli','reference-compatibility']){
+    for(const job of ['reference-compatibility']){
       const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
       expect(download,job).toBeDefined();
     }
+    expect(matrix.steps.some(step=>step.run?.includes('--extract-candidate'))).toBe(true);
     expect(matrix.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
     const release=readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8');
     expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts');

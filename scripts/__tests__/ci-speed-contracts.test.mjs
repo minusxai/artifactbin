@@ -6,6 +6,8 @@ import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {gzipSync} from 'node:zlib';
+import {createHash} from 'node:crypto';
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
 describe('release critical path',()=>{
  it('runs Intel preview/export through the supported-platform experience proof once',()=>{
@@ -226,6 +228,40 @@ it('extracts one named artifact member only after archive verification',async()=
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
+it('extracts only the exact versioned candidate and optional provenance from a verified release ZIP',async()=>{
+ const {downloadAndExtractCurrentArtifactFiles}=await import('../lib/ci-artifact-wait.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'afbin-release-member-')),outputs=[];
+ const digest='sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+ const artifact={id:41,size_in_bytes:3,digest};
+ const members=[{memberName:'afbin-cli-0.4.37.tgz',outputPath:join(directory,'candidate.tgz')},{memberName:'afbin-cli-0.4.37.tgz.sigstore',outputPath:join(directory,'candidate.sigstore'),optional:true}];
+ const candidateBytes=gzipSync('candidate tar bytes');
+ const execute=(_command,args)=>args[0]==='-Z1'?Buffer.from('afbin-cli-0.4.37.tgz\nafbin-cli-0.4.37.tgz.sigstore\ntransition/install.sh\n'):args[2]==='afbin-cli-0.4.37.tgz'?candidateBytes:Buffer.from('signed bundle');
+ const write=(path,bytes)=>outputs.push([path,bytes.toString()]);
+ try{
+  await expect(downloadAndExtractCurrentArtifactFiles(artifact,{repo:'minusxai/artifactbin',deadline:Date.now()+10000,members,request:async()=>Buffer.from('abc'),execute,write})).resolves.toEqual([{memberName:members[0].memberName,size:candidateBytes.length},{memberName:members[1].memberName,size:13}]);
+  expect(outputs.map(row=>row[1])).toEqual([candidateBytes.toString(),'signed bundle']);
+  let extracted=false;
+  await expect(downloadAndExtractCurrentArtifactFiles(artifact,{repo:'minusxai/artifactbin',deadline:Date.now()+10000,members,request:async()=>Buffer.from('tampered'),execute:()=>{extracted=true;return Buffer.alloc(0);},write})).rejects.toThrow(/checksum/);
+  expect(extracted).toBe(false);
+  await expect(downloadAndExtractCurrentArtifactFiles(artifact,{repo:'minusxai/artifactbin',deadline:Date.now()+10000,members,request:async()=>Buffer.from('abc'),execute:(_command,args)=>args[0]==='-Z1'?Buffer.from('afbin-cli-0.4.37.tgz\nafbin-cli-0.4.37.tgz.sigstore\n'):args[2]==='afbin-cli-0.4.37.tgz'?candidateBytes.subarray(0,candidateBytes.length-4):Buffer.from('signed bundle'),write})).rejects.toThrow(/truncated or invalid/);
+  for(const listing of ['afbin-cli-0.4.36.tgz\n','afbin-cli-0.4.37.tgz\nafbin-cli-0.4.37.tgz\n','../afbin-cli-0.4.37.tgz\n']){
+   await expect(downloadAndExtractCurrentArtifactFiles(artifact,{repo:'minusxai/artifactbin',deadline:Date.now()+10000,members,request:async()=>Buffer.from('abc'),execute:(_command,args)=>args[0]==='-Z1'?Buffer.from(listing):Buffer.alloc(0),write})).rejects.toThrow();
+  }
+  const optional=[{memberName:'afbin-cli-0.4.37.tgz',outputPath:members[0].outputPath},{memberName:'afbin-cli-0.4.37.tgz.sigstore',outputPath:members[1].outputPath,optional:true}];
+  await expect(downloadAndExtractCurrentArtifactFiles(artifact,{repo:'minusxai/artifactbin',deadline:Date.now()+10000,members:optional,request:async()=>Buffer.from('abc'),execute:(_command,args)=>args[0]==='-Z1'?Buffer.from('afbin-cli-0.4.37.tgz\n'):candidateBytes,write})).resolves.toHaveLength(1);
+  await expect(downloadAndExtractCurrentArtifactFiles(artifact,{repo:'minusxai/artifactbin',deadline:Date.now()+10000,members:[{memberName:'bundle.sigstore',outputPath:members[1].outputPath,optional:true,maxBytes:8}],request:async()=>Buffer.from('abc'),execute:(_command,args,options)=>{if(args[0]!=='-Z1')expect(options.maxBuffer).toBe(8);return args[0]==='-Z1'?Buffer.from('bundle.sigstore\n'):Buffer.alloc(9);},write})).rejects.toThrow(/size limit/);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('binds optional candidate sidecars to the exact package bytes, source, and run',async()=>{
+ const {validateCandidateProvenance}=await import('../lib/ci-artifact-wait.mjs');
+ const bytes=Buffer.from('exact candidate'),version='0.4.37',run='12345',sha='a'.repeat(40),digest=createHash('sha512').update(bytes).digest('hex');
+ const bundle={dsseEnvelope:{payload:Buffer.from(JSON.stringify({_type:'https://in-toto.io/Statement/v1',subject:[{name:`pkg:npm/%40afbin/cli@${version}`,digest:{sha512:digest}}],predicateType:'https://slsa.dev/provenance/v1',predicate:{buildDefinition:{externalParameters:{workflow:{repository:'https://github.com/minusxai/artifactbin',path:'.github/workflows/ci.yml',ref:'refs/pull/12/merge'}},resolvedDependencies:[{uri:'git+https://github.com/minusxai/artifactbin@refs/pull/12/merge',digest:{gitCommit:sha}}]},runDetails:{metadata:{invocationId:`https://github.com/minusxai/artifactbin/actions/runs/${run}/attempts/1`}}}})).toString('base64'),signatures:[{sig:'opaque signed envelope'}]},verificationMaterial:{}};
+ expect(()=>validateCandidateProvenance({bundle,metadata:{run_id:run,source_sha:sha},version,bytes,run,sha})).not.toThrow();
+ expect(()=>validateCandidateProvenance({bundle,metadata:{run_id:'999',source_sha:sha},version,bytes,run,sha})).toThrow(/build metadata/);
+ expect(()=>validateCandidateProvenance({bundle,metadata:{run_id:run,source_sha:sha},version,bytes:Buffer.from('changed'),run,sha})).toThrow(/subject/);
+});
+
 it('keeps native terminal acceptance strict while exposing bounded startup diagnostics',()=>{
  const source=readFileSync(new URL('../../services/cli/scripts/test-npm-terminal.mjs',import.meta.url),'utf8');
  expect(source).toContain('registrationReceived');
@@ -281,7 +317,14 @@ it('prepares all consumer prerequisites before waiting for the same-run candidat
  expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='acceptance-browser'));
  expect(steps[waiting].run).toContain('--wait-only');
  expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
- expect(waiting).toBeLessThan(steps.findIndex(step=>step.with?.name==='afbin-npm-release'));
+ const candidate=steps.findIndex(step=>step.name==='Download the verified exact-version CLI candidate');
+ expect(candidate).toBeGreaterThan(waiting);
+ expect(steps[candidate].env.GH_TOKEN).toBe('${{ github.token }}');
+ expect(steps[candidate].env.SOURCE_SHA).toBe('${{ github.sha }}');
+ expect(steps[candidate].env.REQUIRE_SIGNED_CANDIDATE).toContain('github.repository');
+ expect(steps[candidate].run).toContain('--extract-candidate');
+ expect(steps[candidate].run).toContain('$SOURCE_SHA');
+ expect(steps[candidate].run).toContain('$REQUIRE_SIGNED_CANDIDATE');
 });
 it('wait-only CLI checks exact attempt and accepts readiness without downloading a duplicate zip',()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-wait-only-'));

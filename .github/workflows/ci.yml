@@ -1164,10 +1164,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: afbin-npm-release
-          path: npm-candidate
+      - name: Download the verified exact-version CLI candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          REQUIRE_SIGNED_CANDIDATE: ${{ github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          version=$(node -p "require('./services/cli/package.json').version")
+          node scripts/lib/ci-artifact-wait.mjs --extract-candidate "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" afbin-npm-release "$version" "$SOURCE_SHA" "$REQUIRE_SIGNED_CANDIDATE" "$GITHUB_WORKSPACE/npm-candidate"
       - name: Download and verify this attempt's platform seed
         env:
           GH_TOKEN: ${{ github.token }}
