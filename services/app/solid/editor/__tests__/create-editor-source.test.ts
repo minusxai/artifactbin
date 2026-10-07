@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEditorSource } from '../create-editor-source';
 import { renderHook } from '@/solid/__tests__/helpers';
 import type { PendingChange } from '../create-live-edits';
@@ -142,4 +142,54 @@ it('redo after undo restores the change, draws it and queues it with its annotat
   expect(queued).toEqual([{ source: typed }]);
   expect(drawn).toEqual([{ source: typed }]);
   expect(store.canRedo()).toBe(false);
+});
+
+
+describe('collaborative Markdown history', () => {
+  const before = '<article id="doc"><p id="a">local</p><p id="b">remote</p></article>';
+  it.each([
+    ['heading', '<h2 id="a">local</h2>'],
+    ['bold', '<p id="a"><strong>local</strong></p>'],
+    ['italic', '<p id="a"><em>local</em></p>'],
+    ['list', '<ul id="list"><li id="item"><p id="a">local</p></li></ul>'],
+    ['quote', '<blockquote id="quote"><p id="a">local</p></blockquote>'],
+    ['code', '<pre id="a">local</pre>'],
+    ['split', '<p id="a">lo</p><p id="new">cal</p>'],
+  ])('undoes and redoes a local %s while preserving remote prose and insertions', async (_name, replacement) => {
+    const { store, queued } = setup(before);
+    const local = before.replace('<p id="a">local</p>', replacement);
+    store.apply(local, { origin: 'local' });
+    const remote = local.replace('<p id="b">remote</p>', '<p id="b">their text</p><p id="c">their new block</p>');
+    store.replaceFromRemote(remote, 'remote-1');
+    queued.length = 0;
+    const expectedUndo = remote.replace(replacement, '<p id="a">local</p>');
+    expect(await store.undo()).toMatchObject({ ok: true, source: expectedUndo });
+    expect(await store.redo()).toMatchObject({ ok: true, source: remote });
+    expect(store.current()).toBe(remote);
+    expect(queued.map(change => change.source)).toEqual([expectedUndo, remote]);
+  });
+
+  it('preserves a conflicting remote deletion and leaves the local undo entry available', async () => {
+    const { store, queued } = setup(before);
+    store.apply(before.replace('>local<', '><strong>local</strong><'), { origin: 'local' });
+    const deleted = '<article id="doc"><p id="b">remote</p></article>';
+    store.replaceFromRemote(deleted, 'remote-delete');
+    queued.length = 0;
+    expect(await store.undo()).toEqual({ ok: false, reason: 'conflict' });
+    expect(store.current()).toBe(deleted);
+    expect(store.canUndo()).toBe(true);
+    expect(queued).toEqual([]);
+  });
+
+  it('does not let a delayed typing publish resurrect a document replaced remotely', () => {
+    vi.useFakeTimers();
+    const { store, queued } = setup(before);
+    store.apply(before.replace('>local<', '>typed<'), { origin: 'local', group: 'typing:a' });
+    const remote = before.replace('>local<', '>server text<');
+    store.replaceFromRemote(remote, 'remote-during-rest');
+    vi.advanceTimersByTime(1000);
+    expect(store.current()).toBe(remote);
+    expect(store.source()).toBe(remote);
+    expect(queued).toHaveLength(1);
+  });
 });

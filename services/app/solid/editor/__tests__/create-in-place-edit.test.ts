@@ -233,3 +233,23 @@ it('blocks an in-flight navigation commit when its flush rejects a stale prose e
   emit({ type: STORY_COMMITTED_MESSAGE });
   await expect(pending).rejects.toThrow('Recover the uncommitted text');
 });
+
+
+it('accepts a full-region Markdown edit over disjoint remote prose without entering draft recovery', async () => {
+  const { runtimeRef, emit, sent } = fakeRuntime();
+  const expected = '<article id="doc"><p id="a">alpha</p><p id="b">bravo</p></article>';
+  const sourceRef = { current: expected.replace('bravo', 'remote words') };
+  const edited = vi.fn((next: string) => { sourceRef.current = next; });
+  const { result: edit } = renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef, editing: true, sessionNonce: NONCE, onSourceEdited: edited,
+  }));
+  emit({ type: STORY_EDIT_READY_MESSAGE });
+  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected, replacement: expected.replace('<p id="a">alpha</p>', '<h2 id="a">alpha</h2>') });
+  expect(edited).toHaveBeenCalledTimes(1);
+  expect(sourceRef.current).toBe('<article id="doc"><h2 id="a">alpha</h2><p id="b">remote words</p></article>');
+  expect(edit.ready()).toBe(true);
+  expect(editModes(sent)).not.toContain(false);
+  const committed = edit.commitPending(true);
+  emit({ type: STORY_COMMITTED_MESSAGE });
+  await expect(committed).resolves.toBeUndefined();
+});
