@@ -155,7 +155,7 @@ export function PageMenuPanel(props: { close: () => void; phone?: boolean; top?:
       <a href="/" aria-label="Hosted at artifactbin" class="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"><img src="/logo-128.png" alt="" class="h-7 w-7" />artifactbin</a>
       {link('/', 'Artifacts', <FileText size={15} stroke-width={1.5} />)}
       {link('/schedules', 'Schedules', <CalendarClock size={15} />)}
-      {link('/chat', 'Connected agents', <User size={15} stroke-width={1.5} />)}
+      {link('/chat', 'Connected Agents', <User size={15} stroke-width={1.5} />)}
       {link('/notifications', 'Notifications', <User size={15} stroke-width={1.5} />)}
       {link('/account', 'Account', <User size={15} stroke-width={1.5} />)}
       {link('/docs-human', 'Human Docs', <BookOpen size={15} stroke-width={1.5} />)}
