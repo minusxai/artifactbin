@@ -5,6 +5,7 @@ import { createEffect, createMemo, createSignal, lazy, on, onCleanup, onMount, S
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
+import { displayTitle } from '@/lib/story/document/title';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared/prepared-runtime';
@@ -113,8 +114,9 @@ export function DocumentPage(): JSX.Element {
   /** The editor's bar is on screen (it replaces the entry skeleton). */
   const [editorMounted, setEditorMounted] = createSignal(false);
   const [editorCodeOpen, setEditorCodeOpen] = createSignal(false);
-  /** The name the editor's title field last showed: the bar's title when editing ends. */
+  /** Current editor name, retained until the reader receives the saved document's metadata. */
   const [editorTitle, setEditorTitle] = createSignal<string | null>(null);
+  const [editorTitleBaseVersion, setEditorTitleBaseVersion] = createSignal(0);
   const [initialAnnotationSelection, setInitialAnnotationSelection] = createSignal<StoryEditSelection | null>(null);
   const [titleHost, setTitleHost] = createSignal<HTMLElement | null>(null);
   const [commentsHost, setCommentsHost] = createSignal<HTMLElement | null>(null);
@@ -196,7 +198,11 @@ export function DocumentPage(): JSX.Element {
   };
   const enterEdit = () => beginEdit(null);
   createEffect(on(lifecycle.phase, (now, before) => {
-    if (now === 'entering') void loadEditorPart();
+    if (now === 'entering') {
+      setEditorTitle(null);
+      setEditorTitleBaseVersion(untrack(live)?.version ?? page?.surface?.version ?? 0);
+      void loadEditorPart();
+    }
     if (!editing()) setEditorMounted(false);
     // Back to reading in place: the next edit opens on the version just saved, not the part this session opened on.
     if (now === 'reading' && before === 'restoring') { parts.reset(); if (editable()) void loadEditorPart(); }
@@ -325,7 +331,16 @@ export function DocumentPage(): JSX.Element {
     });
   });
   const currentVersion = () => page?.archived?.version ?? live()?.version ?? page?.surface?.version ?? 0;
-  const shownTitle = () => live()?.title ?? page?.surface?.title ?? page?.surface?.heading ?? 'Untitled';
+  // The editor owns its stream while editing. Its title signal names every surface until the
+  // reading stream catches up; thereafter live metadata wins, including later remote renames.
+  const shownTitle = () => {
+    const frame = live();
+    const title = editorTitle();
+    if (title !== null && (editing() || !frame || frame.version <= editorTitleBaseVersion())) {
+      return displayTitle({ title, source: editorSeed()?.markup, heading: page?.surface?.heading });
+    }
+    return displayTitle(frame ?? page?.surface ?? {});
+  };
   createEffect(() => { if (socialPreviewOpen() && !editorPart()) void loadEditorPart(); });
   const sharingContent = () => <div class="mx-auto max-w-3xl space-y-6">
     <DocumentSharing id={id!} title={shownTitle()} owner={isOwner()} editable variant="embedded" version={currentVersion()} onSocialPreview={() => setSocialPreviewOpen(true)} />
@@ -333,7 +348,7 @@ export function DocumentPage(): JSX.Element {
     <DocumentPeople id={id!} initialOpen revision={membershipRevision()} onChange={() => setMembershipRevision((n) => n + 1)} /></Show>
   </div>;
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<NotFoundPage />}>
-    <DocumentChrome id={id!} title={() => (!editing() && editorTitle()) || shownTitle()} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
+    <DocumentChrome id={id!} title={shownTitle} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
       like={page!.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={openAnnotationCount}
       archived={page!.archived ?? null} editing={editing} canEdit={editable()} canFork={!archivedNow()} owner={isOwner()}
       install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={page!.surface?.hasInvitedUsers}

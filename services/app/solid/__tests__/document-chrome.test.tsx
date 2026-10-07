@@ -9,6 +9,8 @@ import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { waitFor, within } from '@testing-library/dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
+import type { ArtifactLiveEvent } from '@/lib/story/realtime/live';
 
 let mockRole = 'commenter';
 let mockTitle: string | null = 'A copy';
@@ -16,6 +18,8 @@ let mockArchived: { version: number; head: number } | null = null;
 let served: HTMLElement | null = null;
 let mockCsp: Record<string, unknown> | undefined;
 let mockTemplate: string | null = null;
+let mockLive = () => null as ArtifactLiveEvent | null;
+vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => mockLive() }));
 vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
 import { copyText } from '../lib/copy-text';
@@ -31,6 +35,7 @@ beforeEach(() => {
   mockArchived = null;
   mockCsp = undefined;
   mockTemplate = null;
+  mockLive = () => null;
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
@@ -257,6 +262,53 @@ it('an owner reaches the social preview from the sharing dialog the rail opens',
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Share' }));
   expect(await trusted().findByRole('button', { name: 'Edit social preview' })).toBeInTheDocument();
+});
+
+it('shares the current editor title without requiring a page reload', async () => {
+  mockRole = 'owner'; mockTitle = 'Untitled';
+  const existing = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>', compiledCss: null, authorCss: null });
+    return existing(input, init);
+  });
+  mount('/a/doc#edit');
+  await vi.dynamicImportSettled();
+  const title = await screen.findByRole('textbox', { name: 'Title' });
+  fireEvent.input(title, { target: { value: 'Renamed without reload' } });
+  fireEvent.blur(title);
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+  await waitFor(() => expect(trusted().getByRole('heading', { name: 'Share “Renamed without reload”' })).toBeInTheDocument());
+  fireEvent.input(title, { target: { value: 'Second current title' } });
+  expect(trusted().getByRole('heading', { name: 'Share “Second current title”' })).toBeInTheDocument();
+  fireEvent.input(title, { target: { value: '' } });
+  expect(trusted().getByRole('heading', { name: 'Share “Untitled”' })).toBeInTheDocument();
+});
+
+it('uses the heading fallback in embedded sharing and adopts later reader metadata', async () => {
+  mockRole = 'owner'; mockTitle = 'Old explicit name';
+  const [frame, setFrame] = createSignal<ArtifactLiveEvent | null>(null);
+  mockLive = frame;
+  const existing = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<h2 id="heading">Heading fallback</h2><p id="body">Hello</p>', compiledCss: null, authorCss: null });
+    return existing(input, init);
+  });
+  mount('/a/doc#edit');
+  await vi.dynamicImportSettled();
+  const title = await screen.findByRole('textbox', { name: 'Title' });
+  fireEvent.input(title, { target: { value: '' } });
+  fireEvent.click(trusted(1).getByRole('tab', { name: 'Show sharing' }));
+  expect(trusted(1).getByRole('heading', { name: 'Share “Heading fallback”' })).toBeInTheDocument();
+  fireEvent.input(title, { target: { value: 'Session name' } });
+  expect(trusted(1).getByRole('heading', { name: 'Share “Session name”' })).toBeInTheDocument();
+  setFrame({ version: 5, title: 'Remote name', source: '<h2 id="heading">Remote heading</h2>' } as ArtifactLiveEvent);
+  expect(trusted(1).getByRole('heading', { name: 'Share “Session name”' })).toBeInTheDocument();
+  fireEvent.click(trusted(1).getByRole('button', { name: 'Exit edit mode' }));
+  await waitFor(() => expect(screen.getByText('Remote name', { selector: '[data-mx-document-title]' })).toBeInTheDocument(), { timeout: 5000 });
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+  expect(trusted().getByRole('heading', { name: 'Share “Remote name”' })).toBeInTheDocument();
+  setFrame({ version: 6, title: null, source: '<h2 id="heading">Later remote heading</h2>' } as ArtifactLiveEvent);
+  expect(trusted().getByRole('heading', { name: 'Share “Later remote heading”' })).toBeInTheDocument();
 });
 
 it('opens the current comments in the document rail', async () => {
