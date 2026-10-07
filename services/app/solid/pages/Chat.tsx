@@ -137,7 +137,9 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
   const online = () => info()?.online ?? false;
   const canType = () => online() && !connection();
   const ended = () => info()?.exitCode !== null && info()?.exitCode !== undefined;
-  const canStop = () => !!info()?.managed && (online() || !!info()?.runId && info()?.activity==='starting') && !ended();
+  // Hosted lifetime is independent of terminal connectivity: missing history must still let
+  // the owner cancel the live run. Local managed agents keep their online-only stop contract.
+  const canStop = () => !!info()?.managed && !ended() && (info()?.runId ? info()?.activity !== 'stopped' : online());
   const actionLabel = () => ended() ? 'Remove session' : info()?.managed ? (canStop() ? 'Stop agent' : 'Remove agent') : 'Disconnect remote session';
   const removeOrStop = () => {
     setActing(true);
