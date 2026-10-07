@@ -103,7 +103,7 @@ const SCENE_CANVAS = '<canvas id="scene" width="400" height="300" />';
 
 const { STORY_THEMES } = await tsImport('../../services/app/lib/data/story/story-themes.ts', import.meta.url);
 const THEMES = [null, ...STORY_THEMES.map((t) => t.name)];
-const [kit, prose, popover, fixtures, fontDoc, themeDocs, sceneDoc, sceneProse, sceneCard, redlineStats] = await Promise.all([
+const [kit, prose, popover, fixtures, fontDoc, themeDocs, sceneDoc, sceneProse, sceneCard, redlineStats, redlineBars] = await Promise.all([
   // The kitchen sink's refs, then the document itself (lib/kitchen-sink-doc).
   kitchenSinkMarkup(publish).then((markup) => publish({ markup, theme: 'modernist', colorMode: 'dark', title: 'Kitchen sink (unified)' })),
   publish({ markup: '<Helmet><title>Prose</title></Helmet><h1 className="text-4xl">Just words</h1><p>No charts here.</p>' }),
@@ -119,6 +119,12 @@ const [kit, prose, popover, fixtures, fontDoc, themeDocs, sceneDoc, sceneProse, 
     + [2, 3].map(count => `<div id="redline-row-${count}" className="rl-stat-row">`
       + Array.from({ length: count }, (_, index) => `<div className="rl-stat"><span className="t-label">Metric ${index + 1}</span><span className="t-numeral">120</span><span className="rl-stat-note">Measured today</span></div>`).join('') + '</div>').join('')
     + '</Slide></SlideDeck></div>' }),
+  publish({ title: 'Responsive Redline number bars', theme: 'redline', markup:
+    '<Helmet><Query name="bar_values">{`select 11.0 as today, 4.5 as target`}</Query></Helmet>'
+    + '<div className="@container max-w-3xl px-8"><div id="redline-number-bar" className="rl-bar">'
+    + '<span id="redline-number-today" className="rl-bar-a" style={{"flex":"0 0 71%"}}><Number data="$bar_values" col="today" format=".1f" /> TODAY</span>'
+    + '<span id="redline-number-target" className="rl-bar-b" style={{"flex":"0 0 29%"}}><Number data="$bar_values" col="target" format=".1f" /> TARGET</span>'
+    + '</div></div>' }),
 ]);
 console.log(`   kit: ${B}/a/${kit.id}`);
 
@@ -514,6 +520,52 @@ try {
     } finally { await page.close(); }
   }));
 
+  // Number's nested spans must not inherit bar-segment padding; labels stay complete at phone width.
+  const redlineBarTasks = [390, 1440].map(width => () => leg(`Redline Number bars ${width}px`, async () => {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    try {
+      await page.goto(`${B}/a/${redlineBars.id}`);
+      const frame = await documentFrame(page);
+      await frame.waitForSelector('#redline-number-target [aria-label="Live number"]');
+      await frame.waitForFunction(() => document.querySelector('#redline-number-today [aria-label="Live number"]')?.textContent?.trim() === '11.0'
+        && document.querySelector('#redline-number-target [aria-label="Live number"]')?.textContent?.trim() === '4.5');
+      const geometry = await frame.evaluate(() => {
+        const surface = document.querySelector('.mx-doc');
+        const bar = document.getElementById('redline-number-bar');
+        const readText = (node) => {
+          const range = document.createRange(); range.selectNodeContents(node);
+          return [...range.getClientRects()].map(rect => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }));
+        };
+        const segments = ['today', 'target'].map((which) => {
+          const segment = document.getElementById(`redline-number-${which}`);
+          const value = segment.querySelector('[aria-label="Live number"]');
+          const label = [...segment.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+          const rect = segment.getBoundingClientRect();
+          return { which, value: value.textContent.trim(), label: label.textContent.trim(),
+            segment: { left: rect.left, right: rect.right }, valueRects: readText(value), labelRects: readText(label),
+            flex: getComputedStyle(segment).flex };
+        });
+        return { surface: surface && { width: surface.clientWidth, scroll: surface.scrollWidth },
+          bar: bar && { width: bar.clientWidth, scroll: bar.scrollWidth }, segments };
+      });
+      check(!!geometry.surface && geometry.surface.scroll <= geometry.surface.width + 1,
+        `${width}px: Number bar fits the reader surface (${JSON.stringify(geometry.surface)})`);
+      check(!!geometry.bar && geometry.bar.scroll <= geometry.bar.width + 1,
+        `${width}px: Number bar has no internal horizontal overflow (${JSON.stringify(geometry.bar)})`);
+      for (const segment of geometry.segments) {
+        const value = segment.valueRects[0], label = segment.labelRects[0];
+        check(segment.value === (segment.which === 'today' ? '11.0' : '4.5') && segment.label === segment.which.toUpperCase(),
+          `${width}px: ${segment.which} value and label render from Number/query data (${segment.value} ${segment.label})`);
+        check(segment.flex === (segment.which === 'today' ? '0 0 71%' : '0 0 29%'),
+          `${width}px: ${segment.which} keeps its authored proportional bar segment (${segment.flex})`);
+        check(segment.valueRects.length === 1 && segment.labelRects.length === 1
+          && value.left >= segment.segment.left - 1 && label.right <= segment.segment.right + 1
+          && label.left >= value.right + 2,
+        `${width}px: ${segment.which} value and label stay visible, on one line, and separated (${JSON.stringify(segment)})`);
+      }
+    } finally { await page.close(); }
+  }));
+
   // ── the compiled reader handover (was gate-hydration) ───────────────────────
   const READER_HEADER = 'x-mx-reader';
   /**
@@ -688,7 +740,7 @@ try {
   });
 
   // The long legs first, so the short ones fill in around them.
-  await pool(4, [kitTask, takeoverTask, libraryTask, ...staticTasks, proseTask, ...popoverTasks, ...statTasks, ...themeTasks, ...shellTasks]);
+  await pool(4, [kitTask, takeoverTask, libraryTask, ...staticTasks, proseTask, ...popoverTasks, ...statTasks, ...redlineBarTasks, ...themeTasks, ...shellTasks]);
 } finally {
   await Promise.allSettled([browser.close(), glBrowser.close()]);
 }
