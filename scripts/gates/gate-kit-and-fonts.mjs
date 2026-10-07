@@ -115,10 +115,10 @@ const [kit, prose, popover, fixtures, fontDoc, themeDocs, sceneDoc, sceneProse, 
   publish({ markup: '<h1>Ordinary prose</h1>' }),
   publish({ markup: SCENE_HELMET + `<Card><CardContent>${SCENE_CANVAS}</CardContent></Card>` }),
   publish({ title: 'Responsive stat rows', theme: 'redline', markup:
-    '<div className="@container px-6"><Deck><Slide><h2>Two and three metrics</h2>'
+    '<div className="@container px-6"><SlideDeck><Slide><h2>Two and three metrics</h2>'
     + [2, 3].map(count => `<div id="redline-row-${count}" className="rl-stat-row">`
       + Array.from({ length: count }, (_, index) => `<div className="rl-stat"><span className="t-label">Metric ${index + 1}</span><span className="t-numeral">120</span><span className="rl-stat-note">Measured today</span></div>`).join('') + '</div>').join('')
-    + '</Slide></Deck></div>' }),
+    + '</Slide></SlideDeck></div>' }),
 ]);
 console.log(`   kit: ${B}/a/${kit.id}`);
 
