@@ -11,8 +11,8 @@ import {checkDirectHttp,checkGuestHttpIssuance} from '../../../scripts/gates/lib
 useAppHarness();
 const base='https://example.test';
 const json=(body:unknown,status=200,headers:Record<string,string>={})=>Response.json(body,{status,headers});
-const npmNotice=(helperBase:string)=>({message:'afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup — then use afbin as before.',hint:`Windows PowerShell: npx.cmd --yes @afbin/cli@latest setup. If Node.js 22+ is missing, run ${helperBase}/chat/ensure-node.sh (macOS/Linux) or ${helperBase}/chat/ensure-node.ps1 (Windows) first. Your files, account and skills stay.`});
-const legacyNotice=(helperBase:string)=>({message:'afbin now runs through npm',hint:`Node/npm setup: ${helperBase}/chat/ensure-node.sh (macOS/Linux), ${helperBase}/chat/ensure-node.ps1 (Windows). npx --yes @afbin/cli@latest <command>; npx.cmd`});
+const npmNotice=(helperBase:string)=>({message:'afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup — then use afbin as before.',hint:`Windows PowerShell: npx.cmd --yes @afbin/cli@latest setup. If Node.js 22+ is missing, run ${helperBase}/chat/install-node.sh (macOS/Linux) or ${helperBase}/chat/install-node.ps1 (Windows) first. Your files, account and skills stay.`});
+const legacyNotice=(helperBase:string)=>({message:'afbin now runs through npm',hint:`Node/npm setup: ${helperBase}/chat/install-node.sh (macOS/Linux), ${helperBase}/chat/install-node.ps1 (Windows). npx --yes @afbin/cli@latest <command>; npx.cmd`});
 function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperBase=base,legacyCopy=false}={}){
  let rows=[{region:'EU',amount:2}],version=1;
  const calls:Array<{path:string;init:RequestInit}>=[];
@@ -77,7 +77,7 @@ it('acceptance runs against real composed email, artifact and download handlers'
   const notice=await retired.json();
   expect(notice.error).toBe('cli_npm_required');
   expect(notice.message.startsWith('afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup')).toBe(true);
-  expect(notice.hint).toContain(`${origin}/chat/ensure-node.sh`);
+  expect(notice.hint).toContain(`${origin}/chat/install-node.sh`);
   expect((await fetch(origin+'/api/my/tokens/'+token.id,{method:'DELETE',headers:{cookie:accountCookie,origin}})).status).toBe(204);
  }finally{await drainPreparedPageWarmups();await drainSnapshotRevalidations();await application.close();await rm(directory,{recursive:true,force:true});}
 });

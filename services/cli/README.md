@@ -39,13 +39,12 @@ For a shared host see [team on a network](../../docs/extraction/team.md#team-on-
 
 ## Install and authenticate
 
-Node 22.13 or newer, npm and npx are required. The helper reuses a healthy existing installation or installs official Node 24 LTS into user-owned storage, verifies its checksum, and prepares PATH. No administrator, Homebrew or winget is required.
+The complete installer below prepares Node and installs afbin and agent skills in one command. For Node only, use `curl -fsSL https://app.artifactbin.dev/chat/install-node.sh | bash`, then reopen the terminal; PowerShell uses `Invoke-RestMethod https://app.artifactbin.dev/chat/install-node.ps1 | Invoke-Expression`. Node 22.13 or newer, npm and npx are required. The helper reuses a healthy existing installation or installs official Node 24 LTS into user-owned storage, verifies its checksum, and prepares PATH. No administrator, Homebrew or winget is required.
 
 Windows x64, PowerShell 5.1 or 7:
 
 ```powershell
-Invoke-RestMethod https://app.artifactbin.dev/chat/ensure-node.ps1 | Invoke-Expression
-npx.cmd --yes @afbin/cli@latest setup
+Invoke-RestMethod https://app.artifactbin.dev/chat/install.ps1 | Invoke-Expression
 afbin.cmd preview report.jsx
 ```
 
@@ -67,12 +66,12 @@ This separate smoke run adds no time to the required PR check chain.
 macOS arm64/x64 and Linux arm64/x64 (glibc, bash or zsh):
 
 ```sh
-afbin_node_setup="$(mktemp)" && curl -fsSL https://app.artifactbin.dev/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
-npx --yes @afbin/cli@latest setup
+curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
+# Open a new terminal before using afbin.
 afbin preview report.jsx
 ```
 
-`setup` installs the `afbin` command and the agent skills; run it once. The Windows `.cmd` spellings (`npx.cmd`, `afbin.cmd`) run under ordinary Restricted PowerShell without changing execution policy. The Unix helper must be sourced so this terminal receives PATH immediately. If a download fails, install Node LTS from https://nodejs.org/en/download and rerun the setup line. If an old `afbin` reports `cli_npm_required`, run the setup line once.
+`setup` installs the `afbin` command and the agent skills; run it once. The Windows `.cmd` spellings (`npx.cmd`, `afbin.cmd`) run under ordinary Restricted PowerShell without changing execution policy. Open a new terminal after running the Unix installer so it receives the persisted PATH. If a download fails, install Node LTS from https://nodejs.org/en/download and rerun the setup line. If an old `afbin` reports `cli_npm_required`, run the setup line once.
 
 There is one afbin distribution: `@afbin/cli` on npm. No standalone executable. `setup` installs the `afbin` command globally through npm and `afbin update` installs the version the selected server names (else the latest); neither replaces a running process. Close a running preview before restarting with a newer package. For a pinned or offline run, warm the npm cache and Chromium before disconnecting, then use `npm exec --offline --yes --package=@afbin/cli@VERSION -- afbin ...`. A cold cache cannot install offline. Package installation does not download Chromium; rendering downloads it on first use.
 

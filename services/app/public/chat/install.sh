@@ -12,5 +12,10 @@ afbin_node_setup=$(mktemp)
 trap 'rm -f "$afbin_node_setup"' EXIT HUP INT TERM
 curl -fsSL "$origin/chat/ensure-node.sh" -o "$afbin_node_setup"
 # The helper needs bash/zsh, and changes this process PATH before launching npm.
-bash -c '. "$1" && npx --yes @afbin/cli@latest setup --server "$2"' bash "$afbin_node_setup" "$origin"
+# curl | sh consumes stdin. Restore the controlling terminal for the setup checklist.
+if ( : </dev/tty ) 2>/dev/null; then
+  bash -c '. "$1" && npx --yes @afbin/cli@latest setup --server "$2"' bash "$afbin_node_setup" "$origin" </dev/tty
+else
+  bash -c '. "$1" && npx --yes @afbin/cli@latest setup --server "$2"' bash "$afbin_node_setup" "$origin"
+fi
 printf '%s\n' 'Open a new terminal, then use afbin <command>.'

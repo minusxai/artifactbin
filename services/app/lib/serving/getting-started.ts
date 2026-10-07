@@ -11,9 +11,10 @@ export function gettingStarted(base: string) {
   const server = afbinServerFlag(origin);
   const sections: Array<{ id: string; title: string; blocks: GuideBlock[] }> = [
     { id: 'install', title: 'Install afbin', blocks: [
-      { kind: 'text', text: 'If afbin is not installed, install and set it up first. Run both commands in the same terminal. The first reuses supported Node/npm or installs official Node LTS for your user. The second installs afbin and the artifactbin skill for your coding agents. Setup supports Claude Code, Codex, Pi, and OpenCode; choose which agents receive the skill.' },
+      { kind: 'text', text: 'If afbin is not installed, install and set it up first. Run one command for your platform. It reuses supported Node/npm or installs official Node LTS for your user, then installs afbin and the artifactbin skill for your coding agents. Open a new terminal after installation. Setup supports Claude Code, Codex, Pi, and OpenCode; choose which agents receive the skill.' },
       { kind: 'command', label: 'macOS / Linux', language: 'sh', text: afbinInstallCommand(origin) },
       { kind: 'command', label: 'Windows · PowerShell', language: 'powershell', text: afbinWindowsInstallCommand(origin) },
+      { kind: 'text', text: `Already have Node/npm? Run npx --yes @afbin/cli@latest setup${server} directly (PowerShell: npx.cmd --yes @afbin/cli@latest setup${afbinServerFlag(origin, true)}). For Node only, use ${origin}/chat/install-node.sh with bash and reopen your terminal, or run ${origin}/chat/install-node.ps1 inline in PowerShell.` },
     ] },
     { id: 'learn', title: 'Read the local guide', blocks: [
       { kind: 'text', text: 'Restart your coding agent after setup so it loads the installed skill, then ask it to use the artifactbin skill to create or edit an artifact. Run afbin help to discover everything you can do, then afbin help <topic> for the task you are working on.' },

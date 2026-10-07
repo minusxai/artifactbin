@@ -206,9 +206,9 @@ function InstallInstructions(): JSX.Element {
   const origin = window.location.origin;
   return <div class="mt-4 space-y-4">
     <CopyCommand label="Install CLI" command={afbinInstallCommand(origin)} />
-    <p class="text-xs text-muted">macOS / Linux: run both commands in the same terminal. Supported Node/npm is reused; otherwise official Node LTS is installed for your user.</p>
+    <p class="text-xs text-muted">macOS / Linux: one command installs Node if needed, afbin and agent skills. Open a new terminal after installation.</p>
     <CopyCommand label="Install Windows CLI for artifacts" command={afbinWindowsInstallCommand(origin)} />
-    <p class="text-xs text-muted">Windows: run both commands in PowerShell; npx.cmd works without changing script execution policy.</p>
+    <p class="text-xs text-muted">Windows: run this command in PowerShell. It installs Node if needed, afbin and agent skills without changing script execution policy.</p>
     <p class="text-xs text-muted">Use the command below to sign in to this server and start your installed agent.</p>
     <div><label for="remote-harness" class="mb-2 block text-sm">Choose your agent</label><select id="remote-harness" value={harness()} onChange={(event) => setHarness(event.currentTarget.value)} class="w-full rounded border border-edge bg-surface p-2 text-sm"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="pi">Pi</option><option value="opencode">OpenCode</option></select></div>
     <CopyCommand label="Start a session" command={`afbin remote --server '${origin}' ${harness()}`}  />

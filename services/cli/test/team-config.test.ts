@@ -170,14 +170,14 @@ test('startup instructions name the host teammates set, the installer, and where
   assert.ok(local.some(line=>line.includes('afbin config set host http://app.lvh.me:7445')&&!line.includes('npx')),local.join('\n'));
   // npm appears once, as the setup line; every other command is `afbin <command>`.
   assert.equal(local.join('\n').split('@afbin/cli@').length-1,1,local.join('\n'));
-  assert.ok(local.some(line=>line.includes('http://app.lvh.me:7445/chat/ensure-node.sh')),local.join('\n'));
+  assert.ok(local.some(line=>line.includes('http://app.lvh.me:7445/chat/install-node.sh')),local.join('\n'));
   assert.ok(local.some(line=>line.includes('npx --yes @afbin/cli@latest setup --server http://app.lvh.me:7445')),local.join('\n'));
   assert.ok(local.some(line=>line.includes('[dev-mail] otp')&&line.includes(single.env.EMAIL__DEV_OUTBOX_PATH!)),local.join('\n'));
   const network='APP__HOST=0.0.0.0\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=https://artifacts.example.test\n';
   await writeFile(file,network+'EMAIL__RESEND_API_KEY=re_test_key\nEMAIL__FROM=Team <team@example.test>\n'+secret);
   const published=serverInstructions(await teamSettings(file));
   assert.ok(published.some(line=>line.includes('afbin config set host https://artifacts.example.test')&&!line.includes('npx')),published.join('\n'));
-  assert.ok(published.some(line=>line.includes('https://artifacts.example.test/chat/ensure-node.sh')),published.join('\n'));
+  assert.ok(published.some(line=>line.includes('https://artifacts.example.test/chat/install-node.sh')),published.join('\n'));
   assert.ok(!published.some(line=>line.includes('[dev-mail]')),published.join('\n'));
   assert.ok(published.some(line=>/mail provider/.test(line)),published.join('\n'));
   /**

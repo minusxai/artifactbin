@@ -290,7 +290,7 @@ describe('the bundled teaching and the manual', () => {
     assert.ok(!/npm install -g|npx afbin|npm i -g/.test(text),`${file} teaches npm installation`);
     assert.ok(!/MCP|\/docs\/llm|skills\.download/.test(text),`${file} teaches a remote or MCP surface`);
    }
-   assert.match(teaching.files['references/publishing-auth.md'],/\/chat\/ensure-node\.sh/);
+   assert.match(teaching.files['references/publishing-auth.md'],/\/chat\/install-node\.sh/);
    assert.ok(teaching.files['references/publishing-auth.md'].includes('If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills.'));
    // Every bundled file spells npm at most once, as the setup line; every other command is `afbin <command>`.
    for(const [file,text] of Object.entries(teaching.files as Record<string,string>)){
@@ -360,23 +360,23 @@ describe('the bundled teaching and the manual', () => {
    // A bundle that named one deployment would teach a self-hoster's agent to publish somewhere else.
    const corpus=Object.values(localSkillFiles).join('\n');
    for(const line of corpus.split('\n'))assert.doesNotMatch(line,/https?:\/\/[^\s`)'"]*artifactbin\.dev/,`the bundle addresses a deployment: ${line.trim().slice(0,120)}`);
-   assert.ok(corpus.includes(`${TEACHING_BASE}/chat/ensure-node.sh`),'the installer address must survive compilation as the placeholder');
+   assert.ok(corpus.includes(`${TEACHING_BASE}/chat/install-node.sh`),'the installer address must survive compilation as the placeholder');
 
    const self='https://docs.self-hosted.example';
    const addressed=skillFilesFor(self);
-   assert.ok(addressed['references/npm-local.md'].includes(`${self}/chat/ensure-node.sh`));
+   assert.ok(addressed['references/npm-local.md'].includes(`${self}/chat/install-node.sh`));
    assert.ok(!Object.values(addressed).join('\n').includes(TEACHING_BASE),'no placeholder may survive into an installed skill');
-   assert.ok(addressed['references/errors.md'].includes(`${self}/chat/ensure-node.sh`),'the recovery catalogue is addressed too');
+   assert.ok(addressed['references/errors.md'].includes(`${self}/chat/install-node.sh`),'the recovery catalogue is addressed too');
 
    const home=await mkdtemp(join(tmpdir(),'afbin-skill-origin-'));
    try{
     await installSkills(['pi'],{home,env:{},origin:self});
     const installed=await readFile(join(skillTargets(home,{}).pi,'references/npm-local.md'),'utf8');
-    assert.ok(installed.includes(`${self}/chat/ensure-node.sh`));
+    assert.ok(installed.includes(`${self}/chat/install-node.sh`));
     assert.doesNotMatch(installed,/__AFBIN_SERVER__|artifactbin\.dev\/chat/);
     // Re-pointing the CLI at another server rewrites the installed skill rather than calling it current.
     await installSkills(['pi'],{home,env:{},origin:'https://other.example'});
-    assert.ok((await readFile(join(skillTargets(home,{}).pi,'references/npm-local.md'),'utf8')).includes('https://other.example/chat/ensure-node.sh'));
+    assert.ok((await readFile(join(skillTargets(home,{}).pi,'references/npm-local.md'),'utf8')).includes('https://other.example/chat/install-node.sh'));
    }finally{await rm(home,{recursive:true,force:true});}
 
    // The terminal screens are the default HUMAN path and never take the plain-text branch.
@@ -387,7 +387,7 @@ describe('the bundled teaching and the manual', () => {
     assert.doesNotMatch(screen.join(''),/__AFBIN_SERVER__/);
     const topic:string[]=[];
     assert.equal(await runCli(['help','npm-local'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:true,color:false,stdout:(x:string)=>topic.push(x),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')}),0);
-    assert.ok(topic.join('').includes(`${self}/chat/ensure-node.sh`));
+    assert.ok(topic.join('').includes(`${self}/chat/install-node.sh`));
     assert.doesNotMatch(topic.join(''),/__AFBIN_SERVER__/);
     const http:string[]=[];
     assert.equal(await runCli(['help','http-api'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:false,color:false,stdout:(x:string)=>http.push(x),stderr:()=>{},fetch:async()=>assert.fail('HTTP reference help must stay offline')}),0);

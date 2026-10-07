@@ -28,6 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, needsPostgres, shardWeight } from './gates.manifest.mjs';
+import { runGateProcess } from './gates.process.mjs';
 import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -243,31 +244,10 @@ if (servers === 0 && bases.length === 0) {
  * it is BUFFERED rather than inherited: several gates writing to one terminal
  * at once is a log nobody can read a failure out of.
  */
-const run = (gate, base, timeoutMs) => new Promise((resolve) => {
-  const started_at = Date.now();
-  const child = spawn(process.execPath, [path.join(GATES_DIR, gate.file), base], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}) },
-  });
-  let output = '';
-  let settled = false;
-  child.stdout.on('data', (b) => { output += b; });
-  child.stderr.on('data', (b) => { output += b; });
-  const done = (ok) => {
-    if (settled) return;
-    settled = true;
-    clearTimeout(timer);
-    resolve({ ok, output, seconds: (Date.now() - started_at) / 1000 });
-  };
-  const timer = setTimeout(() => {
-    const seconds = timeoutMs / 1000;
-    output += `${output.endsWith('\n') ? '' : '\n'}timed out after ${seconds} s\n`;
-    child.kill('SIGTERM');
-    done(false);
-  }, timeoutMs);
-  child.on('close', (code) => done(code === 0));
-  child.on('error', () => done(false));
-});
+const run = (gate, base, timeoutMs) => runGateProcess(
+  process.execPath, [path.join(GATES_DIR, gate.file), base],
+  { timeoutMs, env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}) } },
+);
 
 /** Promise tails are group locks: unrelated gates still fan out, while a gate
  * waits for the previous member of its serial group even on another worker. */

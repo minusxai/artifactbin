@@ -63,7 +63,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(gettingStarted.status).toBe(200);
     const setup = await gettingStarted.text();
     expect(setup).toContain('npx --yes @afbin/cli@latest setup');
-    expect(setup).toContain(`${BASE}/chat/ensure-node.ps1`);
+    expect(setup).toContain(`${BASE}/chat/install.ps1`);
     expect(setup).toContain('npx.cmd --yes @afbin/cli@latest setup');
     expect(text).toContain('POST '+BASE+'/api/auth/email-otp/send-verification-otp');
     expect(text).toContain('POST '+BASE+'/api/auth/sign-in/email-otp');

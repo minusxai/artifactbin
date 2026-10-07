@@ -66,10 +66,21 @@ const engineLoads = (page) => page.waitForResponse((r) => r.url().endsWith('.was
 // ── the disposable PostgreSQL, ready before Chromium observes the host network ──
 const adminPassword = randomUUID();
 const readerPassword = randomUUID();
+const containerName = `afbin-data-journey-${randomUUID()}`;
 let container;
+let containerRemoved = false;
+// Detached Docker resources outlive this process: finally alone cannot own them.
+const removeContainer = () => {
+  if (containerRemoved) return;
+  try {
+    execFileSync('docker', ['rm', '-f', container ?? containerName], { stdio: 'ignore', timeout: 4000 });
+    containerRemoved = true;
+  } catch { /* Exit cleanup retries if interruption raced Docker startup. */ }
+};
+process.once('exit', removeContainer);
 let admin;
 const postgres = (async () => {
-  container = (await execFileP('docker', ['run', '--rm', '-d', '-e', `POSTGRES_PASSWORD=${adminPassword}`, '-p', '127.0.0.1::5432', 'postgres:17-alpine'], { encoding: 'utf8' })).stdout.trim();
+  container = (await execFileP('docker', ['run', '--rm', '-d', '--name', containerName, '-e', `POSTGRES_PASSWORD=${adminPassword}`, '-p', '127.0.0.1::5432', 'postgres:17-alpine'], { encoding: 'utf8' })).stdout.trim();
   const port = Number((await execFileP('docker', ['port', container, '5432/tcp'], { encoding: 'utf8' })).stdout.trim().split(':').at(-1));
   for (let attempt = 0; attempt < 100; attempt++) {
     admin = new pg.Client({ host: '127.0.0.1', port, database: 'postgres', user: 'postgres', password: adminPassword, connectionTimeoutMillis: 1000 });
@@ -92,6 +103,13 @@ postgres.catch(() => {}); // awaited (and reported) by the PostgreSQL leg
 
 let b;
 const sink = await startMailSink();
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => {
+    removeContainer();
+    sink.close();
+    Promise.resolve(b?.close()).catch(() => {}).finally(() => process.exit(130));
+  });
+}
 try {
 // Docker creates host interfaces. Settle its startup before Chromium starts fetching app modules,
 // so this gate's own network change cannot interrupt those requests with ERR_NETWORK_CHANGED.
@@ -983,7 +1001,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     sink.close();
   } finally {
     await postgres.catch(() => {});
-    if (container) execFileSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
+    removeContainer();
   }
 }
 check.done();

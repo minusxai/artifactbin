@@ -610,6 +610,14 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('cache-control', 'public, max-age=300');
     c.header('x-content-type-options', 'nosniff');
   });
+  // Node-only entries reuse the audited helpers. A Unix child cannot change its caller's PATH.
+  for (const extension of ['sh', 'ps1']) app.get(`/chat/install-node.${extension}`, c => {
+    const helper = readFileSync(path.join(publicDir, 'chat', `ensure-node.${extension}`), 'utf8');
+    const body = extension === 'sh' ? `#!/bin/bash\nset -e\n${helper}\nprintf '%s\\n' 'Open a new terminal to use Node, npm and npx.'\n` : helper;
+    c.header('content-type', extension === 'sh' ? 'text/x-shellscript; charset=utf-8' : 'text/plain; charset=utf-8');
+    c.header('cache-control', 'public, max-age=300'); c.header('x-content-type-options', 'nosniff');
+    return c.body(body);
+  });
   // Compatibility URLs prepare Node and invoke npm; every deployment selects its own origin.
   for (const installer of ['/install.sh', '/chat/install.sh']) app.get(installer, (c) => {
     const script = readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');

@@ -57,7 +57,7 @@ Downloads and default HTML exports are named `<artifact-id>-<URL-slug>.jsx.html`
 
 Open a `.jsx.html` file in your browser. You can edit text and add comments without a server. **Save** or **Cmd/Ctrl+S** writes the updated HTML, including those comments. Chrome/Edge can show a native Save picker; later saves in the same tab write to the chosen file. Firefox/Safari download an updated copy. The receipt names the saved file. Your tab stays on the originally opened file: if you saved elsewhere, open the saved copy to continue there.
 
-For the full local editor, start a preview server in the folder where you want the JSX copy. If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills.
+For the full local editor, start a preview server in the folder where you want the JSX copy. For a fresh installation, follow [the one-command setup guide](https://app.artifactbin.dev/getting-started.md). If Node is already ready and `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills.
 
 ```sh
 afbin preview --port 7474
