@@ -92,7 +92,7 @@ Classes the runtime provides: `rl-paper`, `rl-red`, `rl-ink`, `rl-dot`, `rl-dot-
 
 ## The hand
 
-Flat ink on stock. Redline draws like a one-colour screen print: a 2px square-capped ink line, flat red for the part that matters, flat ink for the rest, sunk paper for the quiet parts. No shadow, no texture, no gradient; the figure sits in the display face. The subject is the artifact's; the hand is this.
+Flat ink on stock. Redline draws like a one-colour screen print: a 2px square-capped ink line, flat red for the part that matters, flat ink for the rest, sunk paper for the quiet parts. No shadow, no texture, no gradient; the figure sits in the display face. The subject is the artifact's; the hand is this. The `rl-paper`, `rl-red`, `rl-ink` and `rl-on-*` classes set SVG fills only; they do not paint HTML slides. For HTML, use stage classes such as `rl-stage-red`, which set background and text colors.
 
 | Rule | How |
 |---|---|

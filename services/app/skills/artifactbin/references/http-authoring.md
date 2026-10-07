@@ -6,9 +6,9 @@ description: Direct JSX creation, artifact ID reservations and an executable gra
 
 HTTP supports JSX creation and prepared edits without CLI installation; this guide is in `/llms.txt`.
 
-See [JSX markup](markup.md), [data and actions](markup-data.md), [design systems](design-systems.md) and [templates](templates.md).
+See [JSX markup](markup.md), [data and actions](markup-data.md), [design systems](design-systems.md) and [templates](templates.md). Use each link target as served; `.md` appears in source labels, while public guide URLs are extensionless.
 
-[[ urlReplyRule ]] [[ phoneAuthoringRule ]]
+[[ urlReplyRule ]] [[ phoneAuthoringRule ]] Batch independent reads and edits; reserve time for one final response. After required checks pass, do not repeat unchanged QA. For DOM probes, use `page.evaluate`. See the [copyable HTTP browser QA example](http-api.md#browser-preview-and-interactive-qa); reuse it instead of rebuilding the session client.
 
 For a new document, `POST /api/artifacts` with `{"markup":"<p id=\"message\">Alpha</p>","title":"HTTP example","visibility":"unlisted"}`. Give every body element a persistent `id`; preserve it when editing/moving that element. Creation validates JSX and returns its artifact identity/URL. To allocate identities before creation, `POST /api/artifacts/reservations` with `Idempotency-Key: http_authoring_batch_001` and `{}` returns 100 IDs. Reuse that nonce for pool replay, and send one unconsumed ID as `reserved_id` in the create body, with a separate create `Idempotency-Key`. These are artifact IDs, distinct from element IDs and graph node keys. Reuse the exact create body/key after an uncertain response; do not allocate another identity blindly. `X-Artifactbin-Account`, when pinning a workspace, must be the account observed on this server's authenticated response.
 
@@ -44,7 +44,6 @@ A preparation request must include both `edit_id` and `expectedVersion` from the
 
 A source-only `/prepare` request remains a validation-only authoring-context API for clients that already construct their own updates; it returns `{valid:true,datasetBindings?}` without a `document_update`.
 
-## Advanced graph editing
 
 Read [the graph wire contract](http-document-graph.md) before deriving patches; it is also served in `/llms.txt`.
 
@@ -118,6 +117,3 @@ const edited = await fetch(base + '/api/artifacts/' + artifactId + '/edits', {
 });
 if (!edited.ok) throw Error(await edited.text());
 ```
-
-For arbitrary JSX, use source preparation. Advanced clients may use `prepareClientDocumentPublication` (`services/app/lib/story/graph/document-update-client.ts`) with `services/contracts/src/document-update.ts` wire types, or implement that contract.
-For an intentional whole replacement, the same update has `whole:true`, a full `replacement` schema-3 graph and the observed base version; include the `$root` subtree dependency and use current IDs for surviving elements. Whole replacements consume the observed head and do not merge silently. Moves retain element IDs and internal graph keys; insertion uses fresh keys and claims unused element IDs. Annotation remapping requires `annotationOps` with exact observed text maps; sharing/parent changes require their observed revisions/parent IDs. Do not hand-wave these dependencies for a more complex edit.
