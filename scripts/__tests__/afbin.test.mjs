@@ -15,7 +15,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-import { afbinPort, afbinServer, cliBuildStale, devHome, healthRefusal, runAfbin, serverFlag } from '../lib/afbin-run.mjs';
+import { afbinPort, afbinServer, cliBuildStale, devHome, healthRefusal, hostRuntimeState, requiresHostRuntime, runAfbin, serverFlag } from '../lib/afbin-run.mjs';
 import { containmentExpectation, containmentObserved } from '../gates/lib/session-containment.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../..');
@@ -29,8 +29,8 @@ async function fakeCheckout({ distAge = 0, srcAge = 10 } = {}) {
   const now = Date.now() / 1000;
   await writeFile(path.join(root, 'services', 'cli', 'src', 'index.ts'), 'export {};\n');
   await utimes(path.join(root, 'services', 'cli', 'src', 'index.ts'), now - srcAge, now - srcAge);
-  await writeFile(path.join(root, 'services', 'cli', 'scripts', 'build.mjs'), '// build\n');
-  await utimes(path.join(root, 'services', 'cli', 'scripts', 'build.mjs'), now - srcAge, now - srcAge);
+  await writeFile(path.join(root, 'services', 'cli', 'scripts', 'bundle-options.mjs'), '// bundle options\n');
+  await utimes(path.join(root, 'services', 'cli', 'scripts', 'bundle-options.mjs'), now - srcAge, now - srcAge);
   await writeFile(path.join(root, 'services', 'cli', 'dist', 'afbin.mjs'), '// built\n');
   await utimes(path.join(root, 'services', 'cli', 'dist', 'afbin.mjs'), now - distAge, now - distAge);
   return root;
@@ -148,14 +148,52 @@ describe('npm run afbin', () => {
     } finally { await rm(root,{recursive:true,force:true}); }
   });
 
-  it('rebuilds when a shared source the CLI bundles changed — app/lib, utils, contracts, sql', async () => {
-    for (const dir of [['app', 'lib'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]) {
+  it('rebuilds when a shared source the CLI bundles changed — app/lib, auth, utils, contracts, sql', async () => {
+    for (const dir of [['app', 'lib'], ['auth', 'src'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]) {
       const root = await fakeCheckout({ distAge: 10, srcAge: 20 });
       try {
         expect(await cliBuildStale(root), dir.join('/')).toBe(false);
         await mkdir(path.join(root, 'services', ...dir, 'viz'), { recursive: true });
         await writeFile(path.join(root, 'services', ...dir, 'viz', 'shared.ts'), 'export {};\n');
         expect(await cliBuildStale(root), dir.join('/')).toBe(true);
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
+  });
+
+  it('rebuilds when teaching sources change — app skills and the teaching compiler', async () => {
+    for (const file of [
+      'services/app/skills/artifactbin/SKILL.md',
+      'services/cli/scripts/compile-teaching.ts',
+      'services/cli/scripts/generate-teaching.mjs',
+      'scripts/lib/generate-teaching.mjs',
+      'scripts/register-yaml.cjs',
+    ]) {
+      const root = await fakeCheckout({ distAge: 10, srcAge: 20 });
+      try {
+        const fullPath = path.join(root, file);
+        await mkdir(path.dirname(fullPath), { recursive: true });
+        await writeFile(fullPath, 'teaching input\n');
+        const older = Date.now() / 1000 - 30;
+        await utimes(fullPath, older, older);
+        expect(await cliBuildStale(root), file).toBe(false);
+
+        const changed = Date.now() / 1000 + 1;
+        await utimes(fullPath, changed, changed);
+        expect(await cliBuildStale(root), file).toBe(true);
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
+  });
+
+  it('rebuilds when packaged compiler inputs change, including a version-only package bump', async () => {
+    for (const file of ['services/cli/scripts/bundle-options.mjs', 'services/cli/package.json', 'services/cli/npm-shrinkwrap.json', 'package.json', 'package-lock.json', 'scripts/lib/afbin-build.mjs']) {
+      const root = await fakeCheckout({ distAge: 10, srcAge: 20 });
+      try {
+        expect(await cliBuildStale(root), file).toBe(false);
+        await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+        await writeFile(path.join(root, file), file.endsWith('package.json') ? '{"version":"0.4.24"}' : 'updated compiler input');
+        const inputAt = Date.now() / 1000 + 1;
+        await utimes(path.join(root, file), inputAt, inputAt);
+        expect(await cliBuildStale(root), file).toBe(true);
       } finally { await rm(root, { recursive: true, force: true }); }
     }
   });
@@ -168,6 +206,83 @@ describe('npm run afbin', () => {
       const code = await runAfbin({ argv: ['--version'], env: { APP__PORT: '7601' }, root, home: '/home/owner', ...run.options });
       expect(run.builds).toEqual([root]);
       expect(code).toBe(3);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('reports whether the existing runtime is complete and newer than its branch inputs', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'afbin-runtime-'));
+    try {
+      expect((await hostRuntimeState(root)).available).toBe(false);
+      const outputs = [
+        'services/cli/dist/runtime/bootstrap.cjs',
+        'services/cli/dist/runtime/host.mjs',
+        'services/cli/dist/runtime/preview.mjs',
+        'services/cli/dist/runtime/preview/client.js',
+        'services/cli/dist/runtime/preview/connect.js',
+        'services/cli/dist/runtime/preview/chrome.css',
+        'services/cli/dist/runtime/preview/fonts.css',
+        'services/cli/dist/runtime/public/islands/manifest.json',
+        'services/cli/dist/runtime/lib/build-assets/offline/manifest.json',
+        'services/cli/dist/runtime/dist/web/solid-app.html',
+        'services/cli/dist/runtime/package.json',
+      ];
+      for (const output of outputs) {
+        await mkdir(path.dirname(path.join(root, output)), { recursive: true });
+        await writeFile(path.join(root, output), '{}');
+      }
+      const source = path.join(root, 'services/cli/src/preview-entry.ts');
+      await mkdir(path.dirname(source), { recursive: true });
+      await writeFile(source, 'export {};');
+      const builtAt = Date.now() / 1000;
+      await utimes(source, builtAt - 10, builtAt - 10);
+      for (const output of outputs) await utimes(path.join(root, output), builtAt, builtAt);
+      const ready = await hostRuntimeState(root);
+      expect(ready.available, ready.reason).toBe(true);
+
+      const fixture = path.join(root, 'services/app/lib/story/__tests__/unrelated.test.ts');
+      await mkdir(path.dirname(fixture), { recursive: true });
+      await writeFile(fixture, 'not a runtime input');
+      await utimes(fixture, builtAt + 10, builtAt + 10);
+      expect((await hostRuntimeState(root)).available).toBe(true);
+
+      const staleAt = builtAt + 20;
+      await utimes(source, staleAt, staleAt);
+      const stale = await hostRuntimeState(root);
+      expect(stale.available).toBe(false);
+      expect(stale.reason).toMatch(/stale/i);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('requires the packaged runtime only for local host execution, not server-rendered exports', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'afbin-runtime-command-'));
+    try {
+      await writeFile(path.join(root, 'report.jsx'), 'export default () => null;');
+      expect(await requiresHostRuntime(['preview', 'report.jsx'], root)).toBe(true);
+      expect(await requiresHostRuntime(['preview', '--help'], root)).toBe(false);
+      expect(await requiresHostRuntime(['serve', '--port', '7445'], root)).toBe(true);
+      expect(await requiresHostRuntime(['serve', '--help'], root)).toBe(false);
+      expect(await requiresHostRuntime(['export', 'report.jsx', '--format', 'html'], root)).toBe(true);
+      expect(await requiresHostRuntime(['export', 'report.jsx', '--output', 'report.png'], root)).toBe(true);
+      expect(await requiresHostRuntime(['export', 'abc123', '--format', 'html'], root)).toBe(true);
+      expect(await requiresHostRuntime(['export', 'abc123', '--format', 'png'], root)).toBe(true);
+      expect(await requiresHostRuntime(['export', 'abc123@2', '--format', 'png'], root)).toBe(true);
+      expect(await requiresHostRuntime(['export', 'abc123', '--format', 'html', '--refresh'], root)).toBe(false);
+      expect(await requiresHostRuntime(['export', 'https://artifactbin.dev/a/abc123', '--format', 'html'], root)).toBe(false);
+      expect(await requiresHostRuntime(['export', 'report.jsx', '--format', 'html', '--dry-run'], root)).toBe(false);
+      expect(await requiresHostRuntime(['export', 'report.jsx', '--format', 'json'], root)).toBe(false);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('refuses host execution when the current checkout has no current host runtime', async () => {
+    const root = await fakeCheckout();
+    const run = recorder();
+    try {
+      const code = await runAfbin({ argv: ['preview'], env: { APP__PORT: '7601' }, root, home: '/home/owner', ...run.options });
+      expect(code).toBe(1);
+      expect(run.spawned).toEqual([]);
+      expect(run.builds).toEqual([]);
+      expect(run.logged[0]).toMatch(/runtime/i);
+      expect(run.logged[0]).toMatch(/CI-built checkout/i);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

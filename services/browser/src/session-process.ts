@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import type { Actor, BrowserSessionResult } from '@artifactbin/contracts';
-import { BROWSER_SESSION_HEADER, FORWARDED_HOST, FORWARDED_PROTO, SESSION_LIMITS } from '@artifactbin/contracts';
+import { BROWSER_FONT_RESOURCE_PATH, BROWSER_SESSION_HEADER, FONT_FILES, FONT_STYLES, FORWARDED_HOST, FORWARDED_PROTO, SESSION_LIMITS } from '@artifactbin/contracts';
 import { SESSION_WORKER_SOURCE } from './session-worker';
 import { createPagesCookieJar, sessionBrowserArgs, sessionOrigins, type PagesCookieJar } from './session-origins';
 import type { SessionSandboxChoice } from './session-config';
@@ -34,13 +34,36 @@ export interface SessionProcessOptions {
 }
 const require = createRequire(import.meta.url);
 
+const FONT_ORIGINS = new Set([FONT_STYLES, FONT_FILES]);
+
+function scriptedFontOrigin(url: URL): boolean {
+  return url.protocol === 'https:' && !url.username && !url.password && !url.port && FONT_ORIGINS.has(url.origin);
+}
+
+async function sessionResponse(response: Response): Promise<{ status: number; headers: Record<string, string>; body: string }> {
+  // Streams cannot be materialized indefinitely through this bounded bridge.
+  if (response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw new Error('Live event streams are unavailable in scripted sessions'); }
+  const reader = response.body?.getReader();
+  const chunks: Uint8Array[] = []; let size = 0;
+  if (reader) for (;;) {
+    const next = await reader.read(); if (next.done) break;
+    size += next.value.length;
+    if (size > SESSION_LIMITS.outputBytes) { await reader.cancel(); throw new Error('Response limit exceeded'); }
+    chunks.push(next.value);
+  }
+  const out = new Headers(response.headers);
+  for (const name of ['set-cookie', 'content-length', 'content-encoding', 'transfer-encoding']) out.delete(name);
+  return { status: response.status, headers: Object.fromEntries(out), body: Buffer.concat(chunks).toString('base64') };
+}
+
 /**
  * ONE SCRIPTED FETCH. Admits the session's own origins (the app's, and with a pages host its apex and
- * its document origins, session-origins), drops every credential the script supplied, and forwards the
- * request as the actor the session browses as — which is ANONYMOUS for a guest session and its creator
- * otherwise. The pages cookie a document's frame earns from its ticket is the `jar`'s, held on this side:
- * attached to the pages site's requests, never returned to the worker. `run` applies the process's bounded
- * concurrency to the forwarded hop only; admission is refused before it.
+ * its document origins, session-origins) plus the two CSP-approved Google Fonts origins through the app's
+ * internal DNS-pinned relay. Every credential the script supplied is dropped; app requests carry only the
+ * actor the session browses as — ANONYMOUS for a guest and its creator otherwise — and the external font
+ * fetch never sees it. The pages cookie a document's frame earns from its ticket is the `jar`'s, held on this
+ * side: attached to the pages site's requests, never returned to the worker. `run` applies the process's
+ * bounded concurrency to each forwarded hop; admission is refused before it.
  */
 export async function forwardSessionFetch(
   message: Record<string, unknown>,
@@ -51,7 +74,19 @@ export async function forwardSessionFetch(
   if (JSON.stringify(message).length > 100000) throw new Error('Request size limit exceeded');
   const url = new URL(String(message.url));
   const origins = sessionOrigins(options.baseURL, options.pagesHost);
-  if (!origins.allows(url)) throw new Error('Origin is outside this session');
+  const fontRequest = scriptedFontOrigin(url);
+  if (!origins.allows(url) && !fontRequest) throw new Error('Origin is outside this session');
+  if (fontRequest) {
+    if (String(message.method).toUpperCase() !== 'GET') throw new Error('Google Fonts relay allows GET only');
+    const relay = new URL(BROWSER_FONT_RESOURCE_PATH, options.baseURL);
+    relay.searchParams.set('url', url.href);
+    const request = new Request(relay, { method: 'GET', headers: {
+      [BROWSER_SESSION_HEADER]: '1', [FORWARDED_HOST]: relay.host, [FORWARDED_PROTO]: relay.protocol.slice(0, -1),
+    }, signal: AbortSignal.timeout(10000) });
+    let fetched: { status: number; headers: Record<string, string>; body: string } | undefined;
+    await run(async () => { fetched = await sessionResponse(await options.request(request, actor)); });
+    return fetched!;
+  }
   // Drop cookies, authorization, actor and hop-by-hop headers from arbitrary script traffic.
   const supplied = new Headers(message.headers as Record<string, string>);
   // The host the page addressed, as a proxy names it (FORWARDED_HOST): the hop to the app may be a socket
@@ -71,19 +106,7 @@ export async function forwardSessionFetch(
       options.jar?.store(at, answer);
       return answer;
     }, origins.allows);
-    // Streams cannot be materialized indefinitely through this bounded bridge.
-    if (response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw new Error('Live event streams are unavailable in scripted sessions'); }
-    const reader = response.body?.getReader();
-    const chunks: Uint8Array[] = []; let size = 0;
-    if (reader) for (;;) {
-      const next = await reader.read(); if (next.done) break;
-      size += next.value.length;
-      if (size > SESSION_LIMITS.outputBytes) { await reader.cancel(); throw new Error('Response limit exceeded'); }
-      chunks.push(next.value);
-    }
-    const out = new Headers(response.headers);
-    for (const name of ['set-cookie', 'content-length', 'content-encoding', 'transfer-encoding']) out.delete(name);
-    fetched = { status: response.status, headers: Object.fromEntries(out), body: Buffer.concat(chunks).toString('base64') };
+    fetched = await sessionResponse(response);
   });
   return fetched!;
 }

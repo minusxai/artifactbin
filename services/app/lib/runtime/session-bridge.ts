@@ -20,7 +20,7 @@
  * (`server.ts`) and never leaves the process, so nothing outside it can mint an actor.
  */
 import { inProcess, overHttp } from '@artifactbin/utils';
-import type { Upstream } from '@artifactbin/contracts';
+import { BROWSER_FONT_RESOURCE_PATH, type Upstream } from '@artifactbin/contracts';
 import type { Hono } from 'hono';
 
 export interface SessionBridgeOptions {
@@ -35,6 +35,15 @@ export interface SessionBridgeOptions {
 }
 
 export function sessionBridge({ dev, port, secret, app }: SessionBridgeOptions): Upstream {
-  if (dev && secret) return overHttp(`http://127.0.0.1:${port}`, secret);
+  if (dev && secret) {
+    const viaListener = overHttp(`http://127.0.0.1:${port}`, secret);
+    const withinApp = inProcess(app);
+    // The development listener includes the public auth proxy, which deliberately refuses
+    // /api/internal/* before forwarding. This one request is already a trusted session hop
+    // inside this process, and needs no Vite middleware, so send it straight to the app.
+    return (request, actor) => new URL(request.url).pathname === BROWSER_FONT_RESOURCE_PATH
+      ? withinApp(request, actor)
+      : viaListener(request, actor);
+  }
   return inProcess(app);
 }

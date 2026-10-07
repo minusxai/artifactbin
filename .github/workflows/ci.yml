@@ -1102,6 +1102,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: matrix.phase != 'native'
         with:
           node-version: 22.22.3
       # Acceptance tooling has its own pinned lock: no app build or local execution engines.

@@ -36,9 +36,9 @@ export function isDocumentPath(pathname: string): boolean {
  * saw. One prefix rather than a list, so the boundary cannot drift from what
  * is behind it.
  *
- * `INTERNAL_MINT_PATH` is the whole of that surface today: the token mint the
- * CLI's device approval spends (proxy routes/oauth `mintFor`). Nothing else
- * mints a credential, and nothing public does.
+ * `INTERNAL_MINT_PATH` is the only credential mint in that surface: the token
+ * mint the CLI's device approval spends (proxy routes/oauth `mintFor`). Other
+ * internal calls have their own constants and no public request reaches them.
  */
 export const INTERNAL_API_PREFIX = '/api/internal';
 export const INTERNAL_MINT_PATH = `${INTERNAL_API_PREFIX}/tokens`;

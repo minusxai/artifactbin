@@ -131,9 +131,9 @@ export const MIN_PAGE_FORMAT = 3;
  * compiler change whose output an old page cannot take (a Solid or babel-preset-solid upgrade that changes
  * the hydration protocol included). A page below it keeps being served against the build it was compiled
  * with (its retained chunks) while it recompiles in the background; only a page with no such build waits
- * for its compile. 2: unresolved specifiers.
+ * for its compile. 2: unresolved specifiers. 3: authored markup viewer dependencies.
  */
-export const MIN_HANDOVER_CONTRACT = 2;
+export const MIN_HANDOVER_CONTRACT = 3;
 
 /**
  * Everything the compiler produces for one version. Stored beside the prepared
@@ -142,7 +142,7 @@ export const MIN_HANDOVER_CONTRACT = 2;
 export interface CompiledPage {
   build: string;
   /**
-   * The build this page's runtime is pinned to: a page compiled before MIN_HANDOVER_CONTRACT 2 (its module
+   * The build this page's runtime is pinned to: a page compiled before the current handover contract (its module
    * names chunk URLs of this build), and an offline file (lib/offline). A current page binds the live build.
    */
   sharedBuild?: CompilerBuild;
@@ -186,6 +186,8 @@ export interface CompiledPage {
   /** Framework-free behaviour chunks the page loads (`deck`), as specifiers into the shared manifest. */
   behaviors: string[];
   plan: DataPlan | null;
+  /** The authored markup reads `$_me`, even when no SQL query has viewer scope. */
+  readsViewerMarkup: boolean;
   links: LinkHints;
   /** Kit components rendered by the Solid kit, by where they render. */
   kit: { skeleton: string[]; islands: string[] };

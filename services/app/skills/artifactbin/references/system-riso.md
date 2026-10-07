@@ -74,7 +74,7 @@ Chart series order: blue, pink, yellow, key-2, positive. The three inks in print
 
 ## Components
 
-Kit components take Riso through the contract: paper and sheet grounds, blue primary, yellow secondary, pink ring, zero radius. The 2px key edge, the hard shadow and the turn are classes on authored elements: ri-card, ri-btn, ri-tag.
+Kit components take Riso through the contract: paper and sheet grounds, blue primary, yellow secondary, pink ring, zero radius. The 2px key edge, the hard shadow and the turn are classes on authored elements: ri-card, ri-btn, ri-tag. The compact fact list uses `<dl className="ri-dl"><dt>Count</dt><dd><Number data="$totals" col="bikes" /></dd></dl>`: runtime rules target `dt`/`dd`, not generic `div`/`span` wrappers. Keep labels short and avoid 40px `t-numeral` in this list.
 
 - **Buttons.** Kit buttons on the left; authored ri-btn on the right with the 2px key edge and the 6px slip. Blue is the primary. Pink is for the one playful action per page.
 - **Tags.** Tags are mono caps inside a 2px key edge, square. Status tags carry a pip or a word with the colour.

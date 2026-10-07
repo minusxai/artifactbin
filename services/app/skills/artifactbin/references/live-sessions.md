@@ -103,11 +103,13 @@ await page.goto('/a/abc123');
 await page.getByRole('heading').first().waitFor();
 await page.evaluate(() => document.fonts.ready);
 const widths = await page.evaluate(() => ({
-  viewport:innerWidth, page:document.documentElement.scrollWidth,
-  roots:[...document.querySelectorAll('[data-design]')].map(root => ({width:root.clientWidth, content:root.scrollWidth}))
+  viewport:innerWidth,
+  page:{client:document.documentElement.clientWidth,content:document.documentElement.scrollWidth,fits:document.documentElement.scrollWidth<=innerWidth},
+  roots:[...document.querySelectorAll('[data-design]')].map(root => ({client:root.clientWidth,content:root.scrollWidth,fits:root.scrollWidth<=root.clientWidth+1})),
+  surfaces:[...document.querySelectorAll('.mx-doc')].map(doc => ({client:doc.clientWidth,content:doc.scrollWidth,fits:doc.scrollWidth<=doc.clientWidth+1}))
 }));
 await output.image(await page.screenshot({fullPage:true}));
 return widths;
 ```
 
-The page must fit the viewport, and each root's content must fit its width. Inspect the screenshot too: clipped text can still pass a width check. Fix the source and repeat only the failed check. Close the session when done.
+The page must fit the viewport; every `[data-design]` root and `.mx-doc` surface must fit within its width (one-pixel tolerance). A root-only check misses clipping inside the reader. Inspect the full-page screenshot at the actual long label and adjacent numeral; clipped text can pass width checks. Fix the source and repeat only the failed check. Close the session when done.

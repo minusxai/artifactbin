@@ -18,7 +18,7 @@ export { DEFAULT_TOKEN_TTL_MS, LIVE_TOKEN_SQL, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_M
 export { userKindOf } from './user-kinds';
 export { USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensById, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, listAccountTokenRows, listArtifactsByUser, listDraftsByTokenIds, listOwnedArtifacts, listPublicArtifactsByUser, listSharedWithEmail, ownerUsername, revokeUserToken, setUserEmail, setUsername, usernameFromEmail } from './users';
 export type { SharedArtifactSummary, UserRow } from './users';
-export { actorForArtifacts, browserSessionKind, isOwner, requestOrSessionActor, roleFor, sessionActor, tokenActorForRequest } from './viewer';
+export { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, isOwner, requestOrSessionActor, roleFor, sessionActor, tokenActorForRequest } from './viewer';
 export type { RequestActor } from './viewer';
 export { PAGES_COOKIE, PAGES_SESSION_TTL_MS, PAGES_TICKET_TTL_MS, endPagesSession, exchangePagesTicket, issuePagesTicket, pagesSessionActor, pagesSessionOf } from './pages-sessions';
 export type { PagesCarried } from './pages-sessions';

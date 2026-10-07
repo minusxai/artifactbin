@@ -24,6 +24,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import { buildAfbinDev } from './afbin-build.mjs';
 import { resolvePort } from './dev-env.mjs';
 
 /** The repository root, from this file. */
@@ -39,16 +40,60 @@ export function devHome(port, home = homedir()) { return path.join(home, '.artif
 const distEntry = (root) => path.join(root, 'services', 'cli', 'dist', 'afbin.mjs');
 // The CLI bundles more than its own tree: app/lib (validation, the markup and map
 // contracts) and the shared packages. A change there is a change to the CLI.
-const sourceRoots = (root) => [['cli', 'src'], ['cli', 'scripts'], ['app', 'lib'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]
-  .map((dir) => path.join(root, 'services', ...dir));
+const sourceRoots = (root) => [
+  ...[['cli', 'src'], ['app', 'lib'], ['app', 'skills'], ['auth', 'src'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]
+    .map((dir) => path.join(root, 'services', ...dir)),
+  ...['services/cli/scripts/bundle-options.mjs', 'services/cli/package.json', 'services/cli/npm-shrinkwrap.json',
+    'services/cli/scripts/compile-teaching.ts', 'services/cli/scripts/generate-teaching.mjs',
+    'scripts/register-yaml.cjs', 'scripts/lib/generate-teaching.mjs',
+    'package.json', 'package-lock.json', 'scripts/lib/afbin-build.mjs']
+    .map((file) => path.join(root, file)),
+];
 
-async function newestMtime(dir) {
+const runtimePath = (root) => path.join(root, 'services', 'cli', 'dist', 'runtime');
+const runtimeOutputs = (root) => [
+  'bootstrap.cjs',
+  'host.mjs',
+  'preview.mjs',
+  'preview/client.js',
+  'preview/connect.js',
+  'preview/chrome.css',
+  'preview/fonts.css',
+  'public/islands/manifest.json',
+  'lib/build-assets/offline/manifest.json',
+  'dist/web/solid-app.html',
+  'package.json',
+].map((file) => path.join(runtimePath(root), file));
+// Inputs used by build-host: the CLI's host entries, app host/browser code and assets,
+// plus shared server packages. Tests and unrelated app tooling do not invalidate it.
+const runtimeSourceRoots = (root) => [
+  ...[['app', 'app'], ['app', 'server'], ['app', 'lib'], ['app', 'solid'], ['app', 'skills'], ['app', 'orchestrator'], ['app', 'public'],
+    ['cli', 'src'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src'], ['auth', 'src'], ['browser', 'src'], ['events', 'src']]
+    .map((dir) => path.join(root, 'services', ...dir)),
+  ...['services/cli/scripts/build.mjs', 'services/cli/scripts/build-host.mjs', 'services/cli/scripts/build-preview.mjs',
+    'services/cli/scripts/bundle-options.mjs', 'services/app/scripts/build-prep.mjs', 'services/app/scripts/build-server-reader.mjs',
+    'services/app/scripts/build-offline.mjs', 'services/app/scripts/build-libraries.mjs', 'services/app/scripts/copy-assets.mjs',
+    'services/app/package.json', 'services/cli/package.json', 'services/cli/npm-shrinkwrap.json', 'package.json', 'package-lock.json',
+    'services/contracts/package.json', 'services/utils/package.json', 'services/sql/package.json', 'services/auth/package.json',
+    'services/browser/package.json', 'services/events/package.json', 'scripts/build/build-server.mjs',
+    'scripts/build/build-islands.mjs', 'scripts/build/runtime-externals.mjs', 'scripts/build/copy-runner-assets.mjs',
+    'scripts/lib/generate-teaching.mjs', 'vite.config.mts']
+    .map((file) => path.join(root, file)),
+];
+const nonBuildInputs = (file) => file.split(path.sep).some(part => ['__tests__', '__fixtures__', 'test', 'tests', 'fixtures'].includes(part));
+
+async function newestMtime(dir, ignored = () => false) {
   let newest = 0;
+  let info;
+  try { info = await stat(dir); } catch { return newest; }
+  if (info.isFile()) return info.mtimeMs;
+  if (!info.isDirectory()) return newest;
   let entries;
   try { entries = await readdir(dir, { withFileTypes: true }); } catch { return newest; }
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) newest = Math.max(newest, await newestMtime(full));
+    if (ignored(full)) continue;
+    if (entry.isDirectory()) newest = Math.max(newest, await newestMtime(full, ignored));
     else {
       try { newest = Math.max(newest, (await stat(full)).mtimeMs); } catch { /* raced away */ }
     }
@@ -60,7 +105,66 @@ async function newestMtime(dir) {
 export async function cliBuildStale(root = ROOT) {
   let built;
   try { built = (await stat(distEntry(root))).mtimeMs; } catch { return true; }
-  for (const dir of sourceRoots(root)) if (await newestMtime(dir) > built) return true;
+  for (const dir of sourceRoots(root)) if (await newestMtime(dir, nonBuildInputs) > built) return true;
+  return false;
+}
+
+/** A runtime is usable only when complete and no host input changed after its final bootstrap write. */
+export async function hostRuntimeState(root = ROOT) {
+  for (const output of runtimeOutputs(root)) {
+    try { if (!(await stat(output)).isFile()) throw new Error('not a file'); }
+    catch { return { available: false, reason: `missing packaged runtime output ${path.relative(root, output)}` }; }
+  }
+  let built;
+  try { built = (await stat(path.join(runtimePath(root), 'bootstrap.cjs'))).mtimeMs; }
+  catch { return { available: false, reason: 'missing packaged runtime bootstrap' }; }
+  for (const dir of runtimeSourceRoots(root)) {
+    const newest = await newestMtime(dir, nonBuildInputs);
+    if (newest > built) return { available: false, reason: `stale packaged runtime; ${path.relative(root, dir)} changed after its build` };
+  }
+  return { available: true };
+}
+
+/** Only commands that actually execute the local packaged host need that host runtime. */
+export async function requiresHostRuntime(argv, cwd = process.cwd()) {
+  if (argv.includes('--help') || argv.includes('-h') || argv.includes('--version')) return false;
+  const command = argv[0];
+  if (command === 'preview' || command === 'serve') return true;
+  if (command !== 'export' || argv.includes('--dry-run')) return false;
+
+  const values = new Map();
+  const operands = [];
+  let positionalOnly = false;
+  for (let index = 1; index < argv.length; index++) {
+    const arg = argv[index];
+    if (positionalOnly) { operands.push(arg); continue; }
+    if (arg === '--') { positionalOnly = true; continue; }
+    if (!arg.startsWith('-')) { operands.push(arg); continue; }
+    const match = /^--(format|output|type|name|page)(?:=(.*))?$/.exec(arg);
+    if (!match) continue;
+    const name = match[1];
+    const value = match[2] ?? argv[++index];
+    if (value !== undefined) values.set(name, value);
+  }
+  if (values.has('name') || argv.includes('--refresh')) return false;
+  const output = values.get('output');
+  const extension = typeof output === 'string' && output !== '-'
+    ? path.extname(output).toLowerCase().slice(1) : '';
+  const inferred = ({ jpeg: 'jpg', yml: 'yaml' })[extension] ?? extension;
+  const format = values.get('format') ?? inferred;
+  if (!['html', 'png', 'jpg'].includes(format)) return false;
+  if (values.has('format') && inferred && inferred !== format && operands.length === 1) return false;
+  for (const operand of operands) {
+    // A fully qualified artifact URL always goes through serverRenderer. A bare
+    // ID can also resolve through local workspace identity, so require the host
+    // runtime unless --refresh above selected the server route explicitly.
+    if (/^https?:\/\//i.test(operand)) continue;
+    // `file@N` is accepted as a local path when the file itself exists.
+    const candidate = operand.match(/^(.+)@\d+$/)?.[1] ?? operand;
+    try { if ((await stat(path.resolve(cwd, candidate))).isFile()) return true; }
+    catch { /* An unresolved bare reference may be a local workspace ID. */ }
+    if (/^[a-z0-9_-]{6,}$/i.test(candidate)) return true;
+  }
   return false;
 }
 
@@ -83,11 +187,8 @@ async function serverHealthy(port, fetchImpl) {
   } catch { return false; }
 }
 
-/** `npm run build -w services/cli`, inheriting the terminal so its output is the operator's. */
-function buildCli(root) {
-  const built = spawnSync('npm', ['run', 'build', '-w', 'services/cli'], { cwd: root, stdio: 'inherit' });
-  if (built.status !== 0) throw new Error(`Building services/cli failed (${built.status ?? built.signal}).`);
-}
+/** The FAST dev bundle uses the canonical CLI compiler options and skips package assembly. */
+function buildCli(root) { return buildAfbinDev(root); }
 
 /** Forward argv, stdio and the exit code to the branch's CLI. */
 function execCli(file, args, options) {
@@ -103,6 +204,7 @@ export async function runAfbin({
   env = process.env,
   root = ROOT,
   home = homedir(),
+  cwd = process.cwd(),
   fetchImpl = fetch,
   spawnImpl = execCli,
   build = buildCli,
@@ -110,6 +212,13 @@ export async function runAfbin({
 } = {}) {
   const port = afbinPort(env);
   if (!await serverHealthy(port, fetchImpl)) { log(healthRefusal(port)); return 1; }
+  if (await requiresHostRuntime(argv, cwd)) {
+    const runtime = await hostRuntimeState(root);
+    if (!runtime.available) {
+      log(`[afbin] This command needs the current checkout's packaged host runtime, but ${runtime.reason}. Use a CI-built checkout or artifact containing this runtime; for published renders, pass a full artifact URL or use --refresh.`);
+      return 1;
+    }
+  }
   if (await cliBuildStale(root)) await build(root);
   const childEnv = afbinChildEnv(env, port, home);
   const flags = serverFlag(argv, afbinServer(env, port));

@@ -75,10 +75,13 @@ Work up the tiers, and stop at the cheapest one that can still be wrong:
 
 1. Unit tests — `npm test -- --files <paths>`.
 2. The local stack — `npm run dev` on this checkout's `APP__PORT`; verify the change in the app.
-3. The branch's CLI — `npm run afbin -- <args>` builds `services/cli` when it is stale and runs it
-   against that same server, with its state in `~/.artifactbin-dev/<port>` and
-   `ARTIFACTBIN_SKILLS=off`, so the released `afbin`, `~/.artifactbin` and `~/.claude/skills` are
-   untouched. A dev server that is not answering `/api/health` is refused in one line.
+3. The branch's CLI — `npm run afbin -- <args>` fast-bundles the client entry with the CLI's shared
+   compiler options when it is stale, then runs it against that same server, with its state in
+   `~/.artifactbin-dev/<port>` and `ARTIFACTBIN_SKILLS=off`, so the released `afbin`, `~/.artifactbin`
+   and `~/.claude/skills` are untouched. Preview, serve and local rendered exports also need a complete
+   host runtime built from the current sources; when it is absent or stale, use a CI-built checkout or
+   artifact. Published rendered exports can use a full artifact URL or `--refresh`. A dev server that
+   is not answering `/api/health` is refused in one line.
 4. Browser gates — `node scripts/gate-container.mjs <gate ...>`, in a Linux container, up to N at once.
 5. The agent itself — `npm run eval -- --tasks <name>`, against the same server.
 6. Docker and Postgres — pre-release only, not a routine loop.

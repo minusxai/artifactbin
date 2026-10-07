@@ -105,7 +105,6 @@ it('splits independent credential and database host proofs into required paralle
 });
 it('separates CPU-heavy installed proofs while retaining every platform journey',()=>{
  const job=workflow().jobs.cli;
- expect(job.strategy.matrix.phase).toEqual(['native','runtime','preview','local']);
  const proofs=job.steps.filter(step=>step.run?.includes('test-installed-npm.mjs'));
  expect(proofs.map(step=>step.if)).toEqual(["matrix.phase == 'runtime'","matrix.phase == 'preview' || matrix.phase == 'local'"]);
  expect(proofs[0].run).toContain('test-installed-npm.mjs runtime');

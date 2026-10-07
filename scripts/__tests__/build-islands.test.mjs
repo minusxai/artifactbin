@@ -138,6 +138,7 @@ describe('buildIslands', () => {
     const staticUrls = closure([manifest['@mx/boot'], ...KIT_FAMILIES.map(family => manifest[`@mx/kit/${family}`])]);
     const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/comment-view-state.ts'))).toBe(false);
+    expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/routes.ts'))).toBe(false);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
     expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
     const menuFiles = Object.entries(outputInputs).filter(([, inputs]) => inputs.some(input => input.endsWith('islands/kit/select-popup.tsx'))).map(([url]) => url);

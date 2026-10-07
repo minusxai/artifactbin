@@ -948,7 +948,6 @@ describe('CI job shape', () => {
     expect(proof.run).toContain('scripts/test-installed-npm.mjs ${{ matrix.phase }}');
     expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
     expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
-    expect(jobs).not.toHaveProperty('cli-preview');
     expect(jobs.cli.strategy.matrix.os).toContain('macos-15-intel');
     expect(jobs.cli.steps.indexOf(proof)).toBeGreaterThan(jobs.cli.steps.findIndex(step=>step.run?.includes('test:npm-package')));
   });

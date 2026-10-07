@@ -5,6 +5,7 @@ import {createSessionProcess,forwardSessionFetch,sessionPlainPlan,sessionSandbox
 import {sessionCapacity,sessionEnvNamesRead,sessionProcessPaths,sessionSandboxChoice} from '../src/session-config';
 import {createBrowserSessions} from '../src/sessions';
 import {createPagesCookieJar,sessionBrowserArgs,sessionOrigins} from '../src/session-origins';
+import {createSessionRequestQueue} from '../src/session-request-queue';
 import {FORWARDED_HOST} from '@artifactbin/contracts';
 it('launches SEA through its trusted selector with only the executable and browser tree mounted',()=>{
  const plan=sessionSandboxPlan('/tmp/private-session','/cache/chromium/chrome-linux64','/home/operator/bin/afbin',['--internal-browser-worker']);
@@ -46,6 +47,56 @@ it('refuses a scripted fetch outside the session origin',async()=>{
  const options=forwarding();
  await expect(forwardSessionFetch({type:'fetch',id:'1',url:'https://elsewhere.test/a/abc123',method:'GET',headers:{}},ANONYMOUS,options)).rejects.toThrow(/origin/i);
  expect(options.seen).toHaveLength(0);
+});
+
+it('relays only credential-blind Google Fonts GETs back through the app request',async()=>{
+ const options=forwarding();
+ const supplied={cookie:'secret-cookie',authorization:'Bearer secret',[ACTOR_HEADER]:'forged','x-mx-browser-session':'forged',accept:'text/css,*/*;q=0.1',range:'bytes=0-100'};
+ await forwardSessionFetch({type:'fetch',id:'1',url:'https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&display=swap',method:'GET',headers:supplied},ANONYMOUS,options);
+ expect(options.seen).toHaveLength(1);
+ const {request,actor}=options.seen[0]!;
+ const relayed=new URL(request.url);
+ expect(relayed.origin).toBe('http://app');
+ expect(relayed.pathname).toBe('/api/internal/browser-font-resource');
+ expect(relayed.searchParams.get('url')).toBe('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&display=swap');
+ expect(actor).toEqual(ANONYMOUS);
+ expect(request.method).toBe('GET');
+ expect(request.headers.get(BROWSER_SESSION_HEADER)).toBe('1');
+ for(const name of ['cookie','authorization',ACTOR_HEADER,'accept','range','user-agent'])expect(request.headers.get(name),name).toBeNull();
+});
+
+it('refuses font-origin lookalikes, credentials, ports, unrelated origins and writes before forwarding',async()=>{
+ const options=forwarding();
+ const urls=['https://fonts.googleapis.com.evil.test/css2?family=Fraunces',
+  'https://user:secret@fonts.googleapis.com/css2?family=Fraunces',
+  'https://fonts.googleapis.com:444/css2?family=Fraunces',
+  'https://fonts.gstatic.com.evil.test/s/font.woff2',
+  'https://elsewhere.test/css2?family=Fraunces'];
+ for(const url of urls)await expect(forwardSessionFetch({type:'fetch',id:'1',url,method:'GET',headers:{}},ANONYMOUS,options),url).rejects.toThrow(/origin/i);
+ await expect(forwardSessionFetch({type:'fetch',id:'2',url:'https://fonts.googleapis.com/css2?family=Fraunces',method:'POST',headers:{}},ANONYMOUS,options)).rejects.toThrow(/GET only/i);
+ expect(options.seen).toHaveLength(0);
+});
+
+it('bounds a relayed font response before serializing it to the worker',async()=>{
+ const options=forwarding();
+ options.request=async(request,actor)=>{options.seen.push({request,actor});return new Response(Buffer.alloc(8*1024*1024+1),{headers:{'content-type':'font/woff2'}});};
+ await expect(forwardSessionFetch({type:'fetch',id:'1',url:'https://fonts.gstatic.com/s/fraunces/v1/font.woff2',method:'GET',headers:{}},ANONYMOUS,options)).rejects.toThrow(/response limit/i);
+});
+
+it('runs font relay work through the session request queue and refuses overflow',async()=>{
+ const options=forwarding();
+ const queue=createSessionRequestQueue(1,1);
+ let release!:()=>void;
+ const held=new Promise<void>(resolve=>{release=resolve;});
+ options.request=async(request,actor)=>{options.seen.push({request,actor});await held;return new Response('font',{headers:{'content-type':'font/woff2'}});};
+ const fetchFont=(id:string)=>forwardSessionFetch({type:'fetch',id,url:`https://fonts.gstatic.com/s/fraunces/v1/${id}.woff2`,method:'GET',headers:{}},ANONYMOUS,options,queue.run);
+ const first=fetchFont('first');
+ const second=fetchFont('second');
+ await expect(fetchFont('overflow')).rejects.toThrow(/queue limit/i);
+ expect(options.seen).toHaveLength(1);
+ release();
+ await expect(Promise.all([first,second])).resolves.toHaveLength(2);
+ queue.close();
 });
 
 it('carries the anonymous actor from a guest session into the forwarded page request',async()=>{
