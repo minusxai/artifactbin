@@ -59,6 +59,23 @@ test('afbin auth with no saved token runs the browser approval flow and saves th
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
+test('afbin auth --force runs browser approval over a valid saved token and replaces it',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-auth-force-'));const output:string[]=[];const calls:string[]=[];let opened=0;
+ try{
+  await saveConnection({server:origin,token:'saved_access'},home);
+  const code=await runCli(['auth','--force','--server',origin,'--json'],{
+   home,cwd:home,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},
+   auth:{open:async()=>{opened++;}},
+   fetch:async input=>{const path=new URL(String(input)).pathname;calls.push(path);return path==='/api/server'?Response.json({origin,aliases:[]}):path==='/oauth/device'?pairing():credentials();},
+  });
+  assert.equal(code,0,output.join(''));
+  assert.deepEqual(JSON.parse(output.join('')),{authenticated:true,server:origin});
+  assert.deepEqual(calls,['/api/server','/oauth/device','/oauth/device/token']);
+  assert.equal(opened,1);
+  assert.equal((await loadConnection(origin,home,{}))?.token,'new_access');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
 test('afbin auth surfaces the structured denial error and relays the verification URL on stderr',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-auth-denied-'));const output:string[]=[];const diagnostics:string[]=[];
  try{

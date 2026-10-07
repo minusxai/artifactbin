@@ -41,6 +41,8 @@ export interface AuthOptions {
    * redirection to a stranger. Credentials still travel to the SELECTED origin alone.
    */
   aliases?: readonly string[];
+  /** Ignore any saved token and run a new browser approval (afbin auth --force). */
+  fresh?: boolean;
   /** A rejected token must not be reused; another process may already have replaced it. */
   rejectedToken?: string;
   fetch?: typeof fetch;
@@ -61,7 +63,7 @@ export async function browserAuthenticate(origin:string,options:AuthOptions):Pro
  return withLock(home,`auth:${server}`,async()=>{
   const saved=await loadConnection(server,home,{ARTIFACTBIN_HOME:configDir(home,options.env)});
   if(options.artifactId)return deviceAuthenticate(server,{...options,connection:saved??undefined});
- if(saved&&saved.token!==options.rejectedToken&&(!saved.expiresAt||saved.expiresAt>(options.now??Date.now)()))return saved;
+ if(saved&&!options.fresh&&saved.token!==options.rejectedToken&&(!saved.expiresAt||saved.expiresAt>(options.now??Date.now)()))return saved;
   // The same browser approval supports guests in terminals and unattended agents.
   return deviceAuthenticate(server,options);
  },{waitMs:300000});
