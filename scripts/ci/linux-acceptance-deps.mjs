@@ -8,11 +8,18 @@ import {randomUUID,createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 export function runCommand(command,args){return new Promise((done,reject)=>{const child=spawn(command,args,{stdio:'inherit'});child.on('error',reject);child.on('exit',(code,signal)=>code===0?done():reject(new Error('Dependency command failed: '+command+' ('+(code??signal)+')')));});}
 async function debArchives(directory){const files=[];for(const name of await readdir(directory)){if(!name.endsWith('.deb'))continue;const path=join(directory,name),info=await lstat(path);if(!info.isFile()||info.isSymbolicLink())throw new Error('APT archives must be regular files');files.push(path);}return files;}
-export async function installLinuxAcceptanceDependencies({cacheDirectory,playwrightCli},{run=runCommand,configDirectory='/etc/apt/apt.conf.d',uid=process.getuid?.(),gid=process.getgid?.(),readMetadata=readAptMetadata}={}){
+async function preferUbuntuHttpsMirror(mirrorFile,run){
+ let contents;try{contents=await readFile(mirrorFile,'utf8');}catch(error){if(error.code==='ENOENT')return;throw error;}
+ if(!contents.includes('http://azure.archive.ubuntu.com/ubuntu'))return;
+ await run('sudo',['--','sed','-i.bak','s|http://azure\\.archive\\.ubuntu\\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g',mirrorFile]);
+ await run('sudo',['--','rm','-f','--',mirrorFile+'.bak']);
+}
+export async function installLinuxAcceptanceDependencies({cacheDirectory,playwrightCli},{run=runCommand,configDirectory='/etc/apt/apt.conf.d',aptMirrorFile='/etc/apt/apt-mirrors.txt',uid=process.getuid?.(),gid=process.getgid?.(),readMetadata=readAptMetadata}={}){
  if(!Number.isSafeInteger(uid)||!Number.isSafeInteger(gid)||uid<0||gid<0)throw new Error('A Linux user identity is required');
  cacheDirectory=resolve(cacheDirectory);if(/[\x00-\x1f\x7f]/.test(cacheDirectory))throw new Error('Invalid APT cache path');
  await mkdir(cacheDirectory,{recursive:true,mode:0o755});const info=await lstat(cacheDirectory);if(!info.isDirectory()||info.isSymbolicLink())throw new Error('APT cache must be a real directory');await debArchives(cacheDirectory);
  // Refresh signed repository metadata before authorizing any restored completed archives.
+ await preferUbuntuHttpsMirror(aptMirrorFile,run);
  await run('sudo',['--','apt-get','update','-o','APT::Update::Error-Mode=any']);
  const checked=await validateRestoredAptArchives(cacheDirectory,readMetadata);
  console.log('APT archives: '+checked.verified+' SHA256-verified, '+checked.discarded+' discarded before provisioning');
