@@ -61,6 +61,21 @@ it('shows startup status until a native terminal exists and rejects input after 
  }finally{registry.clear();}
 });
 
+it('explains unavailable restored history without stopping the live hosted shell',async()=>{
+ const db=await harness.db(),{runner}=fixture();setServices({runner});
+ runner.terminal=vi.fn(async()=>{throw Error('modal_terminal_cursor_unavailable');});
+ const response=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'history-unavailable',name:'history-box',command:['bash']}}),'create',{enabled:true,runner,db});
+ const {session}=await response.json(),registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
+ try{
+  const view=await agents.view('alice',session.id,-1);
+  expect(view.snapshot).toContain('Earlier terminal output cannot be safely restored');
+  expect(view.snapshot).toContain('Choose Stop, then Start');expect(view.snapshot).toContain('home files persist');
+  expect(view.session).toMatchObject({online:false,activity:'unknown'});
+  await agents.input('alice',session.id,'still-live-input\r');expect(runner.write).toHaveBeenCalledWith({userId:'alice',runId:'native-one',text:'still-live-input\r'});
+  expect(runner.cancel).not.toHaveBeenCalled();
+ }finally{registry.clear();}
+});
+
 it('mounts the app capability endpoint without colliding with run-ID reads',async()=>{
  const app=createAppServer({indexHtml:async()=>'<html><body></body></html>'});
  const response=await app.fetch(request('/api/run-capabilities',{actor:{userId:'alice',credential:'session'}}));

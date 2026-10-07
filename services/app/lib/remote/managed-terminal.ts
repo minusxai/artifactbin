@@ -7,11 +7,15 @@ export async function managedTerminalView(owner:string,info:RemoteSessionInfo):P
  if(!info.runId||!runner.terminal)throw new RemoteError('Managed terminal unavailable',503);
  const lookup={userId:owner,runId:info.runId};
  const run=await runner.getRun(lookup);
- const progress=(message:string):RemoteView=>({session:{...info,online:false,activity:isTerminalManagedRun(run.status)?'stopped':info.activity==='stopping'?'stopping':'starting'},generation:info.runId,seq:0,frames:[],snapshot:message+'\r\n'});
+ const progress=(message:string,activity?:RemoteSessionInfo['activity']):RemoteView=>({session:{...info,online:false,activity:isTerminalManagedRun(run.status)?'stopped':info.activity==='stopping'?'stopping':activity??'starting'},generation:info.runId,seq:0,frames:[],snapshot:message+'\r\n'});
  if(run.status==='queued')return progress(info.activity==='stopping'?'Stopping your hosted box…':'Starting your hosted box…');
  let terminal;
  try{terminal=await runner.terminal(lookup);}
- catch(error){if(error instanceof Error&&error.message==='terminal_unavailable')return progress(isTerminalManagedRun(run.status)?`Run ${run.status}. Your home files are retained.`:info.activity==='stopping'?'Stopping your hosted box…':'Starting your hosted box…');throw error;}
+ catch(error){
+  if(error instanceof Error&&error.message==='modal_terminal_cursor_unavailable')return progress(isTerminalManagedRun(run.status)?`Run ${run.status}. Your home files are retained.`:info.activity==='stopping'?'Stopping your hosted box…':'Earlier terminal output cannot be safely restored. Your hosted shell is still running. Choose Stop, then Start to open a fresh terminal; your home files persist.','unknown');
+  if(error instanceof Error&&error.message==='terminal_unavailable')return progress(isTerminalManagedRun(run.status)?`Run ${run.status}. Your home files are retained.`:info.activity==='stopping'?'Stopping your hosted box…':'Starting your hosted box…');
+  throw error;
+ }
  const finished=isTerminalManagedRun(run.status);
  const ssh=terminal.ssh;
  const host=ssh?.host??ssh?.hostname;
