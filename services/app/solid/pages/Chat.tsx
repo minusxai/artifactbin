@@ -301,7 +301,7 @@ export function ChatPage(): JSX.Element {
     if (first) setParams({session:first.id}, {replace:true});
   });
   const groups = [
-    {kind:'local' as const, label:'Connected local agents', empty:'No connected local agents', get sessions() { return visibleSessions().filter(session => !session.included && !session.runId); }},
+    {kind:'local' as const, label:'Local agents', empty:'No connected local agents', get sessions() { return visibleSessions().filter(session => !session.included && !session.runId); }},
     {kind:'cloud' as const, label:'Cloud agents', empty:'No cloud agents yet', get sessions() { return visibleSessions().filter(session => session.included || session.runId); }},
   ];
   const error = () => page.error() ? connectionMessage(page.error()) : '';
