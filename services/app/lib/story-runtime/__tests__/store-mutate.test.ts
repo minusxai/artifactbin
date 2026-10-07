@@ -312,8 +312,8 @@ describe('write checks', () => {
     expect(store.mutationUnavailable('vote')).toBe('Read-only');
   });
 
-  it('accessSettled waits for the first check, and releases a caller when that check fails', async () => {
-    const { store, answers } = checks({});
+  it.each([{}, { mutationAccess: {} }])('accessSettled waits for the first check, and releases a caller when that check fails (seed %j)', async seed => {
+    const { store, answers } = checks(seed);
     let settled = false;
     void store.accessSettled().then(() => { settled = true; });
     await settle();
@@ -322,9 +322,9 @@ describe('write checks', () => {
     store.start();
     await settle();
     expect(settled).toBe(true);
-    expect(store.mutationUnavailable('vote')).toBe('Could not check edit access. Reload this page to retry.');
+    expect(store.mutationUnavailable('vote')).toBe('Access check failed. Reload.');
     expect(store.canMutate('vote')).toBe(false);
-    await expect(store.mutate('vote')).rejects.toThrow('Could not check edit access');
+    await expect(store.mutate('vote')).rejects.toThrow('Access check failed');
     // Explicit saved-request retries keep their server-authorized wire contract.
     await expect(store.mutate({ mutation: 'vote', args: { choice: 'ramen' } })).resolves.toBeUndefined();
   });
@@ -334,7 +334,7 @@ describe('write checks', () => {
     answers.push(() => Promise.resolve({ tables: {}, errors: {} }));
     store.start();
     await settle();
-    expect(store.mutationUnavailable('vote')).toBe('Could not check edit access. Reload this page to retry.');
+    expect(store.mutationUnavailable('vote')).toBe('Access check failed. Reload.');
     expect(store.canMutate('vote')).toBe(false);
     answers.push(() => Promise.resolve({ tables: {}, errors: {}, mutationAccess: { vote: 'Read-only' } }));
     store.setValue('choice', 'tacos');

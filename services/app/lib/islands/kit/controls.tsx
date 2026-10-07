@@ -4,7 +4,7 @@ import { format as d3format } from 'd3-format';
 import { Portal } from 'solid-js/web';
 import { overlayDestination } from './trusted-overlay';
 import { popupDismiss } from './popup-dismiss';
-import { refName, type Scalar, type TableResult } from '@/lib/story/data/dataflow';
+import { controlOptions as normalize, refName, type Scalar } from '@/lib/story/data/dataflow';
 import { coerceScalarInput } from '@/lib/story/data/scalar-input';
 import { useIsland } from '../context';
 
@@ -41,11 +41,6 @@ function TextField(p: Props & { multiline?: boolean }) {
 export const Input = (p: Props) => <TextField {...p} />;
 export const Textarea = (p: Props) => <TextField {...p} multiline />;
 
-type Option = { value: string; label: string };
-function normalize(raw: unknown, table?: TableResult): Option[] {
-  if (typeof raw === 'string' && refName(raw)) { const [v,l] = table?.columns ?? []; return table && v ? table.rows.map(r => ({ value: String(r[v.name] ?? ''), label: String(r[l?.name ?? v.name] ?? r[v.name] ?? '') })) : []; }
-  return Array.isArray(raw) ? raw.map(x => typeof x === 'object' && x !== null ? { value: String(x.value ?? ''), label: String(x.label ?? x.value ?? '') } : { value: String(x), label: String(x) }) : [];
-}
 function options(p: Props) { const n = nameOf(p,'options'); return normalize(p.options, n ? useIsland().table(n) : undefined); }
 const nullable = (p: Props) => { const name = nameOf(p); return !!name && useIsland().nullable(name); };
 const choiceValue = (p: Props) => nameOf(p) ? valueOf(p) == null ? null : String(valueOf(p)) : lit(p.value);

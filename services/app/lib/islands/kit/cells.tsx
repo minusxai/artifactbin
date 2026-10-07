@@ -20,7 +20,7 @@
  */
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
-import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar, type TableResult } from '@/lib/story/data/dataflow';
+import { controlOptions as optionsOf, type ControlOption as Option, refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/story/data/dataflow';
 import { substituteRow } from '@/lib/story/data/row-scope';
 import { VIEWER_ID } from '@/lib/story/data/builtins';
 import { refusalText } from '@/lib/story/reader/sign-in-required';
@@ -89,15 +89,6 @@ const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Objec
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 const join = (...v: (string | false | null | undefined)[]) => v.filter(Boolean).join(' ');
 
-type Option = { value: string; label: string };
-/** components/kit/controls normalizeControlOptions. */
-function optionsOf(raw: unknown, table?: TableResult): Option[] {
-  if (typeof raw === 'string' && refName(raw)) {
-    const [v, l] = table?.columns ?? [];
-    return table && v ? table.rows.map((r) => { const value = String(r[v.name] ?? ''); return { value, label: l ? String(r[l.name] ?? value) : value }; }) : [];
-  }
-  return Array.isArray(raw) ? raw.map((o) => (typeof o === 'object' && o !== null ? { value: String((o as Option).value ?? ''), label: String((o as Option).label ?? (o as Option).value ?? '') } : { value: String(o), label: String(o) })) : [];
-}
 const parseMulti = (raw: string | null | undefined): string[] | null => {
   if (!raw) return [];
   try { const parsed: unknown = JSON.parse(raw); if (Array.isArray(parsed) && parsed.every((i): i is string => typeof i === 'string')) return [...new Set(parsed)]; } catch { /* a bad persisted value is never an empty write */ }

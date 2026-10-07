@@ -25,7 +25,7 @@ describe('invocation-local cell mutations',()=>{
     store.subscribe(()=>seen.push(store.mutationUnavailable('edit')!));
     store.start();
     for(let i=0;i<5;i++) await Promise.resolve();
-    expect(seen).toContain('Could not check edit access. Reload this page to retry.');
+    expect(seen).toContain('Access check failed. Reload.');
     run.mockResolvedValue({tables:{},errors:{},mutationAccess:{edit:null}});
     store.invalidateDatasets(['abc123']);
     expect(seen.at(-1)).toBe('Checking edit access…');

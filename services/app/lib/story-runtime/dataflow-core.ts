@@ -168,13 +168,21 @@ export function busyOf(state: CoreState): ReadonlySet<string> {
   return set;
 }
 
+const hasFailed = (state: CoreState, node: NodeKey): boolean => state.failed[node] === versionOf(state, node);
+
 /** Every write check has an answer at its version, or failed at it and waits for the next flush. */
 export const accessSettled = (state: CoreState): boolean =>
-  indexOf(state.graph).computed.every((k) => !k.startsWith('access:') || isCurrent(state, k) || state.failed[k] === versionOf(state, k));
+  indexOf(state.graph).computed.every((k) => !k.startsWith('access:') || isCurrent(state, k) || hasFailed(state, k));
 
-/** A write check failed at its current version; a new request clears this state. */
-export const accessCheckFailed = (state: CoreState, name: string): boolean =>
-  state.failed[accessKey(name)] === versionOf(state, accessKey(name));
+export const ACCESS_PENDING = 'Checking edit access…';
+export const ACCESS_FAILED = 'Access check failed. Reload.';
+
+/** The permission answer, or a pending/failed check; never infer an access grant. */
+export function accessUnavailable(state: CoreState, name: string): string | null {
+  const access = state.data.mutationAccess ?? {};
+  return Object.hasOwn(access, name) ? access[name]!
+    : hasFailed(state, accessKey(name)) ? ACCESS_FAILED : ACCESS_PENDING;
+}
 
 /** The local table rows every run and write carries, when the reader has written any. */
 export function localRows(state: CoreState): Record<string, Row[]> | undefined {
@@ -216,13 +224,8 @@ export function partitionRun(run: RunEffect, local: ReadonlySet<string>): { loca
 export function createCore(graph: RuntimeGraph, seed: { state?: DataflowState; values?: Record<string, Scalar>; results?: ServedResults }): CoreState {
   const { state, values, results } = seed;
   const answered: Record<NodeKey, number> = {};
-  const served = (k: NodeKey): boolean => {
-    if (!results) return false;
-    const name = nameOf(k);
-    return k.startsWith('query:') ? Object.hasOwn(results.tables, name) || Object.hasOwn(results.errors, name) : !!results.mutationAccess && Object.hasOwn(results.mutationAccess, name);
-  };
   for (const k of indexOf(graph).computed) {
-    if ((k.startsWith('query:') ? state : state?.mutationAccess) || served(k)) answered[k] = 0;
+    if ((state && (k.startsWith('query:') || namesNode(state, k))) || (results && namesNode(results, k))) answered[k] = 0;
   }
   return {
     graph, clock: 0, versions: {}, answered, requested: {}, failed: {},
@@ -245,9 +248,7 @@ export function step(prev: CoreState, event: CoreEvent): { state: CoreState; eff
   const next = reduce(prev, event, effects);
   if (next === prev) return { state: prev, effects };
   const pendingBefore = pendingOf(prev), pendingAfter = pendingOf(next);
-  const accessChanged = next.graph.mutations.some(m =>
-    accessCheckFailed(prev, m.name) !== accessCheckFailed(next, m.name));
-  const readable = accessChanged || next.data !== prev.data || next.busy !== prev.busy
+  const readable = next.failed !== prev.failed || next.data !== prev.data || next.busy !== prev.busy
     || pendingBefore.size !== pendingAfter.size || [...pendingAfter].some((n) => !pendingBefore.has(n));
   if (!readable) return { state: next, effects };
   // A new snapshot identity whenever anything a reader sees changed, pending
@@ -327,8 +328,9 @@ function flush(state: CoreState, effects: CoreEffect[]): CoreState {
   }
   if (!Object.keys(at).length) return state;
   // Asked again: a failed write check is in flight now, not settled.
-  const failedAt = { ...state.failed };
-  for (const k of Object.keys(at)) delete failedAt[k];
+  const failedAt = Object.keys(state.failed).length
+    ? Object.fromEntries(Object.entries(state.failed).filter(([k]) => !Object.hasOwn(at, k)))
+    : state.failed;
   const tables = localRows(state);
   effects.push({
     type: 'run', at,
@@ -342,6 +344,14 @@ function flush(state: CoreState, effects: CoreEffect[]): CoreState {
 /** The name inside a computed node's key. */
 const nameOf = (k: NodeKey): string => k.slice(k.indexOf(':') + 1);
 
+/** Whether this response actually answers a computed node, for seeding and live reads. */
+function namesNode(answer: RunAnswer, key: NodeKey): boolean {
+  const name = nameOf(key);
+  return key.startsWith('query:')
+    ? Object.hasOwn(answer.tables, name) || Object.hasOwn(answer.errors, name)
+    : Object.hasOwn(answer.mutationAccess ?? {}, name);
+}
+
 function answered(state: CoreState, at: Versions, answer: RunAnswer): CoreState {
   const requested = { ...state.requested };
   const current: NodeKey[] = [];
@@ -353,24 +363,23 @@ function answered(state: CoreState, at: Versions, answer: RunAnswer): CoreState 
   const answeredAt = { ...state.answered }, failedAt = { ...state.failed };
   let { tables, errors, mutationAccess } = state.data;
   for (const k of current) {
+    const name = nameOf(k), query = k.startsWith('query:');
+    // Omitted permissions behave like a failed check: preserve any prior
+    // answer and retry on the next flush; a first check stays closed.
+    if (!query && !Object.hasOwn(answer.mutationAccess ?? {}, name)) {
+      failedAt[k] = at[k]!;
+      continue;
+    }
     answeredAt[k] = at[k]!;
     delete failedAt[k];
-    const name = nameOf(k);
-    if (k.startsWith('query:')) {
+    if (query) {
       if (tables === state.data.tables) { tables = { ...tables }; errors = { ...errors }; }
       delete tables[name]; delete errors[name];
       if (Object.hasOwn(answer.tables, name)) tables[name] = answer.tables[name]!;
       if (Object.hasOwn(answer.errors, name)) errors[name] = answer.errors[name]!;
     } else {
       if (mutationAccess === state.data.mutationAccess) mutationAccess = { ...mutationAccess };
-      if (answer.mutationAccess && Object.hasOwn(answer.mutationAccess, name)) mutationAccess![name] = answer.mutationAccess[name]!;
-      else {
-        // An omitted permission is not an answer. Keep writes closed and let
-        // the next flush retry rather than permanently claiming to be loading.
-        delete mutationAccess![name];
-        delete answeredAt[k];
-        failedAt[k] = at[k]!;
-      }
+      mutationAccess![name] = answer.mutationAccess![name]!;
     }
   }
   return {
@@ -391,11 +400,7 @@ export function versionsNow(state: CoreState): Versions {
  * version, by a door that answers for someone else — no longer lands over it.
  */
 function served(state: CoreState, at: Versions, answer: RunAnswer): CoreState {
-  const named = (k: NodeKey): boolean => {
-    const name = nameOf(k);
-    return k.startsWith('query:') ? Object.hasOwn(answer.tables, name) || Object.hasOwn(answer.errors, name) : !!answer.mutationAccess && Object.hasOwn(answer.mutationAccess, name);
-  };
-  const lands = Object.keys(at).filter((k) => versionOf(state, k) === at[k] && named(k));
+  const lands = Object.keys(at).filter((k) => versionOf(state, k) === at[k] && namesNode(answer, k));
   if (!lands.length) return state;
   const bumped = bump(state, lands);
   return answered(bumped, Object.fromEntries(lands.map((k) => [k, versionOf(bumped, k)])), answer);

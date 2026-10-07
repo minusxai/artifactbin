@@ -38,7 +38,7 @@ import { localZone } from '@/lib/story/data/builtins';
 import { placeDataflow, type DataflowPlacement } from '@/lib/story/data/placement';
 import type { PersonCard } from '@artifactbin/contracts';
 import {
-  accessCheckFailed, accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople, versionsNow,
+  ACCESS_FAILED, ACCESS_PENDING, accessUnavailable, accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople, versionsNow,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,
 } from './dataflow-core';
 import { MAX_PEOPLE_IDS, type ServedResults } from './contract';
@@ -49,8 +49,7 @@ import type { Optimistic, PageEngine } from './page-engine';
 const IDLE_PREPARE_MS = 2000;
 
 /** What `mutationUnavailable` answers while the permission check is still in flight. */
-export const ACCESS_PENDING = 'Checking edit access…';
-const ACCESS_FAILED = 'Could not check edit access. Reload this page to retry.';
+export { ACCESS_PENDING } from './dataflow-core';
 
 export interface MutationAnswer { dataset: string; mutationRunId?:string; local?: LocalMutationResult }
 
@@ -562,11 +561,7 @@ export function createDataflowStore(
     const inPageWrite = !!page && placement.mutations[name] === 'browser';
     if (!transport?.mutate && !inPageWrite) return 'This view cannot save changes.';
     if (decl && 'local' in decl.target) return null;
-    const access = core.data.mutationAccess ?? {};
-    if (Object.hasOwn(access, name)) return access[name]!;
-    return accessCheckFailed(core, name)
-      ? ACCESS_FAILED
-      : ACCESS_PENDING;
+    return accessUnavailable(core, name);
   };
 
   /** Why this write cannot be sent from here, or null. Wire retries with an unknown permission still ask the server to decide. */

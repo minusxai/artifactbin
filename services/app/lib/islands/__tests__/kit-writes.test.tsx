@@ -370,7 +370,7 @@ describe('<DialogContent run> on the island store', () => {
       const dialog = open(host);
       expect(dialog.querySelector('[role="status"]')?.textContent).toBe(ACCESS_PENDING);
       store.start(); await flush();
-      expect(dialog.querySelector('[role="status"]')?.textContent).toBe('Could not check edit access. Reload this page to retry.');
+      expect(dialog.querySelector('[role="status"]')?.textContent).toBe('Access check failed. Reload.');
       expect(dialog.querySelector('fieldset')!.disabled).toBe(true);
       expect(mutate).not.toHaveBeenCalled();
       run.mockResolvedValue({ tables: {}, errors: {}, mutationAccess: { add: null } });
