@@ -789,8 +789,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               label="Annotation comment"
               value={draft()} onChange={setDraft} onSubmit={submitDraft}
 
-              rows={4} autoFocus={!capture.busy()} placeholder="Add a comment for your agent…">
-              <div class="mb-2 flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px] text-muted">
+              rows={3} autoFocus={!capture.busy()} placeholder="Add a comment for your agent…">
+              <div class="flex min-w-0 items-center gap-1 overflow-hidden font-mono text-[11px] text-muted">
                 <For each={crumbs()}>{(crumb, index) => (
                   <span class="flex min-w-0 items-center gap-1">
                     <Show when={index() > 0}><span>›</span></Show>
