@@ -143,3 +143,21 @@ it('excludes native boxes without a comment relay while retaining the hosted def
  await screen.findByLabelText('Mention Default (pi)');
  expect(screen.queryByLabelText('Mention Native (codex)')).toBeNull();
 });
+
+it('quick choices and typed mentions insert identical badges and keep the caret after them', async () => {
+  const id='b'.repeat(64);
+  vi.stubGlobal('fetch', sessions([{id,name:'koala-8e44ad',harness:'claude',online:true}]));
+  const submit=vi.fn();
+  render(()=>{const [value,change]=createSignal('');return <CommentMarkdownField label="Draft" backend={http()} quickAgents value={value()} onChange={change} onSubmit={()=>submit(value())}/>;});
+  const field=screen.getByLabelText('Draft');
+  fireEvent.click(await screen.findByRole('button',{name:'Tag koala-8e44ad'}));
+  const quick=field.querySelector('[data-comment-mention]')?.outerHTML;
+  expect(quick).toBeTruthy();
+  fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});
+  expect(submit).toHaveBeenLastCalledWith(`[@koala-8e44ad](/chat?session=${id}) `);
+  replaceComment(field,'@ko');
+  fireEvent.click(await screen.findByLabelText('Mention koala-8e44ad (claude)'));
+  expect(field.querySelector('[data-comment-mention]')?.outerHTML).toBe(quick);
+  fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});
+  expect(submit).toHaveBeenLastCalledWith(`[@koala-8e44ad](/chat?session=${id}) `);
+});

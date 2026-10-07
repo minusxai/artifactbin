@@ -144,7 +144,7 @@ describe('the composer writes markdown, and sends TEXT', () => {
     layer({ railOpen: true, initialSelection: SELECTION });
     await flush();
     for (const label of ['Bold', 'Italic', 'Code', 'Link', 'List']) expect(within(composer()).getByLabelText(label)).toBeTruthy();
-    expect(within(composer()).getByText('Type @ to mention an agent')).toBeTruthy();
+    expect(composer().querySelector('.comment-mention-tip')).toHaveTextContent('Pro tip: Use @ to tag friends or agents.');
   });
 
   it('⌘B wraps from the keyboard too', async () => {

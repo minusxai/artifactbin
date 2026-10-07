@@ -33,7 +33,7 @@ import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/annotations/comment-folds';
 import { loginHref } from '@/lib/http/login-href';
-import { hasReplyText, remoteMention } from '@/lib/annotations/remote-reply';
+import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story/reader/edit-bar';
 import { documentRect, sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import {
@@ -114,26 +114,6 @@ const linkedFrom = (search: string | undefined) => {
 /** The app router's location where the layer is inside one (the document page); none in isolation. */
 const optionalRouterLocation = () => { try { return useLocation(); } catch { return null; } };
 
-/** useNewCommentDraft: the sole online agent is prefilled once per composer opening; any edit wins over late discovery. */
-function createNewCommentDraft(backend: ArtifactBackend, open: () => boolean) {
-  const [draft, setDraft] = createSignal('');
-  let touched = false;
-  createEffect(() => {
-    if (!open()) { touched = false; return; }
-    if (backend.unavailable('remoteSessions')) return;
-    const abort = new AbortController();
-    void backend.remoteSessions({ signal: abort.signal })
-      .then((data) => {
-        if (abort.signal.aborted || touched) return;
-        const online = (data.sessions ?? []).filter((session) => !session.runId && session.online && session.activity !== 'stopped' && session.exitCode === null);
-        if (online.length === 1) setDraft(remoteMention(online[0]!));
-      })
-      .catch(() => { /* Discovery is optional: a comment can always be written by hand. */ });
-    onCleanup(() => abort.abort());
-  });
-  return [draft, (value: string) => { touched = true; setDraft(value); }, (value: string) => setDraft(value)] as const;
-}
-
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const backend = props.backend ?? createHttpBackend(props.id);
   // A Solid prop getter notifies whenever its source does, even for an equal value. These memos
@@ -182,7 +162,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   let resumeSelectAfterCompose = false;
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen covers the document. */
   const phoneRail = createIsPhoneViewport();
-  const [draft, setDraft, replaceDraft] = createNewCommentDraft(backend, () => selection() !== null);
+  const [draft, setDraft] = createSignal('');
+  const replaceDraft = setDraft;
+  const [availableAgents, setAvailableAgents] = createSignal(0);
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal<string | null>(null);
@@ -763,6 +745,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           <div class="flex items-center gap-2 border-b border-edge px-3 py-2.5">
             <span class="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-accent"><MessageSquare size={12} strokeWidth={1.8} /></span>
             <span class="text-xs font-semibold text-fg">Add comment</span>
+            <span class="ml-auto font-sans text-[10px] text-muted">{availableAgents()} {availableAgents() === 1 ? 'agent' : 'agents'} available</span>
             <button type="button" aria-label="Close annotation composer" onClick={cancelCompose}
               class="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"><X size={14} strokeWidth={1.8} /></button>
           </div>
@@ -786,10 +769,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               <div class="mb-3"><FeatureGate reason={imagesUnavailable}>{(gate) => <button type="button" class="rounded-lg border border-edge bg-panel px-3 py-2 text-xs font-medium disabled:opacity-50" {...gate}>Attach screenshot</button>}</FeatureGate></div>
             </Show>
             <CommentMarkdownField backend={backend} artifactId={props.id}
-              label="Annotation comment"
+              label="Annotation comment" quickAgents onAgentCount={setAvailableAgents}
               value={draft()} onChange={setDraft} onSubmit={submitDraft}
 
-              rows={3} autoFocus={!capture.busy()} placeholder="Add a comment for your agent…">
+              rows={3} autoFocus={!capture.busy()} placeholder="Write a comment…">
               <div class="flex min-w-0 items-center gap-1 overflow-hidden font-mono text-[11px] text-muted">
                 <For each={crumbs()}>{(crumb, index) => (
                   <span class="flex min-w-0 items-center gap-1">

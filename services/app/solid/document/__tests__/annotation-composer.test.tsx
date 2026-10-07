@@ -23,11 +23,13 @@ describe('the annotation composer', () => {
   const online = { id: '11111111-1111-1111-1111-111111111111', name: 'review', online: true, managed: true, exitCode: null, activity: 'listening' };
   const openComposer = () => layer({ initialSelection: TEXT() });
 
-  it('prefills the sole online agent with its stable session target and requires comment text', async () => {
-    knobs.sessions = [online, { ...online, id: 'offline', online: false }];
+  it('starts empty and inserts a chosen agent with its stable target, requiring comment text', async () => {
+    knobs.sessions = [online, { ...online, id: 'offline', online: false, managed: false }];
     openComposer(); await flush();
     const field = screen.getByLabelText('Annotation comment');
-    expect(field).toHaveTextContent('@review');
+    expect(field).toHaveTextContent('');
+    fireEvent.click(screen.getByRole('button', { name: 'Tag review' })); await flush();
+    expect(field.querySelector('[data-comment-mention]')).toHaveTextContent('@review');
     expect(screen.getByLabelText('Save annotation')).toBeDisabled();
     replaceComment(field, '[@review](/chat?session=11111111-1111-1111-1111-111111111111) Please update this');
     fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
@@ -52,13 +54,25 @@ describe('the annotation composer', () => {
     expect(field).toHaveTextContent(value);
   });
 
-  it('keeps a removed default removed for the current composer', async () => {
+  it('keeps a removed chosen agent removed for the current composer', async () => {
     knobs.sessions = [online];
     openComposer(); await flush();
     const field = screen.getByLabelText('Annotation comment');
-    expect(field).toHaveTextContent('@review');
+    expect(field).toHaveTextContent('');
+    fireEvent.click(screen.getByRole('button', { name: 'Tag review' })); await flush();
+    expect(field.querySelector('[data-comment-mention]')).toHaveTextContent('@review');
     replaceComment(field, ''); await flush();
     expect(field).toHaveTextContent('');
+  });
+
+  it('shows two quick choices and opens the full picker for the remaining agents', async () => {
+    knobs.sessions = [online, {...online,id:'second',name:'other'}, {...online,id:'33333333-3333-3333-3333-333333333333',name:'third'}];
+    openComposer(); await flush();
+    expect(screen.getAllByRole('button', {name:/^Tag /})).toHaveLength(2);
+    expect(screen.getByText('3 agents available')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'+1 other'})); await flush();
+    fireEvent.click(screen.getByRole('button',{name:/^Mention third/})); await flush();
+    expect(screen.getByLabelText('Annotation comment').querySelector('[data-comment-mention]')).toHaveTextContent('@third');
   });
 
   it('keeps the original view context across geometry updates and sends it with the native comment', async () => {
