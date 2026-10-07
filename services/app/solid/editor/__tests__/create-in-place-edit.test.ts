@@ -196,3 +196,40 @@ it('opens the script for a mount badge only on a message carrying the session no
   emit({ type: STORY_OPEN_SCRIPT_MESSAGE, component: 'Sparkline' });
   expect(onOpenScript).toHaveBeenCalledWith('Sparkline');
 });
+
+
+it('pauses a rejected prose session and preserves its first fragment until explicitly restored', async () => {
+  const { runtimeRef, emit, sent } = fakeRuntime();
+  const onSourceEdited = vi.fn(), onRejectedEdit = vi.fn();
+  const sourceRef = { current: '<p id="a">Changed elsewhere</p>' };
+  const { result: edit } = renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef, editing: true, sessionNonce: NONCE, onSourceEdited, onRejectedEdit,
+  }));
+  emit({ type: STORY_EDIT_READY_MESSAGE });
+  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected: '<p id="a">Old</p>', replacement: '<p id="a">My draft</p>' });
+  expect(editModes(sent)).toEqual([true, false]);
+  expect(edit.ready()).toBe(false);
+  expect(edit.isUserEditing()).toBe(true);
+  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected: sourceRef.current, replacement: '<p id="a">Queued stale write</p>' });
+  edit.applyFormat('0', { className: 'font-bold' });
+  expect(onSourceEdited).not.toHaveBeenCalled();
+  expect(onRejectedEdit.mock.calls).toEqual([['<p id="a">My draft</p>']]);
+  await expect(edit.commitPending(true)).rejects.toThrow('Recover the uncommitted text');
+  edit.discardRejectedEdit();
+  expect(editModes(sent)).toEqual([true, false, true]);
+  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected: sourceRef.current, replacement: '<p id="a">Changed elsewhere and restored</p>' });
+  expect(onSourceEdited).toHaveBeenCalledOnce();
+});
+
+
+it('blocks an in-flight navigation commit when its flush rejects a stale prose edit', async () => {
+  const { runtimeRef, emit } = fakeRuntime();
+  const { result: edit } = renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { current: '<p id="a">Updated</p>' }, editing: true,
+    sessionNonce: NONCE, onSourceEdited: vi.fn(),
+  }));
+  const pending = edit.commitPending(true);
+  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected: '<p id="a">Old</p>', replacement: '<p id="a">Draft</p>' });
+  emit({ type: STORY_COMMITTED_MESSAGE });
+  await expect(pending).rejects.toThrow('Recover the uncommitted text');
+});

@@ -19,6 +19,7 @@ import { scriptExportLocation } from '@/lib/story/document/script-export-locatio
 import { contextRefOf } from '@/lib/story/document/helmet';
 import { writeContextRef } from '@/lib/story/document/context';
 import ContextPanel from './ContextPanel';
+import ProseRecoveryDialog from './panels/ProseRecoveryDialog';
 import BookOpen from 'lucide-solid/icons/book-open';
 import { Portal } from 'solid-js/web';
 import { useBeforeLeave } from '@solidjs/router';
@@ -755,12 +756,13 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
         </div>
       </Show>
       <Show when={rejectedFragment() !== null}>
-        <div role="alertdialog" aria-label="Recover uncommitted text" class="fixed inset-x-4 top-28 z-50 mx-auto max-w-xl rounded border border-edge bg-surface p-4 shadow-xl">
-          <p>This text could not be applied to the current document. Copy it before restoring the document.</p>
-          <textarea aria-label="Uncommitted text" readOnly value={rejectedFragment() ?? ''} class="mt-2 h-32 w-full font-mono text-sm" />
-          <button type="button" onClick={() => void copyText(rejectedFragment() ?? '').then((ok) => { if (!ok) setHistoryError('Select and copy the text from the field.'); })}>Copy uncommitted text</button>
-          <button type="button" onClick={() => { inPlace.discardRejectedEdit(); setRejectedFragment(null); showInDocument(editorSource.current()); }}>Discard this text and restore document</button>
-        </div>
+        <ProseRecoveryDialog fragment={rejectedFragment() ?? ''}
+          onCopy={() => void copyText(rejectedFragment() ?? '').then((ok) => { if (!ok) setHistoryError('Select and copy the text from the field.'); })}
+          onRestore={() => {
+            showInDocument(editorSource.current(), { redraw: true });
+            inPlace.discardRejectedEdit();
+            setRejectedFragment(null);
+          }} />
       </Show>
       <Show when={historyError()}>
         <div role="alert" class="fixed bottom-4 left-4 z-50 rounded border border-edge bg-surface p-3 text-sm">
