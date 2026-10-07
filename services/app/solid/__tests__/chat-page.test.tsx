@@ -1,7 +1,6 @@
-import { afbinInstallCommand } from '@/lib/serving/agent-discovery-tags';
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
 
@@ -16,6 +15,9 @@ vi.mock('@xterm/xterm', () => ({ Terminal: class {
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { proposeDimensions() { return { cols: 80, rows: 24 }; } } }));
 
 import { ChatPage } from '@/solid/pages/Chat';
+import { AGENT_PALETTE } from '@/solid/lib/agent-identity';
+
+const sidebar = () => within(screen.getByRole('complementary', {name:'Agents'}));
 
 function open(session: string) {
   const history = createMemoryHistory();
@@ -88,6 +90,8 @@ it('lets the user stop waiting and start again with a fresh client wait', async 
   });
   vi.stubGlobal('fetch',fetch);
   open('');
+  await waitFor(() => expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeEnabled());
+ fireEvent.click(sidebar().getByRole('button', {name:'Provision cloud agent'}));
   fireEvent.click(await screen.findByRole('button',{name:'Start hosted box'}));
   fireEvent.click(await screen.findByRole('button',{name:'Stop waiting'}));
   expect(await screen.findByText(/Check your sessions before starting again/)).toBeInTheDocument();
@@ -161,13 +165,35 @@ it('keeps offline and ended sessions behind history without hiding a directly op
   expect(screen.queryByRole('button', { name: 'Open Offline agent' })).toBeNull();
 });
 
-it('keeps install and remote startup commands on the app origin', async () => {
+it('keeps connection commands on demand without installation instructions', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })));
   open('');
-  expect(screen.getByText(afbinInstallCommand(window.location.origin), { normalizer: text => text })).toBeInTheDocument();
-  expect(screen.getByText(`afbin remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
-  fireEvent.change(screen.getByRole('combobox', { name: 'Choose your agent' }), { target: { value: 'codex' } });
-  expect(screen.getByText(`afbin remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
+  expect(screen.queryByRole('heading', {name:'Connected Agents'})).toBeNull();
+  expect(screen.getByRole('region', {name:'Connected local agents'})).toHaveTextContent('No connected local agents');
+  expect(screen.getByRole('region', {name:'Cloud agents'})).toHaveTextContent('No cloud agents yet');
+  expect(screen.queryByText('Install CLI')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Claude Code' })).toBeNull();
+  const trigger = sidebar().getByRole('button', {name:'Connect your agent'});
+  expect(screen.getByRole('region', {name:'Connected local agents'})).toContainElement(trigger);
+  trigger.focus();
+  fireEvent.click(trigger);
+  expect(screen.getByRole('dialog', {name:'Connect your agent'})).toHaveAttribute('aria-modal','true');
+  expect(screen.getByRole('main')).not.toContainElement(screen.getByRole('dialog'));
+  const localName = screen.getByRole('textbox', {name:'Agent name'});
+  expect((localName as HTMLInputElement).value).toMatch(/^[a-z]+-[0-9a-f]{6}$/);
+  fireEvent.input(localName, {target:{value:'otter-12ab34'}});
+  expect(screen.getByText(`afbin remote --server '${window.location.origin}' --name otter-12ab34 claude`)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Codex' }));
+  expect(screen.getByRole('button', { name: 'Codex' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText(`afbin remote --server '${window.location.origin}' --name otter-12ab34 codex`)).toBeInTheDocument();
+  fireEvent.input(localName, {target:{value:'bad; command'}});
+  expect(screen.queryByRole('button', {name:'Copy run in your terminal'})).toBeNull();
+  expect(screen.getByRole('alert')).toHaveTextContent('Use 1–32');
+  fireEvent.keyDown(window, {key:'Escape'});
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(trigger).toHaveFocus();
+  fireEvent.click(within(screen.getByRole('region', {name:'No agent selected'})).getByRole('button', {name:'Connect your agent'}));
+  expect(screen.getByRole('dialog', {name:'Connect your agent'})).toBeInTheDocument();
 });
 
 it('offers native hosted boxes only when the configured service advertises managed processes',async()=>{
@@ -175,12 +201,30 @@ it('offers native hosted boxes only when the configured service advertises manag
  const session={id:'native',runId:'run-one',name:'my-agent',harness:'codex',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null};
  const fetch=vi.fn(async(url:string,_options?:RequestInit)=>({ok:true,json:async()=>url==='/api/run-capabilities'?{version:1,managedProcesses:true}:url==='/api/runs'?{session,runId:'run-one'}:url==='/api/remote/sessions'?{sessions:[]}:{session,seq:0,frames:[],snapshot:'Log in to Codex'}}));
  vi.stubGlobal('fetch',fetch);open('');
- const program=await screen.findByRole('combobox',{name:'Hosted program'});fireEvent.change(program,{target:{value:'codex'}});
+ const provision = sidebar().getByRole('button', {name:'Provision cloud agent'});
+ await waitFor(() => expect(provision).toBeEnabled());
+ expect(screen.getByRole('region',{name:'Cloud agents'})).toContainElement(provision);
+ fireEvent.click(provision);
+ expect(screen.getByRole('dialog',{name:'Provision cloud agent'})).toHaveAttribute('aria-modal','true');
+ const agentName = screen.getByRole('textbox', {name:'Agent name'});
+ expect((agentName as HTMLInputElement).value).toMatch(/^[a-z]+-[0-9a-f]{6}$/);
+ expect(AGENT_PALETTE).toContain('#' + (agentName as HTMLInputElement).value.split('-').at(-1));
+ fireEvent.input(agentName, {target:{value:'koala'}});
+ const color = screen.getByRole('img', {name:/Agent color #[0-9a-f]{6}/}).getAttribute('aria-label');
+ expect(AGENT_PALETTE).toContain(color?.replace('Agent color ', ''));
+ fireEvent.input(agentName, {target:{value:'otter'}});
+ expect(screen.getByRole('img', {name:/Agent color #[0-9a-f]{6}/})).not.toHaveAttribute('aria-label',color);
+ fireEvent.input(agentName, {target:{value:'koala'}});
+ expect(screen.getByRole('img', {name:/Agent color #[0-9a-f]{6}/})).toHaveAttribute('aria-label',color);
+ fireEvent.input(agentName, {target:{value:'koala-a234f4'}});
+ expect(screen.getByRole('img', {name:'Agent color #a234f4'})).toHaveStyle({'background-color':'#a234f4'});
+ fireEvent.click(screen.getByRole('button', {name:'Codex'}));
+ expect(screen.getByRole('button', {name:'Codex'})).toHaveAttribute('aria-pressed','true');
  fireEvent.input(screen.getByRole('textbox',{name:'SSH public key'}),{target:{value:'ssh-ed25519 fixture-only'}});
  fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/runs',expect.objectContaining({method:'POST'})));
  const call=fetch.mock.calls.find(([url])=>url==='/api/runs')!;
- expect(JSON.parse(call[1]!.body as string)).toMatchObject({name:'my-agent',command:['codex'],sshPublicKey:'ssh-ed25519 fixture-only',compute:{vcpu:1,memoryMiB:2048}});
+ expect(JSON.parse(call[1]!.body as string)).toMatchObject({name:'koala-a234f4',command:['codex'],sshPublicKey:'ssh-ed25519 fixture-only',compute:{vcpu:1,memoryMiB:2048}});
  await waitFor(()=>expect(write).toHaveBeenCalledWith('Log in to Codex',expect.any(Function)));
 });
 
@@ -198,10 +242,12 @@ it('retries a stopped-box admission with one frozen request and visible progress
   return {ok:true,json:async()=>({session,seq:0,frames:[],snapshot:'ready'})};
  });
  vi.stubGlobal('fetch',fetch);open('');
- const name=await screen.findByRole('textbox',{name:'Box name'});
+ await waitFor(() => expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeEnabled());
+ fireEvent.click(sidebar().getByRole('button', {name:'Provision cloud agent'}));
+ const name=await screen.findByRole('textbox',{name:'Agent name'});
  fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
  expect(await screen.findByText('Finishing the previous hosted box…')).toBeInTheDocument();
- expect(name).toBeDisabled();expect(screen.getByRole('combobox',{name:'Hosted program'})).toBeDisabled();
+ expect(name).toBeDisabled();expect(screen.getByRole('button',{name:'Shell'})).toBeDisabled();expect(screen.getByRole('button',{name:'Codex'})).toBeDisabled();
  await waitFor(()=>expect(attempts).toBe(2));
  expect(bodies).toHaveLength(2);expect(bodies[1]).toBe(bodies[0]);
  expect(JSON.parse(bodies[0]!).requestId).toBeTruthy();
@@ -254,6 +300,8 @@ it('guides an ended hosted run back to Start hosted box with retained home files
  open(session.id);const endedNotice=await screen.findByText(/Session ended \(exit 0\)/,{selector:'[role="status"]'});
  expect(endedNotice).toHaveTextContent(/Start hosted box/);expect(endedNotice).toHaveTextContent(/same name/);expect(endedNotice).toHaveTextContent(/home files/i);
  expect(endedNotice).not.toHaveTextContent('afbin remote');expect(screen.getByRole('button',{name:'Remove session'})).toBeEnabled();
+ await waitFor(() => expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeEnabled());
+ fireEvent.click(sidebar().getByRole('button', {name:'Provision cloud agent'}));
  expect(screen.getByRole('button',{name:'Start hosted box'})).toBeEnabled();
 });
 
@@ -392,4 +440,18 @@ it('can cancel a capacity-waiting agent and keeps Stop above stale queued polls'
  expect(screen.getByRole('button',{name:'Stop agent'})).toBeDisabled();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
  expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(1);
+});
+
+it('keeps the included agent visible offline and identifies it without treating local Pi as included', async () => {
+ vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+ const base = { harness:'pi',machine:'Hosted',cols:80,rows:24,controller:'web',exitCode:null };
+ const sessions = [{...base,id:'included',name:'afbin',included:true,online:false}, {...base,id:'local-pi',name:'My Pi',online:true}];
+ vi.stubGlobal('fetch', vi.fn(async (url:string) => ({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions}:url==='/api/run-capabilities'?{version:1,managedProcesses:false}:{session:sessions[0],seq:0,frames:[]} })));
+ open('included');
+ expect(await screen.findByRole('button',{name:'Open afbin'})).toHaveTextContent('Included for free');
+ expect(screen.getByRole('region',{name:'Cloud agents'})).toContainElement(screen.getByRole('button',{name:'Open afbin'}));
+ expect(screen.getByRole('region',{name:'Connected local agents'})).toContainElement(screen.getByRole('button',{name:'Open My Pi'}));
+ expect(screen.getByRole('button',{name:'Open My Pi'})).not.toHaveTextContent('Included');
+ expect(screen.getByText(/Your included Pi agent/)).toBeInTheDocument();
+ expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeDisabled();
 });
