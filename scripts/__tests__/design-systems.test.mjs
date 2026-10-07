@@ -53,6 +53,14 @@ describe('the specs', () => {
 });
 
 describe('the committed outputs are what the generator emits now', () => {
+  it('keeps Almanac band arches inside the mobile page surface while preserving the desktop tilt', () => {
+    const css = renderRuntime().entries.find((entry) => entry.name === 'almanac').css;
+    const mobile = css.match(/@container \(max-width: 440px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(mobile).toMatch(/\.al-band\.al-arch\s*\{[^}]*transform:\s*none;/);
+    expect(mobile).toMatch(/\.al-band\.al-arch:hover\s*\{[^}]*transform:\s*none;/);
+    expect(css).toMatch(/@container \(min-width: 760px\) \{[\s\S]*?\.al-arch\s*\{\s*transform:\s*rotate\(-6deg\);/);
+  });
+
   it('lets Almanac outcome cards shrink to their desktop grid tracks', () => {
     const css = renderRuntime().entries.find((entry) => entry.name === 'almanac').css;
     const outcomeRule = css.match(/\.al-outcome\s*\{([^}]*)\}/)?.[1];

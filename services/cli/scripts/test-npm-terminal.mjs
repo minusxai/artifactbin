@@ -10,7 +10,9 @@ import {resolve,join} from 'node:path';
 const entry=resolve(process.argv[2]??'');
 assert.ok(process.argv[2],'Pass the installed npm afbin.mjs path.');
 const directory=await mkdtemp(join(tmpdir(),'afbin native terminal '));
-let worker,output='',exitReceipt,registration,startupReceipt;
+const boundedAppend=(previous,value)=>`${previous}${value}`.slice(-8192);
+const diagnosticText=value=>String(value??'').replaceAll('test-terminal-only','[redacted]').slice(-2000);
+let worker,output='',outputTail='',exitReceipt,registration,startupReceipt,workerSpawned=false,workerDisconnected=false,workerMessages=0,exchangeCount=0,nativeReady=false;
 const server=createServer(async(req,res)=>{
  try{
   assert.equal(req.headers.authorization,'Bearer test-terminal-only');
@@ -20,8 +22,8 @@ const server=createServer(async(req,res)=>{
    registration=body;res.end(JSON.stringify({id:'npm-terminal',runnerKey:'test-runner-proof'}));return;
   }
   assert.equal(req.url,'/api/remote/sessions/npm-terminal/exchange');
-  output+=body.output??'';if(body.exitCode!==undefined)exitReceipt=body.exitCode;
-  const inputs=output.includes('NATIVE_READY')&&!body.ack?[{id:1,kind:'input',data:'finish\r'}]:[];
+  exchangeCount++;const chunk=body.output??'';output=boundedAppend(output,chunk);nativeReady ||= output.includes('NATIVE_READY')||(outputTail+chunk).includes('NATIVE_READY');outputTail=(outputTail+chunk).slice(-'NATIVE_READY'.length+1);if(body.exitCode!==undefined)exitReceipt=body.exitCode;
+  const inputs=nativeReady&&!body.ack?[{id:1,kind:'input',data:'finish\r'}]:[];
   res.end(JSON.stringify({controller:'local',inputs}));
  }catch(error){res.statusCode=500;res.end(JSON.stringify({error:'test_failure',message:error.message}));}
 });
@@ -40,10 +42,17 @@ lines.once('line',line=>{
   cwd:directory,env:{...process.env,HOME:directory,USERPROFILE:directory,ARTIFACTBIN_SKILLS:'off',ARTIFACTBIN_HOME:join(directory,'private-state'),CLI__AUTO_UPDATE:'off'},
   stdio:['ignore','pipe','pipe','ipc'],
  });
- let stdout='',stderr='';worker.stdout.on('data',data=>{stdout+=data;});worker.stderr.on('data',data=>{stderr+=data;});
- worker.on('message',message=>{if(message.error)stderr+=message.error;else startupReceipt=message;});
+ let stdout='',stderr='';worker.stdout.on('data',data=>{stdout=boundedAppend(stdout,data);});worker.stderr.on('data',data=>{stderr=boundedAppend(stderr,data);});
+ worker.once('spawn',()=>{workerSpawned=true;});worker.once('disconnect',()=>{workerDisconnected=true;});
+ worker.on('message',message=>{workerMessages++;if(message.error)stderr=boundedAppend(stderr,message.error);else startupReceipt=message;});
  const completion=new Promise((yes,no)=>{
-  const deadline=setTimeout(()=>{worker.kill();no(new Error(`Native CLI worker did not exit naturally after 20s: ${JSON.stringify({stdout,stderr,exitReceipt,output})}`));},20000);
+  const deadline=setTimeout(()=>{
+   const diagnostic={stdout:diagnosticText(stdout),stderr:diagnosticText(stderr),relayOutput:diagnosticText(output),exitReceipt,
+    registrationReceived:Boolean(registration),registrationManaged:registration?.managed??null,registrationName:registration?.name??null,
+    startupReceipt:startupReceipt?{status:startupReceipt.status,pid:startupReceipt.pid}:null,exchangeCount,
+    workerSpawned,workerDisconnected,workerMessages,workerExitCode:worker.exitCode,workerSignalCode:worker.signalCode};
+   worker.kill();no(new Error(`Native CLI worker did not exit naturally after 20s: ${JSON.stringify(diagnostic)}`));
+  },20000);
   worker.once('error',error=>{clearTimeout(deadline);no(error);});
   worker.once('exit',(code,signal)=>{clearTimeout(deadline);yes({code,signal});});
  });
