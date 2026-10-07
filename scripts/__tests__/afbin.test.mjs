@@ -160,6 +160,30 @@ describe('npm run afbin', () => {
     }
   });
 
+  it('rebuilds when teaching sources change — app skills and the teaching compiler', async () => {
+    for (const file of [
+      'services/app/skills/artifactbin/SKILL.md',
+      'services/cli/scripts/compile-teaching.ts',
+      'services/cli/scripts/generate-teaching.mjs',
+      'scripts/lib/generate-teaching.mjs',
+      'scripts/register-yaml.cjs',
+    ]) {
+      const root = await fakeCheckout({ distAge: 10, srcAge: 20 });
+      try {
+        const fullPath = path.join(root, file);
+        await mkdir(path.dirname(fullPath), { recursive: true });
+        await writeFile(fullPath, 'teaching input\n');
+        const older = Date.now() / 1000 - 30;
+        await utimes(fullPath, older, older);
+        expect(await cliBuildStale(root), file).toBe(false);
+
+        const changed = Date.now() / 1000 + 1;
+        await utimes(fullPath, changed, changed);
+        expect(await cliBuildStale(root), file).toBe(true);
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
+  });
+
   it('rebuilds when packaged compiler inputs change, including a version-only package bump', async () => {
     for (const file of ['services/cli/scripts/bundle-options.mjs', 'services/cli/package.json', 'services/cli/npm-shrinkwrap.json', 'package.json', 'package-lock.json', 'scripts/lib/afbin-build.mjs']) {
       const root = await fakeCheckout({ distAge: 10, srcAge: 20 });

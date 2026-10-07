@@ -1,6 +1,6 @@
 /** The FAST compiler path for `npm run afbin`; production/package assembly stays in the CLI workspace. */
 import { build } from 'esbuild';
-import { access, chmod } from 'node:fs/promises';
+import { chmod } from 'node:fs/promises';
 import path from 'node:path';
 
 import { cliBundle } from '../../services/cli/scripts/bundle-options.mjs';
@@ -10,9 +10,7 @@ import { generateTeaching } from './generate-teaching.mjs';
 export async function buildAfbinDev(root) {
   const cli = path.join(root, 'services', 'cli');
   const entry = path.join(cli, 'src', 'main.ts');
-  const teaching = path.join(cli, 'src', 'generated', 'teaching.json');
-  try { await access(teaching); }
-  catch { await generateTeaching(); }
+  await generateTeaching();
 
   const outdir = path.join(cli, 'dist');
   await build({ ...cliBundle({ afbin: entry }), absWorkingDir: cli, outdir });

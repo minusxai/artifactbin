@@ -43,7 +43,7 @@ describe('FAST afbin development bundle', () => {
       expect(options.plugins.map(plugin => plugin.name)).toEqual(canonical.plugins.map(plugin => plugin.name));
       expect(options.absWorkingDir).toBe(cli);
       expect(options.outdir).toBe(join(cli, 'dist'));
-      expect(stage.generated).toBe(0);
+      expect(stage.generated).toBe(1);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
