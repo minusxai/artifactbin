@@ -32,7 +32,9 @@ function isCandidateEof(output,name){
  const eof=/\bZ_BUF_ERROR\b|zlib:\s*unexpected end of file/i.test(output);
  const candidateName=output.includes(name);
  const bundledAssets=/TAR_ENTRY_ERROR[^\r\n]*dist[\\/]+runtime[\\/]+dist[\\/]+web[\\/]+assets/i.test(output);
- return eof&&(candidateName||bundledAssets);
+ const errorCodes=[...output.matchAll(/\bnpm error code\s+([A-Z0-9_]+)\b/gi)].map(match=>match[1].toUpperCase());
+ const unrelatedNpmError=errorCodes.some(code=>code!=='Z_BUF_ERROR')||/\bnpm error command failed\b/i.test(output);
+ return eof&&(candidateName||bundledAssets)&&!unrelatedNpmError;
 }
 
 export async function installNpmConsumer({npm,tarball,cwd,env,seeded=false,onOutput=chunk=>process.stdout.write(chunk),timeoutMs=300000,heartbeatMs=15000}){
