@@ -738,23 +738,23 @@ describe('data widget parity with the live reader', () => {
     }
   });
 
-  it('unavailable imports guide recipients without revealing technical references', () => {
+  it('unavailable imports guide recipients without revealing technical references', async () => {
     const ctx = island(); ctx.table = () => undefined; ctx.tableSnapshot = ctx.table;
     ctx.error = () => '<Query name="monthly"> reads private_sales (ref:secret-ref), which is unavailable — deleted, or no longer readable here';
     for (const view of [() => <DataTable data="$monthly" />, () => <Question data="$monthly" />]) {
       const { host, dispose } = mount(ctx, view);
       try {
-        expect(host.textContent).toBe('This data is unavailable. The dataset may be private or no longer available. Ask the person who shared this document to check dataset access and share it with your account.');
+        await vi.waitFor(() => expect(host.textContent).toBe('Data unavailable. Ask the document sharer to check dataset access.'));
         expect(host.textContent).not.toMatch(/secret-ref|private_sales|monthly/);
       } finally { dispose(); }
     }
   });
 
-  it('DataTable says why it has no table, inside today\'s adapter wrapper', () => {
+  it('DataTable says why it has no table, inside today\'s adapter wrapper', async () => {
     const ctx = island(); ctx.table = () => undefined; ctx.error = (n) => (n === 'monthly' ? 'boom' : undefined);
     const { host } = mount(ctx, () => <DataTable data="$monthly" id="t" />);
     expect(attrsOf(host.firstElementChild)).toMatchObject({ id: 't', 'aria-label': 'DataTable embed', style: 'width:100%;min-width:0' });
-    expect(host.textContent).toBe('query "monthly" failed: boom');
+    await vi.waitFor(() => expect(host.textContent).toBe('query "monthly" failed: boom'));
   });
 });
 
