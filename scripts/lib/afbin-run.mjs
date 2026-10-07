@@ -41,7 +41,7 @@ const distEntry = (root) => path.join(root, 'services', 'cli', 'dist', 'afbin.mj
 // The CLI bundles more than its own tree: app/lib (validation, the markup and map
 // contracts) and the shared packages. A change there is a change to the CLI.
 const sourceRoots = (root) => [
-  ...[['cli', 'src'], ['app', 'lib'], ['app', 'skills'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]
+  ...[['cli', 'src'], ['app', 'lib'], ['app', 'skills'], ['auth', 'src'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]
     .map((dir) => path.join(root, 'services', ...dir)),
   ...['services/cli/scripts/bundle-options.mjs', 'services/cli/package.json', 'services/cli/npm-shrinkwrap.json',
     'services/cli/scripts/compile-teaching.ts', 'services/cli/scripts/generate-teaching.mjs',

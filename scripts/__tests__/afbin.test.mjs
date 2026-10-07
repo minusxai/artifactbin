@@ -148,8 +148,8 @@ describe('npm run afbin', () => {
     } finally { await rm(root,{recursive:true,force:true}); }
   });
 
-  it('rebuilds when a shared source the CLI bundles changed — app/lib, utils, contracts, sql', async () => {
-    for (const dir of [['app', 'lib'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]) {
+  it('rebuilds when a shared source the CLI bundles changed — app/lib, auth, utils, contracts, sql', async () => {
+    for (const dir of [['app', 'lib'], ['auth', 'src'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]) {
       const root = await fakeCheckout({ distAge: 10, srcAge: 20 });
       try {
         expect(await cliBuildStale(root), dir.join('/')).toBe(false);
