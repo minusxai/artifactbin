@@ -5,7 +5,8 @@ import {execFileSync} from 'node:child_process';
 import {existsSync,writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as sleep} from 'node:timers/promises';
-const artifactTimeout=()=>Error('Current-attempt CLI artifact timed out');
+const artifactTimeout=()=>Error('Current-attempt artifact timed out');
+export const MAX_ARTIFACT_ARCHIVE_BYTES=128*1024*1024;
 /** Three transport attempts share the caller's original readiness deadline.
  * Transient GitHub HTTP failures are read-only API failures, not schema or auth failures. */
 export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:pause=sleep,request=execFileSync,command='gh',requestTimeout=30000,retryDelay=1000,encoding='utf8',maxBuffer=1024*1024}){
@@ -45,13 +46,19 @@ export function verifyArtifactArchive(bytes,digest){
  const actual='sha256:'+createHash('sha256').update(bytes).digest('hex');
  if(!/^sha256:[a-f0-9]{64}$/.test(digest??'')||actual!==digest)throw Error('Current-run artifact archive checksum mismatch');
 }
+export async function downloadCurrentArtifactArchive(artifact,{repo,deadline,request=requestCurrentArtifact}={}){
+ if(Number.isFinite(artifact.size_in_bytes)&&artifact.size_in_bytes>MAX_ARTIFACT_ARCHIVE_BYTES)throw Error(`Current-run artifact archive exceeds ${MAX_ARTIFACT_ARCHIVE_BYTES} byte download limit`);
+ const bytes=await request(['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{deadline,encoding:null,maxBuffer:MAX_ARTIFACT_ARCHIVE_BYTES});
+ verifyArtifactArchive(bytes,artifact.digest);
+ return bytes;
+}
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try {
   const args=process.argv.slice(2),waitOnly=args[0]==='--wait-only';
   if(waitOnly)args.shift();
-  const [repo,run,attempt,output,failedFile]=args;
-  const artifactName=waitOnly?(output??'afbin-npm-release'):'afbin-npm-release';
-  if(!/^[\w.-]+\/[\w.-]+$/.test(repo??'')||!/^\d+$/.test(run??'')||!/^\d+$/.test(attempt??'')||(!waitOnly&&!output)||! /^[\w.-]+$/.test(artifactName))throw Error('Pass repository, run, attempt and output zip (or --wait-only with optional artifact name)');
+  const [repo,run,attempt,output,failedFile,downloadName]=args;
+  const artifactName=waitOnly?(output??'afbin-npm-release'):(downloadName??'afbin-npm-release');
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo??'')||!/^\d+$/.test(run??'')||!/^\d+$/.test(attempt??'')||(!waitOnly&&!output)||! /^[\w.-]+$/.test(artifactName))throw Error('Pass repository, run, attempt and output zip (or --wait-only with optional artifact name; downloads default to afbin-npm-release)');
   const deadline=Date.now()+180000;
   const api=async(path)=>JSON.parse(await requestCurrentArtifact(['api',`/repos/${repo}/actions/${path}`],{deadline}));
   const current=await api(`runs/${run}/attempts/${attempt}`);
@@ -59,10 +66,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   if(waitOnly){
    console.log(`Ready: same-run, same-attempt npm artifact ${artifact.id}`);
   }else{
-  const bytes=await requestCurrentArtifact(['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{deadline,encoding:null,maxBuffer:64*1024*1024});
-  verifyArtifactArchive(bytes,artifact.digest);
+  const bytes=await downloadCurrentArtifactArchive(artifact,{repo,deadline});
   writeFileSync(output,bytes);
-  console.log(`Downloaded same-run, same-attempt npm artifact ${artifact.id}`);
+  console.log(`Downloaded same-run, same-attempt ${artifactName} artifact ${artifact.id}`);
   }
  }catch(error){console.error(error.message);process.exitCode=1;}
 }

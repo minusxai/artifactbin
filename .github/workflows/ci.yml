@@ -1047,8 +1047,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # A genuinely cold standard-user bootstrap is a separate machine/user proof.
-  # It must not contend with native install/browser consumers in the same Windows VM.
+  # A fresh standard-user bootstrap is a separate machine/user proof. It must not
+  # contend with native install/browser consumers in the same Windows VM.
   cli-bootstrap:
     needs: [ plan ]
     if: needs.plan.outputs.cli-bootstrap == 'true'

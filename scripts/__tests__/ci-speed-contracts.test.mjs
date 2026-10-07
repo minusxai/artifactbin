@@ -1,5 +1,5 @@
 /** Required checks consume the package they prove without redundant serial acceptance. */
-import {readFileSync,mkdtempSync,writeFileSync,chmodSync,rmSync} from 'node:fs';
+import {readFileSync,mkdtempSync,writeFileSync,chmodSync,rmSync,existsSync} from 'node:fs';
 import {describe,it,expect} from 'vitest';
 import yaml from 'yaml';
 import {spawnSync} from 'node:child_process';
@@ -159,6 +159,38 @@ it('preserves GitHub artifact archive checksum verification',async()=>{
  expect(()=>verifyArtifactArchive(Buffer.from('abc'),digest)).not.toThrow();
  expect(()=>verifyArtifactArchive(Buffer.from('tampered'),digest)).toThrow(/checksum/);
  expect(()=>verifyArtifactArchive(Buffer.from('abc'),undefined)).toThrow(/checksum/);
+});
+
+it('caps the ZIP subprocess buffer at 128 MiB and verifies downloaded bytes',async()=>{
+ const {MAX_ARTIFACT_ARCHIVE_BYTES,downloadCurrentArtifactArchive}=await import('../lib/ci-artifact-wait.mjs');
+ let observed;
+ const bytes=await downloadCurrentArtifactArchive({id:7,size_in_bytes:88463544,digest:'sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'},{repo:'minusxai/artifactbin',deadline:123,request:async(args,options)=>{observed={args,options};return Buffer.from('abc');}});
+ expect(observed.args).toEqual(['api','/repos/minusxai/artifactbin/actions/artifacts/7/zip']);
+ expect(observed.options).toEqual({deadline:123,encoding:null,maxBuffer:MAX_ARTIFACT_ARCHIVE_BYTES});
+ expect(MAX_ARTIFACT_ARCHIVE_BYTES).toBe(128*1024*1024);expect(bytes.toString()).toBe('abc');
+ await expect(downloadCurrentArtifactArchive({id:8,size_in_bytes:MAX_ARTIFACT_ARCHIVE_BYTES+1,digest:'sha256:unused'},{repo:'minusxai/artifactbin',deadline:123,request:async()=>{throw Error('oversized artifact reached ZIP endpoint');}})).rejects.toThrow(/download limit/);
+});
+
+it('downloads a specifically named artifact only from the current attempt and verifies its archive',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-named-artifact-'));
+ const calls=join(directory,'calls'),gh=join(directory,'gh'),output=join(directory,'seed.zip'),badOutput=join(directory,'bad-seed.zip'),failure=join(directory,'failed.json');
+ writeFileSync(gh,`#!${process.execPath}
+const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.stringify(calls)},path+'\\n');if(path.endsWith('/zip'))process.stdout.write(process.env.TAMPER?'bad':'abc');else if(path.endsWith('/attempts/2'))console.log(JSON.stringify({run_started_at:'2026-10-06T00:00:00Z'}));else if(path.includes('/jobs?'))console.log(JSON.stringify({jobs:[{name:'CLI npm pack',status:'in_progress'}]}));else console.log(JSON.stringify({artifacts:[{id:123,name:'afbin-npm-dependency-seed-Windows-X64',created_at:'2026-10-06T00:01:00Z',size_in_bytes:process.env.TOO_LARGE?134217729:88463544,digest:'sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'}]}));
+`);chmodSync(gh,0o755);
+ try{
+  const {MAX_ARTIFACT_ARCHIVE_BYTES}=await import('../lib/ci-artifact-wait.mjs');
+  expect(MAX_ARTIFACT_ARCHIVE_BYTES).toBe(128*1024*1024);
+  const command=fileURLToPath(new URL('../lib/ci-artifact-wait.mjs',import.meta.url)),args=['minusxai/artifactbin','100','2'];
+  const result=spawnSync(process.execPath,[command,...args,output,failure,'afbin-npm-dependency-seed-Windows-X64'],{encoding:'utf8',env:{...process.env,PATH:directory+':'+process.env.PATH}});
+  expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('afbin-npm-dependency-seed-Windows-X64');
+  expect(readFileSync(output,'utf8')).toBe('abc');
+  const requested=readFileSync(calls,'utf8');expect(requested).toContain('/runs/100/attempts/2');expect(requested).toContain('/artifacts/123/zip');
+  const tampered=spawnSync(process.execPath,[command,...args,badOutput,failure,'afbin-npm-dependency-seed-Windows-X64'],{encoding:'utf8',env:{...process.env,TAMPER:'1',PATH:directory+':'+process.env.PATH}});
+  expect(tampered.status).toBe(1);expect(tampered.stderr).toContain('checksum');expect(existsSync(badOutput)).toBe(false);
+  writeFileSync(calls,'');
+  const oversized=spawnSync(process.execPath,[command,...args,join(directory,'too-large.zip'),failure,'afbin-npm-dependency-seed-Windows-X64'],{encoding:'utf8',env:{...process.env,TOO_LARGE:'1',PATH:directory+':'+process.env.PATH}});
+  expect(oversized.status).toBe(1);expect(oversized.stderr).toContain('download limit');expect(readFileSync(calls,'utf8')).not.toContain('/zip');
+ }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
 it('releases the signed candidate before seed uploads and waits for each native platform seed',()=>{

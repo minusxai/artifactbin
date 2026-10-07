@@ -96,7 +96,8 @@ if(!$rejected){throw 'Native command failure was ignored'}
 $env:npm_config_audit='false';$env:npm_config_fund='false';$env:npm_config_update_notifier='false'
 $env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_SKILLS='off';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
 $rows=Join-Path '__ROOT__' 'rows.csv';[IO.File]::WriteAllText($rows,"amount`n10`n20`n")
-if(Test-Path $env:npm_config_cache){throw 'Expected genuinely cold npm cache'}
+$seededCache=[bool]::Parse('__SEEDED_CACHE__')
+if(!$seededCache -and (Test-Path $env:npm_config_cache)){throw 'Expected genuinely cold npm cache'}
 if(!$publishedVersion){
 $phase='wait for exact current-run candidate'
 $candidateDeadline=[DateTime]::UtcNow.AddMinutes(3)
@@ -104,12 +105,16 @@ while(!(Test-Path '__ROOT__\candidate.tgz')) {
   if([DateTime]::UtcNow -gt $candidateDeadline){throw 'Exact current-run candidate did not arrive'}
   Start-Sleep -Milliseconds 200
 }
+if($seededCache){
+  if(!(Test-Path (Join-Path $env:npm_config_cache '_cacache\_lastverified') -PathType Leaf)){throw 'Expected verified same-run npm dependency seed'}
+  Write-Host 'Verified same-run Windows npm dependency seed is active'
+}
 $phase='standard-user online npx query'
 $result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\candidate.tgz','afbin','query',$rows,'--json')
 if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){throw 'Standard-user npx candidate query failed'}
 }
 # Real setup, not a mocked npm runner: the scoped registry serves only the exact
-# candidate. Dependencies reuse this user's just-populated cold-install cache.
+# candidate. Dependencies reuse the validated seed and npm may fetch cache misses online.
 $phase='candidate registry startup'
 $registry=$null
 if(!$publishedVersion){$registry=Start-Process (Join-Path $private 'node.exe') -ArgumentList @('"__ROOT__\windows-setup-registry.mjs"','"__ROOT__\candidate.tgz"','"__ROOT__\registry.json"') -PassThru -RedirectStandardOutput '__ROOT__\registry.stdout' -RedirectStandardError '__ROOT__\registry.stderr'}
@@ -174,6 +179,7 @@ try {
 '@
 $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
 $child=$child.Replace('__PUBLISHED_VERSION__',$PublishedVersion)
+$child=$child.Replace('__SEEDED_CACHE__',[string]$WaitForArtifact)
 # CreateProcessWithLogonW limits command lines to1024characters; keep script as
 # data on disk and invoke only a short inline expression under Restricted policy.
 [IO.File]::WriteAllText((Join-Path $root 'child.ps1'),$child)
@@ -246,6 +252,20 @@ try {
       Expand-Archive -Path $archive -DestinationPath $download
       $candidates=@(Get-ChildItem $download -Filter '*.tgz')
       if($candidates.Count -ne 1){throw 'Expected one exact current-run npm candidate'}
+      # Restore the exact-platform seed while the child waits for candidate.tgz. The shared
+      # helper enforces current-attempt identity and the archive digest; merge-seed validates
+      # the public dependency graph before creating the ACL-inheriting consumer cache.
+      $seedName='afbin-npm-dependency-seed-Windows-X64'
+      $seedZip=Join-Path $root 'npm-dependency-seed.zip'
+      & node scripts/lib/ci-artifact-wait.mjs $env:GITHUB_REPOSITORY $env:GITHUB_RUN_ID $env:GITHUB_RUN_ATTEMPT $seedZip (Join-Path $root 'failed.json') $seedName
+      if($LASTEXITCODE -ne 0){Write-StandardFailure;throw 'Waiting for exact current-run Windows npm seed failed'}
+      $seedDownload=Join-Path $root 'npm-dependency-seed'
+      Expand-Archive -Path $seedZip -DestinationPath $seedDownload
+      $seeds=@(Get-ChildItem $seedDownload -Filter 'npm-dependency-seed-Windows-X64.tar' -File -Recurse)
+      if($seeds.Count -ne 1){throw 'Expected one exact current-run Windows npm seed'}
+      $cache=Join-Path $root 'npm-cache'
+      & node scripts/lib/npm-dependency-cache.mjs merge-seed $seeds[0].FullName $cache Windows X64
+      if($LASTEXITCODE -ne 0){throw 'Current-run Windows npm dependency seed failed validation'}
       # Publish only a complete file to the waiting child.
       Copy-Item $candidates[0].FullName (Join-Path $root 'candidate.pending')
       Move-Item (Join-Path $root 'candidate.pending') (Join-Path $root 'candidate.tgz')
