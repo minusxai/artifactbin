@@ -1,10 +1,59 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
+it.each([false, true])('marks all notifications read from the inbox (compact: %s)', async compact => {
+  let read = false;
+  let finish: (() => void) | undefined;
+  const writes: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
+    if (url === '/api/my/people') {
+      if (init?.method === 'PATCH') {
+        writes.push(JSON.parse(String(init.body)));
+        await new Promise<void>(resolve => { finish = resolve; });
+        read = true;
+      }
+      return Response.json({ autoAccept: false, unread: read ? 0 : 70, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', sender_id: 'usr_2', username: 'alice', kind: 'reply', title: 'Notes', read_at: read ? new Date().toISOString() : null, revision: 1 }] });
+    }
+    return Response.json({}, { status: 404 });
+  }));
+  window.history.replaceState(null, '', '/notifications');
+  render(() => <App />);
+  const bell = await screen.findByRole('button', { name: 'Notifications, unread updates' });
+  if (compact) fireEvent.click(bell);
+  const view = compact ? within(screen.getByRole('region', { name: 'Notifications' })) : screen;
+  const button = await view.findByRole('button', { name: 'Mark all as read' });
+  fireEvent.click(button);
+  await waitFor(() => expect(button).toBeDisabled());
+  expect(writes).toEqual([{ readAll: true }]);
+  finish!();
+  await waitFor(() => expect(screen.queryByLabelText('Unread')).not.toBeInTheDocument());
+  expect(view.getByRole('link', { name: '@alice replied in Notes' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Notifications' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Mark all as read' })).not.toBeInTheDocument();
+});
+it('keeps unread notifications and allows another attempt when marking all fails', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
+    if (url === '/api/my/people') {
+      if (init?.method === 'PATCH') return Response.json({}, { status: 500 });
+      return Response.json({ autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', sender_id: 'usr_2', username: 'alice', kind: 'reply', title: 'Notes', read_at: null, revision: 1 }] });
+    }
+    return Response.json({}, { status: 404 });
+  }));
+  window.history.replaceState(null, '', '/notifications');
+  render(() => <App />);
+  const button = await screen.findByRole('button', { name: 'Mark all as read' });
+  fireEvent.click(button);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not load notifications');
+  await waitFor(() => expect(button).toBeEnabled());
+  expect(screen.getByLabelText('Unread')).toBeInTheDocument();
+});
+
 it('opens the bell and shows an invitation with a working approval action', async () => {
   const calls: Array<{ url: string; method: string }> = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -18,8 +67,9 @@ it('opens the bell and shows an invitation with a working approval action', asyn
   render(() => <App />);
   const bell = await screen.findByRole('button', { name: 'Notifications, unread updates' });
   fireEvent.click(bell);
-  expect(screen.getByRole('region', { name: 'Notification list' })).toHaveTextContent('alice');
-  fireEvent.click(screen.getByRole('button', { name: 'Approve request' }));
+  const panel = within(screen.getByRole('region', { name: 'Notifications' }));
+  expect(panel.getByRole('region', { name: 'Notification list' })).toHaveTextContent('alice');
+  fireEvent.click(panel.getByRole('button', { name: 'Approve request' }));
   await waitFor(() => expect(calls).toContainEqual({ url: '/api/my/artifacts/doc1/members', method: 'POST' }));
 });
 

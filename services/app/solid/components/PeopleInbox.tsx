@@ -20,6 +20,12 @@ export function PeopleInbox(props: { compact?: boolean; close?: () => void }): J
   const [actionError, setActionError] = createSignal('');
   const items = () => props.compact ? inbox.state()?.notifications.slice(0, 6) ?? [] : inbox.state()?.notifications ?? [];
   const markRead = (item: InboxItem) => { void inbox.load({ read: item.id, revision: item.revision }); props.close?.(); };
+  const markAllRead = async () => {
+    if (busy()) return;
+    setBusy(true); setActionError('');
+    try { await inbox.load({ readAll: true }); }
+    finally { setBusy(false); }
+  };
   const respond = async (item: InboxItem, action: 'accept' | 'approve' | 'dismiss') => {
     if (!item.artifact_id || 'actor' in item) return;
     setBusy(true); setActionError('');
@@ -31,6 +37,7 @@ export function PeopleInbox(props: { compact?: boolean; close?: () => void }): J
     finally { setBusy(false); }
   };
   return <section aria-label="Notification list" class="font-sans">
+    <Show when={inbox.state()?.unread}><div class="flex justify-end border-b border-edge px-3 py-2"><button type="button" disabled={busy()} onClick={() => void markAllRead()} class="rounded px-2 py-1 text-xs font-medium text-accent hover:bg-accent-soft disabled:opacity-50">Mark all as read</button></div></Show>
     <Show when={inbox.error() || actionError()}><p role="alert" class="p-3 text-sm text-danger">{actionError() || inbox.error()} <button onClick={() => void inbox.load()}>Retry</button></p></Show>
     <Show when={!inbox.state() && !inbox.error()}><p role="status" class="p-4 text-sm text-muted">Loading notifications…</p></Show>
     <Show when={inbox.state() && !items().length}><div class="px-6 py-10 text-center"><Bell size={24} class="mx-auto mb-3 text-muted" /><p class="text-sm font-medium">You’re all caught up.</p><p class="mt-1 text-xs leading-5 text-muted">Invitations, replies and activity will appear here.</p></div></Show>
