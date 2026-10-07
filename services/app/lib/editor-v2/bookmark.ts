@@ -2,6 +2,7 @@ import type { AnnotationOperation } from './annotation-map';
 /** Text endpoints use persistent block IDs; offsets are local to that block. */
 import { TextSelection, type EditorState } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
+import type { Node } from 'prosemirror-model';
 import type { JsxElement } from '@/lib/jsx';
 interface TextEndpoint {
   id: string;
@@ -30,11 +31,11 @@ export function captureBookmark(state: EditorState): EditorBookmark | undefined 
     head = endpoint(state.selection.head);
   return anchor && head ? { anchor, head } : undefined;
 }
-export function restoreBookmark(view: EditorView, bookmark: EditorBookmark): boolean {
-  if (view.isDestroyed) return false;
+/** Resolve without dispatching or focusing: remote updates must not steal keyboard focus. */
+export function resolveBookmark(doc: Node, bookmark: EditorBookmark): TextSelection | undefined {
   const locate = (point: TextEndpoint) => {
     let position: number | undefined;
-    view.state.doc.descendants((node, pos) => {
+    doc.descendants((node, pos) => {
       if (node.isTextblock && sourceId(node.attrs.source) === point.id)
         position = pos + 1 + Math.min(node.content.size, Math.max(0, point.offset));
     });
@@ -42,8 +43,13 @@ export function restoreBookmark(view: EditorView, bookmark: EditorBookmark): boo
   };
   const anchor = locate(bookmark.anchor),
     head = locate(bookmark.head);
-  if (anchor === undefined || head === undefined) return false;
-  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, anchor, head)));
+  return anchor === undefined || head === undefined ? undefined : TextSelection.create(doc, anchor, head);
+}
+export function restoreBookmark(view: EditorView, bookmark: EditorBookmark): boolean {
+  if (view.isDestroyed) return false;
+  const selection = resolveBookmark(view.state.doc, bookmark);
+  if (!selection) return false;
+  view.dispatch(view.state.tr.setSelection(selection));
   view.focus();
   return true;
 }

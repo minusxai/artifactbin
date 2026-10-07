@@ -15,6 +15,7 @@ import { editorDocument, sourceNodes } from '@/lib/editor-v2/model';
 import { FlowEditor } from '../FlowEditor';
 import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-v2/flow-view';
 import { createEditorSource } from '../create-editor-source';
+import { captureBookmark } from '@/lib/editor-v2/bookmark';
 
 function nodes(source: string) {
   const p = parseJsx(source);
@@ -538,4 +539,55 @@ describe('markdown block shortcuts', () => {
     composing.type('# ');
     expect(composing.store.current()).toBe('<p id="a"># </p>');
   });
+});
+
+
+describe('selection during collaborative Markdown updates', () => {
+  const initial = '<p id="a">alpha</p><p id="b">bravo</p><p id="c">charlie</p>';
+  it.each([
+    ['insertion above', '<p id="new">a new remote paragraph</p>' + initial],
+    ['deletion above', '<p id="b">bravo</p><p id="c">charlie</p>'],
+    ['heading conversion above', '<h1 id="a">a much longer remote heading</h1><p id="b">bravo</p><p id="c">charlie</p>'],
+    ['block movement', '<p id="c">charlie</p><p id="b">bravo</p><p id="a">alpha</p>'],
+    ['active heading conversion', '<p id="a">alpha</p><h2 id="b">bravo</h2><p id="c">charlie</p>'],
+  ])('keeps the selected text on its persistent block after remote %s', (_name, remote) => {
+    let engine: EditorView | null = null;
+    const [current, setCurrent] = createSignal(nodes(initial));
+    const onChange = vi.fn();
+    render(() => <FlowEditor nodes={current()} path="0" onChange={onChange} onView={v => { if (v) engine = v; }} />);
+    const v = engine!;
+    // A backwards selection in paragraph b, not a collapsed caret.
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, 12, 9)));
+    const bookmark = captureBookmark(v.state);
+    expect(bookmark).toEqual({ anchor: { id: 'b', offset: 4 }, head: { id: 'b', offset: 1 } });
+    setCurrent(nodes(remote));
+    expect(captureBookmark(v.state)).toEqual(bookmark);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(v.state.doc.textContent).toBe(editorDocument(nodes(remote)).textContent);
+  });
+
+  it('clamps selection offsets when the remote author shortens the active block', () => {
+    let engine: EditorView | null = null;
+    const [current, setCurrent] = createSignal(nodes(initial));
+    render(() => <FlowEditor nodes={current()} path="0" onChange={() => {}} onView={v => { if (v) engine = v; }} />);
+    const v = engine!;
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, 13, 10)));
+    setCurrent(nodes(initial.replace('bravo', 'b')));
+    expect(captureBookmark(v.state)).toEqual({ anchor: { id: 'b', offset: 1 }, head: { id: 'b', offset: 1 } });
+  });
+
+  it('uses a valid collapsed fallback when the selected block was deleted remotely', () => {
+    let engine: EditorView | null = null;
+    const [current, setCurrent] = createSignal(nodes(initial));
+    const onChange = vi.fn();
+    render(() => <FlowEditor nodes={current()} path="0" onChange={onChange} onView={v => { if (v) engine = v; }} />);
+    const v = engine!;
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, 12, 9)));
+    setCurrent(nodes('<p id="a">alpha</p><p id="c">charlie</p>'));
+    expect(v.state.selection.empty).toBe(true);
+    expect(v.state.selection.$from.parent.isTextblock).toBe(true);
+    expect(v.state.doc.textContent).toBe('alphacharlie');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
 });

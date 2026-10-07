@@ -12,7 +12,7 @@ import { baseKeymap, chainCommands, splitBlockAs } from 'prosemirror-commands';
 import { keymap } from 'prosemirror-keymap';
 import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { mergeIdentityMaps } from './annotation-map';
-import { captureBookmark, type EditorSelectionChange } from './bookmark';
+import { captureBookmark, resolveBookmark, type EditorSelectionChange } from './bookmark';
 import { clipboardAst, type ClipboardKind } from './clipboard';
 import { inlineShortcut, BLOCK_SHORTCUT, ordinaryParagraph, blockShortcut, splitTask, leaveCode } from './block-shortcuts';
 import { editorDocument, editorSchema, normalizeIdentities, pasteFragment, sourceNodes, toggleInline } from './model';
@@ -465,8 +465,10 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         view.updateState(view.state);
         return;
       }
+      const bookmark = captureBookmark(view.state);
       const position = Math.min(view.state.selection.from, doc.content.size);
-      view.updateState(EditorState.create({ doc, plugins: view.state.plugins, selection: TextSelection.near(doc.resolve(position)) }));
+      const selection = (bookmark && resolveBookmark(doc, bookmark)) ?? TextSelection.near(doc.resolve(position));
+      view.updateState(EditorState.create({ doc, plugins: view.state.plugins, selection }));
       props().onView?.(view);
     },
     destroy() {
