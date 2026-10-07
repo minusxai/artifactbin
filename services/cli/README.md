@@ -6,6 +6,8 @@ Install it once as described in [Install and authenticate](#install-and-authenti
 
 ## Preview and host
 
+`preview` runs in the foreground until Ctrl+C. Run a preview command by itself; do not chain it with `&&` or pipe it to `tail`, because it stays open. Use another terminal for other commands while preview runs, or stop it with Ctrl+C before continuing in the same terminal. Automation should retain the handle to its preview child and stop only that process.
+
 ```sh
 afbin preview --port 7474
 afbin preview report.jsx appendix.jsx
