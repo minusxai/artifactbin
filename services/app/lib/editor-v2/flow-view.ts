@@ -14,7 +14,7 @@ import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { mergeIdentityMaps } from './annotation-map';
 import { captureBookmark, type EditorSelectionChange } from './bookmark';
 import { clipboardAst, type ClipboardKind } from './clipboard';
-import { BLOCK_SHORTCUT, ordinaryParagraph, blockShortcut, splitTask, leaveCode } from './block-shortcuts';
+import { inlineShortcut, BLOCK_SHORTCUT, ordinaryParagraph, blockShortcut, splitTask, leaveCode } from './block-shortcuts';
 import { editorDocument, editorSchema, normalizeIdentities, pasteFragment, sourceNodes, toggleInline } from './model';
 
 export interface FlowEditorProps {
@@ -350,9 +350,20 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
       },
     },
     handleTextInput(view, from, to, text, typing) {
-      if (from !== to || !/^[ \u00a0]$/.test(text) || state.composing || view.composing || props().canEdit?.() === false) return false;
+      if (from !== to || state.composing || view.composing || props().canEdit?.() === false) return false;
       const $from = view.state.doc.resolve(from);
-      if (!ordinaryParagraph($from) || !BLOCK_SHORTCUT.test($from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc') + text)) return false;
+      if (!ordinaryParagraph($from)) return false;
+      if (text === '*') {
+        const inserted = typing();
+        const convert = inlineShortcut(view.state.apply(inserted));
+        if (!convert) return false;
+        view.dispatch(inserted);
+        view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());
+        // Identity normalization adds mark steps; clear typing marks after it.
+        view.dispatch(view.state.tr.setStoredMarks([]));
+        return true;
+      }
+      if (!/^[ \u00a0]$/.test(text) || !BLOCK_SHORTCUT.test($from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc') + text)) return false;
       view.dispatch(typing());
       const convert = blockShortcut(view.state);
       if (convert) view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());

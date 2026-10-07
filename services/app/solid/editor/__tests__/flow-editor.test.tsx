@@ -255,6 +255,52 @@ describe('markdown block shortcuts', () => {
     const caret = (position: 'start' | 'end') => v().dispatch(v().state.tr.setSelection(position === 'start' ? TextSelection.atStart(v().state.doc) : TextSelection.atEnd(v().state.doc)));
     return { view, store, type, enter, caret, v };
   }
+
+  it.each([['**bold**', 'strong', 'bold'], ['*italic*', 'em', 'italic']])('formats typed %s while preserving identity, caret and undo', async (markdown, tag, text) => {
+    const e = editor('<p id="paragraph"></p>');
+    e.type(markdown);
+    expect(e.view.container.querySelector(`p#paragraph > ${tag}`)?.textContent).toBe(text);
+    const converted = e.store.current();
+    expect(converted).not.toContain(markdown);
+    expect(e.v().state.selection.$from.parentOffset).toBe(text.length);
+    await e.store.undo();
+    expect(e.store.current()).toBe(`<p id="paragraph">${markdown}</p>`);
+    await e.store.redo();
+    expect(e.store.current()).toBe(converted);
+    e.type(' next');
+    expect(e.view.container.querySelector(tag)?.textContent).toBe(text);
+    expect(e.view.container.querySelector('p')?.textContent).toBe(`${text} next`);
+  });
+
+  it.each(['<pre id="code"></pre>', '<ul><li><p id="item"></p></li></ul>', '<table><tbody><tr><td><p id="cell"></p></td></tr></tbody></table>'])('keeps typed inline markers literal outside ordinary prose: %s', source => {
+    const e = editor(source);
+    e.type('**literal**');
+    expect(e.store.current()).toContain('**literal**');
+    expect(e.view.container.querySelector('strong')).toBeNull();
+  });
+
+  it('keeps inline Markdown literal during composition and plain-text paste', () => {
+    const composing = editor('<p id="ime"></p>');
+    fireEvent.compositionStart(composing.view.getByRole('textbox'));
+    composing.type('**literal**');
+    expect(composing.view.container.querySelector('strong')).toBeNull();
+    const pasted = editor('<p id="paste"></p>');
+    fireEvent.paste(pasted.view.getByRole('textbox'), { clipboardData: { files: [], getData: (type: string) => type === 'text/plain' ? '**literal**' : '' } });
+    expect(pasted.store.current()).toContain('**literal**');
+    expect(pasted.view.container.querySelector('strong')).toBeNull();
+  });
+
+  it('preserves surrounding prose and leaves escaped or empty emphasis literal', () => {
+    const e = editor('<p id="prose">Before </p>');
+    e.caret('end');
+    e.type('**word** after');
+    expect(e.view.container.querySelector('strong')?.textContent).toBe('word');
+    expect(e.view.container.querySelector('p')?.textContent).toBe('Before word after');
+    const literal = editor('<p id="literal"></p>');
+    literal.type('\\*escaped* ** **');
+    expect(literal.view.container.querySelector('em, strong')).toBeNull();
+  });
+
   const ID = 'e[0-9a-f]{32}';
 
   it.each(['space', 'enter'])('inserts a horizontal rule with --- and %s, preserving undo and a place to type', async trigger => {

@@ -1,4 +1,4 @@
-/** Markdown typing owns structural commands only; the view owns dispatch and source history. */
+/** Markdown typing returns source-backed commands; the view owns dispatch and history. */
 import type { ResolvedPos } from 'prosemirror-model';
 import { TextSelection, type EditorState, type Transaction, type Command } from 'prosemirror-state';
 import { splitBlock } from 'prosemirror-commands';
@@ -79,3 +79,24 @@ export const leaveCode: Command = (state, dispatch) => {
   dispatch?.(tr.setSelection(TextSelection.create(tr.doc, at + 1)).setMeta('mx-command', true).scrollIntoView());
   return true;
 };
+
+
+/** Typed emphasis only: plain spans in authored prose; paste and complex/nested marks stay literal. */
+export function inlineShortcut(state: EditorState): Transaction | null {
+  const { $from, empty } = state.selection;
+  if (!empty || !ordinaryParagraph($from)) return null;
+  const before = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
+  const match = /(?:^|[\s(])(\*\*([^*\n]+)\*\*|\*([^*\n]+)\*)$/.exec(before);
+  if (!match) return null;
+  const text = match[2] ?? match[3]!;
+  if (!text.trim() || text !== text.trim() || text.includes('\ufffc')) return null;
+  const delimiter = match[2] === undefined ? 1 : 2;
+  const start = $from.pos - match[1]!.length;
+  const end = $from.pos;
+  let plain = true;
+  state.doc.nodesBetween(start, end, node => { if (node.isInline && (!node.isText || node.marks.length)) plain = false; });
+  if (!plain) return null;
+  const tr = state.tr.delete(end - delimiter, end).delete(start, start + delimiter);
+  tr.addMark(start, start + text.length, editorSchema.marks.inline.create({ tag: delimiter === 2 ? 'strong' : 'em' }));
+  return tr.setSelection(TextSelection.create(tr.doc, start + text.length)).setStoredMarks([]);
+}
