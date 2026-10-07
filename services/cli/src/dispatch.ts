@@ -297,6 +297,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    }
    // AUTH is lazy and idempotent. A saved token is verified with one read and its account reported;
    // no token or a rejected one runs the same browser approval the rest of the CLI uses on 401.
+   // --force skips the saved token and always runs a fresh browser approval.
+   if(flags.force){connection=await browserAuthenticate(server??declaredServer,{...context.auth,home,env:context.env,interactive,aliases:serverAliases,fresh:true,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});emit({authenticated:true,server:connection.server});return 0;}
    if(connection){
     const probe=new HttpClient({connection,home,env:context.env,fetch:context.fetch});
     try{await probe.request('/artifacts?limit=1');emit({authenticated:true,server:probe.connection.server,account:probe.account??'anonymous'});return 0;}
