@@ -322,7 +322,24 @@ describe('write checks', () => {
     store.start();
     await settle();
     expect(settled).toBe(true);
-    expect(store.mutationUnavailable('vote')).toBe(ACCESS_PENDING);
+    expect(store.mutationUnavailable('vote')).toBe('Could not check edit access. Reload this page to retry.');
+    expect(store.canMutate('vote')).toBe(false);
+    await expect(store.mutate('vote')).rejects.toThrow('Could not check edit access');
+    // Explicit saved-request retries keep their server-authorized wire contract.
+    await expect(store.mutate({ mutation: 'vote', args: { choice: 'ramen' } })).resolves.toBeUndefined();
+  });
+
+  it('reports an incomplete permission answer and asks again on the next flush', async () => {
+    const { store, answers } = checks({});
+    answers.push(() => Promise.resolve({ tables: {}, errors: {} }));
+    store.start();
+    await settle();
+    expect(store.mutationUnavailable('vote')).toBe('Could not check edit access. Reload this page to retry.');
+    expect(store.canMutate('vote')).toBe(false);
+    answers.push(() => Promise.resolve({ tables: {}, errors: {}, mutationAccess: { vote: 'Read-only' } }));
+    store.setValue('choice', 'tacos');
+    await settle();
+    expect(store.mutationUnavailable('vote')).toBe('Read-only');
   });
 
   it('holds a caller while a failed check is being asked again', async () => {
@@ -333,6 +350,7 @@ describe('write checks', () => {
     let answer!: (r: Awaited<ReturnType<QueryTransport['run']>>) => void;
     answers.push(() => new Promise((resolve) => { answer = resolve; }));
     store.setValue('choice', 'tacos'); // the next run asks again
+    expect(store.mutationUnavailable('vote')).toBe(ACCESS_PENDING);
     let settled = false;
     void store.accessSettled().then(() => { settled = true; });
     await settle();

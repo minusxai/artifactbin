@@ -360,6 +360,26 @@ describe('<DialogContent run> on the island store', () => {
     dispose();
   });
 
+  it('replaces a failed first permission check with a clear refusal and recovers on a later answer', async () => {
+    const flow = await compiledOf('<Import name="votes" src="ref:Votes0001" /><Mutation name="add">{`insert into votes.rows (choice) values (\'x\')`}</Mutation>', { Votes0001: [{ name: 'choice', type: 'string' }] });
+    const run = vi.fn().mockRejectedValue(new Error('offline'));
+    const mutate = vi.fn();
+    const store = createDataflowStore({ flow }, { transport: { run, mutate, page: vi.fn() } });
+    const { host, dispose } = mount(islandOn(store), () => <Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Add" run="$add"><button type="submit">Save</button></DialogContent></Dialog>);
+    try {
+      const dialog = open(host);
+      expect(dialog.querySelector('[role="status"]')?.textContent).toBe(ACCESS_PENDING);
+      store.start(); await flush();
+      expect(dialog.querySelector('[role="status"]')?.textContent).toBe('Could not check edit access. Reload this page to retry.');
+      expect(dialog.querySelector('fieldset')!.disabled).toBe(true);
+      expect(mutate).not.toHaveBeenCalled();
+      run.mockResolvedValue({ tables: {}, errors: {}, mutationAccess: { add: null } });
+      store.invalidateDatasets(['Votes0001']); await flush();
+      expect(dialog.querySelector('[role="status"]')).toBeNull();
+      expect(dialog.querySelector('fieldset')!.disabled).toBe(false);
+    } finally { store.dispose(); dispose(); }
+  });
+
   it('an allowed write submits with `args=`, closes once saved, and stays open with the refusal when it fails', async () => {
     const s = fakeStore({ access: { add: null }, values: { title: 'Milk' } });
     const { host, dispose } = mount(islandOn(s.store), () => <Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Add" run="$add" args={{ t: { ref: 'title' } }} stacked={false}><button type="submit">Save</button></DialogContent></Dialog>);

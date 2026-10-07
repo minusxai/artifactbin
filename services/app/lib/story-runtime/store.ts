@@ -38,7 +38,7 @@ import { localZone } from '@/lib/story/data/builtins';
 import { placeDataflow, type DataflowPlacement } from '@/lib/story/data/placement';
 import type { PersonCard } from '@artifactbin/contracts';
 import {
-  accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople, versionsNow,
+  accessCheckFailed, accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople, versionsNow,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,
 } from './dataflow-core';
 import { MAX_PEOPLE_IDS, type ServedResults } from './contract';
@@ -50,6 +50,7 @@ const IDLE_PREPARE_MS = 2000;
 
 /** What `mutationUnavailable` answers while the permission check is still in flight. */
 export const ACCESS_PENDING = 'Checking edit access…';
+const ACCESS_FAILED = 'Could not check edit access. Reload this page to retry.';
 
 export interface MutationAnswer { dataset: string; mutationRunId?:string; local?: LocalMutationResult }
 
@@ -562,15 +563,18 @@ export function createDataflowStore(
     if (!transport?.mutate && !inPageWrite) return 'This view cannot save changes.';
     if (decl && 'local' in decl.target) return null;
     const access = core.data.mutationAccess ?? {};
-    return Object.hasOwn(access, name) ? access[name]! : ACCESS_PENDING;
+    if (Object.hasOwn(access, name)) return access[name]!;
+    return accessCheckFailed(core, name)
+      ? ACCESS_FAILED
+      : ACCESS_PENDING;
   };
 
-  /** Why this write cannot be sent from here, or null. The wire form lets a pending check through: the server decides. */
+  /** Why this write cannot be sent from here, or null. Wire retries with an unknown permission still ask the server to decide. */
   const refusalOf = (name: string, wire: boolean): string | null => {
     if (!core.graph.mutations.some((m) => m.name === name)) return `this document declares no <Mutation name="${name}">`;
     if (!transport?.mutate && !(page && placement.mutations[name] === 'browser')) return 'this document cannot write from here';
     const unavailable = mutationUnavailable(name);
-    return unavailable === ACCESS_PENDING && wire ? null : unavailable;
+    return wire && (unavailable === ACCESS_PENDING || unavailable === ACCESS_FAILED) ? null : unavailable;
   };
 
   const mutate = (async (first: string | MutationRequest, overrides?: Record<string, Scalar>, row?: Record<string, Scalar>): Promise<void> => {

@@ -172,6 +172,10 @@ export function busyOf(state: CoreState): ReadonlySet<string> {
 export const accessSettled = (state: CoreState): boolean =>
   indexOf(state.graph).computed.every((k) => !k.startsWith('access:') || isCurrent(state, k) || state.failed[k] === versionOf(state, k));
 
+/** A write check failed at its current version; a new request clears this state. */
+export const accessCheckFailed = (state: CoreState, name: string): boolean =>
+  state.failed[accessKey(name)] === versionOf(state, accessKey(name));
+
 /** The local table rows every run and write carries, when the reader has written any. */
 export function localRows(state: CoreState): Record<string, Row[]> | undefined {
   const names = Object.keys(state.local);
@@ -241,7 +245,9 @@ export function step(prev: CoreState, event: CoreEvent): { state: CoreState; eff
   const next = reduce(prev, event, effects);
   if (next === prev) return { state: prev, effects };
   const pendingBefore = pendingOf(prev), pendingAfter = pendingOf(next);
-  const readable = next.data !== prev.data || next.busy !== prev.busy
+  const accessChanged = next.graph.mutations.some(m =>
+    accessCheckFailed(prev, m.name) !== accessCheckFailed(next, m.name));
+  const readable = accessChanged || next.data !== prev.data || next.busy !== prev.busy
     || pendingBefore.size !== pendingAfter.size || [...pendingAfter].some((n) => !pendingBefore.has(n));
   if (!readable) return { state: next, effects };
   // A new snapshot identity whenever anything a reader sees changed, pending
@@ -358,7 +364,13 @@ function answered(state: CoreState, at: Versions, answer: RunAnswer): CoreState 
     } else {
       if (mutationAccess === state.data.mutationAccess) mutationAccess = { ...mutationAccess };
       if (answer.mutationAccess && Object.hasOwn(answer.mutationAccess, name)) mutationAccess![name] = answer.mutationAccess[name]!;
-      else delete mutationAccess![name];
+      else {
+        // An omitted permission is not an answer. Keep writes closed and let
+        // the next flush retry rather than permanently claiming to be loading.
+        delete mutationAccess![name];
+        delete answeredAt[k];
+        failedAt[k] = at[k]!;
+      }
     }
   }
   return {
