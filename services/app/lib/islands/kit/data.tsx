@@ -82,6 +82,14 @@ const rowIdentity = (row: Row | undefined, key: string | undefined, index: numbe
   return value === null || value === undefined || (typeof value !== 'string' && typeof value !== 'number') ? `index:${index}` : `${typeof value}:${String(value)}`;
 };
 /** Where the pending lockup spins (QuestionEmbed `waiting`, DataTableAdapter's pending state). */
+/** Keep unreadable/deleted imports indistinguishable; ordinary SQL errors remain useful. */
+function queryFailure(name: string, error: string): string {
+  if (error.startsWith('<Query name="') && error.endsWith(', which is unavailable — deleted, or no longer readable here')) {
+    return 'This data is unavailable. The dataset may be private or no longer available. Ask the person who shared this document to check dataset access and share it with your account.';
+  }
+  return `query "${name}" failed: ${error}`;
+}
+
 const SPINNER = 'size-[22px] animate-spin rounded-full border-2 border-border border-t-primary motion-reduce:animate-none';
 const LOCKUP_LABEL = 'font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground';
 
@@ -101,7 +109,7 @@ export function DataTable(props: DataTableProps) {
       <Switch fallback={`data unavailable — "$${name()}" has no rows yet`}>
         <Match when={busy()}><span aria-hidden="true" class={SPINNER} /><span class={LOCKUP_LABEL}>loading data…</span></Match>
         <Match when={!name()}>{'data unavailable — bind a declared table with data="$name"'}</Match>
-        <Match when={island.error(name())}>{error => `query "${name()}" failed: ${error()}`}</Match>
+        <Match when={island.error(name())}>{error => queryFailure(name(), error())}</Match>
       </Switch>
     </div>
   }>
@@ -287,7 +295,7 @@ export function Question(props: QuestionProps) {
     <Switch>
       <Match when={!name}>{empty('data unavailable — bind a declared table with data="$name"')}</Match>
       <Match when={!table() && pending()}><div class="flex h-full w-full flex-col items-center justify-center gap-2.5 p-4" aria-label="Chart placeholder" data-mx-chart-state="pending"><span aria-hidden="true" class={SPINNER} /><span class={LOCKUP_LABEL}>loading data…</span></div></Match>
-      <Match when={!table() && island.error(name)}>{error => empty(`query "${name}" failed: ${error()}`)}</Match>
+      <Match when={!table() && island.error(name)}>{error => empty(queryFailure(name, error()))}</Match>
       <Match when={!table()}>{empty(`data unavailable — "$${name}" has no rows yet`)}</Match>
       <Match when={kind() === 'single_value'}>
         <div class="flex h-full w-full flex-col items-start justify-center gap-1 p-4" aria-label="Single value" {...attr('data-mx-chart-state', state())}>
