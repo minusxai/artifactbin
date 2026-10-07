@@ -68,11 +68,15 @@ describe('the committed outputs are what the generator emits now', () => {
     expect(outcomeRule).not.toMatch(/\bmin-width:\s*200px;/);
     expect(css).toMatch(/\.al-outcomes\s*\{[^}]*grid-template-columns:\s*1fr 1fr 1fr;/);
   });
-  it('lets Phosphor KPI cards fit narrow grid tracks while preserving their desktop minimum', () => {
+  it('lets Phosphor KPI cards fit their grid tracks while preserving desktop spacing and mobile sizing', () => {
     const css = renderRuntime().entries.find((entry) => entry.name === 'phosphor').css;
     const mobile = css.match(/@container \(max-width: 400px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
-    expect(css).toMatch(/\.p-stat\s*\{[^}]*min-width:\s*200px;/);
-    expect(mobile).toMatch(/\.p-stat\s*\{[^}]*min-width:\s*0;[^}]*padding-inline:\s*clamp\(4px, 1\.8cqw, 12px\);/);
+    const card = css.match(/\.p-stat\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(card).toMatch(/\bmin-width:\s*0;/);
+    expect(card).toMatch(/padding:\s*18px 20px;/);
+    expect(css).not.toMatch(/\.p-stat\s*\{[^}]*min-width:\s*200px;/);
+    expect(mobile).toMatch(/\.p-stat\s*\{[^}]*padding-inline:\s*clamp\(4px, 1\.8cqw, 12px\);/);
+    expect(mobile).not.toMatch(/\.p-stat\s*\{[^}]*min-width:/);
     expect(mobile).toMatch(/\.p-stat \.t-numeral\s*\{[^}]*font-size:\s*clamp\(18px, 10cqw, 40px\);/);
   });
   it('retains cover grounds after comments and resolves every drawing token in both modes', () => {
