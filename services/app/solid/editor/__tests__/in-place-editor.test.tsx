@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Route, Router } from '@solidjs/router';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_TEXT_EDIT_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_FLOW_EDIT_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_TEXT_EDIT_MESSAGE } from '@/lib/story-runtime/contract';
 import { fakeBackend } from '@/test/helpers/artifact-backend';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { screen, within } from '@testing-library/dom';
@@ -245,4 +245,24 @@ it('source typing saves and redraws the same draft before returning to App', asy
   fireEvent.click(view.getByRole('tab', { name: 'Edit on the page' }));
   expect(drafts(sent).at(-1)).toBe(next);
   expect(queued).toHaveLength(1);
+});
+
+
+it('keeps recovery modal until explicit restore and copies the rejected draft without saving it', async () => {
+  let copied = '';
+  vi.stubGlobal('navigator', { clipboard: { writeText: async (text: string) => { copied = text; } } });
+  const { view, emit, sent } = mountEditor('<p id="a">Current document</p>');
+  const fragment = '<p id="a">Recover this text</p>';
+  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected: '<p id="a">Stale document</p>', replacement: fragment });
+  const recovery = view.getByRole('alertdialog', { name: 'Recover uncommitted text' });
+  expect(recovery).toHaveAttribute('aria-modal', 'true');
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(recovery.isConnected).toBe(true);
+  fireEvent.click(within(recovery).getByRole('button', { name: 'Copy uncommitted text' }));
+  await vi.waitFor(() => expect(copied).toBe(fragment));
+  expect(recovery.isConnected).toBe(true);
+  expect(queued).toHaveLength(0);
+  fireEvent.click(within(recovery).getByRole('button', { name: 'Discard this text and restore document' }));
+  expect(view.queryByRole('alertdialog', { name: 'Recover uncommitted text' })).toBeNull();
+  expect(drafts(sent).at(-1)).toBe('<p id="a">Current document</p>');
 });

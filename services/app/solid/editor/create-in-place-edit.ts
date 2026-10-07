@@ -137,6 +137,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
   let commitRequest: Promise<boolean> | null = null;
 
   const postToFrame = (message: Record<string, unknown>) => {
+    if (rejected && message.type !== STORY_EDIT_MODE_MESSAGE) return;
     sendDocument({ runtimeRef: options.runtimeRef }, message);
   };
 
@@ -149,6 +150,9 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
           const nonce = options.sessionNonce;
           if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
 
+          // A rejected editor no longer owns a valid source baseline. Retain the
+          // first recoverable fragment and ignore queued edits until restoration.
+          if (rejected && event.data.type !== 'mx:committed') return;
           switch (event.data.type) {
             case 'mx:history':
               options.onHistory?.(event.data.direction);
@@ -186,6 +190,9 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
                 options.onSourceEdited(next, true, event.data.group, event.data.selection);
               } else if (expected !== replacement) {
                 rejected = true;
+                setReady(false);
+                setSelection(null);
+                postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: false });
                 options.onRejectedEdit?.(replacement);
               }
               break;
@@ -269,6 +276,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
   }));
 
   const applyFormat = (path: string, edit: ComposableFormatEdit) => {
+    if (rejected) return;
     // The engine publishes its checked source transaction. Legacy hosts still
     // need the parent to compose their class/style change. Never do both.
     const current = selection();
@@ -328,13 +336,19 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
       });
     }
     const acknowledged = await commitRequest;
+    // The flush can itself produce a rejected edit before its acknowledgement.
+    if (rejected) throw new Error('Recover the uncommitted text before leaving the editor.');
     if (requireAcknowledgement && !acknowledged) throw new Error('editor commit timed out');
   };
 
   return {
     selection,
     ready,
-    discardRejectedEdit: () => { rejected = false; },
+    discardRejectedEdit: () => {
+      if (!rejected) return;
+      rejected = false;
+      if (options.editing) postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    },
     isUserEditing: () => typing || rejected,
     applyFormat,
     applyLink,
