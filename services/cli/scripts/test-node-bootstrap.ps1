@@ -1,5 +1,6 @@
 # CI-only native standard-user Windows PS5.1 bootstrap. No organization policy bypass.
-param([string]$Tarball,[switch]$WaitForArtifact)
+param([string]$Tarball,[switch]$WaitForArtifact,[string]$PublishedVersion)
+if($PublishedVersion -and $PublishedVersion -notmatch '^\d+\.\d+\.\d+$'){throw 'PublishedVersion must be an exact release version'}
 $ErrorActionPreference = 'Stop'
 $identity = 'mxmx_node_' + [Guid]::NewGuid().ToString('N').Substring(0,6)
 $password = [Guid]::NewGuid().ToString('N')+'aA!9'
@@ -8,7 +9,8 @@ $credential = New-Object Management.Automation.PSCredential("$env:COMPUTERNAME\$
 $root = Join-Path $env:PUBLIC ('afbin-node-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $root | Out-Null
 Copy-Item services/app/public/chat/ensure-node.ps1 (Join-Path $root 'ensure-node.ps1')
-if (!$Tarball -and !$WaitForArtifact) { throw 'Pass the exact npm candidate tarball or wait for this CI run.' }
+Copy-Item services/cli/scripts/windows-setup-registry.mjs (Join-Path $root 'windows-setup-registry.mjs')
+if (!$Tarball -and !$WaitForArtifact -and !$PublishedVersion) { throw 'Pass the exact npm candidate tarball, wait for this CI run, or verify a published version.' }
 if ($Tarball) { Copy-Item $Tarball (Join-Path $root 'candidate.tgz') }
 New-LocalUser -Name $identity -Password $secure -PasswordNeverExpires | Out-Null
 Add-LocalGroupMember -Group Users -Member $identity
@@ -47,7 +49,8 @@ $env:USERPROFILE=$profile; $env:HOME=$profile; $env:LOCALAPPDATA=Join-Path $prof
 Set-ExecutionPolicy -Scope CurrentUser Restricted -Force
 $env:PATH="$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
 if(Get-Command node.exe -ErrorAction SilentlyContinue){throw 'Expected Node-free PATH'}
-$helper=[IO.File]::ReadAllText('__ROOT__\ensure-node.ps1')
+$publishedVersion='__PUBLISHED_VERSION__'
+$helper=if($publishedVersion){Invoke-RestMethod https://app.artifactbin.dev/chat/ensure-node.ps1}else{[IO.File]::ReadAllText('__ROOT__\ensure-node.ps1')}
 $ErrorActionPreference='Continue';$ProgressPreference='Continue'
 $clock=[Diagnostics.Stopwatch]::StartNew()
 Write-Host 'Bootstrap phase: absent Node official bootstrap'
@@ -94,6 +97,7 @@ $env:npm_config_audit='false';$env:npm_config_fund='false';$env:npm_config_updat
 $env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_SKILLS='off';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
 $rows=Join-Path '__ROOT__' 'rows.csv';[IO.File]::WriteAllText($rows,"amount`n10`n20`n")
 if(Test-Path $env:npm_config_cache){throw 'Expected genuinely cold npm cache'}
+if(!$publishedVersion){
 $phase='wait for exact current-run candidate'
 $candidateDeadline=[DateTime]::UtcNow.AddMinutes(3)
 while(!(Test-Path '__ROOT__\candidate.tgz')) {
@@ -103,10 +107,73 @@ while(!(Test-Path '__ROOT__\candidate.tgz')) {
 $phase='standard-user online npx query'
 $result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\candidate.tgz','afbin','query',$rows,'--json')
 if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){throw 'Standard-user npx candidate query failed'}
+}
+# Real setup, not a mocked npm runner: the scoped registry serves only the exact
+# candidate. Dependencies reuse this user's just-populated cold-install cache.
+$phase='candidate registry startup'
+$registry=$null
+if(!$publishedVersion){$registry=Start-Process (Join-Path $private 'node.exe') -ArgumentList @('"__ROOT__\windows-setup-registry.mjs"','"__ROOT__\candidate.tgz"','"__ROOT__\registry.json"') -PassThru -RedirectStandardOutput '__ROOT__\registry.stdout' -RedirectStandardError '__ROOT__\registry.stderr'}
+try {
+  if(!$publishedVersion){
+  $deadline=[DateTime]::UtcNow.AddSeconds(15)
+  while(!(Test-Path '__ROOT__\registry.json')){
+    if($registry.HasExited -or [DateTime]::UtcNow -gt $deadline){throw 'Candidate registry did not become ready'}
+    Start-Sleep -Milliseconds 100
+  }
+  $ready=Get-Content '__ROOT__\registry.json' -Raw | ConvertFrom-Json
+  [IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.npmrc'),('@afbin:registry='+$ready.origin+"`n"))
+  $setupArgs=@('--yes','--package','__ROOT__\candidate.tgz','afbin','setup')
+  }else{
+    $ready=@{version=$publishedVersion}
+    $setupArgs=@('--yes','@afbin/cli@latest','setup')
+  }
+  $setupArgs+=@('--harness','claude','--harness','codex','--yes','--json')
+  Remove-Item Env:ARTIFACTBIN_SKILLS
+  $phase='standard-user setup global and skills'
+  $setup=Invoke-Candidate 'npx.cmd' $setupArgs | ConvertFrom-Json
+  if($setup.global.status -ne 'installed' -or $setup.global.version -ne $ready.version){throw 'Setup did not globally install the exact candidate'}
+  if(!(Test-Path $setup.global.bin)){throw 'npm did not create afbin.cmd'}
+  foreach($harness in @('claude','codex')){
+    $skill=Join-Path $env:USERPROFILE ('.'+$harness+'\skills\artifactbin')
+    $manifest=Get-Content (Join-Path $skill '.afbin-skill.json') -Raw | ConvertFrom-Json
+    if($manifest.version -ne $ready.version -or !(Test-Path (Join-Path $skill 'SKILL.md'))){throw 'Setup skill provenance or content missing'}
+  }
+  # Follow setup's visible PowerShell instruction when npm's prefix is absent
+  # from PATH. Never silently inject a test-only prefix or command shim.
+  if(!$setup.global.on_path){
+    if(!$setup.global.path_line){throw 'Setup omitted durable PATH instruction'}
+    Write-Host ('Customer PATH instruction: '+$setup.global.path_line)
+    Invoke-Expression $setup.global.path_line
+  }
+  $phase='repeat setup retains skills'
+  $repeat=Invoke-Candidate 'npx.cmd' $setupArgs | ConvertFrom-Json
+  if($repeat.global.status -ne 'installed' -or @($repeat.installations | Where-Object {$_.status -ne 'unchanged'}).Count -ne 0){throw 'Repeat setup changed current skills or failed global installation'}
+  # A genuinely new PowerShell process reconstructs Windows' persistent PATH;
+  # prove the global shim, policy, version and local SQL without npx cache lookup.
+  $phase='fresh-shell global afbin.cmd'
+  $fresh=@(
+    '$ErrorActionPreference=''Stop'''
+    '$env:PATH=[Environment]::GetEnvironmentVariable(''PATH'',''Machine'')+'';''+[Environment]::GetEnvironmentVariable(''PATH'',''User'')'
+    'if((Get-ExecutionPolicy) -ne ''Restricted''){throw ''Fresh shell policy changed''}'
+    '$command=(Get-Command afbin.cmd -CommandType Application).Source'
+    'if($command -ne ''__BIN__''){throw ''Fresh shell resolved a different afbin command''}'
+    '$version=& afbin.cmd --version --json'
+    'if($LASTEXITCODE -ne 0 -or ($version | ConvertFrom-Json).version -ne ''__VERSION__''){throw ''Fresh shell afbin version failed''}'
+    '$query=& afbin.cmd query ''__ROWS__'' --json'
+    'if($LASTEXITCODE -ne 0 -or !(($query | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains(''10''))){throw ''Fresh shell SQL failed''}'
+    'Write-Output ''PASS fresh-shell global version and local SQL'''
+  ) -join "`n"
+  $fresh=$fresh.Replace('__BIN__',$setup.global.bin.Replace("'","''")).Replace('__VERSION__',$ready.version).Replace('__ROWS__',$rows.Replace("'","''"))
+  $freshEncoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($fresh))
+  Invoke-Candidate "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @('-NoProfile','-EncodedCommand',$freshEncoded) | Out-Null
+} finally {
+  if($registry){if(!$registry.HasExited){$registry.Kill();$registry.WaitForExit()};$registry.Dispose()}
+}
 # Warmed offline/native behavior is proved by both Windows native matrix versions.
-[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","same-tarball-standard-user-npx"]}')
+[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","real-global-setup","claude-codex-skills","repeat-setup","customer-path-instruction","fresh-shell-global-version-sql"]}')
 '@
 $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
+$child=$child.Replace('__PUBLISHED_VERSION__',$PublishedVersion)
 # CreateProcessWithLogonW limits command lines to1024characters; keep script as
 # data on disk and invoke only a short inline expression under Restricted policy.
 [IO.File]::WriteAllText((Join-Path $root 'child.ps1'),$child)
@@ -128,7 +195,7 @@ function Write-StandardOutput([string]$Path,[ref]$Printed) {
 }
 function Write-StandardFailure {
   # Only owned child diagnostics: bounded output, with inherited runner secrets removed.
-  foreach($name in @('failed.json','bootstrap.stdout','bootstrap.stderr')) {
+  foreach($name in @('failed.json','bootstrap.stdout','bootstrap.stderr','registry.stderr')) {
     $path=Join-Path $root $name
     if(!(Test-Path $path)){continue}
     try {

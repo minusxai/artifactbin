@@ -73,6 +73,17 @@ it('requires one isolated cold Windows bootstrap whenever the native CLI matrix 
  expect(jobs['notify-consumer'].needs).toContain('cli-bootstrap');
  expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain("runner.os != 'Windows'");
 });
+
+it('keeps published Windows installer checks outside the required PR chain',()=>{
+ const release=yaml.parse(readFileSync(new URL('../../.github/workflows/windows-install-smoke.yml',import.meta.url),'utf8'));
+ expect(release.on).toEqual({workflow_dispatch:{inputs:{version:{description:'Expected published latest CLI version',required:true,type:'string'}}}});
+ expect(Object.keys(release.jobs)).toEqual(['install']);
+ expect(release.jobs.install['runs-on']).toBe('windows-2022');
+ expect(release.jobs.install['timeout-minutes']).toBeLessThanOrEqual(7);
+ const proof=release.jobs.install.steps.find(step=>step.run?.includes('test-node-bootstrap.ps1'));
+ expect(proof.run).toContain('-PublishedVersion $env:EXPECTED_VERSION');
+ expect(proof.env.EXPECTED_VERSION).toBe('${{ inputs.version }}');
+});
 it('restores normalized tooling and content-verified reader builds before release packing',()=>{
  const jobs=workflow().jobs,pack=jobs['cli-pack'].steps;
  const install=pack.find(step=>step.id==='install'),reference=jobs['reference-compatibility'].steps.find(step=>step.id==='install');

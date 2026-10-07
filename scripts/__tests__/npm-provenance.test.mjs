@@ -6,7 +6,7 @@ import {join,resolve} from 'node:path';
 import {parse} from 'yaml';
 import {npmDriver} from '../ci/npm-driver.mjs';
 import {describe,it,expect} from 'vitest';
-import {artifactSubject,inspectBundle,signArtifact} from '../ci/npm-provenance.mjs';
+import {artifactSubject,inspectBundle,signArtifact,withRekorConflictRecovery} from '../ci/npm-provenance.mjs';
 const bytes=Buffer.from('the actual tested tarball');
 const subject={name:'pkg:npm/%40afbin/cli@0.4.0',digest:{sha512:createHash('sha512').update(bytes).digest('hex')}};
 const context={GITHUB_REPOSITORY:'minusxai/artifactbin',GITHUB_REPOSITORY_VISIBILITY:'public',GITHUB_EVENT_NAME:'pull_request',AFBIN_HEAD_REPOSITORY:'minusxai/artifactbin',GITHUB_SHA:'a'.repeat(40),AFBIN_HEAD_SHA:'c'.repeat(40),GITHUB_RUN_ID:'17',GITHUB_RUN_ATTEMPT:'2',GITHUB_WORKFLOW_REF:'minusxai/artifactbin/.github/workflows/ci.yml@refs/pull/12/merge'};
@@ -102,4 +102,26 @@ it('accepts the actual workflow publish arguments through npm CLI without confli
   const tarball=invoke(args,source);expect(tarball.status,tarball.stderr).toBe(0);
   expect(JSON.parse(tarball.stdout).name).toBe('@afbin/cli-publish-argument-test');
  }finally{rmSync(fixture,{recursive:true,force:true});}
+});
+
+it('recovers the original signed entry through the pinned official witness and restores its factory', async () => {
+ const original = () => ({ witnesses: [{ tlog: { fetchOnConflict: false, rekor: { getEntry: async uuid => ({ uuid }) } } }] });
+ const config = { createBundleBuilder: original };
+ const result = await withRekorConflictRecovery(config, async () => {
+  const builder = config.createBundleBuilder('dsseEnvelope', {});
+  expect(builder.witnesses[0].tlog.fetchOnConflict).toBe(true);
+  return builder.witnesses[0].tlog.rekor.getEntry('a'.repeat(80));
+ });
+ expect(result).toEqual({ uuid: 'a'.repeat(80) });
+ expect(config.createBundleBuilder).toBe(original);
+ await expect(withRekorConflictRecovery(config, async () => config.createBundleBuilder('dsseEnvelope', {}).witnesses[0].tlog.rekor.getEntry('https://evil.invalid/entry'))).rejects.toThrow('Invalid Rekor entry identity');
+ expect(config.createBundleBuilder).toBe(original);
+ await expect(withRekorConflictRecovery(config, async () => { throw Error('signing failed'); })).rejects.toThrow('signing failed');
+ expect(config.createBundleBuilder).toBe(original);
+});
+it('fails visibly if the pinned witness boundary changes', async () => {
+ const original = () => ({ witnesses: [] });
+ const config = { createBundleBuilder: original };
+ await expect(withRekorConflictRecovery(config, async () => config.createBundleBuilder('dsseEnvelope', {}))).rejects.toThrow('Pinned Rekor witness changed');
+ expect(config.createBundleBuilder).toBe(original);
 });

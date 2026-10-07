@@ -1060,7 +1060,7 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Standard-user Windows Node bootstrap under Restricted PS5.1
+      - name: Standard-user Windows bootstrap, setup and fresh-shell checks under Restricted PS5.1
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
