@@ -8,6 +8,8 @@ $secure = ConvertTo-SecureString $password -AsPlainText -Force
 $credential = New-Object Management.Automation.PSCredential("$env:COMPUTERNAME\$identity",$secure)
 $root = Join-Path $env:PUBLIC ('afbin-node-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $root | Out-Null
+$diagnostics = if($env:GITHUB_WORKSPACE){Join-Path $env:GITHUB_WORKSPACE 'services/cli/test-results/windows-bootstrap'}else{Join-Path $root 'diagnostics'}
+New-Item -ItemType Directory $diagnostics -Force | Out-Null
 Copy-Item services/app/public/chat/ensure-node.ps1 (Join-Path $root 'ensure-node.ps1')
 Copy-Item services/cli/scripts/windows-setup-registry.mjs (Join-Path $root 'windows-setup-registry.mjs')
 if (!$Tarball -and !$WaitForArtifact -and !$PublishedVersion) { throw 'Pass the exact npm candidate tarball, wait for this CI run, or verify a published version.' }
@@ -16,6 +18,7 @@ New-LocalUser -Name $identity -Password $secure -PasswordNeverExpires | Out-Null
 Add-LocalGroupMember -Group Users -Member $identity
 Start-Service seclogon
 & icacls.exe $root /grant "${identity}:(OI)(CI)F" | Out-Null
+& icacls.exe $diagnostics /grant "${identity}:(OI)(CI)M" | Out-Null
 $child = @'
 $ErrorActionPreference='Stop'
 $phase='initialize'
@@ -28,17 +31,40 @@ function Invoke-Candidate([string]$Command,[string[]]$Arguments) {
   Write-Host ('Native phase: '+$phase)
   $previous=$ErrorActionPreference
   $clock=[Diagnostics.Stopwatch]::StartNew()
+  $startedAt=[DateTime]::UtcNow.ToString('o')
+  $code=-1
+  Write-PhaseEvent 'running' $phase $startedAt 0 -1
   try {
     # PS5.1 emits native stderr as ErrorRecord objects; exit code owns success.
     $ErrorActionPreference='Continue'
     $output=& $Command @Arguments 2>&1
     $code=$LASTEXITCODE
-  } finally { $ErrorActionPreference=$previous;Write-Host ('Native timing: '+$phase+' '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s') }
+  } finally {
+    $ErrorActionPreference=$previous
+    $seconds=[Math]::Round($clock.Elapsed.TotalSeconds,1)
+    Write-PhaseEvent 'complete' $phase $startedAt $seconds $code
+    Write-Host ('Native timing: '+$phase+' '+$seconds.ToString('F1')+'s')
+  }
   foreach($record in $output){if($record -is [Management.Automation.ErrorRecord]){Write-Host ('Native stderr: '+$record)}}
   $text=($output | Where-Object {$_ -isnot [Management.Automation.ErrorRecord]} | Out-String)
   Write-Host $text
   if($code -ne 0){throw "$phase failed with exit $code : $text"}
   return $text
+}
+function Write-PhaseEvent([string]$State,[string]$Name,[string]$StartedAt,[double]$Seconds,[int]$ExitCode) {
+  $event=[ordered]@{state=$State;phase=$Name;started_at=$StartedAt;seconds=$Seconds;exit_code=$ExitCode;recorded_at=[DateTime]::UtcNow.ToString('o')}
+  $json=$event | ConvertTo-Json -Compress
+  $encoding=[Text.UTF8Encoding]::new($false)
+  $statePath=Join-Path '__DIAGNOSTICS__' 'phase-state.json'
+  $pending=$statePath+'.pending'
+  [IO.File]::WriteAllText($pending,$json,$encoding)
+  Move-Item $pending $statePath -Force
+  $eventsPath=Join-Path '__DIAGNOSTICS__' 'phase-events.jsonl'
+  $events=@();if(Test-Path $eventsPath){$events=@(Get-Content $eventsPath -Tail 63)}
+  $events+= $json
+  $pending=$eventsPath+'.pending'
+  [IO.File]::WriteAllLines($pending,[string[]]$events,$encoding)
+  Move-Item $pending $eventsPath -Force
 }
 [Environment]::SetEnvironmentVariable('PSModulePath',"$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules",'Process')
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
@@ -95,6 +121,7 @@ if(!$rejected){throw 'Native command failure was ignored'}
 # The exact release tarball runs through npx.cmd under the same non-admin policy.
 $env:npm_config_audit='false';$env:npm_config_fund='false';$env:npm_config_update_notifier='false'
 $env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_SKILLS='off';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
+$env:npm_config_timing='true'
 $rows=Join-Path '__ROOT__' 'rows.csv';[IO.File]::WriteAllText($rows,"amount`n10`n20`n")
 $seededCache=[bool]::Parse('__SEEDED_CACHE__')
 if(!$seededCache -and (Test-Path $env:npm_config_cache)){throw 'Expected genuinely cold npm cache'}
@@ -181,6 +208,7 @@ try {
 [IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","real-global-setup","claude-codex-skills","repeat-setup","customer-path-instruction","fresh-shell-global-version-sql"]}')
 '@
 $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
+$child=$child.Replace('__DIAGNOSTICS__',$diagnostics.Replace("'","''"))
 $child=$child.Replace('__PUBLISHED_VERSION__',$PublishedVersion)
 $child=$child.Replace('__SEEDED_CACHE__',[string]$WaitForArtifact)
 # CreateProcessWithLogonW limits command lines to1024characters; keep script as
@@ -218,17 +246,51 @@ function Write-StandardFailure {
     } catch { Write-Host ('Could not read standard-user child diagnostic: '+$name) }
   }
 }
+function Write-NpmTimingTail {
+  $directory=Join-Path $root 'npm-cache\_logs'
+  if(!(Test-Path $directory)){return}
+  $safe=@()
+  foreach($log in @(Get-ChildItem $directory -Filter '*-debug-0.log' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 2)){
+    $safe+=@(Get-Content $log.FullName -Tail 500 | Where-Object {$_ -match '^npm timing [A-Za-z0-9._:/@-]{1,160} Completed in [0-9]{1,12}ms$'})
+  }
+  $safe=@($safe | Select-Object -Last 40)
+  if(!$safe.Count){return}
+  $path=Join-Path $diagnostics 'npm-timings.txt';$pending=$path+'.pending'
+  [IO.File]::WriteAllLines($pending,[string[]]$safe,[Text.UTF8Encoding]::new($false))
+  Move-Item $pending $path -Force
+  if(!$script:seenNpmTiming){$script:seenNpmTiming=@{}}
+  foreach($line in $safe){if(!$script:seenNpmTiming.ContainsKey($line)){$script:seenNpmTiming[$line]=$true;Write-Host ('Npm timing: '+$line)}}
+}
+function Write-CurrentPhase {
+  $path=Join-Path $diagnostics 'phase-state.json'
+  if(!(Test-Path $path)){return $false}
+  try{
+    $state=Get-Content $path -Raw | ConvertFrom-Json
+    if($state.state -ne 'running'){return $false}
+    if($state.phase -notmatch '^[A-Za-z0-9 -]{1,80}$'){return $false}
+    $start=[DateTime]::Parse($state.started_at).ToUniversalTime()
+    $seconds=[Math]::Max(0,([DateTime]::UtcNow-$start).TotalSeconds)
+    $line='Standard-user phase still running: '+$state.phase+' '+$seconds.ToString('F1')+'s'
+    $path=Join-Path $diagnostics 'phase-heartbeat.txt';$pending=$path+'.pending'
+    [IO.File]::WriteAllText($pending,$line,[Text.UTF8Encoding]::new($false))
+    Move-Item $pending $path -Force
+    Write-Host $line
+    return $true
+  }catch{return $false}
+}
 function Wait-StandardExit([Diagnostics.Process]$Process,[int]$Timeout,[string]$OutputPath='') {
   $clock=[Diagnostics.Stopwatch]::StartNew();$printed=0;$heartbeat=15
   while(!$Process.WaitForExit(1000)) {
     Write-StandardOutput $OutputPath ([ref]$printed)
     if($clock.ElapsedMilliseconds -ge $Timeout){throw 'Standard-user child timed out'}
     if($OutputPath -and $clock.Elapsed.TotalSeconds -ge $heartbeat) {
-      Write-Host ('Standard-user child still running: '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s')
+      if(!(Write-CurrentPhase)){Write-Host ('Standard-user child still running: '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s')}
+      Write-NpmTimingTail
       $heartbeat+=15
     }
   }
   Write-StandardOutput $OutputPath ([ref]$printed)
+  Write-NpmTimingTail
   $Process.WaitForExit()
   $Process.Refresh()
   $code=$Process.ExitCode

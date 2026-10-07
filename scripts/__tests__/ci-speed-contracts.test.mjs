@@ -140,6 +140,18 @@ it('overlaps the same standard-user bootstrap with pack instead of waiting to cr
  for(const file of ['failed.json','bootstrap.stdout','bootstrap.stderr'])expect(diagnostics).toContain(file);
  expect(diagnostics).toContain('-Tail 60');expect(diagnostics).toContain('Substring(0,8192)');
  expect(diagnostics).toContain('$password,$env:GH_TOKEN');expect(diagnostics).toContain(".Replace($secret,'[redacted]')");
+ expect(source).toContain("$env:npm_config_timing='true'");
+ expect(source).toContain('phase-state.json');expect(source).toContain('phase-events.jsonl');expect(source).toContain('phase-heartbeat.txt');
+ expect(source).toContain('function Write-NpmTimingTail');expect(source).toContain("-Filter '*-debug-0.log'");
+ expect(source).toContain("'^npm timing [A-Za-z0-9._:/@-]{1,160} Completed in [0-9]{1,12}ms$'");expect(source).toContain('Select-Object -Last 40');
+ expect(source.indexOf("Write-PhaseEvent 'running'")).toBeLessThan(source.indexOf('$output=& $Command @Arguments 2>&1'));
+ expect(source).toContain("Write-PhaseEvent 'complete'");
+ expect(source).toContain('Standard-user phase still running:');
+ const upload=job.steps.find(step=>step.name==='Upload Windows bootstrap diagnostics');
+ expect(upload?.if).toBe('always()');
+ expect(upload?.uses).toMatch(/^actions\/upload-artifact@/);
+ expect(upload?.with.path).toBe('services/cli/test-results/windows-bootstrap/');
+ expect(upload?.with['if-no-files-found']).toBe('ignore');
 
 });
 it('waits only for current-attempt artifacts and fails on packaging failures or deadline',async()=>{

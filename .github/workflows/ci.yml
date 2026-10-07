@@ -1067,6 +1067,14 @@ jobs:
         run: |
           $env:PSModulePath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules"
           ./services/cli/scripts/test-node-bootstrap.ps1 -WaitForArtifact
+      - name: Upload Windows bootstrap diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-bootstrap-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: services/cli/test-results/windows-bootstrap/
+          if-no-files-found: ignore
+          retention-days: 7
 
   cli:
     needs: [ plan ]
