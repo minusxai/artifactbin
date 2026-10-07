@@ -26,6 +26,9 @@ import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { AgentDiscovery } from '@/lib/serving';
 
+/** Live data widget contents belong to Solid, rather than the server-fragment morph. */
+export const LIVE_DATA_ATTR = 'data-mx-live';
+
 /* ────────────────────────────────────────────────────────────────────────────
  * How a response names its reader path
  * ──────────────────────────────────────────────────────────────────────────── */

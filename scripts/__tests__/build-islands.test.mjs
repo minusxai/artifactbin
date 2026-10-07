@@ -141,6 +141,7 @@ describe('buildIslands', () => {
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/routes.ts'))).toBe(false);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
     expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
+    expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/fit-drawing.ts')), 'legacy drawing compatibility is lazy').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/data-placeholder.tsx')), 'missing-data UI loads only when needed').toBe(false);
     const menuFiles = Object.entries(outputInputs).filter(([, inputs]) => inputs.some(input => input.endsWith('islands/kit/select-popup.tsx'))).map(([url]) => url);
     expect(menuFiles.length).toBeGreaterThan(0);

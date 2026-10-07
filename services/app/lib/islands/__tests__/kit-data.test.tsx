@@ -358,7 +358,7 @@ describe('DataTable', () => {
     // Today's DataTableAdapter wrapper holds the author identity; the kit table inside it is the helper's bare kit render.
     const wrapper = host.firstElementChild!;
     expect((wrapper as HTMLElement).style.minWidth).toBe('0px');
-    expect(Object.fromEntries([...wrapper.attributes].map((a) => [a.name, a.value]))).toEqual({ id: 'dIQl', 'aria-label': 'DataTable embed', 'aria-busy': 'false', style: 'width:100%;min-width:0' });
+    expect(Object.fromEntries([...wrapper.attributes].map((a) => [a.name, a.value]))).toEqual({ id: 'dIQl', 'data-mx-live': '', 'aria-label': 'DataTable embed', 'aria-busy': 'false', style: 'width:100%;min-width:0' });
     const grid = wrapper.querySelector('[data-slot="data-table"]')!;
     expect([grid.getAttribute('aria-label'), grid.hasAttribute('id')]).toEqual(['Data grid', false]);
     expect((grid.firstElementChild as HTMLElement).style.maxHeight).toBe('300px');
@@ -612,7 +612,7 @@ const drawnFor = async (rows: TableResult['rows']) => ({ svg: '<svg data-drawn="
 describe('data widget parity with the live reader', () => {
   it('Number carries no class and no binding stamp; Select writes no static binding stamp and today\'s trigger classes', () => {
     const { host } = mount(undefined, () => <><KitNumber data="$monthly" col="revenue" id="n" /><Select label="Region" value="$region" options="$regions" id="s" /></>);
-    expect(attrsOf(host.querySelector('#n'))).toEqual({ id: 'n', 'aria-busy': 'false' });
+    expect(attrsOf(host.querySelector('#n'))).toEqual({ id: 'n', 'data-mx-live': '', 'aria-busy': 'false' });
     expect(host.querySelector('#s')?.hasAttribute('data-mx-bound')).toBe(false);
     // The retired React SelectControl's trigger classes, as it rendered them.
     const trigger = 'inline-flex w-full items-center justify-between gap-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 min-w-36 border border-input bg-background px-3 shadow-xs hover:bg-muted/40';
@@ -691,6 +691,16 @@ describe('data widget parity with the live reader', () => {
     } finally { rect.mockRestore(); }
     await new Promise((r) => setTimeout(r, 20));
     expect(loadChart).toHaveBeenCalledTimes(1);
+  });
+
+  it('Question fits a legacy served drawing without waiting for the chart engine', async () => {
+    const drawn = { ...(await drawnFor(monthly.rows)), svg: '<svg height="303"></svg>' };
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 249 } as DOMRect);
+    try {
+      const { host } = mount(undefined, () => <Question data="$monthly" viz={chart} drawn={drawn} chart={() => new Promise(() => {})} />);
+      await vi.waitFor(() => expect((host.querySelector('svg') as SVGSVGElement).style.position).toBe('absolute'));
+      expect((host.querySelector('svg') as SVGSVGElement).style.height).toBe('100%');
+    } finally { rect.mockRestore(); }
   });
 
   it('Question feeds a chart drawn here the rows of every later result', async () => {

@@ -57,7 +57,7 @@ export function Number(props: { data: unknown; col?: string; agg?: NumberAgg; pr
   };
   // The former NumberAdapter: the figure stays while its query re-runs, and the wrapper says so.
   const busy = () => !!nameOf(props.data) && island.pending(nameOf(props.data));
-  return <span {...rootProps(props)} aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() ? 'mx-busy-inline' : props.className)}><span aria-label={table() ? 'Live number' : 'Number placeholder'}>{text()}</span></span>;
+  return <span {...rootProps(props)} data-mx-live="" aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() ? 'mx-busy-inline' : props.className)}><span aria-label={table() ? 'Live number' : 'Number placeholder'}>{text()}</span></span>;
 }
 
 interface ColumnTemplate { col: string; id?: string; path?: string; ids?: string[]; props?: Record<string, unknown>; nodes?: unknown[] }
@@ -104,12 +104,12 @@ export function DataTable(props: DataTableProps) {
   const busy = () => !!name() && island.pending(name());
   const wrapper = () => (props.inGridItem ? 'width:100%;height:100%;min-width:0' : 'width:100%;min-width:0');
   return <Show when={!!table()} fallback={
-    <div {...rootProps(props)} aria-label="DataTable embed" class="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" {...attr('attr:style', wrapper())}>
+    <div {...rootProps(props)} data-mx-live="" aria-label="DataTable embed" class="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" {...attr('attr:style', wrapper())}>
       <DataPlaceholder name={name()} pending={busy()} error={island.error(name())} />
     </div>
   }>
     {/* Cell sessions show saving on an editable table; only a read-only table dims while it refreshes. */}
-    <div {...rootProps(props)} aria-label="DataTable embed" aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() && !props.templates?.length ? 'mx-busy' : undefined)} {...attr('attr:style', wrapper())}>
+    <div {...rootProps(props)} data-mx-live="" aria-label="DataTable embed" aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() && !props.templates?.length ? 'mx-busy' : undefined)} {...attr('attr:style', wrapper())}>
       <DataGrid {...props} table={table} />
     </div>
   </Show>;
@@ -343,17 +343,6 @@ const VEGA_CONTAINER: Record<string, string> = { role: 'graphics-document', 'ari
  * stored before that (in the flow, at its nominal height) would hold a smaller box open: it is taken
  * out of the flow here instead, the one layout change such an old drawing still costs.
  */
-const FIT = { position: 'absolute', inset: '0px', width: '100%', height: '100%' } as const;
-function fitDrawing(el: HTMLElement): void {
-  const svg = el.firstElementChild;
-  if (!(svg instanceof SVGSVGElement) || DRAWING_CLASS.split(' ').every((c) => svg.classList.contains(c))) return;
-  const drawn = globalThis.Number(svg.getAttribute('height'));
-  Object.assign(svg.style, FIT);
-  const box = el.getBoundingClientRect().height;
-  if (box && globalThis.Number.isFinite(drawn) && Math.abs(box - drawn) > 1) return;
-  for (const name of Object.keys(FIT)) svg.style.removeProperty(name);
-  if (!svg.getAttribute('style')) svg.removeAttribute('style');
-}
 function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnvelope; rows: () => Row[]; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule> }) {
   const island = useIsland();
   let el!: HTMLDivElement;
@@ -392,7 +381,11 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
     if (props.drawn?.svg && !el.firstElementChild) { el.innerHTML = props.drawn.svg; el.setAttribute(CHART_STATE_ATTR, 'ready'); }
     const served = el.getAttribute(CHART_STATE_ATTR) === 'ready' && !!el.firstElementChild;
     if (!served) { void draw(); return; }
-    fitDrawing(el);
+    // Legacy-only compatibility stays behind a lazy browser boundary; current snapshots already fit.
+    const svg = el.firstElementChild;
+    if (svg instanceof SVGSVGElement && !DRAWING_CLASS.split(' ').every(c => svg.classList.contains(c))) {
+      void import('./fit-drawing').then(module => { if (!disposed) module.fitDrawing(el); }).catch(() => { /* Preserve the visible snapshot if compatibility cannot load. */ });
+    }
     const rows = props.rows();
     drawing = props.drawn ? Promise.resolve(props.drawn) : rowsDigest(rows).then(digest => ({ svg: '', table: props.table, rows: digest }), () => null);
     // Schedule the large controller only after reader readiness and visibility; the SVG stays in place.
