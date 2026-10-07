@@ -33,8 +33,7 @@ select assignee as "to", 'Task ' || title || ' is now ' || status as message
 from tasks.rows where id = $task_id
 `}</Notify>
 </Helmet>
-{/* Body: static JSX, HTML and kit components, Tailwind className, no CDN scripts.
-Each node has a persistent id: keep it when moving; never reuse it. */}
+{/* static JSX, className; no CDN scripts; persistent id. */}
 <div data-design="tw" className="@container px-4 py-8 @2xl:px-8">
 <header className="max-w-prose">
 <h1 className="text-3xl @2xl:text-5xl font-bold">Revenue grew in every region but one</h1>
