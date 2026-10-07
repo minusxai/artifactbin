@@ -75,7 +75,7 @@ export function Slider(p: Props) {
 }
 /** One icon per control: a module-level node would be MOVED between DatePickers (and swapped in during hydration). */
 const calendar = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>;
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const monthName = new Intl.DateTimeFormat('en', { month: 'long' });
 const DOW = ['S','M','T','W','T','F','S'];
 const pad = (n: number) => String(n).padStart(2,'0');
 const iso = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
@@ -95,7 +95,7 @@ export function DatePicker(p: Props) {
     <span class={join('truncate',value() === null && 'text-muted-foreground')}>{value() ?? 'Pick a date'}</span>{calendar()}</button>
     <Show when={open()}><Portal mount={overlayDestination(island, root) ?? root.ownerDocument.body}><div ref={popup} role="dialog" aria-label={p.label ? `${p.label} calendar` : 'calendar'} data-theme={root.closest<HTMLElement>('[data-theme]')?.dataset.theme}
       class="rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:'256px', '--popover':getComputedStyle(root).getPropertyValue('--popover'), '--popover-foreground':getComputedStyle(root).getPropertyValue('--popover-foreground'), '--border':getComputedStyle(root).getPropertyValue('--border')}}>
-      <div class="flex items-center justify-between"><span class="px-1 text-sm font-medium">{MONTHS[shown().m-1]} {shown().y}</span><span class="flex items-center gap-1">
+      <div class="flex items-center justify-between"><span class="px-1 text-sm font-medium">{monthName.format(new Date(shown().y,shown().m-1))} {shown().y}</span><span class="flex items-center gap-1">
         <button type="button" aria-label="Previous month" on:click={() => move(-1)} class="flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">‹</button>
         <button type="button" aria-label="Next month" on:click={() => move(1)} class="flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">›</button>
       </span></div><div class="mt-2 grid grid-cols-7 gap-y-0.5"><For each={DOW}>{d => <span aria-hidden="true" class="flex size-8 items-center justify-center text-[11px] font-medium uppercase text-muted-foreground">{d}</span>}</For>
