@@ -17,7 +17,7 @@ const GOOGLE_FONT_FILE_PATH = /^\/s\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*\.(?:wof
 /** One CSS API and Google-hosted font files only; redirect hops use this same predicate. */
 export function browserFontUrlAllowed(url: URL): boolean {
   if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash) return false;
-  if (url.origin === FONT_STYLES) return url.pathname === '/css2' && url.search.length > 1;
+  if (url.origin === FONT_STYLES) return (url.pathname === '/css' || url.pathname === '/css2') && url.search.length > 1;
   if (url.origin === FONT_FILES) return GOOGLE_FONT_FILE_PATH.test(url.pathname) && !url.search;
   return false;
 }
@@ -30,14 +30,9 @@ function parsedFontUrl(raw: string): URL {
   return url;
 }
 
-function safeAccept(value: string | undefined): string | undefined {
-  return value && value.length <= 256 && /^[\w!#$&^_.+\-/,;=*? ]+$/.test(value) ? value : undefined;
-}
-
-/** Fetch bytes under an exact URL policy. `accept` is bounded; browser credentials and headers never enter. */
+/** Fetch bytes under an exact URL policy; caller credentials, headers, and user agents never enter. */
 export async function fetchBrowserFontResource(
   raw: string,
-  requestedAccept?: string,
   fetcher: typeof fetchWebResource = fetchWebResource,
 ): Promise<{ bytes: Buffer; contentType: string }> {
   const url = parsedFontUrl(raw);
@@ -45,7 +40,7 @@ export async function fetchBrowserFontResource(
   const got = await fetcher(url.href, {
     maxBytes: BROWSER_FONT_MAX_BYTES,
     timeoutMs: BROWSER_FONT_TIMEOUT_MS,
-    accept: safeAccept(requestedAccept) ?? (css ? 'text/css,*/*;q=0.1' : 'font/woff2,font/woff,*/*;q=0.1'),
+    accept: css ? 'text/css,*/*;q=0.1' : 'font/woff2,font/woff,*/*;q=0.1',
     userAgent: FONT_USER_AGENT,
     allowHosts: hostname => hostname === new URL(FONT_STYLES).hostname || hostname === new URL(FONT_FILES).hostname,
     allowUrl: browserFontUrlAllowed,

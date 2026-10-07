@@ -17,7 +17,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!isBrowserSessionRequest(request)) return json({ error: 'forbidden' }, 403, NO_STORE);
   const raw = new URL(request.url).searchParams.get('url') ?? '';
   try {
-    const resource = await fetchBrowserFontResource(raw, request.headers.get('accept') ?? undefined);
+    const resource = await fetchBrowserFontResource(raw);
     return new Response(new Uint8Array(resource.bytes), { status: 200, headers: {
       ...NO_STORE,
       'Access-Control-Allow-Origin': '*',

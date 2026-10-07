@@ -28,7 +28,7 @@ describe('the scripted Google Fonts relay', () => {
     const response = await GET(request(`${BROWSER_FONT_RESOURCE_PATH}?url=${encodeURIComponent(target)}`, {
       actor: ANONYMOUS, headers: { [BROWSER_SESSION_HEADER]: '1', cookie: 'must-not-forward', authorization: 'Bearer must-not-forward' },
     }));
-    expect(relay.fetch).toHaveBeenCalledWith(target, undefined);
+    expect(relay.fetch).toHaveBeenCalledWith(target);
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('text/css');
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
@@ -47,7 +47,7 @@ describe('the scripted Google Fonts relay', () => {
       headers: { [ACTOR_HEADER]: signActor(ANONYMOUS, secret), [BROWSER_SESSION_HEADER]: '1' },
     }));
     expect(response.status).toBe(200);
-    expect(relay.fetch).toHaveBeenCalledWith(target, undefined);
+    expect(relay.fetch).toHaveBeenCalledWith(target);
   });
 
   it('allows only GET', async () => {

@@ -35,8 +35,6 @@ export interface SessionProcessOptions {
 const require = createRequire(import.meta.url);
 
 const FONT_ORIGINS = new Set([FONT_STYLES, FONT_FILES]);
-const SAFE_ACCEPT = /^[\w!#$&^_.+\-/,;=*? ]{1,256}$/;
-const SAFE_RANGE = /^bytes=(?:\d{1,10}-\d{0,10}|-\d{1,10})(?:,(?:\d{1,10}-\d{0,10}|-\d{1,10})){0,3}$/;
 
 function scriptedFontOrigin(url: URL): boolean {
   return url.protocol === 'https:' && !url.username && !url.password && !url.port && FONT_ORIGINS.has(url.origin);
@@ -80,15 +78,11 @@ export async function forwardSessionFetch(
   if (!origins.allows(url) && !fontRequest) throw new Error('Origin is outside this session');
   if (fontRequest) {
     if (String(message.method).toUpperCase() !== 'GET') throw new Error('Google Fonts relay allows GET only');
-    const supplied = new Headers(message.headers as Record<string, string>);
     const relay = new URL(BROWSER_FONT_RESOURCE_PATH, options.baseURL);
     relay.searchParams.set('url', url.href);
-    const headers = new Headers({ [BROWSER_SESSION_HEADER]: '1', [FORWARDED_HOST]: relay.host, [FORWARDED_PROTO]: relay.protocol.slice(0, -1) });
-    const accept = supplied.get('accept');
-    if (accept && SAFE_ACCEPT.test(accept)) headers.set('accept', accept);
-    const range = supplied.get('range');
-    if (range && range.length <= 128 && SAFE_RANGE.test(range)) headers.set('range', range);
-    const request = new Request(relay, { method: 'GET', headers, signal: AbortSignal.timeout(10000) });
+    const request = new Request(relay, { method: 'GET', headers: {
+      [BROWSER_SESSION_HEADER]: '1', [FORWARDED_HOST]: relay.host, [FORWARDED_PROTO]: relay.protocol.slice(0, -1),
+    }, signal: AbortSignal.timeout(10000) });
     let fetched: { status: number; headers: Record<string, string>; body: string } | undefined;
     await run(async () => { fetched = await sessionResponse(await options.request(request, actor)); });
     return fetched!;

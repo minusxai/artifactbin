@@ -62,11 +62,7 @@ it('relays only credential-blind Google Fonts GETs back through the app request'
  expect(actor).toEqual(ANONYMOUS);
  expect(request.method).toBe('GET');
  expect(request.headers.get(BROWSER_SESSION_HEADER)).toBe('1');
- expect(request.headers.get('cookie')).toBeNull();
- expect(request.headers.get('authorization')).toBeNull();
- expect(request.headers.get(ACTOR_HEADER)).toBeNull();
- expect(request.headers.get('accept')).toBe('text/css,*/*;q=0.1');
- expect(request.headers.get('range')).toBe('bytes=0-100');
+ for(const name of ['cookie','authorization',ACTOR_HEADER,'accept','range','user-agent'])expect(request.headers.get(name),name).toBeNull();
 });
 
 it('refuses font-origin lookalikes, credentials, ports, unrelated origins and writes before forwarding',async()=>{

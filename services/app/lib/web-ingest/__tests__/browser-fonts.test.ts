@@ -12,7 +12,7 @@ describe('the scripted Google Fonts fetch policy', () => {
   it('uses the shared origins, fixed browser-compatible UA, and exact URL+host allowlists', async () => {
     const fetcher = mockedFetch();
     const url = `${FONT_STYLES}/css2?family=Fraunces:wght@400;700&display=swap`;
-    await fetchBrowserFontResource(url, 'text/css,*/*;q=0.1', fetcher);
+    await fetchBrowserFontResource(url, fetcher);
     const [asked, options] = fetcher.mock.calls[0]!;
     expect(asked).toBe(url);
     expect(options).toMatchObject({
@@ -26,6 +26,7 @@ describe('the scripted Google Fonts fetch policy', () => {
     expect(options.allowHosts?.('fonts.googleapis.com.evil.test')).toBe(false);
     const allows = options.allowUrl!;
     expect(allows(new URL(url))).toBe(true);
+    expect(allows(new URL(`${FONT_STYLES}/css?family=Fraunces`))).toBe(true);
     expect(allows(new URL(`${FONT_STYLES}/other?family=Fraunces`))).toBe(false);
     expect(allows(new URL(`${FONT_FILES}/s/fraunces/v31/f.woff2`))).toBe(true);
     expect(allows(new URL(`${FONT_FILES}/private/metadata`))).toBe(false);
@@ -37,24 +38,24 @@ describe('the scripted Google Fonts fetch policy', () => {
     for (const url of [
       'https://user:pass@fonts.googleapis.com/css2?family=Fraunces',
       'https://fonts.googleapis.com:444/css2?family=Fraunces',
-      `${FONT_STYLES}/css?family=Fraunces`,
+      `${FONT_STYLES}/css`,
       `${FONT_FILES}/private/metadata`,
       `${FONT_STYLES}/css2?${'x'.repeat(8192)}`,
-    ]) await expect(fetchBrowserFontResource(url, undefined, fetcher), url).rejects.toBeInstanceOf(WebIngestError);
+    ]) await expect(fetchBrowserFontResource(url, fetcher), url).rejects.toBeInstanceOf(WebIngestError);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it('ignores an unsafe Accept value and refuses a non-CSS answer', async () => {
+  it('uses a fixed Accept value and refuses a non-CSS answer', async () => {
     const fetcher = mockedFetch();
     fetcher.mockResolvedValue({ bytes: Buffer.from('<html>blocked</html>'), contentType: 'text/html', finalUrl: `${FONT_STYLES}/css2?family=Fraunces` });
-    await expect(fetchBrowserFontResource(`${FONT_STYLES}/css2?family=Fraunces`, 'x'.repeat(257), fetcher)).rejects.toMatchObject({ code: 'unsupported_type' });
+    await expect(fetchBrowserFontResource(`${FONT_STYLES}/css2?family=Fraunces`, fetcher)).rejects.toMatchObject({ code: 'unsupported_type' });
     expect(fetcher.mock.calls[0]![1].accept).toBe('text/css,*/*;q=0.1');
   });
 
   it('accepts only bytes that sniff as a font for a Google-hosted font URL', async () => {
     const fetcher = mockedFetch();
     fetcher.mockResolvedValue({ bytes: Buffer.from('wOF2font-bytes'), contentType: 'application/octet-stream', finalUrl: `${FONT_FILES}/s/fraunces/v31/f.woff2` });
-    const got = await fetchBrowserFontResource(`${FONT_FILES}/s/fraunces/v31/f.woff2`, undefined, fetcher);
+    const got = await fetchBrowserFontResource(`${FONT_FILES}/s/fraunces/v31/f.woff2`, fetcher);
     expect(got.contentType).toBe('font/woff2');
   });
 });
