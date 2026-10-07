@@ -8,12 +8,10 @@ export function overlayDestination(island: IslandContext, anchor?: HTMLElement):
   if (typeof document === 'undefined') return null;
   // Native modal contents live in the top layer. Their popups must share that owner;
   // a story-root portal remains behind the modal regardless of its z-index.
-  const dialog = anchor?.closest<HTMLElement>('dialog[open]');
-  if (dialog) return dialog;
   // Inside the story root, the overlay inherits the story's font and theme, not the app shell's.
   const story = document.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
-  return story && document.querySelector('style[data-mx-story-css], style[data-mx-tw]')
-    ? story : island.trustedPortal();
+  return anchor?.closest<HTMLElement>('dialog[open]') ?? (story && document.querySelector('style[data-mx-story-css], style[data-mx-tw]')
+    ? story : island.trustedPortal());
 }
 
 /**
@@ -32,6 +30,6 @@ export function storyPortalHost(children: JSX.Element): JSX.Element {
  * overlays in that styled document; other island hosts can use their trusted portal. */
 export function TrustedOverlay(props: { open: () => boolean; anchor?: () => HTMLElement | undefined; children: JSX.Element }): JSX.Element {
   const island = useIsland();
-  const destination = () => props.open() ? overlayDestination(island, props.anchor?.()) ?? props.anchor?.()?.ownerDocument.body ?? null : null;
+  const destination = () => props.open() ? overlayDestination(island, props.anchor?.()) : null;
   return <Show when={destination()} fallback={props.children}>{portal => <Portal mount={portal()}>{storyPortalHost(props.children)}</Portal>}</Show>;
 }
