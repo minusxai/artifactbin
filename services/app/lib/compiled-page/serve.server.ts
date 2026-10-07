@@ -509,11 +509,11 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
 }
 
 /**
- * The page's doors as the compiled page uses them: the viewer overlay's only when the version's plan
- * has a viewer-scope query, so the page never asks a door the server has nothing to answer on.
+ * The page's doors as the compiled page uses them: keep the viewer overlay when the version's plan
+ * or authored markup depends on the reader, so other pages do not ask a door they never use.
  */
-function doorsFor(compiled: CompiledPage, doors: CompiledReaderRequest['doors']): CompiledReaderRequest['doors'] {
-  if (!doors?.viewerUrl || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
+export function doorsFor(compiled: CompiledPage, doors: CompiledReaderRequest['doors']): CompiledReaderRequest['doors'] {
+  if (!doors?.viewerUrl || compiled.readsViewerMarkup || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
   const { viewerUrl: _unused, ...rest } = doors;
   return rest;
 }

@@ -33,7 +33,7 @@ import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { parseRowRef } from '@/lib/story/data/row-scope';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/data/dataflow';
+import { collectRefNameUses, REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/data/dataflow';
 import { resolveRefProps } from '@/lib/story/data/ref-data';
 import { substituteRow } from '@/lib/story/data/row-scope';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
@@ -1086,13 +1086,17 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   // anonymousAccessFacts), so this is the plan snapshots key on; without it no dataset is admitted and
   // every query that reads one is `viewer` — never a private answer in a guest snapshot.
   const plan = input.flow ? planOf(input.flow, input.access ?? { datasets: {} }) : null;
+  // SQL scope alone does not see a reader reference used by authored JSX, such as
+  // `{$_me.id ? <form>…</form> : <SignIn>…</SignIn>}`. Preserve the parser's
+  // dependency report with this version so serving can retain its viewer door.
+  const readsViewerMarkup = collectRefNameUses(input.nodes).some((use) => use.name === '_me.id' || use.name.startsWith('_me.'));
   const links = input.nodes.length ? linkHintsOf(input.nodes, { origins: deploymentOrigins() }) : EMPTY_LINK_HINTS;
   const outlinePlan = input.template === 'plan';
   const outlineDoc = input.template === 'doc';
   const outline = !input.chrome ? [] : outlineDoc ? discoverOutline(input.nodes, true)
     : (input.template === 'editorial' || outlinePlan) && hasOutline(input.nodes) ? discoverOutline(input.nodes) : [];
   const base = {
-    build: build.id, ...(build.ssr ? { ssrHalf: build.ssr.url } : {}), handoverContract: MIN_HANDOVER_CONTRACT, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan, outlineDoc,
+    build: build.id, ...(build.ssr ? { ssrHalf: build.ssr.url } : {}), handoverContract: MIN_HANDOVER_CONTRACT, islands: generated.islandRefs, behaviors: generated.behaviors, plan, readsViewerMarkup, links, outline, outlinePlan, outlineDoc,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
     // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
     authorScript: input.authorScript || null,

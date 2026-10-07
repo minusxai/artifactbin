@@ -6,7 +6,7 @@ import { loadOfflineHalf, packCompiledBrowserModule, type OfflineHalf } from '..
 const page = (module: CompiledPage['module'], manifest: Record<string, string> = { '@mx/boot': '/islands/boot-1111111111111111.js' }): CompiledPage => ({
   build: 'build', sharedBuild: { id: 'build', manifest },
   outline: [], outlinePlan: false, html: '', islands: [], module, ssr: null,
-  behaviors: [], plan: null, links: { prefetch: [], prerender: [] },
+  behaviors: [], plan: null, readsViewerMarkup: false, links: { prefetch: [], prerender: [] },
   kit: { skeleton: [], islands: [] }, reactStatic: [], unported: [], partial: [], authorScript: null,
 });
 
