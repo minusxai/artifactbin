@@ -15,6 +15,7 @@ import type { ClientConfig } from 'pg';
 export interface PgFixture {
   /** The options the last `new Client(...)` was given — the whole point for the TLS tests. */
   options?: ClientConfig;
+  queryError?: Error;
   /** Connections currently open, and the high-water mark, for the pool-bound tests. */
   active: number;
   maximum: number;
@@ -28,6 +29,7 @@ export interface PgFixture {
 export function resetPgFixture(fixture: PgFixture): void {
   fixture.release?.();
   fixture.options = undefined;
+  fixture.queryError = undefined;
   fixture.active = 0;
   fixture.maximum = 0;
   fixture.blocked = undefined;
@@ -47,7 +49,7 @@ export function pgModule(fixture: PgFixture) {
           fixture.maximum = Math.max(fixture.maximum, fixture.active);
           await fixture.blocked;
         }
-        async query() { return { rows: [], fields: [] }; }
+        async query() { if(fixture.queryError)throw fixture.queryError;return { rows: [], fields: [] }; }
         async end() { fixture.active--; }
       },
     },

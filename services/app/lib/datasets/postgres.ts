@@ -1,5 +1,6 @@
 import {DATASET_ALLOW_PRIVATE_NETWORKS,DATASET_DNS_SERVERS} from '@/lib/platform/config';
 import {resolvePostgresHost} from './network';
+import {DatasetError} from './errors';
 import {isIP} from 'node:net';
 import {checkServerIdentity, type PeerCertificate} from 'node:tls';
 import {X509Certificate} from 'node:crypto';
@@ -14,19 +15,19 @@ const MAX_TIMEOUT = 10_000;
 const MAX_RESULT_BYTES = 8 * 1024 * 1024;
 let activeConnections = 0;
 const connectionQueue: Array<{ grant: () => void }> = [];
-class ResultLimitError extends Error {}
+class ResultLimitError extends DatasetError {}
 
 /** Eight active connections and at most 32 waiting for up to one second. */
 async function withConnectionSlot<T>(work: () => Promise<T>): Promise<T> {
   if (activeConnections < 8) activeConnections++;
   else {
-    if (connectionQueue.length >= 32) throw new Error('Postgres is busy; retry later');
+    if (connectionQueue.length >= 32) throw new DatasetError('Postgres is busy; retry later',503);
     await new Promise<void>((resolve, reject) => {
       const entry = { grant: () => { clearTimeout(timer); resolve(); } };
       const timer = setTimeout(() => {
         const index = connectionQueue.indexOf(entry);
         if (index >= 0) connectionQueue.splice(index, 1);
-        reject(new Error('Postgres query queue timed out'));
+        reject(new DatasetError('Postgres query queue timed out; retry later',503));
       }, 1000);
       connectionQueue.push(entry);
     });
@@ -45,7 +46,7 @@ async function withDeadline<T>(client: pg.Client, timeoutMs: number, work: () =>
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      reject(new ResultLimitError('Postgres query timed out'));
+      reject(new ResultLimitError('Postgres query timed out; simplify the query and retry',503));
       void client.end().catch(() => {});
     }, timeoutMs);
   });
@@ -67,7 +68,7 @@ function columnType(oid: number): DatasetColumn['type'] {
 }
 function bounded(value: number | undefined, fallback: number, min: number, max: number): number {
   if (value === undefined) return fallback;
-  if (!Number.isSafeInteger(value) || value < min) throw new Error('Invalid Postgres query bounds');
+  if (!Number.isSafeInteger(value) || value < min) throw new DatasetError('Invalid Postgres query bounds');
   return Math.min(value, max);
 }
 /** IP SAN matching uses the certificate's DER directly. Node 22.23's TLS
@@ -85,7 +86,9 @@ function checkPostgresIdentity(host: string, certificate: PeerCertificate): Erro
  * actual cancellation; the client timeout additionally bounds a broken network. */
 async function transaction<T>(config: PostgresConfig, timeoutMs: number, work: (client: pg.Client) => Promise<T>): Promise<T> {
   return withConnectionSlot(async () => {
-    const address = await resolvePostgresHost(config.host, DATASET_ALLOW_PRIVATE_NETWORKS, DATASET_DNS_SERVERS);
+    const address = await resolvePostgresHost(config.host, DATASET_ALLOW_PRIVATE_NETWORKS, DATASET_DNS_SERVERS).catch(() => {
+      throw new DatasetError('Postgres connection failed. Check connection settings and retry.',503);
+    });
     const identityHost = config.host.startsWith('[') ? config.host.slice(1, -1) : config.host;
     const client = new pg.Client({
       host: address, port: config.port, database: config.database, user: config.username, password: config.password,
@@ -124,8 +127,12 @@ async function transaction<T>(config: PostgresConfig, timeoutMs: number, work: (
     } catch (error) {
       const code = (error as { code?: string }).code;
       // Never pass server messages through: values, credentials, hosts and SQL can occur there.
-      if (error instanceof ResultLimitError) throw error;
-      throw new Error(!connected ? 'Postgres connection failed' : code === '57014' || (error as Error).message === 'Query read timeout' ? 'Postgres query timed out' : 'Postgres query failed');
+      if (error instanceof DatasetError) throw error;
+      if (!connected || code?.startsWith('08') || ['ECONNRESET','ECONNREFUSED','EPIPE','ETIMEDOUT'].includes(code ?? ''))
+        throw new DatasetError('Postgres connection failed. Check connection settings and retry.',503);
+      if (code === '57014' || (error as Error).message === 'Query read timeout')
+        throw new DatasetError('Postgres query timed out; simplify the query and retry',503);
+      throw new DatasetError('Postgres query failed. Check column names and value types against the exposed dataset schema.');
     } finally {
       await client.end().catch(() => {});
     }
@@ -197,7 +204,7 @@ export async function discoverPostgres(config: PostgresConfig): Promise<Discover
         AND pg_catalog.has_schema_privilege(n.oid, 'USAGE')
         AND pg_catalog.has_column_privilege(c.oid, a.attnum, 'SELECT')
       ORDER BY n.nspname, c.relname, a.attnum LIMIT 10001`);
-    if (result.rows.length > 10_000) throw new Error('Postgres catalog is too large');
+    if (result.rows.length > 10_000) throw new DatasetError('Postgres catalog is too large; reduce the schemas or tables exposed to this database role');
     const tables = new Map<string, DiscoveredTable>();
     for (const row of result.rows) {
       const key = JSON.stringify([row.schema, row.name]);

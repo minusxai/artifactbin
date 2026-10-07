@@ -13,6 +13,8 @@ import {POST as tables} from '@/app/a/[id]/tables/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {prepareCatalog} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
+import {DatasetError} from '@/lib/datasets/errors';
+import {POST as query} from '@/app/api/artifacts/[id]/query/route';
 import {dataflowForRow,getArtifactById} from '@/lib/artifacts';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import {mintToken} from '@/lib/accounts';
@@ -76,4 +78,16 @@ it.each(['bearer','browser'] as const)('returns a controlled unavailable-secret 
  }catch(error){result=error;}
  expect(await getArtifactById(f.id)).toMatchObject({version:before.version,edit_id:before.edit_id,source:before.source,meta:before.meta});
  expect(result).toBeInstanceOf(Response);const response=result as Response;expect(response.status).toBe(503);expect(await response.json()).toMatchObject({error:'dataset_error',details:['Dataset credentials are unavailable']});
+});
+
+it.each([400,503])('translates typed Postgres failures consistently in resource and browser queries (%s)',async status=>{
+ const f=await pgFixture();
+ const message=status===400?'Postgres query failed. Check column names and value types against the exposed dataset schema.':'Postgres connection failed. Check connection settings and retry.';
+ const failure=new DatasetError(message,status);
+ vi.mocked(executeCatalog).mockRejectedValueOnce(failure);
+ const native=await query(request(`/api/artifacts/${f.id}/query`,{method:'POST',token:f.ownerToken.token,json:{sql:'select missing_column from people',refresh:true}}),ctx(f.id));
+ expect(native.status).toBe(status);expect(await native.json()).toMatchObject({error:'query_failed',message});
+ vi.mocked(executeCatalog).mockRejectedValueOnce(failure);
+ const browser=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.owner),json:{sql:'select missing_column from people',refresh:true}}),ctx(f.id));
+ expect(browser.status).toBe(status);expect(await browser.json()).toMatchObject({error:'dataset_error',details:[message]});
 });
