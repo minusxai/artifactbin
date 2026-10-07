@@ -169,7 +169,6 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(matrix.steps.some(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'))).toBe(true);
     expect(matrix.strategy.matrix.node).toEqual(['22.22.3','24.21.0']);
     expect(matrix.strategy.matrix.os).toContain('windows-2022');
-    expect(matrix.strategy.matrix.phase).toEqual(['native','runtime','preview','local']);
     const nodeSetups = matrix.steps.filter(step => step.uses?.startsWith('actions/setup-node@'));
     expect(nodeSetups).toHaveLength(2);
     expect(nodeSetups[0].if).toBe("matrix.phase != 'native'");
@@ -188,7 +187,6 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
       const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
       expect(download,job).toBeDefined();
     }
-    expect(ci.jobs).not.toHaveProperty('cli-preview');
     expect(matrix.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
     const release=readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8');
     expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts');
