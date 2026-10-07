@@ -177,6 +177,13 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     const install = matrix.steps.find(step => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
     expect(install.if).toContain("matrix.phase != 'native'");
     expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase != 'native'");
+    const seed=matrix.steps.find(step=>step.name==="Download and verify this attempt's platform seed");
+    expect(seed?.if).toBeUndefined();
+    expect(seed?.run).toContain('ci-artifact-wait.mjs --extract');
+    expect(seed?.run).toContain('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
+    expect(seed?.run).toContain('npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar');
+    const seedDownload=matrix.steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
+    expect(seedDownload).toBeUndefined();
     expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase != 'native'");
     for(const job of ['cli','reference-compatibility']){
       const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');

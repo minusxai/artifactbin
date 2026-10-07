@@ -1160,14 +1160,10 @@ jobs:
         with:
           name: afbin-npm-release
           path: npm-candidate
-      - name: Wait for this attempt's platform seed
+      - name: Download and verify this attempt's platform seed
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}
-          path: .
+        run: node scripts/lib/ci-artifact-wait.mjs --extract "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}" "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar"
       # Unix bootstrap owns a separate fresh cache and is cheap enough to run alongside npm.
       # Windows Restricted bootstrap runs on its own required runner above.
       - name: Same-tarball native npm and warmed offline acceptance
