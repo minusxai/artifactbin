@@ -81,7 +81,7 @@ In Helmet script text, split `</script` as `'</scr' + 'ipt'`.
 
 | Specifier | Gives |
 | --- | --- |
-| `page` | `signal`, `query`, `mutation` (below); [`reviewState`](review-state.md) for saved comment views; `proxy` (Other hosts) |
+| `page` | `signal`, `query`, `mutation` (below); [dataset screenshots](dataset-images.md); [`reviewState`](review-state.md); `proxy` (Other hosts) |
 | `solid-js` | `createSignal`, `createEffect`, `createMemo`, `createRoot`, `batch`, `untrack`, `on`, `onMount`, `onCleanup`, `For`, `Show`, `Switch`, `Match`, `mergeProps`, `splitProps` |
 | `solid-js/web` | `render`, and what JSX compiles to |
 | `solid-js/store` | `createStore`, `reconcile` |
@@ -107,18 +107,6 @@ Each binder takes one string literal, the declared name with its `$`.
   with the server's message (`try`/`catch`).
 
 ## Components
-
-Solid JSX: the component function runs once; what it reads inside JSX, a memo
-or an effect updates in place. An exported component mounts wherever markup
-writes its name as a tag (any capitalized tag that is not a kit component);
-the children are the server-rendered fallback until it mounts.
-
-```jsx
-export function Detail(props) { const item = () => props.item[0]; return <p>{item()?.total}</p>; }
-```
-
-props.item is the current rows array (tracked; read it inside JSX, a memo or
-an effect), not a function; a literal prop such as color is a plain value.
 
 ## Libraries
 

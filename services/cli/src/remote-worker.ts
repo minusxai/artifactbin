@@ -11,6 +11,7 @@ import {createRemoteContextBridge} from './remote-context-bridge';
 import {REMOTE_CONTEXT_ARG} from './entry-args';
 import {REMOTE_REVIEW_POLICY,remoteArguments} from './remote-context';
 import type {RemoteWorkerInput} from './remote-launch';
+import {releaseClaudeConversationReservation,saveClaudeConversation} from './claude-conversation';
 /** The detached worker owns its terminal; launch credentials exist only in memory. */
 export async function remoteWorkerMain():Promise<void>{
  const input=await new Promise<RemoteWorkerInput>((resolve,reject)=>{
@@ -36,7 +37,7 @@ export async function remoteWorkerMain():Promise<void>{
     await writeFile(context,`${REMOTE_REVIEW_POLICY}\n\nThe exact CLI executable for this session is ${JSON.stringify(join(directory,'afbin'))}. Use this absolute executable for EVERY afbin command in this policy; login shells can replace PATH.\n\nAfter reading this context, run: ${quote(join(directory,'afbin'))} remote --ready ${session.id}\nIf the command reports remote_context_blocked, use your harness’s existing approval flow to request approval for that exact command and retry after approval; do not change sandbox, shell environment policy, or permissions. If approvals are unavailable or denied, report the block and wait for the operator. Then wait for tagged comments. If the operator enters a manual terminal task, run that readiness command again only after the manual task is finished and no approval is pending.\n\n## Handoff (context)\n${input.history??'No additional history supplied.'}\n`,{mode:0o600});
     return {args:remoteArguments(input.command,input.args,`Read the private handoff at ${JSON.stringify(context)} and follow its remote-review workflow. Do not edit anything until a tagged request arrives.`),env:remotePermissionEnv(input.command,remoteChildEnv(session.id,session.runnerKey,remoteWorkerEnv(directory,delimiter,client.connection)))};
    },
-   onStarted:session=>{stateKey=remoteStateKey(client.connection.server,session.id);state.put(HOME_SCOPE,'remote-agent',stateKey,{id:session.id,server:client.connection.server,pid:process.pid,directory,historyDigest:createHash('sha256').update(input.history??'').digest('hex'),stopRequested:false} satisfies RemoteLocalState);started=true;process.send?.({id:session.id,name:input.name,url:`${client.connection.server}/chat?session=${session.id}`,status:'starting',pid:process.pid});},
+   onStarted:session=>{stateKey=remoteStateKey(client.connection.server,session.id);state.transaction(()=>{state.put(HOME_SCOPE,'remote-agent',stateKey!,{id:session.id,server:client.connection.server,pid:process.pid,directory,historyDigest:createHash('sha256').update(input.history??'').digest('hex'),stopRequested:false} satisfies RemoteLocalState);if(input.conversation)saveClaudeConversation(state,client.connection.server,session.id,input.conversation);if(input.resumeReservation)releaseClaudeConversationReservation(state,input.resumeReservation);});started=true;process.send?.({id:session.id,name:input.name,url:`${client.connection.server}/chat?session=${session.id}`,status:'starting',pid:process.pid});},
   });
   exitCode=code;process.exitCode=code;
  }catch(error){

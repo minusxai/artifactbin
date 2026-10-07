@@ -115,6 +115,22 @@ describe('createFetchTransport', () => {
     ]);
     expect(JSON.parse(String(calls[0]![1].body))).toMatchObject({ values: { region: 'EU' }, only: ['sales'] });
   });
+
+  it('uploads files only through the signed-in dataset door and reuses a file key on retry',async()=>{
+    const f=vi.fn(async()=>ok({ref:'dimg:abc234def456',url:'/a/abc123/datasets/data12/images/abc234def456'}));
+    const transport=createFetchTransport('/a/abc123/query',f,undefined,{session:true,credentials:'include'});
+    const file=new File(['png'], 'screen.png',{type:'image/png'});
+    await transport.uploadDatasetImage!('data12','edit-key',file);
+    await transport.uploadDatasetImage!('data12','edit-key',file);
+    const first=f.mock.calls[0] as unknown as [string,RequestInit],second=f.mock.calls[1] as unknown as [string,RequestInit];
+    expect(first[0]).toMatch(/\/a\/abc123\/datasets\/data12\/images$/);
+    expect(first[1]).toMatchObject({method:'POST',credentials:'include'});
+    const key1=(first[1].headers as Record<string,string>)['Idempotency-Key'],key2=(second[1].headers as Record<string,string>)['Idempotency-Key'];
+    expect(key1).toBe(key2);
+    expect(first[1].headers).toMatchObject({'X-Edit-Id':'edit-key'});
+    expect(first[1].body).toBe(file);
+    await expect(createFetchTransport('/a/abc123/query',f).uploadDatasetImage!('data12','edit-key',file)).rejects.toThrow(/signed-in/);
+  });
 });
 
 it('preserves a saved operation key and discoverable run id through direct transport',async()=>{

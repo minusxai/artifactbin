@@ -102,6 +102,8 @@ export interface QueryTransport {
    * draft path, a capture) — the store then reports that plainly.
    */
   mutate?(request: MutationRequest): Promise<MutationAnswer>;
+  /** Upload an image for a declared stored dataset import; returns a durable dataset-bound ref. */
+  uploadDatasetImage?(datasetId:string,editId:string,file:File):Promise<{ref:string;url:string}>;
   /**
    * Import one web URL the document ended up with (a bound `<img src="$pick">`,
    * a column of logos) and resolve with the ADDRESS of our copy.
@@ -179,6 +181,7 @@ export interface DataflowStore {
    * which decides every write anyway — answers; its refusal settles the write with its reason.
    */
   mutate(request: MutationRequest): Promise<void>;
+  uploadDatasetImage(datasetId:string,editId:string,file:File):Promise<{ref:string;url:string}>;
   /** Every write's life (StoreWriteEvent), in order, synchronously as it happens. */
   subscribeWrites(listener: (event: StoreWriteEvent) => void): () => void;
   /** Mutations currently in flight (a bound <Button> shows itself busy). */
@@ -623,6 +626,9 @@ export function createDataflowStore(
       prepare();
     },
     mutate,
+    uploadDatasetImage: (datasetId,editId,file) => transport?.uploadDatasetImage
+      ? transport.uploadDatasetImage(datasetId,editId,file)
+      : Promise.reject(new Error('page.uploadImage requires a signed-in page session')),
     subscribeWrites: (listener) => { writeListeners.add(listener); return () => { writeListeners.delete(listener); }; },
     expectAnswer: () => {
       const at = versionsNow(core);

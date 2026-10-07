@@ -113,6 +113,13 @@ a guest is asked to sign in before a write that reads it. A connected Postgres d
 is queried inside itself (`<Query source="ref:…">`), read-only, through its
 exposure whitelist.
 
+Dataset screenshots use a dataset-bound upload door. It requires the current
+document to import the stored dataset and an exact `insert` grant; optimized
+bytes belong to that dataset rather than a generally readable image artifact.
+The dataset-scoped image URL checks current document and dataset read access
+when it serves bytes, so policy changes apply on the next request. The row
+mutation still accepts only the screenshot's scalar `dimg:` reference.
+
 **Queries where the data is.** A reader's interaction re-runs only what depends
 on it, and a query runs in the reader's own browser — on the same SQLite wasm and
 functions, with no network — when the reader may hold everything it reads. The

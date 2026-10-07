@@ -493,6 +493,38 @@ CREATE INDEX IF NOT EXISTS idx_comment_images_annotation ON app.comment_images (
 
 CREATE INDEX IF NOT EXISTS idx_comment_images_expiry ON app.comment_images (expires_at);
 
+CREATE TABLE IF NOT EXISTS app.dataset_images (
+  id TEXT NOT NULL,
+  dataset_id TEXT NOT NULL,
+  document_id TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  operation_key TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS dataset_id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS document_id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS actor_id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS operation_key TEXT NOT NULL;
+
+ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS sha256 TEXT NOT NULL;
+
+ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_images_operation ON app.dataset_images (dataset_id, actor_id, operation_key);
+
+CREATE INDEX IF NOT EXISTS idx_dataset_images_dataset ON app.dataset_images (dataset_id, created_at);
+
 CREATE TABLE IF NOT EXISTS app.remote_agents (
   id TEXT NOT NULL,
   owner TEXT NOT NULL,

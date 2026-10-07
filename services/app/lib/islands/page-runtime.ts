@@ -42,6 +42,8 @@ export interface PublicPage {
   set(name: string, value: Scalar): void;
   ready(name: string): Promise<Row[]>;
   mutation(name: string): MutationFn | undefined;
+  uploadImage(importName:string,file:File):Promise<{ref:string;url:string}>;
+  imageUrl(importName:string,ref:unknown):string;
 }
 declare global { interface Window { page?: PublicPage } }
 
@@ -56,6 +58,8 @@ export function exposePage(win: Window, store: DataflowStore): () => void {
     set: (name: string, value: Scalar) => { bindings.signal(`$${bareName(name)}`)[1](value); },
     ready: (name: string) => bindings.query(`$${bareName(name)}`).ready,
     mutation: (name: string) => (bindings.has(bareName(name)) === 'mutation' ? bindings.mutation(`$${bareName(name)}`) : undefined),
+    uploadImage: bindings.uploadImage,
+    imageUrl: bindings.imageUrl,
   });
   win.page = api;
   return () => { if (win.page === api) delete win.page; bindings.dispose(); };
@@ -126,6 +130,7 @@ export interface AuthorModuleStart {
   source: string;
   /** The document's id, for `proxy` (absent: `proxy` refuses). */
   id?: string | null;
+  editId?:()=>string;
   store: DataflowStore | null;
   root: ParentNode;
   /** Vendor specifier → this build's chunk URL (IslandPageData.vendor). */

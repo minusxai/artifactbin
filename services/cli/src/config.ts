@@ -3,7 +3,7 @@ import {validVersion} from './version-order';
 import { readFile } from "node:fs/promises";
 import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import { DEFAULT_SERVER as CONTRACT_DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
 
@@ -29,6 +29,10 @@ export function withPrivateStateHome<T>(home:string,directory:string,run:()=>T):
 /** The CLI's private state directory: `~/.artifactbin`, or `ARTIFACTBIN_HOME` when set. Skills never live here. */
 export function configDir(home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
   return privateStateHomes.getStore()?.get(home) ?? (env.ARTIFACTBIN_HOME ? env.ARTIFACTBIN_HOME : join(home, ".artifactbin"));
+}
+/** The Claude config directory captured by a managed conversation and reused by explicit resume. */
+export function claudeConfigDirectory(home:string,cwd:string,env:NodeJS.ProcessEnv=process.env):string {
+  return resolve(cwd,env.CLAUDE_CONFIG_DIR??join(env.HOME??home,'.claude'));
 }
 /** Credentials are kept per origin, so switching servers never re-prompts or overwrites another origin's token. */
 function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {

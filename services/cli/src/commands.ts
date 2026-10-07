@@ -40,6 +40,7 @@ export const flags: Record<string,Flag> = {
  stop:{value:'ID',description:'Stop a managed remote agent and its local process.'},
  ready:{value:'ID',description:'Acknowledge context loading from the managed agent process.'},
  session:{value:'REF',description:'Attach to an existing authorized remote session instead of launching a command.'},
+ resume:{value:'ID',description:'Start a new managed Claude relay session from a saved local conversation ID.'},
  output:{short:'o',value:'PATH',description:'Write resulting content to this file or directory.'},
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
  for:{value:'TEMPLATE',description:'Print every reference a document of this template needs, in reading order, as one output.'},
@@ -113,7 +114,7 @@ export const commands: Command[] = [
  {name:'join',usage:'<ref>',description:'Join as yourself: owners/editors join immediately; other readers request approval.',min:1,max:1,flags:[],examples:['afbin join a1B2c3 --json']},
  {name:'members',usage:'<ref> [accept | approve <user-id> | dismiss [user-id] | leave]',description:'Read membership or accept, approve, dismiss or leave. Commenting does not require joining.',min:1,max:3,flags:[],examples:['afbin members a1B2c3 --json','afbin members a1B2c3 approve usr_abc --json']},
  {name:'testuser',usage:'new | list | delete <id> | delete --all',description:'Mint, list and erase throwaway test users: the other person on a page you are verifying. Deleting one erases everything it owns.',min:1,max:2,flags:['all'],examples:['afbin testuser new --json','afbin testuser list --json','afbin testuser delete tu_9fA2b --json','afbin testuser delete --all --json']},
- {name:'remote',usage:'[command [args ...]]',description:'Start a background agent with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session','history','foreground','stop','ready'],examples:['afbin remote pi','afbin remote --name codex2 codex','afbin remote --session rs_123']},
+ {name:'remote',usage:'[command [args ...]]',description:'Start a background agent with browser access, resume a saved Claude conversation, or attach to an existing session.',min:0,max:Infinity,flags:['name','session','resume','history','foreground','stop','ready'],examples:['afbin remote pi','afbin remote --name codex2 codex','afbin remote --session rs_123','afbin remote --resume <local-session-id>']},
 ];
 /**
  * `--as` NAMES A PERSON, NEVER A KIND. It used to take `test-user` and the server minted a fresh
@@ -234,6 +235,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(command.name==='remote'&&f.history&&(f.foreground||f.session))throw new CliError('invalid_arguments','--history is only supported for a background launch.');
  if(command.name==='remote'&&(f.stop||f.ready)){if(result.positionals.length||f.name||f.history||f.foreground||f.session||(f.stop&&f.ready))throw new CliError('invalid_arguments','Use --stop or --ready with one session ID, without launch or attach options.');}
  if(command.name==='remote'&&f.session!==undefined&&(result.positionals.length||f.name!==undefined))throw new CliError('invalid_arguments','--session attaches to an existing session; omit the command and --name.');
+ if(command.name==='remote'&&f.resume!==undefined&&(result.positionals.length||f.session!==undefined||f.name!==undefined||f.history!==undefined||f.foreground||f.stop||f.ready))throw new CliError('invalid_arguments','--resume starts a new background Claude session from a saved local session ID; use it alone, without --foreground.');
  if(command.name==='delete'&&f.in!==undefined&&f.type!=='comment')throw new CliError('invalid_arguments','--in identifies the containing artifact for --type comment only.');
  if(command.name==='delete'&&f.type==='comment'&&f.in===undefined)throw new CliError('invalid_arguments','delete --type comment requires --in <artifact>.');
  if(command.name==='export'&&f.output==='-'&&result.positionals.length>1)throw new CliError('ambiguous_output','Stdout holds one export; use an --output directory for several.');

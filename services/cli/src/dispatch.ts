@@ -35,10 +35,11 @@ import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
 import {installSkills,planSkills,restartHints,selectSkills,skillsDisabled,type SkillChoice,type SkillHarness,skillStatus} from './skill-install';
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
-import {readFile,realpath} from 'node:fs/promises';
-import {resolve} from 'node:path';
+import {readFile,realpath,stat} from 'node:fs/promises';
+import {basename,resolve} from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {recoverFiles,stagedFiles} from './journal';
-import {withLock} from './state';
+import {withLock,State} from './state';
 import {pendingOperation} from './recoverable-operation';
 import {homedir} from 'node:os';
 import {parseCommand,CliError,type ParsedCommand} from './commands';
@@ -53,7 +54,7 @@ import {validateMarkupStructure} from '../../app/lib/story/document/local-valida
 import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext} from './config';
+import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext,claudeConfigDirectory} from './config';
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
@@ -401,12 +402,30 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(command==='remote'){
    // The PTY graph is loaded only after the user selects remote execution.
    const {chooseLaunch}=await import('./launcher');const {runRemote}=await import('./runner');
-   const launch=positionals.length?{command:positionals[0],args:positionals.slice(1)}:await chooseLaunch();
+   const {assertSafeClaudeConversationArgs,hasClaudeSessionSelector,planClaudeConversation,readClaudeConversation,resumeClaudeConversation,releaseClaudeConversationReservation}=await import('./claude-conversation');
+   let launch=typeof flags.resume==='string'?{command:'claude',args:[]}:positionals.length?{command:positionals[0],args:positionals.slice(1)}:await chooseLaunch();
    if(flags.foreground)return runRemote({client,...launch,cwd:context.cwd,name:typeof flags.name==='string'?flags.name:undefined,onSession:url=>stderr(`Remote session: ${style.cyan(url)}\n`)});
    // Keep the process graph lazy: ordinary authoring commands do not load PTY lifecycle code.
    const {launchRemote}=await import('./remote-launch');
-   const receipt=await launchRemote({connection:client.connection,...launch,name:typeof flags.name==='string'?flags.name:undefined,history:typeof flags.history==='string'?flags.history:undefined,cwd:context.cwd??process.cwd(),home,env:context.env});
-   emit(json?receipt:`Started ${receipt.name} · loading context\nMention @${receipt.name} in artifact comments.\nOpen session: ${receipt.url}`);return 0;
+   let cwd=resolve(context.cwd??process.cwd());let env=context.env??process.env;let conversation:import('./claude-conversation').ClaudeConversationRecord|undefined;let resumeReservation:import('./claude-conversation').ClaudeConversationReservation|undefined;let history=typeof flags.history==='string'?flags.history:undefined;let resuming=false;let resumeUnavailable=false;
+   if(typeof flags.resume==='string'){
+    const state=await State.openIfPresent(home,context.env);if(!state)throw new CliError('claude_session_not_found','No saved local Claude conversation matches that session ID.','Use the local session ID printed by an earlier afbin remote launch.');
+    try{
+     const candidate=readClaudeConversation(state,client.connection.server,flags.resume);
+     if(!candidate)throw new CliError('claude_session_not_found','No resumable Claude conversation matches that local session ID.','Only new managed Claude sessions with an Artifactbin-issued session ID can be resumed.');
+     try{if(!(await stat(candidate.cwd)).isDirectory())throw new Error('not a directory');}catch{throw new CliError('claude_session_cwd','The saved Claude working directory is unavailable.','Restore that directory before resuming this conversation.');}
+     const restored=resumeClaudeConversation(state,client.connection.server,flags.resume,randomUUID());
+     launch={command:restored.command,args:restored.args};cwd=restored.cwd;history=undefined;conversation=restored.conversation;resumeReservation=restored.reservation;resuming=true;
+     env={...env,CLAUDE_CONFIG_DIR:restored.conversation.claudeConfigDir!};
+    }finally{state.close();}
+   }else if(basename(launch.command).replace(/\.exe$/i,'')==='claude'){
+    const originalArgs=[...launch.args];const planned=planClaudeConversation(originalArgs,randomUUID());launch={...launch,args:planned.args};
+    if(planned.sessionId){assertSafeClaudeConversationArgs(originalArgs);const directory=claudeConfigDirectory(home,cwd,env);env={...env,CLAUDE_CONFIG_DIR:directory};conversation={sessionId:planned.sessionId,command:launch.command,args:originalArgs,cwd,claudeConfigDir:directory};}else if(!hasClaudeSessionSelector(originalArgs)){resumeUnavailable=true;}
+   }
+   let receipt:Awaited<ReturnType<typeof launchRemote>>;
+   try{receipt=await launchRemote({connection:client.connection,...launch,name:typeof flags.name==='string'?flags.name:undefined,history,cwd,home,env,...(conversation?{conversation}:{}),...(resumeReservation?{resumeReservation}:{})});}
+   finally{if(resumeReservation){const state=await State.openIfPresent(home,context.env);if(state)try{releaseClaudeConversationReservation(state,resumeReservation);}finally{state.close();}}}
+   emit(json?receipt:`Started ${receipt.name} · ${resuming?'resuming the saved Claude conversation':'loading context'}\nMention @${receipt.name} in artifact comments.${conversation?`\nResume this Claude conversation later with: afbin remote --resume ${receipt.id}`:''}${resumeUnavailable?'\nClaude resume is unavailable for this launch because its arguments cannot be safely saved.':''}\nOpen session: ${receipt.url}`);return 0;
   }
   throw new CliError('command_integration_pending',`The ${command} command is still being integrated.`);
  }catch(error){

@@ -41,6 +41,20 @@ function setup() {
 }
 
 describe('the page bindings', () => {
+  it('uploads only through a declared import name and returns a dataset-scoped preview URL',async()=>{
+    const upload=vi.fn(async()=>({ref:'dimg:abc234def456',url:'/a/abc123/datasets/DS1/images/abc234def456'}));
+    const transport:QueryTransport={run:async()=>({tables:{},errors:{}}),page:async()=>({rows:[],columns:[]}),uploadDatasetImage:upload};
+    store=createDataflowStore({flow,results:{tables:{},errors:{}}},{transport});
+    bindings=bindPage(store);
+    document.body.setAttribute('data-mx-live-id','abc123');
+    document.body.setAttribute('data-mx-live-edit','edit1234');
+    const file=new File(['bytes'],'screen.png',{type:'image/png'});
+    await expect(bindings.uploadImage('d',file)).resolves.toMatchObject({ref:'dimg:abc234def456'});
+    expect(upload).toHaveBeenCalledWith('DS1','edit1234',file);
+    expect(bindings.imageUrl('d','dimg:abc234def456')).toContain('/a/abc123/datasets/DS1/images/abc234def456');
+    await expect(bindings.uploadImage('missing',file)).rejects.toThrow(/no declared dataset import/);
+  });
+
   it('binds a Value as [accessor, setter] over the store, and a Query as tracked rows with loading, error and ready', async () => {
     const { store, bindings, land } = setup();
     const [region, setRegion] = bindings.signal('$region');

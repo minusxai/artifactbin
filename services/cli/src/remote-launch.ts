@@ -5,8 +5,11 @@ import {REMOTE_HISTORY_BYTES,REMOTE_NAME} from '../../contracts/src/remote';
 import {REMOTE_WORKER_ARG} from './entry-args';
 import {CliError} from './errors';
 import type {Connection} from './config';
+import type {ClaudeConversationRecord,ClaudeConversationReservation} from './claude-conversation';
 export interface RemoteLaunchOptions {
  connection:Connection; command:string; args:string[]; name?:string; history?:string;
+ conversation?:ClaudeConversationRecord;
+ resumeReservation?:ClaudeConversationReservation;
  cwd:string; home:string; env?:NodeJS.ProcessEnv; timeoutMs?:number;
  worker?:{command:string;args:string[]};
 }
@@ -44,6 +47,6 @@ export async function launchRemote(options:RemoteLaunchOptions):Promise<RemoteLa
   };
   const timer=setTimeout(()=>finish(new Error('Remote worker startup timed out.')),options.timeoutMs??15000);
   child.once('error',error=>finish(error));child.once('exit',exited);child.on('message',message);
-  child.send({connection:options.connection,command:options.command,args:options.args,name,history,cwd:options.cwd,home:options.home} satisfies RemoteWorkerInput,error=>{if(error)finish(error);});
+  child.send({connection:options.connection,command:options.command,args:options.args,name,history,cwd:options.cwd,home:options.home,...(options.conversation?{conversation:options.conversation}:{}),...(options.resumeReservation?{resumeReservation:options.resumeReservation}:{})} satisfies RemoteWorkerInput,error=>{if(error)finish(error);});
  });
 }

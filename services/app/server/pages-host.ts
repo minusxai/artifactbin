@@ -50,7 +50,7 @@ function doorOf(pathname: string, id: string): string | null {
   const prefix = `/a/${id}/`;
   if (!pathname.startsWith(prefix)) return null;
   const rest = pathname.slice(prefix.length);
-  return (DOORS as readonly string[]).includes(rest) ? rest : null;
+  return (DOORS as readonly string[]).includes(rest) || /^datasets\/[A-Za-z0-9]{6,12}\/images(?:\/[A-Za-z0-9]{10,30})?$/.test(rest) ? rest : null;
 }
 
 const forbidden = (origin: string | null, detail: string): Response =>
@@ -75,7 +75,7 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
     if (c.req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: {
         ...cors, ...NO_STORE, vary: 'Origin', 'access-control-allow-methods': 'GET, POST, OPTIONS',
-        'access-control-allow-headers': 'content-type, idempotency-key, last-event-id', 'access-control-max-age': '600',
+        'access-control-allow-headers': 'content-type, idempotency-key, last-event-id, x-edit-id', 'access-control-max-age': '600',
       } });
     }
     await asReader(c.req.raw, id);
