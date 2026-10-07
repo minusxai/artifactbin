@@ -151,7 +151,7 @@ describe('dataset editor — exposure and saving', () => {
   it('retains stored object data when changing refresh settings without new rows', async () => {
     state.loadedCatalog={kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'}],objectKey:'private/object'}]};
     editor(true); await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders')); change('Refresh interval','30'); click('Save dataset');
-    await waitFor(() => expect(savedDefinition()?.tables).toEqual([{schema:'public',name:'rows'}]));
+    await waitFor(() => expect(savedDefinition()?.tables).toEqual([{schema:'public',name:'rows',columns:[{name:'id',type:'number'}]}]));
   });
 
   it('embeds artifact sharing in its own tab without a toolbar share button or dialog', async () => {

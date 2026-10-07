@@ -82,3 +82,47 @@ it('prevents saving during import and preserves the draft after a failed sheet i
   expect(screen.getByLabelText('Stored table name 2')).toHaveValue('sheet_2');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
+
+it('preserves declared stored column types when source markup is applied and saved', async () => {
+  editor(); change('Dataset title', 'Typed quantities'); click('Edit dataset source');
+  change('Dataset source', '<Dataset kind="stored"><Table schema="public" name="quantities" columns={[{"name":"quantity","type":"number"}]} rows={[{"quantity":3}]} /></Dataset>');
+  click('Apply dataset source'); click('Save dataset');
+  await waitFor(() => expect(savedDefinition()?.tables[0]).toEqual(expect.objectContaining({columns:[{name:'quantity',type:'number'}], rows:[{quantity:3}]})));
+});
+
+
+it('retains typed loaded table shape and user constraints when another table is added', async () => {
+  const columns = [{ name: 'quantity', type: 'number' as const, choices: [1, 3] }, { name: 'owner', type: 'user' as const, constraints: { self: true, memberOf: ['current'] } }];
+  state.loadedCatalog = { kind: 'stored', defaultSchema: 'public', refreshSeconds: 0, tables: [{ schema: 'public', name: 'quantities', columns, objectKey: 'obj-1' }] };
+  editor(true);
+  await screen.findByLabelText('Stored rows 1');
+  click('Add JSON table'); change('Stored table name 2', 'inferred'); change('Stored rows 2', '[{"name":"Ada"}]');
+  click('Save dataset');
+  await waitFor(() => expect(savedDefinition()?.tables).toEqual([
+    { schema: 'public', name: 'quantities', columns },
+    { schema: 'public', name: 'inferred', rows: [{ name: 'Ada' }] },
+  ]));
+});
+
+it('keeps explicit empty table columns and a rejected typed draft for correction and retry', async () => {
+  const fallback = globalThis.fetch;
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+    if (url === '/api/my/artifacts' && init?.method === 'POST' && state.calls.filter(c => c.url === url).length === 0) {
+      state.calls.push({ url, method: 'POST', body: JSON.parse(String(init.body)) });
+      return reply({ error: 'invalid_dataset', details: ['Column quantity expects a number.'] }, 400);
+    }
+    return fallback(url, init);
+  }));
+  editor(); change('Dataset title', 'Typed quantities'); click('Edit dataset source');
+  change('Dataset source', '<Dataset kind="stored"><Table schema="public" name="quantities" columns={[{"name":"quantity","type":"number"}]} rows={[{"quantity":"invalid"}]} /><Table schema="public" name="empty" columns={["name"]} rows={[]} /></Dataset>');
+  click('Apply dataset source'); click('Save dataset');
+  await waitFor(() => expect(savedDefinition()?.tables[0]?.columns).toEqual([{ name: 'quantity', type: 'number' }]));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Column quantity expects a number.');
+  expect(screen.getByLabelText('Stored rows 1')).toHaveValue(JSON.stringify([{ quantity: 'invalid' }], null, 2));
+  expect(savedDefinition()?.tables[1]).toEqual({ schema: 'public', name: 'empty', columns: ['name'], rows: [] });
+  change('Stored rows 1', '[{"quantity":3}]'); click('Save dataset');
+  await waitFor(() => expect(state.calls.filter(c => c.url === '/api/my/artifacts')).toHaveLength(2));
+  const retry = state.calls.filter(c => c.url === '/api/my/artifacts')[1];
+  expect(retry.body.dataset).toContain('"type":"number"');
+  expect(retry.body.dataset).toContain('"quantity":3');
+});

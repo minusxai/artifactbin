@@ -33,6 +33,7 @@ type StoredDraft = {
   schema: string;
   name: string;
   rows: string;
+  columns?: CatalogInput["tables"][number]["columns"];
   retained: boolean;
 };
 const initialConnection = (): DatasetConnection => ({
@@ -177,6 +178,7 @@ export function DatasetEditorPage({
       schema: t.schema,
       name: t.name,
       rows: t.rows ? JSON.stringify(t.rows, null, 2) : "",
+      columns: t.columns,
       retained: t.rows === undefined
     })));
   };
@@ -206,7 +208,7 @@ export function DatasetEditorPage({
           ...table
         }) => ({
           ...table,
-          columns: table.columns.map(c => c.name)
+          columns: catalog.kind === "stored" ? table.columns : table.columns.map(c => c.name)
         }))
       }, catalog);
     }).catch(err => {
@@ -322,7 +324,8 @@ export function DatasetEditorPage({
     })) : stored().map(s => {
       if (!s.rows.trim() && s.retained) return {
         schema: s.schema,
-        name: s.name
+        name: s.name,
+        ...(s.columns !== undefined ? { columns: s.columns } : {})
       };
       let rows: unknown;
       try {
@@ -334,6 +337,7 @@ export function DatasetEditorPage({
       return {
         schema: s.schema,
         name: s.name,
+        ...(s.columns !== undefined ? { columns: s.columns } : {}),
         rows: rows as Row[]
       };
     });
