@@ -4,9 +4,11 @@ description: Direct JSX creation, artifact ID reservations and an executable gra
 ---
 ## Direct JSX creation and graph editing
 
-HTTP accepts the browser/CLI JSX creation and prepared-edit contracts directly, without CLI installation. This guide is also served in `/llms.txt`.
+HTTP supports JSX creation and prepared edits without CLI installation; this guide is in `/llms.txt`.
 
-Author with [JSX markup](markup.md), [data, SQL and actions](markup-data.md), [design systems](design-systems.md) and [templates](templates.md); these are public HTTP references.
+See [JSX markup](markup.md), [data and actions](markup-data.md), [design systems](design-systems.md) and [templates](templates.md).
+
+[[ urlReplyRule ]] [[ phoneAuthoringRule ]]
 
 For a new document, `POST /api/artifacts` with `{"markup":"<p id=\"message\">Alpha</p>","title":"HTTP example","visibility":"unlisted"}`. Give every body element a persistent `id`; preserve it when editing/moving that element. Creation validates JSX and returns its artifact identity/URL. To allocate identities before creation, `POST /api/artifacts/reservations` with `Idempotency-Key: http_authoring_batch_001` and `{}` returns 100 IDs. Reuse that nonce for pool replay, and send one unconsumed ID as `reserved_id` in the create body, with a separate create `Idempotency-Key`. These are artifact IDs, distinct from element IDs and graph node keys. Reuse the exact create body/key after an uncertain response; do not allocate another identity blindly. `X-Artifactbin-Account`, when pinning a workspace, must be the account observed on this server's authenticated response.
 
@@ -27,7 +29,6 @@ async function jsonRequest(path, method = 'GET', body) {
 }
 const path = '/api/artifacts/' + artifactId;
 const snapshot = await jsonRequest(path);
-// Replace this example with your complete edited JSX, retaining existing IDs.
 const source = snapshot.markup.replace('Alpha', 'Updated HTTP text');
 const prepared = await jsonRequest(path + '/prepare', 'POST', {
   source, edit_id:snapshot.edit_id, expectedVersion:snapshot.version,

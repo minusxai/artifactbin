@@ -3,6 +3,11 @@
 export const MARKUP_STYLE_RULE =
   'EVERY element needs Tailwind utilities in className — bare HTML renders completely unstyled.';
 
+/** Shared authoring guidance rendered in both the CLI skill and HTTP references. */
+export const URL_REPLY_RULE = 'URL-only requests get the URL alone.';
+export const PHONE_AUTHORING_RULE =
+  'At 390px, fix overflow, clipping and unreachable controls. Use numeric roles for figures, text roles for prose; stack crowded stats.';
+
 /**
  * The rule whose absence produced a report that contradicted its own data.
  *
