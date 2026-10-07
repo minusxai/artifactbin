@@ -33,6 +33,8 @@ suppress the injected defaults. An existing OpenCode permission configuration is
 preserved. Pi has no built-in tool approval prompts. Artifact access checks on the
 server still apply.
 
+Managed helpers restore only their session’s Artifactbin context through a private memory-only local socket on macOS and Linux, so shell environment filtering does not discard readiness proof. A sandbox that blocks local sockets reports `remote_context_blocked`; approve the exact helper readiness command once through your harness’s existing approval flow. If approvals are unavailable or denied, the agent waits for the operator. No shell policy or sandbox override is added. A stopped worker reports `remote_context_unavailable` instead and requires a fresh remote agent. Windows retains inherited environment behavior without this socket bridge.
+
 ## Boundaries
 
 - `remote-launch` owns validation and the detached IPC handshake. Credentials

@@ -117,7 +117,7 @@ test('explicit permission modes and Codex profiles override managed defaults',()
  assert.deepEqual(remoteArguments('codex',['-c','model="chosen"'],'context'),['-c','model="chosen"','--yolo','context']);
 });
 
-import {remotePermissionEnv} from '../src/config';
+import {remotePermissionEnv,saveConnection} from '../src/config';
 test('OpenCode receives per-process automatic permissions and preserves explicit environment overrides',()=>{
  const env={PATH:'/bin',OPENCODE_CONFIG_CONTENT:'{"model":"chosen"}'};
  assert.deepEqual(remotePermissionEnv('/bin/opencode',env),{...env,OPENCODE_PERMISSION:'{"*":"allow"}'});
@@ -143,4 +143,24 @@ test('startup and repeated requests require published edits, with a compact per-
  assert.ok(!payload.instruction.includes(COMMENT_IMAGE_INSTRUCTIONS),'full screenshot policy belongs in startup');
  assert.match(payload.instruction,/--image <image-id> --output <fresh-workspace-path>.webp --json/);
  assert.match(payload.instruction,/blocked/);
+});
+
+for(const ephemeral of [false,true])test(`generated managed helper restores ${ephemeral?'ephemeral':'saved'} auth and readiness after the harness filters Artifactbin environment`,async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'afbin-filtered-context-'));let ready=false,exited=false,output='';let pid:number|undefined;const proof='mxmx_test_filtered_proof';
+ const server=createServer(async(req,res)=>{
+  let raw='';for await(const chunk of req)raw+=chunk;const data=JSON.parse(raw||'{}');res.setHeader('Content-Type','application/json');
+  if(req.url==='/api/remote/sessions'){res.end(JSON.stringify({id:'mxmx_test_filtered',runnerKey:proof}));return;}
+  if(data.type==='ready'){assert.equal(data.proof,proof);assert.equal(req.headers.authorization,'Bearer mxmx_test_filtered_token');ready=true;res.end('{}');return;}
+  output+=data.output??'';if(data.exitCode!==undefined)exited=true;res.end(JSON.stringify({controller:'local',inputs:[],stop:ready}));
+ });
+ await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const port=(server.address() as {port:number}).port,origin=`http://127.0.0.1:${port}`;
+ try{
+  const state=join(dir,'.artifactbin'),connection={server:origin,token:'mxmx_test_filtered_token'};
+  if(!ephemeral)await saveConnection(connection,dir,{ARTIFACTBIN_HOME:state});
+  const harness=join(dir,'filtered.mjs');
+  await writeFile(harness,`import {execFileSync} from 'node:child_process';import {readFileSync,writeFileSync} from 'node:fs';const executable=process.env.PATH.split(':')[0]+'/afbin';const helper=readFileSync(executable,'utf8');writeFileSync(${JSON.stringify(join(dir,'helper.txt'))},helper);const env={...Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('ARTIFACTBIN'))),HOME:${JSON.stringify(dir)}};try{process.stdout.write(execFileSync(executable,['remote','--ready','mxmx_test_filtered','--server',${JSON.stringify(origin)},'--json'],{env,encoding:'utf8'}));}catch(error){process.stdout.write(error.stdout??'');process.stderr.write(error.stderr??'');process.exitCode=1;}`);
+  const result=await launchRemote({connection,command:process.execPath,args:[harness],name:'filtered',cwd:dir,home:dir,env:{...process.env,ARTIFACTBIN_HOME:state,ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'0',TSX_TSCONFIG_PATH:fileURLToPath(new URL('../../../tsconfig.json',import.meta.url))},worker:{command:process.execPath,args:['--import',fileURLToPath(new URL('../../../node_modules/tsx/dist/loader.mjs',import.meta.url)),fileURLToPath(new URL('../src/main.ts',import.meta.url)),'--internal-remote-worker']}});
+  pid=result.pid;for(let i=0;i<100&&!exited;i++)await delay(100);
+  assert.equal(ready,true,output);assert.ok(!output.includes(proof));assert.ok(!(await readFile(join(dir,'helper.txt'),'utf8')).includes(proof));assert.equal(exited,true);
+ }finally{if(pid)try{process.kill(pid,'SIGTERM');}catch{}server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(dir,{recursive:true,force:true});}
 });

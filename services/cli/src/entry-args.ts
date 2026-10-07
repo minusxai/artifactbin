@@ -8,3 +8,5 @@ export const LOCAL_IMAGE_ARG='--internal-image-export';
 export const REMOTE_WORKER_ARG='--internal-remote-worker';
 
 export const LOCAL_HTML_ARG='--internal-html-export';
+
+export const REMOTE_CONTEXT_ARG='--internal-remote-context';

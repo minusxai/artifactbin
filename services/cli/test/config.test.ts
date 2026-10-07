@@ -134,3 +134,12 @@ test('legacy apex credentials stay scoped to an explicit legacy server', async (
   assert.deepEqual(await loadConnection('https://artifactbin.dev',home,{}),{server:'https://artifactbin.dev',token:'mx_legacy'});
  } finally { await rm(home,{recursive:true,force:true}); }
 });
+
+import {restoreRemoteContext,remoteContext} from '../src/config';
+test('managed restoration touches only the scoped Artifactbin context and existing typed connection',async()=>{
+ const env:NodeJS.ProcessEnv={PATH:'/safe/path',CODEX_HOME:'/existing/codex',PROVIDER_KEY:'mxmx_test_provider',OPENCODE_PERMISSION:'existing',ARTIFACTBIN_HOME:'/old'};
+ const context={id:'mxmx_test_scoped',proof:'mxmx_test_proof',home:'/fresh/private',server:'http://localhost:6005',connection:{server:'http://localhost:6005',token:'mxmx_test.jwt.shaped',refreshToken:'mxmx_test_refresh',clientId:'mxmx_test_client'}};
+ restoreRemoteContext(context,env);assert.deepEqual(remoteContext(env),{id:context.id,proof:context.proof});
+ assert.deepEqual(await loadConnection(undefined,'/unused',env),context.connection);
+ assert.equal(env.ARTIFACTBIN_HOME,context.home);assert.equal(env.PATH,'/safe/path');assert.equal(env.CODEX_HOME,'/existing/codex');assert.equal(env.PROVIDER_KEY,'mxmx_test_provider');assert.equal(env.OPENCODE_PERMISSION,'existing');
+});
