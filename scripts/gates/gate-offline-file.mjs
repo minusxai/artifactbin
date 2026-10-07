@@ -991,7 +991,7 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
       await expect(editor.getByRole('button', { name: 'Undo stroke' })).toBeEnabled();
       // Strokes paint on requestAnimationFrame; wait for the pixels, not just the undo button.
       await expect.poll(() => canvas.evaluate(c => { const pixels = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let count = 0; for (let i = 0; i < pixels.length; i += 4) if (pixels[i] < 30 && pixels[i + 1] > 200 && pixels[i + 2] < 30) count++; return count; })).toBeGreaterThan(100);
-      await expect(editor.getByLabel('Annotation comment', { exact: true })).toHaveValue(`Screenshot from ${engineName} at DPR ${dpr}`);
+      await expect(editor.getByLabel('Annotation comment', { exact: true })).toHaveText(`Screenshot from ${engineName} at DPR ${dpr}`);
     });
     await step('the comment saves and its screenshot persists through a reload', async () => {
       await page.getByLabel('Save annotation', { exact: true }).click();

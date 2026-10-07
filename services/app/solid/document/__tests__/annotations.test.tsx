@@ -1,3 +1,4 @@
+import { replaceComment } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * THE RAIL AND THE PINS. Open threads
@@ -75,7 +76,8 @@ describe('AnnotationLayer', () => {
     expect(first).toBeDefined();
     expect(reply).toBeDefined();
     expect(first!.textContent).not.toBe(reply!.textContent);
-    expect(first!.textContent).toMatch(/27 Aug.*\d+:\d{2}/);
+    expect(first!.textContent).toContain(new Intl.DateTimeFormat('en-GB', { day:'numeric', month:'short' }).format(new Date(ANN.thread[0]!.created_at)));
+    expect(first!.textContent).toMatch(/\d+:\d{2}/);
     expect(first).toHaveAttribute('aria-label', expect.stringMatching(/2026/));
   });
 
@@ -223,7 +225,7 @@ describe('AnnotationLayer', () => {
     await flush();
     view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
     await screen.findByLabelText('Annotation thread');
-    fireEvent.input(screen.getByLabelText('Reply to annotation'), { target: { value: 'never mind' } });
+    replaceComment(screen.getByLabelText('Reply to annotation'), 'never mind');
     fireEvent.click(screen.getByLabelText('Send reply'));
     await flush();
     const reply = fetchCalls.find((c) => c.url.endsWith('/annotations/ann_1') && c.init?.method === 'POST');
@@ -262,12 +264,12 @@ describe('AnnotationLayer', () => {
     const view = layer({ railOpen: true });
     await flush();
     fireEvent.click(await screen.findByLabelText('Open annotation thread'));
-    fireEvent.input(screen.getByLabelText('Reply to annotation'), { target: { value: 'half written' } });
+    replaceComment(screen.getByLabelText('Reply to annotation'), 'half written');
     const field = screen.getByLabelText('Reply to annotation');
     view.set({ railOpen: true, liveAnnotations: [{ ...ANN, thread: [...ANN.thread] }] });
     await flush();
     expect(field.isConnected).toBe(true);
-    expect(screen.getByLabelText('Reply to annotation')).toHaveValue('half written');
+    expect(screen.getByLabelText('Reply to annotation')).toHaveTextContent('half written');
   });
 
   it('lists resolved threads below a divider, collapsed until clicked; close shuts the rail', async () => {
@@ -461,13 +463,13 @@ it('prefills the linked agent, permits removing it, and retains a failed reply',
   const view = layer({ railOpen: true, liveAnnotations: [tagged] });
   await screen.findByText('help', { exact: false });
   view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
-  const field = await screen.findByPlaceholderText('reply…');
-  expect(field).toHaveValue('@claude ');
+  const field = await screen.findByLabelText('Reply to annotation');
+  expect(field).toHaveTextContent('@claude');
   expect(screen.getByLabelText('Send reply')).toBeDisabled();
-  fireEvent.input(field, { target: { value: 'my draft' } });
-  expect(field).toHaveValue('my draft');
+  replaceComment(field, 'my draft');
+  expect(field).toHaveTextContent('my draft');
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
   fireEvent.click(screen.getByLabelText('Send reply'));
   await screen.findByRole('alert');
-  expect(field).toHaveValue('my draft');
+  expect(field).toHaveTextContent('my draft');
 });

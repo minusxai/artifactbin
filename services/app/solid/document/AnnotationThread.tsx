@@ -89,7 +89,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   let sending = false;
   const [replyError, setReplyError] = createSignal('');
   createEffect(() => { const next = prefix(); if (!touched) setReply(next); });
-  const [replyPreviewing, setReplyPreviewing] = createSignal(false);
   const [menuOpen, setMenuOpen] = createSignal(false);
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
@@ -101,7 +100,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     sending = true; setReplyError('');
     try {
       if (!await props.onReply(reply())) throw new Error('Could not send reply. Your draft is saved here.');
-      touched = false; setReply(prefix()); setReplyPreviewing(false);
+      touched = false; setReply(prefix());
     } catch { setReplyError('Could not send reply. Your draft is saved here.'); }
     finally { sending = false; }
   };
@@ -262,12 +261,12 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       <Show when={props.open && !props.resolved}>
         <div class="border-t border-edge px-3 py-2">
           <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
-            label="Reply to annotation" previewLabel="Reply preview" previewToggleLabel="Preview reply"
+            label="Reply to annotation"
             value={reply()} onChange={(value) => { touched = true; setReply(value); }} onSubmit={() => void sendReply()}
-            previewing={replyPreviewing()} onPreviewingChange={setReplyPreviewing} rows={2} placeholder="reply…" />
+             rows={2} placeholder="reply…" />
           <Show when={replyError()}><p role="alert" class="text-xs text-red-500">{replyError()}</p></Show>
           <div class="flex justify-end gap-2">
-            <button type="button" aria-label="Cancel reply" onClick={() => { touched = true; setReply(''); setReplyPreviewing(false); props.onOpen(); }}
+            <button type="button" aria-label="Cancel reply" onClick={() => { touched = true; setReply(''); props.onOpen(); }}
               class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>
             <button type="button" aria-label="Send reply" disabled={props.busy || !hasReplyText(reply())} onClick={() => void sendReply()}
               class="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40">reply</button>
