@@ -290,3 +290,42 @@ test('validate wraps a JSON attribute value that was missing its expression brac
   assert.equal(await runCli(['validate','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>assert.fail('offline')}),0,'the rewritten file validates clean');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+
+test('managed review reads the hosted thread after pulling its artifact into the workspace',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-managed-comment-')),home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const server='https://managed-comments.example',sent:Array<{path:string;method:string;body:Record<string,unknown>|null;headers:Headers}>=[];
+ const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'mxmx_test_managed_comment_token',ARTIFACTBIN__REMOTE_SESSION:'mxmx_test_session',ARTIFACTBIN__REMOTE_PROOF:'mxmx_test_proof',ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'0'};
+ const head={id:'abc123',version:1,edit_id:'edit1',state:digest('managed-head'),markup:'<p id="p001">Synthetic</p>',format:'markup',title:'Synthetic',theme:null,template:null,visibility:'private',link_role:'viewer',parent_id:null,capabilities:{comment_receipts:true}};
+ const request:typeof fetch=async(input,init)=>{const url=new URL(String(input)),body=init?.body?JSON.parse(String(init.body)):null;sent.push({path:url.pathname,method:init?.method??'GET',body,headers:new Headers(init?.headers)});const headers={'X-Artifactbin-Account':'mxmx_test_account'};if(url.pathname==='/api/artifacts/abc123')return Response.json(head,{headers});if(url.pathname.includes('annotations'))return Response.json(init?.method==='POST'?{id:'ann_hosted',status:body?.resolve?'resolved':'open',thread:[{body:'Hosted request'},{body:body?.reply}]}:{annotations:[{id:'ann_hosted',thread:[{body:'Hosted request'}]}],next_cursor:null},{headers});throw Error('Unexpected synthetic route '+url.pathname);};
+ const invoke=async(args:string[],scope:NodeJS.ProcessEnv=env)=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,env:scope,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await writeFile(join(cwd,'other.jsx'),'<p id="local">Other local document</p>');const added=await invoke(['add','other.jsx']);assert.equal(added.code,0,JSON.stringify(added.result));
+  const pulled=await invoke(['pull','abc123','--output','doc.jsx']);assert.equal(pulled.code,0,JSON.stringify(pulled.result));sent.length=0;
+  const listed=await invoke(['comment','abc123']);assert.equal(listed.code,0,JSON.stringify(listed.result));
+  assert.equal(listed.result.annotations[0]?.id,'ann_hosted','managed bare-ID comment must read hosted request rather than empty local discussion');
+  assert.ok(sent.some(call=>call.path.includes('annotations')),'hosted comment endpoint was used');
+  for(const phase of ['acknowledged','completed']){
+   sent.length=0;const reply=await invoke(['comment','abc123','--thread','ann_hosted','--body','Hosted '+phase,'--request','request_hosted','--phase',phase]);assert.equal(reply.code,0,JSON.stringify(reply.result));
+   const posts=sent.filter(call=>call.method==='POST');assert.equal(posts.length,1);assert.equal(posts[0]?.path,'/api/artifacts/abc123/annotations/ann_hosted');assert.deepEqual(posts[0]?.body,{request_id:'request_hosted',phase,reply:'Hosted '+phase});
+   assert.equal(posts[0]?.headers.get('X-Artifactbin-Remote-Session'),env.ARTIFACTBIN__REMOTE_SESSION);assert.equal(posts[0]?.headers.get('X-Artifactbin-Remote-Proof'),env.ARTIFACTBIN__REMOTE_PROOF);
+  }
+  sent.length=0;const resolved=await invoke(['comment','abc123','--thread','ann_hosted','--state','resolved']);assert.equal(resolved.code,0,JSON.stringify(resolved.result));assert.deepEqual(sent.filter(call=>call.method==='POST')[0]?.body,{resolve:true});
+  const unmanaged={...env,ARTIFACTBIN__REMOTE_SESSION:undefined,ARTIFACTBIN__REMOTE_PROOF:undefined};
+  sent.length=0;const local=await invoke(['comment','abc123','--node','p001','--body','Ordinary local review'],unmanaged);assert.equal(local.code,0,JSON.stringify(local.result));assert.equal(local.result.local,true);assert.equal(sent.length,0);
+  const before=await invoke(['comment','doc.jsx']);assert.equal(before.code,0);assert.equal(before.result.local,true);assert.equal(before.result.annotations.length,1);assert.equal(sent.length,0);
+  const explicitReply=await invoke(['comment','doc.jsx','--thread',local.result.id,'--body','Local follow-up']);assert.equal(explicitReply.code,0);assert.equal(explicitReply.result.local,true);assert.equal(sent.length,0);
+  const beforeInvalid=await invoke(['comment','doc.jsx']);const source=await readFile(join(cwd,'doc.jsx'),'utf8');
+  for(const [args,scope,error] of [
+   [['comment','abc123','--thread','ann_hosted','--body','Unproven','--request','request_hosted','--phase','completed'],{...env,ARTIFACTBIN__REMOTE_PROOF:undefined},'unsupported_local_comment'],
+   [['comment','doc.jsx','--thread',local.result.id,'--body','Wrong local phase','--request','request_hosted','--phase','completed'],env,'unsupported_local_comment'],
+   [['comment','abc123','doc.jsx','--node','p001','--body','Mixed'],env,'unsupported_local_comment'],
+   [['comment','abc123','other.jsx','--node','p001','--body','Mixed unpublished'],env,'unsupported_local_comment'],
+   [['comment','abc123@2'],env,'version_not_writable'],
+   [['comment','https://other.example/a/abc123'],env,'wrong_server'],
+  ] as Array<[string[],NodeJS.ProcessEnv,string]>){sent.length=0;const rejected=await invoke(args,scope);assert.notEqual(rejected.code,0);assert.equal(rejected.result.error.code,error,args.join(' '));assert.equal(sent.filter(call=>call.method==='POST').length,0);assert.equal(await readFile(join(cwd,'doc.jsx'),'utf8'),source);}
+  sent.length=0;const afterInvalid=await invoke(['comment','doc.jsx']);assert.deepEqual(afterInvalid.result,beforeInvalid.result);assert.equal(sent.length,0);
+  const fresh=await invoke(['comment','other.jsx','--node','local','--body','Unpublished local']);assert.equal(fresh.code,0);assert.equal(fresh.result.local,true);assert.equal(sent.length,0);
+  const localById=await invoke(['comment','abc123'],unmanaged);assert.equal(localById.code,0);assert.equal(localById.result.local,true);assert.equal(localById.result.annotations[0].thread.length,2);assert.equal(sent.length,0);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

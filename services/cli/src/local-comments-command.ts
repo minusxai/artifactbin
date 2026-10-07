@@ -18,11 +18,18 @@ import type {JsxNode} from '../../app/lib/jsx';
 import {BackendRequestError} from '../../app/lib/artifact-backend/errors';
 
 /** Resolve every target before writing so a mixed remote/local request cannot partly mutate locally. */
-export async function localCommentCommand(workspace:Workspace,parsed:ParsedCommand,providedBody?:string):Promise<unknown|undefined>{
+export async function localCommentCommand(workspace:Workspace,parsed:ParsedCommand,providedBody?:string,options:{hostedIds?:boolean}={}):Promise<unknown|undefined>{
  if(parsed.command!=='comment'||parsed.positionals.some(value=>/^https?:\/\//i.test(value)))return undefined;
+ const references=await Promise.all(parsed.positionals.map(ref=>resolveReference(ref,{root:workspace.root,cwd:workspace.cwd,writable:true})));
+ // A managed reviewer addresses hosted threads by their event's artifact ID,
+ // even after pull registered that ID locally. Explicit files remain offline.
+ if(options.hostedIds&&references.some(ref=>ref.kind==='id')){
+  if(references.some(ref=>ref.kind==='path'))throw new CliError('unsupported_local_comment','Managed comments cannot mix hosted artifact IDs with local paths.','Use separate commands for hosted threads and local discussions.');
+  return undefined;
+ }
  const identities=await localIdentities(workspace),targets:Array<{path:string;ref:string}>=[];
- for(const ref of parsed.positionals){
-  const resolved=await resolveReference(ref,{root:workspace.root,cwd:workspace.cwd,writable:true});
+ for(const [index,ref] of parsed.positionals.entries()){
+  const resolved=references[index]!;
   const path=resolved.kind==='path'?resolved.path:identities[resolved.id];
   if(!path)return undefined;
   if(!path.toLowerCase().endsWith('.jsx'))throw new CliError('not_markup','Local comments require a JSX document.');
