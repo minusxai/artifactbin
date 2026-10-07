@@ -24,7 +24,7 @@
  *
  * Anything it cannot do throws, and the caller reloads keeping the reader's place (../live-update).
  */
-import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH } from '@/lib/compiled-page/contract';
+import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR } from '@/lib/compiled-page/contract';
 import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-fragment';
 import { LITERALS_ATTR } from '@/lib/compiled-page/carriers';
 import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
@@ -154,7 +154,7 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
 
   const override = options.mode?.() ?? readerMode(win);
   syncAttributes(root, nextRoot, override);
-  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])), preserveCharts: !!newModule && newModule === oldModule });
+  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])), preserveLiveData: !!newModule && newModule === oldModule });
 
   syncHead(doc, next, { adopted: !!options.adopted, override });
   const data = next.getElementById(ISLAND_DATA_ID);
@@ -335,8 +335,8 @@ interface MorphContext {
   used: Set<Node>;
   /** Every node of a kept island: moved into place, never removed with its old parent. */
   kept: ReadonlySet<Node>;
-  /** The same browser module still owns live chart drawings after a prose-only edit. */
-  preserveCharts?: boolean;
+  /** The same browser module still owns live data widgets and charts after a prose-only edit. */
+  preserveLiveData?: boolean;
   /** Unchanged authored components whose painted root survives a draft compile. */
   stableElementIds?: ReadonlySet<string>;
   /** Unchanged components without an id, by their path in the new tree → their path on the page now. */
@@ -423,10 +423,14 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
       if (match.nodeType === 1) {
         const oldElement = match as Element;
         const newElement = next as Element;
-        const sameChart = ctx.preserveCharts && oldElement.getAttribute('aria-label') === 'Question embed'
+        // Same-module data adapters retain reactive rows, numbers and settled errors. Incoming SSR
+        // placeholders must not overwrite DOM whose unchanged store has no reason to redraw it.
+        const sameLiveData = ctx.preserveLiveData && (oldElement.hasAttribute(LIVE_DATA_ATTR) && newElement.hasAttribute(LIVE_DATA_ATTR)
+          || oldElement.getAttribute('aria-label') === 'Question embed'
           && newElement.getAttribute('aria-label') === 'Question embed'
+        )
           && oldElement.getAttribute(AST_PATH_ATTR) === newElement.getAttribute(AST_PATH_ATTR);
-        if (!sameChart && !ctx.stableElementIds?.has(oldElement.id)
+        if (!sameLiveData && !ctx.stableElementIds?.has(oldElement.id)
           && !(path && ctx.stableElementPaths?.has(path))) {
           // An element the new version draws exactly as it is (a table the edit did not touch) stays as it is: one
           // native comparison instead of a walk over every cell.
@@ -434,7 +438,7 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
             syncAttributes(oldElement, newElement, null);
             morphChildren(oldElement, newElement, ctx);
           }
-        } else if (!sameChart) adoptHydrationKeys(oldElement, newElement);
+        } else if (!sameLiveData) adoptHydrationKeys(oldElement, newElement);
       } else if (match.nodeValue !== next.nodeValue) {
         match.nodeValue = next.nodeValue;
       }

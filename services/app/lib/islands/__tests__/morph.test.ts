@@ -115,6 +115,29 @@ const treePage = (edit: string, module: string, lede: string, label = 'A', regio
   .replace('<div class="mx-doc">', '<div class="mx-doc" data-hk="d-0000">');
 
 describe('the live morph', () => {
+  it('preserves live data widget contents on a prose-only one-tree republish', async () => {
+    const page = (edit: string, lede: string, text: string) => treePage(edit, '/islands/d/aaaaaaaaaaaaaaaa.js', lede)
+      .replace('<b id="live"', `<div id="data" data-mx-live="" data-mx-ast="0.1b">${text}</div><b id="live"`);
+    const tmpl = template('<div class="mx-doc"><div id="w"><div id="data"></div><b id="live"></b></div></div>');
+    function DataDocument() {
+      const context = useIsland();
+      const root = getNextElement(tmpl) as HTMLElement;
+      insert(root.querySelector('#data')!, () => `settled:${String(context.value('region'))}`);
+      return root;
+    }
+    load(page('e1', 'first', 'settled:All'));
+    const doc = boot({ TREE: DataDocument, FLOW: flow }) as MorphableIslandDocument;
+    booted = doc;
+    const widget = $('data');
+    const replaceFlow = vi.spyOn(doc.store!, 'replaceFlow');
+    await morph(window, { fetch: answer(page('e2', 'second', 'loading data…')), importModule: vi.fn() });
+    expect($('lede')?.textContent).toBe('second');
+    expect($('data')).toBe(widget);
+    expect(widget?.textContent).toBe('settled:All');
+    expect(replaceFlow).not.toHaveBeenCalled();
+    doc.context.setValue('region', 'East');
+    expect(widget?.textContent).toBe('settled:East');
+  });
   it('morphs one tree in place, keeping static identity and hydrating a changed module on the same store', async () => {
     load(treePage('e1', '/islands/d/aaaaaaaaaaaaaaaa.js', 'first'));
     const doc = boot({ TREE: TREE_A, FLOW: flow }) as MorphableIslandDocument;

@@ -58,7 +58,7 @@ export function reactRender(markup: string, data?: ParityData): string {
 
 export interface Shape { tag: string; attrs: Record<string, string>; text: string; kids: Shape[] }
 const GENERATED = /^(radix-[^\s]*|«r[^»]*»|_R_[^\s]*_|cl-[\w-]+|s\d+-\d+)$/;
-const DROP = new Set(['data-hk', 'data-mx-ast']);
+const DROP = new Set(['data-hk', 'data-mx-ast', 'data-mx-live']);
 const IDREF = new Set(['id', 'aria-controls', 'aria-labelledby', 'aria-describedby', 'for']);
 
 /** The comparable shape of an HTML string (or an element): what a reader would notice. */
