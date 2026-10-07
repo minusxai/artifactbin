@@ -130,7 +130,7 @@ it('treats @ as a plain character where no one can be mentioned (an offline file
     return <CommentMarkdownField label="Draft" previewLabel="Draft preview" previewToggleLabel="Toggle preview" backend={offline} value={value()} onChange={change} onSubmit={() => {}} />;
   });
   expect(screen.queryByText(/Type @ to mention/)).toBeNull();
-  expect(screen.getByText(/Ctrl\/⌘ \+ Enter to send/)).toBeTruthy();
+  expect(screen.queryByText(/Ctrl\/⌘ \+ Enter to send/)).toBeNull();
   fireEvent.input(screen.getByLabelText('Draft'), { target: { value: 'thanks @Asha', selectionStart: 12 } });
   expect(screen.queryByLabelText('Agent sessions')).toBeNull();
   expect(offline.remoteSessions).not.toHaveBeenCalled();

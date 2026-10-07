@@ -146,7 +146,7 @@ describe('the annotation composer', () => {
     expect(Number.parseInt(popover.style.left, 10) + Number.parseInt(popover.style.width, 10)).toBeLessThanOrEqual(800 - 320);
     expect(popover.style.top).toBe('158px'); // viewport top + selection y + selection height + 12px
     expect(within(popover).getByText('Add comment')).toBeTruthy();
-    expect(within(popover).getByText('⌘↵ to send')).toBeTruthy();
+    expect(within(popover).getByLabelText('Keyboard shortcut to send comment')).toHaveTextContent('Ctrl+Enterto comment');
     expect(within(screen.getByLabelText('Annotation sidebar')).queryByLabelText('Annotation comment')).toBeNull();
     // The breadcrumb: the ancestor is clickable and asks the DOCUMENT to re-select.
     fireEvent.click(screen.getByLabelText('Select section'));
