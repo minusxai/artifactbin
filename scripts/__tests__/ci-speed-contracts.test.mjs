@@ -171,6 +171,18 @@ it('caps the ZIP subprocess buffer at 128 MiB and verifies downloaded bytes',asy
  await expect(downloadCurrentArtifactArchive({id:8,size_in_bytes:MAX_ARTIFACT_ARCHIVE_BYTES+1,digest:'sha256:unused'},{repo:'minusxai/artifactbin',deadline:123,request:async()=>{throw Error('oversized artifact reached ZIP endpoint');}})).rejects.toThrow(/download limit/);
 });
 
+it('keeps native terminal acceptance strict while exposing bounded startup diagnostics',()=>{
+ const source=readFileSync(new URL('../../services/cli/scripts/test-npm-terminal.mjs',import.meta.url),'utf8');
+ expect(source).toContain('registrationReceived');
+ expect(source).toContain('startupReceipt');
+ expect(source).toContain('exchangeCount');
+ expect(source).toContain('workerSpawned');
+ expect(source).toContain('workerDisconnected');
+ expect(source).toContain("nativeReady ||= output.includes('NATIVE_READY')");
+ expect(source).toContain('.slice(-2000)');
+ expect(source).toContain('},20000)');
+});
+
 it('downloads a specifically named artifact only from the current attempt and verifies its archive',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-named-artifact-'));
  const calls=join(directory,'calls'),gh=join(directory,'gh'),output=join(directory,'seed.zip'),badOutput=join(directory,'bad-seed.zip'),failure=join(directory,'failed.json');
