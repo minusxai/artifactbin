@@ -6,6 +6,7 @@ import {execFileSync,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
+import {gzipSync} from 'node:zlib';
 import yaml from 'yaml';
 import * as seeds from '../lib/npm-dependency-cache.mjs';
 import {installNpmConsumer} from '../lib/npm-consumer-install.mjs';
@@ -90,10 +91,12 @@ it('installs isolated candidates offline after a seed and retains the cold boots
 
 it('bounds and streams real consumer subprocesses, retaining failed installer output',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-install-contract-'));
- const script=join(directory,'npm.cjs');
+ const script=join(directory,'npm.cjs'),tarball=join(directory,'candidate.tgz');
  const output=[];
  const options={npm:script,tarball:'candidate.tgz',cwd:directory,env:{...process.env},seeded:true,onOutput:chunk=>output.push(chunk),heartbeatMs:10,timeoutMs:1000};
  try{
+  writeFileSync(tarball,gzipSync('valid candidate gzip'));
+  options.tarball=tarball;
   writeFileSync(script,"process.stdout.write(JSON.stringify(process.argv.slice(2)));process.stderr.write('native lifecycle scripts enabled');setTimeout(()=>{},25);");
   const result=await installNpmConsumer(options);
   expect(result.output).toContain('--offline');expect(result.output).toContain('--full-metadata');expect(result.output).toContain('--foreground-scripts');expect(result.output).toContain('--timing');
@@ -106,6 +109,80 @@ it('bounds and streams real consumer subprocesses, retaining failed installer ou
   await expect(installNpmConsumer({...options,timeoutMs:30})).rejects.toThrow(/exceeded/);
   writeFileSync(script,"process.stdout.write(JSON.stringify(process.argv.slice(2)));");
   expect((await installNpmConsumer({...options,seeded:false})).output).not.toContain('--offline');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('retries only a verified seeded candidate EOF in its bundled runtime assets',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-install-eof-retry-'));
+ const script=join(directory,'npm.cjs'),tarball=join(directory,'candidate.tgz'),countFile=join(directory,'attempts'),argsFile=join(directory,'args');
+ const output=[];
+ try{
+  writeFileSync(tarball,gzipSync('valid candidate gzip'));
+  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)},args=${JSON.stringify(argsFile)},asset=process.env.ASSET_PATH||'dist/runtime/dist/web/assets';const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));fs.appendFileSync(args,JSON.stringify({argv:process.argv.slice(2),cache:process.env.npm_config_cache})+'\\n');if(attempt===1){process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat '+asset+'\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251}else process.stdout.write('retry finished');`);
+  const cache=join(directory,'cache');
+  const result=await installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,npm_config_cache:cache},seeded:true,onOutput:chunk=>output.push(chunk),heartbeatMs:10,timeoutMs:1000});
+  expect(readFileSync(countFile,'utf8')).toBe('2');
+  const attempts=readFileSync(argsFile,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+  expect(attempts[0]).toEqual(attempts[1]);
+  expect(attempts[0].argv).toContain('--offline');expect(attempts[0].argv).toContain('--full-metadata');expect(attempts[0].argv).toContain('--foreground-scripts');
+  expect(attempts[0].cache).toBe(cache);
+  expect(result.output).toContain('npm error zlib: unexpected end of file');
+  expect(result.output).toContain('retry finished');
+  expect(result.output).toMatch(/first install took .* retrying once/i);
+  expect(result.output).toContain('candidate.tgz');
+  expect(output.join('')).toContain('npm warn tar TAR_ENTRY_ERROR');
+  expect(result.output.match(/sha256=([a-f0-9]{64})/)?.[1]).toBe(createHash('sha256').update(readFileSync(tarball)).digest('hex'));
+  rmSync(countFile,{force:true});
+  const windowsSeparatorPath=String.raw`dist\runtime\dist\web\assets`;
+  const windowsResult=await installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,ASSET_PATH:windowsSeparatorPath},seeded:true,onOutput:()=>{},timeoutMs:1000});
+  expect(readFileSync(countFile,'utf8')).toBe('2');
+  expect(windowsResult.output).toContain('Retrying once');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('does not retry generic, corrupt, auth, lifecycle, or repeated candidate install failures',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-install-no-retry-'));
+ const script=join(directory,'npm.cjs'),tarball=join(directory,'candidate.tgz'),countFile=join(directory,'attempts');
+ try{
+  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));const mode=process.env.FAILURE_MODE;if(mode==='generic')process.stderr.write('npm error zlib: unexpected end of file');else if(mode==='auth')process.stderr.write('npm error code E401\\nnpm error zlib: unexpected end of file');else if(mode==='lifecycle')process.stderr.write('npm error command failed: lifecycle script\\nnpm error zlib: unexpected end of file');else if(mode==='candidate'){process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file')}process.exitCode=251;`);
+  writeFileSync(tarball,gzipSync('valid candidate gzip'));
+  for(const mode of ['generic','auth','lifecycle']){
+   rmSync(countFile,{force:true});
+   await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,FAILURE_MODE:mode},seeded:true,onOutput:()=>{},timeoutMs:1000})).rejects.toThrow(/npm install exited/);
+   expect(readFileSync(countFile,'utf8'),mode).toBe('1');
+  }
+  writeFileSync(tarball,'not a gzip candidate');rmSync(countFile,{force:true});
+  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,FAILURE_MODE:'candidate'},seeded:true,onOutput:()=>{},timeoutMs:1000})).rejects.toThrow(/gzip|npm install exited/i);
+  expect(readFileSync(countFile,'utf8')).toBe('1');
+  writeFileSync(tarball,gzipSync('valid candidate gzip'));rmSync(countFile,{force:true});
+  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));if(attempt===1){fs.writeFileSync(${JSON.stringify(tarball)},'mutated candidate');process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251}else process.stdout.write('retry finished');`);
+  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env},seeded:true,onOutput:()=>{},timeoutMs:1000})).rejects.toThrow(/candidate bytes changed/);
+  expect(readFileSync(countFile,'utf8')).toBe('1');
+  writeFileSync(tarball,gzipSync('valid candidate gzip'));rmSync(countFile,{force:true});
+  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));process.stderr.write('candidate attempt '+attempt+'\\nnpm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251;`);
+  let twiceFailed;
+  try{await installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,FAILURE_MODE:'candidate'},seeded:true,onOutput:()=>{},timeoutMs:1000});}catch(error){twiceFailed=error;}
+  expect(twiceFailed?.message).toMatch(/retry.*failed/i);
+  expect(twiceFailed?.message).toContain('candidate attempt 1');expect(twiceFailed?.message).toContain('candidate attempt 2');
+  expect(readFileSync(countFile,'utf8')).toBe('2');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('keeps candidate EOF retries inside the original install deadline and never retries a timeout',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-install-eof-deadline-'));
+ const script=join(directory,'npm.cjs'),tarball=join(directory,'candidate.tgz'),countFile=join(directory,'attempts'),marker=join(directory,'late-marker');
+ try{
+  writeFileSync(tarball,gzipSync('valid candidate gzip'));
+  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)},marker=${JSON.stringify(marker)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));if(process.env.FAILURE_MODE==='initial-timeout'||attempt>1){setTimeout(()=>fs.writeFileSync(marker,'late'),220);setInterval(()=>{},1000)}else setTimeout(()=>{process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251},35);`);
+  const started=performance.now();
+  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env},seeded:true,onOutput:()=>{},timeoutMs:140})).rejects.toThrow(/exceeded 0\.1s|exceeded 0\.14s|retry.*exceeded/i);
+  expect(readFileSync(countFile,'utf8')).toBe('2');
+  expect(performance.now()-started).toBeLessThan(500);
+  await new Promise(resolve=>setTimeout(resolve,250));
+  expect(existsSync(marker)).toBe(false);
+  rmSync(countFile,{force:true});
+  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,FAILURE_MODE:'initial-timeout'},seeded:true,onOutput:()=>{},timeoutMs:100})).rejects.toThrow(/exceeded/);
+  expect(readFileSync(countFile,'utf8')).toBe('1');
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
