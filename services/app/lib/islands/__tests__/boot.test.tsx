@@ -133,7 +133,7 @@ describe('boot', () => {
     booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
     await vi.waitFor(() => expect(window.page).toBeDefined());
     const api = window.page!;
-    expect(Object.keys(api).sort()).toEqual(['get', 'mutation', 'ready', 'set']);
+    expect(Object.keys(api).sort()).toEqual(['get', 'imageUrl', 'mutation', 'ready', 'set', 'uploadImage']);
     expect(api.get('region'), 'a Value reads the store').toBe('West');
     expect(api.get('total'), 'a Query is its rows').toEqual([{ n: 41 }]);
     await expect(api.ready('total'), 'ready is the settled rows').resolves.toEqual([{ n: 41 }]);

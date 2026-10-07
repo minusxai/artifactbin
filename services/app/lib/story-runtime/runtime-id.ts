@@ -2,9 +2,8 @@
  * getRandomValues is available outside secure contexts; randomUUID is not.
  */
 export function runtimeId(): string {
-  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  let index = 0;
+  const bytes = crypto.getRandomValues(new Uint8Array(31));
+  // XOR the variant's two random bits into RFC 4122's fixed 10 prefix.
+  return '00000000-0000-4000-8000-000000000000'.replace(/[08]/g, kind => (+kind ^ (bytes[index++]! & (15 >> (+kind / 4)))).toString(16));
 }

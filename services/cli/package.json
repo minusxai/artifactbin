@@ -1,6 +1,6 @@
 {
   "name": "@afbin/cli",
-  "version": "0.4.40",
+  "version": "0.4.41",
   "type": "module",
   "license": "Apache-2.0",
   "description": "Local files, published artifacts and agent authoring",

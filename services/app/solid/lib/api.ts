@@ -19,10 +19,14 @@ export function apiFetch(url: string, method: Method = 'GET', json?: unknown, in
   });
 }
 
-/** Send and parse the JSON answer; a non-2xx answer throws an ApiError carrying the server's `details[0]` or `error`. */
+/** Send and parse JSON; refusals preserve the server's explanation and HTTP status. */
 export async function apiRequest<T>(url: string, method: Method = 'GET', json?: unknown, init?: RequestInit): Promise<T> {
   const response = await apiFetch(url, method, json, init);
-  const data = await response.json().catch(() => ({})) as { details?: string[]; error?: string };
-  if (!response.ok) throw new ApiError(data.details?.[0] ?? data.error ?? 'The request failed.', response.status);
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null;
+  if (!response.ok) {
+    const message = [...(Array.isArray(data?.details) ? data.details : []), data?.detail, data?.message, data?.error]
+      .find((value): value is string => typeof value === 'string' && !!value.trim());
+    throw new ApiError(message ?? 'The request failed.', response.status);
+  }
   return data as T;
 }

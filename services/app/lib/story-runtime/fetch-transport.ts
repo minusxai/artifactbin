@@ -41,17 +41,6 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
   const session = !!options.session;
   const credentials: RequestCredentials = session ? (options.credentials ?? 'same-origin') : 'omit';
   const post = (url: string, body: unknown) => fetchFn(url, { method: 'POST', credentials, headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) });
-  const imageKeys=new WeakMap<File,string>();
-  const uploadDatasetImage=async(datasetId:string,editId:string,file:File)=>{
-    if(!session)throw new Error('page.uploadImage requires a signed-in reader');
-    const endpoint=new URL(queryUrl,typeof location==='undefined'?'http://localhost':location.href);
-    endpoint.pathname=endpoint.pathname.replace(/\/query\/?$/,'/datasets/'+encodeURIComponent(datasetId)+'/images');endpoint.search='';
-    const key=imageKeys.get(file)??crypto.randomUUID();imageKeys.set(file,key);
-    const res=await fetchFn(endpoint.href,{method:'POST',credentials,headers:{'Content-Type':file.type||'application/octet-stream','X-Edit-Id':editId,'Idempotency-Key':key},body:file});
-    const body=await res.json().catch(()=>({}));
-    if(!res.ok)throw new Error(body.detail??body.error??`image upload failed (${res.status})`);
-    return body as {ref:string;url:string};
-  };
   const ask = async (request: Record<string, unknown>): Promise<QueryAnswer> => {
     const localTables = request.localTables;
     const carriesLocalTables = !!localTables && typeof localTables === 'object' && Object.keys(localTables).length > 0;
@@ -112,6 +101,6 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
         },
       }
       : {}),
-    uploadDatasetImage,
+    image: session ? [queryUrl, fetchFn, credentials] as [string, FetchLike, RequestCredentials] : undefined,
   };
 }

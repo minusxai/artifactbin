@@ -108,6 +108,16 @@ Each binder takes one string literal, the declared name with its `$`.
 
 ## Components
 
+Solid components run once; reads inside JSX, memos and effects stay reactive.
+Exported components mount at their capitalized tag; children are the fallback.
+
+```jsx
+export function Detail(props) { const item = () => props.item[0]; return <p>{item()?.total}</p>; }
+```
+
+props.item is the current rows array (tracked; read it inside JSX, a memo or
+an effect), not a function; a literal prop such as color is a plain value.
+
 ## Libraries
 
 Import a library by its npm name or by URL. Pin a version in every specifier (`three@0.170.0`, `three@0.170.0/examples/…`).

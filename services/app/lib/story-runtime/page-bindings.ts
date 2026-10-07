@@ -1,6 +1,7 @@
 /** Shared page signal bindings: browser author modules and headless Lambda programs use one store contract. */
 import { batch, createRoot, createSignal, untrack, type Accessor } from 'solid-js';
 import type { DataflowStore } from './store';
+import { uploadDatasetImage } from './image-upload';
 import type { Row, Scalar } from '@/lib/story/data/dataflow';
 
 /** A Value's setter, Solid's shape: a value, or a function of the current one. Returns what it wrote. */
@@ -148,11 +149,11 @@ export function bindPage(store: DataflowStore | null): PageBindings {
         if (!fn) throw wrongName('mutation', ref, 'Mutation');
         return fn;
       },
-      async uploadImage(importName,file) {
+      uploadImage(importName,file) {
+        if(typeof document==='undefined')return Promise.reject(new Error('page.uploadImage requires a browser page'));
         const found=store.flow.imports.find(item=>item.name===bareName(importName));
-        if(!found)throw new Error(`page.uploadImage(${JSON.stringify(importName)}) names no declared dataset import`);
-        const editId=typeof document==='undefined'?'':document.body.getAttribute('data-mx-live-edit')??'';
-        return await store.uploadDatasetImage(found.ref.replace(/^ref:/,''),editId,file);
+        if(!found)return Promise.reject(new Error(`page.uploadImage(${JSON.stringify(importName)}) names no declared dataset import`));
+        return uploadDatasetImage(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file);
       },
       imageUrl(importName,ref) {
         const found=store.flow.imports.find(item=>item.name===bareName(importName));
