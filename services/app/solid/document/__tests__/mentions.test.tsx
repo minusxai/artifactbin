@@ -1,3 +1,4 @@
+import { replaceComment } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * @MENTIONS in a comment draft: people
@@ -35,18 +36,18 @@ it.each(['7d545566-1a47-4aaf-be61-cffcb7b8e8f2', 'b'.repeat(64)])('selects sessi
   const backend = http();
   render(() => {
     const [value, change] = createSignal('');
-    return <div onKeyDown={escape}><CommentMarkdownField label="Draft" previewLabel="Draft preview" previewToggleLabel="Toggle preview" backend={backend}
+    return <div onKeyDown={escape}><CommentMarkdownField label="Draft" backend={backend}
       value={value()} onChange={change} onSubmit={() => submit(value())} /></div>;
   });
-  const field = screen.getByLabelText('Draft') as HTMLTextAreaElement;
-  fireEvent.input(field, { target: { value: '@cl', selectionStart: 3 } });
+  const field = screen.getByLabelText('Draft') as HTMLElement;
+  replaceComment(field, '@cl');
   await screen.findByLabelText('Mention Claude (claude)');
   fireEvent.keyDown(field, { key: 'Enter' });
-  expect(field.value).toBe('@Claude ');
+  expect(field.textContent).toBe('@Claude ');
   expect(submit).not.toHaveBeenCalled();
   fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true });
   expect(submit).toHaveBeenCalledWith(`[@Claude](/chat?session=${id}) `);
-  fireEvent.input(field, { target: { value: '@', selectionStart: 1 } });
+  replaceComment(field, '@');
   await screen.findByLabelText('Mention Claude (claude)');
   escape.mockClear();
   fireEvent.keyDown(field, { key: 'Escape' });
@@ -127,11 +128,11 @@ it('treats @ as a plain character where no one can be mentioned (an offline file
   } as unknown as ArtifactBackend;
   render(() => {
     const [value, change] = createSignal('');
-    return <CommentMarkdownField label="Draft" previewLabel="Draft preview" previewToggleLabel="Toggle preview" backend={offline} value={value()} onChange={change} onSubmit={() => {}} />;
+    return <CommentMarkdownField label="Draft" backend={offline} value={value()} onChange={change} onSubmit={() => {}} />;
   });
   expect(screen.queryByText(/Type @ to mention/)).toBeNull();
   expect(screen.queryByText(/Ctrl\/⌘ \+ Enter to send/)).toBeNull();
-  fireEvent.input(screen.getByLabelText('Draft'), { target: { value: 'thanks @Asha', selectionStart: 12 } });
+  replaceComment(screen.getByLabelText('Draft'), 'thanks @Asha');
   expect(screen.queryByLabelText('Agent sessions')).toBeNull();
   expect(offline.remoteSessions).not.toHaveBeenCalled();
 });

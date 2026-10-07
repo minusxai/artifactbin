@@ -184,7 +184,6 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const phoneRail = createIsPhoneViewport();
   const [draft, setDraft, replaceDraft] = createNewCommentDraft(backend, () => selection() !== null);
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
-  const [previewing, setPreviewing] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal<string | null>(null);
   const [deleting, setDeleting] = createSignal<string | null>(null);
@@ -555,7 +554,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         setAnnotations((prev) => [...prev.filter((item) => item.id !== wire.id), wire]);
         setSelection(null);
         replaceDraft('');
-        setPreviewing(false);
+
         setOpenId(wire.id);
         setJustOpenedId(wire.id);
         if (resume) setPick('block');
@@ -567,7 +566,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   const cancelCompose = () => {
     capture.reset();
-    batch(() => { setSelection(null); replaceDraft(''); setPreviewing(false); setFailure(null); });
+    batch(() => { setSelection(null); replaceDraft(''); setFailure(null); });
     if (resumeSelectAfterCompose) {
       resumeSelectAfterCompose = false;
       // The next annotation state clears the old target without a null-selection echo cancelling the new pick.
@@ -787,9 +786,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               <div class="mb-3"><FeatureGate reason={imagesUnavailable}>{(gate) => <button type="button" class="rounded-lg border border-edge bg-panel px-3 py-2 text-xs font-medium disabled:opacity-50" {...gate}>Attach screenshot</button>}</FeatureGate></div>
             </Show>
             <CommentMarkdownField backend={backend} artifactId={props.id}
-              label="Annotation comment" previewLabel="Comment preview" previewToggleLabel="Preview comment"
+              label="Annotation comment"
               value={draft()} onChange={setDraft} onSubmit={submitDraft}
-              previewing={previewing()} onPreviewingChange={setPreviewing}
+
               rows={4} autoFocus={!capture.busy()} placeholder="Add a comment for your agent…">
               <div class="mb-2 flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px] text-muted">
                 <For each={crumbs()}>{(crumb, index) => (

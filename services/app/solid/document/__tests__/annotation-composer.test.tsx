@@ -1,3 +1,4 @@
+import { replaceComment } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * THE COMPOSER — what a new comment
@@ -26,9 +27,9 @@ describe('the annotation composer', () => {
     knobs.sessions = [online, { ...online, id: 'offline', online: false }];
     openComposer(); await flush();
     const field = screen.getByLabelText('Annotation comment');
-    expect(field).toHaveValue('@review ');
+    expect(field).toHaveTextContent('@review');
     expect(screen.getByLabelText('Save annotation')).toBeDisabled();
-    fireEvent.input(field, { target: { value: '@review Please update this' } });
+    replaceComment(field, '[@review](/chat?session=11111111-1111-1111-1111-111111111111) Please update this');
     fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
     expect(JSON.parse(String(creates()[0]?.init?.body)).body).toBe('[@review](/chat?session=11111111-1111-1111-1111-111111111111) Please update this');
   });
@@ -36,7 +37,7 @@ describe('the annotation composer', () => {
   it.each([[], [online, { ...online, id: 'second' }], [{ ...online, online: false }], [{ ...online, activity: 'stopped' }], [{...online,runId:'native-box'}]].map((sessions) => ({ sessions })))('leaves new comments empty without a sole eligible online agent: %j', async ({ sessions }) => {
     knobs.sessions = sessions;
     openComposer(); await flush();
-    expect(screen.getByLabelText('Annotation comment')).toHaveValue('');
+    expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('');
   });
 
   it.each(['My draft', ''])('preserves an edited draft when sessions arrive late: %j', async (value) => {
@@ -45,19 +46,19 @@ describe('the annotation composer', () => {
     vi.stubGlobal('fetch', (url: string, init?: RequestInit) => url === '/api/remote/sessions' ? new Promise((done) => { resolve = done; }) : fallback(url, init));
     openComposer(); await flush();
     const field = screen.getByLabelText('Annotation comment');
-    fireEvent.input(field, { target: { value: 'My draft' } });
-    fireEvent.input(field, { target: { value } });
+    replaceComment(field, 'My draft');
+    replaceComment(field, value);
     resolve(new Response(JSON.stringify({ sessions: [online] }))); await flush();
-    expect(field).toHaveValue(value);
+    expect(field).toHaveTextContent(value);
   });
 
   it('keeps a removed default removed for the current composer', async () => {
     knobs.sessions = [online];
     openComposer(); await flush();
     const field = screen.getByLabelText('Annotation comment');
-    expect(field).toHaveValue('@review ');
-    fireEvent.input(field, { target: { value: '' } }); await flush();
-    expect(field).toHaveValue('');
+    expect(field).toHaveTextContent('@review');
+    replaceComment(field, ''); await flush();
+    expect(field).toHaveTextContent('');
   });
 
   it('keeps the original view context across geometry updates and sends it with the native comment', async () => {
@@ -65,7 +66,7 @@ describe('the annotation composer', () => {
     const view = layer({ railOpen: true, initialSelection: TEXT({ viewState }) });
     await flush();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ nodeId: 'node-1', rect: { x: 9, y: 10, width: 200, height: 40 } }) });
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'Review this view' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'Review this view');
     fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
     expect(JSON.parse(String(creates()[0]?.init?.body)).view_state).toEqual(viewState);
   });
@@ -74,7 +75,7 @@ describe('the annotation composer', () => {
     const range = { v: 1 as const, parts: [{ rel: '0', start: 8, end: 12, text: 'grew' }, { rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] };
     layer({ railOpen: true, initialSelection: TEXT({ quote: 'grew 40% in Q3,', range }) });
     await flush();
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'which quarter?' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'which quarter?');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ path: '1', node_id: 'node-1', body: 'which quarter?', quote: 'grew 40% in Q3,', range });
@@ -85,7 +86,7 @@ describe('the annotation composer', () => {
     const view = layer({ railOpen: true, initialSelection: quoted });
     await flush();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ nodeId: 'node-1', rect: { x: 5, y: 40, width: 200, height: 40 } }) });
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'still about those words' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'still about those words');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ quote: quoted.quote, range: quoted.range });
@@ -96,19 +97,19 @@ describe('the annotation composer', () => {
     await flush();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ rect: { x: 5, y: 40, width: 200, height: 40 } }) });
     const composer = await screen.findByLabelText('Annotation comment');
-    fireEvent.input(composer, { target: { value: 'draft survives replacement' } });
+    replaceComment(composer, 'draft survives replacement');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(creates()).toHaveLength(0);
     expect(screen.getByRole('alert')).toHaveTextContent('Wait for this change to save');
-    expect(composer).toHaveValue('draft survives replacement');
+    expect(composer).toHaveTextContent('draft survives replacement');
   });
 
   it('drops the old quote and range when the same path reports a different durable node', async () => {
     const view = layer({ railOpen: true, initialSelection: TEXT({ nodeId: 'old-node', quote: 'old words', range: { v: 1, parts: [{ rel: '', start: 0, end: 9, text: 'old words' }] } }) });
     await flush();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ nodeId: 'new-node', rect: { x: 5, y: 40, width: 200, height: 40 } }) });
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'draft follows explicit target' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'draft follows explicit target');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ path: '1', node_id: 'new-node', body: 'draft follows explicit target' });
@@ -118,7 +119,7 @@ describe('the annotation composer', () => {
     const view = layer({ railOpen: true, initialSelection: TEXT({ quote: 'grew 40% in Q3,', range: { v: 1, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] } }) });
     await flush();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { kind: 'element', path: '0', nodeId: 'node-0', tag: 'section', rect: { x: 0, y: 0, width: 400, height: 90 }, className: '', style: '', ancestors: [] } });
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'about the whole section' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'about the whole section');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ path: '0', node_id: 'node-0', body: 'about the whole section' });
@@ -127,7 +128,7 @@ describe('the annotation composer', () => {
   it('sends no quote for a selection that has none — a caret comment is still a comment', async () => {
     layer({ railOpen: true, initialSelection: TEXT() });
     await flush();
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'no words' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'no words');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ path: '1', node_id: 'node-1', body: 'no words' });
@@ -152,7 +153,7 @@ describe('the annotation composer', () => {
     fireEvent.click(screen.getByLabelText('Select section'));
     expect(selects(view.runtime.send).at(-1)).toMatchObject({ path: '2' });
 
-    fireEvent.input(composer, { target: { value: 'fresh note' } });
+    replaceComment(composer, 'fresh note');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ path: '2.1', node_id: 'node-2-1', body: 'fresh note' });
@@ -170,7 +171,7 @@ describe('the annotation composer', () => {
     expect(cancel).toHaveClass('bg-transparent');
     expect(cancel).not.toHaveClass('border');
     expect(comment).toHaveClass('border-accent', 'bg-accent', 'text-bg');
-    fireEvent.input(composer, { target: { value: 'from the keyboard' } });
+    replaceComment(composer, 'from the keyboard');
     fireEvent.keyDown(composer, { key: 'Enter', metaKey: true });
     await flush();
     expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ body: 'from the keyboard' });
@@ -187,7 +188,7 @@ describe('the annotation composer', () => {
     knobs.refuseCreate = true;
     layer({ railOpen: true, initialSelection: { kind: 'element', path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] } as StoryEditSelection });
     await flush();
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'note' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'note');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     const alert = await screen.findByRole('alert');
     await waitFor(() => expect(alert.textContent).toContain('Inline style'));
@@ -198,7 +199,7 @@ describe('the annotation composer', () => {
   it('escape cancels the draft, like the cancel button', async () => {
     const view = layer({ railOpen: true, initialSelection: TEXT({ path: '2.1', ancestors: [{ path: '2', tag: 'section', hint: '' }] }) });
     await flush();
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'never mind' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'never mind');
     fireEvent.keyDown(window, { key: 'Escape' });
     await flush();
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
@@ -209,7 +210,7 @@ describe('the annotation composer', () => {
   it('creates a relation directly without a source edit or head retry', async () => {
     layer({ railOpen: true, initialSelection: { kind: 'element', path: '2.1', tag: 'div', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [{ path: '2', tag: 'section', hint: '' }] } as StoryEditSelection });
     await flush();
-    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'mid-sentence note' } });
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'mid-sentence note');
     const before = fetchCalls.length;
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush(); await flush();
@@ -223,12 +224,12 @@ describe('the annotation composer', () => {
     layer({ railOpen: true, initialSelection: TEXT({ path: '2.1', nodeId: undefined }) });
     await flush();
     const composer = await screen.findByLabelText('Annotation comment');
-    fireEvent.input(composer, { target: { value: 'keep this draft' } });
+    replaceComment(composer, 'keep this draft');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(creates()).toHaveLength(0);
     expect(screen.getByRole('alert')).toHaveTextContent('Wait for this change to save');
-    expect(composer).toHaveValue('keep this draft');
+    expect(composer).toHaveTextContent('keep this draft');
   });
 
   it('retries the same failed draft with the same idempotency key', async () => {
@@ -244,11 +245,11 @@ describe('the annotation composer', () => {
     });
     layer({ initialSelection: TEXT() });
     await flush();
-    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Retry me' } });
+    replaceComment(screen.getByLabelText('Annotation comment'), 'Retry me');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(screen.getByRole('alert')).toBeTruthy();
-    expect(screen.getByLabelText('Annotation comment')).toHaveValue('Retry me');
+    expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('Retry me');
     fail = false;
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();

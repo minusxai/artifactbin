@@ -1,0 +1,90 @@
+.comment-rich-editor {
+  position: relative;
+  min-height: var(--comment-min-height, 6rem);
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-edge);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.comment-rich-editor:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.comment-rich-editor p {
+  margin: 0;
+}
+.comment-rich-editor > * + * {
+  margin-top: 8px;
+}
+.comment-rich-editor strong {
+  font-weight: 600;
+}
+.comment-rich-editor em {
+  font-style: italic;
+}
+.comment-rich-editor code {
+  background: var(--color-raised);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.comment-rich-editor pre {
+  padding: 8px;
+  background: var(--color-raised);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+.comment-rich-editor pre code {
+  padding: 0;
+}
+.comment-rich-editor ul,
+.comment-rich-editor ol {
+  padding-left: 20px;
+  list-style-type: disc;
+}
+.comment-rich-editor ol {
+  list-style-type: decimal;
+}
+.comment-rich-editor blockquote {
+  border-left: 2px solid var(--color-edge);
+  padding-left: 10px;
+}
+.comment-rich-editor a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.comment-rich-editor [data-comment-mention] {
+  display: inline;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--mention-color);
+  background: color-mix(
+    in srgb,
+    var(--mention-color) 10%,
+    var(--color-surface)
+  );
+  border: 1px solid color-mix(in srgb, var(--mention-color) 25%, transparent);
+  font-size: 0.92em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.comment-rich-editor .ProseMirror-selectednode {
+  outline: 2px solid var(--color-accent);
+}
+.comment-rich-editor:has(> p:only-child > br:only-child)::before {
+  content: attr(data-placeholder);
+  color: var(--color-faint);
+  pointer-events: none;
+  position: absolute;
+}
