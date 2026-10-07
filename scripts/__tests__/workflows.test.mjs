@@ -170,6 +170,12 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(matrix.strategy.matrix.node).toEqual(['22.22.3','24.21.0']);
     expect(matrix.strategy.matrix.os).toContain('windows-2022');
     expect(matrix.strategy.matrix.phase).toEqual(['native','runtime','preview','local']);
+    const nodeSetups = matrix.steps.filter(step => step.uses?.startsWith('actions/setup-node@'));
+    expect(nodeSetups).toHaveLength(2);
+    expect(nodeSetups[0].if).toBe("matrix.phase != 'native' && steps.install.outputs.cache-hit != 'true'");
+    expect(matrix.steps.indexOf(nodeSetups[0])).toBeGreaterThan(matrix.steps.findIndex(step => step.id === 'install'));
+    expect(matrix.steps.indexOf(nodeSetups[0])).toBeLessThan(matrix.steps.findIndex(step => step.run?.startsWith('npm ci --prefix scripts/ci/npm-acceptance')));
+    expect(nodeSetups[1].with['node-version']).toBe('${{ matrix.node }}');
     const install = matrix.steps.find(step => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
     expect(install.if).toContain("matrix.phase != 'native'");
     const native = matrix.steps.find(step => step.name === 'Same-tarball native npm and warmed offline acceptance');
