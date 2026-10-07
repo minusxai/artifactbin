@@ -22,6 +22,9 @@ export interface RunOptions {
   onSession?: (url: string) => void;
   signal?: AbortSignal;
   managed?: boolean;
+  /** App-reserved hosted agent identity; authenticated registration verifies ownership. */
+  hostedSessionId?:string;
+  hostedGeneration?:string;
   commentCommand?:string;
   env?: NodeJS.ProcessEnv;
   prepare?:(session:{id:string;runnerKey:string})=>Promise<{args:string[];env?:NodeJS.ProcessEnv}>;
@@ -40,7 +43,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
   const register = (signal?: AbortSignal) => client.request<{ id: string; runnerKey: string }>(
     "/remote/sessions", "POST", {
       name: options.name ?? command, harness: command, cwd,
-      machine: hostname(), cols, rows, recoveryKey, ...(options.managed?{managed:true}:{}),
+      machine: hostname(), cols, rows, recoveryKey, ...(options.managed?{managed:true}:{}), ...(options.hostedSessionId?{hostedSessionId:options.hostedSessionId,hostedGeneration:options.hostedGeneration}:{}),
     }, {}, { signal, timeoutMs: 10000 },
   );
   let session = await register(signal);
@@ -60,7 +63,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
     // Registration, context and durable startup receipt form one launch boundary.
     // A failed state write must not strand a child after the launcher reports failure.
     if(child){try{if(options.managed&&process.platform!=='win32')process.kill(-child.pid,"SIGKILL");else child.kill();}catch{try{child.kill();}catch{/* already exited */}}}
-    await client.request(`/remote/sessions/${session.id}`, "DELETE", undefined, {}, { timeoutMs: 10000 }).catch(() => {});
+    if(!options.hostedSessionId)await client.request(`/remote/sessions/${session.id}`, "DELETE", undefined, {}, { timeoutMs: 10000 }).catch(() => {});
     throw error;
   }
   const history = new headless.Terminal({ cols, rows, scrollback: 1000, allowProposedApi: true });

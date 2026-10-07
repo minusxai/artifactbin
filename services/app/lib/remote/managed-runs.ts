@@ -25,7 +25,14 @@ export async function managedRunRoute(request:Request,action:'capabilities'|'cre
   if(!body.success)return json({error:'invalid_run',details:body.error.issues},400);
   const input=body.data;
   if(input.sshPublicKey&&!capabilities.ssh)return json({error:'ssh_unavailable'},400);
-  const db=dependencies?.db??await getDb();
+  const result=await admitManagedRun(owner,input,dependencies?.db??await getDb(),runner);
+  return json(result,result.attached?200:202);
+
+ }catch(error){const reason=error instanceof Error?error.message:'managed_runs_unavailable';return json({error:reason},reason==='not_found'?404:reason==='box_restart_pending'||reason.includes('conflict')?409:503,reason==='box_restart_pending'?{'Retry-After':'1'}:{});}
+}
+
+/** Serializes admission and reattachment for both UI requests and durable queue wakeups. */
+export async function admitManagedRun(owner:string,input:z.infer<typeof spec>,db:Db,runner:RunnerService,wakeRunId?:string){
   const id=createHash('sha256').update(`managed-run:${owner}:${input.name}`).digest('hex');
   const configHash=createHash('sha256').update(JSON.stringify({command:input.command,compute:input.compute,sshPublicKey:input.sshPublicKey??null})).digest('hex');
   let admitted:string|undefined;
@@ -33,10 +40,13 @@ export async function managedRunRoute(request:Request,action:'capabilities'|'cre
    const result=await db.transaction(async tx=>{
     // Reserve the owner/name before admission. Locking this metadata row serializes
     // app replicas; only the configured external runner is called inside the lock.
-    const initial:RemoteSessionInfo={id,name:input.name,harness:input.command[0]!,cwd:'/home/runner',machine:'Hosted',cols:100,rows:30,online:false,exitCode:null,controller:'web',createdAt:new Date().toISOString(),managed:true,activity:'starting',managedConfigHash:configHash};
+    const connectedHarness=input.command.length===1&&['claude','codex'].includes(input.command[0]!);
+    const initial:RemoteSessionInfo={id,name:input.name,harness:input.command[0]!,cwd:'/home/runner',machine:'Hosted',cols:100,rows:30,online:false,exitCode:null,controller:'web',createdAt:new Date().toISOString(),managed:true,activity:'starting',...(connectedHarness?{hostedGeneration:input.requestId,hostedConfig:{command:input.command,compute:input.compute,...(input.sshPublicKey?{sshPublicKey:input.sshPublicKey}:{})}}:{}),managedConfigHash:configHash};
     await tx.query('INSERT INTO remote_agents(id,owner,name,proof_hash,info) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING',[id,owner,input.name,createHash('sha256').update(randomUUID()).digest('hex'),JSON.stringify(initial)]);
     const existing=(await tx.query<{owner:string;active:boolean;info:RemoteSessionInfo}>('SELECT owner,active,info FROM remote_agents WHERE id=$1 FOR UPDATE',[id])).rows[0];
     if(!existing||existing.owner!==owner)throw Error('session_conflict');
+    if(wakeRunId&&(!existing.active||existing.info.runId!==wakeRunId||(existing.info.hostedWakeAttempts??0)>=3))throw Error('wake_superseded');
+    if(connectedHarness)initial.hostedWakeAttempts=wakeRunId?(existing.info.hostedWakeAttempts??0)+1:0;
     if(existing.info.runId){
      const run=await runner.getRun({userId:owner,runId:existing.info.runId});
      if(['queued','running'].includes(run.status)){
@@ -48,14 +58,13 @@ export async function managedRunRoute(request:Request,action:'capabilities'|'cre
       return {runId:existing.info.runId,session:existing.info,attached:true};
      }
     }
-    const {runId}=await runner.start({userId:owner,requestId:`box:${input.name}:${input.requestId}`,name:`box:${input.name}`,command:input.command,compute:input.compute,...(input.sshPublicKey?{sshPublicKey:input.sshPublicKey}:{}),program:{source:'',language:'javascript'},input:null});
+    const {runId}=await runner.start({userId:owner,requestId:`box:${input.name}:${input.requestId}`,name:`box:${input.name}`,command:input.command,compute:input.compute,...(connectedHarness?{env:{ARTIFACTBIN__HOSTED_SESSION:id,ARTIFACTBIN__HOSTED_GENERATION:input.requestId,ARTIFACTBIN__HOSTED_NAME:input.name}}:{}),...(input.sshPublicKey?{sshPublicKey:input.sshPublicKey}:{}),program:{source:'',language:'javascript'},input:null});
     admitted=runId;
     const info={...initial,runId};
-    await tx.query('UPDATE remote_agents SET info=$3,active=true,seen_at=now() WHERE id=$1 AND owner=$2',[id,owner,JSON.stringify(info)]);
+    await tx.query('UPDATE remote_agents SET info=$3,proof_hash=$4,active=true,seen_at=now() WHERE id=$1 AND owner=$2',[id,owner,JSON.stringify(info),createHash('sha256').update(randomUUID()).digest('hex')]);
     return {runId,session:info,attached:false};
    });
-   return json(result,result.attached?200:202);
+   return result;
   }catch(error){if(admitted)await runner.cancel({userId:owner,runId:admitted});throw error;}
 
- }catch(error){const reason=error instanceof Error?error.message:'managed_runs_unavailable';return json({error:reason},reason==='not_found'?404:reason==='box_restart_pending'||reason.includes('conflict')?409:503,reason==='box_restart_pending'?{'Retry-After':'1'}:{});}
 }

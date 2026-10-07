@@ -7,3 +7,5 @@ export {
   normalizeServer,
   type Connection,
 } from "./config.js";
+
+export {runHostedAgent} from "./hosted-agent.js";

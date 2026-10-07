@@ -13,7 +13,7 @@ import type {
 export type Registration = Pick<
   RemoteSessionInfo,
   "name" | "harness" | "cwd" | "machine" | "cols" | "rows"
-> & { recoveryKey?: string; managed?: boolean };
+> & { recoveryKey?: string; managed?: boolean; hostedSessionId?:string;hostedGeneration?:string };
 export class RemoteError extends Error {
   constructor(
     message: string,
@@ -107,6 +107,7 @@ export class RemoteRegistry {
   create(
     userId: string,
     registration: Registration,
+    reservedId?:string,
   ): RemoteSessionInfo & { runnerKey: string } {
     dimensions(registration.cols, registration.rows);
     for (const value of [
@@ -122,12 +123,13 @@ export class RemoteRegistry {
         /[\x00-\x1f\x7f]/.test(value)
       )
         throw new RemoteError("Invalid session details");
-    const { recoveryKey, ...details } = registration;
+    const { recoveryKey, hostedSessionId:_hostedId, hostedGeneration:_generation, ...details } = registration;
     if (recoveryKey !== undefined && !/^[a-f0-9]{64}$/.test(recoveryKey))
       throw new RemoteError("Invalid recovery credential");
-    const id = recoveryKey === undefined ? randomUUID()
-      : createHash("sha256").update(JSON.stringify([userId, recoveryKey])).digest("hex");
+    const id = reservedId ?? (recoveryKey === undefined ? randomUUID()
+      : createHash("sha256").update(JSON.stringify([userId, recoveryKey])).digest("hex"));
     this.prune();
+    if(reservedId)this.removed.delete(reservedId);
     if (this.removed.has(id)) throw new RemoteError("Session disconnected", 410);
     const existing = this.sessions.get(id);
     if (existing) return { ...this.info(existing), runnerKey: existing.key };

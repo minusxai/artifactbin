@@ -1,7 +1,12 @@
+import type {RunStart} from './runner';
 /** V0 remote-terminal protocol. PTY bytes stay on the user's machine until explicitly shared. */
 export interface RemoteSessionInfo {
   /** App-owned managed Run mapping; never an authorization grant. */
   runId?: string;
+  /** Native harness connected to the shared comment relay. Non-secret generation fence. */
+  hostedGeneration?:string;
+  hostedWakeAttempts?:number;
+  hostedConfig?:{command:string[];compute:Required<Pick<NonNullable<RunStart['compute']>,'vcpu'|'memoryMiB'|'ttlSeconds'>>&Pick<NonNullable<RunStart['compute']>,'idleSeconds'>;sshPublicKey?:string};
   /** Non-secret configuration fingerprint used for named-box admission. */
   managedConfigHash?: string;
   sshCommand?: string;
@@ -73,7 +78,7 @@ export type RemoteWorkPhase = 'queued' | 'dispatching' | 'superseded' | 'deliver
 export interface RemoteWork {
  id:string; sessionId:string; artifactId:string; threadId:string; commentId:string;
  name:string; color:RemoteColor; phase:RemoteWorkPhase; updatedAt:string;
- reason?:'queue_full'|'unauthorized';
+ reason?:'queue_full'|'unauthorized'|'interrupted';
  activity?:RemoteActivity;connection?:'online'|'offline'|'stopped';
 }
 

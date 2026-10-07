@@ -418,3 +418,13 @@ test('managed Codex paste omits Enter if the PTY exits before submission',async(
  assert.equal(writes.at(-1),'\x1b[201~');
  assert.ok(!writes.includes('\r'));
 });
+
+test('a hosted bootstrap failure preserves the reserved agent identity for recovery',async()=>{
+ const requests:string[]=[];
+ const server=createServer(async(req,res)=>{for await(const _ of req){}requests.push(req.method+' '+req.url);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({id:'reserved',runnerKey:'mxmx_test_proof'}));});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try{
+  await assert.rejects(runRemote({client:new HttpClient({connection:{server:`http://127.0.0.1:${(server.address() as {port:number}).port}`,token:'mxmx_test_token'}}),command:'claude',args:[],interactive:false,managed:true,hostedSessionId:'reserved',hostedGeneration:'one',prepare:async()=>{throw Error('bootstrap failure');}}),/bootstrap failure/);
+  assert.deepEqual(requests,['POST /api/remote/sessions']);
+ }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});

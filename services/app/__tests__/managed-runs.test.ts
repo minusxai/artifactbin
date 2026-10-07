@@ -1,8 +1,9 @@
+import {wakeManagedAgents} from '@/lib/remote/managed-wakeup';
 import {createAppServer} from '@/server/app';
 import {afterEach,expect,it,vi} from 'vitest';
 import type {RunnerService,RunStart} from '@artifactbin/contracts';
 import {useAppHarness,request} from './harness';
-import {managedRunRoute} from '@/lib/remote/managed-runs';
+import {managedRunRoute,admitManagedRun} from '@/lib/remote/managed-runs';
 import {RemoteAgents} from '@/lib/remote/agents';
 import {RemoteRegistry} from '@/lib/remote/registry';
 import {setServices} from '@/lib/platform/services';
@@ -24,7 +25,7 @@ it('forwards only authenticated owner, safe defaults and native program config; 
  const registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
  try{
   const view=await agents.view('alice',session.id,-1);expect(view.snapshot).toBe('Sign in to Codex');expect(view.session.sshCommand).toBe('ssh -p 2222 runner@ssh.test');expect(view.session.sshHostKey).toBe('[ssh.test]:2222 ssh-ed25519 Zml4dHVyZQ==');
-  await agents.input('alice',session.id,'codex login\r');expect(runner.write).toHaveBeenCalledWith({userId:'alice',runId:'native-one',text:'codex login\r'});
+  await expect(agents.input('alice',session.id,'codex login\r')).rejects.toThrow(/not found/);expect(runner.write).not.toHaveBeenCalled();
   await expect(agents.view('bob',session.id,-1)).rejects.toThrow(/not found/);
   await agents.stop('alice',session.id);expect(runner.cancel).toHaveBeenCalledWith({userId:'alice',runId:'native-one'});
  }finally{registry.clear();}
@@ -117,4 +118,92 @@ it('projects durable hosted lifecycle instead of leaving ended runs starting in 
   await agents.stop('alice',session.id);expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopping'});
   status='failed';expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopped'});
  }finally{registry.clear();}
+});
+
+it('connects a hosted harness to its reserved identity and queues comments until login readiness',async()=>{
+ const db=await harness.db(),{runner,starts}=fixture();setServices({runner});
+ const response=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'generation-one',name:'shared-agent',command:['claude']}}),'create',{enabled:true,runner,db});
+ const {session}=await response.json();
+ expect(starts[0]?.env).toMatchObject({ARTIFACTBIN__HOSTED_SESSION:session.id,ARTIFACTBIN__HOSTED_GENERATION:'generation-one'});
+ const registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
+ const registration={name:'shared-agent',harness:'claude',cwd:'/home/runner',machine:'Hosted',cols:100,rows:30,managed:true,recoveryKey:'a'.repeat(64),hostedSessionId:session.id,hostedGeneration:'generation-one'};
+ try{
+  await expect(agents.create('bob',registration)).rejects.toThrow(/not found/i);
+  await expect(agents.create('alice',{...registration,hostedGeneration:'stale'})).rejects.toThrow(/generation/i);
+  const attached=await agents.create('alice',registration);expect(attached.id).toBe(session.id);
+  const comment={id:'one',body:`[@shared-agent](/chat?session=${session.id}) help`,author:{kind:'human',label:'Owner'}};
+  await db.transaction(async tx=>{await agents.enqueue(tx,'alice','doc-a','thread-a',comment);await agents.enqueue(tx,'alice','doc-a','thread-a',comment);await agents.enqueue(tx,'alice','doc-b','thread-b',{...comment,id:'two'});});
+  expect(await agents.work(db,'doc-a','thread-a')).toHaveLength(1);expect((await agents.work(db,'doc-b','thread-b'))[0]?.phase).toBe('queued');
+  expect((await agents.exchange('alice',session.id,{runnerKey:attached.runnerKey,cols:100,rows:30,ack:0,outputSeq:0,output:''})).inputs).toEqual([]);
+  await agents.ready('alice',session.id,attached.runnerKey);
+  expect((await agents.view('alice',session.id,-1)).session.activity).toBe('listening');
+  await agents.input('alice',session.id,'manual task\r');expect(runner.write).not.toHaveBeenCalled();expect((await agents.read('alice',session.id)).activity).toBe('unknown');
+  await agents.stop('alice',session.id);expect(runner.cancel).toHaveBeenCalled();
+ }finally{registry.clear();}
+});
+
+it('wakes expired compute once for queued work while an explicit stop stays stopped',async()=>{
+ const db=await harness.db(),{runner,starts}=fixture();setServices({runner});let ended=false;
+ runner.getRun=async({runId})=>({runId,status:ended?'completed':'running',output:null,receipt:null});
+ runner.start=async input=>{starts.push(input);return {runId:'run-'+starts.length};};
+ const {session}=await (await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'one',name:'wake-agent',command:['claude']}}),'create',{enabled:true,runner,db})).json();
+ const registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
+ try{
+  await db.transaction(tx=>agents.enqueue(tx,'alice','doc','thread',{id:'queued',body:`[@wake-agent](/chat?session=${session.id}) help`,author:{kind:'human',label:'Owner'}}));
+  ended=true;await wakeManagedAgents(db,runner);expect(starts).toHaveLength(2);expect(starts[1]?.name).toBe(starts[0]?.name);
+  ended=false;await wakeManagedAgents(db,runner);expect(starts).toHaveLength(2);
+  await agents.stop('alice',session.id);ended=true;await wakeManagedAgents(db,runner);expect(starts).toHaveLength(2);
+ }finally{registry.clear();}
+});
+
+it('bounds failed automatic wakeups and fences a wake that raced an explicit stop',async()=>{
+ const db=await harness.db(),{runner,starts}=fixture();setServices({runner});
+ runner.start=async input=>{starts.push(input);return {runId:'run-'+starts.length};};
+ runner.getRun=async({runId})=>({runId,status:'failed',output:null,receipt:null});
+ const {session}=await (await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'one',name:'retry-agent',command:['codex']}}),'create',{enabled:true,runner,db})).json();
+ const registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
+ try{
+  await db.transaction(tx=>agents.enqueue(tx,'alice','doc','thread',{id:'queued',body:`[@retry-agent](/chat?session=${session.id}) help`,author:{kind:'human',label:'Owner'}}));
+  for(let i=0;i<6;i++)await wakeManagedAgents(db,runner);
+  expect(starts).toHaveLength(4);
+  await agents.stop('alice',session.id);
+  await expect(admitManagedRun('alice',{name:'retry-agent',requestId:'stale-wake',command:['codex'],compute:{vcpu:1,memoryMiB:2048,ttlSeconds:3600}},db,runner,'run-4')).rejects.toThrow('wake_superseded');
+  expect(starts).toHaveLength(4);
+ }finally{registry.clear();}
+});
+
+it('fences old proofs before replacement connects and visibly interrupts ambiguous work',async()=>{
+ const db=await harness.db(),{runner,starts}=fixture();setServices({runner});let ended=false;
+ runner.getRun=async({runId})=>({runId,status:ended?'completed':'running',output:null,receipt:null});
+ runner.start=async input=>{starts.push(input);return {runId:'run-'+starts.length};};
+ const create=(requestId:string)=>managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId,name:'fenced-agent',command:['claude']}}),'create',{enabled:true,runner,db});
+ const {session}=await (await create('one')).json();const registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
+ const registration={name:'fenced-agent',harness:'claude',cwd:'/home/runner',machine:'Hosted',cols:100,rows:30,managed:true,recoveryKey:'a'.repeat(64),hostedSessionId:session.id,hostedGeneration:'one'};
+ try{
+  const first=await agents.create('alice',registration);await agents.ready('alice',session.id,first.runnerKey);
+  await db.transaction(tx=>agents.enqueue(tx,'alice','doc','thread',{id:'interrupted',body:`[@fenced-agent](/chat?session=${session.id}) edit`,author:{kind:'human',label:'Owner'}}));
+  await db.query("UPDATE remote_work SET phase='acknowledged' WHERE session_id=$1",[session.id]);
+  ended=true;expect((await create('two')).status).toBe(202);ended=false;
+  await expect(agents.ready('alice',session.id,first.runnerKey)).rejects.toThrow(/credential/);
+  await expect(agents.exchange('alice',session.id,{runnerKey:first.runnerKey,cols:100,rows:30,ack:0,outputSeq:0,output:''})).rejects.toThrow(/credential/);
+  expect((await agents.read('alice',session.id)).online).toBe(false);
+  await agents.create('alice',{...registration,hostedGeneration:'two',recoveryKey:'b'.repeat(64)});
+  expect((await agents.work(db,'doc','thread'))[0]).toMatchObject({phase:'failed',reason:'interrupted'});
+  await agents.remove('alice',session.id);ended=true;expect((await create('three')).status).toBe(202);
+  expect((await agents.create('alice',{...registration,hostedGeneration:'three',recoveryKey:'c'.repeat(64)})).id).toBe(session.id);
+ }finally{registry.clear();}
+});
+
+it('preserves acknowledged work when the same live process reconnects after an app restart',async()=>{
+ const db=await harness.db(),{runner}=fixture();setServices({runner});
+ const {session}=await (await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'same',name:'reconnect-agent',command:['claude']}}),'create',{enabled:true,runner,db})).json();
+ const firstRegistry=new RemoteRegistry(),nextRegistry=new RemoteRegistry(),first=new RemoteAgents(firstRegistry),next=new RemoteAgents(nextRegistry);
+ const registration={name:'reconnect-agent',harness:'claude',cwd:'/home/runner',machine:'Hosted',cols:100,rows:30,managed:true,recoveryKey:'d'.repeat(64),hostedSessionId:session.id,hostedGeneration:'same'};
+ try{
+  const attached=await first.create('alice',registration);await first.ready('alice',session.id,attached.runnerKey);
+  await db.transaction(tx=>first.enqueue(tx,'alice','doc','thread',{id:'in-flight',body:`[@reconnect-agent](/chat?session=${session.id}) edit`,author:{kind:'human',label:'Owner'}}));
+  await db.query("UPDATE remote_work SET phase='acknowledged' WHERE session_id=$1",[session.id]);
+  const recovered=await next.create('alice',registration);expect(recovered.runnerKey).toBe(attached.runnerKey);
+  expect((await next.work(db,'doc','thread'))[0]?.phase).toBe('acknowledged');
+ }finally{firstRegistry.clear();nextRegistry.clear();}
 });
