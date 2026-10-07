@@ -161,3 +161,19 @@ it('quick choices and typed mentions insert identical badges and keep the caret 
   fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});
   expect(submit).toHaveBeenLastCalledWith(`[@koala-8e44ad](/chat?session=${id}) `);
 });
+
+it('hides tagged quick choices and restores them when their badge is removed', async () => {
+  const id='c'.repeat(64);
+  vi.stubGlobal('fetch', sessions([{id,name:'review',harness:'claude',online:true}]));
+  render(()=>{const [value,change]=createSignal('');return <CommentMarkdownField label="Draft" backend={http()} quickAgents value={value()} onChange={change}/>;});
+  const field=screen.getByLabelText('Draft');
+  fireEvent.click(await screen.findByRole('button',{name:'Tag review'}));
+  expect(screen.queryByRole('button',{name:'Tag review'})).toBeNull();
+  expect(screen.queryByRole('group',{name:'Tag agent'})).toBeNull();
+  replaceComment(field,'Just a comment');
+  expect(screen.getByRole('button',{name:'Tag review'})).toBeTruthy();
+  replaceComment(field,'`[@review](/chat?session='+id+')`');
+  expect(screen.getByRole('button',{name:'Tag review'})).toBeTruthy();
+  replaceComment(field,'[@review](/chat?session='+id+') ');
+  expect(screen.queryByRole('button',{name:'Tag review'})).toBeNull();
+});
