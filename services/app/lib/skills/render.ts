@@ -28,7 +28,7 @@ import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/co
 import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
 import { MAX_CONTENT_BYTES } from '@/lib/story/document/input';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
-import { COMPUTED_FIGURE_RULE, NATIVE_TABLE_AUTHORING_RULE, PHONE_AUTHORING_RULE, URL_REPLY_RULE } from '@/lib/serving/agent-guidance';
+import { COMPUTED_FIGURE_RULE, NATIVE_TABLE_AUTHORING_RULE, PHONE_AUTHORING_RULE, PROGRESSIVE_AUTHORING_RULE, URL_REPLY_RULE } from '@/lib/serving/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
 import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/story/data';
 import { DISPLAY_ROWS, SQL_FUNCTIONS } from '@artifactbin/contracts';
@@ -115,6 +115,7 @@ const REGISTRY_GLOBALS = {
   computedFigureRule: COMPUTED_FIGURE_RULE,
   /** Shared authoring rules exposed to CLI and HTTP guides through their existing templates. */
   urlReplyRule: URL_REPLY_RULE,
+  progressiveAuthoringRule: PROGRESSIVE_AUTHORING_RULE,
   phoneAuthoringRule: PHONE_AUTHORING_RULE,
   nativeTableAuthoringRule: NATIVE_TABLE_AUTHORING_RULE,
   /** The functions the engine adds to SQLite, as the engine registers them (@artifactbin/contracts SQL_FUNCTIONS). */

@@ -40,8 +40,16 @@ describe('the installed short skill',()=>{
   const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
   const fewTurns=bullet('- Read `afbin help <page type>`');
   expect(fewTurns).toBeDefined();
+  const httpAuthoring=renderDoc('artifactbin/references/http-authoring.md','https://example.test');
+  const progression='Within six calls of the pull, push a first version with metadata, title, real opening copy and one substantive section; extend it in later pushes.';
+  expect(fewTurns).toContain(progression);
+  expect(teaching.files['SKILL.md']).toContain(progression);
+  expect(httpAuthoring).toContain(progression);
+  expect(httpAuthoring).toContain('URL-only requests get the URL alone.');
+  expect(httpAuthoring).toContain('At 390px, fix overflow, clipping and unreachable controls.');
+  expect(Buffer.byteLength(sheet)).toBeLessThan(8192);
+  expect(Buffer.byteLength(httpAuthoring)).toBeLessThan(8192);
   // Countable, not exhortative: a number of calls and a named payload for the first push.
-  expect(fewTurns).toContain('Within six calls of the pull, push a first version');
   expect(fewTurns).toMatch(/metadata, title, real opening copy and one substantive section/);
   expect(fewTurns).toMatch(/extend it in later pushes/);
   expect(fewTurns).toContain('choose ONE design system');

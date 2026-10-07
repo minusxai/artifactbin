@@ -5,6 +5,8 @@ export const MARKUP_STYLE_RULE =
 
 /** Shared authoring guidance rendered in both the CLI skill and HTTP references. */
 export const URL_REPLY_RULE = 'URL-only requests get the URL alone.';
+export const PROGRESSIVE_AUTHORING_RULE =
+  'Within six calls of the pull, push a first version with metadata, title, real opening copy and one substantive section; extend it in later pushes.';
 export const NATIVE_TABLE_AUTHORING_RULE =
   'DataTable and native HTML tables already own their scroll boxes. Avoid a pixel width or min-width on the table. At 390px, check .mx-doc fits and the last column is reachable. Recheck after the final edit.';
 export const PHONE_AUTHORING_RULE =
