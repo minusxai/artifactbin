@@ -185,3 +185,8 @@ describe('the composer writes markdown, and sends TEXT', () => {
     expect(reply.querySelector('code')?.textContent).toBe('it');
   });
 });
+
+it('displays saved Markdown headings as headings, not hash-prefixed text', () => {
+  render(() => <CommentMarkdown text={'This is new\n## This is a heading'} />);
+  expect(screen.getByRole('heading', {level:2, name:'This is a heading'})).toBeInTheDocument();
+});

@@ -494,3 +494,9 @@ body {
   border-radius: 50%;
   background: currentColor;
 }
+
+/* Comment headings stay compact enough for a discussion rail. */
+.comment-heading, .comment-rich-editor :is(h1,h2,h3,h4,h5,h6) { font-family: var(--font-sans); font-weight: 600; font-size: 15px; line-height: 1.4; }
+.comment-heading[data-level='1'], .comment-rich-editor h1 { font-size: 20px; }
+.comment-heading[data-level='2'], .comment-rich-editor h2 { font-size: 18px; }
+.comment-heading[data-level='3'], .comment-rich-editor h3 { font-size: 16px; }

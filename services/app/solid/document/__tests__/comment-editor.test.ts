@@ -133,3 +133,15 @@ it.each(['initial', 'late'] as const)('places the caret after an %s prefilled ag
   editor.view.dispatch(editor.view.state.tr.insertText('Please review'));
   expect(editor.onChange).toHaveBeenLastCalledWith(prefix + 'Please review');
 });
+it('turns ## and a space into a heading and saves Markdown', () => {
+  const editor = mount();
+  for (const char of '## This is a heading') {
+    const pos = editor.view.state.selection.from;
+    const handled = editor.view.someProp('handleTextInput', fn => fn(editor.view, pos, pos, char, () => editor.view.state.tr));
+    if (!handled) editor.view.dispatch(editor.view.state.tr.insertText(char));
+  }
+  expect(editor.view.dom.querySelector('h2')?.textContent).toBe('This is a heading');
+  expect(editor.onChange).toHaveBeenLastCalledWith('## This is a heading');
+  fireEvent.keyDown(editor.view.dom, {key:'Enter'});
+  expect(editor.view.state.selection.$from.parent.type.name).toBe('paragraph');
+});

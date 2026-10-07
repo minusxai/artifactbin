@@ -41,6 +41,7 @@ function inline(nodes: MdInline[]): JSX.Element {
 
 function block(node: MdNode): JSX.Element {
   switch (node.kind) {
+    case 'heading': return <div role="heading" aria-level={node.level} class="comment-heading" data-level={node.level}>{inline(node.children)}</div>;
     case 'paragraph': return <p class="leading-normal">{inline(node.children)}</p>;
     case 'code_block': return <pre class="min-w-0 max-w-full overflow-x-auto rounded-[4px] border border-edge bg-raised p-2 font-mono text-[11px] leading-snug text-fg"><code>{node.text}</code></pre>;
     case 'list': {

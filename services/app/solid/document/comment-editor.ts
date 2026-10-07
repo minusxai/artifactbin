@@ -12,6 +12,7 @@ import {
   toggleMark,
   chainCommands,
   selectAll,
+  splitBlockAs,
 } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import {
@@ -40,6 +41,7 @@ export const commentSchema = new Schema({
       parseDOM: [{ tag: "p" }],
       toDOM: () => ["p", 0],
     },
+    heading: {content:'inline*',group:'block',defining:true,attrs:{level:{default:2}},parseDOM:[1,2,3,4,5,6].map(level=>({tag:`h${level}`,attrs:{level}})),toDOM:node=>[`h${node.attrs.level}`,0]},
     text: { group: "inline" },
     hard_break: {
       inline: true,
@@ -168,6 +170,7 @@ function inlines(nodes: MdInline[], marks: Mark[] = []): PMNode[] {
   });
 }
 function block(node: MdNode): PMNode {
+  if (node.kind === 'heading') return commentSchema.node('heading',{level:node.level},inlines(node.children));
   if (node.kind === "paragraph")
     return commentSchema.node("paragraph", null, inlines(node.children));
   if (node.kind === "code_block")
@@ -256,6 +259,7 @@ export function commentMarkdown(doc: PMNode): string {
   const children: string[] = [];
   doc.forEach((node) => {
     if (node.type.name === "paragraph") children.push(inlineMarkdown(node));
+    else if (node.type.name === 'heading') children.push('#'.repeat(node.attrs.level)+' '+inlineMarkdown(node));
     else if (node.type.name === "code_block")
       children.push(
         "```" + (node.attrs.lang ?? "") + "\n" + node.textContent + "\n```",
@@ -357,6 +361,7 @@ export function mountCommentEditor(
           Enter: chainCommands(
             splitListItem(commentSchema.nodes.list_item),
             liftListItem(commentSchema.nodes.list_item),
+            splitBlockAs((node, atEnd) => atEnd && node.type.name === 'heading' ? {type:commentSchema.nodes.paragraph} : null),
             baseKeymap.Enter,
           ),
           "Shift-Enter": (state, dispatch) => {
@@ -439,6 +444,10 @@ export function mountCommentEditor(
           );
           return true;
         }
+      }
+      if (text === ' ' && /^#{1,6} $/.test(before) && $from.parent.type.name === 'paragraph') {
+        view.dispatch(view.state.tr.delete($from.start(),from).setBlockType($from.start(), $from.start(), commentSchema.nodes.heading, {level:before.trim().length}));
+        return true;
       }
       if (text === " " && /^[-*] $/.test(before)) {
         view.dispatch(view.state.tr.delete($from.start(), from));

@@ -235,3 +235,9 @@ describe('bounded', () => {
     expect(reads).toBeLessThanOrEqual(body.length * 8);
   });
 });
+it('reads headings after a single newline and keeps escaped hashes literal', () => {
+  const nodes = parseMarkdownLite('This is new\n## This is **a heading**\n\\## literal');
+  expect(nodes.map(node => node.kind)).toEqual(['paragraph','heading','paragraph']);
+  expect(nodes[1]).toMatchObject({kind:'heading',level:2});
+  expect(plainText(nodes)).toBe('This is new\nThis is a heading\n## literal');
+});
