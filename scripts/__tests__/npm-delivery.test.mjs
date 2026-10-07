@@ -8,6 +8,7 @@ import {promisify} from 'node:util';
 import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import {realpathSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {populateNpmSeed} from '../lib/npm-dependency-cache.mjs';
 import {npmConsumerArgs,npmConsumerInstallArgs,npmInstallPhaseTimings} from '../../services/cli/scripts/npm-consumer-args.mjs';
 const npmCli=process.env.npm_execpath??realpathSync(spawnSync('/bin/sh',['-c','command -v npm'],{encoding:'utf8'}).stdout.trim());
@@ -116,5 +117,26 @@ it('reports only numeric allowlisted npm phase timings without paths or credenti
   expect(await npmInstallPhaseTimings(directory)).toEqual({npm:500,'reify:unpack':400});
   expect(await npmInstallPhaseTimings(join(directory,'absent'))).toEqual({});
   expect(npmConsumerInstallArgs('candidate.tgz',true)).toContain('--timing');
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+it('retains bounded sanitized timings from the last two npm timing JSON files',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-live-npm-timing-'));
+ try{
+  await writeFile(join(directory,'2026-01-01T00_00_00_000Z-timing.json'),JSON.stringify({timers:{npm:1}}));
+  await writeFile(join(directory,'2026-01-01T00_00_01_000Z-timing.json'),JSON.stringify({
+   timers:{npm:390,'command:exec':380,'reify:unpack':120,'reify:/secret/path':90,token:50,idealTree:'40',build:null},
+   metadata:{argv:['--registry','https://user:secret@example.test/?token=secret'],token:'secret'},
+  }));
+  await writeFile(join(directory,'2026-01-01T00_00_02_000Z-timing.json'),JSON.stringify({
+   timers:{npm:400,'command:install':301,'command:exec':290,'build:run:postinstall':2,token:70},
+   metadata:{argv:['https://user:secret@example.test'],token:'secret'},
+  }));
+  const timings=await npmInstallPhaseTimings(directory,{fileCount:2});
+  expect(timings).toEqual({npm:400,'command:exec':290,'reify:unpack':120,'command:install':301,'build:run:postinstall':2});
+  expect(JSON.stringify(timings)).not.toMatch(/secret|https?:\/\//);
+  const cli=spawnSync(process.execPath,[fileURLToPath(new URL('../../services/cli/scripts/npm-consumer-args.mjs',import.meta.url)),'diagnostic-timings',directory],{encoding:'utf8'});
+  expect(cli.status,cli.stderr).toBe(0);expect(JSON.parse(cli.stdout)).toEqual(timings);
+  expect(await npmInstallPhaseTimings(join(directory,'absent'),{fileCount:2})).toEqual({});
  }finally{await rm(directory,{recursive:true,force:true});}
 });

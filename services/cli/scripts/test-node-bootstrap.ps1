@@ -249,11 +249,18 @@ function Write-StandardFailure {
 function Write-NpmTimingTail {
   $directory=Join-Path $root 'npm-cache\_logs'
   if(!(Test-Path $directory)){return}
+  $module=Join-Path $PSScriptRoot 'npm-consumer-args.mjs'
+  $text=& node $module diagnostic-timings $directory 2>$null
+  if($LASTEXITCODE -ne 0 -or !$text){return}
+  try{$timings=$text | ConvertFrom-Json}catch{return}
   $safe=@()
-  foreach($log in @(Get-ChildItem $directory -Filter '*-debug-0.log' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 2)){
-    $safe+=@(Get-Content $log.FullName -Tail 500 | Where-Object {$_ -match '^npm timing [A-Za-z0-9._:/@-]{1,160} Completed in [0-9]{1,12}ms$'})
+  foreach($timer in $timings.PSObject.Properties){
+    $name=[string]$timer.Name;$value=$timer.Value
+    if($value -is [bool] -or $value -isnot [ValueType]){continue}
+    try{$milliseconds=[double]$value}catch{continue}
+    if([double]::IsNaN($milliseconds) -or [double]::IsInfinity($milliseconds) -or $milliseconds -lt 0 -or $milliseconds -gt 86400000){continue}
+    $safe+=('npm timing '+$name+' Completed in '+([Math]::Round($milliseconds,0).ToString([Globalization.CultureInfo]::InvariantCulture))+'ms')
   }
-  $safe=@($safe | Select-Object -Last 40)
   if(!$safe.Count){return}
   $path=Join-Path $diagnostics 'npm-timings.txt';$pending=$path+'.pending'
   [IO.File]::WriteAllLines($pending,[string[]]$safe,[Text.UTF8Encoding]::new($false))

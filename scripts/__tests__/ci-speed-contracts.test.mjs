@@ -144,8 +144,8 @@ it('overlaps the same standard-user bootstrap with pack instead of waiting to cr
  expect(diagnostics).toContain('$password,$env:GH_TOKEN');expect(diagnostics).toContain(".Replace($secret,'[redacted]')");
  expect(source).toContain("$env:npm_config_timing='true'");
  expect(source).toContain('phase-state.json');expect(source).toContain('phase-events.jsonl');expect(source).toContain('phase-heartbeat.txt');
- expect(source).toContain('function Write-NpmTimingTail');expect(source).toContain("-Filter '*-debug-0.log'");
- expect(source).toContain("'^npm timing [A-Za-z0-9._:/@-]{1,160} Completed in [0-9]{1,12}ms$'");expect(source).toContain('Select-Object -Last 40');
+ expect(source).toContain('function Write-NpmTimingTail');expect(source).toContain('npm-consumer-args.mjs');
+ expect(source).toContain('diagnostic-timings');expect(source).not.toContain("-Filter '*-debug-0.log'");
  expect(source.indexOf("Write-PhaseEvent 'running'")).toBeLessThan(source.indexOf('$output=& $Command @Arguments 2>&1'));
  expect(source).toContain("Write-PhaseEvent 'complete'");
  expect(source).toContain('Standard-user phase still running:');
