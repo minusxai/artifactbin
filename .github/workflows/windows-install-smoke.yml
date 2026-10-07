@@ -1,0 +1,24 @@
+name: Published Windows install smoke
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Expected published latest CLI version
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  install:
+    name: Published standard-user Windows install
+    runs-on: windows-2022
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Public helper, latest setup and fresh-shell command
+        shell: powershell
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          $env:PSModulePath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules"
+          ./services/cli/scripts/test-node-bootstrap.ps1 -PublishedVersion $env:EXPECTED_VERSION

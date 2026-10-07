@@ -49,6 +49,21 @@ npx.cmd --yes @afbin/cli@latest setup
 afbin.cmd preview report.jsx
 ```
 
+Windows installation acceptance runs in the existing `cli-bootstrap` CI job,
+using a fresh non-administrator account and Restricted PowerShell 5.1. It installs
+official Node from a Node-free PATH, runs real npm setup against the exact candidate
+tarball, verifies Claude/Codex skills and repeat setup, then opens a fresh shell to
+check the global `afbin.cmd` version and a local SQL query. If setup prints a PATH
+instruction, the test follows it before opening the new shell. Candidate metadata
+is served by a loopback scoped registry; package bytes and npm installation are
+unchanged. Dependencies reuse that account's preceding cold npx install cache.
+Each native phase prints its duration; this is an installer check, not a browser gate.
+After publishing, dispatch `Published Windows install smoke` with the expected
+latest version. It uses the public helper and `npx.cmd --yes @afbin/cli@latest setup`
+on a fresh account/cache, with explicit harness choices and JSON output for
+automation. It checks the installed version instead of accepting a stale latest.
+This separate smoke run adds no time to the required PR check chain.
+
 macOS arm64/x64 and Linux arm64/x64 (glibc, bash or zsh):
 
 ```sh
