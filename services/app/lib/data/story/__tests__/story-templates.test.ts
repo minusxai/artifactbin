@@ -66,6 +66,18 @@ describe('STORY_TEMPLATES registry', () => {
     expect(guidanceOf('deck'), 'deck raw <section> slide').not.toMatch(/<section\s/);
   });
 
+  it('scrolly guidance describes the supported ordinary-flow chapter contract', () => {
+    const guidance = guidanceOf('scrolly');
+    expect(guidance).toContain('ordinary document flow');
+    expect(guidance).toContain('same named question');
+    expect(guidance).not.toMatch(/live reader handles the figure|platform's scroll scene/);
+    for (const name of ['dossier', 'drafting', 'volta']) {
+      const system = renderDoc(`artifactbin/references/system-${name}.md`, 'https://example.test');
+      expect(system).toContain('ordinary document flow');
+      expect(system).not.toMatch(/sticky is set by the live reader|sticky figure is the template/);
+    }
+  });
+
   it('getStoryTemplate looks up by name and misses safely', () => {
     expect(getStoryTemplate('deck')?.label.length).toBeGreaterThan(0);
     expect(getStoryTemplate('bogus')).toBeUndefined();

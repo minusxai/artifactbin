@@ -593,7 +593,7 @@
   ],
   [
    "Scroll",
-   "Exploded parts translate along one axis as the reader scrolls; the sticky figure is the template's job."
+   "Show exploded parts in successive chapter states along one axis; figures stay in ordinary document flow."
   ],
   [
    "Charts",

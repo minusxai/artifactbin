@@ -1,7 +1,7 @@
 ---
 name: templates-scrolly
 description: >-
-  The scrolly page type: the reader's job, three compositions the thesis chooses between, what the runtime needs for reveals and the evolving chart, and the rules.
+  The scrolly page type: ordinary-flow chapters, three compositions, repeated live figures, entrance motion, and the rules.
 order: 3
 ---
 ## Read first
@@ -34,16 +34,17 @@ to it.
   content repeated once), chapter breaks, a twist that breaks the pattern. The theatrical one; pick the register the subject
   can carry, deadpan included.
 
-## What the runtime needs
+## Chapter layout and live figures
 
-- Reveals are classes: `animate-fade-up` on the hero, `reveal-up` and
+- Entrance animations are classes: `animate-fade-up` on the hero, `reveal-up` and
   `reveal-left` on chapter elements, staggered with `[transition-delay:120ms]`.
   Captures and reduced-motion viewers see the page finished; nothing is
   hidden from them.
-- The evolving chart is the platform's scroll scene: re-embed the SAME
-  question across steps with progressive `viz` overrides (gray, then one
-  series accented, then the domain zoomed). No sticky; the live reader
-  handles the figure.
+- Re-embed the same named question across chapters with progressive `viz`
+  overrides (gray, then one series accented, then the domain zoomed). Each
+  chapter renders its own live figure in ordinary document flow. The template
+  adds no sticky figure, scroll-triggered chart switching, or reading-progress
+  indicator; author each chapter's figure state explicitly.
 - Full-bleed bands are unpadded siblings of padded prose sections. Keep the
   outer wrapper unpadded, bands `w-full overflow-hidden`, and prose sections
   `px-6 @2xl:px-12` at a readable measure. Do not widen the document with negative margins:
