@@ -228,6 +228,33 @@ await section('reader', async () => {
   const ownerText = await docHeading(owner);
   check(ownerText === 'SEC-PROBE-DOC' && await ownerBar(owner), 'owner sees the shell with the document in its frame');
 
+  // The busiest authenticated toolbar must retain every action on narrow phones.
+  for (const width of [320, 390]) {
+    await owner.setViewportSize({ width, height: 844 });
+    const bar = owner.getByRole('banner', { name: 'Page bar' });
+    for (const name of ['Like', 'Comment', 'Edit', 'Share', 'Notifications', 'Open artifact controls', 'Open menu']) {
+      await bar.getByRole('button', { name, exact: true }).waitFor({ state: 'visible' });
+    }
+    const geometry = await bar.evaluate(element => {
+      const controls = [...element.querySelectorAll('a, button')].map(control => {
+        const bounds = control.getBoundingClientRect();
+        const hit = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+        return { name: control.getAttribute('aria-label'), left: bounds.left, right: bounds.right, width: bounds.width, reachable: hit === control || control.contains(hit) };
+      }).filter(control => control.width > 0);
+      return { width: innerWidth, scrollWidth: document.documentElement.scrollWidth, controls };
+    });
+    check(geometry.scrollWidth <= width, `owner toolbar has no page overflow at ${width}px`);
+    check(geometry.controls.every(control => control.left >= 0 && control.right <= width && control.width >= 36 && control.reachable),
+      `all owner toolbar controls keep full targets inside ${width}px: ${JSON.stringify(geometry.controls)}`);
+    await bar.getByRole('button', { name: 'Open menu', exact: true }).click();
+    await owner.getByRole('navigation', { name: 'Menu', exact: true }).waitFor({ state: 'visible' });
+    check(await owner.getByRole('button', { name: 'Dismiss menu', exact: true }).isVisible(), `owner menu is reachable at ${width}px`);
+    await owner.getByRole('button', { name: 'Dismiss menu', exact: true }).click();
+  }
+  await owner.setViewportSize({ width: 1400, height: 950 });
+  check((await owner.locator('a[aria-label="Star artifactbin on GitHub"]:visible').textContent()).includes('Star'),
+    'desktop toolbar keeps its visible Star label');
+
   // /raw is internal
   const llm = await (await fetch(`${BASE}/llms.txt`)).text();
   check(llm.includes('afbin') && !llm.includes('/raw'), 'agent discovery teaches the CLI without internal raw links');
