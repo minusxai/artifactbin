@@ -259,6 +259,9 @@ export function DocumentPage(): JSX.Element {
   });
 
   const accountSession = () => page?.kind === 'account' || session()?.kind === 'account';
+  // This is permission to start the comment flow, not to write a comment:
+  // guests get sign-in; only annotatable readers get the composer below.
+  const canStartComment = () => !archivedNow() && (annotatable() || !accountSession());
   /** A rail action by name: a press, a carried `?intent=` (after a sign-in), or a pill. */
   const act = (name: string) => {
     if (name === 'controls' || name === 'menu' || name === 'notifications') setPanel(name);
@@ -395,8 +398,11 @@ export function DocumentPage(): JSX.Element {
     )}</Show>
     <TrustedUi overlay layer="discussion">
     <Show when={ready() && nonce()}>
-      <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canEdit={editable()} canAnnotate={annotatable()} editing={editing()}
-        onEdit={(path) => beginEdit(path)} onAnnotate={(selection) => setInitialAnnotationSelection(selection)} />
+      <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canEdit={editable()} canAnnotate={canStartComment()} editing={editing()}
+        onEdit={(path) => beginEdit(path)} onAnnotate={(selection) => {
+          if (annotatable()) setInitialAnnotationSelection(selection);
+          else act('comment');
+        }} />
     </Show>
     <Show when={ready() && annotatable() && id}>
       <AnnotationLayer id={id!} backend={backend ?? undefined} editId={editorPart()?.editId ?? page?.surface?.editId} runtimeRef={runtimeRef} sessionNonce={nonce()}
