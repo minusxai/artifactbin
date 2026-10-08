@@ -135,7 +135,7 @@ jobs:
   # running whole, which made `validate + node` a 2m16s job of which 103s was
   # this step alone.
   #
-  # FOUR shards, down from seven (.agent/ci-proposal.md §1d): seven ran 28-56s of Vitest each beside
+  # FOUR shards, down from seven: seven ran 28-56s of Vitest each beside
   # ~16s of setup, far under the gates (~155s warm), so four keep every shard below them — the
   # heaviest, by scripts/ci/test-timings.json with the integration and CLI-suite reserves, ~124s warm.
   # Earlier: EIGHT, down from ten after run 36838282615, where the plain shards ran 63-111s against a
@@ -234,7 +234,7 @@ jobs:
   # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s
   # on run 36608202961 — over the ~150s per-job target — so it split three, then four ways. Three
   # again after run 36838282615 (four shards, 84-129s): the gates, not this job, set the run's path.
-  # TWO since .agent/ci-proposal.md §1d: three ran 38-44s of work each, so two (~80s warm) stay
+  # TWO: three ran 38-44s of work each, so two (~80s warm) stay
   # under the gates.
   ui:
     needs: [ plan ]

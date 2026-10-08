@@ -33,7 +33,7 @@
 // attempt excluded (data-journey and offline-file each passed a first attempt once). The comments on
 // the rows below record where each gate's timeout was measured; the `seconds` are these CI numbers.
 export const GATE_SPECS = Object.freeze([
-  // Journey gates (.agent/gates-proposal.md §3): each absorbs several former gates; `seconds` measured in
+  // Journey gates: each absorbs several former gates; `seconds` measured in
   // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
   // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
   // process (formerly offline-file, -firefox, -webkit and screenshot-comments: three shards' cross-browser setup).

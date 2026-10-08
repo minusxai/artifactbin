@@ -163,7 +163,7 @@ email account, replacing saved credentials only after successful authentication.
 If browser launch fails, authentication exits immediately with `browser_unavailable`. Browser
 approval waits at most 45 seconds in automation, or the five-minute pairing window interactively.
 The waiting message and timeout errors recommend email login; retry the original command after
-signing in. Email login does not transfer artifacts owned by a guest browser.
+signing in.
 
 For an artifact created in the browser, run `afbin auth <artifact-url>` (plus `--server <origin>`
 for another server). A connection that can already edit continues immediately. Otherwise the

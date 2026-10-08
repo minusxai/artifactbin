@@ -22,10 +22,9 @@ ownership). A public document can have editors; a
 collaborator's own agent edits too, through the CLI connection their account
 holds.
 
-Artifacts published through an **account-owned** connection are born `private`
-— except images and datasets, born `unlisted`, since they are assets other
-documents reference at read time; ones published through an **anonymous**
-connection are born `public` (there is no account to anchor an ACL to). Agents can pass
+Artifacts are born `private` — except images and datasets, born `unlisted`,
+since they are assets other documents reference at read time. Every connection
+belongs to an email account (there is no anonymous connection). Agents can pass
 `"visibility": "public"` on create or PUT.
 
 Artifacts are served at `/a/<id>`; documents you own also get a pretty URL,
@@ -109,7 +108,7 @@ request), with a row cap and a deadline; each import is only the rows its
 reader may see. A write runs only as a declared `<Mutation>` of a document the
 reader can open, against a dataset opened for writes, under that dataset's
 data policy; `$_me.id` is the signed-in reader's id, bound by the server, and
-a guest is asked to sign in before a write that reads it. A connected Postgres database
+a signed-out reader is asked to sign in before a write that reads it. A connected Postgres database
 is queried inside itself (`<Query source="ref:…">`), read-only, through its
 exposure whitelist.
 

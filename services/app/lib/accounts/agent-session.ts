@@ -1,14 +1,14 @@
 /**
  * The BROWSER's copy of a bearer token — as an httpOnly cookie, not localStorage.
  *
- * A person with no account can still own documents: /api/start creates a guest
- * ownership identity, discards its bearer, and the browser must
- * remember it, or the tab that just published cannot edit what it made. That
+ * A browser that owns documents through a guest identity (createGuestOwner) must
+ * remember its token, or the tab that just published cannot edit what it made.
+ * (/api/start no longer issues one: it requires an email account session.) That
  * memory must not be a durable credential any script on the app's origin can
  * read and keep, so the browser holds a SIGNED COOKIE NAMING the token ids;
  * the secret itself never returns to the page after the exchange.
  *
- * Anonymous token ownership uses a separate signed cookie, not an account
+ * Guest token ownership uses a separate signed cookie, not an account
  * session. Account-only guards must never accept a token id as a user id.
  * The cookie is signed with the configured AUTH__SECRET.
  *

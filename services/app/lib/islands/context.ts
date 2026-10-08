@@ -1,6 +1,6 @@
 /**
  * THE ISLAND CONTEXT DOOR. Every kit component reads the document's `IslandContext` (lib/islands/contract)
- * through `useIsland()`; the runtime (rt.ts) and tests supply it with `IslandProvider`. One context per
+ * through `useIsland()`; the runtime (rt.tsx) and tests supply it with `IslandProvider`. One context per
  * document, shared by every island in it.
  *
  * Plain `.ts` (no JSX): the provider is a `createComponent` call, so this module needs no JSX transform.

@@ -86,11 +86,11 @@ queues or rerun unchanged code to hide a slow run. Report cold and warm timings 
 From the repo root; keep this list current.
 
 - `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
-- `npm run dev` — full local composition, default http://localhost:3030; `dev:app` without the proxy.
+- `npm run dev` — full local composition, default http://localhost:3030; `dev:app` the app alone, without login/OAuth.
 - `npm run afbin -- <args>` — the branch's CLI against this checkout's dev server.
 - `npm run eval -- --tasks <name>` — the agent eval against that server (`--deployment`, `--help`).
-  `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo (README is the guide): copy
-  it from `~/projects/artifactbin-evals/evals`, never symlink.
+  `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo (its README is the guide): copy
+  it from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale, so recopy.
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
 - `npm run validate` — FAST: name guard, incremental TypeScript (`tsgo` where installed, else
   tsc) with unused declarations; utils/contracts add `noUncheckedIndexedAccess`.
