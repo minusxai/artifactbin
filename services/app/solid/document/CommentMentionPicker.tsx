@@ -14,8 +14,9 @@ import { type RemoteSessionInfo } from '../../../contracts/src/remote';
 import { agentNameColor } from '../lib/agent-identity';
 import { Tooltip } from '../components/Tooltip';
 const agentLabel = (name: string) => (({ claude: 'Claude Code', codex: 'Codex', pi: 'Pi', opencode: 'OpenCode' } as Record<string, string>)[name] ?? name);
-/** Shared eligibility for quick choices and the full mention picker. */
-export const canTagAgent = (session: RemoteSessionInfo) => !session.runId && (session.managed ? session.exitCode === null && session.activity !== 'stopped' : session.online);
+/** Hosted native generations own the comment relay; raw run terminals do not.
+ * Shared by quick choices and the full picker, including requests queued before login. */
+export const canTagAgent = (session: RemoteSessionInfo) => (!session.runId || !!session.hostedGeneration) && (session.managed ? session.exitCode === null && session.activity !== 'stopped' : session.online);
 export interface MentionKeyboard { keyDown: (key: string) => boolean }
 
 export function CommentMentionPicker(props: {
