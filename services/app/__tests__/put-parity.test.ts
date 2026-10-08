@@ -1,3 +1,4 @@
+import { getArtifactById } from '@/lib/artifacts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * THE TWO WRITE PATHS ARE ONE PIPELINE.
@@ -26,18 +27,18 @@ useAppHarness();
 beforeEach(() => setSession(null));
 
 
-// The browser route reads auth(); this suite drives the anonymous cookie, so
-// there is no account session. The handlers are the real ones.
+// Browser routes receive the verified session actor the proxy attaches.
+// The handlers are the real ones.
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-/** One document, reachable by both credentials: the token that made it, and a cookie naming it. */
+/** One email-owned document, reachable by bearer and verified session. */
 async function subject() {
   const t = await mintToken('parity');
   const made = await (await createArtifact(
-    request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>v1</h1>' } }),
+    request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>v1</h1>', visibility: 'public' } }),
   )).json();
-  return { token: t.token, cookie: await agentCookie([t.id]), id: made.id as string };
+  return { token: t.token, actor: { userId: t.userId!, email: t.email!, emailVerified: true, credential: 'session' as const }, id: made.id as string };
 }
 
 describe('the bearer and browser replace paths answer alike', () => {
@@ -50,7 +51,7 @@ describe('the bearer and browser replace paths answer alike', () => {
 
     const b = await subject();
     const viaBrowser = await (await putBrowser(
-      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<h1 id="heading">browser</h1>' } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', actor: b.actor, json: { markup: '<h1 id="heading">browser</h1>' } }),
       params({ id: b.id }),
     )).json();
 
@@ -63,7 +64,7 @@ describe('the bearer and browser replace paths answer alike', () => {
       // Operation commits return the canonical authoring graph and source.
       expect(wire.document.kind).toBe('graph');
       expect(wire.markup).toContain('<h1 id="heading">');
-      expect(wire.visibility).toBe('public'); // anonymous token ⇒ born public
+      expect(wire.visibility).toBe('public'); // Explicitly published public fixture.
     }
   });
 
@@ -75,27 +76,22 @@ describe('the bearer and browser replace paths answer alike', () => {
     );
     const b = await subject();
     const browser = await putBrowser(
-      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', actor: b.actor, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
       params({ id: b.id }),
     );
     expect([bearer.status, browser.status]).toEqual([409, 409]);
     for(const response of [bearer,browser])expect(await response.json()).toMatchObject({error:'doc_changed',version:1,edit_id:expect.any(String),source:expect.any(String)});
   });
 
-  it('both refuse `private` on an anonymous credential — never a silent downgrade', async () => {
+  it('both refuse legacy anonymous credentials without changing the document', async () => {
     const a = await subject();
-    const bearer = await putBearer(
-      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<p>x</p>', visibility: 'private' } }),
-      params({ id: a.id }),
-    );
-    const b = await subject();
-    const browser = await putBrowser(
-      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', visibility: 'private' } }),
-      params({ id: b.id }),
-    );
-    expect([bearer.status, browser.status]).toEqual([400, 400]);
-    expect(await bearer.json()).toEqual({ error: 'private_requires_account' });
-    expect(await browser.json()).toEqual({ error: 'private_requires_account' });
+    const legacy = await mintToken('legacy', null);
+    setSession(null);
+    const bearer = await putBearer(await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: legacy.token, json: { markup: '<p>x</p>', visibility: 'private' } }), params({ id: a.id }));
+    const browser = await putBrowser(await observedRequest(`/api/my/artifacts/${a.id}`, { method: 'PUT', cookie: await agentCookie([legacy.id]), json: { markup: '<p>x</p>', visibility: 'private' } }), params({ id: a.id }));
+    expect([bearer.status, browser.status]).toEqual([401, 401]);
+    for (const response of [bearer, browser]) expect(await response.json()).toMatchObject({ error: 'unauthorized' });
+    expect((await getArtifactById(a.id))?.version).toBe(1);
   });
 
   it('both echo a dataset’s WRITE acl, so a caller need not re-read to see it', async () => {
@@ -107,7 +103,7 @@ describe('the bearer and browser replace paths answer alike', () => {
       const made = await (await createArtifact(
         request('/api/artifacts', { method: 'POST', token: t.token, json: { dataset: [{ a: 1 }], access: 'readwrite' } }),
       )).json();
-      return { token: t.token, cookie: await agentCookie([t.id]), id: made.id as string };
+      return { token: t.token, actor: { userId: t.userId!, email: t.email!, emailVerified: true, credential: 'session' as const }, id: made.id as string };
     };
     const a = await mk();
     const viaBearer = await (await putBearer(
@@ -116,7 +112,7 @@ describe('the bearer and browser replace paths answer alike', () => {
     )).json();
     const b = await mk();
     const viaBrowser = await (await putBrowser(
-      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { dataset: [{ a: 2 }] } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', actor: b.actor, json: { dataset: [{ a: 2 }] } }),
       params({ id: b.id }),
     )).json();
     expect(viaBearer.access).toBe('readwrite');
@@ -133,7 +129,7 @@ describe('the bearer and browser replace paths answer alike', () => {
       params({ id: mine.id }),
     );
     const browser = await putBrowser(
-      await observedRequest(`/api/my/artifacts/${mine.id}`, { method: 'PUT', cookie: stranger.cookie, json: { markup: '<p>x</p>' } }),
+      await observedRequest(`/api/my/artifacts/${mine.id}`, { method: 'PUT', actor: stranger.actor, json: { markup: '<p>x</p>' } }),
       params({ id: mine.id }),
     );
     expect([bearer.status, browser.status]).toEqual([404, 404]);

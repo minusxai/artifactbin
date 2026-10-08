@@ -13,7 +13,7 @@ describe('advanced HTTP parity',()=>{
     expect(ds.data.columns).toEqual([{ name: 'm', type: 'string' }, { name: 'v', type: 'number' }]);
 
     const story = await operationHttp(t.token, 'create_artifact', {
-      title: 'story',
+      title: 'story', visibility: 'public',
       markup: `<Helmet><Import name="rows_data" src="ref:${ds.data.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
     });
     expect(story.isError).toBe(false);

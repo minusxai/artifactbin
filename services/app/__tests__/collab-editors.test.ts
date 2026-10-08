@@ -46,7 +46,7 @@ import { storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadat
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null)));
 const sessionUser = { id: '', email: '' };
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -91,14 +91,14 @@ async function world(markup = PROSE, visibility: 'public' | 'private' = 'public'
   const owner = await createUser({ email: 'owner@x.com' });
   const ta = await mintToken('a', owner.id);
     await claimToken(owner.id, ta.token);
-  const tb = await mintToken('b');
   const bob = await createUser({ email: 'Bob@X.com' });
+  const tb = await mintToken('b', bob.id);
   const bobNamed = await ensureUsername(bob);
   await claimToken(bob.id, tb.token);
   const carol = await createUser({ email: 'carol@x.com' });
   const tc = await mintToken('c', carol.id);
     await claimToken(carol.id, tc.token);
-  const anon = await mintToken('anon');
+  const anon = await mintToken('anon', null);
   const doc = await create(ta.token, { markup, visibility });
   return { ta, tb, tc, anon, owner, bob: bobNamed, carol, doc };
 }
@@ -211,7 +211,7 @@ describe('an editor edits through every write door, and nothing else', () => {
     const put = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { markup: PROSE }, w.tb.token), params({ id }));
     expect(put.status, await put.clone().text()).toBe(200);
 
-    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(200);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(401);
     expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tc.token), params({ id }))).status).toBe(200);
     const h = await head(id);
     expect((await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: h.edit_id, source: PROSE2 }, w.tc.token), params({ id }))).status).toBe(404);
@@ -266,7 +266,7 @@ describe('an editor on a PRIVATE document', () => {
     expect((await versionMineRoute(await jreq(`/api/my/artifacts/${id}/versions/1`, 'GET'), params({ id, version: '1' }))).status).toBe(404);
     noSession();
     expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(200);
-    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(404);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(401);
   });
 
   it('naming the OWNER\'s own email changes nothing — they stay the owner', async () => {
@@ -364,14 +364,13 @@ describe('the share list carries roles', () => {
     expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
   });
 
-  it('an anonymous owner may name an editor (the row is email-keyed; nothing needs the owner\'s account)', async () => {
+  it('an email account owner may name an editor through the owner scope', async () => {
     const anon = await mintToken('solo');
     const doc = await create(anon.token, { markup: PROSE });
     const bob = await createUser({ email: 'bob@x.com' });
     const tb = await mintToken('b', bob.id);
     await claimToken(bob.id, tb.token);
-    // The sharing surface is browser-only; the anonymous owner reaches it with the agent cookie —
-    // covered by the sharing route's own tests. Here the lib call, through the same owner scope.
+    // The library call uses the same email account owner scope as browser sharing.
     const { updateSharingFor } = await import('@/lib/artifacts');
     const state = await updateSharingFor({ tokenId:anon.id,userId:anon.userId }, doc.id, { shares: [{ email: 'bob@x.com', role: 'editor' }] });
     expect(state?.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
@@ -480,29 +479,16 @@ describe('roleFor and the read ACL', () => {
 });
 
 /**
- * THE INVITEE WHO ONLY EVER SPEAKS TO THE API.
- *
- * `users` is the app's OWN row for a person, and it was written on the first
- * COOKIE session alone (lib/profiles, through lib/viewer's proxyActor). A
- * bearer caller never reached it, so an invited account that had only ever
- * used the CLI held a token, a user id and a verified address — and no row.
- * Every SQL share predicate matches a still-unresolved invite through
- * `(SELECT email FROM users WHERE id = $p)` (lib/artifacts SHARE_PREDICATE),
- * which was therefore NULL: the listing came back empty, a named EDITOR's pull
- * was the uniform 404 (artifact-read rechecks through `editorScope`) and a
- * COMMENTER could not comment — while a viewer's pull worked, because that one
- * path (`namedRoleFor`) also matches the address the request carries. A single
- * cookie visit to /a/:id repaired all of it, which is what named the bug.
- *
- * So the row now follows the claims under a BEARER credential too, and these
- * cases are the whole grant, exercised the way the CLI reaches it: the bearer
- * header the agent sends, plus the claims the proxy attaches to that request.
+ * Invited email accounts can use their complete grant through a bearer alone.
+ * Token issuance establishes the email account before any artifact API call;
+ * these callers never need a browser session to list, read, edit, or comment.
  */
 describe('an invited account that has only ever presented a bearer token', () => {
   /** The pair a CLI request really carries: the bearer header AND the proxy's verdict on it. */
   async function cliCaller(userId: string, email: string) {
+    const db = await harness.db();
+    await db.query("INSERT INTO users (id,email,kind) VALUES ($1,$2,'account')", [userId, email]);
     const minted = await mintToken('cli', userId);
-    await claimToken(userId, minted.token);
     return async (path: string, method = 'GET', body?: unknown) =>
       attachActor(
         await observedRequest(path, { method, token: minted.token, ...(body === undefined ? {} : { json: body }) }),
@@ -514,7 +500,7 @@ describe('an invited account that has only ever presented a bearer token', () =>
   // case names its own person rather than sharing one across a wiped database.
   let people = 0;
 
-  /** Owner A's PRIVATE document, invited to an address whose account the app has never written down. */
+  /** Owner A's PRIVATE document, invited to an email account with no browser session. */
   async function invitedTo(role: 'viewer' | 'commenter' | 'editor') {
     const who = `cli${people++}`, userId = `usr_${who}`, email = `${who}@invited.example`;
     const w = await world(PROSE, 'private');
@@ -522,16 +508,16 @@ describe('an invited account that has only ever presented a bearer token', () =>
     expect((await share(w.doc.id, [{ email, role }])).status).toBe(200);
     noSession();
     const call = await cliCaller(userId, email);
-    // The premise: no `users` row, because nothing has ever brought a cookie.
+    // Issuance already established the email account; no browser visit is needed.
     const db = await harness.db();
-    expect((await db.query('SELECT 1 FROM users WHERE id = $1', [userId])).rows).toEqual([]);
+    expect((await db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId])).rows).toEqual([{ email }]);
     return { w, call, id: w.doc.id, userId, email };
   }
 
   const listedIds = async (response: Response) =>
     ((await response.json()) as { artifacts: Array<{ id: string }> }).artifacts.map((a) => a.id);
 
-  it('an EDITOR lists, reads and writes the document — and the app writes down the account', async () => {
+  it('an EDITOR lists, reads and writes the document using its issued email account', async () => {
     const { call, id, userId, email } = await invitedTo('editor');
 
     // The pull FIRST: an editor's read rechecks the edit predicate

@@ -29,7 +29,7 @@ describe('GET /a/:id (the document itself)', () => {
 
   it('carries Link: <base>/llms.txt; rel="help" and the head pointer, on the request base', async () => {
     const t = await mintToken('t');
-    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
     const res = await rawRoute(new Request(`${BASE}/a/${row.id}`), params(row.id));
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
@@ -77,14 +77,14 @@ describe('GET /a/:id (the document itself)', () => {
     expect(text).toContain('Local and offline edits do not call these HTTP endpoints');
     expect(text).not.toContain('[[ base ]]');
     const t = await mintToken('t');
-    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
     const refused = await app.request(`${BASE}/api/artifacts/${row.id}`);
     expect(refused.status).toBe(401);
     expect(await refused.json()).toMatchObject({ error: 'unauthorized', help: `Retry through afbin: afbin auth --server ${BASE}. If \`afbin\` is not installed, run \`npx --yes @afbin/cli@latest setup\` once (Windows PowerShell: \`npx.cmd --yes @afbin/cli@latest setup\`); it installs the \`afbin\` command and the agent skills.`, guide: `${BASE}/llms.txt` });
   });
   it('follows x-forwarded-proto/host like every other absolute URL the app emits', async () => {
     const t = await mintToken('t');
-    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
     const res = await rawRoute(new Request(`${BASE}/a/${row.id}`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'docs.example' } }), params(row.id));
     expect(res.headers.get('link')).toBe('<https://docs.example/llms.txt>; rel="help"');
   });

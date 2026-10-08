@@ -1,4 +1,4 @@
-import {getArtifactById} from '@/lib/artifacts';
+import {getArtifactById, updateSharingFor} from '@/lib/artifacts';
 import {documentEditBody} from './prepared-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
 /**
@@ -30,10 +30,13 @@ interface Start { id: string; token: string; edit_id: string }
  * document it creates is the one it can edit.
  */
 const start = async (): Promise<Start> => {
-  const { token } = await mintToken('device-approval');
+  const credential = await mintToken('device-approval');
+  const { token } = credential;
   const res = await startRoute(request('/api/start', { method: 'POST', json: {}, token }));
   expect(res.status).toBe(201);
-  return { ...(await res.json()) as Omit<Start, 'token'>, token };
+  const started = (await res.json()) as Omit<Start, 'token'>;
+  await updateSharingFor({ tokenId: credential.id, userId: credential.userId }, started.id, { visibility: 'public' });
+  return { ...started, token };
 };
 
 /** Match the seeded heading text without depending on its freshly generated id. */

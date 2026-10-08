@@ -10,7 +10,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  */
 import { storedMarkup } from '@/test/helpers/echo';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request } from '@/__tests__/harness';
 import { readFrames, sseStream } from '@/__tests__/sse';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { POST as actOnAnnotationRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
@@ -20,12 +20,10 @@ import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { MAX_LIVE_CHANNELS, liveChannelCount, resetLiveSubscriptions, subscribeToArtifact } from '@/lib/story/realtime/live';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 
-const SECRET = 'test-secret';
 useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -33,11 +31,10 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 interface Wire { id: string; edit_id: string; markup: string | null; version: number }
 
 async function setup(): Promise<{ token: string; doc: Wire }> {
-  const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
-  const { token } = (await mintRes.json()) as { token: string };
+  const { token } = await mintToken('live-events');
   const sent = '<section><p>alpha text</p><p>beta text</p></section>';
   const res = await createArtifactRoute(
-    request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: sent } }),
+    request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: sent, visibility: 'public' } }),
   );
   expect(res.status).toBe(201);
   const wire = (await res.json()) as Wire;
@@ -108,7 +105,7 @@ describe('GET /a/<id>/events', () => {
   it('the frame carries dataset preview data; a document carries its source', async () => {
     const { token } = await setup();
     const make = async (body: Record<string, unknown>) => {
-      const r = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+      const r = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
       expect(r.status).toBe(201);
       return (await r.json()) as Wire;
     };
@@ -239,24 +236,24 @@ describe('GET /a/<id>/events — the annotations frame', () => {
 
   async function annotationSetup() {
     const t = await mintToken('agent');
-    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>alpha</p><div>beta figure</div>' } }));
+    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>alpha</p><div>beta figure</div>', visibility: 'public' } }));
     expect(res.status, await res.clone().text()).toBe(201);
     const doc = (await res.json()) as { id: string; edit_id: string };
-    const cookie = await agentCookie([t.id]);
-    return { t, doc, cookie };
+    const actor = { userId: t.userId!, email: t.email!, emailVerified: true, credential: 'session' as const };
+    return { t, doc, actor };
   }
 
-  const annotate = (id: string, cookie: string, editId: string) =>
+  const annotate = (id: string, actor: { userId: string; email: string; emailVerified: boolean; credential: 'session' }, editId: string) =>
     myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '1', edit_id: editId, body: 'look here' } }),
+      request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor, json: { path: '1', edit_id: editId, body: 'look here' } }),
       params({ id }),
     );
 
   it('an owner connection gets current annotations at connect, and a fresh frame on create and on resolve', async () => {
-    const { t, doc, cookie } = await annotationSetup();
-    const first = (await (await annotate(doc.id, cookie, doc.edit_id)).json()) as { id: string };
+    const { t, doc, actor } = await annotationSetup();
+    const first = (await (await annotate(doc.id, actor, doc.edit_id)).json()) as { id: string };
 
-    const res = await eventsRoute(request(`/a/${doc.id}/events`, { cookie: cookie }), params({ id: doc.id }));
+    const res = await eventsRoute(request(`/a/${doc.id}/events`, { actor }), params({ id: doc.id }));
     expect(res.status).toBe(200);
     const reader = sseStream(res.body!);
 
@@ -267,7 +264,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
     const connectFrame = opening.find((e) => e.event === STORY_ANNOTATIONS_EVENT);
     expect(connectFrame, JSON.stringify(opening.map((e) => e.event))).toBeTruthy();
     expect(connectFrame!.data).toEqual({});
-    const list = async () => ((await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations?status=all`, { cookie: cookie }), params({ id: doc.id }))).json()) as { annotations: Array<{ id: string; status: string }> }).annotations;
+    const list = async () => ((await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations?status=all`, { actor }), params({ id: doc.id }))).json()) as { annotations: Array<{ id: string; status: string }> }).annotations;
     expect((await list()).map((a) => a.id)).toEqual([first.id]);
 
     await actOnAnnotationRoute(
@@ -281,12 +278,12 @@ describe('GET /a/<id>/events — the annotations frame', () => {
   });
 
   it('an anonymous reader of the same public document never sees the event', async () => {
-    const { doc, cookie } = await annotationSetup();
+    const { doc, actor } = await annotationSetup();
     const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
     expect(res.status).toBe(200);
     const reader = sseStream(res.body!);
 
-    await annotate(doc.id, cookie, doc.edit_id);
+    await annotate(doc.id, actor, doc.edit_id);
     // Give any (wrong) frame a moment to arrive; only the document frame may exist.
     const seen = await reader.next(3, 1200);
     expect(seen.some((e) => e.event === STORY_ANNOTATIONS_EVENT)).toBe(false);

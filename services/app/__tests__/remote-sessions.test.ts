@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { useAppHarness, request, agentCookie } from "./harness";
+import { useAppHarness, request } from "./harness";
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, claimToken } from "@/lib/accounts";
 import { remoteRoute } from "@/lib/remote/route";
@@ -24,20 +24,20 @@ const body = (runnerKey: string, outputSeq = 1, output = "hello") => ({
 });
 describe("remote session relay", () => {
   it("requires an account-owned credential and keeps sessions private across accounts", async () => {
-    const a = await mintToken("a");
+    const legacy = await mintToken("legacy", null);
     expect(
       (
         await remoteRoute(
           request("/api/remote/sessions", {
             method: "POST",
-            token: a.token,
+            token: legacy.token,
             json: registration,
           }),
         )
       ).status,
-    ).toBe(403);
+    ).toBe(401);
     const user = await createUser({ email: "mxmx_test_remote@example.com" });
-    await claimToken(user.id, a.token);
+    const a = await mintToken("a", user.id);
     const res = await remoteRoute(
       request("/api/remote/sessions", {
         method: "POST",
@@ -47,8 +47,8 @@ describe("remote session relay", () => {
     );
     expect(res.status).toBe(201);
     const made = await res.json();
-    const cookie = await agentCookie([a.id]);
-    const list = await remoteRoute(request("/api/remote/sessions", { cookie }));
+    const actor = { userId: user.id, email: user.email, emailVerified: true, credential: 'session' as const };
+    const list = await remoteRoute(request("/api/remote/sessions", { actor }));
     expect(await list.json()).toMatchObject({ sessions: [{ id: made.id }] });
     expect(
       JSON.stringify(
@@ -73,7 +73,7 @@ describe("remote session relay", () => {
         await remoteRoute(
           request(`/api/remote/sessions/${made.id}`, {
             method: "POST",
-            cookie,
+            actor,
             origin: "https://evil.example",
             json: { type: "input", data: "rm -rf" },
           }),
@@ -171,12 +171,11 @@ import { POST as createArtifact } from "@/app/api/artifacts/route";
 import { POST as createComment } from "@/app/api/my/artifacts/[id]/annotations/route";
 import { POST as replyComment } from "@/app/api/my/artifacts/[id]/annotations/[annId]/route";
 it.each([undefined, "b".repeat(64)])("the real comment and reply routes notify the selected session after saving (%s)", async (recoveryKey) => {
-  const t = await mintToken("remote");
   const user = await createUser({
     email: "mxmx_test_comment_remote@example.com",
   });
-  await claimToken(user.id, t.token);
-  const cookie = await agentCookie([t.id]);
+  const t = await mintToken('remote', user.id);
+  const actor = { userId: user.id, email: user.email, emailVerified: true, credential: 'session' as const };
   const session = remoteSessions.create(user.id, { ...registration, recoveryKey });
   const created = await createArtifact(
     request("/api/artifacts", {
@@ -191,7 +190,7 @@ it.each([undefined, "b".repeat(64)])("the real comment and reply routes notify t
   const res = await createComment(
     request(`/api/my/artifacts/${doc.id}/annotations`, {
       method: "POST",
-      cookie,
+      actor,
       json: { path: "0", edit_id: doc.edit_id, body: `${mention} review this` },
     }),
     { params: Promise.resolve({ id: doc.id }) },
@@ -212,7 +211,7 @@ it.each([undefined, "b".repeat(64)])("the real comment and reply routes notify t
   const reply = await replyComment(
     request(`/api/my/artifacts/${doc.id}/annotations/${ann.id}`, {
       method: "POST",
-      cookie,
+      actor,
       json: { reply: `${mention} one more thing` },
     }),
     { params: Promise.resolve({ id: doc.id, annId: ann.id }) },
