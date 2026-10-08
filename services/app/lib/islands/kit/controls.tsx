@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
-import { For, Show, createEffect, createSignal, untrack, type JSX } from 'solid-js';
+import { For, Show, createEffect, createSignal, untrack, onCleanup, type Component, type JSX } from 'solid-js';
 import { format as d3format } from 'd3-format';
-import { Portal } from 'solid-js/web';
 import { overlayDestination } from './trusted-overlay';
+import type { DatePickerPopupProps } from './controls/date-picker-popup';
 import { popupDismiss } from './popup-dismiss';
 import { controlOptions as normalize, refName, type Scalar } from '@/lib/story/data/dataflow';
 import { coerceScalarInput } from '@/lib/story/data/scalar-input';
@@ -70,34 +70,22 @@ export function Slider(p: Props) {
 }
 /** One icon per control: a module-level node would be MOVED between DatePickers (and swapped in during hydration). */
 const calendar = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>;
-const monthName = new Intl.DateTimeFormat('en', { month: 'long' });
-const DOW = ['S','M','T','W','T','F','S'];
-const pad = (n: number) => String(n).padStart(2,'0');
-const iso = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
-function monthGrid(y: number, m: number) { const start = -new Date(y,m-1,1).getDay(); const count = Math.ceil((-start + new Date(y,m,0).getDate())/7)*7;
-  return Array.from({length:count},(_,index) => { const d = new Date(y,m-1,1+start+index); return { date: iso(d), day:d.getDate(), inMonth:d.getMonth()===m-1 }; }); }
+// The calendar is needed only after interaction; keep the server-rendered trigger in this family.
+let calendarComponent: Component<DatePickerPopupProps> | undefined;
+let calendarLoading: Promise<Component<DatePickerPopupProps>> | undefined;
+export const loadDatePickerPopup = () => calendarLoading ??= import('./controls/date-picker-popup').then(module => calendarComponent=module.default).catch(error => {calendarLoading=undefined;throw error;});
 export function DatePicker(p: Props) {
-  const island = useIsland(); const [open,setOpen] = createSignal(false); const [view,setView] = createSignal<{y:number;m:number} | null>(null);
-  const value = () => choiceValue(p); const today = new Date(); const todayISO = iso(today);
-  const shown = () => view() ?? (/^\d{4}-\d{2}-\d{2}$/.test(value() ?? '') ? { y:Number(value()!.slice(0,4)), m:Number(value()!.slice(5,7)) } : { y:today.getFullYear(), m:today.getMonth()+1 });
-  const outOfRange = (date: string) => (typeof p.min === 'string' && date < p.min) || (typeof p.max === 'string' && date > p.max);
-  const choose = (date: string) => { const n = nameOf(p); if (n) island.setValue(n,date,undefined); setOpen(false); };
-  const move = (delta: number) => { const next = shown().m + delta; setView({ y:shown().y + Math.floor((next-1)/12), m:((next-1+12)%12)+1 }); };
-  let root!: HTMLDivElement; let trigger!: HTMLButtonElement; let popup: HTMLDivElement | undefined;
-  const announce = popupDismiss(open, () => setOpen(false), () => trigger, () => popup);
-  return <Shell authored={p}><div ref={root} class="relative"><button ref={trigger} type="button" aria-label={str(p.label)} aria-haspopup="dialog" aria-expanded={open()} disabled={!active(p)} on:click={() => { setView(null); if (!open()) announce(); setOpen(!open()); }}
+  const island=useIsland(), [open,setOpen]=createSignal(false), [Calendar,setCalendar]=createSignal(calendarComponent), [failed,setFailed]=createSignal(false);
+  const value=()=>{const name=nameOf(p),current=name?island.value(name):lit(p.value);return current==null?null:String(current);};
+  const choose=(date:string)=>{const n=nameOf(p);if(n)island.setValue(n,date,undefined);setOpen(false);};
+  let root!:HTMLDivElement, trigger!:HTMLButtonElement, popup:HTMLDivElement|undefined, disposed=false;
+  onCleanup(()=>{disposed=true;});
+  const announce=popupDismiss(open,()=>setOpen(false),()=>trigger,()=>popup);
+  const load=()=>{setFailed(false);void loadDatePickerPopup().then(component=>{if(!disposed)setCalendar(()=>component);},()=>{if(!disposed)setFailed(true);});};
+  return <Shell authored={p}><div ref={root} class="relative"><button ref={trigger} type="button" aria-label={str(p.label)} aria-haspopup="dialog" aria-expanded={open()} disabled={!active(p)} on:click={()=>{if(!open()){announce();if(!Calendar())load();}setOpen(!open());}}
     class="inline-flex items-center justify-between rounded-md text-sm tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 w-40 gap-2 border border-input bg-background px-3 shadow-xs hover:bg-muted/40">
-    <span class={join('truncate',value() === null && 'text-muted-foreground')}>{value() ?? 'Pick a date'}</span>{calendar()}</button>
-    <Show when={open()}><Portal mount={overlayDestination(island, root) ?? root.ownerDocument.body}><div ref={popup} role="dialog" aria-label={p.label ? `${p.label} calendar` : 'calendar'} data-theme={root.closest<HTMLElement>('[data-theme]')?.dataset.theme}
-      class="rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:'256px', '--popover':getComputedStyle(root).getPropertyValue('--popover'), '--popover-foreground':getComputedStyle(root).getPropertyValue('--popover-foreground'), '--border':getComputedStyle(root).getPropertyValue('--border')}}>
-      <div class="flex items-center justify-between"><span class="px-1 text-sm font-medium">{monthName.format(new Date(shown().y,shown().m-1))} {shown().y}</span><span class="flex items-center gap-1">
-        <button type="button" aria-label="Previous month" on:click={() => move(-1)} class="flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">‹</button>
-        <button type="button" aria-label="Next month" on:click={() => move(1)} class="flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">›</button>
-      </span></div><div class="mt-2 grid grid-cols-7 gap-y-0.5"><For each={DOW}>{d => <span aria-hidden="true" class="flex size-8 items-center justify-center text-[11px] font-medium uppercase text-muted-foreground">{d}</span>}</For>
-        <For each={monthGrid(shown().y,shown().m)}>{cell => <button type="button" aria-label={cell.date} aria-pressed={cell.date === value()} disabled={outOfRange(cell.date)} on:click={() => choose(cell.date)}
-          class={join('flex size-8 items-center justify-center rounded-sm text-sm tabular-nums transition-colors',cell.date === value() ? 'bg-primary font-medium text-primary-foreground' : 'hover:bg-accent hover:text-accent-foreground',!cell.inMonth && cell.date !== value() && 'text-muted-foreground/50',cell.date === todayISO && cell.date !== value() && 'font-semibold text-primary',outOfRange(cell.date) && 'cursor-not-allowed opacity-30 hover:bg-transparent')}>{cell.day}</button>}</For></div>
-      <Show when={!outOfRange(todayISO)}><div class="mt-2 flex items-center justify-between border-t border-border pt-2 text-sm"><span /><button type="button" on:click={() => choose(todayISO)} class="rounded-sm px-1.5 py-0.5 text-primary transition-colors hover:bg-accent">Today</button></div></Show>
-    </div></Portal></Show>
+    <span class={join('truncate',value()===null&&'text-muted-foreground')}>{value()??'Pick a date'}</span>{calendar()}</button>
+    <Show when={open()}><Show when={Calendar()} fallback={<div ref={popup} role="status"><Show when={failed()} fallback="Loading calendar…"><span>Could not load the calendar.</span><button type="button" on:click={load}>Retry calendar</button></Show></div>}>{loaded=>{const View=loaded();return <View root={root} mount={overlayDestination(island,root)??root.ownerDocument.body} label={str(p.label)} value={value()} min={p.min} max={p.max} popupRef={el=>{popup=el;}} choose={choose}/>;}}</Show></Show>
   </div></Shell>;
 }
 /** Native fields keep their tag and authored attributes; only declared bindings are intercepted. */

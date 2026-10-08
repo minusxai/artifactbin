@@ -1,8 +1,6 @@
 /** Shared page signal bindings: browser author modules and headless Lambda programs use one store contract. */
 import { batch, createRoot, createSignal, untrack, type Accessor } from 'solid-js';
 import type { DataflowStore } from './store';
-import { uploadDatasetImage } from './image-upload';
-import { uploadDatasetFile } from './file-upload';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/story/data/dataflow';
 
@@ -159,7 +157,8 @@ export function bindPage(store: DataflowStore | null): PageBindings {
         if(typeof document==='undefined')return Promise.reject(new Error('page.upload requires a browser page'));
         const found=store.flow.imports.find(item=>item.name===bareName(importName));
         if(!found)return Promise.reject(new Error(`page.upload(${JSON.stringify(importName)}) names no declared dataset import`));
-        return uploadDatasetFile(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file);
+        // File bytes are an optional browser interaction; keep their transport out of reader readiness.
+        return import('./file-upload').then(({ uploadDatasetFile }) => uploadDatasetFile(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file));
       },
       fileUrl(importName,ref) {
         const found=store.flow.imports.find(item=>item.name===bareName(importName));
@@ -173,7 +172,7 @@ export function bindPage(store: DataflowStore | null): PageBindings {
         if(typeof document==='undefined')return Promise.reject(new Error('page.uploadImage requires a browser page'));
         const found=store.flow.imports.find(item=>item.name===bareName(importName));
         if(!found)return Promise.reject(new Error(`page.uploadImage(${JSON.stringify(importName)}) names no declared dataset import`));
-        return uploadDatasetImage(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file);
+        return import('./image-upload').then(({ uploadDatasetImage }) => uploadDatasetImage(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file));
       },
       imageUrl(importName,ref) {
         return typeof ref==='string'&&/^dimg:[a-z0-9]+$/.test(ref)?bindings.fileUrl(importName,ref):'';

@@ -5,7 +5,8 @@ import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/st
 import { bindPage } from '@/lib/story-runtime/page-bindings';
 import { createIslandRuntime } from '../rt';
 import { IslandProvider } from '../context';
-import { FileUpload } from '../kit/upload';
+import { FileUpload } from '../kit/upload/control';
+import { FileUpload as DeferredFileUpload } from '../kit/upload';
 import { PreviewFileUpload } from '../kit/static/preview-controls';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
@@ -14,19 +15,27 @@ const flow: CompiledDataflow = { imports: [{ name: 'attachments', ref: 'Attach00
 ], queries:[],mutations:[] };
 const stops: Array<()=>void> = [];
 afterEach(()=>{ for(const stop of stops.splice(0))stop(); document.body.innerHTML=''; });
-function setup(fetchFn: (input:string,init?:RequestInit)=>Promise<Response>, signedIn=true, multiple=true) {
+function setup(fetchFn: (input:string,init?:RequestInit)=>Promise<Response>, signedIn=true, multiple=true, Control=FileUpload) {
   document.body.setAttribute('data-mx-live-id','abc123'); document.body.setAttribute('data-mx-live-edit','edit1234');
   const transport: QueryTransport={run:async()=>({tables:{},errors:{}}),page:async()=>({rows:[],columns:[]}),image:['/a/abc123/query',fetchFn,'include']};
   const runtime=createIslandRuntime({dataflow:{flow:multiple?flow:{...flow,values:flow.values.map(value=>value.name==='refs'?{...value,default:null}:value)}}}, input=>createDataflowStore(input,{transport}));
   runtime.setViewer(signedIn?{hinted:true}:null);
   const host=document.createElement('div'); document.body.append(host);
-  const dispose=render(()=><IslandProvider value={runtime.context}><FileUpload dataset="attachments" value="$refs" busy="$uploading" multiple={multiple} label="Screenshots" accept="image/png" maxFiles={3}/></IslandProvider>,host);
+  const dispose=render(()=><IslandProvider value={runtime.context}><Control dataset="attachments" value="$refs" busy="$uploading" multiple={multiple} label="Screenshots" accept="image/png" maxFiles={3}/></IslandProvider>,host);
   stops.push(()=>{dispose();bindPage(runtime.store!).dispose();runtime.dispose();host.remove();});
   const choose=(files:File[])=>{const field=host.querySelector('input')!;Object.defineProperty(field,'files',{configurable:true,value:files});field.dispatchEvent(new Event('change',{bubbles:true}));};
   return {host,choose,store:runtime.store!,dispose,setViewer:runtime.setViewer};
 }
 const receipt=(ref:string,name='screen.png')=>Response.json({ref,url:'/ignored',name,contentType:'image/png',size:3});
 describe('FileUpload over the bound page store',()=>{
+  it('loads its optional interaction chunk before enabling the real upload control',async()=>{
+    const upload=vi.fn(async()=>receipt('dfile:abc234def456'));
+    const s=setup(upload,true,true,DeferredFileUpload);
+    expect(s.host.textContent).toContain('Preparing uploads');
+    await vi.waitFor(()=>expect(s.host.querySelector('input')).not.toBeNull());
+    s.choose([new File(['png'],'screen.png',{type:'image/png'})]);
+    await vi.waitFor(()=>expect(s.store.getValue('refs')).toBe('["dfile:abc234def456"]'));
+  });
   it('renders a static preview without a store or upload request',()=>{
     const host=document.createElement('div');const dispose=render(()=><PreviewFileUpload p={{dataset:'attachments',value:'$refs',multiple:true,label:'Screenshots'}}/>,host);stops.push(dispose);
     expect(host.textContent).toContain('Choose files');expect(host.querySelector('button')!.disabled).toBe(true);expect(host.querySelector('input')).toBeNull();
@@ -68,7 +77,7 @@ describe('FileUpload over the bound page store',()=>{
     s.host.querySelector<HTMLButtonElement>('[aria-label="Remove replacement.png"]')!.click();expect(s.store.getValue('refs')).toBeNull();
   });
   it('ignores a pending result after the reader becomes signed out',async()=>{
-    let resolve!:(v:Response)=>void;const s=setup(()=>new Promise(r=>{resolve=r;}));s.choose([new File(['a'],'x.png',{type:'image/png'})]);s.setViewer(null);resolve(receipt('dfile:abc234def456'));
+    let resolve!:(v:Response)=>void;const s=setup(()=>new Promise(r=>{resolve=r;}));s.choose([new File(['a'],'x.png',{type:'image/png'})]);await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));s.setViewer(null);resolve(receipt('dfile:abc234def456'));
     await vi.waitFor(()=>expect(s.store.getValue('uploading')).toBe(false));expect(s.store.getValue('refs')).toBe('[]');expect(s.host.querySelector('input')!.disabled).toBe(true);
   });
   it('limits selections before sending bytes and keeps busy false',()=>{
@@ -78,12 +87,13 @@ describe('FileUpload over the bound page store',()=>{
     expect(fetch).not.toHaveBeenCalled();expect(s.store.getValue('uploading')).toBe(false);
   });
   it('does not update a disposed control when an upload lands',async()=>{
-    let resolve!:(v:Response)=>void;const s=setup(()=>new Promise(r=>{resolve=r;}));s.choose([new File(['a'],'x.png',{type:'image/png'})]);s.dispose();resolve(receipt('dfile:abc234def456'));
+    let resolve!:(v:Response)=>void;const s=setup(()=>new Promise(r=>{resolve=r;}));s.choose([new File(['a'],'x.png',{type:'image/png'})]);await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));s.dispose();resolve(receipt('dfile:abc234def456'));
     await new Promise(r=>setTimeout(r,0));expect(s.store.getValue('refs')).toBe('[]');expect(s.store.getValue('uploading')).toBe(false);
   });
   it('ignores late upload results after an external value reset',async()=>{
     let resolve!:(v:Response)=>void;const s=setup(()=>new Promise(r=>{resolve=r;}));s.choose([new File(['a'],'x.png',{type:'image/png'})]);
     expect(s.store.getValue('uploading')).toBe(true);expect(s.host.querySelector('progress')?.hasAttribute('value')).toBe(false);
+    await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));
     s.store.setValue('refs','["dfile:aaa234bbb456"]');resolve(receipt('dfile:abc234def456'));
     await vi.waitFor(()=>expect(s.store.getValue('uploading')).toBe(false));expect(s.store.getValue('refs')).toBe('["dfile:aaa234bbb456"]');
   });
