@@ -190,3 +190,10 @@ it('displays saved Markdown headings as headings, not hash-prefixed text', () =>
   render(() => <CommentMarkdown text={'This is new\n## This is a heading'} />);
   expect(screen.getByRole('heading', {level:2, name:'This is a heading'})).toBeInTheDocument();
 });
+
+it('renders saved agent badges using the same name color as the editor', () => {
+  render(() => <CommentMarkdown text={`[@koala-8e44ad](/chat?session=${'a'.repeat(64)})`} />);
+  const badge=screen.getByRole('link',{name:'@koala-8e44ad'});
+  expect(badge.style.getPropertyValue('--mention-color')).toBe('#8e44ad');
+  expect(badge).toHaveClass('comment-agent-mention');
+});

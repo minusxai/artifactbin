@@ -230,6 +230,7 @@ describe('AnnotationLayer', () => {
     await flush();
     const reply = fetchCalls.find((c) => c.url.endsWith('/annotations/ann_1') && c.init?.method === 'POST');
     expect(JSON.parse(String(reply!.init!.body))).toMatchObject({ reply: 'never mind' });
+    expect(screen.getByLabelText('Reply to annotation').textContent).toBe('');
 
     fireEvent.click(screen.getByLabelText('Resolve annotation'));
     await flush();
@@ -456,7 +457,7 @@ describe('AnnotationLayer', () => {
   });
 });
 
-it('prefills the linked agent, permits removing it, and retains a failed reply', async () => {
+it('starts replies empty even in a tagged thread and retains a failed reply', async () => {
   const mention = `[@claude](/chat?session=${'a'.repeat(64)})`;
   const tagged = { ...ANN, thread: [{ ...ANN.thread[0]!, body: `${mention} help` }] };
   knobs.open = [tagged];
@@ -464,8 +465,11 @@ it('prefills the linked agent, permits removing it, and retains a failed reply',
   await screen.findByText('help', { exact: false });
   view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
   const field = await screen.findByLabelText('Reply to annotation');
-  expect(field).toHaveTextContent('@claude');
+  expect(field.textContent).toBe('');
   expect(screen.getByLabelText('Send reply')).toBeDisabled();
+  replaceComment(field, `${mention} how is it going?`);
+  fireEvent.click(screen.getByLabelText('Send reply')); await flush();
+  expect(field.textContent).toBe('');
   replaceComment(field, 'my draft');
   expect(field).toHaveTextContent('my draft');
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));

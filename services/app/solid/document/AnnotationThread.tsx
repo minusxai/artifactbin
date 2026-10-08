@@ -16,8 +16,8 @@ import EllipsisVertical from 'lucide-solid/icons/ellipsis-vertical';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { hasReplyText, remoteWorkLabel, replyMentionPrefix } from '@/lib/annotations/remote-reply';
-import { REMOTE_COLOR_CSS } from '../../../contracts/src/remote';
+import { hasReplyText, remoteWorkLabel } from '@/lib/annotations/remote-reply';
+import { agentNameColor } from '../lib/agent-identity';
 import { Tooltip } from '../components/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
@@ -83,12 +83,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     onCleanup(() => observer.disconnect());
   });
 
-  const prefix = () => replyMentionPrefix(props.a.thread);
-  const [reply, setReply] = createSignal(prefix());
-  let touched = false;
+  const [reply, setReply] = createSignal('');
   let sending = false;
   const [replyError, setReplyError] = createSignal('');
-  createEffect(() => { const next = prefix(); if (!touched) setReply(next); });
   const [menuOpen, setMenuOpen] = createSignal(false);
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
@@ -100,7 +97,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     sending = true; setReplyError('');
     try {
       if (!await props.onReply(reply())) throw new Error('Could not send reply. Your draft is saved here.');
-      touched = false; setReply(prefix());
+      setReply('');
     } catch { setReplyError('Could not send reply. Your draft is saved here.'); }
     finally { sending = false; }
   };
@@ -146,7 +143,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     <Show when={!props.folded}>
       <For each={agents()}>{(work) => (
         <p role="status" class="flex items-center gap-1.5 border-b border-edge px-3 py-1.5 text-[11px] text-muted">
-          <a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: REMOTE_COLOR_CSS[work.color] }}>@{work.name}</a>
+          <a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
           <span>{remoteWorkLabel(work)}</span>
         </p>
       )}</For>
@@ -184,7 +181,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
           // `scroll-mb-14` is what the open-scroll aims at: on a phone the page's action bar floats over the sheet's bottom.
           return <li data-comment-id={c().id} class="scroll-mb-14 sm:scroll-mb-0">
             <div class="mb-1.5 flex min-w-0 items-center gap-2">
-              <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
               {/* The author line is the comment's own toggle where there is a body to fold (an open thread). */}
               <span role={props.open ? 'button' : undefined} tabIndex={props.open ? 0 : undefined}
                 aria-label={props.open ? (commentFolded() ? 'Expand comment' : 'Collapse comment') : undefined}
@@ -203,6 +199,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                 <AuthorIdentity author={c().author} />
                 <CommentTimestamp iso={c().created_at} class="ml-auto shrink-0 font-mono text-[10px] text-faint" />
               </span>
+              <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
               <Show when={index() === 0 && props.resolved}>
                 <Tooltip content="resolved">
                   <span class="inline-flex h-5 w-5 items-center justify-center text-accent"><Check size={13} strokeWidth={2} /></span>
@@ -264,12 +261,12 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
         <div class="border-t border-edge bg-raised p-3">
           <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
             label="Reply to annotation" quickAgents
-            value={reply()} onChange={(value) => { touched = true; setReply(value); }} onSubmit={() => void sendReply()}
+            value={reply()} onChange={setReply} onSubmit={() => void sendReply()}
              rows={3} placeholder="Write a reply…" />
           <Show when={replyError()}><p role="alert" class="text-xs text-red-500">{replyError()}</p></Show>
           <div class="flex items-center justify-end gap-2">
             <CommentSubmitHint action="reply" />
-            <button type="button" aria-label="Cancel reply" onClick={() => { touched = true; setReply(''); props.onOpen(); }}
+            <button type="button" aria-label="Cancel reply" onClick={() => { setReply(''); props.onOpen(); }}
               class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>
             <button type="button" aria-label="Send reply" disabled={props.busy || !hasReplyText(reply())} onClick={() => void sendReply()}
               class="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40">reply</button>

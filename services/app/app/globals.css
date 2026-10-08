@@ -456,7 +456,7 @@ body {
   color: var(--color-accent);
   text-decoration: underline;
 }
-.comment-rich-editor [data-comment-mention] {
+.comment-rich-editor [data-comment-mention], .comment-agent-mention {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -486,7 +486,7 @@ body {
   position: absolute;
 }
 
-.comment-rich-editor [data-comment-mention]::before {
+.comment-rich-editor [data-comment-mention]::before, .comment-agent-mention::before {
   content: '';
   width: 6px;
   height: 6px;
