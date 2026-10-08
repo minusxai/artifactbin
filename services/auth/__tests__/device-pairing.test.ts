@@ -79,3 +79,18 @@ describe('an approval that lands in the middle of a poll', () => {
   });
 
 });
+
+it('reports why a pairing is no longer open',async()=>{
+ const origin='https://example.com';
+ expect(await store.outcome('NOPE-NOPE-NOPE-NOPE',origin)).toBe('expired');
+ const open=await store.begin(origin);
+ expect(open.expiresIn).toBe(900);
+ expect(await store.outcome(open.userCode,origin)).toBe('pending');
+ await store.approve(open.userCode,origin,'usr_one');
+ expect(await store.outcome(open.userCode,origin)).toBe('approved');
+ const refused=await store.begin(origin);await store.deny(refused.userCode,origin);
+ expect(await store.outcome(refused.userCode,origin)).toBe('denied');
+ const late=await store.begin(origin);
+ await pg.query("UPDATE auth.credentials SET expires_at = now() - interval '1 second' WHERE group_id = $1",[late.userCode]);
+ expect(await store.outcome(late.userCode,origin)).toBe('expired');
+});

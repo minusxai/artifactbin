@@ -404,3 +404,30 @@ it('a direct HTTP consumer obtains its scoped bearer through real email OTP with
  expect(row.user_id).toBeTruthy();expect(row.audience).toBe(RESOURCE);expect(row.scope).toBe('artifacts');
  expect((await testDb().query('SELECT email FROM auth.user WHERE id=$1',[row.user_id])).rows[0]?.email).toBe(email);
 });
+
+it('words the unavailable device page by cause: expired, already approved, denied, all 400', async () => {
+  const begin = async () => await (await app.request('/oauth/device', { method: 'POST' })).json() as { user_code: string; device_code: string; verification_uri_complete: string; expires_in: number };
+  const decide = (user_code: string, decision?: string) => app.request('/oauth/device/approve', { method: 'POST', headers: { ...asUser(), origin: BASE }, body: new URLSearchParams({ user_code, ...(decision ? { decision } : {}) }) });
+  const view = async (pair: { verification_uri_complete: string }) => { const response = await app.request(pair.verification_uri_complete, { headers: asUser() }); return { status: response.status, html: await response.text() }; };
+
+  const expired = await begin();
+  expect(expired.expires_in).toBe(900);
+  const ttl = await testDb().query("SELECT extract(epoch FROM expires_at - now())::int AS s FROM auth.credentials WHERE group_id = $1", [expired.user_code]);
+  expect(Number(ttl.rows[0]?.s)).toBeGreaterThan(890);
+  await testDb().query("UPDATE auth.credentials SET expires_at = now() - interval '1 second' WHERE group_id = $1", [expired.user_code]);
+  expect(await view(expired)).toMatchObject({ status: 400, html: expect.stringMatching(/fresh link/) });
+  expect((await decide(expired.user_code)).status).toBe(400);
+
+  const used = await begin();
+  expect((await decide(used.user_code)).status).toBe(200);
+  const again = await view(used);
+  expect(again.status).toBe(400);
+  expect(again.html).toContain('Already approved');
+  expect(await (await decide(used.user_code)).text()).toContain('Already approved');
+
+  const denied = await begin();
+  expect((await decide(denied.user_code, 'deny')).status).toBe(200);
+  const refused = await view(denied);
+  expect(refused.status).toBe(400);
+  expect(refused.html).toContain('Connection denied');
+});

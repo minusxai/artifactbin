@@ -2,7 +2,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Actor, Queryable } from '@artifactbin/contracts';
 
-const PAIRING_TTL_SECONDS = 300;
+/** A first phone login (mail app, copy code, switch back) outlasts five minutes. */
+export const PAIRING_TTL_SECONDS = 900;
 export interface ArtifactPairingTarget { artifactId: string }
 interface PairingPayload { origin: string; target?: ArtifactPairingTarget; approvedBy?: Actor }
 type PairingResult = { status: 'pending' | 'invalid' | 'denied' } | { status: 'approved'; userId: string | null; target?: ArtifactPairingTarget; approvedBy?: Actor };
@@ -18,8 +19,8 @@ export function createDevicePairing(db: Queryable, schema = 'auth') {
       const userCode = randomBytes(8).toString('hex').toUpperCase().match(/.{4}/g)!.join('-');
       await db.query(`DELETE FROM ${table} WHERE kind = $1 AND expires_at <= now()`, [KIND]);
       await db.query(`INSERT INTO ${table} (kind, credential_hash, group_id, payload, expires_at)
-        VALUES ($1, $2, $3, $4, now() + interval '5 minutes')`,
-      [KIND, hash(deviceCode), userCode, JSON.stringify({ origin, ...(target ? { target } : {}) })]);
+        VALUES ($1, $2, $3, $4, now() + ($5::int * interval '1 second'))`,
+      [KIND, hash(deviceCode), userCode, JSON.stringify({ origin, ...(target ? { target } : {}) }), PAIRING_TTL_SECONDS]);
       return { deviceCode, userCode, expiresIn: PAIRING_TTL_SECONDS, interval: 5 };
     },
     async inspect(userCode: string, origin: string) {
@@ -28,6 +29,15 @@ export function createDevicePairing(db: Queryable, schema = 'auth') {
         AND deleted_at IS NULL AND payload->>'denied' IS DISTINCT FROM 'true'
         AND payload->>'anon' IS DISTINCT FROM 'true' AND expires_at > now()`, [KIND, userCode, origin]);
       return result.rows[0] ? { userCode, ...(result.rows[0].payload.target ? { target: result.rows[0].payload.target } : {}) } : null;
+    },
+    /** Why `inspect` found nothing: lets the page tell an expired link from a used or refused one. */
+    async outcome(userCode: string, origin: string): Promise<'pending' | 'approved' | 'denied' | 'expired'> {
+      const result = await db.query<{ state: string }>(`SELECT CASE
+        WHEN payload->>'denied' = 'true' THEN 'denied'
+        WHEN subject_id IS NOT NULL OR consumed_at IS NOT NULL THEN 'approved'
+        WHEN expires_at <= now() THEN 'expired' ELSE 'pending' END AS state FROM ${table}
+        WHERE kind = $1 AND group_id = $2 AND payload->>'origin' = $3 AND deleted_at IS NULL AND payload->>'anon' IS DISTINCT FROM 'true'`, [KIND, userCode, origin]);
+      return (result.rows[0]?.state as 'pending' | 'approved' | 'denied' | undefined) ?? 'expired';
     },
     async approve(userCode: string, origin: string, userId: string, approvedBy?: Actor): Promise<boolean> {
       if (!userId) return false;

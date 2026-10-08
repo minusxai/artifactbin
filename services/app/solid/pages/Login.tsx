@@ -6,11 +6,28 @@ import { apiFetch } from '../lib/api';
 
 import { FormPage, FORM_INPUT as INPUT, FORM_PRIMARY_BUTTON as BUTTON } from '../components/FormControls';
 
+/** Email and the sent flag (never the code) survive a reload, e.g. an in-app browser that reloads on app switch. */
+const progressKey = () => `afbin:login:${new URLSearchParams(window.location.search).get('callbackUrl') ?? ''}`;
+function readProgress(): { email: string; sent: boolean } {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(progressKey()) ?? 'null') as { email?: unknown; sent?: unknown } | null;
+    if (saved && typeof saved.email === 'string' && saved.email) return { email: saved.email, sent: saved.sent === true };
+  } catch { /* storage unavailable or malformed: start fresh */ }
+  return { email: '', sent: false };
+}
+function writeProgress(email: string, sent: boolean) {
+  try {
+    if (sent) sessionStorage.setItem(progressKey(), JSON.stringify({ email, sent }));
+    else sessionStorage.removeItem(progressKey());
+  } catch { /* storage unavailable */ }
+}
+
 export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
   const { session, sessionError } = useSession();
-  const [email, setEmail] = createSignal('');
+  const saved = readProgress();
+  const [email, setEmail] = createSignal(saved.email);
   const [code, setCode] = createSignal('');
-  const [sent, setSent] = createSignal(false);
+  const [sent, setSent] = createSignal(saved.sent);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   createEffect(() => {
@@ -23,7 +40,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
     setBusy(true); setError(null);
     try {
       const response = await apiFetch('/api/auth/email-otp/send-verification-otp', 'POST', { email: email(), type: 'sign-in' });
-      if (response.ok) { setSent(true); setCode(''); }
+      if (response.ok) { setSent(true); setCode(''); writeProgress(email(), true); }
       else { const body = await response.json().catch(() => ({})); setError(body.error === 'rate_limited' ? 'Too many codes requested. Try again in a bit.' : 'That email address doesn’t look right.'); }
     } catch { setError('Couldn’t reach the server. Try again.'); }
     finally { setBusy(false); }
@@ -44,6 +61,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
     } finally {
       setBusy(false);
     }
+    writeProgress('', false);
     if(props.onAuthenticated)props.onAuthenticated();
     else window.location.href = internalRedirectTarget(new URLSearchParams(window.location.search).get('callbackUrl'), window.location.origin);
   };
@@ -56,7 +74,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
           <input type="text" autofocus inputMode="numeric" autocomplete="one-time-code" maxLength={6} aria-label="Login code" placeholder="6-digit code" value={code()} onInput={event => setCode(event.currentTarget.value)} class={INPUT} />
           <button type="submit" aria-label="Verify code" disabled={busy() || !code()} class={BUTTON}>{busy() ? 'checking…' : 'log in'}</button>
         </form>
-        <div class="mt-4 flex items-center justify-between text-xs text-muted"><button type="button" aria-label="Change email" class="cursor-pointer underline hover:text-accent" onClick={() => { setSent(false); setCode(''); setError(null); }}>change email</button><button type="button" aria-label="Resend code" class="cursor-pointer underline hover:text-accent" disabled={busy()} onClick={() => void requestCode()}>resend code</button></div>
+        <div class="mt-4 flex items-center justify-between text-xs text-muted"><button type="button" aria-label="Change email" class="cursor-pointer underline hover:text-accent" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress('', false); }}>change email</button><button type="button" aria-label="Resend code" class="cursor-pointer underline hover:text-accent" disabled={busy()} onClick={() => void requestCode()}>resend code</button></div>
       </>}>
         <p class="mt-2 text-xs text-muted">We’ll email you a 6-digit code. No password to remember.</p>
         <form class="mt-5 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void requestCode(); }}>

@@ -114,7 +114,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     const {response,data} = result;
     if (!response.ok) throw new CliError('auth_failed',`Could not start browser authentication (HTTP ${response.status}).`);
     pending = {server, ...(connection ? {connectionKey:digest(connection.token)} : {}), deviceCode:data.device_code,userCode:data.user_code,verificationUrl:data.verification_uri_complete,
-      expiresAt:clock()+Math.min(300, data.expires_in)*1000,interval:Math.max(5,data.interval)*1000};
+      expiresAt:clock()+Math.min(900, data.expires_in)*1000,interval:Math.max(5,data.interval)*1000};
     if (!validPending(pending,server,approvalOrigins)) {
       let advertised='';try{advertised=new URL(String(data.verification_uri_complete)).origin;}catch{/* malformed */}
       if(advertised&&!approvalOrigins.includes(advertised))throw new CliError('approval_origin_mismatch',`The selected server ${server} asks for approval at ${advertised}, a different origin that ${server} has not published as one of its own addresses.`,`Run the command with --server ${advertised} if that is the server you meant; credentials are never sent to an origin you did not select.`);

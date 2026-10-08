@@ -45,6 +45,12 @@ function formActionOrigin(redirectUri: string): string {
   try { return new URL(redirectUri).origin; } catch { return ''; }
 }
 
+/** The 400 page for a pairing that can no longer be approved, worded for why. */
+function unavailable(outcome: 'pending' | 'approved' | 'denied' | 'expired'): Response {
+  if (outcome === 'approved') return page('Already approved', '<h1>Already approved</h1><p>This connection was already approved. Return to your agent.</p>', 400);
+  if (outcome === 'denied') return page('Connection denied', '<h1>Connection denied</h1><p>This connection was denied. Ask your agent for a new link if that was a mistake.</p>', 400);
+  return page('Connection expired', '<h1>Connection expired</h1><p>This link is no longer valid. Ask your agent for a fresh link.</p>', 400);
+}
 function page(title: string, body: string, status = 200, redirectUri = ''): Response {
   const formAction = ["'self'", formActionOrigin(redirectUri)].filter(Boolean).join(' ');
   return new Response(
@@ -141,7 +147,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   app.get('/oauth/device', async (c) => {
     const userCode = c.req.query('user_code') ?? '';
     const pending = await o.pairing.inspect(userCode, base(c.req.raw));
-    if (!pending) return page('Connection expired', '<h1>Connection expired</h1><p>Run afbin auth again.</p>', 400);
+    if (!pending) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
     const actor = c.get('actor') ?? ANONYMOUS;
     if (pending.target) {
       const permission = await artifactPermission(o, c.req.raw, actor, pending.target.artifactId);
@@ -162,30 +168,30 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const userCode = String(form.get('user_code') ?? '');
     const decision = form.get('decision');
     const pending = await o.pairing.inspect(userCode, base(c.req.raw));
-    if (!pending) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+    if (!pending) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'email_auth_required' }, 401);
     if (pending.target) {
       const owner = c.get('actor') ?? ANONYMOUS;
       if (!(await artifactPermission(o, c.req.raw, owner, pending.target.artifactId)).canApprove) return page('Approval refused', '<h1>Use the browser that owns this artifact</h1>', 403);
       if (decision === 'deny') {
-        if (!await o.pairing.deny(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired</h1>', 400);
+        if (!await o.pairing.deny(userCode, base(c.req.raw))) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
         return page('Access denied', '<h1>No access was granted</h1>');
       }
       if (decision !== 'approve') return c.json({ error: 'invalid_decision' }, 400);
       const connection = await browserOwner(o, c.req.raw, owner);
       const approved = await o.pairing.approve(userCode, base(c.req.raw), actor.userId, connection.actor);
-      const response = approved ? page('Connection approved', '<h1>Access approved</h1><p>Return to your agent. It can now continue with your artifacts.</p>') : page('Connection expired', '<h1>Connection expired</h1>', 400);
+      const response = approved ? page('Connection approved', '<h1>Access approved</h1><p>Return to your agent. It can now continue with your artifacts.</p>') : unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
       if (approved && connection.cookie) response.headers.append('set-cookie', connection.cookie);
       return response;
     }
     if (decision === 'deny') {
-      if (!await o.pairing.deny(userCode, base(c.req.raw))) return page('Connection expired','<h1>Connection expired</h1>',400);
+      if (!await o.pairing.deny(userCode, base(c.req.raw))) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
       return page('Connection denied','<h1>Connection denied</h1><p>No access was granted.</p>');
     }
     if (decision !== null && decision !== 'approve') return c.json({ error: 'invalid_decision' }, 400);
     const connection = await browserOwner(o, c.req.raw, actor);
-    if (!await o.pairing.approve(userCode, base(c.req.raw), actor.userId, connection.actor)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+    if (!await o.pairing.approve(userCode, base(c.req.raw), actor.userId, connection.actor)) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
     return page('Connection approved', '<h1>Connection approved</h1><p>Return to your terminal. You can close this page.</p>');
   });
   app.on('POST', ['/oauth/device/token', `${ARTIFACT_APPROVAL_PATH}/token`], async (c) => {

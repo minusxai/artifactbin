@@ -197,6 +197,8 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
         otpLength: 6,
         expiresIn: 600,
         allowedAttempts: 5,
+        // A resend inside the code's lifetime re-sends the same code: the one already in the mail app stays valid.
+        resendStrategy: 'reuse',
         sendVerificationOTP: async ({ email, otp, type }) => {
           await opts.mail.send({ to: email, kind: 'otp', subject: 'Your login code', text: `Your code is ${otp}`, otp: `${otp}`, url: type });
         },
