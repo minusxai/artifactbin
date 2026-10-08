@@ -213,6 +213,15 @@ describe('the wire — colocation on GET', () => {
 });
 
 describe('reply / resolve — the agent\'s one mutation', () => {
+  it.each([['pi','Pi'],['opencode','OpenCode'],['custom-robot','custom-robot']])('accepts %s attribution without a connected session', async (agent, label) => {
+    const {t,doc,cookie}=await publish();
+    const a=(await (await annotate(doc.id,cookie,{path:'1',edit_id:doc.edit_id,body:'Review'})).json()) as AnnotationWire;
+    const response=await actOnAnnotationRoute(request(`/api/artifacts/${doc.id}/annotations/${a.id}`,{method:'POST',token:t.token,json:{reply:'Checked'},headers:{'Artifactbin-Agent':agent}}),params({id:doc.id,annId:a.id}));
+    expect(response.status).toBe(200);
+    const result=await response.json() as AnnotationWire;
+    expect(result.thread[1].author).toMatchObject({kind:'agent',label,transport:'http'});
+  });
+
   it('an HTTP agent declares itself once; identity is remembered while transport is snapshotted per reply', async () => {
     const { t, doc, cookie } = await publish();
     const a = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'is this right?' })).json()) as AnnotationWire;

@@ -1,6 +1,6 @@
 /** Production annotation wires over local state; anchors are resolved against today's file on every read. */
 import {randomUUID} from 'node:crypto';
-import type {AnnotationWire} from '../../../app/lib/annotations/store';
+import type {AnnotationWire,AnnotationAuthor} from '../../../app/lib/annotations/store';
 import {nodeIndex} from '../../../app/lib/story/document/node-ids';
 import {sourcePathToBodyPath} from '../../../app/lib/story/document/edit-compose';
 import {canonicalQuote,parseAnnotationRange} from '../../../app/lib/story/annotations/annotation-range';
@@ -9,16 +9,16 @@ import type {State} from '../state';
 import type {PreviewComment} from './comments';
 
 type Stored={file:string;node:string;value:AnnotationWire};
-export function previewAnnotations(state:State,root:string,file:string,source:string){
+export function previewAnnotations(state:State,root:string,file:string,source:string,author:AnnotationAuthor={kind:'human',label:'You',transport:'browser'}){
  const anchors=nodeIndex(source);
  const anchor=(node:string)=>{const entry=anchors.get(node);if(!entry)return null;const path=sourcePathToBodyPath(source,entry.path);return path===null?null:{key:node,nodeId:node,path,spanStart:entry.node.start,spanEnd:entry.node.end};};
  const now=()=>new Date().toISOString();
- const comment=(body:string,id:string=randomUUID())=>({id,body,author:{kind:'human' as const,label:'You',transport:'browser' as const,user_id:null,image:null},created_at:now()});
+ const comment=(body:string,id:string=randomUUID())=>({id,body,author:{...author,user_id:null,image:null},created_at:now()});
  const save=(entry:Stored)=>{state.put(root,'preview-thread',entry.value.id,entry);return entry.value;};
  // Preserve notes made with the original preview, including their selected words.
  for(const row of state.list<PreviewComment>(root,'preview-comment')){
   const old=row.value;if(old.file!==file||state.get(root,'preview-thread',old.id))continue;
-  save({file,node:old.node,value:{id:old.id,status:'open',anchor:anchor(old.node),orphaned:!anchor(old.node),anchor_version:null,snippet:old.quote??'',quote:old.quote??null,range:old.range??null,quote_found:null,thread:[{...comment(old.text,old.id),author:{...comment(old.text).author,label:old.name}}],created_at:now(),resolved_at:null}});
+  save({file,node:old.node,value:{id:old.id,status:'open',anchor:anchor(old.node),orphaned:!anchor(old.node),anchor_version:null,snippet:old.quote??'',quote:old.quote??null,range:old.range??null,quote_found:null,thread:[{...comment(old.text,old.id),author:{kind:'human',label:old.name,transport:'browser',user_id:null,image:null}}],created_at:now(),resolved_at:null}});
  }
  const entries=()=>state.list<Stored>(root,'preview-thread').map(row=>row.value).filter(row=>row.file===file);
  const resolved=(entry:Stored):AnnotationWire=>({...entry.value,anchor:anchor(entry.node),orphaned:!anchor(entry.node)});

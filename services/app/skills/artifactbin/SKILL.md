@@ -12,7 +12,7 @@ npm CLI: local files/browser approval, guests allowed. HTTP: email auth; [HTTP A
 - If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills. [Setup details](references/npm-local.md).
 - Local preview; HTML: `.jsx.html`.
 - Automatic browser approval also applies to `--yes`. If unavailable, ask for email: `afbin auth --email <email>`; then code: `afbin auth --email <email> --otp <code>`. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
-- For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. For a new artifact, write and push. Share its returned URL. [[ urlReplyRule ]]
+- For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. New artifact: write, push, share the returned URL. [[ urlReplyRule ]]
 - Shared/friends/team/signup/vote/RSVP flows: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
 - Read `afbin help <page type>` and choose ONE design system. [[ progressiveAuthoringRule ]] Push confirms source acceptance; do not pull, diff or grep just to reconfirm it.
 - For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=1 --param status=Done` to update. Use its declared names/arguments; preserve its source.
@@ -20,7 +20,7 @@ npm CLI: local files/browser approval, guests allowed. HTTP: email auth; [HTTP A
 - Files: `afbin add <files> --json` assigns IDs; preview/push register files. Preview runs until Ctrl+C; never `preview && push`. Push separately; it runs `afbin validate` and publishes.
 - Every body element has a persistent `id` for its lifetime. Move it with the same id; never reuse an id.
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
-- The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
+- Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: keep `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork: copy and remove those five fields.
 - Questions: source first; render only if needed.
 - Copy: plain words, short sentences; preserve facts and caveats. [Copy guidance](references/copy.md).
@@ -32,7 +32,7 @@ npm CLI: local files/browser approval, guests allowed. HTTP: email auth; [HTTP A
 
 ## Example
 
-Before writing, read `afbin help <page type>`; avoid content flush to the viewport edge.
+Read `afbin help <page type>`; keep viewport padding.
 
 ```jsx
 [[ example ]]
@@ -46,7 +46,7 @@ Before writing, read `afbin help <page type>`; avoid content flush to the viewpo
 - [design systems](references/design-systems.md) — `afbin help design-systems`, then `system-<slug>.md`; [worked briefs](references/worked-briefs.md).
 - [sync and recovery](references/publishing.md).
 - [errors](references/errors.md) — refusal codes and fixes.
-- [comments](references/publishing-annotations.md) — `afbin comment`; `afbin help remote-review`.
+- [comments](references/publishing-annotations.md) — `afbin comment`; `afbin help remote-review`. Include `--agent <your-agent-name>` on posts/replies; custom names accepted.
 - [apps](references/apps.md) — shared pages; interactive wireframes: `afbin help review-state`.
 - [datasets and media](references/publishing-datasets.md), [catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.

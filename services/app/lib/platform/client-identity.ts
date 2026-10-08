@@ -5,6 +5,8 @@ import { AGENT_HEADER, declaredAgentSlug, type DeclaredAgentSlug } from '@artifa
 export type Harness =
   | 'chatgpt'
   | 'codex'
+  | 'pi'
+  | 'opencode'
   | 'claude-code'
   | 'claude-web'
   | 'cursor'
@@ -60,6 +62,8 @@ const USER_AGENT_HARNESSES: ReadonlyArray<readonly [pattern: string, harness: Ha
 const DECLARED_AGENT_HARNESSES: Readonly<Record<DeclaredAgentSlug, Harness>> = {
   chatgpt: 'chatgpt',
   codex: 'codex',
+  pi: 'pi',
+  opencode: 'opencode',
   'claude-code': 'claude-code',
   claude: 'claude-web',
   'claude-web': 'claude-web',

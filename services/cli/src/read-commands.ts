@@ -64,7 +64,7 @@ export async function commentCommand(workspace:Workspace,parsed:ParsedCommand,cl
   if(flags.node&&Array.isArray(head.nodes)&&!head.nodes.includes(String(flags.node)))throw new CliError('invalid_node',`Node ${flags.node} is not in the current document.`,'Use a current node id.');
   return {dry_run:true,id:ref.id,action:flags.thread?(body!==undefined?'reply':'state'):'thread',...(flags.thread?{thread:flags.thread}:{}),...(flags.node?{node:flags.node}:{}),...(flags.quote?{quote:flags.quote}:{}),...(flags.state?{state:flags.state}:{})};
  }
- const mutate=(target:string,input:unknown)=>recoverableOperation(workspace,client,{path:target,method:'POST',body:input,prepare:async()=>{const head=await client.request<{capabilities?:{comment_receipts?:boolean}}>(`/artifacts/${ref.id}`);if(!head.capabilities?.comment_receipts)throw new CliError('unsupported_server','This server does not support recoverable comments.');}});
+ const mutate=(target:string,input:unknown)=>recoverableOperation(workspace,client,{path:target,method:'POST',body:input,...(typeof flags.agent==='string'?{agent:flags.agent}:{}),prepare:async()=>{const head=await client.request<{capabilities?:{comment_receipts?:boolean}}>(`/artifacts/${ref.id}`);if(!head.capabilities?.comment_receipts)throw new CliError('unsupported_server','This server does not support recoverable comments.');}});
  if(flags.thread){
   if(!/^[A-Za-z0-9_-]+$/.test(String(flags.thread)))throw new CliError('invalid_thread','Use the thread id returned by afbin comment.');
   return mutate(`${path}/${flags.thread}`, {...(flags.request?{request_id:flags.request,phase:flags.phase}:{}),...(body!==undefined?{reply:body}:{}),...(flags.state?flags.state==='resolved'?{resolve:true}:{reopen:true}:{})});

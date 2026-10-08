@@ -66,13 +66,17 @@ carry a bounded excerpt and require reading the original thread.
 
 One request is active per agent. `dispatching` means queued for PTY transport;
 `delivered` requires the runner's input acknowledgment. Neither means the model
-has started work. The agent reads the artifact and thread, then posts:
+has started work. The agent reads the artifact and thread, then posts. Include `--agent <name>`
+when commenting or replying: identify the agent software (`codex`, `claude-code`,
+`pi`, `opencode`, or a custom name), not the session name. Unknown names are
+accepted with a generic icon. The flag is optional for compatibility and grants
+no permissions; validated connected-session identity takes precedence:
 
 ```sh
-afbin comment <artifact> --thread <thread> --body 'I will check this.' \
+afbin comment <artifact> --agent codex --thread <thread> --body 'I will check this.' \
   --request <request> --phase acknowledged
 # Do and verify the requested work.
-afbin comment <artifact> --thread <thread> --body 'Updated and verified.' \
+afbin comment <artifact> --agent codex --thread <thread> --body 'Updated and verified.' \
   --request <request> --phase completed --state resolved
 ```
 
