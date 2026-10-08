@@ -9,7 +9,7 @@ import { request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 import { runSqliteSyntaxMigrationBatch, type SqliteSyntaxMigrationOutcome } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { recordResults, type RecordedResult } from '../../../scripts/migrate/sqlite/record-results';
 import { compareResults, formatComparison, regressions } from '../../../scripts/migrate/sqlite/compare-results';
 import { conflictReport, runMigration } from '../../../scripts/migrate/sqlite/run-migration';

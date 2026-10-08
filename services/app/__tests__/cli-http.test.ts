@@ -11,7 +11,7 @@ import { fakeBrowser } from '@artifactbin/utils';
 import { setServices } from '@/lib/platform';
 import { resetExportRenderer } from '@/lib/export';
 import { request, useAppHarness } from './harness';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace, GET as read } from '@/app/api/artifacts/[id]/route';
 import { GET as exportImage } from '@/app/api/artifacts/[id]/export/route';

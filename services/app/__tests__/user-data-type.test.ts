@@ -11,7 +11,7 @@ import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,dataflowForRow,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken, createUser} from '@/lib/accounts';
 import {people} from '@/lib/datasets/user-fields';
 import {avatarUrl} from '@/lib/accounts';
@@ -21,9 +21,9 @@ import {GET as rawRoute} from '@/app/a/[id]/raw/route';
 useAppHarness();
 const ctx = (id:string)=>({params:Promise.resolve({id})});
 async function account(name:string) {
- const token=await mintToken(name);
  const user=await createUser({email:`mxmx_test_${name}@example.com`,name});
- await claimToken(user.id,token.token);
+ const token = await mintToken(name, user.id);
+    await claimToken(user.id,token.token);
  return {token:token.token,tokenId:token.id,user};
 }
 async function create(token:string,body:Record<string,unknown>) {
@@ -114,10 +114,10 @@ describe('native user fields',()=>{
   const response=await documentMutation(request(`/a/${report.id}/mutate`,{method:'POST',token:b.token,json:{mutation:'done',args:{},row:{id:1}}}),ctx(report.id));
   expect(response.status,await response.clone().text()).toBe(200);
   expect((await loadDatasetRows((await getArtifactById(dataset.id))!))[0].who).toBe(b.user.id);
-  const anonymous=await mintToken('anonymous');
-  const own=await create(anonymous.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite'});
-  const denied=await mutate(anonymous.token,own.id,'update public.rows set who=$_me.id');
-  expect(denied.status).toBe(403);
+  const anonymous=await mintToken('anonymous', null);
+  const denied=await mutate(anonymous.token,dataset.id,'update public.rows set who=$_me.id');
+  expect(denied.status).toBe(401);
+  expect((await loadDatasetRows((await getArtifactById(dataset.id))!))[0].who).toBe(b.user.id);
  });
  /*
   * WHO IS READING, NAMED. A <User> may show the viewer themselves, and the

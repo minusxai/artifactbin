@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {request,useAppHarness} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {DELETE as remove} from '@/app/api/artifacts/[id]/route';
 const harness=useAppHarness();
@@ -45,6 +45,6 @@ it('raw byte uploads use the same durable operation ledger',async()=>{
 it('refuses a mismatched workspace account before publication and returns account identity with necessary responses',async()=>{
  const token=await mintToken('account');
  const refused=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Account':'usr_wrong'},json:{markup:'<p>No</p>'}}));
- expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'account_mismatch',expected_account:'usr_wrong',actual_account:token.id});
- const accepted=await createRequest(token.token,{markup:'<p>Yes</p>'});expect(accepted.headers.get('X-Artifactbin-Account')).toBe(token.id);
+ expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'account_mismatch',expected_account:'usr_wrong',actual_account:token.userId});
+ const accepted=await createRequest(token.token,{markup:'<p>Yes</p>'});expect(accepted.headers.get('X-Artifactbin-Account')).toBe(token.userId);
 });

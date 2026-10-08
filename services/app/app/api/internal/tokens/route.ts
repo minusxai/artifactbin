@@ -10,8 +10,8 @@
  *
  * The grant rides the ACTOR the proxy attaches, exactly as on any other route:
  * a session actor (the human logged in and approved) binds the token to that
- * account, so what the agent publishes lands in their dashboard; no actor is
- * the anonymous approval, which reaches only what it itself creates.
+ * account, so what the agent publishes lands in their dashboard. Missing
+ * email account authentication is refused.
  *
  * NO rate limit here, on purpose — a door is enforced in exactly one place:
  * the proxy counts the OAuth doors in front of the approval that reaches this.
@@ -21,6 +21,7 @@ import { baseUrl, json } from '@/lib/http';
 import { agentContract } from '@/lib/serving';
 import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sourcedTokenName } from '@/lib/accounts';
 import { sessionActor } from '@/lib/accounts';
+import { canAuthenticateUser } from '@/lib/accounts/user-kinds';
 
 export async function POST(request: Request) {
   // Only an ACCOUNT session binds the mint: the agent cookie names a token
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
   // route's to change.
   const actor = await sessionActor(request);
   const userId = actor.credential === 'session' ? actor.viewer?.userId ?? null : null;
+  if (!await canAuthenticateUser(userId)) return json({ error: 'email_auth_required' }, 401);
   const body = (await request.json().catch(() => ({}))) as { expiresInHours?: unknown; audience?: unknown; scope?: unknown };
   let expiresInMs: number | undefined;
   if (body.expiresInHours !== undefined) {

@@ -4,6 +4,8 @@ import {ACTOR_HEADER,ANONYMOUS} from '@artifactbin/contracts';
 import {signActor,assemble,cookieName,encodeAgentSession,createTokenReader,inProcess} from '@artifactbin/utils';
 import {authParts,type AuthOptions} from '../src/parts';
 import {mintTestToken,resetTestDb,testDb,testAuthOptions} from './helpers';
+import {createUser} from '@/lib/accounts';
+import {attachActor} from '@artifactbin/utils';
 import {getDb,resetDb} from '@/lib/platform';
 import {createAppServer} from '@/server/app';
 
@@ -25,6 +27,14 @@ const proxy = async (o: Partial<AuthOptions> = {}) => assemble(authParts(await t
 beforeEach(async () => { await resetTestDb(); seenActor = null; seenHeaders = null; answer = new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }); });
 
 describe('the session part', () => {
+  it('refuses a browser session without a verified email identity', async () => {
+    for (const identity of [ { userId: 'legacy' }, { userId: 'legacy', email: 'mxmx_test_unverified@example.com', emailVerified: false } ]) {
+      const app = await proxy({ sessions: { resolve: async () => identity } });
+      await app.request('/api/artifacts');
+      expect(seenActor).toEqual(ANONYMOUS);
+    }
+  });
+
   it('forwards an unauthenticated request as credential none, and the app\'s 401 is the app\'s — the proxy never answers one', async () => {
     answer = new Response('{"error":"unauthorized"}', { status: 401, headers: { 'www-authenticate': 'Bearer realm="x"' } });
     const res = await (await proxy()).request('/api/my/artifacts/x');
@@ -49,13 +59,13 @@ describe('the session part', () => {
     await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_h'],sessionId }, 'test-cookie-secret-00000000000000000000')}` } });
     expect(seenActor).toMatchObject({ credential: 'session', userId: 'usr_2', email: 's@example.com', emailVerified: true, heldTokenIds: ['tok_h'] });
   });
-  it('authenticates the agent cookie as agent-cookie by its primary (last) id', async () => {
+  it('does not authenticate a legacy ownership cookie without email login', async () => {
     const app = await proxy();
     await mintTestToken({ id: 'tok_c', userId: null, query: testDb().query });
     const sessionId='c'.repeat(43);
     await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,'tok_c',now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex')]);
     await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_x', 'tok_c'],sessionId }, 'test-cookie-secret-00000000000000000000')}` } });
-    expect(seenActor).toEqual({ credential: 'agent-cookie', tokenId: 'tok_c', heldTokenIds: ['tok_x', 'tok_c'] });
+    expect(seenActor).toEqual(ANONYMOUS);
   });
   it('ignores a forged inbound actor header, even one signed with a real key — the actor never travelled by header', async () => {
     const app = await proxy();
@@ -89,7 +99,10 @@ describe('revocation reaches the reader at once', () => {
       // The mint is INTERNAL: the proxy refuses the prefix at the edge, so a
       // credential is issued the way the device exchange issues one — straight
       // at the app, never through the parts.
-      mint = async () => await (await app.request('/api/internal/tokens', { method: 'POST' })).json() as { id: string; token: string };
+      mint = async () => {
+        const user = await createUser({ email: 'mxmx_test_auth_revoke@example.com' });
+        return await (await app.request(attachActor(new Request('http://localhost:3000/api/internal/tokens', { method: 'POST' }), { credential: 'session', userId: user.id, email: user.email!, emailVerified: true }))).json() as { id: string; token: string };
+      };
     });
     afterAll(() => resetDb());
     it('mint through the app, resolve through the identity host, revoke through the app: the very next request is nobody', async () => {

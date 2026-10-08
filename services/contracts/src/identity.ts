@@ -24,6 +24,9 @@ export interface TokenReader {
 }
 export interface TokenReaderOptions {
   db: Queryable;
+  /** Owning service's bearer admission policy, rechecked even on cache hits.
+   * ID reads remain available for legacy ownership adoption after email login. */
+  admitBearer?: (token: TokenRecord) => Promise<boolean>;
   /** Where `tokens` lives (APP__SCHEMA). Interpolated — validated as a plain identifier. */
   schema?: string;
   ttlMs?: number;

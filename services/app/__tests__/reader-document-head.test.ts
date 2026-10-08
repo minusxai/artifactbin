@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { mintExportKey } from '@/lib/serving';
 import { useAppHarness } from '@/__tests__/harness';
 
@@ -35,7 +35,7 @@ const serve = async (id: string, query = '') => {
 
 const publish = async (source: string, title: string | null) => {
   const t = await mintToken('t');
-  return createArtifact(t.id, null, { format: 'markup', source, meta: {}, title, description: 'A summary' });
+  return createArtifact(t.id, t.userId, { visibility: 'public', format: 'markup', source, meta: {}, title, description: 'A summary' });
 };
 
 describe('the served document unfurls on its own', () => {

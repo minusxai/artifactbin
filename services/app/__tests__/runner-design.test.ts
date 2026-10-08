@@ -1,6 +1,7 @@
 import { it, expect, afterEach } from "vitest";
 import { useAppHarness, request } from "./harness";
-import { mintToken, createUser, claimToken } from "@/lib/accounts";
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as publish } from "@/app/api/artifacts/route";
 import { GET as read } from "@/app/api/artifacts/[id]/route";
 import { POST as reply } from "@/app/api/artifacts/[id]/annotations/[annId]/route";
@@ -15,8 +16,8 @@ import {
 const harness = useAppHarness();
 afterEach(() => remoteSessions.clear());
 async function setup() {
-  const token = await mintToken("design"),
-    user = await createUser({ email: "mxmx_test_design@example.com" });
+  const user = await createUser({ email: "mxmx_test_design@example.com" }),
+    token = await mintToken("design", user.id);
   await claimToken(user.id, token.token);
   const response = await publish(
     request("/api/artifacts", {
@@ -305,8 +306,8 @@ it("rejects a signed user-only actor on bearer routes instead of claiming it is 
 }, 45000);
 it("rejects a different owner even when remote-agent proof is otherwise valid", async () => {
   const fixture = await setup();
-  const token = await mintToken("other"),
-    user = await createUser({ email: "mxmx_test_other_design@example.com" });
+  const user = await createUser({ email: "mxmx_test_other_design@example.com" });
+  const token = await mintToken("other", user.id);
   await claimToken(user.id, token.token);
   const result = await runDesignPath({
     ...fixture,

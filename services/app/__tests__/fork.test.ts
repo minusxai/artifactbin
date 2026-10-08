@@ -19,7 +19,7 @@ import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/art
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
 import { getArtifactById, getSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
@@ -53,13 +53,13 @@ const PROSE = '<div><h1>Payroll</h1><p data-annotation-anchor="a1b2c3d4e">hello<
 beforeEach(() => noSession());
 
 async function world(markup = PROSE, visibility: 'public' | 'private' = 'public') {
-  const ta = await mintToken('a');
   const owner = await createUser({ email: 'owner@x.com' });
-  await claimToken(owner.id, ta.token);
-  const tb = await mintToken('b');
+  const ta = await mintToken('a', owner.id);
+    await claimToken(owner.id, ta.token);
   const bob = await createUser({ email: 'bob@x.com' });
-  await claimToken(bob.id, tb.token);
-  const anon = await mintToken('anon');
+  const tb = await mintToken('b', bob.id);
+    await claimToken(bob.id, tb.token);
+  const anon = await mintToken('anon',null);
   const doc = await create(ta.token, { markup, visibility, title: 'The NBA payroll stack', description: 'for the dashboard', theme: 'industry', template: 'dashboard' });
   return { ta, tb, anon, owner, bob, doc };
 }
@@ -154,11 +154,11 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect(((await theirs.json()) as { forked_from: string | null }).forked_from).toBeNull();
   });
 
-  it('an anonymous browser cannot own a fork: 409 sign_in_required; no credential at all is 401', async () => {
+  it('a legacy token cookie and no credential both fail browser fork authentication', async () => {
     const w = await world();
     const res = await fork(w.doc.id, await agentCookie([w.anon.id]));
-    expect(res.status, await res.clone().text()).toBe(409);
-    expect(((await res.json()) as { error: string }).error).toBe('sign_in_required');
+    expect(res.status, await res.clone().text()).toBe(401);
+    expect(((await res.json()) as { error: string }).error).toBe('unauthorized');
     expect((await fork(w.doc.id)).status).toBe(401);
   });
 
@@ -244,7 +244,7 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
       }), params(id));
 
     // The anonymous browser (agent cookie) …
-    expect((await crossSite(w.doc.id, await agentCookie([w.anon.id]))).status).toBe(403);
+    expect((await crossSite(w.doc.id, await agentCookie([w.anon.id]))).status).toBe(401);
     // … and the LOGGED-IN one, which is the credential a tokenId-keyed guard
     // would wave straight through.
     asSession({ id: w.bob.id, email: w.bob.email });

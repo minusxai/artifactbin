@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform/db';
 import { useAppHarness, request } from '@/__tests__/harness';
 
@@ -21,7 +21,7 @@ const IMPORT = '@import url(https://fonts.googleapis.com/css2?family=Lobster:ita
 
 async function publish(markup: string): Promise<{ status: number; id: string; body: Record<string, unknown> }> {
   const t = await mintToken('t');
-  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup } }));
+  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup, visibility: 'public' } }));
   const body = await res.json() as Record<string, unknown>;
   return { status: res.status, id: String(body.id), body };
 }

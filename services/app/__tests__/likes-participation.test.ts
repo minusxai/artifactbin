@@ -2,7 +2,7 @@ import {expect,it} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {dataflowForRow,getArtifactById} from '@/lib/artifacts';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {count,has,link} from '@/lib/accounts';
 import {accountProfile} from '@/lib/accounts';
@@ -10,7 +10,7 @@ import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {request,useAppHarness} from './harness';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
-async function account(label:string){const user=await createUser({email:`mxmx_test_likes_${label}@example.com`});const token=await mintToken(label);await claimToken(user.id,token.token);return {user,token};}
+async function account(label:string){const user=await createUser({email:`mxmx_test_likes_${label}@example.com`});const token=await mintToken(label, user.id);await claimToken(user.id,token.token);return {user,token};}
 async function publish(token:string,body:object){const response=await create(request('/api/artifacts',{method:'POST',token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return (await response.json()).id as string;}
 it('creates and claims artifacts without automatically liking them',async()=>{
  const a=await account('owner');const id=await publish(a.token.token,{markup:'<p>App</p>'});

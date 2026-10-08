@@ -5,20 +5,20 @@ import {observedSourceBody,observedTextBody} from './prepared-document';
  * exists, the paste-able instruction names it, and the very first agent edit
  * is an ordinary protocol edit.
  *
- * The response body exposes no credential. A guest owns the document through
- * an HttpOnly cookie; the CLI separately needs explicit browser approval.
+ * The response body exposes no credential. An email account owns the
+ * document; the CLI separately needs explicit browser approval.
  */
 import { describe, expect, it } from 'vitest';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { GET as artifactPage, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { GET as artifactPage } from '@/app/api/artifacts/[id]/route';
 
 import { prepareBlankReport } from '@/solid/lib/blank-report';
 import { getArtifactById } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/serving';
-import { mintToken } from '@/lib/accounts';
+import { mintToken as mintRawToken } from '@/lib/accounts';
 import { createUser } from '@/lib/accounts';
 import { POST as createBrowserArtifact } from '@/app/api/my/artifacts/route';
 import { artifactStarter } from '@/lib/workspace/artifact-starters';
@@ -32,6 +32,11 @@ const BASE = 'http://localhost:3000';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 interface Start { id: string; url: string; prompt: string; edit_id: string }
+
+const mintToken = async (name: string) => {
+  const user = await createUser({ email: `mxmx_test_start_${crypto.randomUUID()}@example.com` });
+  return { ...await mintRawToken(name, user.id), userId: user.id, email: user.email! };
+};
 
 const start = async (opts: Parameters<typeof request>[1] = {}): Promise<Start> =>
   (await (await startRoute(request('/api/start', { method: 'POST', ...opts }))).json()) as Start;
@@ -99,8 +104,9 @@ describe('POST /api/start', () => {
     expect(() => prepareBlankReport({ ...old, document: oldDocument, markup: old.source, theme: null }, 'different')).toThrow();
   });
 
-  it('returns a live document and tokenless instructions with HttpOnly guest ownership', async () => {
-    const res = await startRoute(request('/api/start', { method: 'POST' }));
+  it('returns a live document and tokenless instructions for an email account', async () => {
+    const account = await createUser({ email: 'mxmx_test_start_prompt@example.com' });
+    const res = await startRoute(request('/api/start', { method: 'POST', actor: { credential: 'session', userId: account.id, email: account.email! } }));
     expect(res.status).toBe(201);
     const body = (await res.json()) as Start & Record<string, unknown>;
 
@@ -115,7 +121,7 @@ describe('POST /api/start', () => {
     expect(body).not.toHaveProperty('token');
     expect(body).not.toHaveProperty('expiresAt');
     expect(JSON.stringify(body)).not.toContain('mx_');
-    expect(res.headers.get('set-cookie')).toContain('HttpOnly');
+    expect(res.headers.get('set-cookie')).toBeNull();
 
     expect(body.prompt).toBe(existingPaste(BASE, body.id));
     expect(body.prompt).toContain(`${BASE}/getting-started.md`);
@@ -144,25 +150,11 @@ describe('POST /api/start', () => {
     expect(rows[0].user_id).toBe(user.id);
   });
 
-  it('a signed-out caller owns a public document while unrelated CLI connections cannot edit', async () => {
-    const body = await start();
-    const db = await harness.db();
-    const { rows } = await db.query<{ user_id: string | null; token_id: string; visibility: string }>(
-      'SELECT user_id, token_id, visibility FROM artifacts WHERE id = $1', [body.id],
-    );
-    expect(rows[0].user_id).toMatch(/^usr_/);
-    expect(rows[0].token_id).toMatch(/^tok_/);
-    expect(rows[0].visibility).toBe('public');
-
-    // Public readability alone never grants another connection edit access.
-    const stranger = await mintToken('device-approval');
-    const read = await artifactPage(request(`/api/artifacts/${body.id}`, { token: stranger.token }), params({ id: body.id }));
-    expect(read.status).toBe(200);
-    const write = await putArtifact(
-      request(`/api/artifacts/${body.id}`, { method: 'PUT', token: stranger.token, json: await observedSourceBody(body.id,'<h1>Not yours</h1>') }),
-      params({ id: body.id }),
-    );
-    expect(write.status).toBe(404);
+  it('refuses a signed-out starter without creating an artifact or cookie', async () => {
+    const response = await startRoute(request('/api/start', { method: 'POST' }));
+    expect(response.status).toBe(401);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect((await (await harness.db()).query('SELECT id FROM artifacts')).rows).toHaveLength(0);
   });
 
   it("the agent's FIRST edit is an ordinary protocol edit and reaches a watching page", async () => {
@@ -173,7 +165,7 @@ describe('POST /api/start', () => {
     const doc = await start({ token: agent.token });
 
     // A reader has the page open before the agent touches it.
-    const stream = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
+    const stream = await eventsRoute(request(`/a/${doc.id}/events`, { actor: { credential: 'session', userId: agent.userId!, email: agent.email } }), params({ id: doc.id }));
     expect(stream.status).toBe(200);
     const reader = stream.body!.getReader();
     const decoder = new TextDecoder();
@@ -202,7 +194,7 @@ describe('POST /api/start', () => {
     void reader.cancel().catch(() => {});
     expect(frames.length).toBeGreaterThanOrEqual(2);
     expect((frames[frames.length - 1] as { version: number }).version).toBeGreaterThanOrEqual(2);
-    const frame = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
+    const frame = await (await frameRoute(request(`/a/${doc.id}/events/frame`, { actor: { credential: 'session', userId: agent.userId, email: agent.email } }), params({ id: doc.id }))).json();
     expect(String(frame.source)).toContain('Q3 revenue is up 12%.');
   });
 

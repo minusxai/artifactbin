@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as getArtifact } from '@/app/api/artifacts/[id]/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
 
 useAppHarness();

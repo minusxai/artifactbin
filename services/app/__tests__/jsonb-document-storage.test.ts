@@ -3,13 +3,13 @@ import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {encodeDocument,decodeDocumentNodes,encodeDocumentNodes} from '@/lib/story/document/document-codec';
 import {getArtifactById,applyEditScoped,getVersionFor,forkArtifact} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
-async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
+async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:{tokenId:token.id,userId:token.userId},row:(await getArtifactById(id))!};}
 const stored=async(id:string)=>(await (await getDb()).query('SELECT * FROM artifacts WHERE id=$1',[id])).rows[0];
 it('preserves noncanonical legacy source bytes behind the same edit identity',async()=>{
  const {id,row}=await create(),db=await getDb();
@@ -61,7 +61,7 @@ it('concurrent first loads converge without adding authored edits',async()=>{
 it('a reader without history access cannot trigger conversion of an archived document',async()=>{
  const {id,row,actor}=await create(),db=await getDb();await applyEditScoped(actor,id,documentEdit(row,{source:row.source!.replace('Alpha','Edited')}));
  await db.query('UPDATE artifact_versions SET document=NULL,source=$2 WHERE artifact_id=$1',[id,row.source]);
- const foreign=await mintToken('mxmx_test_jsonb_foreign');expect(await getVersionFor({tokenId:foreign.id,userId:null},id,1)).toBeNull();
+ const foreign=await mintToken('mxmx_test_jsonb_foreign');expect(await getVersionFor({tokenId:foreign.id,userId:foreign.userId},id,1)).toBeNull();
  expect((await db.query('SELECT document,source FROM artifact_versions WHERE artifact_id=$1',[id])).rows[0]).toEqual({document:null,source:row.source});
 });
 it('forking a JSONB document creates another JSONB head with its own history',async()=>{
@@ -103,7 +103,7 @@ it('can replace a document with a native dataset without retaining its JSONB gra
  const response=await replaceRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{dataset:[{value:1}]}}),{params:Promise.resolve({id})});
  expect(response.status,await response.clone().text()).toBe(200);
  const head=await stored(id);expect(head.format).toBe('dataset');expect(head.document).toBeNull();
- expect((await getVersionFor({tokenId:token.id,userId:null},id,row.version))?.source).toBe(row.source);
+ expect((await getVersionFor({tokenId:token.id,userId:token.userId},id,row.version))?.source).toBe(row.source);
 });
 it('first-load archive migration preserves durable legacy identities after the node was removed',async()=>{
  const {id,actor}=await create(),db=await getDb();

@@ -18,12 +18,25 @@ import { services } from '@/lib/platform/services';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { drainSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mintToken as mintRawToken } from '@/lib/accounts/tokens';
 
 const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
   const table = /^CREATE TABLE IF NOT EXISTS (\w+)/.exec(statement)?.[1];
   return table ? [table] : [];
 });
+
+/** Authenticated route fixtures always belong to an email account. Explicit null
+ * remains available for legacy-credential rejection and adoption tests. */
+export async function mintAccountToken(...args: Parameters<typeof mintRawToken>) {
+  const [name, suppliedUserId, query, options] = args;
+  if (suppliedUserId === null) return { ...await mintRawToken(name, null, query, options), userId: null, email: null };
+  const userId = suppliedUserId ?? `mxmx_test_${randomUUID()}`;
+  const db = query ?? await getDb();
+  await db.query("INSERT INTO users (id,email,kind) VALUES ($1,$2,'account') ON CONFLICT (id) DO NOTHING", [userId, `mxmx_test_${Buffer.from(userId).toString('hex')}@example.test`]);
+  const { rows } = await db.query<{ email: string | null }>('SELECT email FROM users WHERE id=$1', [userId]);
+  return { ...await mintRawToken(name, userId, db, options), userId, email: rows[0]?.email ?? null };
+}
 
 /** What a route test may send. `token` (bearer) and `actor` (proxy-attached) are two DIFFERENT credentials: naming both is a test bug, refused. */
 export interface RequestOptions {

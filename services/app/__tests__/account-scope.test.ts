@@ -1,3 +1,4 @@
+import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import {restoreDocument,observedTextBody} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -5,7 +6,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * account — any of a user's tokens may read, edit, and manage anything the
  * user owns, because handing an agent a token IS handing it the account's
  * documents (a second agent must be able to pick up where the first left off).
- * Anonymous tokens keep the old boundary: only what they created.
+ * Legacy anonymous bearers never authorize writes or private reads.
  *
  * Same-direction precedent: render-time image refs already resolve by account,
  * not just token (refDataForRow). This suite pins the API surface.
@@ -22,7 +23,7 @@ import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/rout
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
@@ -149,23 +150,31 @@ describe('account-wide bearer scope', () => {
 
     for (const t of [theirs.token, anon.token]) {
       const read = await getArtifactRoute(request(`/api/artifacts/${made.id}`, { token: t }), params({ id: made.id }));
-      expect(read.status).toBe(404);
+      expect(read.status).toBe(t === anon.token ? 401 : 404);
       const put = await putArtifact(
         await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: t, json: { markup: MARKUP } }),
         params({ id: made.id }),
       );
-      expect(put.status).toBe(404);
+      expect(put.status).toBe(t === anon.token ? 401 : 404);
     }
   });
 
-  it('anonymous tokens may read public artifacts without gaining edit access', async () => {
+  it('logged-out readers keep public access while legacy bearers cannot authenticate', async () => {
+    const owner = await mintToken('owner');
     const anonA = await mintToken('anon-a', null);
     const anonB = await mintToken('anon-b', null);
-    const made = await createMarkup(anonA.token);
+    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: MARKUP, visibility: 'public' } }));
+    expect(res.status).toBe(201);
+    const made = await res.json();
 
     const own = await getArtifactRoute(request(`/api/artifacts/${made.id}`, { token: anonA.token }), params({ id: made.id }));
-    expect(own.status).toBe(200);
-    const foreign = await getArtifactRoute(request(`/api/artifacts/${made.id}`, { token: anonB.token }), params({ id: made.id }));
+    expect(own.status).toBe(401);
+    expect((await getArtifactRoute(request(`/api/artifacts/${made.id}`, { token: anonB.token }), params({ id: made.id }))).status).toBe(401);
+    const publicRead = await serveRaw(request(`/a/${made.id}/raw`), params({id:made.id}));
+    expect(publicRead.status).toBe(200);
+    expect(await publicRead.text()).toContain('alpha text');
+    const reader = await mintToken('reader');
+    const foreign = await getArtifactRoute(request(`/api/artifacts/${made.id}`, {token:reader.token}), params({ id: made.id }));
     expect(foreign.status).toBe(200);expect((await foreign.json()).capabilities.edit).toBe(false);
   });
 });

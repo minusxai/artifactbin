@@ -1,43 +1,14 @@
-/**
- * POST/DELETE /api/session/token — the exchange of an `mx_` secret for the
- * httpOnly agent cookie (lib/agent-session), and the sign-out that clears it.
- *
- * The exchange is a CREDENTIAL CHECK: an unknown or revoked token buys
- * nothing (uniform 401). The cookie that comes back names token ids, never
- * the secret, and re-presenting a held token promotes it rather than
- * duplicating — the token you touched last is the one your next write acts
- * as. The app sets the cookie itself with the shared codec (utils
- * encodeAgentSession under AUTH__SECRET); the proxy READS that cookie to
- * build the agent-cookie actor and never writes it.
- */
-import {
-  agentSessionClearCookie,
-  agentSessionSetCookie,
-  liveAgentSession,
-  encodeAgentSession,
-  withToken,
-} from '@/lib/accounts';
-import { readJson, unauthorized } from '@/lib/http';
-import { resolveToken } from '@/lib/accounts';
+/** Legacy bearer-to-browser login is closed. Keep sign-out available to clear
+ * old ownership cookies; email login may still adopt their artifacts. */
+import { agentSessionClearCookie } from '@/lib/accounts';
+import { json } from '@/lib/http';
 
-const NO_STORE = { 'Cache-Control': 'no-store' };
-
-export async function POST(request: Request) {
-  const body = await readJson(request);
-  const offered = typeof body?.token === 'string' ? body.token.trim() : '';
-  const token = offered ? await resolveToken(offered) : null;
-  if (!token) return unauthorized(request);
-  const held = await liveAgentSession(request);
-  const value = await encodeAgentSession(withToken(held, token.id));
-  return new Response(null, {
-    status: 204,
-    headers: { ...NO_STORE, 'Set-Cookie': agentSessionSetCookie(value) },
-  });
+export async function POST(_request: Request) {
+  return json({ error: 'email_auth_required' }, 401);
 }
 
 export async function DELETE(_request?: Request) {
-  return new Response(null, {
-    status: 204,
-    headers: { ...NO_STORE, 'Set-Cookie': agentSessionClearCookie() },
-  });
+  return new Response(null, { status: 204, headers: {
+    'Cache-Control': 'no-store', 'Set-Cookie': agentSessionClearCookie(),
+  } });
 }

@@ -30,7 +30,7 @@ vi.mock('@/lib/accounts/viewer', async (importOriginal) => {
       const run = duringSetup;
       duringSetup = null;
       if (run) await run();
-      return { viewer: null, tokenId: null };
+      return { viewer: null, tokenId: null, credential: 'none' as const };
     },
   };
 });
@@ -39,11 +39,10 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 
 
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';
 
 useAppHarness();
@@ -59,11 +58,11 @@ beforeEach(async () => {
 
 describe('a write that commits while the stream is opening', () => {
   it('is in the opening frame — the first frame is current state', async () => {
-    const mint = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { 'x-shared-secret': 'test-secret' } }));
-    const { token } = (await mint.json()) as { token: string };
+    const { token } = await mintAccountToken('stream-opening-race');
     const created = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: '<p id="status">before</p>' } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: '<p id="status">before</p>', visibility: 'public' } }),
     );
+    expect(created.status, await created.clone().text()).toBe(201);
     const doc = (await created.json()) as { id: string };
 
     let newEditId = '';

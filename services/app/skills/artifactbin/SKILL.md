@@ -7,7 +7,7 @@ description: >-
 
 artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. Datasets/media are artifacts too.
 
-npm CLI: local files/browser approval, guests allowed. HTTP: email auth; [HTTP API](references/http-api.md).
+npm CLI: local files/browser approval. Email login required for CLI and HTTP; [HTTP API](references/http-api.md).
 
 - If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills. [Setup details](references/npm-local.md).
 - Local preview; HTML: `.jsx.html`.

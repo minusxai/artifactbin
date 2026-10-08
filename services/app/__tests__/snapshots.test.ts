@@ -15,7 +15,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
@@ -42,7 +42,7 @@ afterEach(drainSnapshotRevalidations);
 
 async function owner() {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_snap_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-  const t = await mintToken('snap'); await claimToken(user.id, t.token);
+  const t = await mintToken('snap', user.id); await claimToken(user.id, t.token);
   return { user, token: t.token, tokenId: t.id };
 }
 async function publish(token: string, body: Record<string, unknown>): Promise<string> {

@@ -15,14 +15,14 @@ import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { avatarUrl, avatarVersion, setAvatar } from '@/lib/accounts';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
 import { createTestUser, eraseTestUser } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
 import sharp from 'sharp';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null)));
 
 const sessionUser = { id: '', email: '' };
 
@@ -67,7 +67,7 @@ describe('GET /api/page/session — onboarded', () => {
     expect(await onboarded()).toBe(true);
 
     // An anonymous browser: a token, no account. Nobody to send to /welcome.
-    const token = await mintToken('anon-browser');
+    const token = await mintToken('anon-browser', null);
     const anon = await sessionPage(request('/api/page/session', { cookie: await agentCookie([token.id]) }));
     const anonBody = await anon.json();
     expect(anonBody.user).toBeNull();
@@ -116,9 +116,9 @@ describe('GET /api/page/session — user', () => {
     expect(none.kind).toBe('none');
     expect(none.user).toBeNull();
 
-    const token = await mintToken('anon-session-user');
+    const token = await mintToken('anon-session-user', null);
     const anon = await body(await agentCookie([token.id]));
-    expect(anon.kind).toBe('anon');
+    expect(anon.kind).toBe('none');
     expect(anon.user).toBeNull();
   });
 });
@@ -126,7 +126,7 @@ describe('GET /api/page/session — user', () => {
 describe('erasing a test user', () => {
   it('takes its picture with it, and survives an object that has already gone', async () => {
     const owner = await createUser({ email: 'mxmx_test_eraseowner@example.com' });
-    const token = await mintToken('eraser');
+    const token = await mintToken('eraser', owner.id);
     await claimToken(owner.id, token.token);
 
     const mint = async () => {

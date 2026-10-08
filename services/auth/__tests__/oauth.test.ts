@@ -23,16 +23,18 @@ let pg: PGlite;
 let app: ReturnType<typeof assemble<any>>;
 let session: { userId: string; email: string; emailVerified?:boolean } | null = null;
 let mintedCount = 0;
+const identities = new Map<string, { userId: string; email: string; emailVerified: boolean }>();
 
 const optionsOf = async (): Promise<AuthOptions> => {
   const { query } = testDb();
   const base = await testAuthOptions({
     env: { APP__PUBLIC_BASE_URL: BASE },
     sessions: {
+      identity: async userId => identities.get(userId) ?? null,
       resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: session.emailVerified??true } : null,
     },
     upstream: async (request, actor) => {
-      if (new URL(request.url).pathname === INTERNAL_ARTIFACT_APPROVAL_PATH) return Response.json({ userId: 'usr_guest', tokenId: 'tok_guest_browser', guest: true });
+      if (new URL(request.url).pathname === INTERNAL_ARTIFACT_APPROVAL_PATH) return Response.json(actor.credential === 'session' ? { userId: actor.userId } : { userId: 'usr_guest', tokenId: 'tok_guest_browser', guest: true });
       if (new URL(request.url).pathname === INTERNAL_MINT_PATH && actor.credential === 'session' && actor.userId) {
         const requested = await request.json() as { audience?: string; scope?: string; expiresInHours: number };
         const serial = String(++mintedCount);
@@ -65,8 +67,8 @@ beforeAll(async () => {
   app = assemble(authParts(await optionsOf()));
 });
 afterAll(async () => { await pg.close(); });
-beforeEach(async () => { await resetTestDb(); session = null; });
-const asUser = (userId = 'usr_1', email = 'u@example.com') => { session = { userId, email }; return { cookie: 'sess=1' }; };
+beforeEach(async () => { await resetTestDb(); session = null; identities.clear(); });
+const asUser = (userId = 'usr_1', email = 'u@example.com') => { session = { userId, email }; identities.set(userId, { userId, email, emailVerified: true }); return { cookie: 'sess=1' }; };
 
 async function register(redirectUri = REGISTERED_REDIRECT): Promise<string> {
   const response = await app.request('/oauth/register', {
@@ -284,38 +286,22 @@ it('pairs through browser consent without exposing tokens to the browser', async
   expect(await (await app.request(`${BASE}/api-other`, { headers: { authorization: `Bearer ${credentials.access_token}` } })).json()).toMatchObject({ credential: 'none' });
 });
 
-it('offers a logged-out visitor both a login and an anonymous path, and the anonymous path pairs the CLI with no account', async () => {
-  const started = await app.request('/oauth/device', { method: 'POST' });
-  const pair = await started.json() as { device_code: string; verification_uri_complete: string; user_code: string };
-  // The approval page a logged-OUT visitor sees offers BOTH paths, and shows
-  // the code so it can be matched against the terminal before approving.
-  session = null;
-  const consent = await app.request(pair.verification_uri_complete);
-  const html = await consent.text();
+it('requires email login for device approval and rejects anonymous approval posts', async () => {
+  const pair = await (await app.request('/oauth/device', { method: 'POST' })).json();
+  const html = await (await app.request(pair.verification_uri_complete)).text();
   expect(html).toContain(pair.user_code);
-  expect(html).toMatch(/log in to connect/i);
-  expect(html).toMatch(/continue anonymously/i);
-  // Anonymous approval needs no session but is still origin-bound (CSRF).
-  const approveAnon = (origin: string) => app.request('/oauth/device/approve', {
-    method: 'POST',
-    headers: { origin, 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ user_code: pair.user_code, decision: 'anonymous' }),
-  });
-  expect((await approveAnon('https://evil.example')).status).toBe(403);
-  const approved = await approveAnon(BASE);
-  expect(approved.status).toBe(200);
-  expect(await approved.text()).not.toContain('mx_');
-  // The CLI receives a full credential, minted anonymously, over the same door.
-  const poll = () => app.request('/oauth/device/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_code: pair.device_code }) });
-  const token = await poll();
-  expect(token.status).toBe(200);
-  const credentials = await token.json() as { access_token: string; refresh_token: string; client_id: string; expires_in: number };
-  expect(credentials).toMatchObject({ access_token: expect.stringMatching(/^mx_/), refresh_token: expect.stringMatching(/^mxr_/), client_id: expect.any(String) });
-  expect(credentials.expires_in).toBe(24 * 60 * 60);
-  expect((await poll()).status).toBe(400);
-  // Guest browser and CLI share a user without a registered login identity.
-  const row = await pg.query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE token_hash = $1', [hashToken(credentials.access_token)]);
-  expect(row.rows[0]?.user_id).toBe('usr_guest');
+  expect(html).toContain('Log in to connect');
+  expect(html).not.toMatch(/continue anonymously|continue as guest/i);
+  for (const decision of ['anonymous', 'approve']) {
+    const response = await app.request('/oauth/device/approve', { method: 'POST',
+      headers: { origin: BASE, 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ user_code: pair.user_code, decision }) });
+    expect(response.status).toBe(401);
+  }
+  const poll = await app.request('/oauth/device/token', { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_code: pair.device_code }) });
+  expect(await poll.json()).toMatchObject({ error: 'authorization_pending' });
+  expect((await testDb().query('SELECT id FROM tokens')).rows).toHaveLength(0);
 });
 
 it('requires same-origin browser consent and denial issues no authorization code',async()=>{

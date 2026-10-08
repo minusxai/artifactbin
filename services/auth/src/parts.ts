@@ -135,6 +135,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
       const schema = readEnv(o.env, 'AUTH__SCHEMA') ?? 'auth';
       const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       mountOAuthRoutes(app, {
+        sessions: o.sessions,
         oauth: createOAuthStore(o.identityDb, schema, appSchema),
         pairing: createDevicePairing(o.identityDb, schema),
         upstream: o.upstream,
@@ -172,7 +173,7 @@ async function resolveActor(request: Request, o: AuthOptions): Promise<Actor> {
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (presented) {
     const token = await o.tokens.byToken(presented);
-    if (token && tokenFitsRequest(token, request, o)) {
+    if (token?.userId && tokenFitsRequest(token, request, o)) {
       const actor: Actor = { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
       const identity = token.userId ? await o.sessions.identity?.(token.userId).catch(() => null) : null;
       return identity?.userId === token.userId && identity
@@ -187,7 +188,7 @@ async function resolveActor(request: Request, o: AuthOptions): Promise<Actor> {
   if(browser&&(!held?.sessionId||!heldPrimary||!await browser.live(held.sessionId,heldPrimary)))held=null;
   const heldIds = held?.tokenIds.length ? { heldTokenIds: held.tokenIds } : {};
   const session = await o.sessions.resolve(request).catch(() => null);
-  if (session) {
+  if (session?.userId && session.email && session.emailVerified === true) {
     return {
       credential: 'session',
       userId: session.userId,
@@ -196,11 +197,8 @@ async function resolveActor(request: Request, o: AuthOptions): Promise<Actor> {
       ...heldIds,
     };
   }
-  const lastHeld = held?.tokenIds[held.tokenIds.length - 1];
-  if (lastHeld !== undefined) {
-    const token = await o.tokens.byId(lastHeld);
-    if (token && tokenFitsRequest(token, request, o)) return { credential: 'agent-cookie', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}), ...heldIds };
-  }
+  // Legacy ownership cookies are adoption proofs for an email session, never
+  // a second kind of login.
   return ANONYMOUS;
 }
 

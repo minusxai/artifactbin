@@ -25,7 +25,7 @@ import {
 } from '@/lib/artifacts';
 import { createAnnotationFor, listAnnotationsFor } from '@/lib/annotations';
 import { ANONYMOUS_CEILING, capRole, type ShareRole } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 const SOURCE = '<div><p>hello</p></div>';
@@ -34,7 +34,7 @@ const harness = useAppHarness();
 
 async function account(email: string) {
   const user = await createUser({ email });
-  const token = await mintToken(email);
+  const token = await mintToken(email, user.id);
   await claimToken(user.id, token.token);
   return { user, token };
 }

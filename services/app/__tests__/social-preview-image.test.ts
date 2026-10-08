@@ -3,7 +3,7 @@ import sharp from 'sharp';
 import { useAppHarness, request } from './harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import {exportImage,EXPORT_PNG} from './export-helpers';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { getArtifactById } from '@/lib/artifacts';

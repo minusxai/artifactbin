@@ -14,7 +14,7 @@ import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as previewRoute } from '@/app/api/preview/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -118,7 +118,7 @@ describe('dataflow at the publish door', () => {
     // that holds is private — uniform "does not resolve", never an oracle.
     const mine = await mintToken('mine');
     const owner = await createUser({ email: 'dataflow-owner@example.com' });
-    const theirs = await mintToken('theirs');
+    const theirs = await mintToken('theirs', owner.id);
     await claimToken(owner.id, theirs.token);
     const foreign = await dataset(theirs.token, { visibility: 'private' });
     const res = await create(mine.token, { markup: `<Helmet><Import name="q_data" src="ref:${foreign}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><Question data="$q" />` });

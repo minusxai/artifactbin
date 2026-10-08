@@ -218,8 +218,8 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   process.on(signal, () => { kill('SIGKILL'); process.exit(130); });
 }
 
-const needsMail = selected.some((gate) => specFor(gate.name).needsMail);
-const mailOutbox = needsMail && servers > 0 ? path.join(scratch, 'dev-mail.jsonl') : null;
+// Every authenticated gate now signs in with email through the protected outbox.
+const mailOutbox = servers > 0 ? path.join(scratch, 'dev-mail.jsonl') : null;
 let authSecret = null;
 if (servers > 0) {
   // The servers this boots are the real thing: they want the auth secret, the

@@ -90,9 +90,11 @@ describe('the rows tell the truth about their sources', () => {
     const runner = readFileSync(path.join(SCRIPTS, 'gates.mjs'), 'utf8');
     expect(runner).toMatch(/from '\.\/gates\.manifest\.mjs'/);
     expect(runner).toMatch(/checkManifest\(/);
-    for (const field of ['timeoutMs', 'serialGroup', 'needsMail']) {
+    for (const field of ['timeoutMs', 'serialGroup']) {
       expect(runner, `the runner never reads ${field}`).toContain(field);
     }
+    // Every booted server supplies email auth fixtures, including gates whose direct source has no mail driver.
+    expect(runner).toMatch(/const mailOutbox = servers > 0/);
     // No gate is special-cased by NAME in the runner: that is what the fields are for.
     expect(runner).not.toMatch(/gate\.name\s*===\s*'/);
     const listed = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--list'], { encoding: 'utf8' }).trim().split('\n').sort();

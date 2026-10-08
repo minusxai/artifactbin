@@ -5,11 +5,12 @@ import {join} from 'node:path';
 import {runInNewContext} from 'node:vm';
 import {createTeamApplication} from '../../cli/src/team-application';
 import {AUTH_SECRET} from '@/lib/platform';
-import {drainPreparedPageWarmups} from '@/lib/story/prepared/prepared-page.server';
+import * as preparedPages from '@/lib/story/prepared/prepared-page.server';
+import {enablePreparedPageWarmups,drainPreparedPageWarmups} from '@/lib/story/prepared/prepared-page.server';
 import {drainSnapshotRevalidations} from '@/lib/compiled-page/snapshots.server';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,type ArtifactRow,type TokenActor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/story/graph/document-update-client';
@@ -21,7 +22,7 @@ useAppHarness();
 async function setup(){
  const token=await mintToken('mxmx_test_operation_api');
  const created=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));
- const {id}=await created.json();return {token,id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};
+ const {id}=await created.json();return {token,id,actor:{tokenId:token.id,userId:token.userId},row:(await getArtifactById(id))!};
 }
 async function prepare(row:ArtifactRow,actor:TokenActor,change:ClientDocumentChange){
  if(row.document?.kind!=='graph')throw new Error('Missing authoring snapshot');
@@ -32,12 +33,27 @@ async function prepare(row:ArtifactRow,actor:TokenActor,change:ClientDocumentCha
  return {edit_id:row.edit_id,document_update};
 }
 it('accepts a client-prepared composite through the real route with one permission/document/history query',async()=>{
+ enablePreparedPageWarmups();
  const {token,id,row,actor}=await setup(),db=await getDb();
  const body=await prepare(row,actor,{operations:[{kind:'setAttribute',path:[0],name:'className',value:'p-4'},{kind:'insert',parent:[0],index:1,source:'<h2>Heading</h2>'},{kind:'move',path:[0,2],parent:[0],index:0},{kind:'setText',path:[0,0,0],value:'Moved β'}]});
+ // Preparation belongs to the post-commit worker, not the measured permission/
+ // document/history transaction. Its scheduling must not race the query spy.
+ await drainPreparedPageWarmups();await drainSnapshotRevalidations();
+ const warmPage=preparedPages.warmPreparedPage,warmups:Array<Parameters<typeof warmPage>>=[];
+ const warmupSpy=vi.spyOn(preparedPages,'warmPreparedPage').mockImplementation((...args)=>{warmups.push(args);});
  const spy=vi.spyOn(db,'query');
- const response=await editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:body}),{params:Promise.resolve({id})});
- expect(response.status,await response.clone().text()).toBe(200);
- expect(spy.mock.calls.filter(([sql])=>/\b(?:FROM|UPDATE) artifacts\b/.test(sql))).toHaveLength(1);spy.mockRestore();
+ try{
+  const response=await editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:body}),{params:Promise.resolve({id})});
+  expect(response.status,await response.clone().text()).toBe(200);
+  const artifactQueries=spy.mock.calls.filter(([sql])=>/\b(?:FROM|UPDATE) artifacts\b/.test(sql));
+  expect(artifactQueries,artifactQueries.map(([sql])=>sql).join('\n\n')).toHaveLength(1);
+  expect(warmups.map(([artifactId])=>artifactId)).toEqual([id]);
+ }finally{
+  spy.mockRestore();warmupSpy.mockRestore();
+  // Exercise the real queued preparation after measuring the foreground commit.
+  for(const args of warmups)warmPage(...args);
+  await drainPreparedPageWarmups();await drainSnapshotRevalidations();
+ }
  const head=(await getArtifactById(id))!;expect(head.source).toContain('Moved β');expect(head.source).toContain('Heading');expect(head.source).toContain('className="p-4"');
  expect((await db.query('SELECT document,source FROM artifacts WHERE id=$1',[id])).rows[0]).toMatchObject({source:null,document:{kind:'graph'}});
 });

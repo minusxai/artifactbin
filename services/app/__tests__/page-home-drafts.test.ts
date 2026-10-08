@@ -11,7 +11,8 @@ import { GET as homePage } from '@/app/api/page/home/route';
 import { createArtifact } from '@/lib/artifacts';
 
 
-import { mintToken, revokeToken } from '@/lib/accounts';
+import { revokeToken } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
 import { claimTokenById, createUser } from '@/lib/accounts';
 import { agentCookie, request } from './harness';
 import { useAppHarness, setSession } from '@/__tests__/harness';

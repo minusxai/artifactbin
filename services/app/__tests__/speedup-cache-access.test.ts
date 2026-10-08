@@ -8,17 +8,18 @@ import {useAppHarness,request,agentCookie} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as queryDocument,POST as queryPrivateDocument} from '@/app/a/[id]/query/route';
 import {attachActor,createTokenReader} from '@artifactbin/utils';
+import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
 import {AUTH_SECRET} from '@/lib/platform';
 import {createAuthHost} from '@artifactbin/auth';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {createUser,claimToken} from '@/lib/accounts';
 const harness=useAppHarness();
 const deferred=<T,>()=>{let resolve!:(x:T)=>void;const promise=new Promise<T>(r=>{resolve=r;});return {resolve,promise};};
 
 async function fixture(twoQueries=false){
   pg.hold=null;
-  const user=await createUser({email:'mxmx_test_speedup_access@example.com'}),token=await mintToken('source-owner');
+  const user=await createUser({email:'mxmx_test_speedup_access@example.com'}),token=await mintToken('source-owner',user.id);
   await claimToken(user.id,token.token);
   const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
   const secret=await createDatasetSecret({userId:user.id,tokenId:token.id},'test-only-password',target);
@@ -62,18 +63,31 @@ it.each(['private','deleted'] as const)('does not return source rows when a publ
 });
 
 it.each([
-  ['bearer','revoked'],['agent-cookie','revoked'],['bearer','expired'],['agent-cookie','expired'],
+  ['bearer','revoked'],['scripted-browser','revoked'],['bearer','expired'],['scripted-browser','expired'],
+  ['bearer','unchanged'],['scripted-browser','unchanged'],
 ] as const)('revalidates a forwarded %s token (%s) through the real proxy after upstream SQL',async(credential,change)=>{
-  const {id,token}=await fixture();const db=await harness.db();
+  const {id,token,user}=await fixture();const db=await harness.db();
   await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
   if((await db.query("SELECT to_regclass('dataset_result_cache') AS table_name")).rows[0].table_name)await db.query('DELETE FROM dataset_result_cache');
   const started=deferred<void>(),release=deferred<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>();
   pg.hold=()=>{started.resolve();return release.promise;};
-  const proxy=createAuthHost({env:{},cookieSecret:AUTH_SECRET,tokens:createTokenReader({db}),sessions:{resolve:async()=>null},upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),{params:Promise.resolve({id})})});
-  const req=request(`/a/${id}/query`,{method:'POST',json:{},...(credential==='bearer'?{token:token.token}:{cookie:await agentCookie([token.id])})});
-  const pending=proxy.fetch(req);
-  await started.promise;
-  await db.query(change==='revoked'?'UPDATE tokens SET deleted_at=now() WHERE id=$1':"UPDATE tokens SET expires_at=now()-interval '1 second' WHERE id=$1",[token.id]);
+  const proxy=createAuthHost({env:{},cookieSecret:AUTH_SECRET,tokens:createTokenReader({db}),sessions:{resolve:async()=>null,identity:async userId=>userId===user.id?{userId,email:user.email!,emailVerified:true}:null},upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),{params:Promise.resolve({id})})});
+  const req=request(`/a/${id}/query`,{method:'POST',json:{},token:token.token,...(credential==='scripted-browser'?{headers:{[BROWSER_SESSION_HEADER]:'1'}}:{})});
+  const pending=Promise.resolve(proxy.fetch(req));
+  await Promise.race([started.promise,pending.then(response=>{throw new Error(`Query was denied before upstream SQL: ${response.status}`);})]);
+  if(change!=='unchanged')await db.query(change==='revoked'?'UPDATE tokens SET deleted_at=now() WHERE id=$1':"UPDATE tokens SET expires_at=now()-interval '1 second' WHERE id=$1",[token.id]);
   release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
-  expect(await (await pending).text()).not.toContain('314159265');pg.hold=null;
+  const response=await pending;
+  if(change==='unchanged'){expect(response.status).toBe(200);expect((await response.json()).tables.q.rows).toEqual([{n:314159265}]);}
+  else {expect([401,404]).toContain(response.status);expect(await response.text()).not.toContain('314159265');}
+  pg.hold=null;
+});
+
+it('keeps a plain legacy cookie unauthenticated before querying a private source',async()=>{
+  const {id,token}=await fixture();const db=await harness.db();
+  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+  const source=vi.fn(async()=>({rows:[{n:314159265}],columns:[{name:'n',type:'number' as const}]}));pg.hold=source;
+  const proxy=createAuthHost({env:{},cookieSecret:AUTH_SECRET,tokens:createTokenReader({db}),sessions:{resolve:async()=>null},upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),{params:Promise.resolve({id})})});
+  const response=await proxy.fetch(request(`/a/${id}/query`,{method:'POST',json:{},cookie:await agentCookie([token.id])}));
+  expect(response.status).toBe(404);expect(await response.text()).not.toContain('314159265');expect(source).not.toHaveBeenCalled();pg.hold=null;
 });

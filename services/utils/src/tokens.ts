@@ -53,6 +53,8 @@ export function createTokenReader(o: TokenReaderOptions): TokenReader {
   const liveClause = 'AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now())';
   const byHashSql = `SELECT id, user_id, audience, scope, expires_at FROM ${table} WHERE token_hash = $1 ${liveClause}`;
   const byIdSql = `SELECT id, user_id, audience, scope, expires_at FROM ${table} WHERE id = $1 ${liveClause}`;
+  const admitted = async (value: TokenRecord | null) =>
+    value && (!o.admitBearer || await o.admitBearer(value)) ? value : null;
 
   return {
     async byToken(presented: string): Promise<TokenRecord | null> {
@@ -60,10 +62,10 @@ export function createTokenReader(o: TokenReaderOptions): TokenReader {
       if (!TOKEN_RE.test(presented)) return null;
       const key = `h:${hashToken(presented)}`;
       const cached = recall(key);
-      if (cached.hit) return cached.value;
+      if (cached.hit) return admitted(cached.value);
       const { value, expiresAt } = await read(byHashSql, key.slice(2));
       remember(key, value, expiresAt);
-      return value;
+      return admitted(value);
     },
     async byId(id: string): Promise<TokenRecord | null> {
       const key = `i:${id}`;

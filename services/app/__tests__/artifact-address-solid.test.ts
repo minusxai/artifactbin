@@ -10,7 +10,7 @@ import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { artifactPageAnswer, pagesSite } from '@/lib/serving';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { mintExportKey } from '@/lib/serving';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/serving';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';

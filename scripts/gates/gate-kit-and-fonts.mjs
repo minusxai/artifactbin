@@ -57,7 +57,7 @@ const ownHost = (value) => {
 
 // ── one connection publishes every fixture ─────────────────────────────────────
 const mint = await connectAgent(B);
-const send = (body) => fetch(`${B}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mint.token}` }, body: JSON.stringify(body) });
+const send = (body) => fetch(`${B}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mint.token}` }, body: JSON.stringify({ visibility: 'unlisted', ...body }) });
 const publish = async (body) => {
   const res = await send(body);
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);

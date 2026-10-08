@@ -1,3 +1,4 @@
+import type { Actor } from '@artifactbin/contracts';
 import {expect,it,vi} from 'vitest';
 import { pagesSite } from '@/lib/serving/pages-origin';
 import {getDb} from '@/lib/platform';
@@ -7,28 +8,28 @@ import {GET as anonymousQuery,POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {appPagePolicy,createAppServer} from '@/server/app';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
-import {agentCookie,request,useAppHarness} from './harness';
+import {request,useAppHarness} from './harness';
 import {PATCH as patchArtifact} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {viewersWritePolicy} from '@artifactbin/utils';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 async function fixture(){
- const owner=await mintToken('owner');const friend=await mintToken('friend');
- const user=await createUser({email:'mxmx_test_dataset_friend@example.com'});await claimToken(user.id,friend.token);
- const publish=async(body:object)=>{const r=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:body}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
+ const owner=await mintToken('owner');const user=await createUser({email:'mxmx_test_dataset_friend@example.com'});const friend = await mintToken('friend', user.id);
+    await claimToken(user.id,friend.token);
+ const publish=async(body:object)=>{const r=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',...body}}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
  const ds=await publish({dataset:[{n:1}],access:'readwrite'});
  const doc=await publish({markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
- const cookie=await agentCookie([friend.id]);
- const write=(auth?:string)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:auth,json:{mutation:'add'}}),ctx(doc));
- const permissions=async(auth?:string)=>{const r=auth?await query(request(`/a/${doc}/query`,{method:'POST',cookie:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};
- const share=(id:string,role:'viewer'|'editor')=>updateSharingFor({tokenId:owner.id,userId:null},id,{shares:[{email:user.email,role}]});
+ const actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};
+ const write=(auth?:Actor)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:auth,json:{mutation:'add'}}),ctx(doc));
+ const permissions=async(auth?:Actor)=>{const r=auth?await query(request(`/a/${doc}/query`,{method:'POST',actor:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};
+ const share=(id:string,role:'viewer'|'editor')=>updateSharingFor({tokenId:owner.id,userId:owner.userId},id,{shares:[{email:user.email,role}]});
  // What `afbin push … --policy viewers-write` sends, byte for byte.
  const grantFor=async(id:string)=>{const head=await getArtifactById(id);const r=await patchArtifact(await observedRequest(`/api/artifacts/${id}`,{method:'PATCH',token:owner.token,json:{policy:viewersWritePolicy(),expectedPolicyRevision:head!.policy_revision??0}}),ctx(id));expect(r.status,await r.clone().text()).toBe(200);return r.json();};
  const grant=()=>grantFor(ds);
- return {owner,friend,ds,doc,cookie,write,permissions,share,grant,grantFor,publish};
+ return {actor,owner,friend,ds,doc,write,permissions,share,grant,grantFor,publish};
 }
 it('denies anonymous writes and exposes read-only capability without suppressing live query rows',async()=>{
  const f=await fixture();expect((await f.write()).status).toBe(403);
@@ -37,21 +38,21 @@ it('denies anonymous writes and exposes read-only capability without suppressing
 });
 it('uses dataset roles independently of the document role and rechecks revocation',async()=>{
  const f=await fixture();await f.share(f.doc,'editor');
- expect((await f.write(f.cookie)).status).toBe(403);
- await f.share(f.ds,'editor');expect((await f.permissions(f.cookie)).mutationAccess.add).toBe(null);
- expect((await f.write(f.cookie)).status).toBe(200);
- await f.share(f.ds,'viewer');expect((await f.write(f.cookie)).status).toBe(403);
- expect((await f.permissions(f.cookie)).mutationAccess.add).toBeTruthy();
+ expect((await f.write(f.actor)).status).toBe(403);
+ await f.share(f.ds,'editor');expect((await f.permissions(f.actor)).mutationAccess.add).toBe(null);
+ expect((await f.write(f.actor)).status).toBe(200);
+ await f.share(f.ds,'viewer');expect((await f.write(f.actor)).status).toBe(403);
+ expect((await f.permissions(f.actor)).mutationAccess.add).toBeTruthy();
  expect((await f.permissions()).tables.rows.rows).toEqual([{n:1},{n:2}]);
 });
 it('gives a dataset editor the session relay even when they only view the document',async()=>{
  const f=await fixture();await f.share(f.ds,'editor');
  const app=createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
- expect((await app.request(request(`/a/${f.doc}`,{cookie:f.cookie}))).headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
- expect((await f.write(f.cookie)).status).toBe(200);
- await updateSharingFor({tokenId:f.owner.id,userId:null},f.ds,{access:'read'});
- expect((await f.write(f.cookie)).status).toBe(403);
- expect((await f.permissions(f.cookie)).mutationAccess.add).toBeTruthy();
+ expect((await app.request(request(`/a/${f.doc}`,{actor:f.actor}))).headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
+ expect((await f.write(f.actor)).status).toBe(200);
+ await updateSharingFor({tokenId:f.owner.id,userId:f.owner.userId},f.ds,{access:'read'});
+ expect((await f.write(f.actor)).status).toBe(403);
+ expect((await f.permissions(f.actor)).mutationAccess.add).toBeTruthy();
 });
 it('refuses a save when the share is revoked while its SQL is running',async()=>{
  const f=await fixture();await f.share(f.ds,'editor');
@@ -62,7 +63,7 @@ it('refuses a save when the share is revoked while its SQL is running',async()=>
    }
    return original(sql,values);
  });
- try {expect((await f.write(f.cookie)).status).toBe(403);expect((await getArtifactById(f.ds))?.version).toBe(1);}
+ try {expect((await f.write(f.actor)).status).toBe(403);expect((await getArtifactById(f.ds))?.version).toBe(1);}
  finally {spy.mockRestore();}
 });
 
@@ -73,12 +74,12 @@ it('refuses a save when the share is revoked while its SQL is running',async()=>
  */
 it('the viewers-write shorthand is what lets a viewer, and the link audience, write',async()=>{
  const f=await fixture();await f.share(f.ds,'viewer');
- expect((await f.write(f.cookie)).status,'no policy: only editors write').toBe(403);
+ expect((await f.write(f.actor)).status,'no policy: only editors write').toBe(403);
  expect((await f.write()).status).toBe(403);
  const saved=await f.grant();
  expect(saved.dataset_policy).toEqual(viewersWritePolicy());
  expect(saved.policy_revision).toBe(1);
- expect((await f.write(f.cookie)).status,'the shared viewer now writes').toBe(200);
+ expect((await f.write(f.actor)).status,'the shared viewer now writes').toBe(200);
  expect((await f.write()).status,'and so does the link audience').toBe(200);
  expect((await getArtifactById(f.ds))?.version).toBe(3);
 });
@@ -94,18 +95,18 @@ it('a viewer completes their own row through a $_row row action',async()=>{
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,status:'open'},{id:2,status:'open'}],access:'readwrite'});
  const doc=await f.publish({markup:`<Helmet><Import name="tasks_data" src="ref:${ds}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query><Import name="complete_data" src="ref:${ds}" /><Mutation name="complete">{\`update complete_data.rows set status = 'done' where id = $_row.id\`}</Mutation></Helmet><For each={$tasks} keyBy="id"><Button run="$complete">Complete</Button></For>`});
- const click=(auth?:string,row:Record<string,unknown>={id:1})=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:auth,json:{mutation:'complete',row}}),ctx(doc));
+ const click=(auth?:Actor,row:Record<string,unknown>={id:1})=>mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:auth,json:{mutation:'complete',row}}),ctx(doc));
  const tasks=async()=>{const r=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return (await r.json()).tables.tasks.rows;};
  await f.share(ds,'viewer');
- expect((await click(f.cookie)).status,'no policy: only editors write').toBe(403);
+ expect((await click(f.actor)).status,'no policy: only editors write').toBe(403);
  await f.grantFor(ds);
- const ran=await click(f.cookie);
+ const ran=await click(f.actor);
  expect(ran.status,await ran.clone().text()).toBe(200);
  expect(await ran.json()).toMatchObject({affected:1});
  expect(await tasks()).toEqual([{id:1,status:'done'},{id:2,status:'open'}]);
  // The capability the page reads before it draws the button agrees: the same
  // analysis, with a placeholder row, is what enables the control.
- const capability=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
+ const capability=await query(request(`/a/${doc}/query`,{method:'POST',actor:f.actor,json:{}}),ctx(doc));
  expect((await capability.json()).mutationAccess.complete).toBe(null);
 });
 
@@ -122,7 +123,7 @@ it('a declared date Value is planned as a date, so a viewer writes one through a
  const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows (id, due) select 2, coalesce($d, date($_now))\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{d:'2026-09-01'}}}),ctx(doc));
+ const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'add',args:{d:'2026-09-01'}}}),ctx(doc));
  expect(r.status,await r.clone().text()).toBe(200);
  const rows=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));
  expect((await rows.json()).tables.rows.rows).toEqual([{id:1,due:'2026-01-01'},{id:2,due:'2026-09-01'}]);
@@ -139,7 +140,7 @@ it('a string Value written where a date is required is refused at the click by t
  await f.grantFor(ds);
  const doc=await f.publish({markup:`<Helmet><Value name="d" type="string" /><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows (id, due) select 2, coalesce($d, date($_now))\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  await f.share(ds,'viewer');
- const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{d:'next tuesday'}}}),ctx(doc));
+ const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'add',args:{d:'next tuesday'}}}),ctx(doc));
  expect(r.status).toBe(400);
  expect(JSON.stringify(await r.json())).toMatch(/due/);
  expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{id:1,due:'2026-01-01'}]);
@@ -151,7 +152,7 @@ it('refuses a value whose type is not the one it was declared with, naming the p
  const doc=await f.publish({markup:`<Helmet><Value name="n" type="number" default={0} /><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows (id, amount) select 2, $n\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const send=(n:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{n}}}),ctx(doc));
+ const send=(n:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'add',args:{n}}}),ctx(doc));
  const bad=await send('12.5');
  expect(bad.status).toBe(400);
  expect((await bad.json()).detail).toMatch(/\$n/);
@@ -169,7 +170,7 @@ it('reads an empty string for a number, date or boolean Value as no value, and k
  const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Value name="note" type="string" /><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows (id, due, note) select 2, coalesce($d, '2026-02-02'), $note\`}</Mutation></Helmet><DataTable data="$rows" />`});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{d:'',note:''}}}),ctx(doc));
+ const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'add',args:{d:'',note:''}}}),ctx(doc));
  expect(res.status,await res.clone().text()).toBe(200);
  const rows=(await loadDatasetRows((await getArtifactById(ds))!)) as Array<Record<string,unknown>>;
  expect(rows.find(r=>r.id===2)).toMatchObject({due:'2026-02-02',note:''});
@@ -204,7 +205,7 @@ it('types $_value from the column its editor sits in, at publish and at the clic
  const doc=await f.publish({markup:page('update set_due_data.rows set due = max($_value, due) where id = $_row.id')});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const edit=(value:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'set_due',args:{},value,row:{id:1}}}),ctx(doc));
+ const edit=(value:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'set_due',args:{},value,row:{id:1}}}),ctx(doc));
  const later=await edit('2026-03-03');
  expect(later.status,await later.clone().text()).toBe(200);
  expect((await loadDatasetRows((await getArtifactById(ds))!))[0]).toMatchObject({due:'2026-03-03'});
@@ -221,11 +222,11 @@ it('never lets a caller choose who $_me is',async()=>{
  const doc=await f.publish({markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="sign_data" src="ref:${ds}" /><Mutation name="sign">{\`insert into sign_data.rows (id, who) select 2, $_me.id\`}</Mutation></Helmet><DataTable data="$rows" />`});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const forged=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'sign',args:{_me:'usr_someone_else'}}}),ctx(doc));
+ const forged=await mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'sign',args:{_me:'usr_someone_else'}}}),ctx(doc));
  expect(forged.status).toBe(400);
  expect(JSON.stringify(await forged.json())).toMatch(/_me/);
  expect(await loadDatasetRows((await getArtifactById(ds))!)).toHaveLength(1);
- const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'sign',args:{}}}),ctx(doc));
+ const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'sign',args:{}}}),ctx(doc));
  expect(res.status,await res.clone().text()).toBe(200);
  const rows=(await loadDatasetRows((await getArtifactById(ds))!)) as Array<Record<string,unknown>>;
  expect(rows.find(r=>r.id===2)!.who).not.toBe('usr_someone_else');
@@ -256,7 +257,7 @@ it('answers a guest with sign_in_required for a $_me write, in the capability an
  expect(refused.status).toBe(403);
  expect(await refused.json()).toMatchObject({error:'policy_denied',code:'sign_in_required'});
  // A signed-in reader is told nothing of the sort: the write is simply theirs.
- const signedIn=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
+ const signedIn=await query(request(`/a/${doc}/query`,{method:'POST',actor:f.actor,json:{}}),ctx(doc));
  expect((await signedIn.json()).mutationAccess.claim).toBe(null);
  // Every other refusal keeps its own words.
  const dataset=await anonymousQuery(request(`/a/${f.doc}/query?q=%7B%7D`),ctx(f.doc));
@@ -270,14 +271,14 @@ it.each([false,true])('previews computed row fields from the query schema (empty
  const ds=await f.publish(empty?{dataset:[],columns:[{name:'id',type:'number'},{name:'amount',type:'number'}],access:'readwrite'}:{dataset:[{id:1,amount:3}],access:'readwrite'});
  await f.grantFor(ds);
  const doc=await f.publish({markup:`<Helmet><Import name="balances_data" src="ref:${ds}" /><Query name="balances">{\`select id, amount * 2 as net from balances_data.rows\`}</Query><Import name="settle_data" src="ref:${ds}" /><Mutation name="settle">{\`update settle_data.rows set amount = $_row.net where id = $_row.id\`}</Mutation></Helmet><For each={$balances} keyBy="id"><Button run="$settle">Settle</Button></For>`});
- const result=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
+ const result=await query(request(`/a/${doc}/query`,{method:'POST',actor:f.actor,json:{}}),ctx(doc));
  expect(result.status).toBe(200);
  const body=await result.json();
  expect(body.tables.balances.columns).toEqual([{name:'id',type:'number'},{name:'net',type:'number'}]);
  expect(body.tables.balances.rows).toEqual(empty?[]:[{id:1,net:6}]);
  expect(body.mutationAccess.settle).toBe(null);
  if(!empty){
-  const written=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'settle',row:{id:1,net:6}}}),ctx(doc));
+  const written=await mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'settle',row:{id:1,net:6}}}),ctx(doc));
   expect(written.status,await written.clone().text()).toBe(200);
   expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{id:1,amount:6}]);
  }
@@ -289,7 +290,7 @@ it('stores forgiving timestamps as UTC instants and binds typed mutation paramet
  expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{happened:'2026-09-18T10:00:00.000Z'},{happened:'1970-01-01T00:00:00.000Z'}]);
  const doc=await f.publish({markup:`<Helmet><Value name="when" type="timestamp" default="2026-09-18" /><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values ($when)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  await f.grantFor(ds);
- const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{when:'2026-09-18T12:30:00'}}}),ctx(doc));
+ const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:f.actor,json:{mutation:'add',args:{when:'2026-09-18T12:30:00'}}}),ctx(doc));
  expect(r.status,await r.clone().text()).toBe(200);
  expect((await loadDatasetRows((await getArtifactById(ds))!)).at(-1)).toEqual({happened:'2026-09-18T12:30:00.000Z'});
  const invalid=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{dataset:[{happened:'2026-02-30'}],columns:[{name:'happened',type:'timestamp'}]}}));

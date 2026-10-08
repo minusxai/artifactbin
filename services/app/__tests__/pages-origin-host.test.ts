@@ -10,7 +10,8 @@ import { attachActor } from '@artifactbin/utils';
 import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
-import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, mintToken, pagesSessionActor, revokeToken } from '@/lib/accounts';
+import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, pagesSessionActor, revokeToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/serving/pages-origin';
@@ -33,9 +34,9 @@ const framing = () => createAppServer({ indexHtml: async () => SHELL, pagesSite:
 const DOC = '<Helmet><Value name="rows" type="table" value={[{id: 1}, {id: 2}]} /><Query name="counted">{`select count(*) as n from rows`}</Query></Helmet><h1 id="top">Private plan</h1><DataTable data="$counted" />';
 
 async function world() {
-  const t = await mintToken('pages-owner');
   const user = await createUser({ email: 'pages-owner@example.com' });
-  await claimToken(user.id, t.token);
+  const t = await mintToken('pages-owner', user.id);
+    await claimToken(user.id, t.token);
   const publish = async (markup: string, visibility: string) => {
     const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup, visibility } }));
     expect(res.status, await res.clone().text()).toBe(201);
@@ -171,7 +172,7 @@ describe('the pages session', () => {
     const app = framing();
     // What the session transport (services/browser forwardSessionFetch) sends: the session's actor attached, the
     // session mark, the addressed host, no Origin — and, on the pages site, the cookie the parent holds.
-    const owner: Actor = { credential: 'bearer', tokenId: w.token.id, userId: w.user.id };
+    const owner: Actor = { credential: 'bearer', tokenId: w.token.id, userId: w.user.id, email: w.user.email!, emailVerified: true };
     const frameSrc = async (headers: Record<string, string>) => {
       const html = await (await app.request(as(`${APP}/a/${w.secret}`, owner, { headers: { accept: 'text/html', ...headers } }))).text();
       return new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
@@ -182,7 +183,7 @@ describe('the pages session', () => {
     const exchanged = await app.request(as(src.href, owner, { headers: { [BROWSER_SESSION_HEADER]: '1' } }));
     expect(exchanged.status).toBe(302);
     const cookie = /afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie')!)![1]!;
-    expect(await pagesSessionActor(cookie)).toEqual({ credential: 'agent-cookie', userId: w.user.id, tokenId: w.token.id });
+    expect(await pagesSessionActor(cookie)).toEqual({ credential: 'agent-cookie', userId: w.user.id, tokenId: w.token.id, email: w.user.email! });
     // The document's own door reads the private document as the session's reader.
     const self = pagesOriginFor(w.secret, site);
     const read = await app.request(as(`${self}/a/${w.secret}/query`, owner, { method: 'POST', headers: { [BROWSER_SESSION_HEADER]: '1', 'x-forwarded-host': new URL(self).host, cookie: `afbin_pages=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) }));
@@ -199,11 +200,12 @@ describe('the pages session', () => {
     const now = Date.now();
     const late = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, now))!;
     expect(await exchangePagesTicket(late, now + 61_000)).toBeNull();
-    const guest = await mintToken('guest-owner');
-    const ticket = (await issuePagesTicket({ viewer: null, tokenId: guest.id, credential: 'agent-cookie' }))!;
+    const guest = await mintToken('guest-owner', null);
+    expect(await issuePagesTicket({ viewer: null, tokenId: guest.id, credential: 'agent-cookie' })).toBeNull();
+    const ticket = (await issuePagesTicket({ viewer: {userId:w.user.id,email:w.user.email!,emailVerified:true}, tokenId: w.token.id, credential: 'bearer' }, {}, now, {browserSession:true}))!;
     const session = (await exchangePagesTicket(ticket))!;
-    expect(await pagesSessionActor(session.cookie)).toEqual({ credential: 'agent-cookie', tokenId: guest.id });
-    await revokeToken(guest.id);
+    expect(await pagesSessionActor(session.cookie)).toEqual({ credential: 'agent-cookie', userId:w.user.id, email:w.user.email!, emailVerified:true, tokenId: w.token.id });
+    await revokeToken(w.token.id);
     expect(await pagesSessionActor(session.cookie)).toBeNull();
   });
 
@@ -443,8 +445,8 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const PLOTLY = 'https://cdn.plot.ly';
     const id = await w.publish(`<Helmet><meta name="csp-connect" content="https://127.0.0.1:${port}" /><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Weather</h1>`, 'public');
     await drainPreparedPageWarmups();
-    const t = await mintToken('pages-reader');
     const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });
+    const t = await mintToken('pages-reader', user.id);
     await claimToken(user.id, t.token);
     const reader: Actor = { credential: 'session', userId: user.id, email: 'mxmx_test_pages_reader@example.com', emailVerified: true };
     const self = pagesOriginFor(id, site);

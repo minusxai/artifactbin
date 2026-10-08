@@ -17,7 +17,7 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { mintAccountToken } from '@/__tests__/harness';
 
 
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
@@ -28,18 +28,15 @@ import { readFrames } from '@/__tests__/sse';
 const harness = useAppHarness();
 
 const BASE = 'http://localhost:3000';
-const SECRET = 'test-secret';
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function mint(): Promise<string> {
-  const res = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
-  expect(res.status).toBe(201);
-  return (await res.json() as { token: string }).token;
+  return (await mintAccountToken('mxmx_test_fixture')).token;
 }
 
 async function create(token: string, body: Record<string, unknown>) {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
   expect(res.status).toBe(201);
   return res.json() as Promise<Record<string, unknown> & { id: string; url: string; edit_id: string }>;
 }
@@ -135,7 +132,7 @@ describe('/a/<id> namespace', () => {
 
     // First frame is the current state; then a whole-document PUT must wake us.
     const put = await putArtifact(
-      await observedRequest('/api/artifacts/AbC123', { method: 'PUT', token: token, json: { markup: '<section><p>beta</p></section>' } }),
+      await observedRequest('/api/artifacts/AbC123', { method: 'PUT', token: token, json: { visibility: 'public', markup: '<section><p>beta</p></section>' } }),
       params({ id: 'AbC123' }),
     );
     expect(put.status).toBe(200);

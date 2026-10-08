@@ -68,6 +68,7 @@ async function startLeg() {
   try {
     await run(async () => {
       const page = await own.newPage({ viewport: { width: 1280, height: 900 } });
+      await loginViaEmail(page, BASE, sink, `mxmx_test_start_${stamp}@example.com`);
       await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
       // The start page immediately replaces the document. Capture the real server
       // response before delivering it so navigation cannot discard Chromium's body.
@@ -111,7 +112,7 @@ async function startLeg() {
       must(!!id, 'the guest start page makes a real document');
       check(!('token' in started) && !('expiresAt' in started), 'and the API body hands out NO credential and no expiry');
       check(!/mx_/.test(JSON.stringify(started)), 'nothing token-shaped rides the response at all');
-      check(/HttpOnly/i.test(startRes.headers()['set-cookie'] ?? ''), 'guest ownership stays in an HttpOnly cookie');
+      check((await page.context().cookies(BASE)).some(c => /better-auth/.test(c.name) && c.httpOnly), 'email ownership uses an HttpOnly account session');
       // The COPIED paste is tokenless and points at afbin — the agent-facing surface carries no secret.
       check(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
       check(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
@@ -128,10 +129,10 @@ async function startLeg() {
       // grants a credential. Device approval still owns CLI authentication.
       const bareStart = await fetch(`${BASE}/api/start`, { method: 'POST' });
       const bareDocument = await bareStart.json();
-      check(bareStart.status === 201 && !!bareDocument.id, 'an HTTP client can create a document without browser-only policy');
+      check(bareStart.status === 401 && !bareDocument.id, 'signed-out HTTP creation requires email authentication');
       check(!('token' in bareDocument) && !('expiresAt' in bareDocument) && !/mx_/.test(JSON.stringify(bareDocument)),
         'HTTP creation hands out no credential or expiry');
-      check(/HttpOnly/i.test(bareStart.headers.get('set-cookie') ?? ''), 'guest creation sets an HttpOnly ownership cookie');
+      check(!bareStart.headers.has('set-cookie'), 'signed-out creation issues no ownership credential');
       // The start door is the thing under test, so this leg cannot use the shared
       // start helper — it walks the same two steps by hand.
       const agent = await connectAgent(BASE);
@@ -141,7 +142,7 @@ async function startLeg() {
         body: JSON.stringify({ artifactId: id }),
       })).json();
       await page.goto(approval.verification_uri_complete);
-      await page.getByRole('button', { name: 'Continue as guest', exact: true }).click();
+      await page.getByRole('button', { name: 'Approve access', exact: true }).click();
       await page.getByRole('heading', { name: 'Access approved', exact: true }).waitFor();
       const granted = await fetch(`${BASE}/api/agent-approvals/token`, {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${agent.token}` },
@@ -401,28 +402,31 @@ async function claimLeg() {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers ?? {}) },
     })).json();
-    // An anonymous visitor makes two documents.
-    const anon = await connectAgent(BASE);
+    // An email account creates two private documents.
+    const email = `mxmx_test_claim_${stamp}@example.com`;
+    const anon = await connectAgent(BASE, { email });
     const doc = async (title) => api('/api/artifacts', {
       method: 'POST',
       body: JSON.stringify({ title, markup: `<div data-design="tw" className="p-8"><h1 className="text-3xl font-bold">${title}</h1></div>` }),
     }, anon.token);
     const kept = await doc('Quarterly Review');
     const left = await doc('Scratch Notes');
-    must(!!kept.id && !!left.id, 'an anonymous visitor published two documents');
+    must(!!kept.id && !!left.id, 'an email account published two documents');
 
-    // The browser holds the guest's httpOnly session cookie, and the shell it unlocks belongs to the owner.
+    // The approving browser holds its separate email account session.
     await p.goto(BASE, { waitUntil: 'load' });
     await becomeOwner(p, BASE, anon.token);
 
-    // They log in.
-    const email = `mxmx_test_claim_${stamp}@example.com`;
+    // Re-authenticate the same email account after ending this browser session.
+    await p.getByRole('button', { name: 'Open menu', exact: true }).click();
+    await p.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await p.waitForURL(url => url.pathname === '/login');
     await loginViaEmail(p, BASE, sink, email);
     // The page chrome names the account by HANDLE, not by address, so being signed in is asked of the session endpoint.
     check(await isSignedInAs(p, email), 'logging in with an emailed code signs you in');
 
-    // Guest ownership transfers during verified login, without a second claim UI.
-    check(await p.locator('[aria-label="Unclaimed drafts"]').count() === 0, 'guest drafts are adopted automatically on verified login');
+    // Re-authentication keeps the same account ownership without a claim UI.
+    check(await p.locator('[aria-label="Unclaimed drafts"]').count() === 0, 'email accounts need no draft-claim interface');
     // And there is NOWHERE to paste a credential: the account page lists CLI
     // connections to revoke, and nothing anywhere asks a person for a token.
     await p.goto(`${BASE}/account`, { waitUntil: 'load' });
@@ -434,7 +438,7 @@ async function claimLeg() {
     const stored = await p.evaluate(() => [localStorage.getItem('mx_tokens'), localStorage.getItem('mx_token')]);
     check(stored.every((v) => v === null), 'the browser keeps no token in localStorage');
     const cookies = await p.context().cookies(BASE);
-    check(cookies.some((c) => /mx-agent-session/.test(c.name) && c.httpOnly), 'it holds an httpOnly session cookie instead');
+    check(cookies.some((c) => /better-auth/.test(c.name) && c.httpOnly), 'it holds an httpOnly session cookie instead');
 
     const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
     const mine = await (await fetch(`${BASE}/api/my/artifacts`, { headers: { cookie: cookieHeader } })).json();
@@ -474,7 +478,7 @@ async function workspaceOwner() {
     must(Boolean((await ctx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'owner logged in');
     // The owner's token — guest-owned, then adopted by the verified session. This is what stands in for the AGENT:
     // the same credential an agent would hold.
-    const anon = await connectAgent(BASE);
+    const anon = await connectAgent(BASE, { email: `mxmx_test_workspace_owner_${stamp}@example.com` });
     must(await mergeGuestIntoAccount(page, BASE, anon.token) === 200, 'owner adopted the guest connection');
     const api = async (path, body) => {
       const res = await fetch(`${BASE}${path}`, {

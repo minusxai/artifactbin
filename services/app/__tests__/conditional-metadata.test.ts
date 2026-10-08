@@ -1,12 +1,12 @@
 import {documentEdit} from './prepared-document';
 import {expect,it} from 'vitest';
 import {request,useAppHarness} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {getArtifactFor,setMetadataFor,applyEditFor} from '@/lib/artifacts';
 const harness=useAppHarness();
 async function document() {
- const token=await mintToken('conditional');const actor={tokenId:token.id,userId:null};
+ const token=await mintToken('conditional');const actor={tokenId:token.id,userId:token.userId};
  const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Original</p>',title:'Original'}}));
  expect(response.status).toBe(201);
  const id=(await response.json()).id;const row=(await getArtifactFor(actor,id))!;

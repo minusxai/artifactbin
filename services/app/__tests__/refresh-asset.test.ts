@@ -20,10 +20,9 @@ import { POST as myRefreshRoute } from '@/app/api/my/artifacts/[id]/assets/refre
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { webAssetByHash } from '@/lib/serving';
 import { urlHash } from '@/lib/story/assets/asset-url';
-import { agentCookie } from '@/__tests__/harness';
 
 useAppHarness();
 
@@ -163,7 +162,7 @@ describe('POST /api/my/artifacts/:id/assets/refresh — the menu row', () => {
 
     colour = 0x77;
     const res = await myRefreshRoute(
-      request(`/api/my/artifacts/${made.id}/assets/refresh`, { method: 'POST', cookie: await agentCookie([t.id]), origin: 'same' }),
+      request(`/api/my/artifacts/${made.id}/assets/refresh`, { method: 'POST', actor: { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true }, origin: 'same' }),
       params({ id: made.id }),
     );
     expect(res.status).toBe(200);
@@ -176,7 +175,7 @@ describe('POST /api/my/artifacts/:id/assets/refresh — the menu row', () => {
     const other = await mintToken('other');
     const made = await publishWithImage(owner.token);
     const res = await myRefreshRoute(
-      request(`/api/my/artifacts/${made.id}/assets/refresh`, { method: 'POST', cookie: await agentCookie([other.id]), origin: 'same' }),
+      request(`/api/my/artifacts/${made.id}/assets/refresh`, { method: 'POST', actor: { credential: 'session' as const, userId: other.userId!, email: other.email!, emailVerified: true }, origin: 'same' }),
       params({ id: made.id }),
     );
     expect(res.status).toBe(404);

@@ -704,11 +704,14 @@ await section('phone', async () => {
     + `<Question title="By region" data="$rows" height={240} viz={${ARC_VIZ}} />`
     + Array.from({ length: 30 }, (_, i) => `<p className="mt-4">A paragraph below the chart. ${i + 1}</p>`).join('')
     + '</div>';
-  const chartDoc = await (await fetch(`${B}/api/artifacts`, {
+  const chartResponse = await fetch(`${B}/api/artifacts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
-    body: JSON.stringify({ title: 'mobile gate chart', markup: chartMarkup, theme: 'manuscript' }),
-  })).json();
+    body: JSON.stringify({ title: 'mobile gate chart', visibility: 'public', markup: chartMarkup, theme: 'manuscript' }),
+  });
+  if (!chartResponse.ok) throw new Error(`mobile chart publish ${chartResponse.status}: ${await chartResponse.text()}`);
+  const chartDoc = await chartResponse.json();
+  if (chartDoc.visibility !== 'public') throw new Error(`mobile chart requires public visibility for its signed-out readers, got ${chartDoc.visibility}`);
 
 
   const open = async (viewport, hash = '', id = st.id) => {

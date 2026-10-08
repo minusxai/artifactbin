@@ -9,7 +9,7 @@ import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {getArtifactById} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {services,setServices} from '@/lib/platform';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {notificationJobStore} from '@/lib/notifications';
 import {evaluateNotificationQuery} from '@/lib/notifications';
 import {createNotificationWorker} from '@/lib/notifications';

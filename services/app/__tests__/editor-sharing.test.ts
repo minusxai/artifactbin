@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {agentCookie,request,useAppHarness} from './harness';
+import {request,useAppHarness} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as read,PUT as write} from '@/app/api/my/artifacts/[id]/sharing/route';
 import {observedRequest} from './conditional-request';
@@ -7,25 +7,25 @@ import {DELETE as remove,PATCH as metadata} from '@/app/api/my/artifacts/[id]/ro
 import {POST as restore} from '@/app/api/my/artifacts/[id]/restore/route';
 import {getArtifactById,effectiveRole,updateSharingFor} from '@/lib/artifacts';
 import {createUser,claimToken} from '@/lib/accounts';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 async function person(name:string){
- const user=await createUser({email:`mxmx_test_${name}@example.com`}),token=await mintToken(name);
+ const user=await createUser({email:`mxmx_test_${name}@example.com`}),token=await mintToken(name,user.id);
  await claimToken(user.id,token.token);
- return {user,token,actor:{userId:user.id,tokenId:token.id},cookie:await agentCookie([token.id])};
+ return {user,token,actor:{userId:user.id,tokenId:token.id},session:{userId:user.id,email:user.email,emailVerified:true,credential:'session' as const}};
 }
 async function fixture(role:'viewer'|'commenter'|'editor',dataset=false){
  const owner=await person('sharing_owner'),editor=await person('sharing_editor');
  const r=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{...(dataset?{dataset:[{n:1}]}:{markup:'<p>shared</p>'}),visibility:'private'}}));
  expect(r.status).toBe(201);const {id}=await r.json();
  await updateSharingFor(owner.actor,id,{shares:[{email:editor.user.email,role}]});
- const save=(json:object)=>write(request(`/api/my/artifacts/${id}/sharing`,{method:'PUT',cookie:editor.cookie,json}),params(id));
+ const save=(json:object)=>write(request(`/api/my/artifacts/${id}/sharing`,{method:'PUT',actor:editor.session,json}),params(id));
  return {owner,editor,id,save};
 }
 it.each(['viewer','commenter','editor'] as const)('sharing management requires edit access: %s',async role=>{
  const f=await fixture(role);
- expect((await read(request(`/api/my/artifacts/${f.id}/sharing`,{cookie:f.editor.cookie}),params(f.id))).status).toBe(role==='editor'?200:404);
+ expect((await read(request(`/api/my/artifacts/${f.id}/sharing`,{actor:f.editor.session}),params(f.id))).status).toBe(role==='editor'?200:404);
  for(const granted of ['viewer','commenter','editor'] as const){
   const r=await f.save({shares:[{email:f.editor.user.email,role},{email:'mxmx_test_recipient@example.com',role:granted}],visibility:'unlisted',linkRole:granted});
   expect(r.status).toBe(role==='editor'?200:404);
@@ -49,16 +49,16 @@ it('editors can configure writable datasets through sharing',async()=>{
 it('ownership, deletion and restoration remain outside editor sharing authority',async()=>{
  const f=await fixture('editor');
  expect((await f.save({shares:[{email:f.editor.user.email,role:'owner'}]})).status).toBe(400);
- expect((await remove(request(`/api/my/artifacts/${f.id}`,{method:'DELETE',cookie:f.editor.cookie}),params(f.id))).status).toBe(404);
- expect((await remove(request(`/api/my/artifacts/${f.id}`,{method:'DELETE',cookie:f.owner.cookie}),params(f.id))).status).toBe(200);
- expect((await restore(request(`/api/my/artifacts/${f.id}/restore`,{method:'POST',cookie:f.editor.cookie}),params(f.id))).status).toBe(404);
- expect((await restore(request(`/api/my/artifacts/${f.id}/restore`,{method:'POST',cookie:f.owner.cookie}),params(f.id))).status).toBe(200);
+ expect((await remove(request(`/api/my/artifacts/${f.id}`,{method:'DELETE',actor:f.editor.session}),params(f.id))).status).toBe(404);
+ expect((await remove(request(`/api/my/artifacts/${f.id}`,{method:'DELETE',actor:f.owner.session}),params(f.id))).status).toBe(200);
+ expect((await restore(request(`/api/my/artifacts/${f.id}/restore`,{method:'POST',actor:f.editor.session}),params(f.id))).status).toBe(404);
+ expect((await restore(request(`/api/my/artifacts/${f.id}/restore`,{method:'POST',actor:f.owner.session}),params(f.id))).status).toBe(200);
  expect((await getArtifactById(f.id))?.user_id).toBe(f.owner.user.id);
 });
 
 it('editors can change link access through the metadata API',async()=>{
  const f=await fixture('editor');
- const r=await metadata(await observedRequest(`/api/my/artifacts/${f.id}`,{method:'PATCH',cookie:f.editor.cookie,json:{visibility:'unlisted',linkRole:'commenter'}}),params(f.id));
+ const r=await metadata(await observedRequest(`/api/my/artifacts/${f.id}`,{method:'PATCH',actor:f.editor.session,json:{visibility:'unlisted',linkRole:'commenter'}}),params(f.id));
  expect(r.status).toBe(200);
  expect((await getArtifactById(f.id))?.link_role).toBe('commenter');
 });

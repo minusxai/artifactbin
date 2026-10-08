@@ -1,4 +1,4 @@
-import {getArtifactById} from '@/lib/artifacts';
+import {getArtifactById, updateSharingFor} from '@/lib/artifacts';
 import {documentEditBody} from './prepared-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
 /**
@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { artifactMetadata } from '@/test/helpers/pages';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -30,10 +30,13 @@ interface Start { id: string; token: string; edit_id: string }
  * document it creates is the one it can edit.
  */
 const start = async (): Promise<Start> => {
-  const { token } = await mintToken('device-approval');
+  const credential = await mintToken('device-approval');
+  const { token } = credential;
   const res = await startRoute(request('/api/start', { method: 'POST', json: {}, token }));
   expect(res.status).toBe(201);
-  return { ...(await res.json()) as Omit<Start, 'token'>, token };
+  const started = (await res.json()) as Omit<Start, 'token'>;
+  await updateSharingFor({ tokenId: credential.id, userId: credential.userId }, started.id, { visibility: 'public' });
+  return { ...started, token };
 };
 
 /** Match the seeded heading text without depending on its freshly generated id. */

@@ -20,7 +20,7 @@ import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
 import { setAssetByteQuotaForTests } from '@/lib/serving';
 import { LOCAL_OBJECT_DIR } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';

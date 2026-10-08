@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {request,useAppHarness} from './harness';
 import {documentEditBody} from './prepared-document';
 import {getArtifactById} from '@/lib/artifacts';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
 import {PATCH as patch} from '@/app/api/artifacts/[id]/route';
@@ -25,6 +25,6 @@ it('the advanced registry exposes the same operation-based metadata write',async
  const operation=OPERATIONS.find(x=>x.name==='edit_artifact');expect(operation).toBeDefined();expect(operation?.http.method).toBe('POST');
  const token=await mintToken('metadata-registry');const req=request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>hello</p>'}});
  const original=await(await create(req)).json(),base=(await getArtifactById(original.id))!;
- const result=await operation!.run({actor:{tokenId:token.id,userId:null},base:'http://localhost',request:req,author:{kind:'agent',label:null,transport:'http'}},{id:original.id,...documentEditBody(base,{metadata:{title:'After'}})});
+ const result=await operation!.run({actor:{tokenId:token.id,userId:token.userId},base:'http://localhost',request:req,author:{kind:'agent',label:null,transport:'http'}},{id:original.id,...documentEditBody(base,{metadata:{title:'After'}})});
  expect(result.status).toBe(200);expect(result.body).toMatchObject({title:'After',version:original.version+1});expect(result.body.state).not.toBe(original.state);
 });

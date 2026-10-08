@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { POST as startDocument } from '@/app/api/start/route';
-import { mintToken } from '@/lib/accounts';
-import { useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();
 
@@ -33,16 +33,20 @@ const DOORS: Array<[label: string, handler: (request: Request) => Promise<Respon
   ['POST /api/start for a bearer', startDocument, '/api/start', () => `client, ${REAL}`, true],
 ];
 
-describe("artifact handlers accept repeated requests without a request-rate policy", () => {
+describe("artifact handler authentication is independent of forwarding headers", () => {
   it.each(DOORS)('%s serves repeated requests', async (label, handler, path, head, bearer) => {
-    const token = bearer ? (await mintToken('no-app-side-door')).token : undefined;
+    const account = bearer || path === '/api/internal/tokens' ? await mintToken('no-app-side-door') : null;
+    const token = bearer ? account!.token : undefined;
+    if (path === '/api/internal/tokens') setSession(() => ({ user: { id: account!.userId!, email: account!.email!, emailVerified: true } }));
     for (let i = 0; i < REPEATED_REQUESTS; i++) {
       const response = await handler(viaDoor(path, head(i), token));
-      expect(response.status, `${label}: call ${i + 1} of ${REPEATED_REQUESTS}`).toBe(201);
+      expect(response.status, `${label}: call ${i + 1} of ${REPEATED_REQUESTS}`).toBe(bearer || path === '/api/internal/tokens' ? 201 : 401);
     }
   });
 
   it('mints are genuinely served, not merely un-refused', async () => {
+    const account = await mintToken('mint-owner');
+    setSession(() => ({ user: { id: account.userId!, email: account.email!, emailVerified: true } }));
     const response = await internalMint(viaDoor('/api/internal/tokens', `spoof, ${REAL}`));
     expect(response.status).toBe(201);
     expect((await response.json()).token).toMatch(/^mx_/);

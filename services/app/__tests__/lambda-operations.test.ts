@@ -1,6 +1,7 @@
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {createUser,mintToken,claimToken} from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {GET as anonymousQuery} from '@/app/a/[id]/query/route';
 import {POST as readerMutate} from '@/app/a/[id]/mutate/route';
@@ -12,7 +13,7 @@ import {runnerIdentity} from '../../runner/src/capabilities';
 import {defaultDatasetGrants,signActor,verifyActor} from '@artifactbin/utils';
 const harness=useAppHarness();
 it('proves default owner grants allow Lambda replay but deny anonymous declared writes',async()=>{
- const db=await harness.db();const owner=await createUser({email:'mxmx_test_lambda_ops@example.com'});const token=await mintToken('lambda');await claimToken(owner.id,token.token);
+ const db=await harness.db();const owner=await createUser({email:'mxmx_test_lambda_ops@example.com'});const token=await mintToken('lambda', owner.id);await claimToken(owner.id,token.token);
  const create=async(json:unknown)=>{const r=await publish(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
  const dataset=await create({dataset:[{n:1}],access:'readwrite'});
  expect(await setDatasetPolicy({userId:owner.id,tokenId:token.id},dataset,defaultDatasetGrants(),0)).toMatchObject({revision:1});

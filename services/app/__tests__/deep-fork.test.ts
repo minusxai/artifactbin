@@ -12,7 +12,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { viewersWritePolicy } from '@artifactbin/utils';
 
@@ -52,8 +52,8 @@ beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; fault.onClaim = 
 afterEach(() => { setArtifactQuotaForTests(null); });
 
 async function world() {
-  const ta = await mintToken('a'); const owner = await createUser({ email: 'owner@x.com' }); await claimToken(owner.id, ta.token);
-  const tb = await mintToken('b'); const bob = await createUser({ email: 'bob@x.com' }); await claimToken(bob.id, tb.token);
+  const owner = await createUser({ email: 'owner@x.com' }); const ta = await mintToken('a', owner.id); await claimToken(owner.id, ta.token);
+  const bob = await createUser({ email: 'bob@x.com' }); const tb = await mintToken('b', bob.id); await claimToken(bob.id, tb.token);
   const written = await create(ta.token, { dataset: [{ id: 1, who: owner.id, item: 'Groceries', amount: 48.5 }], access: 'readwrite', visibility: 'unlisted', title: 'tab' });
   expect(await setDatasetPolicy({ tokenId: ta.id, userId: owner.id }, written.id, viewersWritePolicy(), 0)).toMatchObject({ revision: 1 });
   const readOnly = await create(ta.token, { dataset: [{ code: 'USD', rate: 1 }], visibility: 'unlisted', title: 'rates' });
@@ -133,8 +133,8 @@ describe('forking a page that writes a dataset', () => {
 
 /** A page that writes TWO of someone else's datasets and reads a third. */
 async function twoWriters() {
-  const ta = await mintToken('a'); const owner = await createUser({ email: 'two-owner@x.com' }); await claimToken(owner.id, ta.token);
-  const tb = await mintToken('b'); const bob = await createUser({ email: 'two-bob@x.com' }); await claimToken(bob.id, tb.token);
+  const owner = await createUser({ email: 'two-owner@x.com' }); const ta = await mintToken('a', owner.id); await claimToken(owner.id, ta.token);
+  const bob = await createUser({ email: 'two-bob@x.com' }); const tb = await mintToken('b', bob.id); await claimToken(bob.id, tb.token);
   const expenses = await create(ta.token, { dataset: [{ id: 1, item: 'Groceries' }], access: 'readwrite', visibility: 'unlisted', title: 'expenses' });
   const people = await create(ta.token, { dataset: [{ id: 1, name: 'Ada' }], access: 'readwrite', visibility: 'unlisted', title: 'people' });
   const rates = await create(ta.token, { dataset: [{ code: 'USD', rate: 1 }], visibility: 'unlisted', title: 'rates' });

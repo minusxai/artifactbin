@@ -12,7 +12,7 @@ import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '@/lib/islands/contract';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
@@ -20,7 +20,7 @@ const harness = useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
 
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }];
 
@@ -109,8 +109,8 @@ describe('the served document', () => {
    * token because only DECLARED scalars do).
    */
   it('tells the document who is reading, and tells a capture nobody', async () => {
-    const t = await mintToken('reader-identity');
     const user = await createUser({ email: 'mxmx_test_island_reader@example.com', name: 'Ada' });
+    const t = await mintToken('reader-identity', user.id);
     await claimToken(user.id, t.token);
     const cookie = await agentCookie([t.id]);
     const doc = ((await (await create(t.token, { markup: '<p>Reading as <User userId="$_me.id" /></p>', visibility: 'public' })).json()) as { id: string }).id;

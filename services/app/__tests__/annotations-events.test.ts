@@ -9,7 +9,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor, type AnnotationAuthor } from '@/lib/annotations';
 import { createArtifact, type TokenActor } from '@/lib/artifacts';
 import { setServices } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -46,13 +46,13 @@ async function publish(email: string) {
   return { owner, row, actor: { tokenId: tok.id, userId: owner.id } satisfies TokenActor };
 }
 
-/** The same document under an ANONYMOUS token — no account behind it at all. */
-async function publishAnonymously() {
-  const tok = await mintToken('agent');
-  const row = await createArtifact(tok.id, null, doc);
+/** A legacy document with token ownership — kept to verify event provenance. */
+async function publishLegacy() {
+  const tok = await mintToken('agent', null);
+  const row = await createArtifact(tok.id, tok.userId, doc);
   await vi.waitFor(() => expect(fake.events.map((e) => e.verb)).toContain('created'));
   await listen();
-  return { row, actor: { tokenId: tok.id, userId: null } satisfies TokenActor };
+  return { row, actor: { tokenId:tok.id,userId:tok.userId } satisfies TokenActor };
 }
 
 const open = async (actor: TokenActor, artifactId: string, baseEditId: string, body: string) => {
@@ -73,7 +73,7 @@ describe('a thread opened', () => {
     expect(JSON.stringify((await said('annotated'))[0]), 'the words themselves never travel').not.toContain('this number looks wrong');
   });
   it('speaks for the TOKEN when no account is behind it', async () => {
-    const { row, actor } = await publishAnonymously();
+    const { row, actor } = await publishLegacy();
     await open(actor, row.id, row.edit_id, 'an agent says so');
     expect((await said('annotated'))[0]).toMatchObject({ subject_kind: 'token', subject_id: actor.tokenId, object_id: row.id });
   });

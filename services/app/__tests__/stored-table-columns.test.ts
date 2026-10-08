@@ -12,7 +12,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { artifactState } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { executeCatalog } from '@/lib/datasets/execute';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { request, useAppHarness } from './harness';
 useAppHarness();
 

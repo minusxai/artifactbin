@@ -27,6 +27,17 @@ function fakeDb(): Queryable & { statements: Array<{ sql: string; params: unknow
 }
 
 describe('createTokenReader', () => {
+  it('rechecks account admission even on cached bearers while retaining legacy ID proofs', async () => {
+    let allowed = false;
+    const reader = createTokenReader({ db: fakeDb(), admitBearer: async () => allowed });
+    expect(await reader.byToken(LIVE)).toBeNull();
+    expect(await reader.byId('tok_live')).toEqual({ id: 'tok_live', userId: 'usr_1' });
+    allowed = true;
+    expect(await reader.byToken(LIVE)).toEqual({ id: 'tok_live', userId: 'usr_1' });
+    allowed = false;
+    expect(await reader.byToken(LIVE)).toBeNull();
+  });
+
   it('byToken resolves a live token and answers null for an unknown or revoked one', async () => {
     const r = createTokenReader({ db: fakeDb() });
     expect(await r.byToken(LIVE)).toEqual({ id: 'tok_live', userId: 'usr_1' });

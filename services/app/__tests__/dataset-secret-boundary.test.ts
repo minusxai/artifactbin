@@ -11,7 +11,7 @@ import { POST as discover } from '@/app/api/my/datasets/discover/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import {POST as revertArtifact} from '@/app/api/artifacts/[id]/revert/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, claimToken } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 
@@ -20,7 +20,7 @@ const target = {host:'db.example.com',port:5432,database:'commerce',username:'re
 const ctx = (id:string) => ({params:Promise.resolve({id})});
 async function actor(name:string) {
   const user = await createUser({email:`mxmx_test_secret_review_${name}@example.com`});
-  const token = await mintToken(name); await claimToken(user.id,token.token);
+  const token = await mintToken(name, user.id); await claimToken(user.id,token.token);
   return {user,token};
 }
 async function fixture() {

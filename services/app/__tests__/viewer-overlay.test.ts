@@ -13,7 +13,7 @@ import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
@@ -27,7 +27,7 @@ beforeEach(() => asSession(null));
 
 async function owner() {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_overlay_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-  const t = await mintToken('overlay'); await claimToken(user.id, t.token);
+  const t = await mintToken('overlay', user.id); await claimToken(user.id, t.token);
   return { user, token: t.token, tokenId: t.id };
 }
 async function create(token: string, body: Record<string, unknown>): Promise<string> {
@@ -102,14 +102,14 @@ describe('GET /a/:id/viewer — what never leaves it', () => {
 describe('an island page\'s writes reach the document\'s mutate door', () => {
   /**
    * The browser, as far as a write is concerned: a same-origin request with `credentials: 'same-origin'`
-   * carries the reader's cookie and an Origin header; `omit` carries neither. Everything after that is the
+   * carries the reader's verified session actor and an Origin header; `omit` carries neither. Everything after that is the
    * real transport and the real route.
    */
-  const browser = (cookie: string) => async (url: string, init: RequestInit = {}) => {
+  const browser = (actor: import('@artifactbin/contracts').Actor) => async (url: string, init: RequestInit = {}) => {
     const withSession = init.credentials !== 'omit';
     const path = new URL(url, 'http://localhost:3000').pathname;
     const id = path.split('/')[2]!;
-    const req = request(path, { method: init.method ?? 'GET', body: init.body as BodyInit, headers: init.headers as Record<string, string>, ...(withSession ? { cookie, origin: 'same' as const } : {}) });
+    const req = request(path, { method: init.method ?? 'GET', body: init.body as BodyInit, headers: init.headers as Record<string, string>, ...(withSession ? { actor, origin: 'same' as const } : {}) });
     return mutateRoute(req, params(id));
   };
 
@@ -117,12 +117,12 @@ describe('an island page\'s writes reach the document\'s mutate door', () => {
     const who = await owner();
     const ds = await create(who.token, { dataset: [{ choice: 'ramen' }], access: 'readwrite' });
     const id = await create(who.token, { visibility: 'private', markup: `<Helmet><Value name="choice" type="string" default="tacos" /><Import name="d" src="ref:${ds}" /><Mutation name="vote">{\`insert into d.rows (choice) values ($choice)\`}</Mutation></Helmet><Button run="$vote">Vote</Button>` });
-    const cookie = await agentCookie([who.tokenId]);
-    const signedIn = createFetchTransport(`/a/${id}/query`, browser(cookie), `/a/${id}/mutate`, { session: true });
+    const actor = {credential:'session' as const,userId:who.user.id,email:who.user.email!,emailVerified:true};
+    const signedIn = createFetchTransport(`/a/${id}/query`, browser(actor), `/a/${id}/mutate`, { session: true });
     await expect(signedIn.mutate!({ mutation: 'vote', args: { choice: 'udon' } })).resolves.toMatchObject({ dataset: ds });
     expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{ choice: 'ramen' }, { choice: 'udon' }]);
 
-    const guest = createFetchTransport(`/a/${id}/query`, browser(cookie), `/a/${id}/mutate`);
+    const guest = createFetchTransport(`/a/${id}/query`, browser(actor), `/a/${id}/mutate`);
     await expect(guest.mutate!({ mutation: 'vote', args: { choice: 'soba' } })).rejects.toThrow();
     expect((await getArtifactById(ds))!.version).toBe(2);
   });

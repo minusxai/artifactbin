@@ -7,7 +7,7 @@
  * `/api/tokens` aside). It is unreachable from outside — proxy parts
  * `internalBoundary` — so it is driven here the way the proxy drives it.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 
 import { createUser } from '@/lib/accounts';
@@ -25,6 +25,8 @@ import { useAppHarness } from '@/__tests__/harness';
 const harness = useAppHarness();
 
 const ADMIN = 'admin-secret-for-tests';
+const ADMIN_EMAIL = 'mxmx_test_operator@example.com';
+beforeEach(async () => { await createUser({ email: ADMIN_EMAIL }); });
 process.env.ADMIN__SECRET = ADMIN;
 const params = (p: Record<string, string>) => ({ params: Promise.resolve(p) });
 const json = (r: Response) => r.json() as Promise<Record<string, unknown>>;
@@ -33,7 +35,7 @@ type TokenRow = { id: string; status: string; expires_at: string | null; last_us
 describe('token routes served by the app', () => {
   it('POST /api/tokens mints with the admin secret and 404s without it', async () => {
     expect((await mintAdmin(request('/api/tokens', { method: 'POST', json: {} }))).status).toBe(404);
-    const res = await mintAdmin(request('/api/tokens', { method: 'POST', token: ADMIN, json: { name: 't' } }));
+    const res = await mintAdmin(request('/api/tokens', { method: 'POST', token: ADMIN, json: { email: ADMIN_EMAIL, name: 't' } }));
     expect(res.status).toBe(201);
     expect(await json(res)).toMatchObject({ token: expect.stringMatching(/^mx_/) });
   });
@@ -41,7 +43,7 @@ describe('token routes served by the app', () => {
     const res = await mintAdmin(request('/api/tokens', {
       method: 'POST',
       token: ADMIN,
-      json: { name: 'short-job', expiresInHours: 2 },
+      json: { email: ADMIN_EMAIL, name: 'short-job', expiresInHours: 2 },
     }));
     expect(res.status).toBe(201);
     const minted = await json(res);
@@ -56,13 +58,12 @@ describe('token routes served by the app', () => {
     expect(await json(invalid)).toEqual({ error: 'invalid_expiry' });
   });
   it('DELETE /api/tokens/:id revokes; a second call 404s', async () => {
-    const { id } = await json(await mintAdmin(request('/api/tokens', { method: 'POST', token: ADMIN, json: {} })));
+    const { id } = await json(await mintAdmin(request('/api/tokens', { method: 'POST', token: ADMIN, json: { email: ADMIN_EMAIL } })));
     expect((await revokeAdmin(request(`/api/tokens/${id}`, { method: 'DELETE', token: ADMIN }), params({ id: String(id) }))).status).toBe(204);
     expect((await revokeAdmin(request(`/api/tokens/${id}`, { method: 'DELETE', token: ADMIN }), params({ id: String(id) }))).status).toBe(404);
   });
-  it('the internal mint issues anonymously, and binds to the user under a session actor', async () => {
-    const anon = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST' })));
-    expect(anon.token).toMatch(/^mx_/);
+  it('the internal mint requires an email account and binds to its session actor', async () => {
+    expect((await mintInternal(request('/api/internal/tokens', { method: 'POST' }))).status).toBe(401);
     const user = await createUser({ email: 'a@example.com' });
     const owned = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST', actor: { credential: 'session', userId: user.id, email: 'a@example.com', emailVerified: true } })));
     const { rows } = await (await harness.db()).query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE id = $1', [owned.id]);
@@ -70,7 +71,7 @@ describe('token routes served by the app', () => {
   });
   it('only a session mint may create an API audience-bound access token', async () => {
     const grant = { audience: 'https://artifactbin.example/api', scope: 'artifacts' };
-    expect((await mintInternal(request('/api/internal/tokens', { method: 'POST', json: grant }))).status).toBe(400);
+    expect((await mintInternal(request('/api/internal/tokens', { method: 'POST', json: grant }))).status).toBe(401);
     const user = await createUser({ email: 'oauth@example.com' });
     const actor = { credential: 'session' as const, userId: user.id, email: 'oauth@example.com', emailVerified: true };
     const minted = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST', actor, json: grant })));
@@ -127,16 +128,18 @@ describe('token routes served by the app', () => {
     expect((await revokeMine(request(`/api/my/tokens/${id}`, { method: 'DELETE', actor: actorA, origin: 'https://evil.example', headers: { host: 'localhost' } }), params({ id: String(id) }))).status).toBe(403);
     expect((await revokeMine(request(`/api/my/tokens/${id}`, { method: 'DELETE', actor: actorA }), params({ id: String(id) }))).status).toBe(204);
   });
-  it('POST /api/session/token adopts a token into the agent cookie; DELETE clears it', async () => {
-    const { token } = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST' })));
-    const res = await adoptSession(request('/api/session/token', { method: 'POST', json: { token } }));
-    expect(res.status).toBe(204);
-    expect(cookieValue(res).value).not.toBeNull();
-    const cleared = await clearSession(request('/api/session/token', { method: 'DELETE' }));
+  it('POST /api/session/token refuses token login; DELETE still clears the old cookie', async () => {
+    const user = await createUser({ email: 'mxmx_test_exchange@example.com' });
+    const { token } = await mintToken('account', user.id);
+    const response = await adoptSession(request('/api/session/token', { method: 'POST', json: { token } }));
+    expect(response.status).toBe(401);
+    expect(cookieValue(response).value).toBeNull();
+    const cleared = await clearSession();
     expect(cookieValue(cleared).cleared).toBe(true);
   });
   it('a token revoked here stops authorizing on the very next request', async () => {
-    const { id, token } = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST' })));
+    const user = await createUser({ email: 'mxmx_test_revocation@example.com' });
+    const { id, token } = await mintToken('account', user.id);
     expect((await listArtifacts(request('/api/artifacts', { token: String(token) }))).status).toBe(200);
     await revokeAdmin(request(`/api/tokens/${id}`, { method: 'DELETE', token: ADMIN }), params({ id: String(id) }));
     expect((await listArtifacts(request('/api/artifacts', { token: String(token) }))).status).toBe(401);

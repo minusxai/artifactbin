@@ -21,7 +21,9 @@ type BootOutcome = {
   kind: 'exited' | 'listened' | 'timed-out';
   code: number | null;
   output: string;
-  guestCookieAccepted?: boolean;
+  loggedOutStartStatus?: number;
+  loggedOutMintStatus?: number;
+  guestCookieIssued?: boolean;
 };
 
 async function availablePort(offset: number): Promise<number> {
@@ -91,11 +93,10 @@ async function runBoot(port: number, overrides: Record<string, string>): Promise
   if (outcome.kind === 'listened') {
     const base = `http://localhost:${port}`;
     const started = await fetch(base + '/api/start', { method: 'POST' });
-    const { id } = await started.json() as { id: string };
-    const cookie = started.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-    const home = await fetch(base + '/api/page/home', { headers: { cookie } });
-    const result = await home.json() as { drafts?: Array<{ id: string }> };
-    outcome.guestCookieAccepted = result.drafts?.some(draft => draft.id === id) ?? false;
+    outcome.loggedOutStartStatus = started.status;
+    outcome.guestCookieIssued = started.headers.getSetCookie().length > 0;
+    const minted = await fetch(base + '/api/session/token', { method: 'POST' });
+    outcome.loggedOutMintStatus = minted.status;
   }
   if (child.exitCode === null && child.signalCode === null) {
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
@@ -152,7 +153,9 @@ describe.concurrent('production boot environment', () => {
     expect(result.kind, result.output).toBe('listened');
     expect(result.output).toContain('[boot] AUTH__SECRET unset — generated per boot');
     expect(result.output).toContain(`[boot] auth + app on http://localhost:${port} (dev, db pglite)`);
-    expect(result.guestCookieAccepted).toBe(true);
+    expect(result.loggedOutStartStatus).toBe(401);
+    expect(result.loggedOutMintStatus).toBe(401);
+    expect(result.guestCookieIssued).toBe(false);
   }, 90_000);
 
   it('turns an occupied port into an actionable error without an unhandled stack', async () => {

@@ -29,7 +29,8 @@ import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { getDb } from '@/lib/platform';
 import { createGuestOwner } from '@/lib/accounts';
 import { createTestUser } from '@/lib/accounts';
-import { mintToken, tokenStatus } from '@/lib/accounts';
+import { tokenStatus } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { services, setServices } from '@/lib/platform';
 import { request, useAppHarness } from './harness';
@@ -58,9 +59,9 @@ const script = (session_id: string, extra: Record<string, unknown> = {}) =>
 
 /** An owner with a real account, as the product makes one. */
 async function account(name: string) {
-  const token = await mintToken(name);
   const user = await createUser({ email: `mxmx_test_${name}@example.com`, name });
-  await claimToken(user.id, token.token);
+  const token = await mintToken(name, user.id);
+    await claimToken(user.id, token.token);
   return { token: token.token, tokenId: token.id, userId: user.id, email: user.email };
 }
 

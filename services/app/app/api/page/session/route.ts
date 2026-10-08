@@ -1,6 +1,6 @@
 /**
  * Who is looking, for the app's chrome: the account (or none), how the browser
- * is authenticated (`account` | `anon` | `none`, the top bar's session
+ * is authenticated (`account` | `none`, the top bar's session
  * control), and whether this person has been through the welcome page.
  *
  * `user` carries what the bar draws the person with: their current handle

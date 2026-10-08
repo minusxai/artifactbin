@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { withTokenAuth } from '@/lib/accounts';
 import { profileWrites, syncProfile } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { sessionActor } from '@/lib/accounts';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -74,7 +74,7 @@ describe('profile sync at the bearer door', () => {
   const ok = withTokenAuth(async () => new Response('ok'));
 
   it('writes the row for a bearer token whose proxy claims name its account', async () => {
-    const token = await mintToken('cli');
+    const token = await mintToken('cli', 'usr_cli0000000001');
     await claimToken('usr_cli0000000001', token.token);
     const before = profileWrites();
 
@@ -93,14 +93,14 @@ describe('profile sync at the bearer door', () => {
   });
 
   it('writes nothing for claims that do not belong to the presented token', async () => {
-    const token = await mintToken('cli');
+    const token = await mintToken('cli', 'usr_cli0000000002');
     await claimToken('usr_cli0000000002', token.token);
     const before = profileWrites();
 
     await ok(cliRequest(token, { credential: 'bearer', tokenId: 'tok_somethingelse', userId: 'usr_cli0000000002', email: 'other@example.com' }));
     await ok(cliRequest(token, { credential: 'bearer', tokenId: token.id, userId: 'usr_someoneelse00', email: 'other@example.com' }));
     expect(profileWrites()).toBe(before);
-    expect((await (await harness.db()).query('SELECT 1 FROM users')).rows).toEqual([]);
+    expect((await (await harness.db()).query('SELECT id,email FROM users')).rows).toEqual([{id:token.userId,email:token.email}]);
   });
 
   /**
@@ -111,7 +111,7 @@ describe('profile sync at the bearer door', () => {
   it('answers the request anyway when the address already belongs to another id, and SAYS SO once', async () => {
     const db = await harness.db();
     await db.query('INSERT INTO users (id, email, username) VALUES ($1, $2, $3)', ['usr_theotherone00', 'shared@example.com', 'shared_1234']);
-    const token = await mintToken('cli');
+    const token = await mintToken('cli', 'usr_cli0000000003');
     await claimToken('usr_cli0000000003', token.token);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -140,7 +140,7 @@ describe('profile sync at the bearer door', () => {
    * hiding it would turn an outage into an empty listing that reads like a permission problem.
    */
   it('lets an unrelated database failure out, rather than hiding it behind the reach the caller lost', async () => {
-    const token = await mintToken('cli');
+    const token = await mintToken('cli', 'usr_cli0000000009');
     await claimToken('usr_cli0000000009', token.token);
     const db = await harness.db();
     const real = db.query.bind(db);
@@ -163,7 +163,7 @@ describe('profile sync at the bearer door', () => {
    * too. An ordinary GET still writes: that is the whole point of syncing at the bearer door.
    */
   it('writes nothing for an explicit dry-run GET, and writes on the ordinary one', async () => {
-    const token = await mintToken('cli');
+    const token = await mintToken('cli', 'usr_cli0000000004');
     await claimToken('usr_cli0000000004', token.token);
     const claims = { credential: 'bearer', tokenId: token.id, userId: 'usr_cli0000000004', email: 'dry@example.com', emailVerified: true } as const;
     const before = profileWrites();
@@ -172,7 +172,7 @@ describe('profile sync at the bearer door', () => {
     expect(dry.status).toBe(200);
     expect(profileWrites()).toBe(before);
     const db = await harness.db();
-    expect((await db.query('SELECT 1 FROM users WHERE id = $1', ['usr_cli0000000004'])).rows).toEqual([]);
+    expect((await db.query('SELECT email FROM users WHERE id = $1', ['usr_cli0000000004'])).rows).toEqual([{email:token.email}]);
 
     expect((await ok(cliRequest(token, claims))).status).toBe(200);
     expect(profileWrites() - before).toBe(1);
@@ -192,7 +192,7 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
 
   it('reaches a dataset shared with them as editor through /api/my/secrets, having never called another route', async () => {
     const owner = await createUser({ email: 'dataset-owner@example.com' });
-    const ownerToken = await mintToken('owner');
+    const ownerToken = await mintToken('owner', owner.id);
     await claimToken(owner.id, ownerToken.token);
     const published = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: ownerToken.token, json: {
       dataset: { kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'id', type: 'number' }], rows: [{ id: 1 }] }] },
@@ -204,11 +204,10 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     const db = await harness.db();
     await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')", [id, 'firstcall@invited.example']);
 
-    // The invitee: a token, an account and an invitation — and no `users` row, because nothing has
-    // ever brought a cookie and this is their first request of any kind.
-    const invitee = await mintToken('invitee');
+    // An email account's first bearer request synchronizes the verified invitation address.
+    const invitee = await mintToken('invitee', 'usr_cli0000000005');
     await claimToken('usr_cli0000000005', invitee.token);
-    expect((await db.query('SELECT 1 FROM users WHERE id = $1', ['usr_cli0000000005'])).rows).toEqual([]);
+    expect((await db.query('SELECT email FROM users WHERE id = $1', ['usr_cli0000000005'])).rows).toEqual([{email:invitee.email}]);
 
     const response = await createSecretRoute(attachActor(
       request('/api/my/secrets', { method: 'POST', token: invitee.token, json: { value: 'a-password', connection: TARGET, datasetId: id } }),
@@ -220,7 +219,7 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
 
   it('keeps the uniform 404 for an account nobody invited', async () => {
     const owner = await createUser({ email: 'dataset-owner2@example.com' });
-    const ownerToken = await mintToken('owner2');
+    const ownerToken = await mintToken('owner2', owner.id);
     await claimToken(owner.id, ownerToken.token);
     const published = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: ownerToken.token, json: {
       dataset: { kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'id', type: 'number' }], rows: [{ id: 1 }] }] },
@@ -229,7 +228,7 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     expect(published.status).toBe(201);
     const { id } = (await published.json()) as { id: string };
 
-    const stranger = await mintToken('stranger');
+    const stranger = await mintToken('stranger', 'usr_cli0000000006');
     await claimToken('usr_cli0000000006', stranger.token);
     const response = await createSecretRoute(attachActor(
       request('/api/my/secrets', { method: 'POST', token: stranger.token, json: { value: 'a-password', connection: TARGET, datasetId: id } }),

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { POST as reject } from '@/app/api/tokens/reject/route';
 import { AGENT_COOKIE, decodeAgentSessionEnvelope } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { agentCookie, cookieValue, request, useAppHarness } from './harness';
 
 useAppHarness();
@@ -22,7 +22,7 @@ describe('request()', () => {
   });
   it('an attached actor arrives the way the proxy hands it over — no header, no cookie', async () => {
     const t = await mintToken('t');
-    const r = request('/api/artifacts', { actor: { credential: 'bearer', tokenId: t.id } });
+    const r = request('/api/artifacts', { actor: { credential: 'bearer', tokenId: t.id, userId: t.userId!, email: t.email!, emailVerified: true } });
     expect(r.headers.get('authorization')).toBeNull();
     expect(r.headers.get('cookie')).toBeNull();
     expect((await listArtifacts(r)).status).toBe(200);
@@ -40,7 +40,7 @@ describe('request()', () => {
   });
   it('refuses a bearer AND an actor in one request — two credentials is a test bug', async () => {
     const t = await mintToken('t');
-    expect(() => request('/api/x', { token: t.token, actor: { credential: 'bearer', tokenId: t.id } })).toThrow(/one credential/i);
+    expect(() => request('/api/x', { token: t.token, actor: { credential: 'bearer', tokenId: t.id, userId: t.userId!, email: t.email!, emailVerified: true } })).toThrow(/one credential/i);
   });
 });
 
@@ -52,13 +52,13 @@ describe('agentCookie() and cookieValue()', () => {
   });
   it('reads a rewritten cookie and recognises a cleared one', async () => {
     const a = await mintToken('a');
-    const b = await mintToken('b');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: a.id }, cookie: await agentCookie([a.id, b.id]) }));
+    const b = await mintToken('b', a.userId!);
+    const res = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: a.id }, actor: {credential:'session',userId:a.userId!,email:a.email!,emailVerified:true,heldTokenIds:[a.id,b.id]}, cookie: await agentCookie([a.id, b.id]) }));
     expect(res.status).toBe(204);
     const rewritten = cookieValue(res);
     expect(rewritten.cleared).toBe(false);
     expect(await decodeAgentSessionEnvelope(rewritten.value)).toMatchObject({ tokenIds: [b.id], sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
-    const last = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: b.id }, cookie: rewritten.value ? `${AGENT_COOKIE}=${rewritten.value}` : '', actor: { credential: 'agent-cookie', tokenId: b.id, heldTokenIds: [b.id] } }));
+    const last = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: b.id }, cookie: rewritten.value ? `${AGENT_COOKIE}=${rewritten.value}` : '', actor: { credential:'session',userId:b.userId!,email:b.email!,emailVerified:true,heldTokenIds:[b.id] } }));
     expect(cookieValue(last).cleared).toBe(true);
     expect(cookieValue(new Response(null)).value).toBeNull();
   });

@@ -1,6 +1,7 @@
 import {afterEach,expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {createUser,mintToken,claimToken} from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {observedTextBody} from './prepared-document';
@@ -11,7 +12,7 @@ const harness=useAppHarness();let stop:(()=>Promise<void>)|undefined;
 afterEach(async()=>{await stop?.();stop=undefined;setLambdaProgramResolver(undefined);setServices({runner:undefined});});
 it('stores a live artifact reference without copying execution source or pinning its version',async()=>{
  const db=await harness.db();const owner=await createUser({email:'mxmx_test_schedule_live@example.com'});
- const token=await mintToken('schedule');await claimToken(owner.id,token.token);
+ const token=await mintToken('schedule', owner.id);await claimToken(owner.id,token.token);
  const doc=await(await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Live schedule</p>'}}))).json();
  const runner:RunnerService={start:async()=>({runId:'unused'}),getRun:async()=>{throw Error('unused')},events:async()=>({events:[],nextSequence:0,hasMore:false}),cancel:async()=>{}};
  setServices({runner});stop=await startLambdaSchedules(db);
@@ -25,7 +26,7 @@ it('stores a live artifact reference without copying execution source or pinning
 });
 it('uses the same owner-scoped API for CRUD, manual triggers and history, and resolves the latest source',async()=>{
  const db=await harness.db();const owner=await createUser({email:'mxmx_test_schedule_http@example.com'});
- const token=await mintToken('schedule');await claimToken(owner.id,token.token);
+ const token=await mintToken('schedule', owner.id);await claimToken(owner.id,token.token);
  const doc=await(await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<Helmet><script type="server">{`export default()=>({marker: "initial"})`}</script></Helmet><p>Live executable</p>'}}))).json();
  const started:import('@artifactbin/contracts').RunStart[]=[];
  const runner:RunnerService={start:async input=>{started.push(input);return {runId:'run-'+started.length};},getRun:async({runId})=>({runId,status:'running',output:null,receipt:null}),events:async()=>({events:[],nextSequence:0,hasMore:false}),cancel:async()=>{}};
@@ -54,7 +55,7 @@ it('uses the same owner-scoped API for CRUD, manual triggers and history, and re
 });
 it('invokes and schedules owner-controlled native program artifacts without a V8 document',async()=>{
  const db=await harness.db();const owner=await createUser({email:'mxmx_test_schedule_native@example.com'});
- const token=await mintToken('program-schedule');await claimToken(owner.id,token.token);
+ const token=await mintToken('program-schedule', owner.id);await claimToken(owner.id,token.token);
  const definition={version:1,command:['node','-e','console.log(process.env.ARTIFACTBIN_INPUT)']};
  const created=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{program:definition,visibility:'unlisted'}}));expect(created.status).toBe(201);const doc=await created.json();
  const started:import('@artifactbin/contracts').RunStart[]=[];

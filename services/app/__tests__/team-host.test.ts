@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {useAppHarness} from './harness';
 import {createTeamApplication} from '../../cli/src/team-application';
 import {getDb} from '@/lib/platform';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {AUTH_SECRET} from '@/lib/platform';
 useAppHarness();
 it('team host composes real public auth and preserves separate owners and anonymous denial',async()=>{
@@ -13,10 +13,8 @@ it('team host composes real public auth and preserves separate owners and anonym
  try{
  const host=await createTeamApplication({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,PROXY__RATE_LIMIT_CONFIG_FILE:'/does-not-exist/production-policy.yml',EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')},process.cwd());
  const bareStart=await host.fetch(new Request(origin+'/api/start',{method:'POST'}));
- expect(bareStart.status).toBe(201);
- const bareDocument=await bareStart.json();expect(bareDocument.id).toBeTruthy();
- expect(bareDocument).not.toHaveProperty('token');expect(bareDocument).not.toHaveProperty('expiresAt');
- expect(JSON.stringify(bareDocument)).not.toMatch(/mx_/);expect(bareStart.headers.get('set-cookie')).toContain('HttpOnly');
+ expect(bareStart.status).toBe(401);
+ expect(bareStart.headers.get('set-cookie')).toBeNull();
  const db=await getDb();
  await db.query('INSERT INTO users (id,email,name,username) VALUES ($1,$2,$3,$4),($5,$6,$7,$8)',
  ['usr_team1','mxmx_test_team1@example.test','First','team1','usr_team2','mxmx_test_team2@example.test','Second','team2']);

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/serving';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { request, useAppHarness } from './harness';

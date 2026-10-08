@@ -17,7 +17,7 @@ import {getDb} from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { resetExportRenderer, renderArtifactImage } from '@/lib/export';
 import { setServices } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/assets/social-preview';
 import { useAppHarness } from '@/__tests__/harness';
 
@@ -38,7 +38,7 @@ afterEach(() => setServices({}));
 
 async function doc(): Promise<string> {
   const t = await mintToken('t');
-  const row = await createArtifact(t.id, null, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+  const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
   return row.id;
 }
 
@@ -72,9 +72,9 @@ describe('the export route through the browser seam', () => {
   it('forwards a saved social-preview crop to the browser', async () => {
     browser();
     const t = await mintToken('crop');
-    const row = await createArtifact(t.id, null, {
+    const row = await createArtifact(t.id, t.userId, {
       format: 'markup', source: '<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><div>hi</div>',
-      meta: {}, title: 'hi', description: null,
+      meta: {}, title: 'hi', description: null, visibility: 'public',
     });
     await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card`), params(row.id));
     expect(lastRequest().capture).toEqual({ card: { x: 300, y: 900, width: 800 } });
@@ -83,7 +83,7 @@ describe('the export route through the browser seam', () => {
   it('keeps the framing overview editor-only and renders it at the canonical layout width', async () => {
     browser();
     const t = await mintToken('preview');
-    const row = await createArtifact(t.id, null, {
+    const row = await createArtifact(t.id, t.userId, {
       format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
     });
     const anonymous = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`), params(row.id));
@@ -95,7 +95,7 @@ describe('the export route through the browser seam', () => {
     expect(owner.headers.get('cache-control')).toBe('private, max-age=86400');
     expect(lastRequest()).toMatchObject({ capture: 'preview', viewport: { width: 1600, height: 840 } });
 
-    const dataset = await createArtifact(t.id, null, {
+    const dataset = await createArtifact(t.id, t.userId, {
       format: 'dataset', source: null, meta: {}, title: 'data', description: null,
     });
     const unsupported = await exportImage(new Request(`${BASE}/a/${dataset.id}/export?mode=preview`, {
@@ -107,7 +107,7 @@ describe('the export route through the browser seam', () => {
   it('renders an editor draft crop sharply without making it a durable public card', async () => {
     browser();
     const t = await mintToken('draft-owner');
-    const row = await createArtifact(t.id, null, {
+    const row = await createArtifact(t.id, t.userId, {
       format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
     });
     const res = await exportImage(new Request(

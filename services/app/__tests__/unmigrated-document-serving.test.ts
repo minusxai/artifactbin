@@ -19,16 +19,16 @@ import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { PREVIOUS_ENGINE } from '@/lib/story/data/data-syntax';
 import { prepareClientDocumentReplacement, prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
 import type { DocumentGraph } from '@/lib/story/graph/document-graph';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function owner() {
-  const token = await mintToken('mxmx_test_unmigrated');
   const user = await createUser({ email: 'unmigrated-owner@example.com' });
-  await claimToken(user.id, token.token);
+  const token = await mintToken('mxmx_test_unmigrated', user.id);
+    await claimToken(user.id, token.token);
   return { token: token.token, tokenId: token.id, userId: user.id, email: user.email, actor: { tokenId: token.id, userId: user.id } };
 }
 type Owner = Awaited<ReturnType<typeof owner>>;

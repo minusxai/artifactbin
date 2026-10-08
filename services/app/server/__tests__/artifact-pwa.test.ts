@@ -5,8 +5,8 @@ import { signActor } from '@artifactbin/utils';
 import { createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { mintToken } from '@/lib/accounts';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { createUser, ensureUsername } from '@/lib/accounts';
 import { mintExportKey } from '@/lib/serving';
 
 const harness = useAppHarness();
@@ -14,10 +14,9 @@ const secret = 'vitest-actor-secret-0000000000000000';
 const app = createAppServer({ actorSecret: secret, indexHtml: async () => '<html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>' });
 async function world(enabled = true) {
   const owner = await ensureUsername(await createUser({ email: `mxmx_test_pwa_${enabled ? 'on' : 'off'}@example.com` }));
-  const token = await mintToken('pwa');
-  await claimToken(owner.id, token.token);
+  const token = await mintToken('pwa', owner.id);
   const make = async (visibility: 'public' | 'private') => (await (await createArtifactRoute(new Request('http://localhost/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token.token}` }, body: JSON.stringify({ markup: `${enabled ? '<Helmet><meta name="artifactbin:pwa-enabled" content="true" /></Helmet>' : ''}<h1>Live app</h1>`, title: 'My app <&>', visibility }) }))).json()) as { id: string };
-  return { public: await make('public'), private: await make('private'), headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: owner.id, email: owner.email }, secret) } };
+  return { public: await make('public'), private: await make('private'), headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: owner.id, email: owner.email, emailVerified: true }, secret) } };
 }
 
 it('serves an authorized app at its stable address with manifest discovery and no canonical redirect', async () => {
@@ -73,9 +72,8 @@ it('protects app pages, manifest metadata and icons, including after access is r
 
 it('publishes a separate admitted icon and settings, while refusing foreign private icons', async () => {
   const w = await world();
-  const ownerToken = await mintToken('icons');
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_icons@example.com' }));
-  await claimToken(owner.id, ownerToken.token);
+  const ownerToken = await mintToken('icons', owner.id);
   const create = (body: Record<string, unknown>, token = ownerToken.token) => createArtifactRoute(new Request('http://localhost/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body) }));
   const image = await sharp({ create: { width: 64, height: 32, channels: 3, background: '#ff0000' } }).png().toBuffer();
   const upload = await create({ image: `data:image/png;base64,${image.toString('base64')}`, visibility: 'private' });

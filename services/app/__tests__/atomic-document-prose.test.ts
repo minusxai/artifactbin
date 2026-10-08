@@ -1,7 +1,7 @@
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {documentEdit,documentEditBody} from './prepared-document';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,applyEditScoped} from '@/lib/artifacts';
 import {documentAfterOperation,type DocumentOperationHistory} from '@/lib/story/graph/document-update-history';
@@ -9,7 +9,7 @@ import {graphSource} from '@/lib/story/graph/document-graph';
 import {POST as editRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
-async function setup(){const token=await mintToken('mxmx_test_atomic_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {id,token,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
+async function setup(){const token=await mintToken('mxmx_test_atomic_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {id,token,actor:{tokenId:token.id,userId:token.userId},row:(await getArtifactById(id))!};}
 it('two stale independent variable-length Unicode edits each use one atomic statement',async()=>{
  const {id,actor,row}=await setup(),db=await getDb();
  const a=documentEdit(row,{source:row.source!.replace('Alpha','First 👩🏽‍💻')}),b=documentEdit(row,{source:row.source!.replace('Beta','Second &amp; β')});

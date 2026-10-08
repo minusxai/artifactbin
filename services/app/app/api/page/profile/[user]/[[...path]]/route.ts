@@ -15,7 +15,7 @@ import { json } from '@/lib/http';
 import { profileSocial } from '@/lib/accounts';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 import { getUserByUsername, listPublicArtifactsByUser, ownerUsername } from '@/lib/accounts';
-import { browserSessionKind, sessionActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 
 const decoded = (segment: string): string => { try { return decodeURIComponent(segment); } catch { return segment; } };
 export async function GET(request: Request, ctx: { params: Promise<{ user: string; path?: string }> }) {
@@ -48,7 +48,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   // A profile is the same public index for its owner and every visitor.
   // Root public folders list alongside root documents; filed work stays inside folders.
   const files = await listPublicArtifactsByUser(owner.id);
-  const anon = !viewer && (await browserSessionKind(request)) === 'anon';
+  const anon = false;
   // The follow counts are everyone's, owner included; how the viewer and the
   // owner relate is a signed-in stranger's alone (lib/profile-social).
   const social = await profileSocial(owner.id, viewer?.userId ?? null);

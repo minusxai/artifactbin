@@ -1,10 +1,10 @@
 import {createUser} from '@/lib/accounts';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
 import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/story/graph/document-update-history';
-import {expect,it,vi} from 'vitest';
+import {afterEach,expect,it,vi} from 'vitest';
 import {useAppHarness,request,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/platform';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,editorScope} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {prepareClientDocumentUpdate,prepareClientDocumentReplacement} from '@/lib/story/graph/document-update-client';
@@ -12,9 +12,10 @@ import {commitDocumentUpdate} from '@/lib/story/graph/document-update-write';
 import {graphIntegrity,graphSource,type DocumentGraph} from '@/lib/story/graph/document-graph';
 import {applyGraphPatch} from '@/lib/story/graph/document-graph-patch';
 useAppHarness();
+afterEach(()=>vi.restoreAllMocks());
 async function setup(){
- const token=await mintToken('mxmx_test_trusted_ops'),actor={tokenId:token.id,userId:null};
- const res=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>'}}));expect(res.status).toBe(201);
+ const token=await mintToken('mxmx_test_trusted_ops'),actor={tokenId:token.id,userId:token.userId};
+ const res=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:'<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>'}}));expect(res.status).toBe(201);
  const {id}=await res.json(),db=await getDb(),row=(await getArtifactById(id))!;
  const document=(await db.query<{document:DocumentGraph}>('SELECT document FROM artifacts WHERE id=$1',[id])).rows[0]!.document;
  // The create's telemetry must not land inside a test's count of its own statements.
@@ -106,7 +107,10 @@ it('dry-run shares commit guards and never changes document or history',async()=
  expect((await db.query('SELECT version,edit_id,document FROM artifacts WHERE id=$1',[id])).rows).toEqual(before.rows);
  const invalid={...update,expectedMetadata:{title:'A title that was never observed'}};
  expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,invalid,{dryRun:true}))?.applied).toBe(false);
- expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,{...update,settings:{visibility:'private'}},{dryRun:true}))?.applied).toBe(false);
+ // A legacy token-owned row cannot acquire account-only settings without email adoption.
+ await db.query('UPDATE artifacts SET user_id=NULL WHERE id=$1',[id]);
+ const legacyActor={...actor,userId:null};
+ expect((await commitDocumentUpdate(db,legacyActor,editorScope(legacyActor),id,{...update,settings:{visibility:'private'}},{dryRun:true}))?.applied).toBe(false);
 });
 
 it('replays a whole replacement exactly and preserves lifetime ids on restore',async()=>{
@@ -150,6 +154,7 @@ it('commits saved mentions with the document and refuses ineligible recipients w
  const {db,id,base,actor:tokenActor}=await setup();
  const owner=await createUser({email:'mxmx_test_mention_owner@example.com'}),recipient=await createUser({email:'mxmx_test_mention_target@example.com'});
  await db.query('UPDATE artifacts SET user_id=$2 WHERE id=$1',[id,owner.id]);
+ await db.query('UPDATE tokens SET user_id=$2 WHERE id=$1',[tokenActor.tokenId,owner.id]);
  await db.query('UPDATE users SET auto_accept_mentions=false WHERE id=$1',[recipient.id]);
  await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status) VALUES('user',$1,'follow','user',$2,'accepted')",[recipient.id,owner.id]);
  const actor={...tokenActor,userId:owner.id};
@@ -166,7 +171,7 @@ it('commits saved mentions with the document and refuses ineligible recipients w
 
 it('binds newly attached dataset scopes and archives them in the document commit, rejecting stale preparation',async()=>{
  const {db,actor,id,base}=await setup();
- const dataset=await db.query<{id:string}>(`INSERT INTO artifacts(id,token_id,title,format,source,meta) VALUES('ScpDat',$1,'Tasks','dataset','<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"assignee","type":"user","constraints":{"memberOf":["current"]}}]} /></Dataset>',$2) RETURNING id`,[actor.tokenId,JSON.stringify({catalog:{kind:'stored',defaultSchema:'public',tables:[{schema:'public',name:'rows',columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]}]},columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]})]);
+ const dataset=await db.query<{id:string}>(`INSERT INTO artifacts(id,token_id,user_id,title,format,source,meta) VALUES('ScpDat',$1,$3,'Tasks','dataset','<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"assignee","type":"user","constraints":{"memberOf":["current"]}}]} /></Dataset>',$2) RETURNING id`,[actor.tokenId,JSON.stringify({catalog:{kind:'stored',defaultSchema:'public',tables:[{schema:'public',name:'rows',columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]}]},columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]}),actor.userId]);
  const source=`<main id="root"><p id="a">Alpha</p><p id="b">Beta</p><Helmet><Import name="tasks_data" src="ref:${dataset.rows[0]!.id}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query></Helmet><DataTable data="$tasks" /></main>`;
  const prepared=await prepareDocumentAuthoringContext(actor,id,{source,dryRun:true});expect(prepared.status,await prepared.clone().text()).toBe(200);
  const {datasetBindings}=await prepared.json();expect(datasetBindings).toHaveLength(1);
@@ -226,6 +231,7 @@ it('keeps every mention when a recipient automatically joins through the first o
  const {db,id,base,actor:tokenActor}=await setup();
  const owner=await createUser({email:'mxmx_test_multi_owner@example.com'}),recipient=await createUser({email:'mxmx_test_multi_target@example.com'});
  await db.query('UPDATE artifacts SET user_id=$2 WHERE id=$1',[id,owner.id]);
+ await db.query('UPDATE tokens SET user_id=$2 WHERE id=$1',[tokenActor.tokenId,owner.id]);
  await db.query('UPDATE users SET auto_accept_mentions=true WHERE id=$1',[recipient.id]);
  await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status) VALUES('user',$1,'follow','user',$2,'accepted')",[recipient.id,owner.id]);
  const actor={...tokenActor,userId:owner.id};

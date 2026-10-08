@@ -136,7 +136,7 @@ check(await signedIn(commenterCtx), 'commenter logged in');
 check(await signedIn(strangerCtx), 'a second person is signed in — and was never invited to anything');
 
 // The owner's token: guest-owned, then adopted by the verified session.
-const anon = await connectAgent(BASE);
+const anon = await connectAgent(BASE, { email: OWNER_EMAIL });
 const claimed = await mergeGuestIntoAccount(owner, BASE, anon.token);
 check(claimed === 200, 'owner adopted the guest connection');
 const api = async (path, init = {}) => {

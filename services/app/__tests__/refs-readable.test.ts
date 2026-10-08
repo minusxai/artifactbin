@@ -20,7 +20,7 @@ import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { dataflowForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
@@ -31,7 +31,7 @@ const PNG =
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }];
 
 const create = async (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
 
 const queryDoc = (ds: string) =>
   `<Helmet><Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><Question data="$sales" viz={{"kind":"table"}} />`;
@@ -77,7 +77,7 @@ describe('link-readable refs', () => {
 
   it('a PRIVATE foreign dataset stays invisible — the uniform "does not resolve"', async () => {
     const owner = await createUser({ email: 'refs-owner@example.com' });
-    const t = await mintToken('owner');
+    const t = await mintToken('owner', owner.id);
     await claimToken(owner.id, t.token);
     const created = await create(t.token, { dataset: ROWS, visibility: 'private' });
     const ds = (await created.json()) as { id: string; visibility: string };

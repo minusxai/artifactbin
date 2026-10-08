@@ -25,7 +25,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -39,7 +39,7 @@ const HTML_DOC = '<Helmet><script>{`window.x=1;`}</script></Helmet><h1>Stored ht
 
 let token: string;
 async function publish(body: Record<string, unknown>): Promise<{ id: string; url: string }> {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
   expect(res.status, JSON.stringify(await res.clone().json())).toBe(201);
   return res.json();
 }

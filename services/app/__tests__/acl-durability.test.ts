@@ -20,7 +20,7 @@ import { POST as patchMineRoute } from '@/app/api/my/artifacts/[id]/edits/route'
 
 import { getArtifactById,getVersionFor } from '@/lib/artifacts';
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
@@ -33,7 +33,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 async function fixtures() {
   const owner = await ensureUsername(await createUser({ email: 'acl@example.com' }));
   await setUsername(owner.id, 'aclowner');
-  const t = await mintToken('acl');
+  const t = await mintToken('acl', owner.id);
   await claimToken(owner.id, t.token);
   return { owner, token: t.token };
 }

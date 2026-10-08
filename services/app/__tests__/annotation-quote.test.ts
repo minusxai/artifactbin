@@ -1,3 +1,4 @@
+import { setSession } from './harness';
 import {getArtifactById} from '@/lib/artifacts';
 import {documentEditBody} from './prepared-document';
 /**
@@ -14,7 +15,7 @@ import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -39,6 +40,7 @@ async function setup() {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: DOC } }));
   expect(res.status, await res.clone().text()).toBe(201);
   const doc = (await res.json()) as { id: string; edit_id: string; version: number };
+  setSession({user:{id:t.userId!,email:t.email!}});
   return { t, doc, cookie: await agentCookie([t.id]) };
 }
 const head = async (token: string, id: string) => {
@@ -180,6 +182,7 @@ async function setupWith(markup: string) {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup } }));
   expect(res.status, await res.clone().text()).toBe(201);
   const doc = (await res.json()) as { id: string; edit_id: string; version: number };
+  setSession({user:{id:t.userId!,email:t.email!}});
   return { t, doc, cookie: await agentCookie([t.id]) };
 }
 
@@ -290,7 +293,8 @@ describe('an area comment', () => {
     const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: AREA_DOC } }));
     expect(res.status, await res.clone().text()).toBe(201);
     const doc = (await res.json()) as { id: string; edit_id: string; version: number };
-    return { t, doc, cookie: await agentCookie([t.id]) };
+    setSession({user:{id:t.userId!,email:t.email!}});
+  return { t, doc, cookie: await agentCookie([t.id]) };
   }
   const areaComment = (w: Awaited<ReturnType<typeof areaSetup>>, extra: Record<string, unknown>) =>
     myCreateAnnotationRoute(

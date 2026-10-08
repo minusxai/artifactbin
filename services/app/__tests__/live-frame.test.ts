@@ -24,12 +24,12 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { resetFrameCache, frameBuilds } from '@/lib/story/data/frame';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null)));
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
@@ -55,7 +55,7 @@ afterAll(async () => { await resetLiveSubscriptions(); });
 async function publicDoc() {
   const t = await mintToken('t');
   const ds = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { dataset: [{ a: 1 }, { a: 2 }] }, t.token))).json();
-  const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: DOC(ds.id) }, t.token))).json();
+  const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: DOC(ds.id), visibility: 'public' }, t.token))).json();
   return { t, ds, doc };
 }
 
@@ -91,7 +91,7 @@ describe('GET /a/<id>/events/frame', () => {
 
   it('runs the read ACL: a private document is the uniform 404 to a stranger and a frame to its owner', async () => {
     const owner = await createUser({ email: 'mxmx_test_owner@example.com' });
-    const t = await mintToken('o'); await claimToken(owner.id, t.token);
+    const t = await mintToken('o', owner.id); await claimToken(owner.id, t.token);
     const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: '<div><p>secret</p></div>', visibility: 'private' }, t.token))).json();
     expect((await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).status).toBe(404);
     expect((await frameRoute(jreq(`/a/nope00/events/frame`), params('nope00'))).status).toBe(404);

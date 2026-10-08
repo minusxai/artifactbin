@@ -7,7 +7,7 @@ import {POST as forkRoute} from '@/app/api/my/artifacts/[id]/fork/route';
 import {POST as tables} from '@/app/a/[id]/tables/route';
 import {forkDatasetPreview,type ArtifactRow} from '@/lib/artifacts';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {request,setSession,useAppHarness} from './harness';
 const harness=useAppHarness();const current={id:'',email:''};
@@ -15,7 +15,7 @@ const ctx=(id:string)=>({params:Promise.resolve({id})});
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
 beforeEach(()=>{current.id='';current.email='';});
 beforeEach(()=>setSession(()=>current.id?{user:{id:current.id,email:current.email}}:null));
-async function user(name:string){const account=await createUser({email:`mxmx_test_pg_fork_${name}@example.com`});const token=await mintToken(name);await claimToken(account.id,token.token);return {account,token};}
+async function user(name:string){const account=await createUser({email:`mxmx_test_pg_fork_${name}@example.com`});const token=await mintToken(name, account.id);await claimToken(account.id,token.token);return {account,token};}
 async function postgresDataset(owner:Awaited<ReturnType<typeof user>>){
  const secret=await createDatasetSecret({userId:owner.account.id,tokenId:owner.token.id},'fork-test-password',target);
  const definition={kind:'postgres',connection:{...target,passwordSecretId:secret.id},defaultSchema:'public',refreshSeconds:60,tables:[{schema:'public',name:'rows',source:{schema:'public',table:'rows'},columns:['id']}]};

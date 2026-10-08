@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { createEvents } from '@artifactbin/events/local';
 import { GET } from '@/app/api/page/home/route';
 import { createUser } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { request, useAppHarness } from './harness';
 

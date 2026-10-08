@@ -14,7 +14,7 @@ import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/ro
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PATCH as patchArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { mintExportKey } from '@/lib/serving';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
@@ -58,7 +58,7 @@ async function outcome(p: Promise<unknown>): Promise<{ kind: 'render' | 'redirec
 async function fixtures() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   await setUsername(owner.id, 'mxmx_owner');
-  const t = await mintToken('owned');
+  const t = await mintToken('owned', owner.id);
   await claimToken(owner.id, t.token);
   const anon = await mintToken('anon');
   return { owner, ownedToken: t.token, anonToken: anon.token };
@@ -86,9 +86,9 @@ describe('canonical redirects', () => {
     expect(r).toEqual({ kind: 'redirect', to: `/@mxmx_owner/${doc.id}-eating-healthy` });
   });
 
-  it('/a/<id> of an anonymous doc renders in place (it IS canonical)', async () => {
+  it('/a/<id> of an account document without a username renders in place', async () => {
     const { anonToken } = await fixtures();
-    const doc = await create(anonToken, { title: 'Loose Note', markup: '<h1>x</h1>' });
+    const doc = await create(anonToken, { title: 'Loose Note', markup: '<h1>x</h1>', visibility:'public' });
     expect((await outcome(ArtifactPage(doc.id))).kind).toBe('render');
   });
 
