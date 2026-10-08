@@ -460,8 +460,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 0 6px;
+  border-radius: 5px;
   vertical-align: baseline;
   line-height: 1.4;
   font-family: var(--font-sans);
