@@ -74,7 +74,7 @@ export function cliBumpRequired(paths, { cliRelease = false } = {}) {
 // checked out at evals/ for a run; they are not a module of this one.)
 export const CI_MODULES = {
   contracts: [],
-  utils: ['contracts'],
+  utils: ['contracts', 'test-support'],
   'test-support': [],
   sql: ['contracts', 'utils'],
   browser: ['contracts', 'utils', 'test-support'],
