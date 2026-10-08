@@ -12,12 +12,13 @@ import {REMOTE_REVIEW_POLICY,remoteArguments} from './remote-context';
 const execute=promisify(execFile);
 const openCodeId=/^ses_[a-zA-Z0-9]+$/;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+export interface HostedAgentPaths {cwd?:string;stateDirectory?:string}
 async function transcripts(directory:string):Promise<string[]>{
  try{const entries=await readdir(directory,{withFileTypes:true});return (await Promise.all(entries.map(entry=>entry.isDirectory()?transcripts(join(directory,entry.name)):entry.isFile()&&entry.name.endsWith('.jsonl')?[join(directory,entry.name)]:[]))).flat();}
  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return [];throw error;}
 }
 /** Select native history only in this agent's retained home; never resume an unrelated workspace. */
-export async function hostedHarnessArguments(command:string,home:string,context:string,listOpenCodeSessions:()=>Promise<string>=async()=> (await execute('opencode',['session','list','--format','json'],{cwd:home,timeout:30000,maxBuffer:1024*1024})).stdout):Promise<string[]>{
+export async function hostedHarnessArguments(command:string,home:string,context:string,listOpenCodeSessions:()=>Promise<string>=async()=> (await execute('opencode',['session','list','--format','json'],{cwd:home,timeout:30000,maxBuffer:1024*1024})).stdout,_paths?:HostedAgentPaths):Promise<string[]>{
  if(command==='claude'){
   const directory=join(home,'.artifactbin','hosted-agent');await mkdir(directory,{recursive:true,mode:0o700});
   const path=join(directory,'claude-session');
@@ -74,7 +75,7 @@ export async function hostedHarnessArguments(command:string,home:string,context:
  throw Error('unsupported_hosted_harness');
 }
 /** Runs in the compute job itself; one PTY, one relay, and one persistent native session. */
-export async function runHostedAgent(options:{id:string;generation:string;name:string;command:string;home:string;connection:Connection;executable:string;signal?:AbortSignal}):Promise<number>{
+export async function runHostedAgent(options:HostedAgentPaths&{id:string;generation:string;name:string;command:string;home:string;connection:Connection;executable:string;signal?:AbortSignal}):Promise<number>{
  const {home,command,connection}=options;
  const directory=join(home,'.artifactbin','hosted-agent');await mkdir(directory,{recursive:true,mode:0o700});
  const executable=join(directory,'afbin'),context=join(directory,'context.md');
@@ -95,7 +96,7 @@ export async function runHostedAgent(options:{id:string;generation:string;name:s
 
 
 /** Restore startup workflow before opening a resumed native TUI. */
-export async function prepareHostedHarness(options:{command:string;home:string;context:string;env:NodeJS.ProcessEnv;signal?:AbortSignal;listOpenCodeSessions?:()=>Promise<string>;runStartup?:(args:string[],options:{cwd:string;env:NodeJS.ProcessEnv;signal?:AbortSignal})=>Promise<void>;onStartupUnavailable?:()=>void}):Promise<string[]>{
+export async function prepareHostedHarness(options:HostedAgentPaths&{command:string;home:string;context:string;env:NodeJS.ProcessEnv;signal?:AbortSignal;listOpenCodeSessions?:()=>Promise<string>;runStartup?:(args:string[],options:{cwd:string;env:NodeJS.ProcessEnv;signal?:AbortSignal})=>Promise<void>;onStartupUnavailable?:()=>void}):Promise<string[]>{
  options.signal?.throwIfAborted();
  const args=await hostedHarnessArguments(options.command,options.home,options.context,options.listOpenCodeSessions);
  options.signal?.throwIfAborted();
