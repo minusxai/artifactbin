@@ -201,6 +201,7 @@ jobs:
       - name: Size targets
         run: node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
         with:
           name: page-speed
           path: page-speed

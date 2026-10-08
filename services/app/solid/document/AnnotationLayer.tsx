@@ -51,7 +51,8 @@ import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_CO
 import { RailChrome } from './AnnotationRail';
 import { AnnotationThread } from './AnnotationThread';
 import { createCommentCapture } from './CommentCapture';
-import { CommentMarkdownField, CommentSubmitHint } from './CommentMarkdown';
+import { CommentSubmitHint } from './CommentMarkdown';
+import { CommentMarkdownField } from './LazyCommentField';
 import { PersonMentionProvider } from './PersonMention';
 import type { ScreenshotDrawing } from './ScreenshotEditor';
 

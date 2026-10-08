@@ -76,9 +76,31 @@ export function documentViewProbe() {
 /** The lab's throttling (scripts/ci/performance-loads.mjs `conditions`). */
 export const LAB_THROTTLE = { latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4 };
 
-/** The size lab keeps the same network byte accounting with one unthrottled view. */
+/** Size samples per cell: the summary takes their median, so one late-landing chunk cannot move a target. */
+export const SIZE_RUNS = 3;
+/** Size mode reads the byte totals only after the network has been quiet this long (bounded by SIZE_SETTLE_MAX_MS). */
+export const SIZE_QUIET_MS = 500;
+export const SIZE_SETTLE_MAX_MS = 8000;
+
+/**
+ * Resolve once `busy()` has been false for `quietMs` straight, or `maxMs` has passed.
+ * Clock and sleep are injected so the settle is testable without a browser.
+ */
+export async function waitForQuiet({ busy, quietMs = SIZE_QUIET_MS, maxMs = SIZE_SETTLE_MAX_MS, pollMs = 50, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+  const start = now();
+  let quietSince = null;
+  for (;;) {
+    const t = now();
+    if (busy()) quietSince = null; else quietSince ??= t;
+    if (quietSince !== null && t - quietSince >= quietMs) return true;
+    if (t - start >= maxMs) return false;
+    await sleep(pollMs);
+  }
+}
+
+/** The size lab keeps the same network byte accounting with unthrottled views, settled before reading. */
 export const documentMeasurementMode = sizeOnly => sizeOnly
-  ? { runs: 1, throttle: null, sizeOnly: true }
+  ? { runs: SIZE_RUNS, throttle: null, sizeOnly: true }
   : { runs: 5, throttle: LAB_THROTTLE, sizeOnly: false };
 
 const kindOf = ({ type }) => type === 'Document' ? 'html' : type === 'Script' ? 'js' : type === 'Stylesheet' ? 'css' : 'other';
@@ -98,10 +120,12 @@ export async function measureDocumentView(context, url, { route, painted, thrott
     // Sizes come from the network, not Resource Timing: the raw document is an
     // opaque-origin sandbox, where every resource reports zero body bytes.
     const requests = new Map();
-    cdp.on('Network.requestWillBeSent', event => { if (!event.request.url.startsWith('data:') && !requests.has(event.requestId)) requests.set(event.requestId, { url: event.request.url, type: event.type, headers: 0, gzip: 0, decoded: 0 }); });
+    const inflight = new Set();
+    cdp.on('Network.requestWillBeSent', event => { if (!event.request.url.startsWith('data:') && !requests.has(event.requestId)) requests.set(event.requestId, { url: event.request.url, type: event.type, headers: 0, gzip: 0, decoded: 0 }); if (!['EventSource', 'WebSocket', 'Ping'].includes(event.type)) inflight.add(event.requestId); });
     cdp.on('Network.responseReceived', event => { const r = requests.get(event.requestId); if (r) { r.type = event.type; r.headers = event.response.encodedDataLength ?? 0; } });
     cdp.on('Network.dataReceived', event => { const r = requests.get(event.requestId); if (r) r.decoded += event.dataLength; });
-    cdp.on('Network.loadingFinished', event => { const r = requests.get(event.requestId); if (r) r.gzip = Math.max(0, event.encodedDataLength - r.headers); });
+    cdp.on('Network.loadingFinished', event => { const r = requests.get(event.requestId); if (r) r.gzip = Math.max(0, event.encodedDataLength - r.headers); inflight.delete(event.requestId); });
+    cdp.on('Network.loadingFailed', event => { inflight.delete(event.requestId); });
     const errors = [];
     page.on('pageerror', error => errors.push(String(error).slice(0, 200)));
     await page.addInitScript(({ view, want }) => { window.__documentViewConfig = { view, want }; }, { view: route === 'view', want: painted });
@@ -113,6 +137,8 @@ export async function measureDocumentView(context, url, { route, painted, thrott
     }, sizeOnly, { timeout: timeoutMs }).then(() => true, () => false);
     // Late resources (chart chunks, fonts) and the LCP candidate settle.
     if (!sizeOnly) await page.waitForTimeout(1000);
+    // Size mode has no fixed settle: the bytes are read once no request is in flight for SIZE_QUIET_MS.
+    else await waitForQuiet({ busy: () => inflight.size > 0 });
     const measured = await page.evaluate(() => {
       const s = window.__documentView;
       // Resource timing names every script and when it finished, even at the opaque origin (where its sizes read zero).
@@ -142,6 +168,7 @@ export async function measureDocumentView(context, url, { route, painted, thrott
       painted: painted ? measured.painted : null,
       readyAt: measured.readyAt,
       requests: requests.size,
+      scripts: [...requests.values()].filter(request => kindOf(request) === 'js').map(request => ({ url: new URL(request.url).pathname, gzip: request.gzip })),
       bytes,
       jsBeforeReady,
       scriptsBeforeReady,

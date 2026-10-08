@@ -5,7 +5,7 @@ import { replaceComment } from './comment-input';
  * the rail starts a pick; the editor ends one; the document answers with the block (or the drawn
  * area) the reader chose, and the composer opens on it. Includes where the rail sits under the bars.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { Suspense } from 'solid-js';
 import * as captureScreen from '@/lib/capture/screen';
@@ -13,6 +13,7 @@ import { CaptureError, type CaptureSession } from '@/lib/capture/contract';
 import { STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationLayer } from '../AnnotationLayer';
+import { preloadCommentField } from '../LazyCommentField';
 import { ANN, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, layer, makeRuntime } from './annotation-rig';
 
 beforeEach(installAnnotationFetch);
@@ -22,6 +23,7 @@ const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
 const creates = () => fetchCalls.filter((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
 
 describe('picking a block from the rail', () => {
+  beforeAll(() => preloadCommentField());
   beforeEach(() => { vi.spyOn(captureScreen, 'captureAvailable').mockReturnValue(true); });
   const PICKED: StoryEditSelection = {
     kind: 'text', path: '2.1', nodeId: 'node-2-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',

@@ -388,6 +388,10 @@ parameter selects another runtime.
   the view route's ready is the app shell's own; one line per target, `pass`/`fail`/`no data`; `--strict` fails on
   a missed target. `page-speed.yml` runs it on the head result into the job summary with `--strict`;
   that fails the page-speed workflow, which is informational and does not gate `ci.yml`.
+- The size lab is deterministic: each cell is the median of 3 unthrottled cold views, and each view reads its
+  byte totals only after no request has been in flight for 500 ms (bounded at 8 s), so target 3 counts the lazy
+  chunks a reader loads after ready on every run instead of whichever had landed when sampled.
+  The comment composer (ProseMirror) loads on first use, not with the document page.
 - `jsBeforeReady` joins the page's resource timing (names and `responseEnd`, available at the opaque
   origin even though sizes are not) to the CDP wire bytes per URL; ready is: view → takeover, raw →
   the `mx:ready` event, or DOMContentLoaded when the page has no module script. Unit: wire bytes as the
