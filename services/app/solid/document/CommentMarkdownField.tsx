@@ -55,6 +55,19 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   let editor: ReturnType<typeof mountCommentEditor> | undefined;
   let keyboard: MentionKeyboard | null = null;
   const [agents,setAgents] = createSignal<RemoteSessionInfo[]>([]);
+  const [agentsLoad,setAgentsLoad] = createSignal<'loading'|'ready'|'error'>('loading');
+  let agentsAbort: AbortController | undefined;
+  const loadAgents = () => {
+    if (!props.backend) return;
+    agentsAbort?.abort();
+    const abort = agentsAbort = new AbortController();
+    setAgentsLoad('loading');
+    void props.backend.remoteSessions({signal:abort.signal}).then(answer=>{
+      if(abort.signal.aborted)return;
+      setAgents((answer.sessions??[]).filter(canTagAgent));
+      setAgentsLoad('ready');
+    }).catch(()=>{if(!abort.signal.aborted)setAgentsLoad('error');});
+  };
   const untaggedAgents = createMemo(() => {
     const tagged = new Set<string>();
     commentDocument(props.value).descendants(node => {
@@ -95,13 +108,8 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
       }});
     if(props.autoFocus)editor.view.focus();
     if (props.quickAgents && props.backend && !props.backend.unavailable('remoteSessions')) {
-      const abort = new AbortController();
-      void props.backend.remoteSessions({signal:abort.signal}).then(answer=>{
-        if(abort.signal.aborted)return;
-        const eligible=(answer.sessions??[]).filter(canTagAgent);
-        setAgents(eligible);
-      }).catch(()=>{});
-      onCleanup(()=>abort.abort());
+      loadAgents();
+      onCleanup(()=>agentsAbort?.abort());
     }
   });
   createEffect(()=>{const value=props.value;editor?.sync(value);});
@@ -122,7 +130,9 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
         <Show when={untaggedAgents().length}><span>Tag agent</span></Show>
         <For each={untaggedAgents().slice(0,2)}>{agent=><button type="button" aria-label={`Tag ${agent.name}`} class="comment-agent-choice" style={{'--mention-color':agentNameColor(agent.name)}} onMouseDown={event=>event.preventDefault()} onClick={()=>insertMention(remoteMention(agent))}><span aria-hidden="true">●</span> {agent.name}</button>}</For>
         <Show when={untaggedAgents().length>2}><button type="button" class="comment-agent-more" aria-expanded={!!mention()} onMouseDown={event=>event.preventDefault()} onClick={showAgents}>+{untaggedAgents().length-2} {untaggedAgents().length===3?'other':'others'}</button></Show>
-        <Show when={!agents().length}><span>No agents available</span></Show>
+        <Show when={agentsLoad()==='loading'}><span role="status">Loading agents…</span></Show>
+        <Show when={agentsLoad()==='error'}><span role="alert">Could not load agents.</span><button type="button" aria-label="Retry loading agents" onClick={loadAgents}>Retry</button></Show>
+        <Show when={agentsLoad()==='ready' && !agents().length}><span>No agents available</span></Show>
         <Show when={agents().length && !untaggedAgents().length}><span>All agents tagged</span></Show>
         </div>
         <a class="comment-agents-manage" aria-label={agents().length ? 'Manage agents' : 'Add agent'} href="/chat" target="_blank" rel="noopener noreferrer">{agents().length ? 'Manage' : 'Add agent'}<ArrowUpRight size={12} aria-hidden="true" /></a>

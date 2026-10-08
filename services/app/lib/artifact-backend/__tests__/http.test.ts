@@ -278,7 +278,7 @@ describe('createHttpBackend', () => {
     await expect(backend.remoteSessions({ signal })).resolves.toEqual({ sessions: [{ id: 's1' }] });
     expect(calls[0]).toEqual({ url: '/api/remote/sessions', init: { credentials: 'same-origin', signal } });
     stubFetch(json({}, 401));
-    await expect(backend.remoteSessions()).resolves.toEqual({ sessions: [] });
+    await expect(backend.remoteSessions()).rejects.toThrow('Could not load agents (401)');
     const del = stubFetch(new Response(null, { status: 204 }));
     await backend.deleteRemoteSession('s1');
     expect(del[0]).toEqual({ url: '/api/remote/sessions/s1', init: { method: 'DELETE', credentials: 'same-origin' } });
