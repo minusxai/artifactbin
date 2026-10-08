@@ -1,5 +1,6 @@
 import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { CliError } from './commands';
 import { atomicWrite, digest, isMissing, readOptional } from './files';
 import { readState, stateFor } from './state-access';
 import type { State } from './state';
@@ -11,18 +12,20 @@ const inside = (root: string, path: string): boolean => {
   return !!rel && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 };
 
+const outside = (message: string): CliError => new CliError('outside_workspace', message, 'Write inside the workspace, e.g. --output shot.png, and move the file afterwards if it must live elsewhere.', undefined, 1);
+
 /** Resolve symlinks, including existing parents of an as-yet absent file. */
 export async function confinedPath(root: string, path: string): Promise<string> {
   const base = await realpath(root);
   const lexicalRoot = resolve(root);
   const absolute = resolve(base, isAbsolute(path) && inside(lexicalRoot, path) ? relative(lexicalRoot, path) : path);
-  if (!inside(base, absolute)) throw new Error(`Path is outside the workspace: ${path}`);
+  if (!inside(base, absolute)) throw outside(`Path is outside the workspace: ${path}`);
   let existing = absolute;
   const suffix: string[] = [];
   for (;;) {
     try {
       const resolved = resolve(await realpath(existing), ...suffix);
-      if (!inside(base, resolved)) throw new Error(`Path resolves outside the workspace: ${path}`);
+      if (!inside(base, resolved)) throw outside(`Path resolves outside the workspace: ${path}`);
       return resolved;
     } catch (error) {
       if (!isMissing(error)) throw error;

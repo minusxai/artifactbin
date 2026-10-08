@@ -40,16 +40,16 @@ the script carries behaviour.
     const monthly = query('$monthly');                          // a Query: monthly() rows; .loading(), .error(), await .ready
     const bump = mutation('$bump');                             // a Mutation: an async function that resolves after commit
 
-    const total = createMemo(() => monthly().reduce((s, r) => s + Number(r.total), 0));   // derived, cached until monthly changes
-    createEffect(() => {                                        // runs now and whenever a signal it CALLS changes
+    const total = createMemo(() => monthly().reduce((s, r) => s + Number(r.total), 0));
+    createEffect(() => {
       document.querySelector('#summary').textContent =          // unbound markup: the script owns it
         region() + ': ' + total() + (monthly.loading() ? ' (updating…)' : '');
     });
     document.querySelector('#more').addEventListener('click', () => setClicks(clicks() + 1));   // write a Value
     document.querySelector('#bump').addEventListener('click', async () => {
       const status = document.querySelector('#status');
-      try { await bump(); status.textContent = 'saved'; }      // readers of the table re-run
-      catch (error) { status.textContent = error.message; }     // the server's refusal, verbatim
+      try { await bump(); status.textContent = 'saved'; }
+      catch (error) { status.textContent = error.message; }
     });
 
     export function Bars(props) {                               // mounted from markup below; keep props whole
@@ -75,7 +75,7 @@ the script carries behaviour.
 </div>
 ```
 
-In Helmet script text, split `</script` as `'</scr' + 'ipt'`.
+In Helmet script text, split `</script` as `'</scr' + 'ipt'`. The body is a JS template literal, so backslash escapes are cooked before compile (`\/` becomes `/`, `\.` becomes `.`, `\n` a newline): write regexes without escapes, or use `new RegExp` with doubled backslashes.
 
 ## Imports
 

@@ -204,7 +204,7 @@ test('composed push reports a published dependency when the document is refused'
    assert.ok(JSON.stringify(body).includes(`/a/${dependencyId}`),'The document references the accepted dependency identity');writes.push('doc.jsx');
    return Response.json({error:'quota_exceeded'},{status:403,headers:{'X-Artifactbin-Account':'usr_one'}});
   }});
-  assert.notEqual(code,0);const result=JSON.parse(output[0]);assert.equal(result.error.code,'quota_exceeded',JSON.stringify(result));assert.deepEqual(writes,['notes.txt','doc.jsx']);assert.deepEqual(result.error.details.completed_operations,[{path:'notes.txt',status:'published',id:dependencyId,version:1}]);
+  assert.notEqual(code,0);const result=JSON.parse(output[0]);assert.equal(result.error.code,'quota_exceeded',JSON.stringify(result));assert.deepEqual(writes,['notes.txt','doc.jsx']);assert.deepEqual(result.error.details.completed_operations,[{path:'notes.txt',status:'published',id:dependencyId,url:`https://example.com/a/${dependencyId}`,version:1}]);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('pushing a renamed unchanged file updates tracking locally without credentials or requests',async()=>{
@@ -554,7 +554,7 @@ test('a successful publish says the head is the pushed file, so the agent does n
   output.length=0;
   assert.equal(await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch}),0,output.join(''));
   const result=JSON.parse(output[0]);
-  assert.equal(result.operations[0].status,'published');
+  assert.equal(result.operations[0].status,'published');assert.match(result.operations[0].url,/\/a\/abc123$/);
   assert.equal(result.next,PUBLISHED_NEXT);
   assert.match(result.next,/Do not pull, diff, export or grep/);
   // What the door checked, in the same reply, so the agent has its proof without gathering it.

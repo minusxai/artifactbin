@@ -57,7 +57,7 @@ import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} fro
 import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext,claudeConfigDirectory,claudeConfigEnvironment} from './config';
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
-import {HttpClient} from './http';
+import {HttpClient,detailLine} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
 import {uploadAttachment} from './upload';
@@ -504,16 +504,21 @@ function refusalDetails(message:string,details:unknown):string[]{
  const lines:string[]=[];
  const files=(details as {files?:unknown}).files;
  if(Array.isArray(files)){
-  const failed=files.filter((file):file is {path:string;diagnostics:Array<{message?:unknown;severity?:unknown}>}=>
+  const failed=files.filter((file):file is {path:string;diagnostics:Array<{message?:unknown;severity?:unknown;line?:unknown;column?:unknown}>}=>
    !!file&&typeof file==='object'&&(file as {valid?:unknown}).valid===false&&typeof (file as {path?:unknown}).path==='string'&&Array.isArray((file as {diagnostics?:unknown}).diagnostics));
   for(const file of failed.slice(0,MAX_REFUSAL_FILES)){
    const first=file.diagnostics.find(diagnostic=>!!diagnostic&&typeof diagnostic.message==='string'&&diagnostic.severity!=='notice');
-   if(first)lines.push(`${file.path}: ${first.message as string}`);
+   if(first){const at=typeof first.line==='number'?`:${first.line}${typeof first.column==='number'?`:${first.column}`:''}`:'';lines.push(`${file.path}${at}: ${first.message as string}`);}
   }
   if(failed.length>MAX_REFUSAL_FILES)lines.push(`… and ${failed.length-MAX_REFUSAL_FILES} more files; run afbin validate for the rest.`);
  }
  const strings=(details as {details?:unknown}).details;
- if(Array.isArray(strings))lines.push(...strings.filter((detail):detail is string=>typeof detail==='string'));
+ if(Array.isArray(strings))lines.push(...strings.map(detailLine).filter((line):line is string=>line!==undefined));
+ // A merge_conflict names the fields that overlap; the full texts stay in --json.
+ const stores=['workspace_root','home_store','portable_store'].map(key=>[key,(details as Record<string,unknown>)[key]]).filter((entry):entry is [string,string]=>typeof entry[1]==='string');
+ if(stores.length)lines.push(...stores.map(([key,value])=>`${key.replace('_',' ')}: ${value}`));
+ const fields=(details as {fields?:unknown}).fields;
+ if(Array.isArray(fields)&&fields.length&&fields.every(field=>typeof field==='string'))lines.push(`Conflicting fields: ${fields.join(', ')}`);
  return lines.filter(line=>!message.includes(line));
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */

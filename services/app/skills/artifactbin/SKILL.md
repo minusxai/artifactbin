@@ -12,7 +12,7 @@ npm CLI: local files/browser approval. Email login required for CLI and HTTP; [H
 - If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills. [Setup details](references/npm-local.md).
 - Local preview; HTML: `.jsx.html`.
 - Automatic browser approval also applies to `--yes`. If unavailable, ask for email: `afbin auth --email <email>`; then code: `afbin auth --email <email> --otp <code>`. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
-- For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. For a new artifact, write and push. Share its returned URL. [[ urlReplyRule ]]
+- For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. For a new artifact, write and push inside an afbin workspace (discovery walks up parents), not a temp directory. Share its returned URL. [[ urlReplyRule ]]
 - Shared/friends/team/signup/vote/RSVP flows: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
 - Read `afbin help <page type>` and choose ONE design system. [[ progressiveAuthoringRule ]] Push confirms source acceptance; do not pull, diff or grep just to reconfirm it.
 - For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=1 --param status=Done` to update. Use its declared names/arguments; preserve its source.
@@ -39,18 +39,18 @@ Before writing, read `afbin help <page type>`; avoid content flush to the viewpo
 
 ## Read next
 
-- [design](references/design.md) — visual design.
+- [design](references/design.md).
 - [markup](references/markup.md); [data](references/markup-data.md) and [example](references/markup-data-example.md).
 - [uploads](references/markup-upload.md).
 - [page types](references/templates.md) — `afbin help templates`, then `references/templates-<name>.md`.
 - [design systems](references/design-systems.md) — `afbin help design-systems`, then `system-<slug>.md`; [worked briefs](references/worked-briefs.md).
 - [sync and recovery](references/publishing.md).
-- [errors](references/errors.md) — refusal codes and fixes.
+- [errors](references/errors.md).
 - [comments](references/publishing-annotations.md) — `afbin comment --agent <name>` for posts/replies.
 - [apps](references/apps.md) — shared pages; interactive wireframes: `afbin help review-state`.
 - [datasets and media](references/publishing-datasets.md), [catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
-- [authentication](references/publishing-auth.md) — sign-in and credentials.
+- [authentication](references/publishing-auth.md).
 - [lambdas](references/lambdas.md).
-- [live sessions](references/live-sessions.md) — Playwright, `mx`, screenshots.
+- [live sessions](references/live-sessions.md).
 - [commands](references/commands.md); [Markdown import](references/markdown.md) for a one-time `.md` push.
