@@ -73,6 +73,25 @@ it('loads the account handle late while keeping profile controls without the ret
   expect(screen.getByText(/afbin CLI connection/)).toBeInTheDocument();
 });
 
+// The accounts gate's claim leg, moved here: a verified account's page lists CLI connections to revoke, and nothing
+// anywhere asks a person to paste a token.
+it('asks a person for no pasted token anywhere on the account page', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
+    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
+    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
+    if (url === '/api/my/domain') return Response.json({ enabled: false, target: null, targetAddresses: [], domain: null });
+    if (url === '/api/my/tokens') return Response.json({ tokens: [] });
+    return Response.json({});
+  }));
+  window.history.replaceState(null, '', '/account');
+  const view = render(() => <App />);
+  await vi.dynamicImportSettled();
+  await waitFor(() => expect((screen.getByRole('textbox', { name: 'Username' }) as HTMLInputElement).value).toBe('owner'));
+  expect(screen.queryByLabelText('Token to claim')).not.toBeInTheDocument();
+  expect(view.container.textContent).not.toMatch(/mx_\.\.\./);
+});
+
 it('shows an attached domain’s DNS records and verifies through its named action', async () => {
   const calls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {

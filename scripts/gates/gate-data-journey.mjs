@@ -1,28 +1,28 @@
 /**
  * Gate: the DATA journey, as one walk over one fixture set — a dataset becomes numbers on a page, the page
  * re-runs its queries itself, a private reader gets in through the document's door, a link carries the
- * reader's selection, local SQL never becomes a stored write, a policy editor opens and closes a write
- * live, and an external PostgreSQL source never leaks a credential or a hidden value.
+ * reader's selection, local SQL never becomes a stored write, and a policy editor opens and closes a write
+ * live.
  *
- * Absorbs dataflow, local-sql-state, dataset-policies, data-ux and postgres-datasets (proposal §3 row 10).
- * Two connections: one stays a guest (the public documents, the data-ux owner, the policy owner), one is
- * adopted into the owner account (the private documents, the PostgreSQL leg). Two logins: the owner and a
- * second account, which is dataflow's private reader, the policy editor and the PostgreSQL recipient — on
- * different artifacts, so the roles never meet. Independent legs run side by side; the booking click
- * timing runs last, alone.
+ * Absorbs dataflow, local-sql-state, dataset-policies and data-ux (proposal §3 row 10). Two connections: one
+ * stays a guest (the public documents, the data-ux owner, the policy owner), one is adopted into the owner
+ * account (the private documents). Two logins: the owner and a second account, which is dataflow's private
+ * reader and the policy editor — on different artifacts, so the roles never meet. Independent legs run side by
+ * side; the booking click timing runs last, alone. Every document check reads inside the document's frame
+ * (lib/page-facts).
  *
- * Needs Docker (a disposable postgres:17-alpine on a loopback port), so the manifest says needsPostgres and
- * the gate container refuses it. Every document check reads inside the document's frame (lib/page-facts).
+ * The external PostgreSQL leg (formerly postgres-datasets: discovery, exposure, a sourced document, forged
+ * queries, a notebook model, a manual refresh and notifications, never leaking a credential or a hidden value)
+ * left for services/app/lib/datasets/__tests__/postgres-routes.test.ts (the real routes against a disposable
+ * server, `integration`), the dataset editor's own suite (solid/pages/__tests__/dataset-editor-*.test.tsx) and
+ * solid/components/__tests__/dataset-catalog-view.test.tsx — so this gate needs no Docker and runs in a gate
+ * container like any other.
  *
  *   usage: node scripts/gates/gate-data-journey.mjs [base]
  */
 import { readFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { execFile, execFileSync } from 'node:child_process';
-import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import pg from 'pg';
 import { readEditChartObservation } from './lib/edit-chart-observation.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
@@ -32,11 +32,9 @@ import { openMenu } from './lib/reveal-chrome.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { becomeOwner, mergeGuestIntoAccount, startDocument } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
-import { notificationDocumentPayload, notificationMutationPayload } from '../fixtures/postgres-notifications.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('data-journey');
-const execFileP = promisify(execFile);
 /** A group of assertions that reports as one check: ok when the body finishes, FAIL naming the first broken assertion. */
 const step = async (label, body) => {
   try { await body(); return check(true, label); } catch (error) { return check(false, `${label} — ${String(error?.message ?? error).split('\n')[0].slice(0, 300)}`); }
@@ -63,57 +61,15 @@ const documentResponse = (page) => page.waitForResponse((r) => { try { return r.
 /** Armed BEFORE a navigation: resolves once that page has loaded its SQLite engine's wasm (false after 20 s). */
 const engineLoads = (page) => page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), { timeout: 20000 }).then(() => true, () => false);
 
-// ── the disposable PostgreSQL, ready before Chromium observes the host network ──
-const adminPassword = randomUUID();
-const readerPassword = randomUUID();
-const containerName = `afbin-data-journey-${randomUUID()}`;
-let container;
-let containerRemoved = false;
-// Detached Docker resources outlive this process: finally alone cannot own them.
-const removeContainer = () => {
-  if (containerRemoved) return;
-  try {
-    execFileSync('docker', ['rm', '-f', container ?? containerName], { stdio: 'ignore', timeout: 4000 });
-    containerRemoved = true;
-  } catch { /* Exit cleanup retries if interruption raced Docker startup. */ }
-};
-process.once('exit', removeContainer);
-let admin;
-const postgres = (async () => {
-  container = (await execFileP('docker', ['run', '--rm', '-d', '--name', containerName, '-e', `POSTGRES_PASSWORD=${adminPassword}`, '-p', '127.0.0.1::5432', 'postgres:17-alpine'], { encoding: 'utf8' })).stdout.trim();
-  const port = Number((await execFileP('docker', ['port', container, '5432/tcp'], { encoding: 'utf8' })).stdout.trim().split(':').at(-1));
-  for (let attempt = 0; attempt < 100; attempt++) {
-    admin = new pg.Client({ host: '127.0.0.1', port, database: 'postgres', user: 'postgres', password: adminPassword, connectionTimeoutMillis: 1000 });
-    try { await admin.connect(); break; }
-    catch { await admin.end(); if (attempt === 99) throw new Error('disposable Postgres did not become ready'); await delay(200); }
-  }
-  // Password is a generated UUID, never authored SQL or an external credential.
-  await admin.query(`CREATE ROLE dataset_reader LOGIN PASSWORD '${readerPassword}';
-    CREATE SCHEMA sales; CREATE SCHEMA support;
-    CREATE TABLE sales.orders (id integer, region text, amount integer, customer_secret text);
-    INSERT INTO sales.orders VALUES (1,'west',120,'hidden-west'),(2,'east',90,'hidden-east'),(3,'west',30,'hidden-west');
-    CREATE TABLE sales.internal_notes (secret text);
-    CREATE TABLE support.tickets (id integer, subject text);
-    INSERT INTO support.tickets VALUES (10,'Refund requested');
-    GRANT USAGE ON SCHEMA sales,support TO dataset_reader;
-    GRANT SELECT ON sales.orders,support.tickets TO dataset_reader;`);
-  return port;
-})();
-postgres.catch(() => {}); // awaited (and reported) by the PostgreSQL leg
-
 let b;
 const sink = await startMailSink();
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.once(signal, () => {
-    removeContainer();
     sink.close();
     Promise.resolve(b?.close()).catch(() => {}).finally(() => process.exit(130));
   });
 }
 try {
-// Docker creates host interfaces. Settle its startup before Chromium starts fetching app modules,
-// so this gate's own network change cannot interrupt those requests with ERR_NETWORK_CHANGED.
-await postgres;
 b = await launchChromium();
 // ── two connections: a guest, and one the owner account adopts ─────────────────
 const [guestConnection, adoptedConnection] = await Promise.all([connectAgent(B), connectAgent(B, { email: OWNER_EMAIL })]);
@@ -180,7 +136,7 @@ const bookingRows = Array.from({ length: 40 }, (_, i) => {
 });
 const CSV = 'month,revenue,zip,note\n2026-01,120,01234,ok\n2026-02,,09876,\n2026-03,190,01234,fine';
 
-const [ds, big, bookings, lsDataset, made, ingested, editData, policyDataset, pgSeed, chartSeed, editSeed] = await Promise.all([
+const [ds, big, bookings, lsDataset, made, ingested, editData, policyDataset, chartSeed, editSeed] = await Promise.all([
   api('/api/artifacts', { dataset: [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }] }).then(j),
   api('/api/artifacts', { dataset: rows200 }).then(j),
   api('/api/artifacts', { dataset: bookingRows, visibility: 'public' }).then(j),
@@ -190,8 +146,6 @@ const [ds, big, bookings, lsDataset, made, ingested, editData, policyDataset, pg
   api('/api/artifacts', { title: 'sales', dataset: 'month,revenue,zip\n2026-01,120,01234\n2026-02,150,09876\n2026-03,190,01234' }).then(j),
   api('/api/artifacts', { title: 'edit-mode data', dataset: 'region,revenue\nNorth,4200\nSouth,3100' }).then(j),
   api('/api/artifacts', { dataset: [{ branch: 'root' }], access: 'readwrite' }).then(async (r) => { assert.equal(r.status, 201, await r.clone().text()); return r.json(); }),
-  // The PostgreSQL document is a PUT over an existing document of the adopted connection (it was a started one).
-  ownerPost('/api/artifacts', { markup: '<p>PostgreSQL document placeholder</p>', visibility: 'unlisted' }).then(j),
   api('/api/artifacts', { markup: '<p>chart placeholder</p>' }).then(j),
   api('/api/artifacts', { markup: '<p>edit placeholder</p>' }).then(j),
 ]);
@@ -693,275 +647,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     await ownerPage.close();
   });
 
-  // ── POSTGRESQL: connection → restricted dataset → filtered document → notifications ──
-  const postgresLeg = lane('postgres', async () => {
-    let secretsRead = 0;
-    const secretFree = value => {
-      secretsRead++;
-      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-      assert.ok(!serialized.includes(adminPassword) && !serialized.includes(readerPassword), 'credentials must not appear in returned metadata or document markup');
-      assert.ok(!serialized.includes('hidden-west') && !serialized.includes('hidden-east'), 'hidden source values must not appear in public output');
-    };
-    const ownerApi = async (page, path, method = 'GET', data) => page.evaluate(async ({ path, method, data }) => {
-      const response = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
-      return { status: response.status, body: await response.json().catch(() => ({})) };
-    }, { path, method, data });
-    const guestApi = async (path, data) => {
-      const response = await fetch(`${B}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-      return { status: response.status, body: await response.json().catch(() => ({})) };
-    };
-    async function uiResponse(page, path, action, method = 'POST', expected = 200, requestFields = {}) {
-      const pending = page.waitForResponse(response => new URL(response.url()).pathname === path && response.request().method() === method
-        && Object.entries(requestFields).every(([key, value]) => response.request().postDataJSON()?.[key] === value));
-      await action();
-      const response = await pending;
-      const body = await response.json();
-      secretFree(body);
-      assert.equal(response.status(), expected, `${method} ${path}: ${JSON.stringify(body)}`);
-      return body;
-    }
-    /** `scope` is the page (the dataset's own app page) or a document's frame (lib/page-facts documentFrame). */
-    async function previewContains(scope, text, label = 'Table preview') {
-      const preview = scope.getByLabel(label, { exact: true });
-      await preview.waitFor();
-      await scope.waitForFunction(({ label, text }) => [...document.querySelectorAll('[aria-label]')].some(node => node.getAttribute('aria-label') === label && node.textContent?.includes(text)), { label, text }).catch(async error => {
-        const shown = (await preview.innerText()).slice(0, 300);
-        secretFree(shown);
-        console.error(`preview ${label} never showed ${text}: ${shown}`);
-        throw error;
-      });
-    }
-    // Default schema, result cache and source markup live under the editor's collapsed "Advanced" disclosure.
-    const openAdvanced = async (page) => {
-      const details = page.locator('details', { has: page.locator('summary', { hasText: 'Advanced' }) });
-      if (!(await details.evaluate((el) => el.open))) await details.locator('summary').click();
-    };
-    let port;
-    if (!(await step('disposable Postgres has two schemas and a SELECT-only reader', async () => { port = await postgres; }))) return;
-    const owner = await ownerCtx.newPage();
-    await owner.goto(B, { waitUntil: 'domcontentloaded' });
-    const guest = await b.newPage({ viewport: { width: 1280, height: 900 } });
-    let datasetId, modelDatasetId;
-    await step('dataset connection discovers schemas; selected columns and stable default schema persist into table picker', async () => {
-      assert.equal((await ownerApi(owner, '/api/page/session', 'GET')).status, 200);
-      await owner.goto(`${B}/datasets/new`, { waitUntil: 'load' });
-      await owner.getByLabel('Dataset title', { exact: true }).fill('Postgres gate warehouse');
-      await owner.getByLabel('PostgreSQL', { exact: true }).click();
-      for (const [label, value] of Object.entries({ Host: '127.0.0.1', Port: String(port), Database: 'postgres', Username: 'dataset_reader', Password: readerPassword })) {
-        await owner.getByLabel(label, { exact: true }).fill(value);
-      }
-      await owner.getByLabel('Use SSL', { exact: true }).uncheck();
-      const secretResponse = owner.waitForResponse(response => new URL(response.url()).pathname === '/api/my/secrets' && response.request().method() === 'POST');
-      const discovery = await uiResponse(owner, '/api/my/datasets/discover', () => owner.getByLabel('Test and discover', { exact: true }).click());
-      assert.match(await owner.getByLabel('Dataset connection', { exact: true }).getByRole('status').innerText(), /Connected.*2 tables/);
-      const credential = await secretResponse;
-      assert.equal(credential.status(), 201); secretFree(await credential.json());
-      await owner.getByLabel('Password status', { exact: true }).waitFor();
-      assert.equal(await owner.getByLabel('Password', { exact: true }).count(), 0);
-      assert.deepEqual(discovery.tables.map(table => `${table.schema}.${table.name}`).sort(), ['sales.orders', 'support.tickets']);
-      assert.equal(await owner.getByLabel('Expose table sales.orders', { exact: true }).isChecked(), false);
-      await owner.getByLabel('Toggle table sales.orders', { exact: true }).click();
-      for (const column of ['id', 'region', 'amount']) await owner.getByLabel(`Expose column sales.orders.${column}`, { exact: true }).check();
-      assert.equal(await owner.getByLabel('Expose column sales.orders.customer_secret', { exact: true }).isChecked(), false);
-      await openAdvanced(owner);
-      await owner.getByLabel('Default schema', { exact: true }).selectOption('sales');
-      await owner.getByLabel('Expose table support.tickets', { exact: true }).check();
-      await owner.getByLabel('Toggle table support.tickets', { exact: true }).click();
-      for (const column of ['id', 'subject']) assert.equal(await owner.getByLabel(`Expose column support.tickets.${column}`, { exact: true }).isChecked(), true);
-      assert.equal(await owner.getByLabel('Default schema', { exact: true }).inputValue(), 'sales');
-      await owner.getByLabel('Refresh interval', { exact: true }).fill('0');
-      const created = await uiResponse(owner, '/api/my/artifacts', () => owner.getByLabel('Save dataset', { exact: true }).click(), 'POST', 201);
-      datasetId = created.id; assert.ok(datasetId);
-      await owner.waitForURL(url => url.pathname === `/a/${datasetId}`);
-      await previewContains(owner, '120');
-      assert.equal(await owner.getByLabel('Dataset schema', { exact: true }).inputValue(), 'sales');
-      await owner.getByLabel('Dataset schema', { exact: true }).selectOption('support');
-      await previewContains(owner, 'Refund requested');
-      assert.equal(await owner.getByLabel('Dataset table', { exact: true }).inputValue(), 'tickets');
-      await owner.getByLabel('Dataset schema', { exact: true }).selectOption('sales');
-      await previewContains(owner, '120');
-    });
-    await step('read-only schema browser lists all exposed relations and columns without editor access', async () => {
-      const metadata = await ownerApi(owner, `/api/my/artifacts/${datasetId}`);
-      assert.equal(metadata.status, 200); secretFree(metadata.body);
-      const exposed = metadata.body.meta.catalog.tables.find(table => table.schema === 'sales' && table.name === 'orders');
-      assert.deepEqual(exposed.columns.map(column => column.name), ['id', 'region', 'amount']);
-      assert.ok(metadata.body.meta.catalog.connection.passwordSecretId);
-      assert.ok(!Object.hasOwn(metadata.body.meta.catalog.connection, 'password'));
-      assert.equal((await guestApi(`/a/${datasetId}/tables`, { sql: 'select * from orders' })).status, 404, 'private dataset must reject an anonymous reader');
-      assert.equal((await ownerApi(owner, `/api/my/artifacts/${datasetId}/sharing`, 'PUT', { visibility: 'unlisted' })).status, 200);
-      await guest.goto(`${B}/a/${datasetId}`, { waitUntil: 'load' });
-      await previewContains(guest, '120');
-      await guest.getByLabel('Browse dataset schema', { exact: true }).click();
-      const schemaBrowser = await guest.getByLabel('Dataset schema browser', { exact: true }).innerText();
-      for (const name of ['sales', 'orders', 'region', 'amount', 'support', 'tickets', 'subject']) assert.ok(schemaBrowser.includes(name));
-      assert.ok(!schemaBrowser.includes('customer_secret'));
-      assert.equal(await guest.getByLabel('Edit dataset', { exact: true }).count(), 0);
-    });
-    await step('anonymous reader sees permitted source data and a typed Value filter reruns the remote query', async () => {
-      const markup = '<Helmet><Value name="region" type="string" default="west" />'
-        + `<Query name="orders" source="ref:${datasetId}">{\`select id, region, amount from orders where $region is null or region=$region order by id\`}</Query></Helmet>`
-        + '<div data-design="tw" className="p-8"><h1>Regional orders</h1><input aria-label="Region" value="$region" /><DataTable data="$orders" /></div>';
-      const published = await fetch(`${B}/api/artifacts/${pgSeed.id}`, { method: 'PUT', headers: OH, body: JSON.stringify({ title: 'Postgres sourced document', markup, visibility: 'unlisted' }) });
-      const publication = await published.json();
-      secretFree(publication);
-      assert.equal(published.status, 200, `same-owner document must accept a sourced filtered query: ${JSON.stringify(publication)}`);
-      await guest.goto(`${B}/a/${pgSeed.id}`, { waitUntil: 'load' });
-      // The document is framed by the app page on its own origin: its table and its input live in that frame.
-      const sourced = await documentFrame(guest);
-      await previewContains(sourced, '120', 'DataTable embed');
-      assert.ok(!(await sourced.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
-      await sourced.locator('html[data-mx-ready]').waitFor();
-      await sourced.getByLabel('Region', { exact: true }).fill('east');
-      await previewContains(sourced, '90', 'DataTable embed');
-      assert.ok(!(await sourced.getByLabel('DataTable embed', { exact: true }).innerText()).includes('120'));
-      secretFree(await guest.content());
-      secretFree(await sourced.content());
-    });
-    await step('forged reader queries cannot reach hidden columns, undeclared tables, catalogs or writes; database remains unchanged', async () => {
-      for (const sql of ['select customer_secret from orders', "select id from orders where customer_secret='hidden-west'", 'select * from sales.internal_notes', 'select * from pg_catalog.pg_authid', 'delete from orders', 'with changed as (delete from orders returning *) select * from changed']) {
-        const denied = await guestApi(`/a/${datasetId}/tables`, { sql });
-        assert.equal(denied.status, 400, 'forged hidden-data or write query must be rejected'); secretFree(denied.body);
-      }
-      assert.equal((await admin.query('select count(*)::int as n from sales.orders')).rows[0].n, 3);
-      assert.equal((await admin.query('select sum(amount)::int as n from sales.orders')).rows[0].n, 240);
-    });
-    await step('chained notebook cells roundtrip through markup; only the exposed final model reaches readers', async () => {
-      // A fresh model-only dataset chooses its stable default schema at creation.
-      await owner.goto(`${B}/datasets/new`, { waitUntil: 'load' });
-      await owner.getByLabel('Dataset title', { exact: true }).fill('Postgres model-only notebook');
-      await owner.getByLabel('PostgreSQL', { exact: true }).click();
-      for (const [label, value] of Object.entries({ Host: '127.0.0.1', Port: String(port), Database: 'postgres', Username: 'dataset_reader', Password: readerPassword })) await owner.getByLabel(label, { exact: true }).fill(value);
-      await owner.getByLabel('Use SSL', { exact: true }).uncheck();
-      await uiResponse(owner, '/api/my/datasets/discover', () => owner.getByLabel('Test and discover', { exact: true }).click());
-      await owner.getByLabel('Add notebook cell', { exact: true }).click();
-      await owner.getByLabel('Cell name 1', { exact: true }).fill('raw_orders');
-      await owner.getByLabel('Cell SQL 1', { exact: true }).fill('select region, amount from sales.orders');
-      await uiResponse(owner, '/api/my/datasets/notebook/preview', () => owner.getByLabel('Cell SQL 1', { exact: true }).press('Control+Enter'));
-      await previewContains(owner, '120', 'Cell preview 1');
-      assert.equal(await owner.getByLabel('Expose cell 1', { exact: true }).isChecked(), false);
-      await owner.getByLabel('Add notebook cell', { exact: true }).click();
-      await owner.getByLabel('Cell name 2', { exact: true }).fill('region_totals');
-      await owner.getByLabel('Cell SQL 2', { exact: true }).fill('select region, sum(amount)::int as total from raw_orders group by region order by region');
-      await uiResponse(owner, '/api/my/datasets/notebook/preview', () => owner.getByLabel('Cell SQL 2', { exact: true }).press('Meta+Enter'));
-      await previewContains(owner, '150', 'Cell preview 2');
-      await owner.getByLabel('Expose cell 2', { exact: true }).check();
-      assert.equal(await owner.getByLabel('Expose table models.region_totals', { exact: true }).isChecked(), true);
-      // Publish only the final model. The intermediate cell and physical tables stay internal.
-      await owner.getByLabel('Expose schema sales', { exact: true }).uncheck();
-      await owner.getByLabel('Expose schema support', { exact: true }).uncheck();
-      await openAdvanced(owner);
-      await owner.getByLabel('Default schema', { exact: true }).selectOption('models');
-      await owner.getByRole('tab', { name: 'Data preview', exact: true }).click();
-      await owner.getByLabel('SQL view', { exact: true }).click();
-      await owner.getByLabel('Dataset SQL', { exact: true }).fill('select * from models.region_totals');
-      await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 200, { sql: 'select * from models.region_totals' });
-      await previewContains(owner, '150');
-      await owner.getByLabel('Dataset SQL', { exact: true }).fill('select * from sales.orders');
-      const deniedDraft = await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 400, { sql: 'select * from sales.orders' });
-      assert.ok(deniedDraft.error);
-      assert.equal(await owner.getByLabel('Dataset SQL', { exact: true }).inputValue(), 'select * from sales.orders');
-      await owner.getByRole('tab', { name: 'Source & models', exact: true }).click();
-      await openAdvanced(owner);
-      await owner.getByLabel('Edit dataset source', { exact: true }).click();
-      const source = await owner.getByLabel('Dataset source', { exact: true }).inputValue();
-      assert.match(source, /<Dataset/); assert.match(source, /raw_orders/); secretFree(source);
-      await owner.getByLabel('Apply dataset source', { exact: true }).click();
-      const modelCreated = await uiResponse(owner, '/api/my/artifacts', () => owner.getByLabel('Save dataset', { exact: true }).click(), 'POST', 201);
-      modelDatasetId = modelCreated.id;
-      await owner.waitForURL(url => url.pathname === `/a/${modelDatasetId}`);
-      assert.equal((await ownerApi(owner, `/api/my/artifacts/${modelDatasetId}/sharing`, 'PUT', { visibility: 'unlisted' })).status, 200);
-      assert.equal(await owner.getByLabel('Dataset schema', { exact: true }).inputValue(), 'models');
-      assert.equal(await owner.getByLabel('Dataset table', { exact: true }).inputValue(), 'region_totals');
-      await previewContains(owner, '150');
-      const publicPage = await fetch(`${B}/api/page/artifact/${modelDatasetId}`).then(response => response.json());
-      secretFree(publicPage);
-      const publicCatalog = publicPage.surface.catalog;
-      assert.equal(publicCatalog.tables.length, 1);
-      assert.ok(!Object.hasOwn(publicCatalog, 'notebook'));
-      assert.ok(!Object.hasOwn(publicCatalog, 'notebookSources'));
-      assert.ok(!JSON.stringify(publicPage).includes('raw_orders'));
-      for (const sql of ['select * from sales.orders', 'select * from raw_orders']) assert.equal((await guestApi(`/a/${modelDatasetId}/tables`, { sql })).status, 400);
-    });
-    await step('manual refresh reads an external database update; model metadata stays credential-free', async () => {
-      await admin.query('update sales.orders set amount=125 where id=1');
-      const refreshed = await uiResponse(owner, `/a/${modelDatasetId}/tables`, () => owner.getByLabel('Refresh dataset', { exact: true }).click(), 'POST', 200, { refresh: true });
-      assert.equal(refreshed.rows.find(row => row.region === 'west').total, 155);
-      await previewContains(owner, '155');
-      assert.match(await owner.getByLabel('Refresh status', { exact: true }).innerText(), /Last refreshed.*Manual refresh/);
-      const finalMetadata = await ownerApi(owner, `/api/my/artifacts/${modelDatasetId}`); secretFree(finalMetadata.body);
-      assert.ok(finalMetadata.body.meta.catalog.tables.some(table => table.name === 'region_totals'));
-    });
-    // Notifications use the very same native catalog interface as Query. Writes still target a stored dataset.
-    const recipient = await secondCtx.newPage();
-    await recipient.goto(B, { waitUntil: 'domcontentloaded' });
-    const checked = async (page, path, method = 'GET', data, status = 200) => {
-      const result = await ownerApi(page, path, method, data);
-      secretFree(result.body);
-      assert.equal(result.status, status, `${method} ${path}: ${JSON.stringify(result.body)}`);
-      return result.body;
-    };
-    let recipientId, notice, trigger;
-    const run = async (documentId = notice.id) => {
-      const result = await checked(owner, `/a/${documentId}/mutate`, 'POST', notificationMutationPayload(recipientId));
-      assert.equal(typeof result.mutationRunId, 'string');
-      return result.mutationRunId;
-    };
-    const settled = async runId => {
-      const deadline = Date.now() + 12_000;
-      while (Date.now() < deadline) {
-        const { jobs } = await checked(owner, `/api/notification-runs/${runId}/jobs`);
-        assert.equal(jobs.length, 1, 'one durable job evaluates every linked rule');
-        if (['completed', 'failed'].includes(jobs[0].status)) return jobs[0];
-        await delay(100);
-      }
-      throw new Error(`Notification run ${runId} did not settle`);
-    };
-    const inbox = async runId => (await checked(recipient, '/api/my/people')).notifications.filter(item => item.kind === 'mutation' && item.mutation_run_id === runId);
-    let successRun;
-    await step('native PostgreSQL arrays, native concatenation, and chained notebook models combine distinct messages once per recipient/run', async () => {
-      recipientId = (await ownerApi(recipient, '/api/page/session')).body.user.id;
-      trigger = await checked(owner, '/api/my/artifacts', 'POST', {
-        access: 'readwrite',
-        dataset: '<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>',
-      }, 201);
-      // The stored import is also a required readable source.
-      await checked(owner, `/api/my/artifacts/${trigger.id}/sharing`, 'PUT', { visibility: 'unlisted' });
-      notice = await checked(owner, '/api/my/artifacts', 'POST', notificationDocumentPayload({ triggerId: trigger.id, recipientId, modelDatasetId, datasetId }), 201);
-      await checked(recipient, `/api/my/artifacts/${notice.id}/members`, 'POST', { action: 'join' });
-      await checked(owner, `/api/my/artifacts/${notice.id}/members`, 'POST', { action: 'approve', userId: recipientId });
-      successRun = await run();
-      const successJob = await settled(successRun);
-      assert.equal(successJob.status, 'completed');
-      assert.deepEqual([...successJob.notification_names].sort(), ['duplicate_notice', 'model_notice', 'physical_notice']);
-      const delivered = await inbox(successRun);
-      assert.equal(delivered.length, 1, 'one recipient gets one item across three rules and duplicate array entries');
-      assert.deepEqual([...delivered[0].messages].sort(), ['Order 1', 'West total 155']);
-    });
-    await step('current native-source authority gates both delivery and disclosure', async () => {
-      await checked(owner, `/api/my/artifacts/${modelDatasetId}/sharing`, 'PUT', { visibility: 'private' });
-      assert.equal((await inbox(successRun)).length, 0, 'disclosure rechecks the current native source authority');
-      const deniedRun = await run();
-      assert.equal((await settled(deniedRun)).status, 'completed');
-      assert.equal((await inbox(deniedRun)).length, 0, 'one unreadable source suppresses the whole combined item');
-      await checked(owner, `/api/my/artifacts/${modelDatasetId}/sharing`, 'PUT', { visibility: 'unlisted' });
-      assert.equal((await inbox(deniedRun)).length, 0, 'restoring source access does not backfill a suppressed run');
-    });
-    await step('PostgreSQL JSON text fails the job without partial sibling-rule delivery', async () => {
-      const invalidNotice = await checked(owner, '/api/my/artifacts', 'POST', notificationDocumentPayload({ triggerId: trigger.id, recipientId, modelDatasetId, datasetId, invalid: true }), 201);
-      await checked(recipient, `/api/my/artifacts/${invalidNotice.id}/members`, 'POST', { action: 'join' });
-      await checked(owner, `/api/my/artifacts/${invalidNotice.id}/members`, 'POST', { action: 'approve', userId: recipientId });
-      const invalidRun = await run(invalidNotice.id);
-      assert.equal((await settled(invalidRun)).status, 'failed', 'JSON text is not a typed recipient list');
-      assert.equal((await inbox(invalidRun)).length, 0, 'a failed rule publishes no partial messages from successful sibling rules');
-    });
-    // Every output read above went through secretFree; a leak fails the step that read it, naming this label.
-    check(secretsRead > 20, `credentials must not appear in returned metadata or document markup (${secretsRead} outputs read)`);
-    check(secretsRead > 20, `hidden source values must not appear in public output (${secretsRead} outputs read)`);
-    for (const page of [owner, guest, recipient]) await page.close();
-  });
-
-  await Promise.all([anonymousLocal, dataflow, localAndPolicies, dataUx, postgresLeg]);
+  await Promise.all([anonymousLocal, dataflow, localAndPolicies, dataUx]);
 
   // ── the booking document's day click, alone: under 50 ms, and no request ────────
   await lane('booking', async () => {
@@ -996,12 +682,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
   });
   // Unknown ids answering the uniform 404 (POST and GET) moved to vitest: api.test.ts:46–49,190–196.
 } finally {
-  try {
-    await Promise.allSettled([b?.close(), admin?.end()]);
-    sink.close();
-  } finally {
-    await postgres.catch(() => {});
-    removeContainer();
-  }
+  await Promise.allSettled([b?.close()]);
+  sink.close();
 }
 check.done();

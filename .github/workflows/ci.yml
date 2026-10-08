@@ -522,7 +522,6 @@ jobs:
       - id: gate-browsers
         run: |
           echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/7)" >> "$GITHUB_OUTPUT"
-          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/7)" >> "$GITHUB_OUTPUT"
       # KEYED ON WHAT PINS THE BROWSER, not on the lockfile: browsers.json is where playwright-core
       # records the Chromium revision it will download, so the entry survives every lockfile change
       # that is not a Playwright upgrade — including the version line a release rewrites.
@@ -578,13 +577,8 @@ jobs:
             mkdir -p "$HOME/browser-debs"
             cp /var/cache/apt/archives/*.deb "$HOME/browser-debs/" 2>/dev/null || true
           fi
-      # The gate runner selects the shard on this host; pull Postgres only when
-      # that selection includes postgres-datasets, before its gate timeout starts.
-      # Neither this nor the sandbox prep below needs anything `build` produces, so both run
-      # while `build` is still assembling its artifact rather than after waiting for it.
-      - name: pull the Postgres image the datasets gate needs
-        if: steps.gate-browsers.outputs.postgres == 'true'
-        run: docker pull postgres:17-alpine
+      # The sandbox prep below needs nothing `build` produces, so it runs while `build` is still
+      # assembling its artifact rather than after waiting for it.
       - name: Prepare isolated browser session workers
         run: |
           sudo apt-get install -y bubblewrap || { sudo apt-get update; sudo apt-get install -y bubblewrap; }

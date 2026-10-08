@@ -1,5 +1,8 @@
 import {fixtureFetch as fetch} from './fixture-http.mjs';
-/** The font metas and the editor URL-import door share the asset gate's fixture/browser. */
+/**
+ * The font metas and the editor URL-import door share the asset gate's fixture/browser. A simple URL import keeping
+ * its source unrewritten is web-import.test.ts's ("stores no asset row, fetches nothing and serves the original URL").
+ */
 import { startDocument, becomeOwner } from '../../lib/start-doc.mjs';
 import { documentFrame } from './page-facts.mjs';
 
@@ -7,20 +10,6 @@ export async function checkWebImport(B, browser, WEB, ok) {
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   // ── a Google font names a family; the document's own font sheet imports it ─
   const fontDoc = await startDocument(B);
-  // The combined asset fixture also exercises normalization. Check the
-  // no-rewrite response on the original simple image shape, then reuse this
-  // document for the font case; an unrelated normalization must not fail it.
-  const sourcePut = await fetch(`${B}/api/artifacts/${fontDoc.id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fontDoc.token}` },
-    body: JSON.stringify({
-      title: 'source-preserving import',
-      markup: `<div id="root" className="p-8"><h1 id="heading" className="text-2xl font-bold">Imported</h1><img id="shot" src="${WEB}/photo.png" alt="imported" /></div>`,
-    }),
-  });
-  const sourceBody = await sourcePut.json();
-  ok(sourcePut.status === 200 && sourceBody.markup?.includes(`src="${WEB}/photo.png"`),
-    'a simple URL import preserves source without a markup rewrite');
   const fontPut = await fetch(`${B}/api/artifacts/${fontDoc.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fontDoc.token}` },
@@ -46,11 +35,7 @@ export async function checkWebImport(B, browser, WEB, ok) {
       if (!read) await page.waitForTimeout(250);
     }
     ok(/Lobster/.test(read?.family ?? ''), `the heading asks for the named family (${read?.family})`);
-    // The served document's own font sheet, whichever surface the app page draws it in.
-    const raw = await (await fetch(`${B}/a/${fontDoc.id}/raw`, { headers: { Authorization: `Bearer ${fontDoc.token}` } })).text();
-    ok(/<style data-mx-font-vars>@import url\(https:\/\/fonts\.googleapis\.com\/css2\?family=Lobster:/.test(raw),
-      'the served font sheet opens with the Google Fonts import');
-    ok(!raw.includes('/webfonts/'), 'no face is served from a copied /webfonts address');
+    // The served font sheet's Google import and the absent /webfonts copy are google-fonts.test.ts's.
   }
 
   // ── the HUMAN door: the editor's insert-image popover takes a URL ───────────

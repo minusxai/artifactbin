@@ -5,11 +5,10 @@
  *   1. A FILE (was gate-pdf): a stored PDF linked by `<File src="ref:…">` is a card in the document a STRANGER is
  *      served; a REAL click opens the file's own address and the download is named by Content-Disposition; the
  *      bytes are sandboxed and nosniff; the card widens no part of the document's policy.
- *   2. WEB URLS (was gate-web-assets): publish copies nothing and serves the URLs as written; a held copy made by
- *      the view-time door is no page in our origin (attachment, sandbox, nosniff); a refresh moves it to the new
- *      bytes; the editor's insert-by-URL door; a URL BOUND to a reader's choice imports once, paints from /assets,
- *      refuses the metadata address and a `data:` value, and a private document's door is the uniform 404 to a
- *      stranger while its owner and an invited viewer see the picture.
+ *   2. WEB URLS (was gate-web-assets): the framed document keeps the URLs as written; a held copy made by the
+ *      view-time door is no page in our origin when a browser navigates to it; a named Google family reaches the
+ *      heading; the editor's insert-by-URL door; a URL BOUND to a reader's choice imports once, paints from
+ *      /assets, and refuses the metadata address and a `data:` value.
  *   3. A PICTURE A PERSON ADDS (was gate-image-upload): the file picker, a drop, a paste and a REAL keystroke paste
  *      (the system clipboard, so this gate is in the clipboard serial group) all insert an image that PAINTS and
  *      persists; a ref: image shows its blur while the bytes travel; dropping or pasting onto an image replaces it
@@ -20,21 +19,29 @@
  *     152–153, 156–158, 160–169) → services/app/__tests__/pdf-serving.test.ts ("the five headers") and
  *     services/app/server/__tests__/pdf-range.test.ts; the sandbox and nosniff headers stay here verbatim;
  *   - the export PNG of a document with an uploaded image (image-upload 199–203) → the exports journey gate, which
- *     holds one PNG set for the suite.
+ *     holds one PNG set for the suite;
+ *   - the web-URL facts no browser is needed for: publish fetches, stores and warns about nothing and the stored and
+ *     served markup keep every URL → services/app/__tests__/web-import.test.ts ("stores no asset row, fetches nothing
+ *     and serves the original URL", "an @font-face url…") and file-embed.test.ts (a <File> URL "is kept verbatim");
+ *     the held copy's sandbox, attachment, nosniff and immutable headers → assets-route.test.ts ("serves the stored
+ *     bytes with all five headers", "leaves every other type as an attachment — the SVG hole stays closed"); a refresh
+ *     repointing the held copy → refresh-asset.test.ts ("re-fetches one URL and repoints the row"); the Google font
+ *     sheet's import and no /webfonts copy → google-fonts.test.ts;
+ *   - a PRIVATE document's asset door (born private, the stranger's uniform 404 for page and JSON, the owner and an
+ *     invited viewer admitted, one source fetch, no artifact invented) → doc-assets-route.test.ts; the frame's doors
+ *     carrying the pages session of its reader → pages-origin-host.test.ts ("answers its own doors with its reader").
  *
  *   usage: node scripts/gates/gate-media.mjs [base]
  */
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import sharp from 'sharp';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
 import { documentFrame, documentFrame as framedDocument, INLINE_STORY } from './lib/page-facts.mjs';
 import { checkWebImport } from './lib/web-import-cases.mjs';
 import { samplePdf } from '../lib/sample-pdf.mjs';
-import { becomeOwner, publishAs, startDocument } from '../lib/start-doc.mjs';
-import { loginViaEmail, startMailSink } from '../lib/mail-login.mjs';
+import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('media');
@@ -198,22 +205,12 @@ await section('web urls', async () => {
     'base64',
   );
   const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#c33"/></svg>');
-  /* A WIDE photograph — the only shape that earns a second, narrower copy
-   * (lib/images/optimise: wider than 960px). Its colour is what a refresh
-   * CHANGES, so "the reader got the new bytes" is a pixel, not a header. */
-  const wide = (colour) => sharp({ create: { width: 1600, height: 1200, channels: 3, background: colour } })
-    .jpeg({ quality: 80 }).toBuffer();
-  let wideColour = '#1d6fa5';
   let hits = [];
   const web = createServer((req, res) => {
     hits.push((req.url ?? '').split('?')[0]);
     const path = (req.url ?? '').split('?')[0];
     if (path === '/photo.png') { res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(PNG); return; }
     if (path === '/logo.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml' }); res.end(SVG); return; }
-    if (path === '/wide.jpg') {
-      wide(wideColour).then((b) => { res.writeHead(200, { 'Content-Type': 'image/jpeg' }); res.end(b); });
-      return;
-    }
     // The BOUND leg's pictures (section 6) — the same 48×32 PNG, so "it painted"
     // is a naturalWidth there too.
     if (/^\/pic\d\.png$/.test(path)) { res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(PNG); return; }
@@ -233,7 +230,7 @@ await section('web urls', async () => {
   const owner = await startDocument(B);
   const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` };
 
-  /* ── 1. publish copies nothing ───────────────────────────────────────────── */
+  /* ── 1. the framed document keeps the URLs as written ─────────────────────── */
   const PHOTO = `${WEB}/photo.png${RUN}`;
   const FACE = `${WEB}/face.woff2${RUN}`;
   const PDF = `${WEB}/report.pdf${RUN}`;
@@ -253,26 +250,8 @@ await section('web urls', async () => {
     console.error(`could not publish (${put.status} ${JSON.stringify(wrote)})`);
     throw new Error('the web-assets fixture could not be published');
   }
-  check(!('asset_warnings' in wrote), `the push reply carries no asset_warnings (${JSON.stringify(wrote.asset_warnings ?? null)})`);
-  check(hits.length === 0, `publish asked the source host for nothing (${hits.join(' ') || 'no requests'})`);
-
-  const stored = await (await fetch(`${B}/api/artifacts/${owner.id}`, { headers: auth })).json();
-  for (const url of [PHOTO, HTTPS_IMAGE, PDF, FACE]) check(stored.markup.includes(url), `the stored markup keeps ${url}`);
-
-  /* No row: `/assets/<sha256 of the canonical url>` is the address a held copy
-   * would have, and it answers 404 when the row does not exist. */
+  /* `/assets/<sha256 of the canonical url>` is the address a held copy has. */
   const assetPath = (url) => `/assets/${createHash('sha256').update(new URL(url).href).digest('hex')}`;
-  for (const url of [PHOTO, HTTPS_IMAGE, PDF, FACE]) {
-    const res = await fetch(`${B}${assetPath(url)}`);
-    check(res.status === 404, `no stored copy exists for ${url} (${res.status})`);
-  }
-
-  const raw = await (await fetch(`${B}/a/${owner.id}/raw`, { headers: { Authorization: `Bearer ${owner.token}` } })).text();
-  check(raw.includes(`src="${HTTPS_IMAGE}"`), 'the served document carries the original https image URL');
-  check(raw.includes(`src="${PHOTO}"`), 'the served document carries the original image URL');
-  check(raw.includes(`href="${PDF}"`), 'the served <File> card links the original URL');
-  check(raw.includes(FACE), 'the served stylesheet keeps the original @font-face url');
-  check(!/\/assets\/[0-9a-f]{64}/.test(raw), 'the served document names no /assets copy');
 
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   await becomeOwner(page, B, owner.token);
@@ -325,28 +304,6 @@ await section('web urls', async () => {
   check(!verdict.startsWith('OUR ORIGIN'), `a top-level navigation to the stored SVG does not run in this origin: ${verdict}`);
   await bare.close();
 
-  const headers = (await fetch(svgUrl)).headers;
-  check(headers.get('content-security-policy') === 'sandbox', 'the asset carries CSP: sandbox');
-  check(headers.get('content-disposition') === 'attachment', 'the asset carries Content-Disposition: attachment');
-  check(headers.get('x-content-type-options') === 'nosniff', 'the asset carries nosniff');
-  check((headers.get('cache-control') ?? '').includes('immutable'), 'the asset is immutable');
-
-  /* ── 3. a refresh repoints a held copy at the source's new bytes ──────────── */
-  const WIDE_URL = `${WEB}/wide.jpg${RUN}`;
-  const wideHeld = await importForReader(WIDE_URL);
-  check(wideHeld.status === 200 && !!wideHeld.url, `the view-time door holds the wide image (${wideHeld.status} ${wideHeld.url})`);
-  const bytesAt = async (url) => Buffer.from(await (await fetch(url)).arrayBuffer());
-  const wideBefore = wideHeld.url ? await bytesAt(wideHeld.url) : Buffer.alloc(0);
-  wideColour = '#b4381f';
-  const refreshed = await fetch(`${B}/api/artifacts/assets/refresh`, {
-    method: 'POST', headers: auth, body: JSON.stringify({ url: WIDE_URL }),
-  });
-  const refreshBody = await refreshed.json();
-  check(refreshed.status === 200 && (refreshBody.refreshed ?? []).includes(WIDE_URL),
-    `refresh re-fetched the changed source (${refreshed.status} ${JSON.stringify(refreshBody).slice(0, 160)})`);
-  const wideAfter = wideHeld.url ? await bytesAt(wideHeld.url) : Buffer.alloc(0);
-  check(wideBefore.length > 0 && wideAfter.length > 0 && !wideBefore.equals(wideAfter),
-    `the held address now serves the refreshed bytes (${wideBefore.length} → ${wideAfter.length} bytes, ${wideBefore.equals(wideAfter) ? 'unchanged' : 'changed'})`);
 
   await checkWebImport(B, browser, WEB, check);
 
@@ -505,79 +462,6 @@ await section('web urls', async () => {
 
     check(boundOutbound.length === 0, `bound: zero requests from the page to the source host (${boundOutbound.length})`);
 
-    /*
-     * THE DEFAULT CASE: a signed-in user's document is born private, so its first
-     * reader is its owner, looking at it on the app page. The frame is on the
-     * document's own origin and calls its own asset door with the pages session
-     * the app page minted for that reader, so the door's read ACL sees the owner
-     * and hands back the public address of our copy.
-     */
-    const sink = await startMailSink();
-    const PRIV = `${WEB}/pic3.png?run=${RUN_ID}`;
-    const holder = await browser.newPage();
-    await loginViaEmail(holder, B, sink, `mxmx_test_boundassets_${RUN_ID}@example.com`);
-    // Publication may start a thumbnail render before the reader navigates. Count the
-    // one source fetch across publication AND navigation, not after that race starts.
-    const beforePriv = hits.filter((h) => h === '/pic3.png').length;
-    const mine = await publishAs(holder, {
-      title: 'private bound',
-      markup: `<Helmet><Value name="pick" type="string" default="${PRIV}" /></Helmet><div><img src="$pick" alt="a" /></div>`,
-    });
-    const readBack = await holder.evaluate(async (id) => (await fetch(`/api/my/artifacts/${id}`)).json(), mine.id);
-    check(readBack.visibility === 'private', `bound: a signed-in user's document is born private (${readBack.visibility})`);
-
-    const paints = (frameOrPage) => frameOrPage.evaluate(async () => {
-      const deadline = Date.now() + 15_000;
-      const read = () => {
-        const img = document.querySelector('img[alt="a"]');
-        return {
-          src: img?.getAttribute('src') ?? null,
-          mark: img?.getAttribute('data-mx-asset') ?? null,
-          natural: img ? [img.naturalWidth, img.naturalHeight] : [-1, -1],
-        };
-      };
-      while (Date.now() < deadline) {
-        const s = read();
-        if (s.natural[0] > 0 || s.mark) return s;
-        await new Promise((r) => setTimeout(r, 100));
-      }
-      return read();
-    });
-
-    await holder.goto(`${B}/a/${mine.id}`, { waitUntil: 'networkidle' });
-    const owned = await paints(await storyFrame(holder));
-    check(owned.natural[0] === 48 && owned.natural[1] === 32,
-      `bound: a private document's OWNER sees the picture, imported through its own door (${JSON.stringify(owned)})`);
-    check(/^\/assets\/[0-9a-f]{64}$/.test(owned.src ?? ''),
-      `bound: and its src is the public content address the door handed back (${owned.src})`);
-    check(hits.filter((h) => h === '/pic3.png').length === beforePriv + 1,
-      `bound: the source host was asked exactly once for it (before=${beforePriv}, after=${hits.filter(h=>h==='/pic3.png').length})`);
-    const listed = await holder.evaluate(async () => (await fetch('/api/my/artifacts')).json());
-    check(Array.isArray(listed.artifacts) && listed.artifacts.some((a) => a.id === mine.id),
-      'bound: the import created no artifact of its own — the document is still the only one');
-
-    const asStranger = await fetch(`${B}/a/${mine.id}/assets?u=${encodeURIComponent(ONE)}`, { redirect: 'manual' });
-    const asStrangerJson = await fetch(`${B}/a/${mine.id}/assets?u=${encodeURIComponent(ONE)}`, { headers: { Accept: 'application/json' } });
-    check(asStranger.status === 404 && asStrangerJson.status === 404,
-      `bound: a stranger's call to a private document's asset endpoint is the uniform 404, page and JSON alike (${asStranger.status}/${asStrangerJson.status})`);
-
-    const guestEmail = `mxmx_test_boundguest_${RUN_ID}@example.com`;
-    const shared = await holder.evaluate(async ([id, email]) => (await fetch(`/api/my/artifacts/${id}/sharing`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }),
-    })).status, [mine.id, guestEmail]);
-    check(shared === 200, `bound: the owner invited a viewer (${shared})`);
-    const guest = await browser.newPage();
-    await loginViaEmail(guest, B, sink, guestEmail);
-    const beforeGuest = hits.filter((h) => h === '/pic3.png').length;
-    await guest.goto(`${B}/a/${mine.id}`, { waitUntil: 'networkidle' });
-    const seenByGuest = await paints(await storyFrame(guest));
-    check(seenByGuest.natural[0] === 48,
-      `bound: an INVITED VIEWER of the private document sees the picture too, in the app page's frame (${JSON.stringify(seenByGuest)})`);
-    check(hits.filter((h) => h === '/pic3.png').length === beforeGuest,
-      'bound: and cost the source host nothing — it was already ours');
-    sink.close();
   }
   web.close();
 });

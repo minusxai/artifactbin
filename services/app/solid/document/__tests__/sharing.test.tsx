@@ -68,6 +68,28 @@ it('invites an email, changes its role, and removes it under public visibility',
   await waitFor(() => expect(state.shares).toEqual([]));
 });
 
+// A named COMMENTER from the row (the collab-roles gate's step 6b, moved here): the same role menu, the other role.
+it('invites an email and makes them a commenter from the row', async () => {
+  const state = { visibility: 'public', linkRole: 'viewer', shares: [] as Array<{ email: string; role: string }>, canPrivate: true };
+  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
+    if (init?.method === 'PUT') {
+      const patch = JSON.parse(String(init.body)) as { shares?: typeof state.shares };
+      if (patch.shares) state.shares = patch.shares;
+    }
+    return Response.json(state);
+  }));
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
+  fireEvent.click(view.getByRole('button', { name: 'Share' }));
+  await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
+  fireEvent.input(screen.getByRole('textbox', { name: 'Invite email' }), { target: { value: 'commenter@example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add email' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Role for commenter@example.com' })).toHaveTextContent('can view'));
+  fireEvent.click(screen.getByRole('button', { name: 'Role for commenter@example.com' }));
+  fireEvent.click(screen.getByRole('option', { name: 'can comment' }));
+  await waitFor(() => expect(state.shares).toEqual([{ email: 'commenter@example.com', role: 'commenter' }]));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Role for commenter@example.com' })).toHaveTextContent('can comment'));
+});
+
 it('offers view, comment and edit link roles and sends only the changed link role', async () => {
   const state = { visibility: 'unlisted', linkRole: 'viewer', shares: [] };
   const writes: unknown[] = [];

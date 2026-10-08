@@ -3,19 +3,10 @@
  * `docker run` line — so each can be tested without a container engine.
  */
 import { createHash } from 'node:crypto';
-import { GATE_SPECS } from '../gates.manifest.mjs';
 
 /** What a container asks for unless told otherwise: the shape of one CI gate runner (4 vCPUs). */
 export const DEFAULT_CPUS = 4;
 export const DEFAULT_MEMORY = '8g';
-
-/**
- * Gates that cannot run inside a gate container, and why: every manifest row with `needsPostgres`. Each is
- * still run by PR CI; the runner refuses them by name instead of failing them for a reason that says
- * nothing about the product.
- */
-export const CONTAINER_REFUSALS = Object.freeze(Object.fromEntries(GATE_SPECS.filter((spec) => spec.needsPostgres).map((spec) => [spec.name,
-  'starts its own Postgres with `docker run -p 127.0.0.1::5432`, a host port the container cannot reach; PR CI runs it'])));
 
 /** Where things live inside the container. */
 export const INSIDE = Object.freeze({ src: '/src', work: '/work', deps: '/deps', builds: '/builds' });
@@ -89,18 +80,13 @@ export function parseArgs(argv) {
 }
 
 /**
- * Which requested gates exist and may run here. Throws naming every unknown gate (with the known
- * set) and every refused one (with its reason) at once.
+ * Which requested gates exist. Throws naming every unknown gate (with the known set) at once.
  * @param {string[]} requested
  * @param {string[]} known  gate names discovered on disk
  */
 export function checkGates(requested, known) {
   const unknown = requested.filter((name) => !known.includes(name));
-  const refused = requested.filter((name) => Object.hasOwn(CONTAINER_REFUSALS, name));
-  const problems = [];
-  if (unknown.length) problems.push(`unknown gate(s): ${unknown.join(', ')}. Known: ${known.join(', ')}`);
-  for (const name of refused) problems.push(`${name} cannot run in a gate container: it ${CONTAINER_REFUSALS[name]}`);
-  if (problems.length) throw new Error(problems.join('\n'));
+  if (unknown.length) throw new Error(`unknown gate(s): ${unknown.join(', ')}. Known: ${known.join(', ')}`);
 }
 
 /**
