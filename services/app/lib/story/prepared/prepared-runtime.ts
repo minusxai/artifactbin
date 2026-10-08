@@ -42,7 +42,7 @@ export interface ServedStoryRuntime {
   /**
    * The isolated sheet — the text of the story's `<style>`. ABSENT in the
    * HTML bootstrap whenever the server inlined the story itself: that
-   * `<style>` is then the one copy, and web/bootstrap puts its text back here
+   * `<style>` is then the one copy, and solid/lib/bootstrap puts its text back here
    * before anything reads the payload.
    */
   css?: string;

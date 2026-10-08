@@ -38,7 +38,7 @@ export async function copyRuntimePublic(source,destination){
 async function buildHost(){
  execFileSync(process.execPath,[process.env.npm_execpath??join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),'run','build','-w','services/app'],{cwd:repo,stdio:'inherit'});
  await rm(runtime,{recursive:true,force:true});await mkdir(runtime,{recursive:true});
- execFileSync(process.execPath,[join(repo,'scripts/build/build-server.mjs'),join(runtime,'host.mjs'),join(cli,'src/team-entry.ts'),'sharp','--remote-runner'],{cwd:repo,stdio:'inherit'});
+ execFileSync(process.execPath,[join(repo,'scripts/build/build-server.mjs'),join(runtime,'host.mjs'),join(app,'server/team-host.ts'),'sharp','--remote-runner'],{cwd:repo,stdio:'inherit'});
  execFileSync(process.execPath,[join(repo,'scripts/build/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp','--remote-runner'],{cwd:repo,stdio:'inherit'});
  await buildPreview(join(runtime,'preview'));
  await copyRuntimePublic(join(app,'public'),join(runtime,'public'));

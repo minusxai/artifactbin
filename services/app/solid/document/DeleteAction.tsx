@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, Show, type JSX } from 'solid-js';
 import Trash2 from 'lucide-solid/icons/trash-2';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
 export function DeleteAction(props: { id: string; title: string; onDeleted: () => void }): JSX.Element {

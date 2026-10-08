@@ -10,7 +10,7 @@ import tailwindcss from '@tailwindcss/vite';
 import solid from 'vite-plugin-solid';
 import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
-import { describePrecompression, precompressTree } from './scripts/lib/precompress.mjs';
+import { describePrecompression, precompressTree } from './services/app/scripts/precompress.mjs';
 import { declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 
 const webRoot = path.resolve(import.meta.dirname, 'services/app/web');

@@ -116,7 +116,7 @@ const safeJson = (value: unknown): string => JSON.stringify(value).replace(/</g,
  * The page's data rides at the END of the body — after the story the server
  * rendered, as the body's own last element — so the first paint never waits
  * for it to download. Still read before the app's first render: the SPA's
- * module runs after the document is parsed (web/bootstrap reads exactly this
+ * module runs after the document is parsed (solid/lib/bootstrap reads exactly this
  * element, a direct child of body, which no authored id inside the story can be).
  */
 export const withBootstrap = (html: string, data: unknown): string => {
@@ -468,7 +468,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * The canonical address for a document, when the one the viewer asked for is
    * not it — served IN PLACE, not redirected: the page is rendered as the
    * canonical address and names it (`address`) for the SPA to put in the
-   * address bar (web/heal-address), saving a shared link its round trip. It
+   * address bar (solid/lib/heal-address), saving a shared link its round trip. It
    * runs AFTER the ACL, so a private document never leaks its owner to a
    * viewer who cannot read it; a valid export key skips the healing, because a
    * capture must stay at the address it was handed.

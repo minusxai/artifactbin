@@ -12,11 +12,8 @@
  * hostname cannot move a byte count.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  buildQuickSheet, buildSkillTree, expectedSkillName, readFirstBlock, renderSkill,
-  mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, QUICK_SHEET_MAX_BYTES,
-  SKILL_FILE_MAX_BYTES, SKILL_LISTING_MAX_BYTES,
-} from '../skills';
+import { buildSkillTree, expectedSkillName, readFirstBlock, renderSkill, mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, SKILL_FILE_MAX_BYTES, SKILL_LISTING_MAX_BYTES } from '../skills';
+import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { STORY_THEMES } from '../data/story/story-themes';
 import { STORY_TEMPLATES } from '../data/story/story-templates';
 

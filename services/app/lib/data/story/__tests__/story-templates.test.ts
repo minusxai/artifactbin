@@ -9,7 +9,7 @@
  *  - the lookup helper.
  */
 import { describe, it, expect } from 'vitest';
-import { renderDoc } from '@/lib/skills';
+import { renderDoc } from '@/test/helpers/skill-docs';
 
 /** A genre's authoring guidance is its docs file — `skills/artifactbin/references/templates-<name>.md`, the one copy agents read. */
 const guidanceOf = (name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, 'https://example.test');

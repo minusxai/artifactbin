@@ -3,7 +3,7 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runInNewContext} from 'node:vm';
-import {createTeamApplication} from '../../cli/src/team-application';
+import {createTeamApplication} from '../server/team-application';
 import {AUTH_SECRET} from '@/lib/platform';
 import * as preparedPages from '@/lib/story/prepared/prepared-page.server';
 import {enablePreparedPageWarmups,drainPreparedPageWarmups} from '@/lib/story/prepared/prepared-page.server';

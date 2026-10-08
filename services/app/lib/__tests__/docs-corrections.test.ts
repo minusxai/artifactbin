@@ -10,7 +10,7 @@
  * reason to doubt it.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc } from '../skills';
+import { buildQuickSheet, renderDoc } from '@/test/helpers/skill-docs';
 import { IMAGE_URL_FIELD_GUIDANCE } from '@/lib/serving';
 import { OPERATIONS } from '../operations/registry';
 

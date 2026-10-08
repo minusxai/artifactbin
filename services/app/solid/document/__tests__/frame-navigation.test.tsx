@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * THE APP PAGE FOLLOWS ITS FRAME'S LINKS (solid/document/frame-navigation) and REPORTS THE DOCUMENT IT SHOWS
- * (web/artifact-view-report from solid/pages/Document): a navigation is heard only from the frame's own window on the
+ * (solid/lib/artifact-view-report from solid/pages/Document): a navigation is heard only from the frame's own window on the
  * document's origin, answered before it is taken, followed by the router for an app page and by a full load for any
  * other address; the document page reports one view as it shows its frame.
  */
@@ -13,8 +13,8 @@ import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE } from '@/lib/story-ru
 
 const FRAMED_ORIGIN = 'http://646f633132333435.lvh.me';
 let served: HTMLElement | null = null;
-vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: 'viewer', archived: null, surface: { id: 'doc12345', title: 'A doc', format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: null } }) }));
-vi.mock('@/web/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
+vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: 'viewer', archived: null, surface: { id: 'doc12345', title: 'A doc', format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: null } }) }));
+vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 
 import { answerFrameNavigation, appNavigationTarget } from '../frame-navigation';
 import { DocumentPage } from '../../pages/Document';

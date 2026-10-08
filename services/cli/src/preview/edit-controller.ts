@@ -2,7 +2,7 @@
  * THE PREVIEW'S STORY CONTROLLER — framework-free, adapted from components/IslandStory.tsx's
  * `createIslandController` for a local file instead of a hosted artifact: the same compiled DOM,
  * the same edit session (lib/story-runtime/edit/session createFrameEditSession), DOM-mounter
- * (solid/editor/dom-mounter), selection-actions and annotate sessions (lib/story-runtime/edit/*) —
+ * (lib/story-runtime/edit/dom-mounter), selection-actions and annotate sessions (lib/story-runtime/edit/*) —
  * only a structural edit's recompile goes through this process's own `/draft` door (compiled.ts)
  * instead of `/a/:id/draft-preview`.
  *
@@ -154,7 +154,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
     if(!command.on){draftSequence++;pendingDraft=null;if(quietDraftTimer!==null)win.clearTimeout(quietDraftTimer);quietDraftTimer=null;edit?.dispose();edit=null;return;}
     if(edit||editLoading)return;
     editLoading=true;
-    void Promise.all([import('../../../app/lib/story-runtime/edit/session'),import('../../../app/solid/editor/dom-mounter')]).then(([{createFrameEditSession},{mountCompiledEditRegions}])=>{
+    void Promise.all([import('../../../app/lib/story-runtime/edit/session'),import('../../../app/lib/story-runtime/edit/dom-mounter')]).then(([{createFrameEditSession},{mountCompiledEditRegions}])=>{
      if(disposed||!editRequested)return;
      edit=createFrameEditSession({win,root,channel,requestRender:()=>{},mountCompiled:mountCompiledEditRegions});
      edit.setNodes(nodes);

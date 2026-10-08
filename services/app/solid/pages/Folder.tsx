@@ -7,7 +7,7 @@ import type { ArtifactRole } from '@/lib/artifacts/share-roles';
 import { canEdit } from '@/lib/artifacts/share-roles';
 import type { AccountWorkspace } from '@/lib/workspace/dashboard';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { PAGE_COLUMN } from '../components/ui';
 import Shelf from '../components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';

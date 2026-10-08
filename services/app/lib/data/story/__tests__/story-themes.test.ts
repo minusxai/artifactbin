@@ -17,7 +17,8 @@ import {
   STORY_THEMES, STORY_THEME_NAMES, getStoryTheme, storyThemeCss,
   storyThemeDefaultMode, resolveStoryMode, RETIRED_STORY_THEMES, resolveStoredStoryDesign,
 } from '../story-themes';
-import { renderDoc, skillTree } from '@/lib/skills';
+import { skillTree } from '@/lib/skills';
+import { renderDoc } from '@/test/helpers/skill-docs';
 
 /** Exactly the CSS variables TW_INPUT_JSX maps utilities onto, plus --radius. */
 const REQUIRED_VARS = [

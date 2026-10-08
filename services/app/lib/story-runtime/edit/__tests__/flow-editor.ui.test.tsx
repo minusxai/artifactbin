@@ -14,7 +14,7 @@ import type { EditorView } from 'prosemirror-view';
 import { editorDocument, sourceNodes } from '@/lib/editor-v2/model';
 import { FlowEditor } from '../FlowEditor';
 import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-v2/flow-view';
-import { createEditorSource } from '../create-editor-source';
+import { createEditorSource } from '@/solid/editor/create-editor-source';
 import { captureBookmark } from '@/lib/editor-v2/bookmark';
 
 function nodes(source: string) {

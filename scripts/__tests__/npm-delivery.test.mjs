@@ -9,7 +9,7 @@ import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {populateNpmSeed} from '../lib/npm-dependency-cache.mjs';
+import {populateNpmSeed} from '../../services/cli/scripts/npm-dependency-cache.mjs';
 import {npmConsumerArgs,npmConsumerInstallArgs,npmInstallPhaseTimings} from '../../services/cli/scripts/npm-consumer-args.mjs';
 const npmCli=process.env.npm_execpath??realpathSync(spawnSync('/bin/sh',['-c','command -v npm'],{encoding:'utf8'}).stdout.trim());
 const pack=new URL('../../services/cli/scripts/pack-release.mjs',import.meta.url);

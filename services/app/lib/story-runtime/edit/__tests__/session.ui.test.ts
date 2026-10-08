@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { mountCompiledEditRegions } from '@/solid/editor/dom-mounter';
+import { mountCompiledEditRegions } from '@/lib/story-runtime/edit/dom-mounter';
 import { morphDraftDom } from '@/lib/islands/morph/engine';
 import { createFrameEditSession, type FrameEditSession } from '../session';
 import {

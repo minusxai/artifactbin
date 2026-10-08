@@ -29,7 +29,7 @@ test('foreground team process serves real login and excludes another database ow
  if(!controller.listening)await new Promise<void>(resolve=>controller.once('listening',resolve));
  const runnerPort=(controller.address() as {port:number}).port;
  await writeFile(file,`APP__HOST=127.0.0.1\nAPP__PORT=${port}\nAPP__PUBLIC_BASE_URL=http://app.lvh.me:${port}\nAUTH__SECRET=${'s'.repeat(48)}\nEMAIL__DEV_OUTBOX_PATH=outbox.jsonl\nRUNNER__SERVICE_URL=http://127.0.0.1:${runnerPort}\nCONTRACT__ACTOR_SECRET=${secret}\n`);
- const root=fileURLToPath(new URL('../../../',import.meta.url)),entry=new URL('../src/team-entry.ts',import.meta.url).href;
+ const root=fileURLToPath(new URL('../../../',import.meta.url)),entry=new URL('../../app/server/team-host.ts',import.meta.url).href;
  const reporter=new URL('../src/operator-error.ts',import.meta.url).href;
  const children:ChildProcess[]=[];
  // The same two calls the packaged entrypoint makes: start the host, and report a startup failure.

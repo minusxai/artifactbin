@@ -1,5 +1,5 @@
 /**
- * Page data as a Solid resource over the shared store (web/page-data-store): a signal fed by
+ * Page data as a Solid resource over the shared store (solid/lib/page-data-store): a signal fed by
  * `store.subscribe`, a memo of (key, revision), and an effect that subscribes to the current resource
  * and loads it. The store aborts a pending load when its last subscriber leaves. A key that depends
  * on a route param is passed as an accessor.
@@ -8,8 +8,8 @@
  * parallel with the route's lazy chunk; `adoptPreload` keeps a finished preload from being fetched again.
  */
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from 'solid-js';
-import { createPageDataStore, type PageDataSnapshot } from '@/web/page-data-store';
-import { REFRESH_EVENT } from '@/web/page-data-events';
+import { createPageDataStore, type PageDataSnapshot } from '@/solid/lib/page-data-store';
+import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 import { useSession } from './session';
 
 async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {

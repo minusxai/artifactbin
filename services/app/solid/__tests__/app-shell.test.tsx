@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
-import { REFRESH_EVENT } from '@/web/page-data-events';
+import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 
 let session: unknown;
 let calls: string[];

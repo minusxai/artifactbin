@@ -10,6 +10,7 @@ const args = raw.filter(arg => arg !== '--reuse');
 const node = process.execPath;
 const commands = label === 'validate' && !args.length ? [
   [node, 'scripts/ci/check-residual-names.mjs'],
+  [node, 'scripts/ci/module-graph.mjs'],
   ...typeCheckCommands({ root: path.resolve('.'), node }),
 ] : label === 'test' ? [[node, 'scripts/ci/test-changed.mjs', ...args]] : null;
 try {

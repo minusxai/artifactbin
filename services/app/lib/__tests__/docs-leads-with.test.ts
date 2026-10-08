@@ -14,7 +14,8 @@
  * lives in skill-tree.test.ts.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc, renderSkill, skillTree } from '../skills';
+import { renderSkill, skillTree } from '../skills';
+import { buildQuickSheet, renderDoc } from '@/test/helpers/skill-docs';
 
 const BASE = 'https://example.test';
 

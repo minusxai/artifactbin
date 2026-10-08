@@ -3,7 +3,7 @@
  *
  * The page's private handle on the served story root: comments, selections, reader mode, data
  * wakeups, in-place editing (lib/story-runtime/edit/session over the compiled DOM, mounted by
- * solid/editor/dom-mounter) and new versions morphed in place (lib/islands/live-update). A page
+ * lib/story-runtime/edit/dom-mounter) and new versions morphed in place (lib/islands/live-update). A page
  * shell (the Solid document page) moves the root into its tree (`moveInto`), creates this
  * controller, and hands its `nonce` to the page's annotation and editor chrome.
  */
@@ -567,7 +567,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         frozen = true;
         const stale = nodesVersion !== shownVersion();
         void Promise.all([
-          import('@/lib/story-runtime/edit/session'), import('@/solid/editor/dom-mounter'),
+          import('@/lib/story-runtime/edit/session'), import('@/lib/story-runtime/edit/dom-mounter'),
           stale ? import('@/lib/story/document/update-parts') : null, stale ? import('@/lib/story/assets/asset-url') : null,
         ]).then(async ([{ createFrameEditSession }, { mountCompiledEditRegions }, parts, assets]) => {
           if (disposed || !editRequested) return;

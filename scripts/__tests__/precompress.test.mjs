@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
-import { precompressTree } from '../lib/precompress.mjs';
+import { precompressTree } from '../../services/app/scripts/precompress.mjs';
 
 const dirs = [];
 const tree = () => { const dir = mkdtempSync(path.join(os.tmpdir(), 'precompress-')); dirs.push(dir); return dir; };

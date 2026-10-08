@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildQuickSheet } from '../skills';
+import { buildQuickSheet } from '@/test/helpers/skill-docs';
 import { validateMarkupStructure } from '@/lib/story/document/local-validation';
 
 const sheet = buildQuickSheet('https://artifactbin.dev');

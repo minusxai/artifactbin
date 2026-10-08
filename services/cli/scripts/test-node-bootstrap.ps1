@@ -357,7 +357,7 @@ try {
       $seeds=@(Get-ChildItem $seedDownload -Filter 'npm-dependency-seed-Windows-X64.tar' -File -Recurse)
       if($seeds.Count -ne 1){throw 'Expected one exact current-run Windows npm seed'}
       $cache=Join-Path $root 'npm-cache'
-      & node scripts/lib/npm-dependency-cache.mjs merge-seed $seeds[0].FullName $cache Windows X64
+      & node services/cli/scripts/npm-dependency-cache.mjs merge-seed $seeds[0].FullName $cache Windows X64
       if($LASTEXITCODE -ne 0){throw 'Current-run Windows npm dependency seed failed validation'}
       # Publish only a complete file to the waiting child.
       Copy-Item $candidates[0].FullName (Join-Path $root 'candidate.pending')

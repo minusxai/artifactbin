@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createPageDataStore } from '../page-data-store';
+import { createPageDataStore } from '@/solid/lib/page-data-store';
 
 it('old subscription cleanup never deletes the replacement account resource', () => {
   const store = createPageDataStore(); store.setScope('A'); const old = store.resource<string>('x');

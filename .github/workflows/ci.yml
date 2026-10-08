@@ -716,16 +716,16 @@ jobs:
           key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
 
       - id: npm-seed-key
-        run: node scripts/lib/npm-dependency-cache.mjs seed-key "$GITHUB_OUTPUT"
+        run: node services/cli/scripts/npm-dependency-cache.mjs seed-key "$GITHUB_OUTPUT"
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: npm-seeds
         with:
           path: .ci-cache-key/npm-platform-seeds/*.tar
-          key: ${{ steps.npm-seed-key.outputs.key }}-${{ hashFiles('scripts/lib/npm-dependency-cache.mjs') }}
+          key: ${{ steps.npm-seed-key.outputs.key }}-${{ hashFiles('services/cli/scripts/npm-dependency-cache.mjs') }}
       - if: steps.npm-seeds.outputs.cache-hit != 'true'
         run: |
-          node scripts/lib/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed"
-          node scripts/lib/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
+          node services/cli/scripts/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed"
+          node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #
@@ -931,13 +931,13 @@ jobs:
           restore-keys: test-builds-v1-${{ runner.os }}-
       - if: needs.plan.outputs.cli == 'true'
         id: npm-seed-key
-        run: node scripts/lib/npm-dependency-cache.mjs seed-key "$GITHUB_OUTPUT"
+        run: node services/cli/scripts/npm-dependency-cache.mjs seed-key "$GITHUB_OUTPUT"
       - if: needs.plan.outputs.cli == 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: npm-seeds
         with:
           path: .ci-cache-key/npm-platform-seeds/*.tar
-          key: ${{ steps.npm-seed-key.outputs.key }}-${{ hashFiles('scripts/lib/npm-dependency-cache.mjs') }}
+          key: ${{ steps.npm-seed-key.outputs.key }}-${{ hashFiles('services/cli/scripts/npm-dependency-cache.mjs') }}
       # Create only pinned public tarballs, never an arbitrary prior user cache.
       - name: Prepare public downloads while building the CLI
         if: needs.plan.outputs.cli == 'true'
@@ -945,7 +945,7 @@ jobs:
           SEED_CACHE_HIT: ${{ steps.npm-seeds.outputs.cache-hit }}
         run: |
           if [[ "$SEED_CACHE_HIT" != true ]]; then
-            node scripts/lib/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed" &
+            node services/cli/scripts/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed" &
             seed_pid=$!
             trap 'kill "$seed_pid" 2>/dev/null || true' EXIT
           fi
@@ -982,7 +982,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - if: needs.plan.outputs.cli == 'true' && steps.npm-seeds.outputs.cache-hit != 'true'
-        run: node scripts/lib/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
+        run: node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: needs.plan.outputs.cli == 'true'
         with:

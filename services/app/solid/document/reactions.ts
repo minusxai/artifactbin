@@ -5,7 +5,7 @@
  */
 import { loginHref } from '@/lib/http/login-href';
 import { refusedForSignIn } from '@/lib/story/reader/sign-in-required';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { apiFetch } from '../lib/api';
 
 type Navigate = (href: string) => void;

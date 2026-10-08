@@ -1,5 +1,6 @@
 import {describe,it,expect} from 'vitest';
-import {buildQuickSheet,renderDoc,skillExample,stripBundleMarkers,condenseForBundle} from '../skills';
+import {skillExample,stripBundleMarkers,condenseForBundle} from '../skills';
+import {buildQuickSheet,renderDoc} from '@/test/helpers/skill-docs';
 import teaching from '../../../cli/src/generated/teaching.json';
 const sheet=buildQuickSheet('https://artifactbin.dev');
 describe('the installed short skill',()=>{

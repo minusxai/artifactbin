@@ -7,7 +7,7 @@ import Settings2 from 'lucide-solid/icons/settings-2';
 import Terminal from 'lucide-solid/icons/terminal';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import UserRound from 'lucide-solid/icons/user-round';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { useOptionalInbox } from '../lib/notifications';
 import WorkspaceCreate from './WorkspaceCreate';
 import { Avatar } from './Avatar';

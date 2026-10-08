@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
-import { loadThree } from '@/web/three-bundle';
+import { loadThree } from '@/solid/lib/three-bundle';
 
 export default function ModelPreview(props: { source: Blob | string; title: string }): JSX.Element {
   let canvas!: HTMLCanvasElement;

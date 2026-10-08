@@ -2,7 +2,7 @@
  * THE ADDRESS BAR, HEALED IN PLACE — the entry's FIRST import, so it runs before
  * any other module body: before the router is created, before the initial story
  * is captured against the current path, before any inlined data is looked up by
- * path (web/bootstrap takeBootstrap).
+ * path (solid/lib/bootstrap takeBootstrap).
  *
  * A readable document requested at a non-canonical address is served directly
  * rather than redirected (server/app documentAddress): one round trip fewer for

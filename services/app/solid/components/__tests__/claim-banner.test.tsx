@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClaimBanner from '@/solid/components/ClaimBanner';
-import { REFRESH_EVENT } from '@/web/page-data-events';
+import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 
 type Offer = { tokenId: string; titles: string[]; artifacts: number };
 let offers: Offer[];

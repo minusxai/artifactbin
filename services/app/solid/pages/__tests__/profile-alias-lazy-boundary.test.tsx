@@ -25,7 +25,7 @@ vi.mock('../Document', () => {
   return { DocumentPage: () => <p>DOCUMENT FALLBACK</p> };
 });
 
-vi.mock('@/web/served-frame', () => ({ servedDocumentFrame: () => loaded.servedFrame }));
+vi.mock('@/solid/lib/served-frame', () => ({ servedDocumentFrame: () => loaded.servedFrame }));
 
 import { ProfileAliasRoute } from '@/solid/pages/ProfileAlias';
 

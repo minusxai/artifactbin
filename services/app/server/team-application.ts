@@ -1,4 +1,4 @@
-import {canAuthenticateUser} from '../../app/lib/accounts/user-kinds';
+import {canAuthenticateUser} from '@/lib/accounts/user-kinds';
 /** OSS team composition reuses the shared login and identity; the app owns authorization. */
 import {join} from 'node:path';
 import {createTokenReader} from '@artifactbin/utils';
@@ -6,10 +6,10 @@ import {createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,creat
 import {createSql} from '@artifactbin/sql/local';
 import {createBrowser,sessionProcessPaths} from '@artifactbin/browser/local';
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
-import {createAppHost,type AppHost} from '../../app/server/host';
-import {EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '../../app/lib/platform/config';
-import {setServices} from '../../app/lib/platform/services';
-import {chromiumExecutable} from './chromium';
+import {createAppHost,type AppHost} from './host';
+import {EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '@/lib/platform/config';
+import {setServices} from '@/lib/platform/services';
+import {chromiumExecutable} from '../../cli/src/chromium';
 
 export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string):Promise<AppHost>{
  const origin=readEnv(env,'APP__PUBLIC_BASE_URL'),secret=readEnv(env,'AUTH__SECRET');

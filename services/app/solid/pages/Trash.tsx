@@ -12,7 +12,7 @@ import ChevronLeft from 'lucide-solid/icons/chevron-left';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import Search from 'lucide-solid/icons/search';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged } from '@/solid/lib/page-data-events';
 import RowMenu from '../components/RowMenu';
 import { Tooltip } from '../components/Tooltip';
 import { Badge, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo } from '../components/ui';

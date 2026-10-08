@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { REFRESH_EVENT } from '@/web/page-data-events';
+import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 import { Button, PANEL } from './ui';
 import { ConfirmDialog } from './ConfirmDialog';
 import { apiFetch } from '../lib/api';
