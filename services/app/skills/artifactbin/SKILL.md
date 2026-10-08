@@ -11,7 +11,7 @@ npm CLI: local files/browser approval. Email login required for CLI and HTTP; [H
 
 - If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills. [Setup details](references/npm-local.md).
 - Local preview; HTML: `.jsx.html`.
-- Chat or phone: ask for email, run `afbin auth --email <email>`, ask for the code, then `afbin auth --email <email> --otp <code>`. Browser approval (also for `--yes`) only on a shared desktop or if asked. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
+- Chat or phone: ask email, run `afbin auth --email <email>`, ask for the code, then `afbin auth --email <email> --otp <code>`. Automatic browser approval only on a shared desktop or on request. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. For a new artifact, write and push inside an afbin workspace (discovery walks up parents), not a temp directory. Share its returned URL. [[ urlReplyRule ]]
 - Shared/friends/team/signup/vote/RSVP flows: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
 - Read `afbin help <page type>` and choose ONE design system. [[ progressiveAuthoringRule ]] Push confirms source acceptance; do not pull, diff or grep just to reconfirm it.
