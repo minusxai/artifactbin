@@ -135,6 +135,9 @@ while(!(Test-Path '__ROOT__\candidate.tgz')) {
 }
 if($seededCache){
   if(!(Test-Path (Join-Path $env:npm_config_cache '_cacache\_lastverified') -PathType Leaf)){throw 'Expected verified same-run npm dependency seed'}
+  # Full packuments match npm view seed entries; misses remain online.
+  $env:npm_config_prefer_offline='true'
+  $env:npm_config_full_metadata='true'
   Write-Host 'Verified same-run Windows npm dependency seed is active'
 }
 $phase='standard-user online npx query'

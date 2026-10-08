@@ -8,8 +8,8 @@ import {createGunzip} from 'node:zlib';
 import {pipeline} from 'node:stream/promises';
 import {Writable} from 'node:stream';
 
-async function sha256File(path,deadline){
- const remaining=deadline-performance.now();
+async function sha256File(path,deadline,now){
+ const remaining=deadline-now();
  if(remaining<=0)throw Error('install deadline elapsed before candidate hashing');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(Error('install deadline elapsed during candidate hashing')),remaining);
  const hash=createHash('sha256');
@@ -19,8 +19,8 @@ async function sha256File(path,deadline){
  }finally{clearTimeout(timer);}
 }
 
-async function assertGzip(path,deadline){
- const remaining=deadline-performance.now();
+async function assertGzip(path,deadline,now){
+ const remaining=deadline-now();
  if(remaining<=0)throw Error('install deadline elapsed before candidate gzip validation');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(Error('install deadline elapsed during candidate gzip validation')),remaining);
  try{
@@ -37,26 +37,33 @@ function isCandidateEof(output,name){
  return eof&&(candidateName||bundledAssets)&&!unrelatedNpmError;
 }
 
-export async function installNpmConsumer({npm,tarball,cwd,env,seeded=false,onOutput=chunk=>process.stdout.write(chunk),timeoutMs=300000,heartbeatMs=15000}){
- const started=performance.now(),deadline=started+timeoutMs,name=basename(tarball);
+export async function installNpmConsumer({npm,tarball,cwd,env,seeded=false,onOutput=chunk=>process.stdout.write(chunk),timeoutMs=300000,heartbeatMs=15000,now=()=>performance.now(),attemptRunner}){
+ const started=now(),deadline=started+timeoutMs,name=basename(tarball);
  // The candidate marker is retained with native CI logs so an extraction failure can be
  // attributed to these exact bytes. Dependency cache entries are not included here.
- const initialDigest=seeded?await sha256File(tarball,deadline):null;
+ const initialDigest=seeded?await sha256File(tarball,deadline,now):null;
  let output='';
  const emit=text=>{output+=text;onOutput(text);};
  const diagnostic=text=>emit(`${output&&!output.endsWith('\n')?'\n':''}${text}`);
  if(initialDigest)diagnostic(`Npm consumer candidate: ${name} sha256=${initialDigest}\n`);
  // npm cache add stores full packuments; request the same representation offline.
  const args=[npm,'install',...(seeded?['--offline','--full-metadata']:[]),'--foreground-scripts','--no-audit','--no-fund','--timing',tarball];
- const runAttempt=(attempt)=>new Promise((resolve,reject)=>{
-  const attemptStarted=performance.now();
-  const remaining=deadline-performance.now();
-  if(remaining<=0){resolve({timedOut:true,output:'',code:null,signal:null,seconds:0});return;}
+ // Injection keeps deadline scheduling independently testable; native execution is the default.
+ const runAttempt=async(attempt)=>{
+  const remaining=deadline-now();
+  if(remaining<=0)return {timedOut:true,output:'',code:null,signal:null,seconds:0};
+  if(attemptRunner){
+   const result=await attemptRunner({attempt,timeoutMs:remaining,args,cwd,env});
+   if(result.output)emit(result.output);
+   return result;
+  }
+  return new Promise((resolve,reject)=>{
+  const attemptStarted=now();
   const child=spawn(process.execPath,args,{cwd,env,detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
   let attemptOutput='',timedOut=false;
   const collect=chunk=>{const text=chunk.toString();attemptOutput+=text;emit(text);};
   child.stdout.on('data',collect);child.stderr.on('data',collect);
-  const heartbeat=setInterval(()=>onOutput(`npm install still running (${((performance.now()-started)/1000).toFixed(1)}s, ${seeded?'offline seeded':'cold online'}, attempt ${attempt})\n`),heartbeatMs);
+  const heartbeat=setInterval(()=>onOutput(`npm install still running (${((now()-started)/1000).toFixed(1)}s, ${seeded?'offline seeded':'cold online'}, attempt ${attempt})\n`),heartbeatMs);
   const timer=setTimeout(()=>{
    timedOut=true;
    // Lifecycle scripts inherit our pipes. Terminate the entire tree so close is bounded.
@@ -67,10 +74,11 @@ export async function installNpmConsumer({npm,tarball,cwd,env,seeded=false,onOut
   },remaining);
   const clear=()=>{clearInterval(heartbeat);clearTimeout(timer);};
   child.once('error',error=>{clear();reject(error);});
-  child.once('close',(code,signal)=>{clear();resolve({code,signal,output:attemptOutput,timedOut,seconds:(performance.now()-attemptStarted)/1000});});
- });
+  child.once('close',(code,signal)=>{clear();resolve({code,signal,output:attemptOutput,timedOut,seconds:(now()-attemptStarted)/1000});});
+  });
+ };
  const first=await runAttempt(1);
- const seconds=(performance.now()-started)/1000;
+ const seconds=(now()-started)/1000;
  if(first.timedOut){diagnostic(`Native timing: ${seeded?'offline blob-cached':'cold'} npm install ${seconds.toFixed(1)}s\n`);throw Error(`npm install exceeded ${timeoutMs/1000}s\n${output}`);}
  if(first.code===0){diagnostic(`Native timing: ${seeded?'offline blob-cached':'cold'} npm install ${seconds.toFixed(1)}s\n`);return {output,seconds};}
  const firstExit=first.code??first.signal;
@@ -81,24 +89,24 @@ export async function installNpmConsumer({npm,tarball,cwd,env,seeded=false,onOut
 
  let currentDigest;
  try{
-  currentDigest=await sha256File(tarball,deadline);
+  currentDigest=await sha256File(tarball,deadline,now);
   if(currentDigest!==initialDigest)throw Error('candidate bytes changed during the first npm install');
-  await assertGzip(tarball,deadline);
-  if(await sha256File(tarball,deadline)!==initialDigest)throw Error('candidate bytes changed during gzip validation');
+  await assertGzip(tarball,deadline,now);
+  if(await sha256File(tarball,deadline,now)!==initialDigest)throw Error('candidate bytes changed during gzip validation');
  }catch(error){
   diagnostic(`Candidate EOF retry skipped: ${error.message}\n`);
-  diagnostic(`Native timing: offline blob-cached npm install ${((performance.now()-started)/1000).toFixed(1)}s\n`);
+  diagnostic(`Native timing: offline blob-cached npm install ${((now()-started)/1000).toFixed(1)}s\n`);
   throw Error(`npm install exited ${firstExit}; candidate retry validation failed\n${output}`);
  }
 
- const remaining=deadline-performance.now();
+ const remaining=deadline-now();
  if(remaining<=0){
   diagnostic('Candidate EOF retry skipped: original install deadline elapsed\n');
-  diagnostic(`Native timing: offline blob-cached npm install ${((performance.now()-started)/1000).toFixed(1)}s\n`);
+  diagnostic(`Native timing: offline blob-cached npm install ${((now()-started)/1000).toFixed(1)}s\n`);
   throw Error(`npm install exited ${firstExit}; retry deadline elapsed\n${output}`);
  }
  diagnostic(`Seeded candidate archive extraction EOF; ${name} sha256=${initialDigest} is unchanged and gzip-valid. First install took ${first.seconds.toFixed(1)}s. Retrying once with the same offline cache (${remaining.toFixed(0)}ms remain).\n`);
- const retry=await runAttempt(2),totalSeconds=(performance.now()-started)/1000;
+ const retry=await runAttempt(2),totalSeconds=(now()-started)/1000;
  diagnostic(`Native timing: offline blob-cached npm install ${totalSeconds.toFixed(1)}s\n`);
  if(retry.timedOut)throw Error(`npm install exceeded ${timeoutMs/1000}s during one seeded candidate retry (first attempt exited ${firstExit})\n${output}`);
  if(retry.code!==0)throw Error(`npm install retry failed after seeded candidate EOF (first attempt exited ${firstExit}, retry exited ${retry.code??retry.signal})\n${output}`);
