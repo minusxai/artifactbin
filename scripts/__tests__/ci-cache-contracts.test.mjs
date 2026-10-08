@@ -202,7 +202,7 @@ it('keeps candidate EOF retries inside the original install deadline and never r
  const script=join(directory,'npm.cjs'),tarball=join(directory,'candidate.tgz'),countFile=join(directory,'attempts'),marker=join(directory,'late-marker');
  try{
   writeFileSync(tarball,gzipSync('valid candidate gzip'));
-  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)},marker=${JSON.stringify(marker)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));if(process.env.FAILURE_MODE==='initial-timeout'||attempt>1){setTimeout(()=>fs.writeFileSync(marker,'late'),220);setInterval(()=>{},1000)}else setTimeout(()=>{process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251},35);`);
+  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)},marker=${JSON.stringify(marker)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));if(process.env.FAILURE_MODE==='initial-timeout'||attempt>1){setTimeout(()=>fs.writeFileSync(marker,'late'),220);setInterval(()=>{},1000)}else {process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251};`);
   const started=performance.now();
   await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env},seeded:true,onOutput:()=>{},timeoutMs:140})).rejects.toThrow(/exceeded 0\.1s|exceeded 0\.14s|retry.*exceeded/i);
   expect(readFileSync(countFile,'utf8')).toBe('2');
@@ -403,4 +403,17 @@ it('caches only Linux browser deb archives and still provisions the full browser
  expect(install.run).toContain('linux-acceptance-deps.mjs');expect(install.run).toContain('playwright/cli.js');expect(install.if).not.toContain('cache-hit');
  expect(install.if).toContain("matrix.phase == 'preview'");expect(install.if).toContain("matrix.phase == 'local'");
  expect(cli.strategy.matrix.os).toEqual(['ubuntu-24.04','ubuntu-24.04-arm','macos-14','macos-15-intel','windows-2022']);
+});
+
+
+it('reuses the verified first-npx entry for real candidate setup while published setup stays npx',()=>{
+ const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ expect(source).toContain("Copy-Item services/cli/scripts/windows-bootstrap-candidate.mjs (Join-Path $root 'windows-bootstrap-candidate.mjs')");
+ expect(source).toContain("$result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\\candidate.tgz','afbin','query',$rows,'--json')");
+ const setup=source.slice(source.indexOf("$phase='candidate registry startup'"),source.indexOf("$phase='repeat setup retains skills'"));
+ expect(setup).toContain("$phase='verify npm-owned candidate entry'");expect(setup).toContain("$env:npm_config_cache,'__ROOT__\\candidate.tgz',$ready.version");
+ expect(setup).toContain("$setupCommand=Join-Path $private 'node.exe'");expect(setup).toContain("$setupArgs=@($entry,'setup')");
+ expect(setup).toContain("$setupCommand='npx.cmd'");expect(setup).toContain("$setupArgs=@('--yes','@afbin/cli@latest','setup')");
+ expect(setup).toContain('Invoke-Candidate $setupCommand $setupArgs');expect(setup).toContain("$setup.global.status -ne 'installed'");
+ expect(setup).not.toContain("$setupArgs=@('--yes','--package'");
 });

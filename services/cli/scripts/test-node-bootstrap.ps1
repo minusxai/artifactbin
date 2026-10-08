@@ -12,6 +12,7 @@ $diagnostics = if($env:GITHUB_WORKSPACE){Join-Path $env:GITHUB_WORKSPACE 'servic
 New-Item -ItemType Directory $diagnostics -Force | Out-Null
 Copy-Item services/app/public/chat/ensure-node.ps1 (Join-Path $root 'ensure-node.ps1')
 Copy-Item services/cli/scripts/windows-setup-registry.mjs (Join-Path $root 'windows-setup-registry.mjs')
+Copy-Item services/cli/scripts/windows-bootstrap-candidate.mjs (Join-Path $root 'windows-bootstrap-candidate.mjs')
 if (!$Tarball -and !$WaitForArtifact -and !$PublishedVersion) { throw 'Pass the exact npm candidate tarball, wait for this CI run, or verify a published version.' }
 if ($Tarball) { Copy-Item $Tarball (Join-Path $root 'candidate.tgz') }
 New-LocalUser -Name $identity -Password $secure -PasswordNeverExpires | Out-Null
@@ -154,15 +155,21 @@ try {
   }
   $ready=Get-Content '__ROOT__\registry.json' -Raw | ConvertFrom-Json
   [IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.npmrc'),('@afbin:registry='+$ready.origin+"`n"))
-  $setupArgs=@('--yes','--package','__ROOT__\candidate.tgz','afbin','setup')
+  # The first npx query already installed this exact candidate. Verify its npm
+  # provenance before reusing its entry; setup still performs real global npm install.
+  $phase='verify npm-owned candidate entry'
+  $entry=(Invoke-Candidate (Join-Path $private 'node.exe') @('__ROOT__\windows-bootstrap-candidate.mjs',$env:npm_config_cache,'__ROOT__\candidate.tgz',$ready.version)).Trim()
+  $setupCommand=Join-Path $private 'node.exe'
+  $setupArgs=@($entry,'setup')
   }else{
     $ready=@{version=$publishedVersion}
+    $setupCommand='npx.cmd'
     $setupArgs=@('--yes','@afbin/cli@latest','setup')
   }
   $setupArgs+=@('--harness','claude','--harness','codex','--yes','--json')
   Remove-Item Env:ARTIFACTBIN_SKILLS
   $phase='standard-user setup global and skills'
-  $setup=Invoke-Candidate 'npx.cmd' $setupArgs | ConvertFrom-Json
+  $setup=Invoke-Candidate $setupCommand $setupArgs | ConvertFrom-Json
   if($setup.global.status -ne 'installed' -or $setup.global.version -ne $ready.version){throw 'Setup did not globally install the exact candidate'}
   if(!(Test-Path $setup.global.bin)){throw 'npm did not create afbin.cmd'}
   foreach($harness in @('claude','codex')){
