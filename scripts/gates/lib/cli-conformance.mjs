@@ -22,6 +22,7 @@ import { tsImport } from 'tsx/esm/api';
 import { lane } from './lane.mjs';
 import { fixtureFetch as fetch } from './fixture-http.mjs';
 import { connectAgent, signInAccount } from './cli-connection.mjs';
+import { connectConformanceNonOwner } from './conformance-account.mjs';
 import { checkGuestHttpIssuance, checkDirectHttp } from './http-conformance.mjs';
 import { loginViaEmail } from '../../lib/mail-login.mjs';
 
@@ -146,7 +147,10 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
         assert.match((await read.json()).markup, /<Import name="sales_data" src="ref:/);
       });
       await scenario('owner/non-owner/anonymous private access; leak negative control', async () => {
-        const other = (await connectAgent(BASE)).token;
+        const other = (await connectConformanceNonOwner({ base: BASE, accountEmail, stamp, credentialSource, env: process.env }, {
+          connectAgent,
+          acquireCredential: async (...args) => (await tsImport('../../lib/credential.ts', import.meta.url)).acquireCredential(...args),
+        })).token;
         const hidden = status => assert.equal(status, 404, 'private read must remain hidden');
         assert.equal((await api(`/api/artifacts/${id}`, null)).status, 401, 'API requires authentication');
         hidden((await api(`/a/${id}`, null)).status);
