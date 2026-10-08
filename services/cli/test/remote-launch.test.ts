@@ -4,22 +4,28 @@ import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {launchRemote} from '../src/remote-launch';
+import {claudeConfigEnvironment} from '../src/config';
 
 test('detached launch returns a registered receipt, passes credentials only through IPC and snapshots history without changing argv',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'afbin-remote-'));
  try{
   const history=join(dir,'history.md');await writeFile(history,'Context with $(literal) and `ticks`.');
   const worker=join(dir,'worker.mjs');
-  await writeFile(worker,`import {writeFileSync} from 'node:fs';process.once('message',m=>{writeFileSync(${JSON.stringify(join(dir,'received.json'))},JSON.stringify({m,argv:process.argv}));process.send({id:'session',name:'claude',url:'http://localhost:3000/chat?session=session',status:'starting',pid:process.pid});process.disconnect();setTimeout(()=>process.exit(0),200);});`);
-  const conversation={sessionId:'550e8400-e29b-41d4-a716-446655440000',command:'claude',args:['--chrome','--model','sonnet'],cwd:dir,claudeConfigDir:join(dir,'.claude')};
+  await writeFile(worker,`import {writeFileSync} from 'node:fs';process.once('message',m=>{writeFileSync(${JSON.stringify(join(dir,'received.json'))},JSON.stringify({m,argv:process.argv,claudeConfigDir:process.env.CLAUDE_CONFIG_DIR}));process.send({id:'session',name:'claude',url:'http://localhost:3000/chat?session=session',status:'starting',pid:process.pid});process.disconnect();setTimeout(()=>process.exit(0),200);});`);
+  const conversation={sessionId:'550e8400-e29b-41d4-a716-446655440000',command:'claude',args:['--chrome','--model','sonnet'],cwd:dir,claudeConfigDir:join(dir,'.claude'),claudeConfigDirExplicit:false};
   const resumeReservation={key:`http://localhost:3000/${conversation.sessionId}`,token:'test-reservation'};
-  const receipt=await launchRemote({connection:{server:'http://localhost:3000',token:'test-only-secret'},command:'claude',args:['--chrome','--model','sonnet'],conversation,resumeReservation,history,cwd:dir,home:dir,env:{...process.env,ARTIFACTBIN_HOME:join(dir,'state')},worker:{command:process.execPath,args:[worker]}});
+  const launchEnv=claudeConfigEnvironment(join(dir,'.claude'),false,{...process.env,ARTIFACTBIN_HOME:join(dir,'state')});
+  const receipt=await launchRemote({connection:{server:'http://localhost:3000',token:'test-only-secret'},command:'claude',args:['--chrome','--model','sonnet'],conversation,resumeReservation,history,cwd:dir,home:dir,env:launchEnv,worker:{command:process.execPath,args:[worker]}});
   assert.equal(receipt.name,'claude');assert.equal(receipt.status,'starting');
   const received=JSON.parse(await readFile(join(dir,'received.json'),'utf8'));
   assert.deepEqual(received.m.args,['--chrome','--model','sonnet']);assert.equal(received.m.history,'Context with $(literal) and `ticks`.');
   assert.equal(received.m.connection.token,'test-only-secret');assert.ok(!JSON.stringify(received.argv).includes('secret'));
   assert.deepEqual(received.m.conversation,conversation);assert.ok(!JSON.stringify(received.m.conversation).includes('test-only-secret'));
+  assert.equal(received.claudeConfigDir,undefined);
   assert.deepEqual(received.m.resumeReservation,resumeReservation);
+  await launchRemote({connection:{server:'http://localhost:3000',token:'test-only-secret'},command:'claude',args:['--chrome','--model','sonnet'],conversation:{...conversation,claudeConfigDirExplicit:true},cwd:dir,home:dir,env:claudeConfigEnvironment(join(dir,'custom-claude'),true,{...process.env,ARTIFACTBIN_HOME:join(dir,'state')}),worker:{command:process.execPath,args:[worker]}});
+  const explicitLaunch=JSON.parse(await readFile(join(dir,'received.json'),'utf8'));
+  assert.equal(explicitLaunch.claudeConfigDir,join(dir,'custom-claude'));
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('startup failure and timeout reject instead of claiming a running agent',async()=>{

@@ -1,4 +1,4 @@
-import {autoUpdatePolicy} from '../src/config';
+import {autoUpdatePolicy,claudeConfigEnvironment} from '../src/config';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, stat, rm } from "node:fs/promises";
@@ -142,4 +142,19 @@ test('managed restoration touches only the scoped Artifactbin context and existi
  restoreRemoteContext(context,env);assert.deepEqual(remoteContext(env),{id:context.id,proof:context.proof});
  assert.deepEqual(await loadConnection(undefined,'/unused',env),context.connection);
  assert.equal(env.ARTIFACTBIN_HOME,context.home);assert.equal(env.PATH,'/safe/path');assert.equal(env.CODEX_HOME,'/existing/codex');assert.equal(env.PROVIDER_KEY,'mxmx_test_provider');assert.equal(env.OPENCODE_PERMISSION,'existing');
+});
+
+
+test('Claude launch preserves default auth namespace and explicit config scopes', () => {
+ const caller = {HOME:'/synthetic/home', PATH:'/synthetic/bin'};
+ const implicit = claudeConfigEnvironment('/synthetic/home/.claude', false, caller);
+ assert.equal(Object.hasOwn(implicit, 'CLAUDE_CONFIG_DIR'), false);
+ assert.deepEqual(implicit, caller);
+ const changedCaller = {...caller, CLAUDE_CONFIG_DIR:'/synthetic/other'};
+ const restoredDefault = claudeConfigEnvironment('/synthetic/home/.claude', false, changedCaller);
+ assert.equal(Object.hasOwn(restoredDefault, 'CLAUDE_CONFIG_DIR'), false);
+ assert.equal(changedCaller.CLAUDE_CONFIG_DIR, '/synthetic/other');
+ const explicit = claudeConfigEnvironment('/synthetic/custom', true, caller);
+ assert.equal(explicit.CLAUDE_CONFIG_DIR, '/synthetic/custom');
+ assert.equal(Object.hasOwn(caller, 'CLAUDE_CONFIG_DIR'), false);
 });
