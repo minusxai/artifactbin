@@ -3,7 +3,7 @@ import { replaceComment } from './comment-input';
 /**
  * @MENTIONS in a comment draft: people
  * and agents, a stable session id in the wire text and only the name in the field, the keyboard
- * owned by the picker while it is open, and a copyable connection request when no agent is there.
+ * owned by the picker while it is open, and a link to manage agents.
  */
 import { afterEach, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
@@ -55,38 +55,28 @@ it.each(['7d545566-1a47-4aaf-be61-cffcb7b8e8f2', 'b'.repeat(64)])('selects sessi
   expect(escape).not.toHaveBeenCalled();
 });
 
-it('offers a copyable connection request without selecting a mention or submitting the comment', async () => {
-  vi.stubGlobal('fetch', sessions([]));
-  const writeText = vi.fn().mockResolvedValue(undefined);
-  vi.stubGlobal('navigator', { clipboard: { writeText } });
+it.each([[], [{id:'agent',name:'review',harness:'codex',online:true}]].map(agents => ({agents})))('offers agent management when no agents match: %j', async ({agents}) => {
+  vi.stubGlobal('fetch', sessions(agents));
   const select = vi.fn();
   const submit = vi.fn((event: Event) => event.preventDefault());
-  render(() => <form onSubmit={submit}><CommentMentionPicker backend={http()} query="" onSelect={select} /></form>);
+  render(() => <form onSubmit={submit}><CommentMentionPicker backend={http()} query="missing" onSelect={select} /></form>);
+  const manage = await screen.findByRole('link', { name: 'Manage agents' });
+  expect(manage).toHaveAttribute('href', '/chat');
+  expect(manage).toHaveAttribute('target', '_blank');
+  expect(manage).toHaveAttribute('rel', 'noopener noreferrer');
+  expect(screen.getByText('No matching agents.')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Copy connection request' })).toBeNull();
-  const copy = await screen.findByRole('button', { name: 'Copy connection request' });
-  expect(screen.getByText('Ask your agent to connect:')).toBeTruthy();
-  fireEvent.click(copy);
-  await waitFor(() => expect(writeText).toHaveBeenCalledWith('Connect to afbin remote so I can @mention you in artifact comments.'));
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Copied'));
+  expect(screen.queryByText('Ask your agent to connect:')).toBeNull();
   expect(select).not.toHaveBeenCalled();
   expect(submit).not.toHaveBeenCalled();
 });
 
-it('keeps the connection request available when clipboard access fails', async () => {
-  vi.stubGlobal('fetch', sessions([]));
-  vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } });
-  render(() => <CommentMentionPicker backend={http()} query="" onSelect={vi.fn()} />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Copy connection request' }));
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not copy. Select and copy the request above.'));
-  expect(screen.getByText('Connect to afbin remote so I can @mention you in artifact comments.')).toBeTruthy();
-});
-
-it.each([true, false])('offers setup alongside an existing agent (online=%s)', async (online) => {
+it.each([true, false])('offers management alongside an existing agent (online=%s)', async (online) => {
   vi.stubGlobal('fetch', sessions([{ id: 'agent', name: 'review', harness: 'codex', managed: true, exitCode: null, online }]));
   render(() => <CommentMentionPicker backend={http()} query="" onSelect={vi.fn()} />);
   await screen.findByLabelText('Mention review (codex)');
-  fireEvent.click(screen.getByRole('button', { name: 'Add another agent' }));
-  expect(screen.getByRole('button', { name: 'Copy connection request' })).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Manage agents' })).toHaveAttribute('href', '/chat');
+  expect(screen.queryByRole('button', { name: 'Copy connection request' })).toBeNull();
 });
 
 it('removes an offline agent without selecting it and keeps failures retryable', async () => {
@@ -103,7 +93,7 @@ it('removes an offline agent without selecting it and keeps failures retryable',
   fireEvent.click(screen.getByRole('button', { name: 'Remove review' }));
   await waitFor(() => expect(screen.queryByLabelText('Mention review (codex)')).toBeNull());
   expect(select).not.toHaveBeenCalled();
-  expect(screen.getByRole('button', { name: 'Copy connection request' })).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Manage agents' })).toHaveAttribute('href', '/chat');
 });
 
 it('mentions a person by their stable account id', async () => {
@@ -131,6 +121,7 @@ it('treats @ as a plain character where no one can be mentioned (an offline file
     return <CommentMarkdownField label="Draft" backend={offline} value={value()} onChange={change} onSubmit={() => {}} />;
   });
   expect(screen.queryByText(/Type @ to mention/)).toBeNull();
+  expect(screen.getByLabelText('Draft')).toHaveAttribute('aria-placeholder', 'Write a comment ...');
   expect(screen.queryByText(/Ctrl\/⌘ \+ Enter to send/)).toBeNull();
   replaceComment(screen.getByLabelText('Draft'), 'thanks @Asha');
   expect(screen.queryByLabelText('Agent sessions')).toBeNull();
@@ -169,7 +160,8 @@ it('hides tagged quick choices and restores them when their badge is removed', a
   const field=screen.getByLabelText('Draft');
   fireEvent.click(await screen.findByRole('button',{name:'Tag review'}));
   expect(screen.queryByRole('button',{name:'Tag review'})).toBeNull();
-  expect(screen.queryByRole('group',{name:'Tag agent'})).toBeNull();
+  expect(screen.getByRole('link',{name:'Manage agents'})).toHaveAttribute('href', '/chat');
+  expect(screen.getByText('All agents tagged')).toBeTruthy();
   replaceComment(field,'Just a comment');
   expect(screen.getByRole('button',{name:'Tag review'})).toBeTruthy();
   replaceComment(field,'`[@review](/chat?session='+id+')`');

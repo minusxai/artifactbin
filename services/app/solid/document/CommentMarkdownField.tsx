@@ -6,6 +6,7 @@
  */
 import { children as resolveChildren, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import Bold from 'lucide-solid/icons/bold';
+import ArrowUpRight from 'lucide-solid/icons/arrow-up-right';
 import Code from 'lucide-solid/icons/code';
 import Italic from 'lucide-solid/icons/italic';
 import Link2 from 'lucide-solid/icons/link-2';
@@ -38,14 +39,12 @@ export interface CommentMarkdownFieldProps {
   /** ⌘↵. The caller decides whether the draft is sendable at all. */
   onSubmit?: () => void;
   rows?: number;
-  placeholder?: string;
   autoFocus?: boolean;
   class?: string;
   /** Mentions look people and agents up here; without it `@` is just a character. */
   backend?: ArtifactBackend;
   artifactId?: string;
   quickAgents?: boolean;
-  onAgentCount?: (count: number) => void;
   /** Anything ABOVE the toolbar — the composer's breadcrumb, which says what is being commented on. */
   children?: JSX.Element;
 }
@@ -80,7 +79,8 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   const canMention = () => !props.backend || !(props.backend.unavailable('remoteSessions') && props.backend.unavailable('mentions'));
   const apply = (marker:MdMarker) => { if(marker==='link'){setLinkOpen(value=>!value);return;} editor?.format(marker); };
   onMount(() => {
-    editor=mountCommentEditor(mount,{value:()=>props.value,label:props.label,placeholder:props.placeholder,onChange:props.onChange,
+    const placeholder = canMention() ? 'Protip: Use @ to tag friends or agents' : 'Write a comment ...';
+    editor=mountCommentEditor(mount,{value:()=>props.value,label:props.label,placeholder,onChange:props.onChange,
       onMention:query=>setMention(canMention()&&props.backend?query:null),
       onKey:event=>{
         if(event.isComposing)return false;
@@ -99,7 +99,7 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
       void props.backend.remoteSessions({signal:abort.signal}).then(answer=>{
         if(abort.signal.aborted)return;
         const eligible=(answer.sessions??[]).filter(canTagAgent);
-        setAgents(eligible); props.onAgentCount?.(eligible.length);
+        setAgents(eligible);
       }).catch(()=>{});
       onCleanup(()=>abort.abort());
     }
@@ -116,14 +116,17 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
     <Show when={linkOpen()}><div class="mb-2 flex gap-2"><input aria-label="Link URL" value={href()} onInput={event=>setHref(event.currentTarget.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();if(editor?.link(href()))setLinkOpen(false);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setLinkOpen(false);editor?.view.focus();}}} class="min-w-0 flex-1 rounded border border-edge bg-surface p-1 text-xs"/><button type="button" class="text-xs text-accent" onClick={()=>{if(editor?.link(href()))setLinkOpen(false);}}>Apply link</button></div></Show>
     <div ref={mount} style={{'--comment-min-height':`${Math.max(props.rows??3,2)*1.5+1.5}rem`}} />
     <Show when={mention()&&props.backend}><CommentMentionPicker backend={props.backend!} artifactId={props.artifactId} query={mention()!.query} onSelect={insertMention} onReady={handle=>{keyboard=handle;}}/></Show>
-    <Show when={props.quickAgents && canMention() && (!agents().length || untaggedAgents().length > 0)}>
-      <div class="comment-agent-choices" role="group" aria-label="Tag agent">
-        <span>Tag Agent:</span>
+    <Show when={props.quickAgents && canMention()}>
+      <div class="comment-agents" role="group" aria-label="Tag agent">
+        <div class="comment-agent-choices">
+        <Show when={untaggedAgents().length}><span>Tag agent</span></Show>
         <For each={untaggedAgents().slice(0,2)}>{agent=><button type="button" aria-label={`Tag ${agent.name}`} class="comment-agent-choice" style={{'--mention-color':agentNameColor(agent.name)}} onMouseDown={event=>event.preventDefault()} onClick={()=>insertMention(remoteMention(agent))}><span aria-hidden="true">●</span> {agent.name}</button>}</For>
         <Show when={untaggedAgents().length>2}><button type="button" class="comment-agent-more" aria-expanded={!!mention()} onMouseDown={event=>event.preventDefault()} onClick={showAgents}>+{untaggedAgents().length-2} {untaggedAgents().length===3?'other':'others'}</button></Show>
         <Show when={!agents().length}><span>No agents available</span></Show>
+        <Show when={agents().length && !untaggedAgents().length}><span>All agents tagged</span></Show>
+        </div>
+        <a class="comment-agents-manage" aria-label={agents().length ? 'Manage agents' : 'Add agent'} href="/chat" target="_blank" rel="noopener noreferrer">{agents().length ? 'Manage' : 'Add agent'}<ArrowUpRight size={12} aria-hidden="true" /></a>
       </div>
     </Show>
-    <Show when={!mention()&&canMention()}><p class="comment-mention-tip">Pro tip: Use <kbd>@</kbd> to tag <strong>friends or agents.</strong></p></Show>
   </div>;
 }
