@@ -154,6 +154,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
   };
   const online = () => info()?.online ?? false;
   const canType = () => online() && !connection() && !['queued', 'stopping', 'stopped'].includes(info()?.activity ?? '') && info()?.exitCode == null;
+  const canResumeArtifactWork = () => !!info()?.managed && !info()?.runId && !info()?.included && online() && info()?.activity === 'unknown' && !ended();
   const waiting = () => {
     const session = info();
     if (!session || session.exitCode != null) return '';
@@ -182,6 +183,16 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
         setError(reason.message);
       }).finally(() => setActing(false));
   };
+  const resumeArtifactWork = () => {
+    if (!canResumeArtifactWork() || acting()) return;
+    setActing(true);
+    void request(`/${props.id}`, { type: 'resume-artifact-work' })
+      // The runner may change activity before this response arrives; let the
+      // next terminal poll publish the authoritative state instead of racing it.
+      .then(() => setError(''))
+      .catch((reason) => setError(reason.message))
+      .finally(() => setActing(false));
+  };
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!canType() || !draft().trim() || sending()) return;
@@ -202,6 +213,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
     <Show when={info()?.sshCommand}><CopyCommand label="SSH into this box" command={info()!.sshCommand!} /></Show>
     <Show when={info()?.sshHostKey}><CopyCommand label="SSH known_hosts entry" command={info()!.sshHostKey!} /><p class="mb-3 text-xs text-muted">Add this entry to your SSH known_hosts file to verify this box before connecting.</p></Show></details>
     <Show when={connection() || waiting()}><p role="status" class="mb-2 text-sm text-muted">{connection() || waiting()}</p></Show>
+    <Show when={canResumeArtifactWork()}><div class="mb-3 rounded border border-edge bg-surface p-3"><p class="mb-2 text-sm text-muted">Use this only after the agent has finished the manual task and no approval is pending.</p><button type="button" class="rounded border border-edge px-3 py-2" disabled={acting()} onClick={resumeArtifactWork}>Resume artifact requests</button></div></Show>
     <Show when={error()}><p role="alert" class="mb-2 text-sm text-red-500">{error()}</p></Show>
     <div class="agent-console" style={{ 'max-width': mobile() ? '420px' : undefined }}>
       <Show when={ended()}><p role="status" class="mb-3 rounded border border-edge bg-surface p-4 text-sm">Session ended (exit {info()?.exitCode}). {info()?.runId

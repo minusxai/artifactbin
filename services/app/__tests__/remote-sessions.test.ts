@@ -4,6 +4,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, claimToken } from "@/lib/accounts";
 import { remoteRoute } from "@/lib/remote/route";
 import { RemoteRegistry, remoteSessions } from "@/lib/remote/registry";
+import { remoteAgents } from "@/lib/remote/agents";
 useAppHarness();
 afterEach(() => remoteSessions.clear());
 const registration = {
@@ -81,6 +82,28 @@ describe("remote session relay", () => {
         )
       ).status,
     ).toBe(403);
+  });
+  it("allows the authenticated owning account to acknowledge completed manual work", async () => {
+    const ownerToken = await mintToken("owner-ready");
+    const owner = await createUser({ email: "mxmx_test_owner_ready_route@example.com" });
+    await claimToken(owner.id, ownerToken.token);
+    const otherToken = await mintToken("other-ready");
+    const other = await createUser({ email: "mxmx_test_other_ready_route@example.com" });
+    await claimToken(other.id, otherToken.token);
+    const made = await remoteAgents.create(owner.id, {
+      ...registration, name: "dashboard", managed: true, recoveryKey: "a".repeat(64),
+    });
+    await remoteAgents.ready(owner.id, made.id, made.runnerKey);
+    await remoteAgents.input(owner.id, made.id, "manual task finished\r");
+    const post = (token: string) => remoteRoute(request(`/api/remote/sessions/${made.id}`, {
+      method: "POST", token, json: { type: "resume-artifact-work" },
+    }), made.id);
+    expect((await post(otherToken.token)).status).toBe(404);
+    expect((await remoteRoute(request(`/api/remote/sessions/${made.id}`, {
+      method: "POST", token: ownerToken.token, json: { type: "ready", proof: "wrong" },
+    }), made.id)).status).toBe(403);
+    expect((await post(ownerToken.token)).status).toBe(200);
+    expect((await remoteAgents.read(owner.id, made.id)).activity).toBe("listening");
   });
   it("replays output, deduplicates exchanged batches and comment input, and accepts direct input and enforces runner key", async () => {
     const r = new RemoteRegistry();
