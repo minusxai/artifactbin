@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { agentCookie, useAppHarness } from './harness';
 import { mintToken, resolveToken, revokeToken, createGuestOwner } from '@/lib/accounts';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
-import { createTeamApplication } from '../server/team-application';
+import { createTeamApplication } from '../server/team-host';
 import { createOAuthStore } from '../../auth/src/identity/oauth';
 import { AUTH_SECRET, getDb } from '@/lib/platform';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
