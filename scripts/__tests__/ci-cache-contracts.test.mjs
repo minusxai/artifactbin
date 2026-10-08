@@ -425,7 +425,7 @@ it('caches only Linux browser deb archives and still provisions the full browser
  const install=cli.steps.find(step=>step.name==='Install Linux acceptance browser dependencies');
  expect(install.run).toContain('linux-acceptance-deps.mjs');expect(install.run).toContain('playwright/cli.js');expect(install.if).not.toContain('cache-hit');
  expect(install.if).toContain("matrix.phase == 'preview'");expect(install.if).toContain("matrix.phase == 'local'");
- expect(cli.strategy.matrix.os).toEqual(['ubuntu-24.04','ubuntu-24.04-arm','macos-14','macos-15-intel','windows-2022']);
+ expect(String(cli.strategy.matrix.os)).toContain('["ubuntu-24.04","ubuntu-24.04-arm","macos-14","macos-15-intel","windows-2022"]');
 });
 
 
