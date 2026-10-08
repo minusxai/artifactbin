@@ -34,7 +34,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 const body = async (r: Response) => (await r.json()) as Record<string, any>;
 
 const create = async (token: string, input: Record<string, unknown>) => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: input }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: {visibility:'public',...input} }));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string; edit_id: string; version: number; state: string };
 };
@@ -72,17 +72,17 @@ describe('refusals an afbin command reaches name the afbin action', () => {
   });
 
   it('deleting a comment on an unclaimed token names afbin auth, not "a token claimed by your account"', async () => {
-    const t = await mintToken('anon');
-    const { id } = await create(t.token, { markup: '<p>Body</p>' });
+    const t = await mintToken('anon',null);
+    const { id } = await create((await mintToken('owner')).token, { markup: '<p>Body</p>' });
     const res = await deleteAnnotation(request(`/api/artifacts/${id}/annotations/ann_1`, { method: 'DELETE', token: t.token }), params({ id, annId: 'ann_1' }));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
     const refusal = await body(res);
-    expect(refusal.error).toBe('account_required');
-    expect(refusal.hint).toContain('afbin auth');
+    expect(refusal.error).toBe('unauthorized');
+    expect(refusal.help).toContain('afbin auth');
   });
 
   it('a session listing on an unclaimed token names afbin auth (afbin list --type session)', async () => {
-    const t = await mintToken('anon');
+    const t = await mintToken('anon',null);
     const res = await runOperation('list_remote_sessions', request('/api/sessions', { token: t.token }), { tokenId:t.id,userId:t.userId }, {});
     expect(res.status).toBe(403);
     const refusal = await body(res);
@@ -91,9 +91,9 @@ describe('refusals an afbin command reaches name the afbin action', () => {
   });
 
   it('the remote relay refuses an anonymous credential by naming afbin auth (afbin remote)', async () => {
-    const t = await mintToken('anon');
+    const t = await mintToken('anon',null);
     const res = await remoteRoute(request('/api/remote/sessions', { method: 'POST', token: t.token, json: { name: 'Shell', harness: 'claude', cwd: '/p', machine: 'laptop', cols: 80, rows: 24 } }));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
     expect(String((await body(res)).error)).toContain('afbin auth');
   });
 

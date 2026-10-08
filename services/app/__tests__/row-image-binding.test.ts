@@ -14,7 +14,7 @@ import {useAppHarness,request} from './harness';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 const create=async(token:string,body:Record<string,unknown>)=>{
- const response=await publish(request('/api/artifacts',{method:'POST',token,json:body}));
+ const response=await publish(request('/api/artifacts',{method:'POST',token,json:{visibility:'public',...body}}));
  const result=await response.json();expect(response.status,JSON.stringify(result)).toBe(201);return result as {id:string};
 };
 const markup=(dataset:string)=>`<Helmet><Import name="books_data" src="ref:${dataset}" /><Query name="books">{\`select * from books_data.rows order by position\`}</Query></Helmet><For each={$books} keyBy="id"><article><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/><h2>{$_row.title}</h2></article></For>`;

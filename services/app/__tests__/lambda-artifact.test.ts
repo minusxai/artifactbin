@@ -15,7 +15,7 @@ import {hostCapabilities,runnerIdentity} from '../../runner/src/capabilities';
 const harness=useAppHarness();const close:Array<()=>Promise<unknown>>=[];
 afterEach(async()=>{setLambdaProgramResolver(undefined);setServices({runner:undefined});for(const fn of close.splice(0).reverse())await fn();});
 it('runs published JSX with real Solid bindings, authenticated data calls, mutations and notifications',async()=>{
- const db=await harness.db();const owner=await createUser({email:'mxmx_test_lambda_end_to_end@example.com'}),token=await mintToken('lambda');await claimToken(owner.id,token.token);
+ const db=await harness.db();const owner=await createUser({email:'mxmx_test_lambda_end_to_end@example.com'}),token=await mintToken('lambda',owner.id);await claimToken(owner.id,token.token);
  const make=async(json:unknown)=>{const r=await publish(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
  const ds=await make({dataset:[{region:'west',n:1},{region:'east',n:2}],access:'readwrite'});
  const script=`import {signal,query,mutation} from 'page';
@@ -27,7 +27,7 @@ export default async function(input){const initial=await rows.ready;setRegion('e
   const response=await app.request(new Request('http://internal/api/runner/operations',{method:'POST',headers:{'content-type':'application/json',[ACTOR_HEADER]:signActor(runnerIdentity(ctx),secret)},body:JSON.stringify({operation:op.replace(/^artifactbin\./,''),input:args,documentSource:ctx.request.document?.source})}));
   const value=await response.json();if(!response.ok)throw Error(value.error);return value;
  }})});close.push(()=>runner.close());setServices({runner});
- const invoke=()=>invokeArtifact(request('/run',{method:'POST',actor:{userId:owner.id,credential:'session'},json:{requestId:'real-jsx',input:{n:3}}}),id);
+ const invoke=()=>invokeArtifact(request('/run',{method:'POST',actor:{userId:owner.id,credential:'session',email:owner.email!,emailVerified:true},json:{requestId:'real-jsx',input:{n:3}}}),id);
  const result=await invoke();expect(result.status,await result.clone().text()).toBe(202);const {runId}=await result.json();
  for(let i=0;i<1500;i++){if((await runner.getRun({runId,userId:owner.id})).receipt)break;await new Promise(r=>setTimeout(r,10));}
  const done=await runner.getRun({runId,userId:owner.id});expect(done.status,JSON.stringify(done)).toBe('completed');
@@ -35,7 +35,7 @@ export default async function(input){const initial=await rows.ready;setRegion('e
  expect((await getArtifactById(ds))?.version).toBe(2);expect((await db.query('SELECT id FROM notification_jobs')).rows).toHaveLength(1);
  expect(await (await invoke()).json()).toEqual({runId});
  close.push(await startLambdaSchedules(db));
- const scheduled=await artifactSchedule(request('/schedule',{method:'POST',actor:{userId:owner.id,credential:'session'},json:{cron:'*/5 * * * *',timezone:'UTC',input:{n:4}}}),id);
+ const scheduled=await artifactSchedule(request('/schedule',{method:'POST',actor:{userId:owner.id,credential:'session',email:owner.email!,emailVerified:true},json:{cron:'*/5 * * * *',timezone:'UTC',input:{n:4}}}),id);
  expect(scheduled.status,await scheduled.clone().text()).toBe(201);
  const saved=(await db.query<{spec:Record<string,unknown>}>('SELECT spec FROM runner_schedules WHERE id=$1',[(await scheduled.json()).id])).rows[0]!;
  expect(saved.spec.artifactId).toBe(id);expect(saved.spec).not.toHaveProperty('document');expect(saved.spec).not.toHaveProperty('version');expect(saved.spec).not.toHaveProperty('program');

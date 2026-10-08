@@ -46,7 +46,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 
 const publish = async (markup: string) => {
   const t = await mintToken('t');
-  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup } }));
+  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup, visibility: 'public' } }));
   return { res, body: await res.json() as Record<string, unknown> };
 };
 

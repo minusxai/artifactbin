@@ -20,6 +20,7 @@ import {loadWorkspace} from '../../cli/src/workspace';
 import {HttpClient} from '../../cli/src/http';
 import {stateFor} from '../../cli/src/state-access';
 import {HOME_SCOPE} from '../../cli/src/state';
+import {readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '../../cli/src/local-workspace';
 import {getDb} from '@/lib/platform';
 useAppHarness();
 async function publication(root:string):Promise<{ids:Record<string,string>}>{
@@ -92,20 +93,20 @@ it('previews unpublished document and dataset IDs locally with no server reads',
  }finally{await session?.close();await cli.cleanup();}
 });
 
-it('authenticated reservations survive account token rotation and isolate guest token namespaces',async()=>{
+it('authenticated reservations survive account token rotation and isolate independent email account namespaces',async()=>{
  const user=await createUser({email:'mxmx_test_ids@example.test'}),otherUser=await createUser({email:'mxmx_test_other_ids@example.test'});
- const first=await mintToken('first',user.id),rotated=await mintToken('rotated',user.id),other=await mintToken('other',otherUser.id),anonymous=await mintToken('anonymous'),otherGuest=await mintToken('other-guest');
+ const first=await mintToken('first',user.id),rotated=await mintToken('rotated',user.id),other=await mintToken('other',otherUser.id),independent=await mintToken('independent'),otherIndependent=await mintToken('other-independent'),legacy=await mintToken('legacy',null);
  const call=(token?:string)=>reserve(request('/api/artifacts/reservations',{method:'POST',token,headers:{'Idempotency-Key':'batch_account_000001'}}));
- expect((await call()).status).toBe(401);
- const guest=await call(anonymous.token);expect(guest.status).toBe(200);const guestBatch=await guest.json();expect(guestBatch.ids).toHaveLength(100);expect(await(await call(anonymous.token)).json()).toEqual(guestBatch);
- const secondGuest=await(await call(otherGuest.token)).json();expect(secondGuest.ids.some((id:string)=>guestBatch.ids.includes(id))).toBe(false);
+ expect((await call()).status).toBe(401);expect((await call(legacy.token)).status).toBe(401);
+ const independentResponse=await call(independent.token);expect(independentResponse.status).toBe(200);const independentBatch=await independentResponse.json();expect(independentBatch.ids).toHaveLength(100);expect(await(await call(independent.token)).json()).toEqual(independentBatch);
+ const secondIndependent=await(await call(otherIndependent.token)).json();expect(secondIndependent.ids.some((id:string)=>independentBatch.ids.includes(id))).toBe(false);
  const response=await call(first.token);expect(response.status).toBe(200);const batch=await response.json();
- expect(batch.ids).toHaveLength(100);expect(await(await call(rotated.token)).json()).toEqual(batch);expect(guestBatch.ids.some((id:string)=>batch.ids.includes(id))).toBe(false);
+ expect(batch.ids).toHaveLength(100);expect(await(await call(rotated.token)).json()).toEqual(batch);expect(independentBatch.ids.some((id:string)=>batch.ids.includes(id))).toBe(false);
  const foreign=await(await call(other.token)).json();expect(foreign.ids.some((id:string)=>batch.ids.includes(id))).toBe(false);
  const publish=(token:string)=>create(request('/api/artifacts',{method:'POST',token,json:{reserved_id:batch.ids[0],markup:'<p>Same account</p>'}}));
- expect((await publish(other.token)).status).toBe(403);expect((await publish(anonymous.token)).status).toBe(403);expect((await publish(rotated.token)).status).toBe(201);
- const guestPublish=(token:string)=>create(request('/api/artifacts',{method:'POST',token,json:{reserved_id:guestBatch.ids[0],markup:'<p>Guest namespace</p>',visibility:'unlisted'}}));
- expect((await guestPublish(otherGuest.token)).status).toBe(403);expect((await guestPublish(anonymous.token)).status).toBe(201);
+ expect((await publish(other.token)).status).toBe(403);expect((await publish(independent.token)).status).toBe(403);expect((await publish(rotated.token)).status).toBe(201);
+ const independentPublish=(token:string)=>create(request('/api/artifacts',{method:'POST',token,json:{reserved_id:independentBatch.ids[0],markup:'<p>Independent account namespace</p>',visibility:'unlisted'}}));
+ expect((await independentPublish(otherIndependent.token)).status).toBe(403);expect((await independentPublish(independent.token)).status).toBe(201);
 });
 it('ordinary creates skip reserved identities and reservation allocation skips existing artifacts',async()=>{
  const token=await mintToken('mxmx_test_id_collision'),actor={tokenId:token.id,userId:token.userId};
@@ -231,20 +232,15 @@ it('refuses cyclic dataset dependencies before reserving or publishing and prese
  }finally{await cli.cleanup();}
 });
 
-it('CLI browser guest credentials publish local public and unlisted documents without an email account',async()=>{
+it('CLI guest credentials cannot publish local public and unlisted documents without an email account',async()=>{
  const calls:CliCall[]=[];const cli=await cliWorkspace('guest-publication',{fetch:artifactTransport(calls)});
  try{
-  const token=await cli.connect('mxmx_test_guest_publication',null);
+  const token=await mintToken('mxmx_test_guest_publication',null);await cli.useToken(token.token);
   for(const visibility of ['public','unlisted'])await writeFile(join(cli.root,visibility+'.jsx'),`---\nvisibility: ${visibility}\n---\n<p>Guest ${visibility}</p>`);
-  const ids=await cli.invoke(['add','public.jsx','unlisted.jsx']);const originals=await Promise.all(['public.jsx','unlisted.jsx'].map(file=>readFile(join(cli.root,file),'utf8')));
-  const pushed=await cli.invoke(['push','public.jsx','unlisted.jsx']);expect(pushed.local_source_preserved).toBe(true);
-  const mapped=(await publication(cli.root)).ids;
-  expect((await(await getDb()).query('SELECT user_id FROM tokens WHERE id=$1',[token.id])).rows).toEqual([{user_id:null}]);
-  for(const visibility of ['public','unlisted']){
-   const localId=ids[visibility+'.jsx'],id=mapped[localId];expect(id).toBeTruthy();expect(id).not.toBe(localId);
-   const response=await read(request('/api/artifacts/'+id,{token:token.token}),{params:Promise.resolve({id})});expect(response.status).toBe(200);expect((await response.json()).visibility).toBe(visibility);
-  }
-  expect(calls.some(call=>call.path==='/api/artifacts/reservations')).toBe(true);expect(calls.filter(call=>call.path==='/api/artifacts'&&call.method==='POST')).toHaveLength(2);
+  await cli.invoke(['add','public.jsx','unlisted.jsx']);const originals=await Promise.all(['public.jsx','unlisted.jsx'].map(file=>readFile(join(cli.root,file),'utf8')));
+  const pushed=await cli.run(['push','public.jsx','unlisted.jsx']);expect(pushed.code).not.toBe(0);
+  expect((await(await getDb()).query('SELECT id FROM artifacts')).rows).toEqual([]);
+  expect(calls.filter(call=>call.path==='/api/artifacts'&&call.method==='POST')).toHaveLength(0);
   expect(await Promise.all(['public.jsx','unlisted.jsx'].map(file=>readFile(join(cli.root,file),'utf8')))).toEqual(originals);
  }finally{await cli.cleanup();}
 });
@@ -254,8 +250,18 @@ it('an adopted browser guest workspace continues with a new account token while 
  const cli=await cliWorkspace('guest-claim-publication',{fetch:async(input,init)=>{accounts.push(new Headers(init?.headers).get('X-Artifactbin-Account')??'');return transport(input,init);}});
  try{
   const guest=await createGuestOwner({name:'mxmx_test_claim_guest'}),guestCli=await mintToken('mxmx_test_guest_cli',guest.userId);await cli.useToken(guestCli.token);await writeFile(join(cli.root,'report.jsx'),'---\nvisibility: unlisted\n---\n<p>Guest draft</p>');
+  // Build the legacy publication snapshot through today's email-authenticated CLI,
+  // then seed its historical guest ownership before verified adoption.
+  const seedAccount=await mintToken('mxmx_test_legacy_seed');await cli.useToken(seedAccount.token);
   const ids=await cli.invoke(['add','report.jsx']);await cli.invoke(['push','report.jsx']);
   const initial=await publication(cli.root),localId=ids['report.jsx'],remoteId=initial.ids[localId];
+  const manifestPath=join(cli.root,'.artifactbin','publications',digest(CLI_SERVER).slice(0,24),'manifest.json');
+  const legacyManifest=JSON.parse(await readFile(manifestPath,'utf8'));legacyManifest.account=guest.userId;await writeFile(manifestPath,JSON.stringify(legacyManifest));
+  const legacyDirectory=join(cli.root,'.artifactbin','publications',digest(CLI_SERVER).slice(0,24));
+  const privateState=await stateFor(join(legacyDirectory,'private')),portableState=await readLocalWorkspaceState(legacyManifest.root);
+  privateState.put(legacyManifest.root,'workspace',legacyManifest.root,{server:CLI_SERVER,account:guest.userId});
+  portableState?.put(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE,{server:CLI_SERVER,account:guest.userId});
+  await (await getDb()).query('UPDATE artifacts SET user_id=$1,token_id=$2 WHERE id=$3',[guest.userId,guestCli.id,remoteId]);
   const user=await createUser({email:'mxmx_test_claimed_publication@example.test'});await mergeGuestUsers(user.id,[guest.tokenId]);expect((await(await getDb()).query('SELECT kind,merged_into_user_id FROM users WHERE id=$1',[guest.userId])).rows).toEqual([{kind:'guest',merged_into_user_id:user.id}]);
   const account=await mintToken('mxmx_test_claimed_token',user.id);await cli.useToken(account.token);
   const source=(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('Guest draft','Claimed account edit');await writeFile(join(cli.root,'report.jsx'),source);
@@ -281,7 +287,7 @@ it('guest adoption preserves reservation replay and unused IDs despite an accoun
  const account=await createUser({email:'mxmx_test_reserved_adopted@example.test'}),accountToken=await mintToken('account-reserved',account.id),other=await mintToken('foreign-reserved',(await createUser({email:'mxmx_test_reserved_foreign@example.test'})).id);
  const batch='batch_shared_adoption_001';
  const allocate=(token:string,pin?:string)=>reserve(request('/api/artifacts/reservations',{method:'POST',token,headers:{'Idempotency-Key':batch,...(pin?{'X-Artifactbin-Account':pin}:{})}}));
- const guestIds=(await(await allocate(guestToken.token)).json()).ids,accountIds=(await(await allocate(accountToken.token)).json()).ids;
+ const guestIds=await reserveIds({tokenId:guestToken.id,userId:guest.userId},batch),accountIds=(await(await allocate(accountToken.token)).json()).ids;
  expect(guestIds.some((id:string)=>accountIds.includes(id))).toBe(false);
  await mergeGuestUsers(account.id,[guest.tokenId]);
  expect((await(await allocate(accountToken.token,guest.userId)).json()).ids).toEqual(guestIds);

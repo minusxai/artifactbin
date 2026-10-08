@@ -29,7 +29,7 @@ import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null)));
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
@@ -55,7 +55,7 @@ afterAll(async () => { await resetLiveSubscriptions(); });
 async function publicDoc() {
   const t = await mintToken('t');
   const ds = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { dataset: [{ a: 1 }, { a: 2 }] }, t.token))).json();
-  const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: DOC(ds.id) }, t.token))).json();
+  const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: DOC(ds.id), visibility: 'public' }, t.token))).json();
   return { t, ds, doc };
 }
 

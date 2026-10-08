@@ -38,7 +38,7 @@ afterEach(() => setServices({}));
 
 async function doc(): Promise<string> {
   const t = await mintToken('t');
-  const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+  const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
   return row.id;
 }
 
@@ -74,7 +74,7 @@ describe('the export route through the browser seam', () => {
     const t = await mintToken('crop');
     const row = await createArtifact(t.id, t.userId, {
       format: 'markup', source: '<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><div>hi</div>',
-      meta: {}, title: 'hi', description: null,
+      meta: {}, title: 'hi', description: null, visibility: 'public',
     });
     await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card`), params(row.id));
     expect(lastRequest().capture).toEqual({ card: { x: 300, y: 900, width: 800 } });

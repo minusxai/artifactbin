@@ -40,7 +40,7 @@ const RECIPE = {
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 async function create(token: string, body: Record<string, unknown>) {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
   return { status: res.status, body: await res.json() };
 }
 

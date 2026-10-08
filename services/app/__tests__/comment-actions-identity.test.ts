@@ -11,7 +11,7 @@
  * would move the head every reader and every agent is editing against.
  */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request, agentCookie } from './harness';
+import { useAppHarness, request } from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { POST as createRoute } from '@/app/api/artifacts/route';
@@ -43,9 +43,9 @@ describe('annotation actions are relations, not edits', () => {
     const doc = await made.json();
     const read = async () => (await getRoute(request(`/api/artifacts/${doc.id}`, { token: token.token }), params(doc.id))).json();
 
-    const cookie = await agentCookie([token.id]);
+    const actor = { credential: 'session' as const, userId: token.userId!, email: token.email!, emailVerified: true };
     const commented = await commentRoute(request(`/api/my/artifacts/${doc.id}/annotations`, {
-      method: 'POST', cookie, json: { node_id: 'card', body: 'Keep this card' },
+      method: 'POST', actor, json: { node_id: 'card', body: 'Keep this card' },
     }), params(doc.id));
     expect(commented.status, await commented.clone().text()).toBe(201);
     const annotation = await commented.json();
@@ -54,7 +54,7 @@ describe('annotation actions are relations, not edits', () => {
     const before = await history(doc.id);
     for (const action of [{ reply: 'Moved successfully' }, { resolve: true }, { reopen: true }]) {
       const response = await commentActionRoute(
-        request(`/api/my/artifacts/${doc.id}/annotations/${annotation.id}`, { method: 'POST', cookie, json: action }),
+        request(`/api/my/artifacts/${doc.id}/annotations/${annotation.id}`, { method: 'POST', actor, json: action }),
         { params: Promise.resolve({ id: doc.id, annId: annotation.id }) },
       );
       expect(response.status, `${Object.keys(action)[0]}: ${await response.clone().text()}`).toBeLessThan(300);

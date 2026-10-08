@@ -2,7 +2,7 @@
  * The query endpoints behind the runtime store's transports:
  *  - GET  /a/<id>/query?q=<JSON QueryRequest> — the DOCUMENT's own path: the
  *    sandboxed top-level document fetches its re-runs itself. Answered with
- *    the ANONYMOUS read ACL — it never reads a cookie — and CORS `*`, so it
+ *    the ANONYMOUS read ACL — it never reads a credential — and CORS `*`, so it
  *    can only ever return what an unauthenticated fetch gets (public/unlisted).
  *  - POST /a/<id>/query — the READER path inside the owner's shell (the page
  *    relays for the frame, with its session): re-run a stored document's
@@ -11,7 +11,7 @@
  *    caller's own datasets, bearer or session, nothing persisted.
  */
 import { describe, expect, it } from 'vitest';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as queryGet, POST as queryRoute } from '@/app/a/[id]/query/route';
 import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -24,7 +24,7 @@ const BASE = 'http://localhost:3000';
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) =>
-  (await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }))).json();
+  (await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }))).json();
 
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }];
 const DOC = (ds: string) =>
@@ -81,23 +81,15 @@ describe('POST /a/<id>/query (reader path)', () => {
     expect(nope.status).toBe(404);
   });
 
-  it('answers the browser credential the PAGE was served under — the agent cookie, not only an account session', async () => {
-    /*
-     * The split-viewer failure, one layer in. A browser whose only credential
-     * is the agent-session cookie naming a CLAIMED token is an owner
-     * everywhere else — the proxy hands it the shell, /raw serves it the
-     * document — because those resolve `sessionActor`. This route resolved
-     * only the account session, so the document painted and then every bound
-     * control died against a 404 on the first change.
-     */
+  it('answers the verified email browser session that served the page', async () => {
     const user = await createUser({ email: 'owner2@x.com' });
     const t = await mintToken('t', user.id);
     await claimToken(user.id, t.token);
     const ds = (await create(t.token, { dataset: ROWS })).id;
     const doc = (await create(t.token, { markup: DOC(ds), visibility: 'private' })).id;
 
-    const cookie = await agentCookie([t.id]);
-    const res = await queryRoute(request(`/a/${doc}/query`, { method: 'POST', cookie: cookie, json: { values: { region: 'NA' }, only: ['sales'] } }), params({ id: doc }));
+    const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
+    const res = await queryRoute(request(`/a/${doc}/query`, { method: 'POST', actor: actor, json: { values: { region: 'NA' }, only: ['sales'] } }), params({ id: doc }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { tables: Record<string, { rows: unknown[] }> };
     expect(body.tables.sales.rows).toEqual([{ region: 'NA', revenue: 1200 }]);
@@ -141,20 +133,20 @@ describe('POST /api/query (owner path — a draft)', () => {
     expect(body.tables.sales.rows).toEqual([{ region: 'EU', revenue: 840 }]);
   });
 
-  it('runs a draft under the BROWSER\'s agent-session cookie (anonymous owner editing their own doc)', async () => {
+  it('runs a draft under the owner\'s verified email browser session', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS })).id;
-    const cookie = await agentCookie([t.id]);
-    const res = await draftQueryRoute(request('/api/query', { method: 'POST', cookie: cookie, origin: BASE, json: { markup: DOC(ds), values: { region: 'EU' } } }));
+    const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
+    const res = await draftQueryRoute(request('/api/query', { method: 'POST', actor: actor, origin: BASE, json: { markup: DOC(ds), values: { region: 'EU' } } }));
     expect(res.status).toBe(200);
     expect(((await res.json()) as { tables: Record<string, { rows: unknown[] }> }).tables.sales.rows).toEqual([{ region: 'EU', revenue: 840 }]);
   });
 
-  it('refuses a cross-site cookie call, and never blocks a bearer agent', async () => {
+  it('refuses a cross-site actor call, and never blocks a bearer agent', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS })).id;
-    const cookie = await agentCookie([t.id]);
-    expect((await draftQueryRoute(request('/api/query', { method: 'POST', cookie: cookie, origin: 'https://evil.example', json: { markup: DOC(ds) } }))).status).toBe(403);
+    const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
+    expect((await draftQueryRoute(request('/api/query', { method: 'POST', actor: actor, origin: 'https://evil.example', json: { markup: DOC(ds) } }))).status).toBe(403);
     expect((await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: { markup: DOC(ds) } }))).status).toBe(200);
   });
 
@@ -190,7 +182,7 @@ describe('POST /api/query (owner path — a draft)', () => {
 });
 
 describe('GET /a/<id>/query?q= (the document fetches for itself)', () => {
-  const getReq = (path: string, cookie?: string) => new Request(`${BASE}${path}`, { headers: cookie ? { Cookie: cookie } : {} });
+  const getReq = (path: string, actor?: import('@artifactbin/contracts').Actor) => request(path, { actor });
   const q = (r: unknown) => encodeURIComponent(JSON.stringify(r));
 
   it('re-runs the requested queries with the given values over a public document, CORS-open', async () => {
@@ -223,19 +215,19 @@ describe('GET /a/<id>/query?q= (the document fetches for itself)', () => {
     expect((await queryGet(getReq(`/a/${doc}/query?q=${q({})}`), params({ id: doc }))).status).toBe(200);
   });
 
-  it('is CREDENTIAL-BLIND: a private document is the uniform 404 even when the owner\'s own session cookie rides along', async () => {
+  it('is CREDENTIAL-BLIND: a private document is the uniform 404 even when the owner\'s own session actor rides along', async () => {
     // The route authorizes as an anonymous viewer by construction — that is
-    // what makes `Access-Control-Allow-Origin: *` safe. A cookie arriving here
+    // what makes `Access-Control-Allow-Origin: *` safe. A actor arriving here
     // (it should not: the document's origin is opaque and both cookies are
     // SameSite=Lax) must change nothing.
     const user = await createUser({ email: 'getowner@example.com' });
     const t = await mintToken('t', user.id);
     const ds = (await create(t.token, { dataset: ROWS })).id;
     const doc = (await create(t.token, { markup: DOC(ds), visibility: 'private' })).id;
-    const cookie = await agentCookie([t.id]);
-    // The POST (relay) path admits this very cookie — the contrast is the point.
-    expect((await queryRoute(request(`/a/${doc}/query`, { method: 'POST', cookie: cookie, origin: BASE, json: {} }), params({ id: doc }))).status).toBe(200);
-    expect((await queryGet(getReq(`/a/${doc}/query?q=${q({})}`, cookie), params({ id: doc }))).status).toBe(404);
+    const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
+    // The POST (relay) path admits this very actor — the contrast is the point.
+    expect((await queryRoute(request(`/a/${doc}/query`, { method: 'POST', actor: actor, origin: BASE, json: {} }), params({ id: doc }))).status).toBe(200);
+    expect((await queryGet(getReq(`/a/${doc}/query?q=${q({})}`, actor), params({ id: doc }))).status).toBe(404);
     expect((await queryGet(getReq(`/a/${doc}/query?q=${q({})}`), params({ id: doc }))).status).toBe(404);
     expect((await queryGet(getReq(`/a/zzzzzz/query?q=${q({})}`), params({ id: 'zzzzzz' }))).status).toBe(404);
   });
@@ -338,11 +330,11 @@ describe('naming the people a page computed', () => {
 });
 
 describe('holding an import', () => {
-  const hold = (doc: string, name: string, init: { cookie?: string } = {}) => Promise.all([
+  const hold = (doc: string, name: string, init: { actor?: import('@artifactbin/contracts').Actor } = {}) => Promise.all([
     queryGet(request(`/a/${doc}/query?q=${encodeURIComponent(JSON.stringify({ hold: name }))}`), params({ id: doc })),
     queryRoute(request(`/a/${doc}/query`, { method: 'POST', ...init, json: { hold: name } }), params({ id: doc })),
   ]);
-  const island = async (doc: string, init: { token?: string; cookie?: string } = {}) =>
+  const island = async (doc: string, init: { token?: string; actor?: import('@artifactbin/contracts').Actor } = {}) =>
     ((await (await pageRoute(request(`/api/page/artifact/${doc}`, init), params({ id: doc }))).json()) as { surface: { runtime: { data: { dataflow?: { hold?: string[] } } } } }).surface.runtime.data.dataflow;
 
   it('answers every row of a readable import through both doors, past the display window, and names it on the island', async () => {
@@ -379,10 +371,10 @@ describe('holding an import', () => {
     }
     expect((await island(doc))?.hold).toEqual([]);
     // Their owner may hold them: the session door answers the owner's own credential.
-    const cookie = await agentCookie([t.id]);
-    const [, owners] = await hold(doc, 'sales_data', { cookie });
+    const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
+    const [, owners] = await hold(doc, 'sales_data', { actor });
     expect(owners.status).toBe(200);
-    expect((await island(doc, { cookie }))?.hold).toEqual(['sales_data', 'regions_data']);
+    expect((await island(doc, { actor }))?.hold).toEqual(['sales_data', 'regions_data']);
   });
 
   it('holds only what the document imports, by import name — never a ref, never an undeclared name', async () => {

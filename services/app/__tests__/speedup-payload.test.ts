@@ -8,7 +8,7 @@ useAppHarness();
 
 it('the markup page transports its isolated sheet once and leaves the source to the editor door',async()=>{
   const token=await mintToken('payload');
-  const create=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<h1>Readable content</h1>'}}));
+  const create=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:'<h1>Readable content</h1>'}}));
   expect(create.status).toBe(201);const {id}=await create.json();
   const response=await artifactPage(request(`/api/page/artifact/${id}`,{token:token.token}),{params:Promise.resolve({id})});
   expect(response.status).toBe(200);

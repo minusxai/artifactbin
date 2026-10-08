@@ -86,9 +86,9 @@ describe('canonical redirects', () => {
     expect(r).toEqual({ kind: 'redirect', to: `/@mxmx_owner/${doc.id}-eating-healthy` });
   });
 
-  it('/a/<id> of an anonymous doc renders in place (it IS canonical)', async () => {
+  it('/a/<id> of an account document without a username renders in place', async () => {
     const { anonToken } = await fixtures();
-    const doc = await create(anonToken, { title: 'Loose Note', markup: '<h1>x</h1>' });
+    const doc = await create(anonToken, { title: 'Loose Note', markup: '<h1>x</h1>', visibility:'public' });
     expect((await outcome(ArtifactPage(doc.id))).kind).toBe('render');
   });
 

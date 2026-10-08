@@ -13,6 +13,7 @@
  * people the old session-minted design left behind are taken out.
  */
 import { expect, it } from 'vitest';
+import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
@@ -26,7 +27,7 @@ import { resolveTokenById } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { count, has, link } from '@/lib/accounts';
-import { agentCookie, request, useAppHarness } from './harness';
+import { request, useAppHarness } from './harness';
 
 const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -67,8 +68,8 @@ it('takes everything the person owned, held and said — and nothing of the acco
 
   // Things it DID: a like on its own copy, a comment, a follow of another test
   // user, and a live browser session.
-  const asTestUser = await agentCookie([testuser.tokenId]);
-  expect((await likeRoute(request(`/api/my/artifacts/${copy.id}/like`, { method: 'POST', cookie: asTestUser, origin: 'same' }), params(copy.id))).status).toBe(200);
+  const asTestUser = {credential:'bearer' as const,userId:testuser.id,tokenId:testuser.tokenId};
+  expect((await likeRoute(request(`/api/my/artifacts/${copy.id}/like`, { method: 'POST', actor: asTestUser, headers: {[BROWSER_SESSION_HEADER]:'1'}, origin: 'same' }), params(copy.id))).status).toBe(200);
   const friend = await testUserOf(owner);
   await link(testuser.id, 'follow', friend.id);
   await db.query(
