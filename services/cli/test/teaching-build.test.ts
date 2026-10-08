@@ -13,7 +13,7 @@ test('teaching bootstraps without its output and repairs stale output determinis
  const fixture=mkdtempSync(join(tmpdir(),'afbin-teaching-'));
  try{
   for(const relative of ['package.json','tsconfig.json','scripts/register-yaml.cjs',
-   'services/app/lib','services/app/skills','services/app/orchestrator/prompts','services/app/public/chat/release.json','services/runner/src','services/contracts/src','services/utils/src',
+   'services/app/lib','services/app/skills','services/app/public/chat/release.json','services/runner/src','services/contracts/src','services/utils/src',
    'services/cli/src','services/cli/scripts','services/cli/package.json']){
    const target=join(fixture,relative);mkdirSync(dirname(target),{recursive:true});
    cpSync(join(repo,relative),target,{recursive:true,filter:source=>

@@ -14,7 +14,7 @@
  */
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet } from '@/lib/jsx/immutable-set';
 
 /**
  * Components that may live INSIDE editable prose: they render inline, and are

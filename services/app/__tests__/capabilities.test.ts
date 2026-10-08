@@ -8,10 +8,9 @@
  * artifact ("real"), or one a test user owns ("sandbox").
  */
 import { expect, it } from 'vitest';
-import { useAppHarness } from './harness';
+import { useAppHarness, createGuestOwner } from './harness';
 import { can } from '@/lib/artifacts';
 import { createTestUser } from '@/lib/accounts';
-import { createGuestOwner } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';

@@ -12,7 +12,7 @@ import {channelForAnnotations} from '../story/realtime/live';
 interface Work {id:string;owner:string;session_id:string;artifact_id:string;thread_id:string;comment_id:string;phase:string;data:{commentContext?:RunnerJson;payload:{body:string;author:string|null}}}
 let external:{agent:HostedRemoteAgent;key:string}|undefined;
 /** Only an explicitly configured URL service gets this callback capability. */
-export function externalHostedProof(owner:string,id:string):string|undefined {
+function externalHostedProof(owner:string,id:string):string|undefined {
  if(!external?.agent.owns(owner,id))return;
  return createHmac('sha256',external.key).update(JSON.stringify([owner,id])).digest('hex');
 }

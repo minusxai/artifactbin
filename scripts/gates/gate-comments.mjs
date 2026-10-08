@@ -24,6 +24,7 @@
  *
  *   usage: node scripts/gates/gate-comments.mjs [base]
  */
+import { sleep } from './lib/sleep.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
@@ -35,7 +36,6 @@ import { commentTargetsMarkup } from '../fixtures/comment-targets.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('comments');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function until(read, want, budgetMs = 8000) {
   const deadline = Date.now() + budgetMs;

@@ -15,7 +15,7 @@ import {CLI_VERSION} from './version';
 import {CliError} from './commands';
 import {homedir} from 'node:os';
 import {colorSupport,createStyle} from './style';
-export const skillHarnesses=['claude','codex','pi','opencode'] as const;
+const skillHarnesses=['claude','codex','pi','opencode'] as const;
 export type SkillHarness=typeof skillHarnesses[number];
 export const harnessLabels:Record<SkillHarness,string>={claude:'Claude Code',codex:'Codex',pi:'pi',opencode:'OpenCode'};
 export interface SkillChoice {name:SkillHarness;path:string;selected:boolean}
@@ -55,7 +55,7 @@ export async function selectSkills(options:{home:string;env?:NodeJS.ProcessEnv;i
  return (options.choose??chooseSkills)(skillHarnesses.map(name=>({name,path:targets[name],selected:selected.includes(name)})));
 }
 /** Terminal-only checklist; noninteractive callers never enter this boundary. */
-export async function chooseSkills(choices:SkillChoice[]):Promise<SkillHarness[]>{
+async function chooseSkills(choices:SkillChoice[]):Promise<SkillHarness[]>{
  const input=process.stdin,output=process.stderr;
  if(!input.isTTY)throw new CliError('interactive_required','A terminal is required for the checklist.','Use --harness <name> or --yes.');
  let cursor=0;const checked=choices.map(x=>x.selected);const wasRaw=input.isRaw;
@@ -84,7 +84,7 @@ export async function chooseSkills(choices:SkillChoice[]):Promise<SkillHarness[]
 async function physicalPath(path:string):Promise<string>{
  try{return await realpath(path);}catch(error){if(!isMissing(error))throw error;const parent=dirname(path);if(parent===path)throw error;return join(await physicalPath(parent),relative(parent,path));}
 }
-export function safeSkillPath(path:string):boolean{return !!path&&!isAbsolute(path)&&!path.includes('\\')&&path.split('/').every(x=>!!x&&x!=='.'&&x!=='..')&&path!=='.afbin-skill.json';}
+function safeSkillPath(path:string):boolean{return !!path&&!isAbsolute(path)&&!path.includes('\\')&&path.split('/').every(x=>!!x&&x!=='.'&&x!=='..')&&path!=='.afbin-skill.json';}
 interface Manifest {version:string;source?:string;server?:string;files:Record<string,string>}
 /** Managed copies record their provenance so status, update and the harness agree on who owns them. */
 const SKILL_SOURCE='afbin-cli';

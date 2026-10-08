@@ -119,7 +119,6 @@ export function Tooltip(props: { open?: boolean; defaultOpen?: boolean; onOpenCh
     trigger, setTrigger, placed, setPlaced, enter: timing.enter, leave: timing.close, openNow: timing.openNow, close: timing.close };
   return <TooltipContext.Provider value={ctx}>{props.children}</TooltipContext.Provider>;
 }
-export function TooltipProvider(props: { children?: JSX.Element }) { return props.children; }
 export function TooltipTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
   const ctx = useContext(TooltipContext)!; let pointerDown = false; let movedOpen = false; let button!: HTMLButtonElement;
   // While hydrating Solid leaves served attributes alone; the content's id and the placement arrive after, so once
@@ -138,7 +137,7 @@ export function TooltipTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement
     on:focus={() => { if (!pointerDown) ctx.openNow(); }} on:blur={() => ctx.close()} on:click={() => ctx.close()}>{props.children}</button>;
 }
 /** A disabled editing control needs a focusable span as its tooltip anchor. */
-export function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
+function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
   const ctx = useContext(TooltipContext)!; let span!: HTMLSpanElement; let movedOpen = false;
   onMount(() => createEffect(() => {
     for (const [name, value] of [['aria-describedby', ctx.open() ? ctx.contentId() : null], ['data-state', ctx.state()], ['data-radix-popper-side', ctx.placed()?.side], ['data-radix-popper-align', ctx.placed()?.align]] as const) {
@@ -205,10 +204,6 @@ function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideO
     </div>
   </div>;
 }
-export function PopoverAnchor(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-anchor" {...props} />; }
-export function PopoverHeader(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-header" {...props} />; }
-export function PopoverTitle(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-title" {...props} />; }
-export function PopoverDescription(props: JSX.HTMLAttributes<HTMLParagraphElement>) { return <p data-slot="popover-description" {...props} />; }
 /**
  * Radix Avatar: the image is drawn only once the browser has loaded it (a detached `Image` probes the
  * address); until then — and for an address that fails — the fallback shows. The served markup is the
@@ -243,9 +238,6 @@ export function AvatarFallback(props: JSX.HTMLAttributes<HTMLSpanElement>) {
   const ctx = useContext(AvatarContext);
   return <Show when={ctx?.status() !== 'loaded'}><span data-slot="avatar-fallback" {...props} /></Show>;
 }
-export function AvatarBadge(props: JSX.HTMLAttributes<HTMLSpanElement>) { return <span data-slot="avatar-badge" {...props} />; }
-export function AvatarGroup(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="avatar-group" {...props} />; }
-export function AvatarGroupCount(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="avatar-group-count" {...props} />; }
 
 /** Reuses the reader tooltip; the stable anchor keeps disabled controls reachable by keyboard and touch. */
 export function MutationHint(props: { reason: string | null; fullWidth?: boolean; children: JSX.Element }) {

@@ -3,7 +3,7 @@
  * The operation family is the surface; `afbin testuser` and `--as` translate to it.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { agentCookie, useAppHarness, setSession } from './harness';
+import { agentCookie, useAppHarness, setSession, createGuestOwner } from './harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
@@ -45,8 +45,7 @@ describe('minting', () => {
     expect((await list.json()).testusers.map((t: { id: string }) => t.id).sort()).toEqual([...made].sort());
   });
   it('a guest cannot mint one', async () => {
-    const { createGuestOwner } = await import('@/lib/accounts/guest-owner');
-    const g = await createGuestOwner();
+        const g = await createGuestOwner();
     const cookie = await agentCookie([g.tokenId]);
     const r = await newTestUser(jreq('/api/testusers', 'POST', {}, undefined, cookie));
     expect([401, 403]).toContain(r.status);
@@ -83,8 +82,7 @@ describe('guests at the doors', () => {
     const dsId = ((await ds.json()) as { id: string }).id;
     const page = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: `<Helmet><Import name="join_data" src="ref:${dsId}" /><Mutation name="join">{\`insert into join_data.rows (who) select $_me.id\`}</Mutation></Helmet><Button run="$join">Join</Button>`, visibility: 'unlisted' }, a.token));
     const pageId = ((await page.json()) as { id: string }).id;
-    const { createGuestOwner } = await import('@/lib/accounts/guest-owner');
-    const g = await createGuestOwner();
+        const g = await createGuestOwner();
     const cookie = await agentCookie([g.tokenId]);
     sessionUser.id = g.userId; sessionUser.email = '';
     for (const [name, res] of [

@@ -1,7 +1,7 @@
 /** Framework-free author AST props and names shared by the compiler and the editor. */
 import type { JsxAttribute, JsxElement, JsxNode } from '@/lib/jsx';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet } from '@/lib/jsx/immutable-set';
 import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/story/data/dataflow';
 import { substituteRow } from '@/lib/story/data/row-scope';
 import { needsFrameReferrer } from '@/lib/story/styles/document-sources';

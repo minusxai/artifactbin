@@ -19,7 +19,7 @@ const TESTUSER_ID=/^[A-Za-z0-9_-]{1,128}$/;
 /** The `--as` value on the wire: `guest`, or the test user an account minted. */
 export function viewerChoice(value:string):ViewerChoice{return value==='guest'?'guest':{testuser:value};}
 
-export function testUserIdentity(value:string):string{
+function testUserIdentity(value:string):string{
  if(!TESTUSER_ID.test(value))throw new CliError('invalid_testuser',`${value} is not a test user id.`,'Run afbin testuser list for the ids this account holds, or afbin testuser new to mint one.');
  return value;
 }
@@ -32,7 +32,7 @@ function parseTestUser(input:unknown):TestUser{
   expires_at:value.expires_at,artifacts:Number(value.artifacts??0),sessions:Number(value.sessions??0)};
 }
 
-export async function listTestUsers(client:HttpClient):Promise<TestUser[]>{
+async function listTestUsers(client:HttpClient):Promise<TestUser[]>{
  const response=await client.request<{testusers?:unknown}>('/testusers');
  if(!Array.isArray(response.testusers))throw new CliError('invalid_response','The server did not return a test user collection.');
  return response.testusers.map(parseTestUser);

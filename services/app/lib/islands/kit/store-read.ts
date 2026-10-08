@@ -17,9 +17,4 @@ export function hydratedRead<T>(read: () => T, served?: { value: T }): () => T {
   return () => (live() ? read() : served.value);
 }
 
-/**
- * What `mutationUnavailable` answers while the write check is in flight — lib/story-runtime/store
- * ACCESS_PENDING, restated rather than imported: importing the store module from a kit family would
- * re-partition the shared runtime's chunks (the build splits by file). kit-writes.test pins the two equal.
- */
-export const ACCESS_PENDING = 'Checking edit access…';
+export { ACCESS_PENDING } from '@/lib/story-runtime/contract';

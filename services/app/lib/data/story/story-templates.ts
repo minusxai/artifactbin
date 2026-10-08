@@ -7,7 +7,7 @@
  * `content.template` for navigation behaviour, and the guide offers compositions to authors.
  *
  * The prose (labels, personalities, beats) is human-edited in
- * `orchestrator/prompts/story-guidance.yaml`; this module is the thin typed projection over it.
+ * `story-guidance.yaml`; this module is the thin typed projection over it.
  * A genre's full authoring guidance — and a theme's — is a docs file
  * (`skills/artifactbin/references/templates-<name>.md`, `…/themes-<name>.md`), the one copy
  * agents read.

@@ -20,6 +20,7 @@
  *
  *   usage: node scripts/gates/gate-inplace-edit.mjs [base]
  */
+import { sleep } from './lib/sleep.mjs';
 import { DOCUMENT_FRAME, documentFrame, documentLocator, inlineStory } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
@@ -30,7 +31,6 @@ import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('inplace-edit');
 const note = (label) => console.log(`  ·   ${label}`);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const CHART = '{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"x","type":"nominal"},"y":{"field":"y","type":"quantitative"}}}}';
 const filler = Array.from({ length: 40 }, (_, i) =>

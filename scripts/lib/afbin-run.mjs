@@ -67,7 +67,7 @@ const runtimeOutputs = (root) => [
 // Inputs used by build-host: the CLI's host entries, app host/browser code and assets,
 // plus shared server packages. Tests and unrelated app tooling do not invalidate it.
 const runtimeSourceRoots = (root) => [
-  ...[['app', 'app'], ['app', 'server'], ['app', 'lib'], ['app', 'solid'], ['app', 'skills'], ['app', 'orchestrator'], ['app', 'public'],
+  ...[['app', 'app'], ['app', 'server'], ['app', 'lib'], ['app', 'solid'], ['app', 'skills'], ['app', 'public'],
     ['cli', 'src'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src'], ['auth', 'src'], ['browser', 'src'], ['events', 'src']]
     .map((dir) => path.join(root, 'services', ...dir)),
   ...['services/cli/scripts/build.mjs', 'services/cli/scripts/build-host.mjs', 'services/cli/scripts/build-preview.mjs',

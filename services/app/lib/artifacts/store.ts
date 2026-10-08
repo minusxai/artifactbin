@@ -226,7 +226,6 @@ async function insertArtifact(
   const catalog=catalogOf(input);
   if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
   const ownerKind = await userKindOf(userId, tx);
-  const guestDefault = input.visibility === undefined && ownerKind === 'guest';
   /*
    * THE SANDBOX CEILING. A test user's work never lists anywhere and is never
    * `public`: it exists to be looked at by the account that minted it and by
@@ -238,7 +237,7 @@ async function insertArtifact(
   const visibility = ownerKind === 'testuser'
     ? (input.visibility === 'public' || input.visibility === undefined ? 'unlisted' : input.visibility)
     : input.visibility ??
-      (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
+      (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   const datasetPolicy = atCreation.datasetPolicy?.policy ??
     (!atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres' ? defaultDatasetGrants() : null);
@@ -270,8 +269,7 @@ async function insertArtifact(
     input.format,
     input.source,
     JSON.stringify(input.meta),
-    // Guest identities retain anonymous public defaults. Registered
-    // accounts create private documents, except assets, born
+    // Accounts create private documents, except assets, born
     // unlisted: a public document reaches them at read time, and a
     // born-private ref bakes a 404 into every shared document that uses
     // it. Routes validate an explicit ask upstream. Decided above, because a

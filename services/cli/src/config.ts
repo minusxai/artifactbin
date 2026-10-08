@@ -48,7 +48,7 @@ function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv
 export function hostDirectory(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
   return join(configDir(home, env), 'hosts', digest(normalizeServer(server)).slice(0, 16));
 }
-export function normalizeHost(value: string): string {
+function normalizeHost(value: string): string {
   return normalizeServer(value);
 }
 export async function readClientDefaults(home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<ClientDefaults> {

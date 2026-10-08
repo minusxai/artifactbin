@@ -20,7 +20,7 @@ import { resolveToken, resolveTokenById, touchToken } from './tokens';
  * actor header; without one (a direct handler call in a test) it is whatever
  * the test mocked `@/auth` to say. Fail-safe: never a crash.
  */
-export async function sessionViewer(request?: Request): Promise<Viewer> {
+async function sessionViewer(request?: Request): Promise<Viewer> {
   try {
     const fromProxy = await proxyActor(request);
     if (fromProxy) return fromProxy.credential === 'session' ? fromProxy.viewer : null;

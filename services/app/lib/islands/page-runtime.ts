@@ -24,12 +24,11 @@ import { createComponent, render } from 'solid-js/web';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/story/data/dataflow';
+import { PAGE_GLOBAL } from '@/lib/story-runtime/contract';
 import { bindPage, type PageBindings, type MutationFn } from '@/lib/story-runtime/page-bindings';
 export { bindPage, type PageBindings, type MutationFn, type QueryAccessor, type ValueSetter } from '@/lib/story-runtime/page-bindings';
 const bareName = (ref: string): string => (typeof ref === 'string' && ref.startsWith('$') ? ref.slice(1) : String(ref));
 
-/** The global the generated `page` module reads at import (author-module.server PAGE_GLOBAL). */
-export const PAGE_GLOBAL = '__mxPageBindings';
 
 /**
  * What `window.page` holds, for a browser session to drive the page: plain data in and out, never a signal.

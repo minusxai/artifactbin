@@ -1,11 +1,9 @@
 /**
  * The BROWSER's copy of a bearer token — as an httpOnly cookie, not localStorage.
  *
- * A browser that owns documents through a guest identity (createGuestOwner) must
- * remember its token, or the tab that just published cannot edit what it made.
- * (/api/start no longer issues one: it requires an email account session.) That
- * memory must not be a durable credential any script on the app's origin can
- * read and keep, so the browser holds a SIGNED COOKIE NAMING the token ids;
+ * A browser's memory of the tokens it holds (legacy guest ownership, adopted at
+ * email login; nothing issues a new one) must not be a durable credential any
+ * script on the app's origin can read and keep, so the browser holds a SIGNED COOKIE NAMING the token ids;
  * the secret itself never returns to the page after the exchange.
  *
  * Guest token ownership uses a separate signed cookie, not an account

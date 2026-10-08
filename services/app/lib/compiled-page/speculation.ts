@@ -28,7 +28,7 @@ export interface SpeculationRules {
 export const contentSha = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex').slice(0, 16);
 
 /** A hint the page may name: a root-relative path or an http(s) URL, never another scheme. */
-export const isNavigable = (url: string): boolean => (url.startsWith('/') && !url.startsWith('//')) || /^https?:\/\/[^/\\]/i.test(url);
+const isNavigable = (url: string): boolean => (url.startsWith('/') && !url.startsWith('//')) || /^https?:\/\/[^/\\]/i.test(url);
 
 /**
  * The rule set for a page's link hints, or null when there is nothing to

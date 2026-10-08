@@ -26,7 +26,6 @@ import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Button, stableRowKey } from '../kit/basic';
 import { ACCESS_PENDING } from '../kit/store-read';
-import { ACCESS_PENDING as STORE_ACCESS_PENDING } from '@/lib/story-runtime/store';
 import { validRowKey } from '@/lib/story/data/repeat-identity';
 import { Segmented } from '../kit/controls';
 import { Select, loadSelectPopup } from '../kit/select';
@@ -283,8 +282,7 @@ describe('the island context\'s write checks (rt createIslandRuntime)', () => {
 });
 
 describe('restated constants', () => {
-  it('the kit\'s pending check and row-key rule are the store\'s and the interpreter\'s', () => {
-    expect(ACCESS_PENDING).toBe(STORE_ACCESS_PENDING);
+  it('the kit\'s row-key rule is the interpreter\'s', () => {
     for (const key of ['a', '', 'x'.repeat(256), 'x'.repeat(257), 'a\u0001', 0, 7.5, NaN, Infinity, null, undefined, true, {}]) expect(stableRowKey(key)).toBe(validRowKey(key));
   });
 });

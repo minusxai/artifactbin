@@ -3,7 +3,7 @@
  *
  * A module is a path: `server` (server.ts), `scripts` (root scripts/), `pkg/<name>` (services/<name>),
  * `lib/<name>` (services/app/lib/<name>, or the single file lib/<name>.ts), `app/<dir>` (services/app/
- * <solid|server|app|web|src|orchestrator|scripts>) and `app-root` (anything else under services/app).
+ * <solid|server|app|web|src|scripts>) and `app-root` (anything else under services/app).
  * An edge is any import of non-test source — static, `export from`, dynamic import calls, CommonJS require calls and
  * `import("x")` types, type-only included — read with the TypeScript parser.
  *
@@ -29,7 +29,7 @@ const ts = createRequire(import.meta.url)('typescript');
 export const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'pkg/cli', 'scripts', 'server'];
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
 const PACKAGES = ['auth', 'browser', 'cli', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
-const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'orchestrator', 'scripts'];
+const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 
 /** The module a repository-relative path belongs to, or null (outside services/scripts/server.ts). */

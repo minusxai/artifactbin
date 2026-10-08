@@ -11,12 +11,10 @@ import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 import type { AnnotationRange } from '@/lib/story/annotations/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { ImageRefData, RefDataMap } from '@/lib/story/data/ref-data';
-import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
+import type { RefDataMap } from '@/lib/story/data/ref-data';
+import type { DataflowState, Scalar } from '@/lib/story/data/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import type { PersonCard } from '@artifactbin/contracts';
-import type { LocalMutationResult } from '@/lib/story/datasets/local-state';
-import type { ManagedAssetKind } from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -259,7 +257,7 @@ export interface EditDraft {
  * A saved version heard on the reader's live stream (solid/pages/Document). Only `nodes` is read: the morph
  * fetches the version's compiled fragment itself; the rest is what the frame carries.
  */
-export interface ReaderFrame {
+interface ReaderFrame {
   type: typeof STORY_DOCUMENT_MESSAGE;
   nodes: JsxNode[];
   source?: undefined;
@@ -276,7 +274,7 @@ export interface ReaderFrame {
  * The local preview's draft (services/cli/src/preview/client): source only. Its own controller
  * (services/cli/src/preview/edit-controller) compiles the file on disk and reads nothing else.
  */
-export interface LocalDraft {
+interface LocalDraft {
   type: typeof STORY_DOCUMENT_MESSAGE;
   nodes: JsxNode[];
   source: string;
@@ -378,81 +376,6 @@ export interface StoryScrollMessage {
  * with data loads at all. A document without it reloads instead.
  */
 export const STORY_DATA_HOOK = '__mxInvalidateDatasets';
-
-export const STORY_QUERY_MESSAGE = 'mx:query';
-export const STORY_QUERY_RESULT_MESSAGE = 'mx:query-result';
-
-export interface StoryQueryRequest {
-  type: typeof STORY_QUERY_MESSAGE;
-  id: number;
-  values: Record<string, Scalar>;
-  only: string[];
-  /** The reader's IANA zone, bound as `$_tz`. */
-  tz?: string;
-  localTables?: Record<string, Row[]>;
-  /** A window of one query (a table reading past the cap) — see lib/sql/engine QueryPage. */
-  page?: { name: string; offset: number; limit: number; sort?: { col: string; dir: 'asc' | 'desc' } };
-}
-
-export type StoryQueryResult =
-  | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; tables: DataflowState['tables']; errors: DataflowState['errors']; mutationAccess?: DataflowState['mutationAccess'];userOptions?:DataflowState['userOptions'];people?:DataflowState['people'] }
-  | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; error: string };
-
-/**
- * THE ASSET RELAY — the third thing a framed document cannot do for itself.
- *
- * A bound `<img src="$pick">` names a URL only the reader can compute, and the
- * document imports it through its own endpoint (`/a/<id>/assets?u=…`). Loading
- * that as an `<img>` works top-level and CANNOT work inside a parent: the frame
- * is opaque-origin, so its subresource requests carry no cookie, and the
- * endpoint therefore sees an anonymous caller from inside every framed document
- * — the owner's own copy of their PRIVATE document included, where the read ACL
- * then answers the uniform 404. That is not an edge case: a signed-in user's
- * document is born private.
- *
- * So the frame asks the PAGE, exactly as it does for a query and a write, and
- * the page — which holds the session — calls the endpoint and posts back the
- * ADDRESS of our copy. That address is `/assets/<hash>`, which needs no
- * credential at all (content-addressed from the URL, serving nothing the source
- * host does not), which is the whole reason a relay can answer this: what
- * crosses back is a public address, never bytes and never a credential.
- */
-export const STORY_ASSET_MESSAGE = 'mx:asset';
-export const STORY_ASSET_RESULT_MESSAGE = 'mx:asset-result';
-
-export interface StoryAssetRequest {
-  type: typeof STORY_ASSET_MESSAGE;
-  id: number;
-  /** The web URL the document ended up with — never a path, never ours. */
-  url: string;
-  kind?: ManagedAssetKind;
-}
-
-export type StoryAssetResult =
-  /** Where our copy lives: `/assets/<hash>`. */
-  | { type: typeof STORY_ASSET_RESULT_MESSAGE; id: number; url: string; image?:ImageRefData }
-  /** The importer's own code (`forbidden_address`, `too_large`, `rate_limited`, …). */
-  | { type: typeof STORY_ASSET_RESULT_MESSAGE; id: number; refused: string };
-
-/**
- * THE WRITE RELAY — the same shape as the query relay, for the same reason: a
- * document inside a parent page cannot present a session, and a PRIVATE
- * document's writes must. The frame posts the mutation request
- * (lib/story/datasets/mutation-request), the page POSTs /a/<id>/mutate and posts the
- * answer back.
- */
-export const STORY_MUTATE_MESSAGE = 'mx:mutate';
-export const STORY_MUTATE_RESULT_MESSAGE = 'mx:mutate-result';
-
-export interface StoryMutateRequest {
-  type: typeof STORY_MUTATE_MESSAGE;
-  id: number;
-  request: import('@/lib/story/datasets/mutation-request').MutationRequest;
-}
-
-export type StoryMutateResult =
-  | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: true; dataset: string; mutationRunId?:string; version: number; affected: number; local?: LocalMutationResult }
-  | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: false; error: string };
 
 /**
  * PAGE → FRAME: a dataset this document reads has changed (the page heard it
@@ -727,7 +650,7 @@ interface StorySelectMessage {
  * set every time, `[]` clears. Unknown paths are ignored.
  */
 export const STORY_SPOTLIGHT_MESSAGE = 'mx:spotlight';
-export interface StorySpotlightMessage { type: typeof STORY_SPOTLIGHT_MESSAGE; paths: string[] }
+interface StorySpotlightMessage { type: typeof STORY_SPOTLIGHT_MESSAGE; paths: string[] }
 
 /* ────────────────────────────────────────────────────────────────────────────
  * ANNOTATIONS — comments the owner pins to nodes; the frame only ever sees
@@ -921,12 +844,6 @@ export type FrameBridgeFramePayload =
   | { kind: 'scroll'; scrollX: number; scrollY: number }
   | { kind: 'error'; message: string };
 
-export interface FrameBridgeEnvelope<P> {
-  type: typeof STORY_FRAME_BRIDGE_MESSAGE;
-  key: string;
-  payload: P;
-}
-
 /** A bridge envelope at all (any key): the door swallows these so no other listener sees one. */
 export function isFrameBridgeEnvelope(data: unknown): data is { type: typeof STORY_FRAME_BRIDGE_MESSAGE; key?: unknown; payload: { kind: string } } {
   if (!data || typeof data !== 'object') return false;
@@ -970,6 +887,12 @@ export function isEditParentMessage(data: unknown): data is StoryEditParentMessa
   const d = data as { type?: unknown };
   return typeof d.type === 'string' && EDIT_PARENT_TYPES.has(d.type);
 }
+
+/** The global the generated `page` module reads at import (lib/islands/page-runtime sets it; story/document/author-module.server emits the read). */
+export const PAGE_GLOBAL = '__mxPageBindings';
+
+/** What `mutationUnavailable` answers while a write's access check is in flight; the store and the island kit share this one string. */
+export const ACCESS_PENDING = 'Checking edit access…';
 
 /**
  * A server-harvested Mermaid drawing (lib/mermaid-images): fixed layout, and

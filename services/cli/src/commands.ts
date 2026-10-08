@@ -67,16 +67,16 @@ export const flags: Record<string,Flag> = {
  name:{value:'NAME',description:'Select a named query, mutation or table, or name a remote terminal session.'},
 };
 /** Resource kinds are one vocabulary; each command accepts the subset it can address. */
-export const RESOURCE_TYPES=['artifact','folder','dataset','file','profile','session'] as const;
+const RESOURCE_TYPES=['artifact','folder','dataset','file','profile','session'] as const;
 const VERSIONED_TYPES=['artifact','folder','dataset','file'] as const;
-export const COMMAND_TYPES:Record<string,readonly string[]>={
+const COMMAND_TYPES:Record<string,readonly string[]>={
  pull:RESOURCE_TYPES,push:RESOURCE_TYPES,status:RESOURCE_TYPES,
  diff:['artifact','folder','dataset','file','profile','session'],
  list:[...RESOURCE_TYPES,'table'],
  delete:[...VERSIONED_TYPES,'session','comment'],
  fork:VERSIONED_TYPES,export:VERSIONED_TYPES,log:VERSIONED_TYPES,
 };
-export const FORMATS:Record<string,readonly string[]>={
+const FORMATS:Record<string,readonly string[]>={
  pull:['jsx','yaml','csv','json','original'],export:['png','jpg','html','csv','json','yaml','original'],
  list:['table','csv','json','yaml'],query:['table','csv','json','yaml'],help:['text','markdown','man'],
 };
@@ -127,7 +127,7 @@ export const commands: Command[] = [
  */
 const VIEWER_KINDS=['testuser','test-user','test_user','testusers'];
 const VIEWER_FIX='Mint one with afbin testuser new and pass the id it prints (afbin testuser list shows the ones you hold); on a session --as guest browses signed out instead.';
-export function viewerArgument(value:unknown,command:string):string {
+function viewerArgument(value:unknown,command:string):string {
  if(typeof value!=='string')throw new CliError('invalid_viewer','--as names who to act as.',VIEWER_FIX);
  const normalized=value.replace(/[A-Z]/g,character=>character.toLowerCase());
  if(VIEWER_KINDS.includes(normalized))throw new CliError('invalid_viewer',`--as takes a test user id, not the word ${value}.`,VIEWER_FIX);

@@ -3,7 +3,7 @@ export { agentContract } from './agent-contract';
 export { existingPaste } from './agent-copy';
 export type { AgentDiscovery } from './agent-discovery-tags';
 export { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, agentDiscoveryTail, withAgentDiscoveryTail } from './agent-discovery';
-export { COMPUTED_FIGURE_RULE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE, PROGRESSIVE_AUTHORING_RULE } from './agent-guidance';
+export { COMPUTED_FIGURE_RULE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from './agent-guidance';
 export { APP_SHELL_FONT_PRELOADS } from './app-fonts';
 export { archivedReadOnly, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
 export type { ArchivedRender } from './archived-version';
@@ -15,7 +15,7 @@ export { assetByteQuotaExceeded, assetBytesForToken, setAssetByteQuotaForTests }
 export { BASEMAP_ALLOWED, BASEMAP_UPSTREAM } from './basemap';
 export { DOMAIN_HOME_CSP, linkedStylesheets, renderDomainHome } from './custom-domain-home';
 export type { ProfileListingData } from './custom-domain-home';
-export { attachDomain, canonicalDocumentUrl, customHostCandidate, domainHomepage, domainHomepageOptions, setDomainHomepage, domainOf, domainPostUrl, domainResolver, isServable, normalizeHostname, ownerForHost, recheckDomains, removeDomain, servesDocument, servesEmbeddedArtifact, servesWebAsset, setDomainResolver, startDomainRecheck, verifiedHostOf, verifyDomain } from './custom-domains';
+export { attachDomain, canonicalDocumentUrl, customHostCandidate, domainHomepage, domainHomepageOptions, setDomainHomepage, domainOf, domainResolver, isServable, normalizeHostname, ownerForHost, recheckDomains, removeDomain, servesDocument, servesEmbeddedArtifact, servesWebAsset, setDomainResolver, startDomainRecheck, verifiedHostOf, verifyDomain } from './custom-domains';
 export { domainPath, setDomainPath } from './custom-domains';
 export type { CaaRecord, DomainResolver } from './custom-domains';
 export { mintExportKey, verifyExportKey } from './export-read-key';
@@ -27,6 +27,5 @@ export { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from './start-placehold
 export { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from './theme-bootstrap';
 export { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl, tileUrlTemplate } from './tiles';
 export { WEB_ASSET_KINDS, WebAssetRefused, importForDocument, importWebAsset, lookupWebAssets, refreshWebAsset, refreshWebAssets, webAssetByHash } from './web-assets';
-export type { AssetWarning, WebAssetKind } from './web-assets';
-export { PAGES_SESSION_PATH, pagesSite, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, pagesApexOrigin, pagesLabel, pagesOriginFor, pagesRequestOf, pagesSessionUrl, pagesSiteFor } from './pages-origin';
-export type { PagesRequest, PagesSite } from './pages-origin';
+export type { WebAssetKind } from './web-assets';
+export { pagesSite, pagesOriginFor } from './pages-origin';
