@@ -3,7 +3,7 @@ import {render,screen,fireEvent,waitFor,cleanup} from '@solidjs/testing-library'
 import {it,expect,vi,afterEach} from 'vitest';
 import {LoginPage} from '../pages/Login';
 vi.mock('@/solid/lib/session',()=>({useSession:()=>({session:()=>({user:null,kind:'none',onboarded:true}),sessionError:()=>null})}));
-afterEach(()=>{cleanup();vi.unstubAllGlobals();window.history.replaceState(null,'','/');});
+afterEach(()=>{cleanup();sessionStorage.clear();vi.unstubAllGlobals();window.history.replaceState(null,'','/');});
 it('uses the existing email login handlers and continues without navigating away from an in-memory offer',async()=>{
  window.history.replaceState(null,'','/connect?request=portable');const done=vi.fn();
  const fetch=vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('{}',{status:200}));vi.stubGlobal('fetch',fetch);
@@ -56,4 +56,23 @@ it('still explains an actually rejected login code',async()=>{
  fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'123456'}});
  fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
  await screen.findByText(/That code isn.t right/);expect(done).not.toHaveBeenCalled();
+});
+
+it('returns to code entry with the same email after a reload, and keeps the code out of storage',async()=>{
+ sessionStorage.clear();window.history.replaceState(null,'','/login?callbackUrl=%2Foauth%2Fdevice%3Fuser_code%3DABCD');
+ const request=vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('{}',{status:200}));vi.stubGlobal('fetch',request);
+ const first=render(()=> <LoginPage onAuthenticated={vi.fn()}/>);
+ fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_reload@example.com'}});
+ fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
+ fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'654321'}});
+ expect(JSON.stringify(Object.entries(sessionStorage))).not.toContain('654321');
+ first.unmount();
+ const done=vi.fn();render(()=> <LoginPage onAuthenticated={done}/>);
+ expect(((await screen.findByRole('textbox',{name:'Login code'})) as HTMLInputElement).value).toBe('');
+ expect(screen.getByText('mxmx_test_reload@example.com')).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Resend code'})).toBeTruthy();
+ fireEvent.input(screen.getByRole('textbox',{name:'Login code'}),{target:{value:'654321'}});
+ fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
+ await waitFor(()=>expect(done).toHaveBeenCalledOnce());
+ expect(sessionStorage.length).toBe(0);
 });
