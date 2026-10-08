@@ -94,7 +94,7 @@ const emailOf = async (db: Kysely<Record<string, unknown>>, userId: string): Pro
 export interface HumanAuth {
   /** Better Auth's HTTP handler: mount at /api/auth/*. */
   handler: (request: Request) => Promise<Response>;
-  sessions: { identity?(userId:string): Promise<{userId:string;email:string;emailVerified:boolean}|null>; resolve(request: Request): Promise<{ userId: string; email: string; emailVerified: boolean } | null> };
+  sessions: { identity?(userId:string): Promise<{userId:string;email:string;emailVerified:boolean}|null>; resolve(request: Request): Promise<{ userId: string; email: string; emailVerified: boolean; setCookies?: string[] } | null> };
   /** The instance, for identity routes (sign-out on revoke, …). */
   api: ReturnType<typeof betterAuth>['api'];
 }
@@ -298,9 +298,11 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
         return row ? {userId: row.id, email: row.email, emailVerified: row.emailVerified === true} : null;
       },
       async resolve(request) {
-        const s = await auth.api.getSession({ headers: request.headers }).catch(() => null);
+        // Errors propagate: only "no session" is anonymous. returnHeaders carries the rolled-forward cookie.
+        const {headers, response: s} = await auth.api.getSession({ headers: request.headers, returnHeaders: true });
         if (!s?.user?.id) return null;
-        return { userId: s.user.id, email: s.user.email, emailVerified: !!s.user.emailVerified };
+        const setCookies = headers.getSetCookie();
+        return { userId: s.user.id, email: s.user.email, emailVerified: !!s.user.emailVerified, ...(setCookies.length ? { setCookies } : {}) };
       },
     },
   };
