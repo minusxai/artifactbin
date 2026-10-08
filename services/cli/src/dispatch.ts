@@ -60,6 +60,7 @@ import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from 
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
+import {uploadAttachment} from './upload';
 import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
@@ -354,6 +355,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    if(command==='members'&&positionals[2]&&!['approve','dismiss'].includes(action??''))throw new CliError('invalid_arguments','Only approve and dismiss take another user ID.');
    emit(action?await client.request(`/artifacts/${id}/members`,'POST',{action,...(command==='invite'?{usernames:positionals.slice(1),...(flags['include-access']?{includeAccess:true}:{})}:{}),...(command==='members'&&positionals[2]?{userId:positionals[2]}:{})}):await client.request(`/artifacts/${id}/members`));return 0;
   }
+  if(command==='upload'){const receipt=await uploadAttachment(workspace,parsed,client);emit(json?receipt:`${receipt.ref} ${receipt.url}`);return 0;}
   if(command==='testuser'){emit(await testUserCommand(client,positionals[0],positionals[1],{all:!!flags.all}));return 0;}
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}

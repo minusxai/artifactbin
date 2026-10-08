@@ -6,6 +6,7 @@ export {CliError} from './errors.js';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ 'idempotency-key':{value:'KEY',description:'Reuse this upload identity to recover a confirmed file without creating another.'},
  account:{value:'ACCOUNT',description:'Explicit workspace rebind target: current authenticated account only.'},
  artifact:{value:'ID',description:'Published live artifact ID for a schedule, including program artifacts.'},
  cron:{value:'EXPRESSION',description:'Five-field cron expression interpreted in --timezone.'},
@@ -81,6 +82,7 @@ export const FORMATS:Record<string,readonly string[]>={
 export const globalFlags=['help','version','json','server','yes'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
+ {name:'upload',usage:'<file> --in <document> --name <import>',description:'Upload one attachment to a declared dataset import; returns its file reference without changing rows.',min:1,max:1,flags:['in','name','idempotency-key'],examples:['afbin upload receipt.pdf --in abc123 --name expenses --json']},
  {name:'workspace',usage:'rebind --account current',description:'Explicitly rebind local workspace ownership; preserves content and remote permission checks.',min:1,max:1,flags:['account','dry-run'],examples:['afbin workspace rebind --account current --dry-run','afbin workspace rebind --account current']},
  {name:'add',usage:'<path> [<path> ...]',description:'Assign stable account-scoped identities to local files without publishing.',min:1,max:Infinity,flags:[],examples:['afbin add sales.csv report.jsx --json']},
  {name:'mv',usage:'<from> <to>',description:'Move a registered local file while retaining its identity.',min:2,max:2,flags:[],examples:['afbin mv sales.csv data.csv']},
@@ -174,6 +176,10 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(result.flags.help||result.flags.version)return result;
  if(result.positionals.length<command.min||result.positionals.length>command.max)throw new CliError('invalid_arguments',`Usage: afbin ${command.name} ${command.usage}`.trim());
  const f=result.flags;
+ if(command.name==='upload'){
+  if(typeof f.in!=='string'||typeof f.name!=='string')throw new CliError('invalid_arguments','Upload requires --in <document> and --name <declared-import>.');
+  if(f['idempotency-key']!==undefined&&!/^[A-Za-z0-9_-]{1,128}$/.test(String(f['idempotency-key'])))throw new CliError('invalid_arguments','--idempotency-key must contain 1–128 letters, digits, underscores or hyphens.');
+ }
  if(command.name==='import'&&f.output!==undefined&&(typeof f.output!=='string'||f.output==='-'||!f.output.toLowerCase().endsWith('.jsx')))throw new CliError('invalid_arguments','Import output must be a JSX file ending in .jsx.','Use --output report.jsx, or omit it to use the input basename.');
  if(command.name==='auth'){
   if(f.otp&&!f.email)throw new CliError('invalid_arguments','--otp requires --email.');
