@@ -34,12 +34,20 @@ export async function signInAccount(base, { origin = new URL(base).origin, sink,
     headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body) });
   const sent = await post('/api/auth/email-otp/send-verification-otp', { email, type: 'sign-in' });
   if (!sent.ok) throw new Error(`Email login code request failed (${sent.status})`);
-  const otp = sink.lastCode(email);
+  let otp = sink.lastCode(email);
+  const deadline = Date.now() + 5_000;
+  while (!otp && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 25));
+    otp = sink.lastCode(email);
+  }
   if (!otp) throw new Error('Email login code did not reach the protected outbox');
   const verified = await post('/api/auth/sign-in/email-otp', { email, otp });
   if (!verified.ok) throw new Error(`Email login verification failed (${verified.status})`);
   const cookie = verified.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   if (!cookie) throw new Error('Email login did not establish an account session');
+  const confirmed = await fetch(`${base}/api/my/profile`, { method: 'PATCH',
+    headers: { 'content-type': 'application/json', origin, cookie }, body: JSON.stringify({ welcome_pending: false }) });
+  if (!confirmed.ok) throw new Error(`Account onboarding failed (${confirmed.status})`);
   return { cookie };
 }
 

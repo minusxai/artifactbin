@@ -417,7 +417,8 @@ async function claimLeg() {
     await p.goto(BASE, { waitUntil: 'load' });
     await becomeOwner(p, BASE, anon.token);
 
-    // They log in.
+    // Re-authenticate the same email account after ending this browser session.
+    await p.request.post(`${BASE}/api/auth/sign-out`, { headers: { origin: BASE } });
     await loginViaEmail(p, BASE, sink, email);
     // The page chrome names the account by HANDLE, not by address, so being signed in is asked of the session endpoint.
     check(await isSignedInAs(p, email), 'logging in with an emailed code signs you in');

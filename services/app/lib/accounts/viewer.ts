@@ -4,6 +4,7 @@
  * without dragging account authentication into every test and client bundle that touches
  * artifact SQL. This is the only non-route file that imports @/auth.
  */
+import { pagesRequestOf } from '../serving/pages-origin';
 import { currentRequest } from '../platform/request-context';
 import { actorOf } from '@artifactbin/utils';
 import { mergeGuestUsers } from './guest-owner';
@@ -91,7 +92,14 @@ export function isBrowserSessionRequest(request: Request): boolean {
 async function proxyActor(request: Request | undefined): Promise<RequestActor | null> {
   const attached = attachedActor(request);
   if (attached) {
-    if (attached.credential === 'agent-cookie') return NO_ACTOR;
+    if (attached.credential === 'agent-cookie') {
+      // Only the pages host creates token-backed browser cookies. Its WeakMap
+      // mark cannot be supplied by a client; retain the cookie CSRF guard.
+      const carrying = request ?? currentRequest();
+      const token = attached.tokenId ? await resolveTokenById(attached.tokenId) : null;
+      if (!carrying || !pagesRequestOf(carrying) || !token || token.userId !== attached.viewer?.userId
+        || !await canAuthenticateUser(token.userId)) return NO_ACTOR;
+    }
     if (attached.credential === 'bearer' && !await canAuthenticateUser(attached.viewer?.userId)) return NO_ACTOR;
     if ((request ?? currentRequest())?.headers.get(BROWSER_SESSION_HEADER) === '1') {
       const token = attached.tokenId ? await resolveTokenById(attached.tokenId) : null;
