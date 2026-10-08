@@ -35,6 +35,8 @@ const EXCEPTIONS = new Set([
   '/api/artifacts/reservations', // CLI identity-pool allocation, not an artifact operation
   '/api/artifacts/preflight', // read-only validation of the actual publication body
   '/api/artifacts/{id}/content', // immutable binary content download; no document rendering or imports
+  '/api/artifacts/{id}/datasets/{datasetId}/files', // raw-byte CLI attachment upload; headers carry edit/idempotency identity, not a JSON operation
+  '/api/artifacts/{id}/datasets/{datasetId}/files/{fileId}', // scoped binary attachment download; receipt metadata comes from the upload
   '/api/artifacts/{id}/comment-images/{imageId}', // binary attachment download; metadata is inlined on annotation reads
   '/api/artifacts/{id}/annotations', // the list view — the primary read is get_artifact, which inlines the open set
 ]);

@@ -1,7 +1,7 @@
 /** Shared page signal bindings: browser author modules and headless Lambda programs use one store contract. */
 import { batch, createRoot, createSignal, untrack, type Accessor } from 'solid-js';
 import type { DataflowStore } from './store';
-import { uploadDatasetImage } from './image-upload';
+import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/story/data/dataflow';
 
 /** A Value's setter, Solid's shape: a value, or a function of the current one. Returns what it wrote. */
@@ -22,6 +22,8 @@ export interface PageBindings {
   query(ref: string): QueryAccessor;
   /** `mutation('$rename')`: a declared Mutation. Throws on any other name. */
   mutation(ref: string): MutationFn;
+  upload(importName:string,file:File):Promise<DatasetUploadResult>;
+  fileUrl(importName:string,ref:unknown):string;
   uploadImage(importName:string,file:File):Promise<{ref:string;url:string}>;
   imageUrl(importName:string,ref:unknown):string;
   /** A Value's or Query's current value as a TRACKED read (a mounted component's `$name` prop), or undefined. */
@@ -46,6 +48,8 @@ const NONE: PageBindings = {
   signal: (ref) => { throw wrongName('signal', ref, 'Value'); },
   query: (ref) => { throw wrongName('query', ref, 'Query'); },
   mutation: (ref) => { throw wrongName('mutation', ref, 'Mutation'); },
+  upload: () => Promise.reject(new Error('page.upload is unavailable')),
+  fileUrl: () => '',
   uploadImage: () => Promise.reject(new Error('page.uploadImage is unavailable')),
   imageUrl: () => '',
   read: () => undefined, has: () => null, dispose: () => {},
@@ -149,18 +153,29 @@ export function bindPage(store: DataflowStore | null): PageBindings {
         if (!fn) throw wrongName('mutation', ref, 'Mutation');
         return fn;
       },
+      upload(importName,file) {
+        if(typeof document==='undefined')return Promise.reject(new Error('page.upload requires a browser page'));
+        const found=store.flow.imports.find(item=>item.name===bareName(importName));
+        if(!found)return Promise.reject(new Error(`page.upload(${JSON.stringify(importName)}) names no declared dataset import`));
+        // File bytes are an optional browser interaction; keep their transport out of reader readiness.
+        return import('./file-upload').then(({ uploadDatasetFile }) => uploadDatasetFile(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file));
+      },
+      fileUrl(importName,ref) {
+        const found=store.flow.imports.find(item=>item.name===bareName(importName));
+        const match=typeof ref==='string'?/^(dimg|dfile):([a-z0-9]+)$/.exec(ref):null;
+        if(!found||!match)return '';
+        const docId=typeof document==='undefined'?'':document.body.getAttribute('data-mx-live-id')??'';
+        if(!docId)return '';
+        return `${globalThis.location?.origin??''}/a/${encodeURIComponent(docId)}/datasets/${encodeURIComponent(found.ref.replace(/^ref:/,''))}/${match[1]==='dimg'?'images':'files'}/${encodeURIComponent(match[2]!)}`;
+      },
       uploadImage(importName,file) {
         if(typeof document==='undefined')return Promise.reject(new Error('page.uploadImage requires a browser page'));
         const found=store.flow.imports.find(item=>item.name===bareName(importName));
         if(!found)return Promise.reject(new Error(`page.uploadImage(${JSON.stringify(importName)}) names no declared dataset import`));
-        return uploadDatasetImage(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file);
+        return import('./image-upload').then(({ uploadDatasetImage }) => uploadDatasetImage(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file));
       },
       imageUrl(importName,ref) {
-        const found=store.flow.imports.find(item=>item.name===bareName(importName));
-        const match=typeof ref==='string'?/^dimg:([a-z0-9]+)$/.exec(ref):null;
-        if(!found||!match)return '';
-        const docId=typeof document==='undefined'?'':document.body.getAttribute('data-mx-live-id')??'';
-        return `${globalThis.location?.origin??''}/a/${encodeURIComponent(docId)}/datasets/${encodeURIComponent(found.ref.replace(/^ref:/,''))}/images/${encodeURIComponent(match[1]!)}`;
+        return typeof ref==='string'&&/^dimg:[a-z0-9]+$/.test(ref)?bindings.fileUrl(importName,ref):'';
       },
       read(name) {
         const value = values.get(name);

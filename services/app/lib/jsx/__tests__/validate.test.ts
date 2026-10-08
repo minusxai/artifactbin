@@ -318,3 +318,14 @@ describe('validateJsx - positioned Grid placement', () => {
     expect(grid(' mode="flow"', '<GridItem w={6}><p>a</p></GridItem><GridItem w={6}><p>b</p></GridItem>')).toEqual([]);
   });
 });
+
+
+describe('FileUpload markup contract', () => {
+  const options = { components: [...JSX_STORY_COMPONENT_NAMES] };
+  it('accepts declared binding spellings and a literal dataset import name', () => {
+    expect(errors('<FileUpload dataset="attachments" value="$refs" busy="$uploading" multiple maxFiles={5} accept="image/png" />', options)).toEqual([]);
+  });
+  it.each(['dataset="$attachments" value="$refs"', 'dataset="attachments" value="ref:abc123"', 'dataset="attachments" value="$refs" busy={true}', 'dataset="attachments" value="$refs" maxFiles={0}'])('rejects invalid upload contract %s', attrs => {
+    expect(errors(`<FileUpload ${attrs} />`, options).some(e => e.tag === 'FileUpload')).toBe(true);
+  });
+});

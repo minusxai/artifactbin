@@ -22,6 +22,7 @@ import { reviewStateFor, type ReviewStateRegistration } from '@/lib/story-runtim
 import { batch, getOwner, onCleanup, untrack, type JSX } from 'solid-js';
 import { createComponent, render } from 'solid-js/web';
 import type { DataflowStore } from '@/lib/story-runtime/store';
+import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/story/data/dataflow';
 import { bindPage, type PageBindings, type MutationFn } from '@/lib/story-runtime/page-bindings';
 export { bindPage, type PageBindings, type MutationFn, type QueryAccessor, type ValueSetter } from '@/lib/story-runtime/page-bindings';
@@ -42,6 +43,8 @@ export interface PublicPage {
   set(name: string, value: Scalar): void;
   ready(name: string): Promise<Row[]>;
   mutation(name: string): MutationFn | undefined;
+  upload(importName:string,file:File):Promise<DatasetUploadResult>;
+  fileUrl(importName:string,ref:unknown):string;
   uploadImage(importName:string,file:File):Promise<{ref:string;url:string}>;
   imageUrl(importName:string,ref:unknown):string;
 }
@@ -58,6 +61,8 @@ export function exposePage(win: Window, store: DataflowStore): () => void {
     set: (name: string, value: Scalar) => { bindings.signal(`$${bareName(name)}`)[1](value); },
     ready: (name: string) => bindings.query(`$${bareName(name)}`).ready,
     mutation: (name: string) => (bindings.has(bareName(name)) === 'mutation' ? bindings.mutation(`$${bareName(name)}`) : undefined),
+    upload: bindings.upload,
+    fileUrl: bindings.fileUrl,
     uploadImage: bindings.uploadImage,
     imageUrl: bindings.imageUrl,
   });

@@ -51,6 +51,15 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('compiles FileUpload as a separate island family', async () => {
+    const input = await inputOf('<Helmet><Import name="attachments" src="ref:SALES1" /><Value name="refs" type="string" default="[]" url={false}/><Value name="uploading" type="boolean" default={false} url={false}/></Helmet><FileUpload dataset="attachments" value="$refs" busy="$uploading" multiple label="Screenshots" maxFiles={5} />');
+    const page = await compilePage(input, loadCompilerBuild());
+    expect(page.module!.specifiers).toContain('@mx/kit/upload');
+    expect(page.readsViewerMarkup).toBe(true);
+    expect(page.unported).toEqual([]);
+    expect(dom(page.html).querySelector('[role="status"]')?.textContent).toBe('Preparing uploads…');
+  });
+
   it('compiles an 11 MB static run inside an island within a bounded time', async () => {
     const text = 'abcdefghijklmnopqrstuvwxyz0123456789'.repeat(300);
     const rows = Array.from({ length: 1_100 }, (_, i) => `<p id="row-${i}">Static row ${i} ${text}</p>`).join('');

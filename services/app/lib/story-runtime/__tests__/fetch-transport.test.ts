@@ -8,6 +8,7 @@ import {createAuthenticatedTransport} from '../authenticated-transport';
 import { describe, expect, it, vi } from 'vitest';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
+import { uploadDatasetFile } from '@/lib/story-runtime/file-upload';
 import { uploadDatasetImage } from '@/lib/story-runtime/image-upload';
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -138,6 +139,26 @@ describe('createFetchTransport', () => {
       ['/a/abc123/query', 'POST', 'same-origin'], ['/a/abc123/mutate', 'POST', 'same-origin'],
     ]);
     expect(JSON.parse(String(calls[0]![1].body))).toMatchObject({ values: { region: 'EU' }, only: ['sales'] });
+  });
+
+  it('preserves a generic upload key and encoded filename when recovering an incomplete receipt', async () => {
+    const receipt={ref:'dfile:abc234def456',url:'/a/abc123/datasets/data12/files/abc234def456',name:'résumé #1.txt',contentType:'text/plain',size:5};
+    const f=vi.fn().mockResolvedValueOnce(Response.json({ref:receipt.ref})).mockResolvedValueOnce(Response.json(receipt));
+    const context=createFetchTransport('/a/abc123/query',f,undefined,{session:true,credentials:'include'}).image;
+    const file=new File(['hello'],receipt.name,{type:'text/plain'});
+    await expect(uploadDatasetFile(context,'data12','edit-key',file)).rejects.toThrow(/incomplete/);
+    await expect(uploadDatasetFile(context,'data12','edit-key',file)).resolves.toEqual(receipt);
+    const first=f.mock.calls[0] as [string,RequestInit],second=f.mock.calls[1] as [string,RequestInit];
+    expect(first[0]).toBe('/a/abc123/datasets/data12/files');
+    expect(first[1].headers).toMatchObject({'X-Filename':encodeURIComponent(receipt.name),'X-Edit-Id':'edit-key'});
+    expect((first[1].headers as Record<string,string>)['Idempotency-Key']).toBe((second[1].headers as Record<string,string>)['Idempotency-Key']);
+    expect(first[1].body).toBe(file);
+    expect(first[1].credentials).toBe('include');
+  });
+
+  it.each([{size:0.5},{url:''},{name:''},{contentType:''}])('rejects malformed attachment metadata %j',async invalid=>{
+    const context=createFetchTransport('/a/abc123/query',vi.fn(async()=>Response.json({ref:'dfile:abc234def456',url:'/a/abc123/datasets/data12/files/abc234def456',name:'note.txt',contentType:'text/plain',size:5,...invalid})),undefined,{session:true}).image;
+    await expect(uploadDatasetFile(context,'data12','edit-key',new File(['hello'],'note.txt',{type:'text/plain'}))).rejects.toThrow(/incomplete/);
   });
 
   it('uploads files only through the signed-in dataset door and reuses a file key on retry',async()=>{

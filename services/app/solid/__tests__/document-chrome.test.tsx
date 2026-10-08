@@ -11,6 +11,7 @@ import { waitFor, within } from '@testing-library/dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import type { ArtifactLiveEvent } from '@/lib/story/realtime/live';
+import type { FramedStory } from '../document/create-framed-story';
 
 let mockRole = 'commenter';
 let mockKind = 'account';
@@ -20,6 +21,21 @@ let served: HTMLElement | null = null;
 let mockCsp: Record<string, unknown> | undefined;
 let mockTemplate: string | null = null;
 let mockLive = () => null as ArtifactLiveEvent | null;
+let mockSelectionBridge = false;
+const selectionSend = vi.fn();
+let selectionReceive: ((data: unknown) => void) | undefined;
+vi.mock('../document/create-framed-story', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../document/create-framed-story')>();
+  return { ...actual, createFramedStory: (...args: Parameters<typeof actual.createFramedStory>) => {
+    if (!mockSelectionBridge) return actual.createFramedStory(...args);
+    return {
+      frame: args[0].framed.frame, nonce: () => 'guest-selection-nonce', setTopInset: () => {},
+      controller: () => ({ send: selectionSend, subscribe: (receive: (data: unknown) => void) => {
+        selectionReceive = receive; return () => {};
+      } }),
+    } as unknown as FramedStory;
+  } };
+});
 vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => mockLive() }));
 vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
@@ -41,6 +57,9 @@ beforeEach(() => {
   mockCsp = undefined;
   mockTemplate = null;
   mockLive = () => null;
+  mockSelectionBridge = false;
+  selectionSend.mockClear();
+  selectionReceive = undefined;
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
@@ -368,6 +387,23 @@ it('still offers login to a guest asking to comment', () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
   expect(loginHref).toHaveBeenCalledWith(window.location, 'comment');
+});
+
+it('offers the framed comment action to a guest and sends it through sign-in', () => {
+  mockKind = 'anon'; mockRole = 'viewer'; mockSelectionBridge = true;
+  mount();
+  expect(selectionSend).toHaveBeenCalledWith({ type: 'mx:selection-actions', edit: false, annotate: true });
+  selectionReceive?.({ type: 'mx:selection-action', nonce: 'guest-selection-nonce', action: 'annotate',
+    selection: { kind: 'text', path: '0', nodeId: 'n1', tag: 'p', rect: { x: 0, y: 0, width: 1, height: 1 }, className: '', style: '', ancestors: [] } });
+  expect(loginHref).toHaveBeenCalledWith(window.location, 'comment');
+  expect(document.querySelector('[aria-label="Annotation composer"]')).toBeNull();
+});
+
+it.each(['viewer', 'archived guest'])('does not grant a framed comment action to a %s', (kind) => {
+  mockRole = 'viewer'; mockSelectionBridge = true;
+  if (kind === 'archived guest') { mockKind = 'anon'; mockArchived = { version: 1, head: 2 }; }
+  mount();
+  expect(selectionSend).toHaveBeenCalledWith({ type: 'mx:selection-actions', edit: false, annotate: false });
 });
 
 it('a viewer asking for #edit reads the document', () => {

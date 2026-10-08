@@ -38,6 +38,11 @@ export class HttpClient {
  async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={},options:{timeoutMs?:number;readOnly?:boolean;signal?:AbortSignal}={}):Promise<T>{
   return this.perform(path,method,body,headers,false,options.timeoutMs,options.readOnly,apiUrl,options.signal) as Promise<T>;
  }
+ /** Raw bytes stay behind the authenticated API transport; one key covers every retry. */
+ async upload<T=Record<string,unknown>>(path:string,bytes:Uint8Array,headers:Record<string,string>):Promise<T>{
+  if(!headers['Idempotency-Key'])throw new CliError('invalid_arguments','Uploads require an idempotency key.');
+  return this.perform(path,'POST',bytes,headers,false,30000,false,apiUrl,undefined,true) as Promise<T>;
+ }
  async content(path:string,method='GET',body?:unknown):Promise<{bytes:Buffer;contentType:string}>{
   return this.perform(path,method,body,{},true) as Promise<{bytes:Buffer;contentType:string}>;
  }
@@ -49,7 +54,7 @@ export class HttpClient {
  async view(path:string,timeoutMs=60000):Promise<{bytes:Buffer;contentType:string}>{
   return this.perform(path,'GET',undefined,{},true,timeoutMs,true,viewerUrl) as Promise<{bytes:Buffer;contentType:string}>;
  }
- private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl,signal?:AbortSignal):Promise<unknown>{
+ private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl,signal?:AbortSignal,raw=false):Promise<unknown>{
   const url=address(path,this.connection.server);
   const remote=remoteContext(this.options.env);
   if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight'&&!(/^\/api\/artifacts\/[A-Za-z0-9]{6}\/prepare$/.test(url.pathname)&&method==='POST'&&(body as {dryRun?:boolean})?.dryRun===true)&&!isForkPreflight(url.pathname,method,body))throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
@@ -61,10 +66,11 @@ export class HttpClient {
     ...(imageExport?{'X-Artifactbin-Export-Delivery':'redirect'}:{}),
     ...(remote&&/\/annotations\/[^/]+$/.test(url.pathname)?{'X-Artifactbin-Remote-Session':remote.id,'X-Artifactbin-Remote-Proof':remote.proof}:{}),
     ...headers,Authorization:`Bearer ${this.connection.token}`,'X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION),'User-Agent':`afbin/${CLI_VERSION}`,
-    ...(body!==undefined?{'Content-Type':'application/json'}:{}),...(this.account?{'X-Artifactbin-Account':this.account}:{}),
+    ...(body!==undefined&&!raw?{'Content-Type':'application/json'}:{}),...(this.account?{'X-Artifactbin-Account':this.account}:{}),
     ...(this.options.readOnly?{'X-Artifactbin-Dry-Run':'1'}:{}),
-   },...(body!==undefined?{body:JSON.stringify(body)}:{})});}
+   },...(body!==undefined?{body:raw?body as Uint8Array<ArrayBuffer>:JSON.stringify(body)}:{})});}
    catch(error){
+    if(raw&&attempt<2&&!signal?.aborted)continue;
     if(signal?.aborted)throw new CliError('cancelled','The request was cancelled.');
     if(readOnly||['GET','HEAD','DELETE'].includes(method))throw transportFailure(this.connection.server,error);
     throw new CliError('outcome_unknown',`The ${method} request to ${this.connection.server} did not return a confirmed response (${transportFailure(this.connection.server,error).message}).`);
@@ -86,6 +92,7 @@ export class HttpClient {
     try{response=await(this.options.fetch??fetch)(asset.toString(),{method:'GET',redirect:'error',credentials:'omit',signal:AbortSignal.timeout(timeoutMs)});}
     catch{throw new CliError('transport_error','The exported image could not be downloaded.');}
    }
+   if(raw&&[408,429,500,502,503,504].includes(response.status)&&attempt<2)continue;
    if(response.status===401){
     if(!this.options.readOnly&&!refreshed&&this.connection.refreshToken&&this.connection.clientId){
      refreshed=true;try{await this.refresh();continue;}catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;}

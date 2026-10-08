@@ -109,6 +109,17 @@ describe('the scripts reference teaches the in-document module', () => {
     expect(flat).not.toContain('`fetch` reaches HTTPS URLs');
   });
 
+  it('points new attachments at the unified upload API and marks the image API as compatibility-only', () => {
+    const uploads = renderDoc('artifactbin/references/markup-upload.md', BASE)!;
+    const legacy = renderDoc('artifactbin/references/dataset-images.md', BASE)!;
+    expect(uploads).toContain('<FileUpload');
+    expect(uploads).toContain('page.upload');
+    expect(uploads).toContain('page.fileUrl');
+    expect(uploads).toMatch(/does not delete the uploaded object/i);
+    expect(legacy).toMatch(/deprecated compatibility exports/i);
+    expect(legacy).toContain('markup-upload.md');
+  });
+
   it('teaches no part of the retired Preact contract', () => {
     expect(scripts).not.toMatch(/preact|@preact\/signals|\.value\b|\beffect\(|useState|from 'react'/i);
   });

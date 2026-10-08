@@ -15,7 +15,7 @@ import { RECIPES as filesRecipes } from '../kit/recipes/files';
 import { RECIPES as mermaidRecipes } from '../kit/recipes/mermaid';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
-import { Input, Textarea, Segmented, Slider, Switch, DatePicker, BoundNative } from '../kit/controls';
+import { Input, Textarea, Segmented, Slider, Switch, DatePicker, BoundNative, loadDatePickerPopup } from '../kit/controls';
 import { User, UserImage, UserHandle, SignIn } from '../kit/people';
 import { Files } from '../kit/files';
 import { Mermaid } from '../kit/mermaid';
@@ -24,8 +24,20 @@ import { Select, loadSelectPopup } from '../kit/select';
 const mount = (island = fakeIsland(), view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={island}>{view()}</IslandProvider>, host); return { host, dispose }; };
 
 describe('controls', () => {
+  it('loads the calendar only after opening while preserving its trigger',async()=>{
+    const {host,dispose}=mount(fakeIsland({when:'2026-09-28'}),()=> <DatePicker label="When" value="$when"/>);
+    try {
+      const trigger=host.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!;
+      expect(trigger.textContent).toBe('2026-09-28');
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      trigger.click();
+      expect(host.textContent).toContain('Loading calendar…');
+      await vi.waitFor(()=>expect(document.querySelector('[aria-label="2026-09-29"]')).toBeTruthy());
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    } finally {dispose();}
+  });
   it('keeps picker popups inside their owning open native dialog', async () => {
-    await loadSelectPopup();
+    await Promise.all([loadSelectPopup(),loadDatePickerPopup()]);
     const island = fakeIsland({ person: '', when: '2026-09-28' });
     island.setValue = vi.fn();
     const { host, dispose } = mount(island, () => <dialog open aria-label="Feedback">
@@ -113,7 +125,8 @@ describe('controls', () => {
     dispose();
   });
 
-  it('DatePicker opens a calendar', () => {
+  it('DatePicker opens a calendar', async () => {
+    await loadDatePickerPopup();
     const island = fakeIsland({ when: '2026-09-28' }); island.setValue = vi.fn();
     const { host, dispose } = mount(island, () => <DatePicker label="When" value="$when" />);
     (host.querySelector('[aria-haspopup="dialog"]') as HTMLButtonElement).click();
@@ -123,7 +136,8 @@ describe('controls', () => {
     dispose();
   });
 
-  it('DatePicker closes on an outside pointer and Escape', () => {
+  it('DatePicker closes on an outside pointer and Escape', async () => {
+    await loadDatePickerPopup();
     const { host, dispose } = mount(fakeIsland({ when: '2026-09-28' }), () => <DatePicker label="When" value="$when" />);
     document.body.append(host);
     try {
@@ -139,6 +153,24 @@ describe('controls', () => {
     } finally { dispose(); host.remove(); }
   });
 
+  it('DatePicker keeps month navigation, date bounds and Today choice',async()=>{
+    await loadDatePickerPopup();
+    vi.useFakeTimers();vi.setSystemTime(new Date('2026-09-28T12:00:00'));
+    const island=fakeIsland({when:'2026-09-28'});island.setValue=vi.fn();
+    const {host,dispose}=mount(island,()=> <DatePicker label="When" value="$when" min="2026-09-27" max="2026-10-02"/>);
+    try {
+      host.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!.click();
+      expect(document.querySelector<HTMLButtonElement>('[aria-label="2026-09-26"]')!.disabled).toBe(true);
+      document.querySelector<HTMLButtonElement>('[aria-label="Next month"]')!.click();
+      expect(document.querySelector('[role="dialog"]')!.textContent).toContain('October 2026');
+      expect(document.querySelector<HTMLButtonElement>('[aria-label="2026-10-03"]')!.disabled).toBe(true);
+      expect(document.querySelector<HTMLButtonElement>('[aria-label="2026-10-02"]')!.disabled).toBe(false);
+      document.querySelector<HTMLButtonElement>('[aria-label="Previous month"]')!.click();
+      expect(document.querySelector('[role="dialog"]')!.textContent).toContain('September 2026');
+      const today=Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(button=>button.textContent==='Today')!;
+      today.click();expect(island.setValue).toHaveBeenCalledWith('when','2026-09-28',undefined);
+    } finally {dispose();vi.useRealTimers();}
+  });
   it('a $-bound native field reads and writes the value', () => {
     const island = fakeIsland({ region: 'West' });
     island.setValue = vi.fn();

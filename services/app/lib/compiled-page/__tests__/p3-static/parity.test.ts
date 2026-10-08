@@ -10,6 +10,24 @@ import { JSDOM } from 'jsdom';
 import { applyCurrentLayoutContracts } from '@/lib/islands/__tests__/kit-parity';
 
 const baseline = JSON.parse(readFileSync(new URL('./react-html.json', import.meta.url), 'utf8')) as Record<string, string>;
+// FileUpload was introduced after the React reader retired. Its reviewed Solid SSR contract
+// supplements the frozen React corpus; every historical component remains compared to that capture.
+const uploadBaseline = JSON.parse(readFileSync(new URL('./upload-html.json', import.meta.url), 'utf8')) as Record<string, string>;
+function expectedHtml(key: string): string {
+  if (key === 'file-upload') return uploadBaseline[key]!;
+  const html = applyCurrentLayoutContracts(baseline[key]!);
+  if (key !== 'kitchen-sink') return html;
+  const root = new JSDOM(`<main>${html}</main>`).window.document.querySelector('main')!;
+  const switchShell = root.querySelector('[role="switch"][aria-label="Compare"]')?.closest('.mx-control');
+  if (!switchShell) throw new Error('kitchen-sink capture lost the Compare control anchor');
+  switchShell.insertAdjacentHTML('afterend', '\n    ' + uploadBaseline['kitchen-sink-upload']!);
+  // Adding a kit island changes the fixture's serialized literal table, not historical DOM.
+  const literals = [...root.querySelectorAll('script')].find(node => node.textContent?.startsWith('{"moduleData"'));
+  if (!literals) throw new Error('kitchen-sink capture lost its literal table');
+  literals.textContent = uploadBaseline['kitchen-sink-literals']!;
+  return root.innerHTML;
+}
+
 
 // One-tree SSR retains closed panels and portal homes; compare the React capture's visible surface.
 const visibleHtml = (html: string): string => {
@@ -57,7 +75,7 @@ describe('Solid static render parity', () => {
       const input = await inputOf(doc);
       const page = await compilePage(input, build);
       const generated = generate({ ...input, glyphCatalogUrl: build.manifest['@mx/glyphs'] });
-      const expected = applyCurrentLayoutContracts(baseline[doc.key]!);
+      const expected = expectedHtml(doc.key);
       const parsed = parsedDomDiffs(visibleHtml(expected), visibleHtml(page.html));
       reports.push({ key: doc.key, dom: parsed.dom, hydrationKeys: parsed.hydrationKeys, generatedIds: parsed.generatedIds,
         contentDom: parsed.dom.filter((diff) => !parsed.hydrationKeys.includes(diff) && !parsed.generatedIds.includes(diff)),
@@ -71,6 +89,6 @@ describe('Solid static render parity', () => {
     }
     expect(reports.flatMap((report) => report.contentDom.map((diff) => `${report.key}: ${diff}`))).toEqual([]);
     // The deleted per-island shell assigned hydration prefixes and rail IDs that the one-tree renderer cannot preserve.
-    expect(reports).toHaveLength(34);
+    expect(reports).toHaveLength(35);
   }, 300_000);
 });

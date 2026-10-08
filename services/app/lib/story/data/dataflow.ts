@@ -309,6 +309,7 @@ export const REF_ATTRS: {
     // else, and Enter reaching a `run=` form is the browser's own implicit
     // submission through the real `<input>` inside — not a binding of its own.
     Input: { value: 'scalar' },
+    FileUpload: { value: 'scalar', busy: 'scalar' },
     Textarea: { value: 'scalar' },
     Select: { value: 'scalar', options: 'table', run: 'mutation' },
     Slider: { value: 'scalar' },
@@ -662,6 +663,10 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
       if (n.type !== 'element') continue;
       if (n.control && n.control.kind !== 'fragment') expressionUses(n.control.test, n, 'condition', 'test');
       const scriptComponent = n.isComponent && !REGISTERED_COMPONENT_NAMES.has(n.tag);
+      if (n.tag === 'FileUpload') {
+        const dataset = n.attributes.find(a => a.name === 'dataset');
+        if (dataset?.value.static && typeof dataset.value.json === 'string') out.push({name: dataset.value.json, tag:n.tag, attr:'dataset', expects:'any', readOnly:true, start:dataset.start, end:dataset.end});
+      }
       for (const a of n.attributes) if (!a.value.static) {
         if(n.tag === 'For' && a.name === 'each' && a.value.reactive?.kind === 'signal') out.push({name:a.value.reactive.name,tag:n.tag,attr:a.name,expects:'table',start:a.start,end:a.end});
         // A script component's prop binds the declared signal, whatever its kind; the runtime hands it over as one.
@@ -747,6 +752,14 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
       continue;
     }
     const kind = kinds.get(u.name);
+    if (u.tag === 'FileUpload' && kind) {
+      if (u.attr === 'dataset' && kind !== 'import') errors.push(err('FileUpload dataset must name a declared Import', u, u.tag, u.attr));
+      if (u.attr === 'value' || u.attr === 'busy') {
+        const expectedType = u.attr === 'busy' ? 'boolean' : 'string';
+        const value = flow.values.find(v => v.name === u.name);
+        if (value?.kind === 'scalar' && value.type !== expectedType) errors.push(err(`FileUpload ${u.attr} requires a ${expectedType} Value`, u, u.tag, u.attr));
+      }
+    }
     if (!kind) {
       errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> refers to nothing declared${u.expects === 'mutation' ? ' — declare it in <Helmet> as <Mutation name="…">{`insert into <import>.rows …`}</Mutation>' : hint}`, u, u.tag, u.attr));
     } else if (u.expects !== 'any' && kind !== u.expects) {
