@@ -6,11 +6,12 @@ import { replaceComment } from './comment-input';
  * both are discarded the moment the thing they describe changes: a different durable node at the
  * same path, a widened target, a removed id. A caret comment carries no quote and is still a comment.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import { fireEvent } from '../../__tests__/helpers';
 import { fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
+import { preloadCommentField } from '../LazyCommentField';
 
 beforeEach(installAnnotationFetch);
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -20,6 +21,7 @@ const selects = (send: ReturnType<typeof vi.fn>) => send.mock.calls.map((c) => c
 const TEXT = (over: Partial<StoryEditSelection> = {}): StoryEditSelection => ({ kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [], ...over } as StoryEditSelection);
 
 describe('the annotation composer', () => {
+  beforeAll(() => preloadCommentField());
   const online = { id: '11111111-1111-1111-1111-111111111111', name: 'review', online: true, managed: true, exitCode: null, activity: 'listening' };
   const openComposer = () => layer({ initialSelection: TEXT() });
 
