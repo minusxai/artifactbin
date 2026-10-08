@@ -2,6 +2,7 @@ import {State,HOME_SCOPE} from './state';
 import {basename,isAbsolute} from 'node:path';
 import {CliError} from './errors';
 import {randomUUID} from 'node:crypto';
+import {REMOTE_NAME} from '../../contracts/src/remote';
 
 export interface ClaudeConversationPlan {args:string[];sessionId?:string}
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30,22 +31,22 @@ export function planClaudeConversation(args:readonly string[],newId:string,resum
  return hasClaudeSessionSelector(args)||!safeClaudeConversationArgs(args)?{args:[...args]}:{args:[...args,'--session-id',newId],sessionId:newId};
 }
 
-export interface ClaudeConversationRecord {sessionId:string;command:string;args:string[];cwd:string;claudeConfigDir:string;claudeConfigDirExplicit?:boolean}
+export interface ClaudeConversationRecord {sessionId:string;command:string;args:string[];cwd:string;claudeConfigDir:string;claudeConfigDirExplicit?:boolean;name?:string}
 export interface ClaudeConversationReservation {key:string;token:string}
 const RESERVATION_TTL_MS=60_000;
 export const claudeConversationKey=(server:string,relayId:string)=>`${server}/${relayId}`;
 export function saveClaudeConversation(state:State,server:string,relayId:string,value:ClaudeConversationRecord):void{
- if(!validClaudeSessionId(value.sessionId)||typeof value.cwd!=='string'||!isAbsolute(value.cwd)||typeof value.claudeConfigDir!=='string'||!isAbsolute(value.claudeConfigDir)||typeof value.claudeConfigDirExplicit!=='boolean'||!Array.isArray(value.args)||value.args.some(arg=>typeof arg!=='string')||typeof value.command!=='string'||basename(value.command).replace(/\.exe$/i,'')!=='claude')throw new Error('Invalid Claude conversation restart record.');
+ if(!validClaudeSessionId(value.sessionId)||typeof value.cwd!=='string'||!isAbsolute(value.cwd)||typeof value.claudeConfigDir!=='string'||!isAbsolute(value.claudeConfigDir)||typeof value.claudeConfigDirExplicit!=='boolean'||typeof value.name!=='string'||!REMOTE_NAME.test(value.name)||!Array.isArray(value.args)||value.args.some(arg=>typeof arg!=='string')||typeof value.command!=='string'||basename(value.command).replace(/\.exe$/i,'')!=='claude')throw new Error('Invalid Claude conversation restart record.');
  assertSafeClaudeConversationArgs(value.args);
- state.put(HOME_SCOPE,'claude-conversation',claudeConversationKey(server,relayId),{sessionId:value.sessionId,command:value.command,args:[...value.args],cwd:value.cwd,claudeConfigDir:value.claudeConfigDir,claudeConfigDirExplicit:value.claudeConfigDirExplicit} satisfies ClaudeConversationRecord);
+ state.put(HOME_SCOPE,'claude-conversation',claudeConversationKey(server,relayId),{sessionId:value.sessionId,command:value.command,args:[...value.args],cwd:value.cwd,claudeConfigDir:value.claudeConfigDir,claudeConfigDirExplicit:value.claudeConfigDirExplicit,name:value.name} satisfies ClaudeConversationRecord);
 }
 export function readClaudeConversation(state:State,server:string,relayId:string):ClaudeConversationRecord|null{
  const value=state.get<unknown>(HOME_SCOPE,'claude-conversation',claudeConversationKey(server,relayId))?.value;
  if(!value||typeof value!=='object'||Array.isArray(value))return null;
  const record=value as Partial<ClaudeConversationRecord>;
- if(!validClaudeSessionId(record.sessionId)||typeof record.command!=='string'||basename(record.command).replace(/\.exe$/i,'')!=='claude'||!Array.isArray(record.args)||record.args.some(arg=>typeof arg!=='string')||typeof record.cwd!=='string'||!isAbsolute(record.cwd)||typeof record.claudeConfigDir!=='string'||!isAbsolute(record.claudeConfigDir)||(record.claudeConfigDirExplicit!==undefined&&typeof record.claudeConfigDirExplicit!=='boolean'))return null;
+ if(!validClaudeSessionId(record.sessionId)||typeof record.command!=='string'||basename(record.command).replace(/\.exe$/i,'')!=='claude'||!Array.isArray(record.args)||record.args.some(arg=>typeof arg!=='string')||typeof record.cwd!=='string'||!isAbsolute(record.cwd)||typeof record.claudeConfigDir!=='string'||!isAbsolute(record.claudeConfigDir)||(record.claudeConfigDirExplicit!==undefined&&typeof record.claudeConfigDirExplicit!=='boolean')||(record.name!==undefined&&(typeof record.name!=='string'||!REMOTE_NAME.test(record.name))))return null;
  try{assertSafeClaudeConversationArgs(record.args);}catch{return null;}
- return {sessionId:record.sessionId,command:record.command,args:[...record.args],cwd:record.cwd,claudeConfigDir:record.claudeConfigDir,...(record.claudeConfigDirExplicit!==undefined?{claudeConfigDirExplicit:record.claudeConfigDirExplicit}:{})};
+ return {sessionId:record.sessionId,command:record.command,args:[...record.args],cwd:record.cwd,claudeConfigDir:record.claudeConfigDir,...(record.claudeConfigDirExplicit!==undefined?{claudeConfigDirExplicit:record.claudeConfigDirExplicit}:{}),...(record.name!==undefined?{name:record.name}:{})};
 }
 export function resumeClaudeConversation(state:State,server:string,relayId:string,newId:string):{command:string;args:string[];cwd:string;conversation:ClaudeConversationRecord;reservation:ClaudeConversationReservation}{
  const saved=readClaudeConversation(state,server,relayId);
@@ -66,7 +67,8 @@ export function resumeClaudeConversation(state:State,server:string,relayId:strin
   if(old&&typeof old.value.reservedAt==='number'&&Date.now()-old.value.reservedAt<RESERVATION_TTL_MS)throw new CliError('claude_session_running','That Claude conversation is already being restarted.','Wait for the existing resume launch to finish before trying again.');
   if(old)state.delete(HOME_SCOPE,'claude-conversation-reservation',reservationKey);
   const token=randomUUID();state.put(HOME_SCOPE,'claude-conversation-reservation',reservationKey,{token,reservedAt:Date.now()},{exclusive:true});
-  return {command:saved.command,args:plan.args,cwd:saved.cwd,conversation:{...saved,claudeConfigDirExplicit:saved.claudeConfigDirExplicit??true},reservation:{key:reservationKey,token}};
+  const fallbackName=`claude-${saved.sessionId.replaceAll('-','').slice(0,16).toLowerCase()}`;
+  return {command:saved.command,args:plan.args,cwd:saved.cwd,conversation:{...saved,claudeConfigDirExplicit:saved.claudeConfigDirExplicit??true,name:saved.name??fallbackName},reservation:{key:reservationKey,token}};
  });
 }
 export function releaseClaudeConversationReservation(state:State,reservation:ClaudeConversationReservation):void{

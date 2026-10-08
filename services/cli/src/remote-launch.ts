@@ -18,8 +18,9 @@ export interface RemoteWorkerInput extends Omit<RemoteLaunchOptions,'worker'|'ti
 /** Credentials travel only over the private startup pipe, never argv or a persisted launch file. */
 export async function launchRemote(options:RemoteLaunchOptions):Promise<RemoteLaunchReceipt>{
  if(process.platform==='win32')throw new CliError('unsupported_platform','Background remote agents currently support macOS and Linux. Use --foreground on Windows.');
- const name=options.name??basename(options.command).replace(/\.exe$/i,'').toLowerCase();
+ const name=options.name??options.conversation?.name??basename(options.command).replace(/\.exe$/i,'').toLowerCase();
  if(!REMOTE_NAME.test(name))throw new CliError('invalid_name','Use a lowercase agent name of 1–32 letters, digits, underscores or hyphens, starting with a letter.');
+ const conversation=options.conversation?{...options.conversation,name}:undefined;
  let history:string|undefined;
  if(options.history){
   const file=resolve(options.cwd,options.history),info=await stat(file);
@@ -47,6 +48,6 @@ export async function launchRemote(options:RemoteLaunchOptions):Promise<RemoteLa
   };
   const timer=setTimeout(()=>finish(new Error('Remote worker startup timed out.')),options.timeoutMs??15000);
   child.once('error',error=>finish(error));child.once('exit',exited);child.on('message',message);
-  child.send({connection:options.connection,command:options.command,args:options.args,name,history,cwd:options.cwd,home:options.home,...(options.conversation?{conversation:options.conversation}:{}),...(options.resumeReservation?{resumeReservation:options.resumeReservation}:{})} satisfies RemoteWorkerInput,error=>{if(error)finish(error);});
+  child.send({connection:options.connection,command:options.command,args:options.args,name,history,cwd:options.cwd,home:options.home,...(conversation?{conversation}:{}),...(options.resumeReservation?{resumeReservation:options.resumeReservation}:{})} satisfies RemoteWorkerInput,error=>{if(error)finish(error);});
  });
 }

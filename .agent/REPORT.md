@@ -1,7 +1,7 @@
-# Claude config environment report
+# Claude resume agent name report
 
-Managed Claude launches now preserve whether `CLAUDE_CONFIG_DIR` was supplied by the caller. Implicit config removes the variable from the child environment so Claude uses its native default authentication namespace; explicit config restores the resolved absolute path. New resumable records save this choice, validate it, and restore it on resume. Legacy records keep their prior explicit-path behavior and become explicit records when resumed.
+Root cause: `parseCommand` rejected every `remote --resume ... --name ...` invocation, even though dispatch already supports a launch name. In addition, resumable Claude records did not store the original remote agent name, so a resume silently returned to the default `claude` name and could collide with another active agent.
 
-TDD evidence: the seeded `npm test -- --files services/cli/test/config.test.ts` failed before implementation because `claudeConfigEnvironment` was not exported. After implementation, the focused config, conversation, and remote-launch tests passed (3 files, 39 tests). The launch test starts real worker processes and checks both unset implicit config and explicit custom config. Conversation tests cover new metadata, implicit and explicit resume behavior, legacy metadata, and malformed metadata.
+The parser now permits an explicit resume name. New conversation records save the effective name and normal resumes reuse it; explicit `--name` overrides are propagated into worker IPC and the updated record. Legacy records get a deterministic `claude-<first 16 UUID hex>` name. No remote session is removed or stopped automatically.
 
-Validation: `npm run validate` passed. No credentials or account state were touched. Release/version, full suites, gates, and deployment remain with the root orchestrator.
+TDD: the new `remote --resume ID --name claude2` test failed before the parser fix with `invalid_arguments`. After the full change, selected checks passed: `services/cli/test/claude-conversation.test.ts`, `services/cli/test/remote-launch.test.ts`, and `services/cli/test/help.test.ts` (64 tests); `npm run validate` passed. `npm run release:cli` bumped afbin from 0.4.47 to 0.4.48.
