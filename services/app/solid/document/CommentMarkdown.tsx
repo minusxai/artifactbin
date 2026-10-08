@@ -172,3 +172,8 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
     <Show when={!mention()&&canMention()}><p class="comment-mention-tip">Pro tip: Use <kbd>@</kbd> to tag <strong>friends or agents.</strong></p></Show>
   </div>;
 }
+
+/** Shared footer hint keeps new comments and replies visually consistent. */
+export function CommentSubmitHint(props: { action: 'comment' | 'reply' }): JSX.Element {
+  return <span class="mr-auto hidden items-center gap-1.5 font-sans text-[11px] text-muted sm:inline-flex" aria-label={`Keyboard shortcut to send ${props.action}`}><kbd class="rounded border border-edge bg-surface px-1.5 py-0.5 font-sans text-[10px]">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd><span aria-hidden="true">+</span><kbd class="rounded border border-edge bg-surface px-1.5 py-0.5 font-sans text-[10px]">Enter</kbd><span class="ml-1">to {props.action}</span></span>;
+}
