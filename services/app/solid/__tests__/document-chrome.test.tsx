@@ -13,6 +13,7 @@ import { createSignal } from 'solid-js';
 import type { ArtifactLiveEvent } from '@/lib/story/realtime/live';
 
 let mockRole = 'commenter';
+let mockKind = 'account';
 let mockTitle: string | null = 'A copy';
 let mockArchived: { version: number; head: number } | null = null;
 let served: HTMLElement | null = null;
@@ -20,7 +21,9 @@ let mockCsp: Record<string, unknown> | undefined;
 let mockTemplate: string | null = null;
 let mockLive = () => null as ArtifactLiveEvent | null;
 vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => mockLive() }));
-vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
+import { loginHref } from '@/lib/http/login-href';
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
 import { copyText } from '../lib/copy-text';
 vi.mock('@/web/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
@@ -31,6 +34,8 @@ import { DocumentPage } from '../pages/Document';
 
 beforeEach(() => {
   mockRole = 'commenter';
+  mockKind = 'account';
+  vi.mocked(loginHref).mockClear();
   mockTitle = 'A copy';
   mockArchived = null;
   mockCsp = undefined;
@@ -327,6 +332,42 @@ it('opens a carried fork intent after login and consumes the query parameter', (
   mount('/a/doc?intent=fork');
   expect(trusted().getByRole('dialog', { name: 'Fork this artifact?' })).toBeInTheDocument();
   expect(window.location.search).toBe('');
+});
+
+it('consumes a signed-in viewer comment intent without restarting login', () => {
+  mockRole = 'viewer';
+  mount('/a/doc?intent=comment');
+  expect(window.location.search).toBe('');
+  expect(loginHref).not.toHaveBeenCalled();
+  const notice = [...document.querySelectorAll('[data-trusted-ui]')].map(host => host.shadowRoot?.querySelector('[role="status"]')).find(Boolean);
+  expect(notice).toHaveTextContent('You have view-only access. Ask the owner for comment access.');
+  fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+  expect(loginHref).not.toHaveBeenCalled();
+  const noticeHost = notice!.getRootNode() as ShadowRoot;
+  fireEvent.click(within(noticeHost.querySelector<HTMLElement>('[data-trusted-ui-root]')!).getByRole('button', { name: 'Dismiss comment access notice' }));
+  expect(notice).not.toBeInTheDocument();
+});
+
+it('does not send a signed-in owner of an archived version back to login', () => {
+  mockRole = 'owner'; mockArchived = { version: 2, head: 3 };
+  mount('/a/doc?intent=comment');
+  expect(loginHref).not.toHaveBeenCalled();
+  const notice = [...document.querySelectorAll('[data-trusted-ui]')].map(host => host.shadowRoot?.querySelector('[role="status"]')).find(Boolean);
+  expect(notice).toHaveTextContent('Comments are unavailable on archived versions.');
+});
+
+it('opens a carried comment intent for an authorized commenter without login', () => {
+  mount('/a/doc?intent=comment');
+  expect(window.location.search).toBe('');
+  expect(loginHref).not.toHaveBeenCalled();
+  expect(trusted(1).getByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
+});
+
+it('still offers login to a guest asking to comment', () => {
+  mockKind = 'anon'; mockRole = 'viewer';
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+  expect(loginHref).toHaveBeenCalledWith(window.location, 'comment');
 });
 
 it('a viewer asking for #edit reads the document', () => {

@@ -105,6 +105,7 @@ export function DocumentPage(): JSX.Element {
   const [pwaEnabled, setPwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
   const [ready, setReady] = createSignal(false);
   const [railOpen, setRailOpen] = createSignal(false);
+  const [commentNotice, setCommentNotice] = createSignal<string | null>(null);
   const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
   const [liveAnnotations, setLiveAnnotations] = createSignal<AnnotationWire[] | null>(null);
   const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
@@ -262,7 +263,14 @@ export function DocumentPage(): JSX.Element {
   const act = (name: string) => {
     if (name === 'controls' || name === 'menu' || name === 'notifications') setPanel(name);
     else if (name === 'comment') {
-      if (!annotatable()) { window.location.assign(loginHref(window.location, 'comment')); return; }
+      if (!annotatable()) {
+        if (!accountSession()) window.location.assign(loginHref(window.location, 'comment'));
+        else setCommentNotice(archivedNow()
+          ? 'Comments are unavailable on archived versions.'
+          : 'You have view-only access. Ask the owner for comment access.');
+        return;
+      }
+      setCommentNotice(null);
       setRailOpen((open) => !open);
     } else if (name === 'fork') setFork(true);
     else if (name === 'share') { if (isOwner()) setSharingOpen(true); }
@@ -374,6 +382,14 @@ export function DocumentPage(): JSX.Element {
       <Show when={fork() && id}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Show>
     </TrustedUi>
     {/* The document's notice takes its own row above the frame (the frame shrinks), never over it. */}
+    <Show when={!!commentNotice() && frameSlot()}>{(slot) => (
+      <Portal mount={slot()}><TrustedUi>
+        <div class="flex items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3 text-sm">
+          <p role="status">{commentNotice()}</p>
+          <button type="button" aria-label="Dismiss comment access notice" class="shrink-0 cursor-pointer text-muted hover:text-fg" onClick={() => setCommentNotice(null)}>Dismiss</button>
+        </div>
+      </TrustedUi></Portal>
+    )}</Show>
     <Show when={page?.cspRequest?.status === 'blocked' && !editing() && frameSlot()}>{(slot) => (
       <Portal mount={slot()}><TrustedUi><CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} /></TrustedUi></Portal>
     )}</Show>
