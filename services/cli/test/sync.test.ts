@@ -20,6 +20,9 @@ import {parseDatasetPolicy} from '../../utils/src/dataset-policy';
 import {fork,type ChildProcess} from 'node:child_process';
 import {once} from 'node:events';
 import {cliHarness} from './harness';
+import {PGlite} from '@electric-sql/pglite';
+import {mintTestToken} from '@artifactbin/test-support';
+import {SCHEMA_STATEMENTS} from '../../app/lib/platform/schema';
 
 
 test('push recovers a lost create reply with frozen bytes, then publishes newer local edits without a GET',async()=>{
@@ -449,7 +452,17 @@ describe('surviving a server restart', () => {
    const call=async(message:Record<string,unknown>)=>{const response=once(child!,'message');child!.send(message);const [value]=await response;assert.equal(value.failure,undefined);return value;};
    const stop=async()=>{if(child&&child.exitCode===null&&child.signalCode===null){const exit=once(child,'exit');child.kill('SIGKILL');await exit;}};
    try{
-    await start();const {token}=await call({action:'mint'});const request={action:'create',token,key:'restart-operation-key-123'};
+    // The restart worker exercises real handlers, so its bearer must belong to
+    // an email account. Seed private state before any child opens this PGLite
+    // directory, and close the seeding connection before the crash/replay flow.
+    const db=new PGlite(join(root,'db'));let token:string;
+    try{
+     for(const statement of SCHEMA_STATEMENTS)await db.exec(statement);
+     const userId='mxmx_test_restart_account';
+     await db.query("INSERT INTO users (id,email,kind) VALUES ($1,$2,'account')",[userId,'mxmx_test_restart@example.test']);
+     token=await mintTestToken({id:'tok_restart_account',userId,query:async(sql,params)=>db.query(sql,params)});
+    }finally{await db.close();}
+    await start();const request={action:'create',token,key:'restart-operation-key-123'};
     const initial=await call(request);assert.equal(initial.status,201);await stop();await start();
     const replay=await call(request);assert.deepEqual(replay,initial);
     await call({action:'expire'});const expired=await call(request);assert.equal(expired.body.id,initial.body.id);assert.equal(expired.body.response_expired,true);
