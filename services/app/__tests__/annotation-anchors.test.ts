@@ -31,7 +31,7 @@ const harness = useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-const DOC = '<p>An intro paragraph here.</p><div>Revenue grew 40% in Q3.</div>';
+const DOC = '<p id="intro">An intro paragraph here.</p><div id="figure">Revenue grew 40% in Q3.</div>';
 
 interface AnnotationWire {
   id: string;
@@ -57,7 +57,7 @@ async function setup() {
   const browserActor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
   // Annotate the <div> — body path '1' (no Helmet in this fixture, so body == source).
   const made = await myCreateAnnotationRoute(
-    request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { path: '1', edit_id: doc.edit_id, body: 'check this figure' } }),
+    request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { node_id: 'figure', edit_id: doc.edit_id, body: 'check this figure' } }),
     params({ id: doc.id }),
   );
   expect(made.status, await made.clone().text()).toBe(201);
@@ -144,7 +144,7 @@ describe('the annotation anchor', () => {
     const { t, doc, browserActor, ann } = await setup();
     const h = await head(t.token, doc.id);
     const second = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { path: '1', edit_id: h.edit_id, body: 'also this' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { node_id: 'figure', edit_id: h.edit_id, body: 'also this' } }),
       params({ id: doc.id }),
     );
     expect(second.status, await second.clone().text()).toBe(201);
@@ -169,7 +169,7 @@ describe('the annotation anchor', () => {
   it('a prior comment does not stale the document head', async () => {
     const { t, doc, browserActor } = await setup();
     const res = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { path: '0', edit_id: doc.edit_id, body: 'x' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { node_id: 'intro', edit_id: doc.edit_id, body: 'x' } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(201);

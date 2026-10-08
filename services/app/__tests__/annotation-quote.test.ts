@@ -21,7 +21,7 @@ import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-const DOC = '<p>An intro paragraph here.</p><p><strong>Revenue grew</strong> 40% in Q3, ahead of plan.</p><p>Costs fell too.</p>';
+const DOC = '<p>An intro paragraph here.</p><p id="rev"><strong>Revenue grew</strong> 40% in Q3, ahead of plan.</p><p id="costs">Costs fell too.</p>';
 
 interface RangePart { rel: string; start: number; end: number; text: string }
 interface AnnotationRange { v: 1; parts: RangePart[] }
@@ -58,7 +58,7 @@ const list = async (token: string, id: string): Promise<Wire[]> => {
 };
 const comment = (w: Awaited<ReturnType<typeof setup>>, extra: Record<string, unknown>, editId = w.doc.edit_id) =>
   myCreateAnnotationRoute(
-    request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { path: '1', edit_id: editId, body: 'is this right?', ...extra } }),
+    request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { node_id: 'rev', edit_id: editId, body: 'is this right?', ...extra } }),
     params({ id: w.doc.id }),
   );
 
@@ -138,7 +138,7 @@ describe('a comment keeps its quote and range', () => {
 
     const {edit_id}=await head(w.t.token, w.doc.id);void edit_id;
     const plain = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { path: '2', edit_id, body: 'plain' } }),
+      request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { node_id: 'costs', edit_id, body: 'plain' } }),
       params({ id: w.doc.id }),
     );
     expect(plain.status, await plain.clone().text()).toBe(201);
@@ -174,7 +174,7 @@ describe('a comment keeps its quote and range', () => {
  */
 const RE_ANCHOR_DOC =
   '<p>An intro paragraph here.</p>'
-  + '<p>Lead in <strong>Revenue grew</strong> 40% in Q3.</p>'
+  + '<p id="lead">Lead in <strong>Revenue grew</strong> 40% in Q3.</p>'
   + '<p>Costs fell too.</p>';
 
 async function setupWith(markup: string) {
@@ -195,7 +195,7 @@ describe('resolving a range against the SOURCE', () => {
       request(`/api/my/artifacts/${w.doc.id}/annotations`, {
         method: 'POST', cookie: w.cookie,
         json: {
-          path: '1', edit_id: w.doc.edit_id, body: 'which quarter?',
+          node_id: 'lead', edit_id: w.doc.edit_id, body: 'which quarter?',
           quote: 'grew 40% in Q3. Costs fell too.',
           range: {
             v: 1,
@@ -222,7 +222,7 @@ describe('resolving a range against the SOURCE', () => {
       const one = await myCreateAnnotationRoute(
         request(`/api/my/artifacts/${w.doc.id}/annotations`, {
           method: 'POST', cookie: w.cookie,
-          json: { path: '1', edit_id, body: `only ${part.rel}`, quote: part.text, range: { v: 1, parts: [part] } },
+          json: { node_id: 'lead', edit_id, body: `only ${part.rel}`, quote: part.text, range: { v: 1, parts: [part] } },
         }),
         params({ id: w.doc.id }),
       );
@@ -232,12 +232,12 @@ describe('resolving a range against the SOURCE', () => {
   });
 
   it('reads a node the way the DOM does: the text either side of a tag joins with NOTHING', async () => {
-    const w = await setupWith('<p>Untouched.</p><p>Total<strong>42</strong>units sold.</p>');
+    const w = await setupWith('<p>Untouched.</p><p id="total">Total<strong>42</strong>units sold.</p>');
     const made = await myCreateAnnotationRoute(
       request(`/api/my/artifacts/${w.doc.id}/annotations`, {
         method: 'POST', cookie: w.cookie,
         json: {
-          path: '1', edit_id: w.doc.edit_id, body: 'is that right?',
+          node_id: 'total', edit_id: w.doc.edit_id, body: 'is that right?',
           quote: 'Total42units',
           // textContent is "Total42units sold." — a joiner between the tags
           // would read "Total 42 units sold." and never find this.
@@ -283,7 +283,7 @@ describe('what "found" means', () => {
  * outside the grammar by the same name a bad text range gets.
  */
 describe('an area comment', () => {
-  const AREA_DOC = '<section><p>Revenue grew 40% in Q3.</p><ul><li>one</li><li>two</li></ul></section>';
+  const AREA_DOC = '<section id="area"><p>Revenue grew 40% in Q3.</p><ul><li>one</li><li>two</li></ul></section>';
   const AREA = { v: 1, kind: 'area', box: { x: 0.2, y: 0.05, w: 0.5, h: 0.4 } };
 
   interface AreaWire { id: string; orphaned: boolean; anchor: { key: string; path: string } | null; snippet: string; quote: string | null; range: unknown; quote_found: boolean | null }
@@ -298,7 +298,7 @@ describe('an area comment', () => {
   }
   const areaComment = (w: Awaited<ReturnType<typeof areaSetup>>, extra: Record<string, unknown>) =>
     myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { path: '0', edit_id: w.doc.edit_id, body: 'this region', ...extra } }),
+      request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { node_id: 'area', edit_id: w.doc.edit_id, body: 'this region', ...extra } }),
       params({ id: w.doc.id }),
     );
   const areaList = async (token: string, id: string): Promise<AreaWire[]> => {
