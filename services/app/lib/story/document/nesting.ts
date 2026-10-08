@@ -113,25 +113,50 @@ function breaksParagraph(nodes: JsxNode[], inSvg = false): boolean {
 }
 
 /**
- * Rewrite every `<p>` that holds block content into a `<div>`, depth-first.
+ * Rewrite paragraphs holding blocks and supply missing list containers, depth-first.
  *
- * Structure-preserving by construction: the element keeps its attributes, its
+ * The paragraph repair is structure-preserving: the element keeps its attributes, its
  * children and its position among its siblings, so nothing downstream that
  * addresses a node POSITIONALLY moves — the editor's held `<Question>`
  * selection and the edit protocol's AST paths both survive it. Only the tag
  * name changes.
  *
- * A fixpoint: a rewritten `<div>` is not a `<p>`, so a second pass finds
+ * List repair retains every existing element/identity but inserts a parent around
+ * invalid direct item runs. Publication assigns those new containers identities
+ * after canonicalization, and editor transactions do so before persisting.
+ *
+ * A fixpoint: a rewritten `<div>` is not a `<p>`, and repaired items are inside
+ * list containers, so a second pass finds
  * nothing. That is what lets this be part of canonical form (see
  * canonicalizeMarkup) rather than a one-off pass at publish.
  */
-export function fixHtmlNesting(nodes: JsxNode[]): JsxNode[] {
+export function fixHtmlNesting(nodes: JsxNode[], listKind: 'ul' | 'ol' = 'ul'): JsxNode[] {
   // A subtree with nothing to repair is answered as it came (the same objects): the editor asks at every pause
   // of a report thousands of nodes long, and a copy of all of them was most of the answer.
   let changed = false;
   const out = nodes.map((node) => {
     if (!isElement(node)) return node;
-    const children = fixHtmlNesting(node.children);
+    const kind = !node.isComponent && (node.tag === 'ul' || node.tag === 'ol') ? node.tag : listKind;
+    let children = fixHtmlNesting(node.children, kind);
+    // Legacy list commands allowed an item directly inside another item. DOM APIs
+    // retain that tree, but HTML parsing closes the outer item and strands empty
+    // bullet rows. Supply the missing list container; keep every authored node and
+    // identity, including empty items, rather than guessing which wrappers to delete.
+    if (!node.isComponent && node.tag === 'li' && children.some(child => isElement(child) && child.tag === 'li')) {
+      const repaired: JsxNode[] = [];
+      let run: JsxNode[] = [];
+      const flush = () => {
+        if (!run.length) return;
+        repaired.push({ type: 'element', tag: kind, isComponent: false, attributes: [], children: run, selfClosing: false, start: 0, end: 0 });
+        run = [];
+      };
+      for (const child of children) {
+        if ((isElement(child) && child.tag === 'li') || (run.length && child.type === 'text' && !child.value.trim())) run.push(child);
+        else { flush(); repaired.push(child); }
+      }
+      flush();
+      children = repaired;
+    }
     const rewrite = !node.isComponent && node.tag.toLowerCase() === 'p' && breaksParagraph(node.children);
     if (!rewrite && children === node.children) return node;
     changed = true;

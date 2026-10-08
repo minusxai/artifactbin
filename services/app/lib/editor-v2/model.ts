@@ -5,6 +5,7 @@ import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Root } from 'mdast';
 import { validateClipboardAst } from './clipboard-ast';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+import { fixHtmlNesting } from '@/lib/story/document/nesting';
 import type { JsxNode, JsxElement, JsxAttribute } from '@/lib/jsx';
 
 const metadata = {
@@ -102,8 +103,9 @@ export const editorSchema = new Schema({
       parseDOM: [{ tag: 'ol', getAttrs: () => ({ tag: 'ol' }) }],
     },
     list_item: {
-      group: 'block',
-      content: 'block+',
+      // Items belong only to lists. Making them general blocks lets liftTarget
+      // stop inside an outer item, producing li > li on Shift-Tab.
+      content: 'paragraph block*',
       attrs: { ...metadata, tag: { default: 'li' } },
       toDOM: (node) => ['li', domAttributes(node), 0],
       parseDOM: [{ tag: 'li', getAttrs: () => ({ tag: 'li' }) }],
@@ -304,11 +306,16 @@ function blocks(nodes: JsxNode[]): EditorNode[] {
       }
     }
     flush();
+    // List commands require a leading paragraph. Direct-inline prose already has
+    // a synthetic textblock; list-only/other block starts need an empty one that
+    // never becomes authored markup or an extra reader paragraph.
+    if (type === 'list_item' && children.length && children[0].type !== editorSchema.nodes.paragraph)
+      children.unshift(editorSchema.nodes.paragraph.create({ synthetic: true }));
     return [editorSchema.nodes[type].create(attrs, children.length ? children : editorSchema.nodes.paragraph.create())];
   });
 }
 export function editorDocument(nodes: JsxNode[]): EditorNode {
-  const children = blocks(nodes);
+  const children = blocks(fixHtmlNesting(nodes));
   return editorSchema.nodes.doc.create(null, children.length ? children : editorSchema.nodes.paragraph.create());
 }
 function element(tag: string, children: JsxNode[], original?: JsxElement | null): JsxElement {

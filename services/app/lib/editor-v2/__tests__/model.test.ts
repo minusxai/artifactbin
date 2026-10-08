@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { splitBlock } from 'prosemirror-commands';
+import { sinkListItem, liftListItem } from 'prosemirror-schema-list';
 import { validateJsx } from '@/lib/jsx/validate';
 import { serializeJsx } from '@/lib/jsx';
 import {
@@ -9,6 +10,7 @@ import {
   normalizeIdentities,
   pasteFragment,
   toggleInline,
+  editorSchema,
 } from '../model';
 import { clipboardAst } from '../clipboard';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
@@ -70,6 +72,50 @@ it('represents nested list items as blocks instead of block-shaped inline marks'
   expect(marks).not.toContain('ul');
   expect(marks).not.toContain('li');
   expect(source(s)).toBe('<ul id="list"><li id="item">one<ul id="nested"><li id="child">two</li></ul></li></ul>');
+});
+
+it('list indentation and lifting round-trip without putting an item directly inside an item', () => {
+  let s = state('<ul id="list"><li id="first"><p id="a">A</p></li><li id="second"><p id="b">B</p></li><li id="third"><p id="c">C</p></li></ul>');
+  const original = source(s);
+  let at = 0;
+  s.doc.descendants((n, pos) => { if (n.isText && n.text === 'B') at = pos; });
+  s = s.apply(s.tr.setSelection(TextSelection.create(s.doc, at)));
+  expect(sinkListItem(editorSchema.nodes.list_item)(s, tr => { s = s.apply(tr); })).toBe(true);
+  expect(liftListItem(editorSchema.nodes.list_item)(s, tr => { s = s.apply(tr); })).toBe(true);
+  expect(source(s)).toBe(original);
+  expect(sinkListItem(editorSchema.nodes.list_item)(s, tr => { s = s.apply(tr); })).toBe(true);
+  expect(source(s)).toContain('<p id="a">A</p><ul>');
+});
+
+it('repairs legacy direct item nesting on import without losing identities or empty items', () => {
+  const s = state('<ol id="list"><li id="outer"><li id="child">B</li><li id="empty"><p id="blank"></p></li></li></ol>');
+  expect(source(s)).toBe('<ol id="list"><li id="outer"><ol><li id="child">B</li><li id="empty"><p id="blank"></p></li></ol></li></ol>');
+  expect(() => s.doc.check()).not.toThrow();
+});
+
+it('gives repair containers stable identities when a legacy document is edited and reloaded', () => {
+  let s = state('<ul id="list"><li id="outer"><li id="child"><p id="text">B</p></li></li></ul>'), at = 0;
+  s.doc.descendants((n, pos) => { if (n.isText && n.text === 'B') at = pos; });
+  s = s.apply(normalizeIdentities(s.tr.setSelection(TextSelection.create(s.doc, at + 1)).insertText('!'), true));
+  const saved = source(s);
+  const ids = [...saved.matchAll(/id="([^"]+)"/g)].map(m => m[1]);
+  expect(ids).toHaveLength(5);
+  expect(new Set(ids).size).toBe(5);
+  expect(ids).toEqual(expect.arrayContaining(['list', 'outer', 'child', 'text']));
+  expect(source(state(saved))).toBe(saved);
+  expect(source(state(source(state(saved))))).toBe(saved);
+});
+
+it('indents and lifts direct-inline list prose without authoring its synthetic paragraphs', () => {
+  const original = '<ul id="list"><li id="first">A</li><li id="second"><strong id="bold">B</strong></li></ul>';
+  let s = state(original), at = 0;
+  s.doc.descendants((n, pos) => { if (n.isText && n.text === 'B') at = pos; });
+  s = s.apply(s.tr.setSelection(TextSelection.create(s.doc, at)));
+  expect(() => s.doc.check()).not.toThrow();
+  expect(sinkListItem(editorSchema.nodes.list_item)(s, tr => { s = s.apply(tr); })).toBe(true);
+  expect(liftListItem(editorSchema.nodes.list_item)(s, tr => { s = s.apply(tr); })).toBe(true);
+  expect(source(s)).toBe(original);
+  expect(() => s.doc.check()).not.toThrow();
 });
 
 it('assigns stable unique identities before sending a split or pasted fragment', () => {
