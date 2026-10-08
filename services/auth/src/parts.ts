@@ -8,7 +8,8 @@ import {createDevicePairing} from './identity/device-pairing';
 import {createOAuthStore} from './identity/oauth';
 import {readEnv} from './env';
 import {createAgentBrowserSessions} from './auth/agent-browser-session';
-export interface SessionInfo {userId:string;email?:string;emailVerified?:boolean}
+/** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
+export interface SessionInfo {userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
 export interface SessionStore {
  identity?(userId:string):Promise<SessionInfo|null>;
  resolve(request:Request):Promise<SessionInfo|null>;
@@ -41,11 +42,22 @@ export function session(o: AuthOptions): Part<AuthEnv> {
   return {
     name: 'session',
     mount: (app) => app.use('*', async (c, next) => {
-      const admitted=await resolveActor(c.req.raw, o);
+      const refresh:string[]=[];
+      let admitted:Actor;
+      try {admitted=await resolveActor(c.req.raw, o, refresh);}
+      catch {
+        // A failed lookup is not a sign-out: never render this request as anonymous.
+        return new Response(JSON.stringify({error:'session_unavailable'}),{status:503,headers:{'content-type':'application/json','cache-control':'no-store'}});
+      }
       const heldOwners = admitted.credential === 'session' && admitted.emailVerified
         ? await Promise.all((admitted.heldTokenIds ?? []).map(id => o.tokens.byId(id))) : [];
       c.set('actor', admitted);
       await next();
+      // Better Auth extends the row; the browser's cookie only follows if we forward its re-issue.
+      if(admitted.credential==='session'&&refresh.length) {
+        const already=new Set(c.res.headers.getSetCookie().map(value=>value.split('=')[0]));
+        for(const value of refresh) if(!already.has(value.split('=')[0]!)) c.res.headers.append('set-cookie',value);
+      }
       // The app can merge guest ownership after verified login. Clear cached
       // CLI identities on this transition; subsequent requests see matching owners.
       if (heldOwners.some(token => token?.userId && token.userId !== admitted.userId)) o.tokens.invalidate();
@@ -168,7 +180,7 @@ export function publicBuildAssets(o: AuthOptions): Part<AuthEnv> {
 }
 
 
-async function resolveActor(request: Request, o: AuthOptions): Promise<Actor> {
+async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]): Promise<Actor> {
   const auth = request.headers.get('authorization') ?? '';
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (presented) {
@@ -187,8 +199,9 @@ async function resolveActor(request: Request, o: AuthOptions): Promise<Actor> {
   const browser=agentBrowserOf(o),heldPrimary=held?.tokenIds.at(-1);
   if(browser&&(!held?.sessionId||!heldPrimary||!await browser.live(held.sessionId,heldPrimary)))held=null;
   const heldIds = held?.tokenIds.length ? { heldTokenIds: held.tokenIds } : {};
-  const session = await o.sessions.resolve(request).catch(() => null);
+  const session = await o.sessions.resolve(request);
   if (session?.userId && session.email && session.emailVerified === true) {
+    if (session.setCookies) refresh?.push(...session.setCookies);
     return {
       credential: 'session',
       userId: session.userId,
