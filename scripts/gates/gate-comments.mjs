@@ -359,7 +359,7 @@ async function ownerLeg(browser, { id, token }) {
     );
     check(persistedTyping?.markup?.includes('MIDSENTENCE'), 'ordinary editor exit persists the typing without comment-triggered writes');
 
-    // ── a logged-out reader sees nothing ──────────────────────────────────
+    // ── a logged-out reader can start a comment through sign-in ───────────
     const strangerCtx = await browser.newContext();
     const stranger = await strangerCtx.newPage();
     await stranger.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
@@ -370,12 +370,21 @@ async function ownerLeg(browser, { id, token }) {
       + await stranger.locator('[data-mx-annotated], [data-mx-annotation-open], [aria-label^="Open annotation conversation by"]').count();
     const strangerButtons = await stranger.locator('[aria-label="Toggle comments"]').count();
     check(strangerPins === 0 && strangerButtons === 0, 'a logged-out reader sees no pins and no annotate chrome');
-    // A reader's selection happens inside the document's frame, like the owner's — and nothing grants them an
-    // action, so no chunk loads.
+    // Guests may start the comment flow, but no composer or annotation writes
+    // are available until they sign in.
     await strangerDoc.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
     await sleep(500);
-    check(await strangerDoc.locator('[data-mx-selection-actions]').count().catch(() => 0) === 0,
-      'a reader selecting text is offered nothing at all');
+    check(await strangerDoc.getByRole('button', { name: 'Comment on selected text', exact: true }).isVisible().catch(() => false),
+      'a logged-out reader selecting text is offered Comment');
+    await strangerDoc.locator('#figure').click();
+    await strangerDoc.locator('#figure').click({ button: 'right' });
+    await strangerDoc.getByRole('button', { name: 'Comment', exact: true }).click();
+    await until(() => stranger.url(), (url) => new URL(url).pathname === '/login');
+    const loginAddress = new URL(stranger.url());
+    check(loginAddress.pathname === '/login' && loginAddress.searchParams.get('callbackUrl')?.includes('intent=comment'),
+      'a logged-out right-click Comment opens login with the return intent');
+    check(await stranger.getByRole('textbox', { name: 'Email', exact: true }).isVisible().catch(() => false),
+      'guest commenting requires email sign-in');
     await strangerCtx.close();
     await owner.close();
   }
