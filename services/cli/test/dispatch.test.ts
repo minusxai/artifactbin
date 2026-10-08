@@ -110,6 +110,49 @@ test('a managed command refuses an account workspace manifest from another origi
   assert.ok(sent.every(call=>call.path==='/api/server'&&!call.headers.has('Authorization')&&!call.headers.has('X-Artifactbin-Remote-Session')&&!call.headers.has('X-Artifactbin-Remote-Proof')),'the account mismatch is rejected before credentials or proof can be used');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+test('managed pull refuses to bind a foreign workspace baseline but keeps stdout reads available',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-managed-pull-boundary-')),home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const connected='https://managed-pull.example',foreign='https://foreign-pull.example';
+ const env={ARTIFACTBIN_URL:connected,ARTIFACTBIN_TOKEN:'mxmx_test_pull_token',ARTIFACTBIN__REMOTE_SESSION:'mxmx_test_pull_session',ARTIFACTBIN__REMOTE_PROOF:'mxmx_test_pull_proof',ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'0'};
+ const calls:Array<{origin:string;path:string;headers:Headers}>=[],head={id:'abc123',version:1,edit_id:'pull1',state:digest('managed-pull'),format:'markup',markup:'<p>Managed copy</p>',title:'Managed copy',visibility:'private',capabilities:{read:true}};
+ const request:typeof fetch=async(input,init)=>{
+  const url=new URL(String(input));calls.push({origin:url.origin,path:url.pathname,headers:new Headers(init?.headers)});
+  if(url.pathname==='/api/server')return Response.json({error:'No identity document'},{status:404});
+  if(url.pathname==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'mxmx_test_connected_account'}});
+  return Response.json({error:{code:'not_found',message:'Unexpected synthetic route'}},{status:404});
+ };
+ const invoke=async(args:string[],json=true)=>{const out:string[]=[];const code=await runCli([...args,...(json?['--json']:[])],{cwd,home,env,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:request});return{code,out:out.join('')};};
+ try{
+  await saveTracking(await loadWorkspace(cwd,home),{server:foreign,account:'mxmx_test_foreign_account'});
+  const before=(await loadWorkspace(cwd,home)).tracking;
+  const refused=await invoke(['pull','abc123','--output','managed-copy.jsx']);
+  assert.notEqual(refused.code,0,'pull-to-file cannot store a managed-origin artifact in a foreign workspace baseline');
+  assert.equal(JSON.parse(refused.out).error.code,'wrong_server');
+  assert.ok(calls.every(call=>call.origin===connected&&!call.headers.has('Authorization')&&!call.headers.has('X-Artifactbin-Remote-Session')&&!call.headers.has('X-Artifactbin-Remote-Proof')),'the refusal precedes authenticated or proof-bearing requests');
+  assert.deepEqual(await readdir(cwd),[],'the foreign workspace receives no pulled file');
+  assert.deepEqual((await loadWorkspace(cwd,home)).tracking,before,'the foreign workspace baseline stays unchanged');
+
+  calls.length=0;
+  const stdout=await invoke(['pull','abc123','--output','-'],false);
+  assert.equal(stdout.code,0,stdout.out);
+  assert.match(stdout.out,/Managed copy/);
+  assert.ok(calls.some(call=>call.origin===connected&&call.path==='/api/artifacts/abc123'));
+  assert.ok(calls.every(call=>call.origin===connected),'stdout reads still use the connected origin');
+  assert.deepEqual(await readdir(cwd),[]);
+  assert.deepEqual((await loadWorkspace(cwd,home)).tracking,before,'stdout does not establish tracking');
+
+  const draft=join(cwd,'local.jsx');await writeFile(draft,'<p>Local draft</p>');calls.length=0;
+  for(const args of [['push','local.jsx'],['add','local.jsx'],['workspace','rebind','--account','current'],['fork','abc123'],['delete','abc123'],['mv','local.jsx','renamed.jsx']] as string[][]){
+   const blocked=await invoke(args);
+   assert.notEqual(blocked.code,0,args.join(' '));
+   assert.equal(JSON.parse(blocked.out).error.code,'wrong_server',args.join(' '));
+  }
+  assert.deepEqual(await readdir(cwd),['local.jsx'],'tracked local content and paths are not changed');
+  assert.equal(await readFile(draft,'utf8'),'<p>Local draft</p>');
+  assert.deepEqual((await loadWorkspace(cwd,home)).tracking,before,'push, add, workspace rebind, fork, delete and mv leave the foreign baseline intact');
+  assert.ok(calls.every(call=>!call.headers.has('Authorization')&&!call.headers.has('X-Artifactbin-Remote-Session')&&!call.headers.has('X-Artifactbin-Remote-Proof')),'blocked workspace operations do not authenticate');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test('local commands and malformed invocations never load credentials, call the server or create state',async()=>{
  const base=await mkdtemp(join(tmpdir(),'afbin-dispatch-'));const home=join(base,'home'),root=join(base,'work');await mkdir(home);await mkdir(root);
  try{
