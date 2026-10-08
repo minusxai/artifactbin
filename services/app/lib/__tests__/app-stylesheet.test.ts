@@ -36,8 +36,8 @@ describe('the compiled app stylesheet', () => {
     const css = await appStylesheet();
     expect(css).toContain('.comment-rich-editor {');
     expect(css).toContain('min-height: max(6rem, var(--comment-min-height, 8rem))');
-    expect(css).toContain('.comment-rich-editor [data-comment-mention] {');
-    expect(css).toContain('.comment-rich-editor [data-comment-mention]::before {');
+    expect(css).toContain('.comment-rich-editor [data-comment-mention], .comment-agent-mention {');
+    expect(css).toContain('.comment-rich-editor [data-comment-mention]::before, .comment-agent-mention::before {');
   }, 60_000);
 
   it('paints kit popups inside the trusted overlay using the app palette', async () => {
