@@ -506,15 +506,42 @@ describe('view-mode text selection actions', () => {
 
 
 describe('document context actions', () => {
-  it('opens Edit and Select on right-click and activates Select without a comment', () => {
+  it('opens Edit, Comment and Select on right-click and activates Select without a comment', () => {
     actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 90 });
     document.querySelector('p')!.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
     const toolbar = document.querySelector(`[${SELECTION_ACTIONS_ATTR}]`)!;
-    expect(toolbar.querySelectorAll('button')).toHaveLength(2);
+    expect(toolbar.querySelectorAll('button')).toHaveLength(3);
     (toolbar.querySelector('[data-mx-selection-action="select"]') as HTMLElement).click();
     expect(onAction).toHaveBeenCalledWith('select', expect.objectContaining({ path: '0' }));
+  });
+
+  it.each(['text', 'graphic', 'blank block'])('comments directly on a right-clicked %s without selecting text', (content) => {
+    const source = parseJsxOrThrow('<div><p id="target">words</p></div>');
+    document.body.innerHTML = '<div data-mx-ast="0"><p id="target" data-mx-ast="0.0">'
+      + (content === 'graphic' ? '<svg><path /></svg>' : content === 'text' ? '<span>words</span>' : '') + '</p></div>';
+    actions.setNodes(source.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: true });
+    const target = document.querySelector('path, span, p')!;
+    target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const button = document.querySelector<HTMLButtonElement>('[aria-label="Comment"]');
+    expect(button).not.toBeNull();
+    button!.click();
+    expect(onAction).toHaveBeenCalledWith('annotate', expect.objectContaining({ path: '0.0', nodeId: 'target' }));
+    expect(onAction.mock.calls[0][1].quote).toBeUndefined();
+    expect(bubbleVisible()).toBe(false);
+  });
+
+  it('does not offer commenting without annotation permission', () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: false });
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(document.querySelector('[data-mx-selection-action="annotate"]')).toBeNull();
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: false });
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    document.querySelector('p')!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(bubbleVisible()).toBe(false);
   });
 
   it('preserves native link and Shift+right-click menus and reader permissions', () => {
