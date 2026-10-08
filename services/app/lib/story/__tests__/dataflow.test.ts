@@ -316,3 +316,14 @@ describe('validateDataflow', () => {
     expect(errors.map((e) => e.message).join('\n')).toMatch(/set="\$nope"> refers to nothing declared/);
   });
 });
+
+
+describe('FileUpload declared data contracts', () => {
+  it('requires a real dataset Import and string/boolean state', () => {
+    const uses = collectRefNameUses(nodes('<FileUpload dataset="attachments" value="$refs" busy="$uploading" />'));
+    const f = flow([value('<Value name="refs" type="string" default="[]" />'), value('<Value name="uploading" type="boolean" default={false} />')], [], [{name:'attachments',ref:'Attach0001',start:0,end:1}]);
+    expect(validateDataflow(f, uses)).toEqual([]);
+    const bad = flow([value('<Value name="refs" type="number" />'),value('<Value name="uploading" type="string" />'),value('<Value name="attachments" type="string" />')], []);
+    expect(validateDataflow(bad, uses).map(e=>e.message)).toEqual(expect.arrayContaining(['FileUpload dataset must name a declared Import','FileUpload value requires a string Value','FileUpload busy requires a boolean Value']));
+  });
+});

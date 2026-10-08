@@ -34,6 +34,8 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
   <Value name="compare" type="boolean" default={false} />
   <Value name="note" type="string" default="" url={false} />
   <Value name="title" type="string" default="" url={false} />
+  <Value name="attachment_refs" type="string" default="[]" url={false} />
+  <Value name="uploading_attachments" type="boolean" default={false} url={false} />
   <Import name="sales_data" src="${ds}" />
   <Query name="regions">{\`select distinct region from sales_data.rows order by 1\`}</Query>
   <Query name="sales">{\`select * from sales_data.rows where $region is null or region = $region\`}</Query>
@@ -157,6 +159,7 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
     <Slider label="Min revenue" value="$min_rev" min={0} max={200} step={10} prefix="$" format=",.0f" />
     <DatePicker label="Since" value="$since" />
     <Switch label="Compare" checked="$compare" />
+    <FileUpload dataset="sales_data" value="$attachment_refs" busy="$uploading_attachments" multiple label="Attachments" accept="image/png,image/jpeg,image/webp" maxFiles={5} />
   </div>
   <p className="mt-4">Filtered revenue: <Number data="$sales" col="revenue" agg="sum" prefix="$" /> across the selection.</p>
   <div className="mt-6 grid grid-cols-1 gap-6 @2xl:grid-cols-2">

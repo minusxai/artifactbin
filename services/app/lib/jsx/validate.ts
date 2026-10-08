@@ -138,6 +138,16 @@ function walk(
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
     errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
   }
+  if (node.tag === 'FileUpload') {
+    for (const key of ['dataset', 'value', 'busy']) {
+      const value = node.attributes.find(a => a.name === key)?.value;
+      if (key === 'busy' && !value) continue;
+      const valid = value?.static && typeof value.json === 'string' && (key === 'dataset' ? /^[A-Za-z][A-Za-z0-9_]*$/.test(value.json) : /^\$[A-Za-z][A-Za-z0-9_]*$/.test(value.json));
+      if (!valid) errors.push({message: key === 'dataset' ? 'FileUpload dataset must name a declared Import (literal name, without $)' : `FileUpload ${key} must bind a declared ${key === 'busy' ? 'boolean' : 'string'} Value with "$name"`, tag: node.tag, attr: key, start: node.start, end: node.end});
+    }
+    const max = node.attributes.find(a => a.name === 'maxFiles')?.value;
+    if (max && (!max.static || typeof max.json !== 'number' || !Number.isInteger(max.json) || max.json < 1)) errors.push({message: 'FileUpload maxFiles must be a positive integer', tag: node.tag, attr: 'maxFiles', start: node.start, end: node.end});
+  }
   if (node.tag === 'Mermaid') {
     const code = node.attributes.find(a => a.name === 'code')?.value;
     const error = mermaidSourceError(code?.static ? code.json : undefined);

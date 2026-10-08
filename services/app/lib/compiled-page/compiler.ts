@@ -110,6 +110,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options', 'className'] },
   Button: { mod: 'basic', api: ['variant', 'size', 'run', 'set', 'args'] },
   Mermaid: { mod: 'mermaid', island: true, api: ['code', 'title', 'colorMode'], grid: true },
+  FileUpload: { mod: 'upload', island: true, api: ['dataset', 'value', 'busy', 'multiple', 'accept', 'label', 'maxFiles', 'disabled', 'className'] },
   Input: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'type', 'min', 'max', 'step', 'aria-label'] },
   Textarea: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'rows', 'aria-label'] },
   Segmented: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'options'] },
@@ -605,7 +606,7 @@ export function generate(input: GenerateInput): Generated {
       if (!node.isComponent) return '';
     }
     if (ctx.preview && PREVIEW_EMBEDS[node.tag]) return `<div${jsxAttrs(elementAttrs('div', { style: PREVIEW_STYLE }))}>{${lit(PREVIEW_EMBEDS[node.tag])}}</div>`;
-    if (ctx.preview && (node.tag === 'Input' || node.tag === 'Select' || node.tag === 'Switch')) {
+    if (ctx.preview && (node.tag === 'Input' || node.tag === 'Select' || node.tag === 'Switch' || node.tag === 'FileUpload')) {
       const previewTag = `Preview${node.tag}`;
       useKit(previewTag, mode, ctx);
       const props = ctx.preview.rewrite(rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview.values));
@@ -892,7 +893,7 @@ export function generate(input: GenerateInput): Generated {
       return box && box.kind === P.ELEMENT ? element('div', attrs, box.html) : null;
     }
     if (PREVIEW_EMBEDS[node.tag]) return element('div', elementAttrs('div', { style: PREVIEW_STYLE }), solidText(PREVIEW_EMBEDS[node.tag]!));
-    if (node.tag === 'Input' || node.tag === 'Select' || node.tag === 'Switch') {
+    if (node.tag === 'Input' || node.tag === 'Select' || node.tag === 'Switch' || node.tag === 'FileUpload') {
       const previewTag = `Preview${node.tag}`;
       const component = input.kitServer?.static?.[previewTag];
       if (typeof component !== 'function') return null;
@@ -1000,7 +1001,7 @@ export function generate(input: GenerateInput): Generated {
   if (deck) {
     const allocate = createPreviewPropsAllocator(nodes, '_R_1_');
     const previewValues = declaredValues(input.flow);
-    const buttonTags = new Set(['button', 'input', 'select', 'textarea', 'Button', 'TabsTrigger', 'AccordionTrigger', 'CollapsibleTrigger', 'PopoverTrigger', 'DialogTrigger', 'DialogClose', 'Switch', 'Segmented', 'Select', 'DatePicker', 'Input', 'Textarea', 'Slider']);
+    const buttonTags = new Set(['button', 'input', 'select', 'textarea', 'Button', 'TabsTrigger', 'AccordionTrigger', 'CollapsibleTrigger', 'PopoverTrigger', 'DialogTrigger', 'DialogClose', 'Switch', 'Segmented', 'Select', 'DatePicker', 'Input', 'Textarea', 'Slider', 'FileUpload']);
     const hasButton = (node: JsxNode): boolean => isElement(node) && (buttonTags.has(node.tag) || node.children.some(hasButton));
     const rail = slides.map((slide) => {
       // The same Solid skeleton renderer draws a miniature with declared values and rail-local IDs.
@@ -1089,7 +1090,8 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   // SQL scope alone does not see a reader reference used by authored JSX, such as
   // `{$_me.id ? <form>…</form> : <SignIn>…</SignIn>}`. Preserve the parser's
   // dependency report with this version so serving can retain its viewer door.
-  const readsViewerMarkup = collectRefNameUses(input.nodes).some((use) => use.name === '_me.id' || use.name.startsWith('_me.'));
+  // FileUpload reads viewer() for signed-out availability even without an authored $_me expression.
+  const readsViewerMarkup = generated.kit.islands.includes('FileUpload') || collectRefNameUses(input.nodes).some((use) => use.name === '_me.id' || use.name.startsWith('_me.'));
   const links = input.nodes.length ? linkHintsOf(input.nodes, { origins: deploymentOrigins() }) : EMPTY_LINK_HINTS;
   const outlinePlan = input.template === 'plan';
   const outlineDoc = input.template === 'doc';

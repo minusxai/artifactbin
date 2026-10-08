@@ -66,3 +66,22 @@ it('bounds each network attempt to thirty seconds and uses a fresh abort signal'
   expect(fetcher).toHaveBeenCalledTimes(1);expect(signals).toHaveLength(1);
  } finally { vi.useRealTimers(); }
 });
+
+
+it('cancels an active backoff after multiple retries without another request', async () => {
+ vi.useFakeTimers();
+ try {
+  const controller = new AbortController();
+  const fetcher = vi.fn(async (_url: string, _init: RequestInit) => pending());
+  const body = JSON.stringify({ requestId: 'cancel-after-retries', name: 'box' });
+  const task = startManagedRun({ body, signal: controller.signal, fetcher });
+  const cancelled = expect(task).rejects.toMatchObject({ name: 'AbortError' });
+  await vi.advanceTimersByTimeAsync(3_000);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  controller.abort(new DOMException('Stopped waiting', 'AbortError'));
+  await cancelled;
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(fetcher.mock.calls.every(call => call[1]?.body === body)).toBe(true);
+ } finally { vi.useRealTimers(); }
+});

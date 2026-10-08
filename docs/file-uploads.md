@@ -49,3 +49,32 @@ to answer whether you already own a live artifact published from those exact
 bytes, and the CLI then references that artifact instead of uploading the file
 again. The lookup never crosses accounts: another owner's identical bytes and
 artifacts merely shared with you are never returned.
+
+
+## Dataset attachments in pages
+
+Use the declared dataset import name with the reusable upload control:
+
+```jsx
+<Helmet>
+  <Import name="attachments" src="ref:<datasetId>" />
+  <Value name="attachment_refs" type="string" default="[]" url={false} />
+  <Value name="uploading" type="boolean" default={false} url={false} />
+</Helmet>
+<FileUpload dataset="attachments" value="$attachment_refs" multiple
+  accept="image/png,image/jpeg,image/webp" label="Screenshots"
+  busy="$uploading" maxFiles={5} />
+```
+
+A single upload binds a nullable string reference; `multiple` binds a JSON array
+of references in a string Value. The control uploads bytes and updates this local
+Value only. Save those references with your own Mutation, guarding Save while
+`$uploading` is true. Removing an item removes its reference; it does not delete
+stored bytes. Failed uploads can retry the same selected File without duplicating
+successful earlier items. Signed-out and archived controls cannot upload.
+
+For author components, `page.upload('attachments', file)` returns
+`{ref, url, name, contentType, size}`. Resolve a saved reference through
+`page.fileUrl('attachments', ref)` for a dataset-scoped preview or download.
+`page.uploadImage` remains compatible with existing pages. `accept` and the
+shared 50 MB client limit guide selection; the server owns byte/type validation.

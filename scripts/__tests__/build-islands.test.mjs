@@ -12,7 +12,7 @@ import path from 'node:path';
 import { AUTHOR_VENDOR_SPECIFIERS, CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, FRAME_EDITOR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
+const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'upload', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
 
 describe('the toolchain', () => {
   it('pins Solid 1.9 and a matching babel preset', () => {
@@ -141,6 +141,7 @@ describe('buildIslands', () => {
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/routes.ts'))).toBe(false);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
     expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
+    expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/upload/control.tsx')), 'optional upload interactions load after mounting').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/fit-drawing.ts')), 'legacy drawing compatibility is lazy').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/data-placeholder.tsx')), 'missing-data UI loads only when needed').toBe(false);
     const menuFiles = Object.entries(outputInputs).filter(([, inputs]) => inputs.some(input => input.endsWith('islands/kit/select-popup.tsx'))).map(([url]) => url);

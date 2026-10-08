@@ -22,7 +22,6 @@ npm CLI: local files/browser approval, guests allowed. HTTP: email auth; [HTTP A
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: keep `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork: copy and remove those five fields.
-- Questions: source first; render only if needed.
 - Copy: plain words, short sentences; preserve facts and caveats. [Copy guidance](references/copy.md).
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. Files/registered IDs use local data, unchanged by server mutations. Published data: `afbin export <artifact-url> --output out.png` or ID with `--refresh` (fresh published image; refuses local paths). For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
 - [[ phoneAuthoringRule ]] (`afbin help live-sessions`).
@@ -42,6 +41,7 @@ Before writing, read `afbin help <page type>`; avoid content flush to the viewpo
 
 - [design](references/design.md) — visual design.
 - [markup](references/markup.md); [data](references/markup-data.md) and [example](references/markup-data-example.md).
+- [uploads](references/markup-upload.md).
 - [page types](references/templates.md) — `afbin help templates`, then `references/templates-<name>.md`.
 - [design systems](references/design-systems.md) — `afbin help design-systems`, then `system-<slug>.md`; [worked briefs](references/worked-briefs.md).
 - [sync and recovery](references/publishing.md).

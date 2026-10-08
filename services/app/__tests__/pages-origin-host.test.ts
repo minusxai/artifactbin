@@ -227,6 +227,21 @@ describe('the pages session', () => {
 });
 
 describe('a document\'s own origin', () => {
+  it('admits only its own file-upload door and its filename header', async () => {
+    const w = await world();
+    const app = framing();
+    const self = pagesOriginFor(w.secret, site);
+    const path = `/a/${w.secret}/datasets/Attach01/files`;
+    const preflight = await app.request(`${self}${path}`, { method: 'OPTIONS', headers: { origin: self, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-edit-id,idempotency-key,x-filename' } });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-headers')).toContain('x-filename');
+    const refused = await app.request(`${self}/a/${w.other}/datasets/Attach01/files`, { method: 'OPTIONS', headers: { origin: self } });
+    expect(refused.status).toBe(404);
+    const anonymous = await app.request(`${self}${path}`, { method: 'POST', headers: { origin: self }, body: 'synthetic' });
+    expect(anonymous.status).toBe(403);
+    expect(await anonymous.json()).toMatchObject({ error: 'dataset_file_upload_failed' });
+  });
+
   it('serves its standalone page under the document policy, with direct absolute doors, to its pages session alone', async () => {
     const w = await world();
     const app = framing();
