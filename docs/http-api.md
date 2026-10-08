@@ -4,7 +4,7 @@ The HTTP API is the service boundary used by the CLI. Direct integrations can us
 
 ## Direct integration authentication: email OTP
 
-Direct integrations use email verification, not a guest or browser-approval flow:
+Direct integrations use email verification, not a browser-approval flow:
 
 1. `POST /api/auth/email-otp/send-verification-otp` with JSON `{"email":"you@example.com","type":"sign-in"}`. The user supplies the code delivered to their email.
 2. `POST /api/auth/sign-in/email-otp` with JSON `{"email":"you@example.com","otp":"123456"}`. Keep its session cookies in memory or a private cookie jar.
@@ -13,7 +13,7 @@ Direct integrations use email verification, not a guest or browser-approval flow
 
 All JSON calls send `Content-Type: application/json`. For the session-authenticated steps, send the selected server's `Origin`; do not put secrets in URLs, source files or logs. OTP sending retains the existing email rate limits and verification protections. Token responses use `Cache-Control: no-store`. A session response's cookies are credentials; keep the cookie jar private.
 
-CLI authentication deliberately has a different entry experience: `afbin auth` opens browser approval and can continue as a guest; `auth --email <email>` uses email OTP and a refreshable CLI device grant. Existing CLI capabilities remain usable through HTTP. A server cannot identify CLI versus curl from a User-Agent or caller-supplied header; this distinction is enforced at the token issuance door, not by pretending that valid guest CLI bearer requests are not HTTP requests.
+CLI authentication deliberately has a different entry experience: `afbin auth` opens browser approval (email login required); `auth --email <email>` uses email OTP and a refreshable CLI device grant. Existing CLI capabilities remain usable through HTTP. A server cannot identify CLI versus curl from a User-Agent or caller-supplied header; this distinction is enforced at the token issuance door, not by pretending that valid CLI bearer requests are not HTTP requests.
 
 ## Artifact operations
 

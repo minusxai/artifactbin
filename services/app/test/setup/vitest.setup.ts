@@ -1,6 +1,6 @@
 // The cwd contract: the app's cwd is its package dir, because several modules
 // resolve files relative to process.cwd() — lib/skills/tree.ts,
-// lib/story/runtime-asset.ts, lib/story/ssr.server.ts, server/app.ts among
+// lib/compiled-page/build.server.ts, lib/serving/agent-discovery.ts, server/app.ts among
 // them — so the runners (scripts/dev.mjs, scripts/gates.mjs) and this setup
 // all hand them services/app as the cwd.
 process.chdir(process.env.APP_PACKAGE_ROOT ?? path.resolve(import.meta.dirname, '../..')); // cwd = services/app

@@ -1,6 +1,6 @@
 /**
  * The story `<Grid>`/`<GridItem>` positioning classes MUST survive the per-story Tailwind
- * compile. They live as literal class strings in components/kit/grid.tsx, reach every
+ * compile. They live as literal class strings in lib/story-ui/recipe-classes.ts, reach every
  * story's stylesheet through the recipe-class union (STORY_UI_RECIPE_CLASSES), and are the
  * ONLY thing positioning grid items in view mode and in captures — if the compiler ever
  * stops emitting one of these calc()/container-query utilities, grids silently collapse to
@@ -14,7 +14,7 @@ const GRID_STORY =
   '<Grid><GridItem x={0} y={0} w={8} h={5}><p>alpha</p></GridItem></Grid>' +
   '</div>';
 
-/** The load-bearing grid classes, exactly as written in components/kit/grid.tsx. */
+/** The load-bearing grid classes, exactly as written in lib/story-ui/recipe-classes.ts. */
 const GRID_CLASSES = [
   'h-[calc(var(--g-rows)*var(--g-rh))]',
   'left-[calc(var(--gi-x)/var(--g-cols)*100%)]',

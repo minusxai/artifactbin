@@ -4,7 +4,7 @@ Status: shipped. This describes the compiled reader as it runs: a publish-time c
 document version into static HTML with small Solid islands, served the same way to every reader path.
 Its four size targets are checked by the page-speed lab.
 
-Targets (brotli/wire bytes, checked by `scripts/build/size-targets.mjs` against the page-speed lab):
+Targets (gzip wire bytes, checked by `scripts/build/size-targets.mjs` against the page-speed lab):
 
 | # | Target | Before Phase 2 | Target |
 |---|--------|----------------|--------|
@@ -46,7 +46,7 @@ is typed against the framework-free store (`lib/story-runtime/store`), never aga
 | Island runtime | `lib/islands/rt.tsx`, `lib/islands/boot.ts` | What every island receives (`IslandContext`): data accessors, values, `mutate`, viewer overlay, write status feed, revalidation patching. Bridges the framework-free store into Solid's store. |
 | Interactive kit | `lib/islands/kit/*.tsx` | Vendored Solid components with Radix DOM conventions, one file per family, the intended reader DOM pinned by component tests. Overlays share one core (§7). |
 | Viewer overlay door | `GET /a/:id/viewer` | After paint: the viewer's identity, the `viewer`-scope results, mutation access, holdable imports — the same admission as `POST /a/:id/query`. |
-| App handover | `web/initial-story.ts`, `solid/document/create-island-story.ts`, `solid/pages/Document.tsx`, `lib/islands/handover.ts` | The Solid app adopts the live island document without re-rendering it (`IslandDocument`, in `lib/islands/contract.ts`) (§7). |
+| App handover | `web/served-frame.ts`, `solid/document/create-framed-story.ts`, `solid/pages/Document.tsx`, `lib/islands/handover.ts`, `lib/story-runtime/frame-bridge/` | The Solid app page adopts the document frame the server drew and reaches the live island document (`IslandDocument`, in `lib/islands/contract.ts`) through the frame bridge without re-rendering it (§7). |
 | Link hints | `lib/compiled-page/links.ts`, `speculation.ts` | `<a href>` to same-deployment artifacts, collected at compile → `<link rel=prefetch>` and speculation rules emitted by the assembler. |
 | Handover gates | `scripts/gates/gate-kit-and-fonts.mjs`, `scripts/gates/gate-editor-path.mjs` | Check that the compiled story survives island hydration in its frame (kit-and-fonts), then yields to the editor (editor-path). |
 | Size targets | `scripts/build/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The four targets, pass/fail per target from a lab result JSON; `--strict` fails the page-speed workflow (not `ci.yml`). |
@@ -97,9 +97,9 @@ is a 0.6 KB framework-free behaviour chunk from the shared build).
 
 ### 2.2 Serve
 
-The assembler takes `AssembleInput` (contract) and returns the whole HTML document. Chrome is an
-input (`ReaderChromeInput` rendered by `renderReaderChrome` (`lib/story/reader/reader-chrome.ts`), or null for `/raw`, exports and
-the offline file). The story HTML (`AssembleInput.story`) is produced by the serve path, never by the assembler: when the
+The assembler takes `AssembleInput` (contract) and returns the whole HTML document. It draws no app
+chrome: the app page (Solid, `solid/document/DocumentChrome.tsx`) frames the assembled `/raw` document
+on the document's own origin, and exports and the offline file are the same document without the frame. The story HTML (`AssembleInput.story`) is produced by the serve path, never by the assembler: when the
 request has a snapshot, the compiled page's SSR module (`CompiledPage.ssr`, the `generate: 'ssr'` build of
 the same islands, imported once per build) renders the islands WITH the snapshot's rows and drawings —
 the prototype's `render(data)` — so a dashboard's first paint is its numbers, not skeletons; the result is
@@ -305,15 +305,17 @@ document is edited into a new version or deliberately backfilled; the existing v
 
 ## 7. The app, the editor and the overlays
 
-The page is HTML-first. The assembler renders the reader chrome on the server (`renderReaderChrome`)
-and the compiled story; the Solid app (`web/solid-spa-idle.ts` is the tiny loader, tagged
-`data-mx-spa-idle`) loads on idle for a reader who can edit and on first chrome interaction otherwise.
+The page is HTML-first. The server draws the document's frame into the app page
+(`lib/serving/document-frame`, `iframe[data-mx-document-frame]`) beside the Solid app shell; the frame
+holds the compiled story, which runs on `APP__PAGES_HOST` and never waits for the app. The app
+(`web/served-frame.ts` captures the served frame before it mounts) adopts that frame and talks to the
+story only through the frame bridge.
 
-1. Adoption without re-render. The app finds the island document through `IslandDocument`
+1. Adoption without re-render. The frame side finds the island document through `IslandDocument`
    (`lib/islands/handover.ts`): `root` (the story element), `store` (the `DataflowStore` the islands
-   run on), `mode`, `setMode('read' | 'edit')`, `dispose()`, `subscribe`. `solid/document/create-island-story.ts`
-   moves `root` into the page and `solid/pages/Document.tsx` renders chrome around it; the story is
-   never hydrated or re-rendered by the app. The islands keep running and the app's reactions (like,
+   run on), `mode`, `setMode('read' | 'edit')`, `dispose()`, `subscribe`. `lib/story-runtime/frame-bridge/frame.ts`
+   exposes it to the page, `solid/document/create-framed-story.ts` holds the framed document and
+   `solid/pages/Document.tsx` renders chrome around it; the story is never hydrated or re-rendered by the app. The islands keep running and the app's reactions (like,
    follow, comments) keep reading the store.
 2. Live versions. A new published version is morphed into the adopted story in place
    (`lib/islands/morph/engine`), preserving unchanged nodes, islands, reader values and the store. The

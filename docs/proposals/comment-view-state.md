@@ -1,4 +1,4 @@
-# Native comment view state prototype
+# Native comment view state
 
 A comment keeps its existing source anchor, quote, range and revision. Optional
 `view_state: {v: 1, components: {...}}` records explicitly registered UI/mock state.
@@ -33,13 +33,8 @@ The author runtime and frame editor are independently bundled. The registry is
 attached to the document through a versioned symbol, so both bundles share it.
 No callbacks or executable state cross the authenticated frame channel.
 
-Scope of this prototype: registered local state, not automatic capture of all kit
+Scope: registered local state, not automatic capture of all kit
 controls, arbitrary JavaScript memory, backend data, focus, scroll containers,
 transient hover state or animation time. Restores run against the current artifact;
 archived-version playback and state migrations are future work. A changed set of
 registration IDs is refused; custom adapters own compatibility within each ID.
-
-Local demo source: `tmp/state-review/demo.jsx`. It has three independent registered
-state parts and a payment action counter excluded from review state. Resetting,
-then reopening a native comment must restore the view without incrementing that
-counter. Reloading must retain the comment and allow restoration in a fresh runtime.

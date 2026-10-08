@@ -66,9 +66,7 @@ The commands are afbin query ID --name tasks and afbin query ID --write --name c
 
 UI write testing must use an isolated copy with copied writable datasets. A local draft can still reference the original datasets. Publish the isolated data and update Imports before testing; never fall back to writing the original.
 
-## Implementation and verification
-
-Start from latest main and reuse only prior work that fits this proposal. Four implementation workstreams cover shared query execution, run jobs and aggregation, explicit membership and presentation, and teaching/demo/evals. Integration verifies the whole feature together.
+## Verification
 
 Required checks cover stored and PostgreSQL query sources (including models), saved arguments and actor identity, combined messages across rules, explicit membership, source access and credential revocation, bulk and zero-row mutations, concurrent retries, lost responses, and retrying notification processing without repeating a mutation. Real PostgreSQL integration runs through the existing CI gate.
 
@@ -76,9 +74,7 @@ Agent evals verify headless operation of existing artifacts, session testing of 
 
 Current implementation and check results: https://github.com/minusxai/artifactbin/pull/188. Focused checks, deferred suites and live eval outcomes are reported separately; a deferred suite is not a pass.
 
-## Demo and remaining limitations
-
-The implementation handoff includes a running local artifact, joined-recipient inbox, and notification status/retry flow. The executable setup and login steps are in [demo.md](mutation-notifications/demo.md). The branch CLI and browser must exercise the same named action against that server.
+## Limitations
 
 Not included: an authenticated GET alias, a headless row/cell API, scheduled notifications independent of mutations, rich HTML messages, or production email delivery. Browser retry IDs survive retries on the same page; recovery after a full page reload is not implemented.
 

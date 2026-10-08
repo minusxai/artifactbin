@@ -1,8 +1,8 @@
 // A dangerous URL scheme must be rejected under EVERY spelling of the attribute.
 //
 // Story markup passes two independent gates: `validateJsxSource` at SAVE time
-// (`lib/jsx/validate.ts`) and the interpreter at RENDER time
-// (`lib/story-ui/interpreter.tsx`). Both lowercase the attribute name and look it
+// (`lib/jsx/validate.ts`) and the render-time primitives
+// (`lib/story-ui/interpreter-primitives.ts`). Both lowercase the attribute name and look it
 // up in a set of URL-bearing attributes — and those two sets were maintained by
 // hand, so they drifted: one had `'xlink:href'`, the other `'xlinkhref'`.
 //
