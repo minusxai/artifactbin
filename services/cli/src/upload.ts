@@ -9,6 +9,15 @@ import {artifactReference} from './read-commands';
 import type {HttpClient} from './http';
 import type {Workspace,Snapshot} from './workspace';
 
+/** A receipt names this document's served attachment; it carries no bearer grant. */
+function validReceipt(result:DatasetUploadResult,documentId:string,datasetId:string,client:HttpClient):boolean{
+ if(typeof result.ref!=='string'||!/^dfile:[a-z0-9]+$/.test(result.ref)||typeof result.url!=='string'||typeof result.name!=='string'||!result.name.trim()||typeof result.contentType!=='string'||!result.contentType.trim()||!Number.isSafeInteger(result.size)||result.size<0||(result.replayed!==undefined&&typeof result.replayed!=='boolean'))return false;
+ try{
+  const url=new URL(result.url,client.connection.server);
+  return client.sameServer(url.origin)&&!url.username&&!url.password&&!url.search&&!url.hash&&url.pathname===`/a/${documentId}/datasets/${datasetId}/files/${result.ref.slice('dfile:'.length)}`;
+ }catch{return false;}
+}
+
 /** Resolve a named published import; the server owns permission and storage validation. */
 export async function uploadAttachment(workspace:Workspace,parsed:ParsedCommand,client:HttpClient):Promise<DatasetUploadResult>{
  const ref=await artifactReference(workspace,String(parsed.flags.in),client.connection.server,true,client.aliases);
@@ -30,6 +39,6 @@ export async function uploadAttachment(workspace:Workspace,parsed:ParsedCommand,
  let result:DatasetUploadResult;
  try{result=await client.upload<DatasetUploadResult>(`/artifacts/${ref.id}/datasets/${imported.ref}/files`,bytes,{'Content-Type':contentType,'X-Edit-Id':head.edit_id,'X-Filename':encodeURIComponent(name),'Idempotency-Key':key});}
  catch(error){if(error instanceof CliError&&(error.code==='outcome_unknown'||error.code==='invalid_response'||[408,429,500,502,503,504].includes(Number((error.details as {http_status?:number}|undefined)?.http_status))))throw new CliError(error.code,error.message,`Retry the same upload with --idempotency-key ${key}.`);throw error;}
- if(typeof result.ref!=='string'||typeof result.url!=='string'||typeof result.name!=='string'||typeof result.contentType!=='string'||!Number.isSafeInteger(result.size)||result.size<0)throw new CliError('invalid_response','The upload returned an incomplete file receipt.',`Retry the same upload with --idempotency-key ${key}.`);
+ if(!validReceipt(result,ref.id,imported.ref,client))throw new CliError('invalid_response','The upload returned an incomplete file receipt.',`Retry the same upload with --idempotency-key ${key}.`);
  return result;
 }
