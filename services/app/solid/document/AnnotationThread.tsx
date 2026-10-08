@@ -23,7 +23,7 @@ import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
 import { AuthorIdentity, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
 import { CommentFoldingBody } from './CommentFoldingBody';
-import { CommentMarkdownField } from './CommentMarkdown';
+import { CommentMarkdownField, CommentSubmitHint } from './CommentMarkdown';
 import { CommentScreenshot } from './CommentScreenshot';
 
 const threadClass = 'rounded-[6px] border border-edge bg-comment text-sm';
@@ -261,13 +261,14 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
         </button>
       </Show>
       <Show when={props.open && !props.resolved}>
-        <div class="border-t border-edge px-3 py-2">
+        <div class="border-t border-edge bg-raised p-3">
           <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
             label="Reply to annotation" quickAgents
             value={reply()} onChange={(value) => { touched = true; setReply(value); }} onSubmit={() => void sendReply()}
-             rows={2} placeholder="Write a reply…" />
+             rows={3} placeholder="Write a reply…" />
           <Show when={replyError()}><p role="alert" class="text-xs text-red-500">{replyError()}</p></Show>
-          <div class="flex justify-end gap-2">
+          <div class="flex items-center justify-end gap-2">
+            <CommentSubmitHint action="reply" />
             <button type="button" aria-label="Cancel reply" onClick={() => { touched = true; setReply(''); props.onOpen(); }}
               class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>
             <button type="button" aria-label="Send reply" disabled={props.busy || !hasReplyText(reply())} onClick={() => void sendReply()}

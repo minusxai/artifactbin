@@ -51,7 +51,7 @@ import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_CO
 import { RailChrome } from './AnnotationRail';
 import { AnnotationThread } from './AnnotationThread';
 import { createCommentCapture } from './CommentCapture';
-import { CommentMarkdownField } from './CommentMarkdown';
+import { CommentMarkdownField, CommentSubmitHint } from './CommentMarkdown';
 import { PersonMentionProvider } from './PersonMention';
 import type { ScreenshotDrawing } from './ScreenshotEditor';
 
@@ -791,7 +791,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             <Show when={selection()?.viewStateError}><p role="status" class="mb-2 text-xs text-muted">{selection()?.viewStateError}</p></Show>
             <Show when={failure()}><p role="alert" class="mb-2 font-mono text-[11px] text-danger">{failure()}</p></Show>
             <div class="flex items-center justify-end gap-2">
-              <span class="mr-auto hidden items-center gap-1.5 font-sans text-[11px] text-muted sm:inline-flex" aria-label="Keyboard shortcut to send comment"><kbd class="rounded border border-edge bg-surface px-1.5 py-0.5 font-sans text-[10px]">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd><span aria-hidden="true">+</span><kbd class="rounded border border-edge bg-surface px-1.5 py-0.5 font-sans text-[10px]">Enter</kbd><span class="ml-1">to comment</span></span>
+              <CommentSubmitHint action="comment" />
               <button type="button" aria-label="Cancel annotation" onClick={cancelCompose}
                 class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>
               <button type="button" aria-label="Save annotation" disabled={busy() || capture.busy() || (capture.required() && !capture.draft()) || !hasReplyText(draft())} onClick={submitDraft}

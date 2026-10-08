@@ -504,7 +504,7 @@ body {
 .comment-editor-tools { display: flex; align-items: center; min-height: 28px; margin-bottom: 6px; }
 .comment-editor-tools.has-context { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .comment-editor-context { min-width: 0; overflow: hidden; white-space: nowrap; }
-.comment-editor-toolbar { display: flex; align-items: center; gap: 2px; }
+.comment-editor-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 2px; margin-left: auto; }
 .comment-editor-tools.has-context .comment-editor-toolbar { justify-content: flex-end; }
 .comment-editor-toolbar button { flex-shrink: 0; }
 
