@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { connectConformanceNonOwner } from '../gates/lib/conformance-account.mjs';
+import { connectConformanceNonOwner } from '../lib/conformance-account.mjs';
 
 it('production private-access checks authenticate a different email through the configured inbox', async () => {
   const acquireCredential = vi.fn(async (_source, { email }) => ({ token: `test-token-for-${email}` }));

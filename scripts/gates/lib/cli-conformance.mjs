@@ -22,7 +22,7 @@ import { tsImport } from 'tsx/esm/api';
 import { lane } from './lane.mjs';
 import { fixtureFetch as fetch } from './fixture-http.mjs';
 import { connectAgent, signInAccount } from './cli-connection.mjs';
-import { connectConformanceNonOwner } from './conformance-account.mjs';
+import { connectConformanceNonOwner } from '../../lib/conformance-account.mjs';
 import { checkGuestHttpIssuance, checkDirectHttp } from './http-conformance.mjs';
 import { loginViaEmail } from '../../lib/mail-login.mjs';
 
