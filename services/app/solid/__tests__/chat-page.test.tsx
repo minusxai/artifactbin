@@ -5,13 +5,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
 
-const { write, scrollPages, scrollLines, scrollToBottom } = vi.hoisted(() => ({
-  scrollPages: vi.fn(), scrollLines: vi.fn(), scrollToBottom: vi.fn(),
+const { write, scrollPages, scrollLines, scrollToBottom, terminalInput } = vi.hoisted(() => ({
+  scrollPages: vi.fn(), scrollLines: vi.fn(), scrollToBottom: vi.fn(), terminalInput: { send: (_value: string) => {} },
   write: vi.fn((data: string, callback?: () => void) => { if (data) callback?.(); }),
 }));
 vi.mock('@xterm/xterm', () => ({ Terminal: class {
   cols = 80; rows = 24; write = write; scrollPages = scrollPages; scrollLines = scrollLines; scrollToBottom = scrollToBottom;
-  loadAddon() {} open() {} resize() {} reset() {} dispose() {} onData() { return { dispose() {} }; }
+  loadAddon() {} open() {} resize() {} reset() {} dispose() {} onData(callback: (value: string) => void) { terminalInput.send = callback; return { dispose() {} }; }
 } }));
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { proposeDimensions() { return { cols: 80, rows: 24 }; } } }));
 
@@ -288,4 +288,65 @@ it('shows the same offline state in the selected header and list while keeping r
   expect(await screen.findByRole('button',{name:'Open Offline Claude'})).toHaveTextContent('claude · Offline');
   expect(await screen.findByText('claude · Hosted · Offline')).toBeInTheDocument();
   expect(screen.getByText('Waiting for your hosted terminal…')).toBeInTheDocument();
+});
+
+it('shows one stopping state and disables input while a stop receipt and terminal poll are pending',async()=>{
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ const session={id:'stop-transition',runId:'native-transition',name:'Transition',harness:'claude',machine:'Hosted',managed:true,online:true,activity:'listening',exitCode:null,cols:100,rows:30};
+ let completeStop!:(value:unknown)=>void;
+ const receipt=new Promise(resolve=>{completeStop=resolve;});
+ vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>options?.method==='POST'?receipt:{ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,snapshot:'Ready',frames:[]}}));
+ open(session.id);
+ await screen.findByText('claude · Hosted · Online · Ready');
+ fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
+ await waitFor(()=>expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument());
+ expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
+ expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
+ expect(screen.getByRole('button',{name:'Send Enter'})).toBeDisabled();
+ terminalInput.send('must not reach shutdown');
+ completeStop({ok:true,json:async()=>({ok:true})});
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Stop agent'})).toBeDisabled());
+ expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument();
+ expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
+});
+
+
+it('keeps stopping through stale polls, blocks raw terminal input, and accepts a confirmed ended state', async () => {
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ let session={id:'stop-latched',runId:'native-latched',name:'Latched',harness:'claude',machine:'Hosted',managed:true,online:true,activity:'listening',exitCode:null as number|null,cols:100,rows:30};
+ let polls=0;
+ const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>options?.method==='POST'?{ok:true}:url==='/api/remote/sessions'?{sessions:[session]}:(polls++,{session,seq:0,snapshot:'Ready',frames:[]})}));
+ vi.stubGlobal('fetch',fetch);open(session.id);
+ await screen.findByText('claude · Hosted · Online · Ready');
+ const pollsAtStop = polls;
+ fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
+ await waitFor(()=>expect(polls).toBeGreaterThan(pollsAtStop));
+ expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument();
+ expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
+ terminalInput.send('shutdown input');
+ fireEvent.submit(screen.getByRole('textbox',{name:'Message to agent'}).closest('form')!);
+ await new Promise(resolve=>setTimeout(resolve,0));
+ expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(1);
+ session={...session,online:false,activity:'stopped',exitCode:0};
+ expect(await screen.findByText('claude · Hosted · Ended')).toBeInTheDocument();
+ expect(screen.getByText('claude · Ended')).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Remove session'})).toBeEnabled();
+});
+
+it('restores the latest usable session and shows the error when Stop fails', async () => {
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ const session={id:'stop-failed',runId:'native-failed',name:'Retry Stop',harness:'claude',machine:'Hosted',managed:true,online:true,activity:'listening',exitCode:null,cols:100,rows:30};
+ let rejectStop!:(reason:unknown)=>void;
+ const receipt=new Promise((_resolve,reject)=>{rejectStop=reject;});
+ const fetch=vi.fn(async(url:string,options?:RequestInit)=>options?.method==='POST'?receipt:{ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,snapshot:'Ready',frames:[]}});
+ vi.stubGlobal('fetch',fetch);open(session.id);
+ await screen.findByText('claude · Hosted · Online · Ready');
+ fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
+ expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
+ rejectStop(new Error('Stop could not be confirmed'));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Stop could not be confirmed');
+ expect(screen.getByText('claude · Hosted · Online · Ready')).toBeInTheDocument();
+ expect(screen.getByText('claude · Online · Ready')).toBeInTheDocument();
+ expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled();
+ expect(screen.getByRole('button',{name:'Stop agent'})).toBeEnabled();
 });
