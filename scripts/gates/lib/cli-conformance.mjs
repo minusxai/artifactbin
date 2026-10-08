@@ -49,7 +49,13 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
   delete env.ARTIFACTBIN_TOKEN;
   delete env.ARTIFACTBIN_REFRESH_TOKEN;
   const accountEmail = process.env.EVAL_LOGIN_EMAIL ?? `mxmx_test_conformance_${stamp}@example.com`;
-  const approvingAccount = await signInAccount(BASE, { sink, email: accountEmail });
+  // Deployment acceptance reads its configured inbox; local gates read their protected outbox.
+  const credentialSource = process.env.CONFORMANCE__CREDENTIAL_SOURCE;
+  const approvingAccount = credentialSource
+    ? await (await tsImport('../../lib/credential.ts', import.meta.url)).acquireCredential(credentialSource, {
+      base: BASE, env: process.env, email: accountEmail, localOutbox: process.env.EMAIL__DEV_OUTBOX_PATH,
+    })
+    : await signInAccount(BASE, { sink, email: accountEmail });
   let browserCookie = approvingAccount.cookie;
   async function invoke(args, { cwd = workspace, expected = 0, approve = false } = {}) {
     const child = spawn(cli.endsWith('.mjs') ? process.execPath : cli,
@@ -90,7 +96,6 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
   /** One acceptance scenario: its asserts are the verdict, and a failure does not stop the next scenario. */
   const scenario = (label, body) => lane(check, 'cli').run(() => lane(check, 'cli').step(label, body));
   // Reuse the eval's real email login for deployments; its outbox variant is exercised in CI.
-  const credentialSource = process.env.CONFORMANCE__CREDENTIAL_SOURCE;
   const ctx = credentialSource ? null : await context();
   const publishedIds = [];
   const { step, run } = lane(check, 'cli');
@@ -104,17 +109,11 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
       let accountCookie;
       let id;
       let read;
-      await step('guest CLI connection follows its browser into the account', async () => {
+      await step('email CLI connection belongs to its approving account', async () => {
         assert.ok(token);
         if (credentialSource) {
-          // The eval helper is TypeScript; load it through its existing runner boundary.
-          const { acquireCredential } = await tsImport('../../lib/credential.ts', import.meta.url);
-          const email = accountEmail;
-          assert.match(email, /^mxmx_test_/, 'acceptance must use a disposable test account');
-          const account = await acquireCredential(credentialSource, {
-            base: BASE, env: process.env, email, localOutbox: process.env.EMAIL__DEV_OUTBOX_PATH,
-          });
-          accountCookie = account.cookie;
+          assert.match(accountEmail, /^mxmx_test_/, 'acceptance must use a disposable test account');
+          accountCookie = approvingAccount.cookie;
         } else {
           const owner = await ctx.newPage();
           await ctx.addCookies(browserCookie.split('; ').map(pair => {
@@ -125,8 +124,7 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
           await loginViaEmail(owner, BASE, sink, accountEmail);
           accountCookie = (await ctx.cookies(BASE)).map(({ name, value }) => `${name}=${value}`).join('; ');
         }
-        // A verified browser session merges its guest identity, including the CLI credential.
-        // Claiming that credential by bearer secret would try to take another user's token.
+        // The CLI credential and its approving browser belong to the same email account.
         const accountHome = await fetch(`${BASE}/api/page/home?part=core`, { headers: { cookie: accountCookie } });
         assert.equal(accountHome.status, 200);
         assert.equal((await accountHome.json()).signedIn, true);
