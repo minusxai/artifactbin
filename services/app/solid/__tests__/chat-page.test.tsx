@@ -91,6 +91,9 @@ it('lets the user stop waiting and start again with a fresh client wait', async 
   fireEvent.click(await screen.findByRole('button',{name:'Start hosted box'}));
   fireEvent.click(await screen.findByRole('button',{name:'Stop waiting'}));
   expect(await screen.findByText(/Check your sessions before starting again/)).toBeInTheDocument();
+  // Cross the server's retry delay: a canceled wait must never send admission again.
+  await new Promise(resolve=>setTimeout(resolve,1100));
+  expect(starts).toBe(1);
   fireEvent.click(await screen.findByRole('button',{name:'Start hosted box'}));
   await waitFor(()=>expect(starts).toBe(2));
 });

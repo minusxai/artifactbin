@@ -906,6 +906,10 @@ async function hostedRestartLeg(owner) {
           : { session: current, seq: 0, generation: session.runId, frames: [], snapshot: (current.activity === 'queued' ? capacityMessage : 'Starting your hosted box…') + '\r\n' };
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
       });
+      // Keep retry timers paused while the browser verifies cancellation. Real time
+      // can otherwise consume the next 500 ms fixture response before Stop waiting.
+      await page.clock.install();
+      await page.clock.pauseAt(new Date());
       await page.goto(`${BASE}/chat`, { waitUntil: 'load' });
       await page.getByRole('textbox', { name: 'Box name' }).waitFor({ state: 'visible' });
       await page.getByRole('button', { name: 'Start hosted box', exact: true }).click();
@@ -915,10 +919,12 @@ async function hostedRestartLeg(owner) {
       check(await page.getByRole('textbox', { name: 'SSH public key' }).isDisabled(), 'the submitted SSH key stays frozen during teardown');
       await page.getByRole('button', { name: 'Stop waiting', exact: true }).click();
       await page.getByRole('alert').getByText('Stopped waiting. Your hosted box may still be stopping. Check your sessions before starting again.', { exact: true }).waitFor({ state: 'visible' });
+      await page.clock.runFor(1000); // Cross Retry-After after cancellation, then remain paused.
       check(bodies.length === 1, `stopping the browser wait does not submit a follow-up retry (${bodies.length} request(s))`);
       await page.getByRole('button', { name: 'Start hosted box', exact: true }).waitFor({ state: 'visible' });
       await page.getByRole('button', { name: 'Start hosted box', exact: true }).click();
       await page.getByText('Finishing the previous hosted box…', { exact: true }).waitFor({ state: 'visible' });
+      await page.clock.resume();
       await page.getByRole('button', { name: `Open ${session.name}`, exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForFunction(name => [...document.querySelectorAll('button[aria-pressed="true"]')].some(button => button.getAttribute('aria-label') === `Open ${name}`), session.name);
       await page.getByText('codex · Waiting for capacity', { exact: true }).waitFor({ state: 'visible' });
