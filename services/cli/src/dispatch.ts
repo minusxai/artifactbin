@@ -54,7 +54,7 @@ import {validateMarkupStructure} from '../../app/lib/story/document/local-valida
 import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext,claudeConfigDirectory} from './config';
+import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext,claudeConfigDirectory,claudeConfigEnvironment} from './config';
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
@@ -417,12 +417,13 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
      if(!candidate)throw new CliError('claude_session_not_found','No resumable Claude conversation matches that local session ID.','Only new managed Claude sessions with an Artifactbin-issued session ID can be resumed.');
      try{if(!(await stat(candidate.cwd)).isDirectory())throw new Error('not a directory');}catch{throw new CliError('claude_session_cwd','The saved Claude working directory is unavailable.','Restore that directory before resuming this conversation.');}
      const restored=resumeClaudeConversation(state,client.connection.server,flags.resume,randomUUID());
-     launch={command:restored.command,args:restored.args};cwd=restored.cwd;history=undefined;conversation=restored.conversation;resumeReservation=restored.reservation;resuming=true;
-     env={...env,CLAUDE_CONFIG_DIR:restored.conversation.claudeConfigDir!};
+     launch={command:restored.command,args:restored.args};cwd=restored.cwd;history=undefined;conversation={...restored.conversation,claudeConfigDirExplicit:restored.conversation.claudeConfigDirExplicit??true};resumeReservation=restored.reservation;resuming=true;
+     // Records predating claudeConfigDirExplicit always forced this path on resume.
+     env=claudeConfigEnvironment(restored.conversation.claudeConfigDir,restored.conversation.claudeConfigDirExplicit??true,env);
     }finally{state.close();}
    }else if(basename(launch.command).replace(/\.exe$/i,'')==='claude'){
     const originalArgs=[...launch.args];const planned=planClaudeConversation(originalArgs,randomUUID());launch={...launch,args:planned.args};
-    if(planned.sessionId){assertSafeClaudeConversationArgs(originalArgs);const directory=claudeConfigDirectory(home,cwd,env);env={...env,CLAUDE_CONFIG_DIR:directory};conversation={sessionId:planned.sessionId,command:launch.command,args:originalArgs,cwd,claudeConfigDir:directory};}else if(!hasClaudeSessionSelector(originalArgs)){resumeUnavailable=true;}
+    if(planned.sessionId){assertSafeClaudeConversationArgs(originalArgs);const explicit=typeof env.CLAUDE_CONFIG_DIR==='string';const directory=claudeConfigDirectory(home,cwd,env);env=claudeConfigEnvironment(directory,explicit,env);conversation={sessionId:planned.sessionId,command:launch.command,args:originalArgs,cwd,claudeConfigDir:directory,claudeConfigDirExplicit:explicit};}else if(!hasClaudeSessionSelector(originalArgs)){resumeUnavailable=true;}
    }
    let receipt:Awaited<ReturnType<typeof launchRemote>>;
    try{receipt=await launchRemote({connection:client.connection,...launch,name:typeof flags.name==='string'?flags.name:undefined,history,cwd,home,env,...(conversation?{conversation}:{}),...(resumeReservation?{resumeReservation}:{})});}

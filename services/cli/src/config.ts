@@ -32,7 +32,14 @@ export function configDir(home = homedir(), env: NodeJS.ProcessEnv = process.env
 }
 /** The Claude config directory captured by a managed conversation and reused by explicit resume. */
 export function claudeConfigDirectory(home:string,cwd:string,env:NodeJS.ProcessEnv=process.env):string {
-  return resolve(cwd,env.CLAUDE_CONFIG_DIR??join(env.HOME??home,'.claude'));
+ return resolve(cwd,env.CLAUDE_CONFIG_DIR??join(env.HOME??home,'.claude'));
+}
+/** Restore the caller's Claude auth namespace when it was implicit; otherwise scope to its saved directory. */
+export function claudeConfigEnvironment(directory:string,explicit:boolean,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
+ const restored={...env};
+ if(explicit)restored.CLAUDE_CONFIG_DIR=resolve(directory);
+ else delete restored.CLAUDE_CONFIG_DIR;
+ return restored;
 }
 /** Credentials are kept per origin, so switching servers never re-prompts or overwrites another origin's token. */
 function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
