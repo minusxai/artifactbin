@@ -11,9 +11,9 @@ import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared/prepared-runtime';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { loginHref } from '@/lib/http/login-href';
-import { takeBootstrap } from '@/web/bootstrap';
-import { adoptServedFrame } from '@/web/served-frame';
-import { reportArtifactView } from '@/web/artifact-view-report';
+import { takeBootstrap } from '@/solid/lib/bootstrap';
+import { adoptServedFrame } from '@/solid/lib/served-frame';
+import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
 import { NotFoundPage } from './NotFound';
 import type { AnnotationWire } from '@/lib/annotations/store';
@@ -87,7 +87,7 @@ const whenIdle = (task: () => void): (() => void) => {
  * the editor's chrome. Comments, selections, the reader's colour choice and editing reach the document through the
  * bridge (solid/document/create-framed-story); the address's `#hash` goes to its page behaviour. A link to an app path
  * inside the document comes back here and this page follows it (solid/document/frame-navigation). Showing the
- * document is its view (web/artifact-view-report).
+ * document is its view (solid/lib/artifact-view-report).
  */
 export function DocumentPage(): JSX.Element {
   const location = useLocation();
@@ -191,7 +191,7 @@ export function DocumentPage(): JSX.Element {
     void loadEditorPart();
     void import('../editor/ArtifactEditor').catch(() => {});
     void import('@/lib/story-runtime/edit/session').catch(() => {});
-    void import('../editor/dom-mounter').catch(() => {});
+    void import('@/lib/story-runtime/edit/dom-mounter').catch(() => {});
   };
   const beginEdit = (selectionPath: string | null) => {
     if (editable() && !editing()) prefetchEditor();

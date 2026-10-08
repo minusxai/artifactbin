@@ -12,7 +12,7 @@
  * tests pin the ones whose absence produced that page.
  */
 import { describe, it, expect } from 'vitest';
-import { renderDoc } from '@/lib/skills';
+import { renderDoc } from '@/test/helpers/skill-docs';
 import { COMPUTED_FIGURE_RULE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@/lib/serving';
 
 describe('the markup field description', () => {

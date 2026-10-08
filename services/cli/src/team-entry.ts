@@ -1,4 +1,8 @@
-/** Foreground entry: install operator configuration before importing eager application modules. */
+/**
+ * Foreground team host: install operator configuration before loading eager application modules. The
+ * application is a parameter (the runtime's entry, services/app/server/team-host, composes it), so the
+ * CLI never imports the server.
+ */
 import {createServer} from 'node:http';
 import {mkdir,lstat} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
@@ -12,13 +16,14 @@ import {withLock} from './state';
  * not stacks — but only while STARTING. `phase` is shared with `listen`, which flips it the moment the
  * listener is open, so a failure during the hours of serving that follow keeps its own report.
  */
-export async function startTeamHost(configFile:string,assets:string,overrides:TeamOverrides={}):Promise<void>{
+export type TeamApplication=(env:NodeJS.ProcessEnv,runtime:string)=>Promise<{fetch:(request:Request)=>Promise<Response>;close:()=>Promise<void>}>;
+export async function startTeamHost(configFile:string,assets:string,overrides:TeamOverrides,application:TeamApplication):Promise<void>{
  const settings=await teamSettings(configFile,process.env,overrides),runtime=resolve(assets),data=join(settings.directory,'data');
  const phase={directory:settings.directory,port:settings.port,started:false};
- try{await listen(settings,runtime,data,phase);}
+ try{await listen(settings,runtime,data,phase,application);}
  catch(error){throw startupFailure(error,phase);}
 }
-async function listen(settings:TeamSettings,runtime:string,data:string,phase:{started:boolean}):Promise<void>{
+async function listen(settings:TeamSettings,runtime:string,data:string,phase:{started:boolean},application:TeamApplication):Promise<void>{
  await mkdir(data,{recursive:true,mode:0o700});
  for(const path of [data,join(data,'pglite'),join(data,'objects')]){
   try{if((await lstat(path)).isSymbolicLink())throw new Error('Team storage must use its own directory, not a symlink.');}
@@ -28,9 +33,8 @@ async function listen(settings:TeamSettings,runtime:string,data:string,phase:{st
   process.chdir(runtime);
   for(const key of Object.keys(process.env))if(!(key in settings.env))delete process.env[key];
   Object.assign(process.env,settings.env);
-  // Intentional process-composition import: app config captures the installed environment eagerly.
-  const {createTeamApplication}=await import('./team-application');
-  const host=await createTeamApplication(settings.env,runtime),server=createServer(getRequestListener(host.fetch));
+  // Loaded only now: app config captures the installed environment eagerly.
+  const host=await application(settings.env,runtime),server=createServer(getRequestListener(host.fetch));
   let stop!:()=>void;const stopped=new Promise<void>(resolve=>{stop=resolve;});
   process.on('SIGINT',stop);process.on('SIGTERM',stop);
   try{

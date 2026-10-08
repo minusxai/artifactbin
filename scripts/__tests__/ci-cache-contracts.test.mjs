@@ -10,8 +10,8 @@ import {gzipSync} from 'node:zlib';
 import {createServer} from 'node:http';
 import {promisify} from 'node:util';
 import yaml from 'yaml';
-import * as seeds from '../lib/npm-dependency-cache.mjs';
-import {installNpmConsumer} from '../lib/npm-consumer-install.mjs';
+import * as seeds from '../../services/cli/scripts/npm-dependency-cache.mjs';
+import {installNpmConsumer} from '../../services/cli/scripts/npm-consumer-install.mjs';
 const npmCli=()=>process.env.npm_execpath??join(execFileSync('npm',['root','-g'],{encoding:'utf8'}).trim(),'npm/bin/npm-cli.js');
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
 
@@ -64,7 +64,7 @@ it('reuses only public platform archives and still uploads them from the current
  expect(reader).toBeDefined();expect(reader.with).toEqual(writer.with);
  expect(reader.with.path).toBe('.ci-cache-key/npm-platform-seeds/*.tar');
  expect(reader.with.key).toContain('steps.npm-seed-key.outputs.key');
- expect(reader.with.key).toContain('scripts/lib/npm-dependency-cache.mjs');
+ expect(reader.with.key).toContain('services/cli/scripts/npm-dependency-cache.mjs');
  const build=pack.find(step=>step.name==='Prepare public downloads while building the CLI');
  expect(build.env.SEED_CACHE_HIT).toBe('${{ steps.npm-seeds.outputs.cache-hit }}');
  expect(build.run).toContain('"$SEED_CACHE_HIT" != true');
@@ -96,7 +96,7 @@ it('seeds only the same-run Windows bootstrap cache and leaves online cache-miss
  const bootstrap=workflow().jobs['cli-bootstrap'].steps.find(step=>step.run?.includes('test-node-bootstrap.ps1'));
  expect(bootstrap.run).toContain('-WaitForArtifact');
  expect(source).toContain('afbin-npm-dependency-seed-Windows-X64');
- expect(source).toContain('scripts/lib/npm-dependency-cache.mjs merge-seed');
+ expect(source).toContain('services/cli/scripts/npm-dependency-cache.mjs merge-seed');
  expect(source).toContain("'_cacache\\_lastverified'");
  expect(source).toContain('Expected verified same-run npm dependency seed');
  expect(source).toContain("$env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache'");
@@ -104,7 +104,7 @@ it('seeds only the same-run Windows bootstrap cache and leaves online cache-miss
  expect(source).not.toContain('$env:npm_config_offline');
  expect(source).toContain("$phase='standard-user online npx query'");
  expect(source).toContain("$phase='standard-user setup global and skills'");
- const acl=source.indexOf('& icacls.exe $root /grant'),seed=source.indexOf('scripts/lib/npm-dependency-cache.mjs merge-seed');
+ const acl=source.indexOf('& icacls.exe $root /grant'),seed=source.indexOf('services/cli/scripts/npm-dependency-cache.mjs merge-seed');
  const candidateWait=source.indexOf("while(!(Test-Path '__ROOT__\\candidate.tgz'))"),seedCheck=source.indexOf('Expected verified same-run npm dependency seed'),query=source.indexOf("$phase='standard-user online npx query'");
  expect(acl).toBeGreaterThanOrEqual(0);expect(seed).toBeGreaterThan(acl);
  expect(candidateWait).toBeGreaterThan(-1);expect(candidateWait).toBeLessThan(seedCheck);expect(seedCheck).toBeLessThan(query);
@@ -266,7 +266,7 @@ it('rejects incomplete or wrong-platform archives before copying a seed into the
  const lock=readFileSync(new URL('../../services/cli/npm-shrinkwrap.json',import.meta.url),'utf8');
  const dependencies=seeds.npmSeedDependencies(lock,{os:'linux',cpu:'x64'});
  const archive=join(directory,'seed.tar'),target=join(directory,'consumer');
- const run=(os='Linux',arch='X64')=>spawnSync(process.execPath,[fileURLToPath(new URL('../lib/npm-dependency-cache.mjs',import.meta.url)),'merge-seed',archive,target,os,arch],{encoding:'utf8'});
+ const run=(os='Linux',arch='X64')=>spawnSync(process.execPath,[fileURLToPath(new URL('../../services/cli/scripts/npm-dependency-cache.mjs',import.meta.url)),'merge-seed',archive,target,os,arch],{encoding:'utf8'});
  const pack=(selected,{manifests=true}={})=>{
   const records=selected.flatMap(dependency=>{
    const tarball={key:'make-fetch-happen:request-cache:'+dependency.resolved,integrity:dependency.integrity,metadata:{url:dependency.resolved}};

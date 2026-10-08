@@ -32,7 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
-import { precompressTree, describePrecompression } from '../lib/precompress.mjs';
+import { precompressTree, describePrecompression } from '../../services/app/scripts/precompress.mjs';
 import { readLucideIcons } from '../../services/app/scripts/lucide-icons.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
@@ -129,7 +129,7 @@ const STANDALONE_LAZY = [
  * closure. It is its OWN graph, not an entry of the shared one: an entry there would re-partition the shared
  * chunks under the rt+boot budget for a module no reader loads. Split, so the controller and the relay load on
  * attach and the editor (ProseMirror, the edit session, the DOM mounter) only on edit mode, through the
- * controller's own dynamic imports. The editor's Solid modules (services/app/solid) compile as the app compiles
+ * controller's own dynamic imports. The editor's Solid modules (lib/story-runtime/edit, services/app/solid) compile as the app compiles
  * them (dom, not hydratable); the graph carries its own copy of Solid's runtime, which shares nothing with the
  * islands' (the editor mounts its own roots).
  */
@@ -537,7 +537,7 @@ function buildId(manifest, halves, graphInputs) {
 }
 
 /** What the `--cache` marker keys on: this script, the lockfile, and every repository file the last build read. */
-const toolHash = () => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'scripts/lib/precompress.mjs')), fs.readFileSync(path.join(ROOT, 'package-lock.json')), fs.readFileSync(SQLITE_WASM)]));
+const toolHash = () => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'services/app/scripts/precompress.mjs')), fs.readFileSync(path.join(ROOT, 'package-lock.json')), fs.readFileSync(SQLITE_WASM)]));
 const sourceHashes = (rels) => Object.fromEntries(rels.map((rel) => [rel, fs.existsSync(path.join(ROOT, rel)) ? sha256(fs.readFileSync(path.join(ROOT, rel))) : null]));
 const trackedSources = (inputs) => [...new Set([
   ...listFiles(ISLANDS_SRC).filter((f) => !f.split(path.sep).includes('__tests__')).map((f) => toPosix(path.relative(ROOT, f))),

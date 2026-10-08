@@ -21,7 +21,7 @@ import { reloadKeepingPlace } from '@/lib/islands/live-update';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { displayTitle } from '@/lib/story/document/title';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
-import { initialViewWasReported } from '@/web/artifact-view-report';
+import { initialViewWasReported } from '@/solid/lib/artifact-view-report';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import { loginHref } from '@/lib/http/login-href';
 import { replaceDocument } from '../lib/document-navigation';
@@ -98,7 +98,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     onCleanup(() => window.removeEventListener('hashchange', syncEditHash));
   });
 
-  // ── one view per open (web/artifact-view-report: the served page reports a compiled read itself) ──
+  // ── one view per open (solid/lib/artifact-view-report: the served page reports a compiled read itself) ──
   onMount(() => {
     if (initialViewWasReported(document, id)) return;
     document.body.setAttribute('data-mx-view-reported', id);

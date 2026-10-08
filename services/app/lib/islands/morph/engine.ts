@@ -362,7 +362,7 @@ interface MorphContext {
   editRegions?: ReadonlyMap<string, Element>;
 }
 
-/** A held editor's stand-in in a draft (solid/editor/dom-mounter EDIT_REGION_ATTR; not imported: no editor code here). */
+/** A held editor's stand-in in a draft (lib/story-runtime/edit/dom-mounter EDIT_REGION_ATTR; not imported: no editor code here). */
 const EDIT_REGION_ATTR = 'data-mx-edit-region';
 
 type Movable = Element & { moveBefore?: (node: Node, child: Node | null) => void };

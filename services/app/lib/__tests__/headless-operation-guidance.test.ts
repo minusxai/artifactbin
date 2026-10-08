@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {buildQuickSheet} from '../skills';
+import {buildQuickSheet} from '@/test/helpers/skill-docs';
 import teaching from '../../../cli/src/generated/teaching.json';
 
 describe('headless operation guidance',()=>{

@@ -15,7 +15,8 @@
  * rejects. Add a builder here when you add one.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc, renderTree, skillTree } from '../skills';
+import { renderTree, skillTree } from '../skills';
+import { buildQuickSheet, renderDoc } from '@/test/helpers/skill-docs';
 import { publishJsx } from '../story/document/jsx-tier';
 import type { StoredContent } from '../story/document/input';
 

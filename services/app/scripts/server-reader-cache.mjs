@@ -19,7 +19,7 @@ const REPO = path.resolve(APP, '../..');
 const MARKER = path.join(APP, 'lib/build-assets/.server-reader-cache.json');
 const TOOLS = ['services/app/scripts/build-server-reader.mjs', 'services/app/scripts/server-reader-cache.mjs',
   'services/app/scripts/preparation-fingerprint.mjs', 'services/app/scripts/build-offline.mjs', 'services/app/scripts/build-libraries.mjs',
-  'services/app/scripts/lucide-icons.mjs', 'scripts/lib/precompress.mjs',
+  'services/app/scripts/lucide-icons.mjs', 'services/app/scripts/precompress.mjs',
   'package-lock.json', 'services/app/package.json', 'services/app/lib/libraries/registry.json'];
 // Mirrors app/globals.css: @source ../web ../solid ../lib, minus their __tests__ (solid's stay).
 const SOURCE_DIRS = ['web', 'solid', 'lib'];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
-import { renderDoc } from '../skills';
+import { renderDoc } from '@/test/helpers/skill-docs';
 import { validateMarkupStructure } from '../story/document/local-validation';
 
 const doc = (name: string) => renderDoc(`artifactbin/references/${name}.md`, 'https://example.test');

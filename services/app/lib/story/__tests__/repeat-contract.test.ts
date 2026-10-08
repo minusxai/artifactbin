@@ -3,7 +3,7 @@ import { parseJsx,validateJsx } from '@/lib/jsx';
 import { collectRefNameUses } from '../data/dataflow';
 import { keyedRowsError, validRowKey } from '../data/repeat-identity';
 import { publishJsx } from '../document/jsx-tier';
-import { renderDoc } from '@/lib/skills';
+import { renderDoc } from '@/test/helpers/skill-docs';
 import { stampNodeIds } from '../document/node-ids';
 const source='<For id="orders" each={$orders} keyBy="order_id"><p id="customer">{$_row.customer}</p></For>';
 function nodes(source:string){const p=parseJsx(source);if(!p.ok)throw new Error(p.error);return p.nodes;}

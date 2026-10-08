@@ -16,7 +16,7 @@
  *   no rule dropped: corpus −8.9%, OpenCode −44% cost, pi −23%.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc } from '../skills';
+import { buildQuickSheet, renderDoc } from '@/test/helpers/skill-docs';
 
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 import { STORY_THEMES } from '../data/story/story-themes';

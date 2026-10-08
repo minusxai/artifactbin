@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
-import { pageDataChanged, profileChanged } from '@/web/page-data-events';
+import { pageDataChanged, profileChanged } from '@/solid/lib/page-data-events';
 import { Button } from './ui';
 import { apiFetch } from '../lib/api';
 

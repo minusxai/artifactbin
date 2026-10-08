@@ -21,7 +21,7 @@ import { formatFileSize } from '@/lib/workspace/file-display';
 import { displayTitle } from '@/lib/story/document/title';
 import type { ReaderForkedFrom } from '@/lib/story/reader/fork-credit.server';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged } from '@/solid/lib/page-data-events';
 import WorkspaceShell from '../components/WorkspaceShell';
 import { AssetWorkspace, type AssetSection } from '../components/AssetWorkspace';
 import { DatasetActionsView } from '../components/DatasetActionsView';

@@ -2,7 +2,7 @@
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
 import { internalRedirectTarget } from '@/lib/http/safe-redirect';
-import { pageDataChanged, profileChanged } from '@/web/page-data-events';
+import { pageDataChanged, profileChanged } from '@/solid/lib/page-data-events';
 import { AvatarCircle } from '../components/AvatarCircle';
 import { replaceDocument } from '../lib/document-navigation';
 import { useSession } from '../lib/session';

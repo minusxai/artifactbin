@@ -2,7 +2,7 @@
  * WHERE A SCRIPT COMPONENT MOUNTS. A capitalized tag outside the kit registry is a component the document's Helmet
  * script exports: the compiler emits a mount node (`data-mx-mount="<Name>"`) whose children are the server-rendered
  * fallback, the page runtime renders the component into it (lib/islands/page-runtime), and the editor badges it and
- * keeps that fallback out of inline editing (solid/editor/dom-mounter). One definition for all three, free of the
+ * keeps that fallback out of inline editing (lib/story-runtime/edit/dom-mounter). One definition for all three, free of the
  * compiler's graph so the editor chunk can read it.
  */
 import type { JsxNode } from '@/lib/jsx/types';

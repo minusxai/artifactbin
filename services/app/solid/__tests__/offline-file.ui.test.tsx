@@ -13,13 +13,13 @@ import { renderArtifactFileHtml } from '@/lib/offline/file-html';
 import { draftKey, readDraft, writeDraft } from '@/lib/offline/local-state';
 import { suggestedFileName } from '@/lib/offline/save-file';
 import { disposeSolidOfflineFile, mountSolidOfflineFile, queryConsumersOf } from '@/lib/offline/solid-entry';
-import type { CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
+import type { CompiledEditCallbacks } from '@/lib/story-runtime/edit/dom-mounter';
 import { preloadCommentField } from '../document/LazyCommentField';
 
 // The real mounter, with the callbacks the offline shell hands it kept for the flow-edit cases.
 const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null, view: null as EditorView | null, onFlush: null as (() => void) | null }));
-vi.mock('@/solid/editor/dom-mounter', async (real) => {
-  const actual = await real<typeof import('@/solid/editor/dom-mounter')>();
+vi.mock('@/lib/story-runtime/edit/dom-mounter', async (real) => {
+  const actual = await real<typeof import('@/lib/story-runtime/edit/dom-mounter')>();
   return {
     ...actual,
     mountCompiledEditRegions: (...args: Parameters<typeof actual.mountCompiledEditRegions>) => {

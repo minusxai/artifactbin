@@ -4,7 +4,7 @@
  *
  *  - STATIC, content-addressed trees (/assets, /islands, /libraries, /offline):
  *    the brotli/gzip siblings the build wrote beside each file
- *    (scripts/lib/precompress.mjs). Chosen per request, never computed.
+ *    (services/app/scripts/precompress.mjs). Chosen per request, never computed.
  *  - DYNAMIC pages and page data: brotli at a fast quality, computed per
  *    response, only for a finished HTML/JSON body (`compressDynamic`).
  *
@@ -23,7 +23,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 
 type ServeStaticOptions = Parameters<typeof serveStatic>[0];
 const SIBLING = /\.(?:br|gz)$/;
-/** The content types a sibling can exist for (scripts/lib/precompress PRECOMPRESSIBLE). */
+/** The content types a sibling can exist for (services/app/scripts/precompress PRECOMPRESSIBLE). */
 const COMPRESSIBLE_TYPE = /^(?:text\/|application\/(?:javascript|json|wasm|manifest\+json)|image\/svg\+xml)/i;
 
 /** Add `Accept-Encoding` to a response's Vary, once. */

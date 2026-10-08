@@ -3,7 +3,7 @@
  * react-grid-layout/css/styles.css (v1.5.2), injected INSIDE the story surface root by the
  * edit-mode Grid adapter (never `<head>`: the app's own stylesheets never reach the served
  * document's realm). Two adapters share it: the React one (`.react-grid-item` etc., RGL's own
- * classes) and the Solid one (`[data-mx-grid-tile]`/`.mx-grid-resize`, solid/editor/GridEdit.tsx
+ * classes) and the Solid one (`[data-mx-grid-tile]`/`.mx-grid-resize`, lib/story-runtime/edit/GridEdit.tsx
  * and dom-mounter.tsx) — each adapter's rules are inert against the other's markup, so one sheet
  * covers both rather than drifting into two.
  *

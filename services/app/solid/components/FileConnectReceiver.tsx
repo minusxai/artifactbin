@@ -1,7 +1,6 @@
 /** One inert receiver. The offer stays in memory through authentication and recoverable writes. */
 import {createSignal,Show,onCleanup,type JSX} from 'solid-js';
-import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_MAX_BYTES,type PreviewConnectMessage} from '@artifactbin/contracts';
-import {previewWorkspaceUrl} from '@/lib/offline/preview-connect';
+import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_MAX_BYTES,previewWorkspaceUrl,type PreviewConnectMessage} from '@artifactbin/contracts';
 import {PageBar,DocumentTitle} from './PageBar';
 import {runtimeId} from '../../lib/story-runtime/runtime-id';
 import {FormPage,FORM_INPUT,FORM_PRIMARY_BUTTON,FORM_SECONDARY_BUTTON} from './FormControls';

@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createPageDataStore } from '../page-data-store';
+import { createPageDataStore } from '@/solid/lib/page-data-store';
 
 it('repeated preload of the same navigation is idempotent after completion', async () => {
   const store=createPageDataStore();store.setScope('A');const load=vi.fn(async()=>1);

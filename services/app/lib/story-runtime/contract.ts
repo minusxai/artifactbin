@@ -518,7 +518,7 @@ export const STORY_TEXT_EDIT_MESSAGE = 'mx:text-edit';
 interface StoryTextEditMessage { type: typeof STORY_TEXT_EDIT_MESSAGE; nonce: string; path: string; innerHtml: string }
 
 /**
- * Frame → parent: the person pressed "Edit script" on a script component's mount badge (solid/editor/dom-mounter).
+ * Frame → parent: the person pressed "Edit script" on a script component's mount badge (lib/story-runtime/edit/dom-mounter).
  * `component` is the mount's name; the parent opens the Helmet script in the source editor at its export.
  */
 export const STORY_OPEN_SCRIPT_MESSAGE = 'mx:open-script';

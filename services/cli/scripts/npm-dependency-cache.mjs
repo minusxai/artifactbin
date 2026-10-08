@@ -212,9 +212,9 @@ export async function packPlatformNpmSeeds(source,output,lockText,{concurrency=M
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const [first,second,third,fourth,fifth]=process.argv.slice(2);
  if(first==='seed-key'){
-  appendFileSync(second,`key=${npmPlatformSeedCacheKey(readFileSync(new URL('../../services/cli/npm-shrinkwrap.json',import.meta.url),'utf8'))}\n`);
+  appendFileSync(second,`key=${npmPlatformSeedCacheKey(readFileSync(new URL('../npm-shrinkwrap.json',import.meta.url),'utf8'))}\n`);
  }else if(first==='prepare-seed'){
-  const dependencies=npmSupportedSeedDependencies(readFileSync(new URL('../../services/cli/npm-shrinkwrap.json',import.meta.url),'utf8'));
+  const dependencies=npmSupportedSeedDependencies(readFileSync(new URL('../npm-shrinkwrap.json',import.meta.url),'utf8'));
   const start=Date.now();await populateNpmSeed(dependencies,second);
   // Check every actual cached tarball against the consumer shrinkwrap, including
   // npm's multiple index records for the same URL; npm owns blob verification.
@@ -222,7 +222,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   execFileSync('npm',['cache','verify','--cache',second],{stdio:'inherit'});
   console.log(`Prepared ${dependencies.length} pinned public tarballs in ${Date.now()-start}ms`);
  }else if(first==='pack-seeds'){
-  await packPlatformNpmSeeds(second,third,readFileSync(new URL('../../services/cli/npm-shrinkwrap.json',import.meta.url),'utf8'));
+  await packPlatformNpmSeeds(second,third,readFileSync(new URL('../npm-shrinkwrap.json',import.meta.url),'utf8'));
  }else if(first==='pack-seed'){
   const records=await assertPublicNpmCache(second);
   execFileSync('tar',['-cf',third,'-C',second,'_cacache']);
@@ -230,7 +230,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
 }else if(first==='merge-seed'){
   const platform=seedPlatforms.find(([os,arch])=>os===fourth&&arch===fifth);
   if(!platform)throw Error('Pass supported runner OS and architecture for the npm seed');
-  const lockText=readFileSync(new URL('../../services/cli/npm-shrinkwrap.json',import.meta.url),'utf8');
+  const lockText=readFileSync(new URL('../npm-shrinkwrap.json',import.meta.url),'utf8');
   const result=await extractValidatedNpmSeed(second,third,lockText,{os:platform[2],cpu:platform[3]});
   console.log(`Prepared verified npm seed: ${JSON.stringify(result.phases)} ms`);
 }else{

@@ -1,20 +1,11 @@
 /** A portable file hands a copy to a user-selected preview server without granting it network access. */
 import {runtimeId} from '../story-runtime/runtime-id';
-import { normalizeOrigin, PREVIEW_CONNECT_CHANNEL, PREVIEW_CONNECT_PATH, PREVIEW_CONNECT_MAX_BYTES, type PreviewConnectMessage } from '@artifactbin/contracts';
+import { normalizeOrigin, previewWorkspaceUrl, PREVIEW_CONNECT_CHANNEL, PREVIEW_CONNECT_PATH, PREVIEW_CONNECT_MAX_BYTES, type PreviewConnectMessage } from '@artifactbin/contracts';
 
 export function previewServerOrigin(value: string): string {
   const origin = normalizeOrigin(value.trim());
   if (!origin) throw new Error('Enter an HTTPS server address, or a local address such as http://localhost:7474. Use only the server address, without a path.');
   return origin;
-}
-
-/** The returned editor link must stay inside the chosen server's workspace. */
-export function previewWorkspaceUrl(origin: string, path: string): string | null {
-  if (!path.startsWith('/workspace/') || path.includes('\\') || /[\u0000-\u001f]/.test(path)) return null;
-  let url: URL;
-  try { url = new URL(path, origin); } catch { return null; }
-  if (url.origin !== origin || !url.pathname.startsWith('/workspace/') || url.search || url.hash) return null;
-  return url.href;
 }
 
 export interface PreviewConnectionOptions {

@@ -3,7 +3,7 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {useAppHarness} from './harness';
-import {createTeamApplication} from '../../cli/src/team-application';
+import {createTeamApplication} from '../server/team-application';
 import {getDb} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {AUTH_SECRET} from '@/lib/platform';

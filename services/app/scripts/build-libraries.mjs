@@ -2,7 +2,7 @@ import esbuild from 'esbuild';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { precompressFile } from '../../../scripts/lib/precompress.mjs';
+import { precompressFile } from './precompress.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const registry = JSON.parse(readFileSync(path.join(root, 'lib/libraries/registry.json'), 'utf8'));

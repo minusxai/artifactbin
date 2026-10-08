@@ -51,7 +51,7 @@ const editSession = vi.hoisted(() => ({
   },
 }));
 vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () => editSession.session }));
-vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
+vi.mock('@/lib/story-runtime/edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
 import { createIslandController, holdChartDrawings } from '../island-controller';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';

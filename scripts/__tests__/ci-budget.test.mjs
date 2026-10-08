@@ -123,7 +123,7 @@ it('exits nonzero for an over-limit attempt and missing start, but accepts a fre
  } finally {rmSync(directory,{recursive:true,force:true});}
 });
 it('shares only verified npm download blobs, never installed modules or npx state',async()=>{
- const {mergeNpmDependencyCache}=await import('../lib/npm-dependency-cache.mjs');
+ const {mergeNpmDependencyCache}=await import('../../services/cli/scripts/npm-dependency-cache.mjs');
  const directory=mkdtempSync(join(tmpdir(),'afbin-npm-cas-'));
  const source=join(directory,'source'),target=join(directory,'target');
  const {mkdirSync,existsSync}=await import('node:fs');
@@ -149,7 +149,7 @@ it('warms only normal matrix download blobs while keeping the standard-user boot
 });
 
 it('refuses credential/private seed metadata',async()=>{
- const {assertPublicNpmCache}=await import('../lib/npm-dependency-cache.mjs');
+ const {assertPublicNpmCache}=await import('../../services/cli/scripts/npm-dependency-cache.mjs');
  const directory=mkdtempSync(join(tmpdir(),'afbin-npm-public-'));
  const {mkdirSync}=await import('node:fs');
  const index=join(directory,'_cacache','index-v5');mkdirSync(index,{recursive:true});
@@ -179,7 +179,7 @@ it('refuses credential/private seed metadata',async()=>{
 });
 
 it('seeds only pinned public shrinkwrap tarballs including optional native platforms',async()=>{
- const {npmSeedDependencies,npmSupportedSeedDependencies}=await import('../lib/npm-dependency-cache.mjs');
+ const {npmSeedDependencies,npmSupportedSeedDependencies}=await import('../../services/cli/scripts/npm-dependency-cache.mjs');
  const lock={packages:{'':{name:'@afbin/cli'},'node_modules/a':{resolved:'https://registry.npmjs.org/a/-/a-1.tgz',integrity:'sha512-a'},'node_modules/b':{optional:true,os:['win32'],resolved:'https://registry.npmjs.org/b/-/b-1.tgz',integrity:'sha512-b'}}};
  expect(npmSeedDependencies(JSON.stringify(lock),{os:'linux',cpu:'x64'})).toEqual([{resolved:lock.packages['node_modules/a'].resolved,integrity:'sha512-a'}]);
  expect(npmSeedDependencies(JSON.stringify(lock),{os:'win32',cpu:'x64'})).toHaveLength(2);
@@ -192,7 +192,7 @@ it('seeds only pinned public shrinkwrap tarballs including optional native platf
  }
 });
 it('creates a fresh seed with bounded npm cache operations instead of selecting arbitrary host caches',async()=>{
- const {populateNpmSeed,npmSeedRequest}=await import('../lib/npm-dependency-cache.mjs');
+ const {populateNpmSeed,npmSeedRequest}=await import('../../services/cli/scripts/npm-dependency-cache.mjs');
  const directory=mkdtempSync(join(tmpdir(),'afbin-clean-seed-'));
  const dependencies=Array.from({length:19},(_,i)=>({resolved:`https://registry.npmjs.org/a/-/a-${i}.0.0.tgz`,integrity:'sha512-test'}));
  let active=0,max=0;const calls=[];
@@ -226,7 +226,7 @@ it('warns rather than fails when a PR consumer includes a long prerequisite wait
 });
 
 it('packs independent platform seeds with bounded concurrent npm processes',async()=>{
- const {packPlatformNpmSeeds}=await import('../lib/npm-dependency-cache.mjs');
+ const {packPlatformNpmSeeds}=await import('../../services/cli/scripts/npm-dependency-cache.mjs');
  const directory=mkdtempSync(join(tmpdir(),'afbin-pack-concurrency-')),source=join(directory,'source');
  const {mkdir,writeFile}=await import('node:fs/promises');await mkdir(join(source,'_cacache/index-v5'),{recursive:true});
  const url='https://registry.npmjs.org/a/-/a-1.tgz',integrity='sha512-test';

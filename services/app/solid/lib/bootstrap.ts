@@ -10,7 +10,7 @@ const BOOTSTRAP_ID = 'mx-page-data';
 
 interface Payload {
   path: string; profile?: unknown; artifact?: unknown;
-  /** The canonical path, when the document was served at another address (server/app; web/heal-address). */
+  /** The canonical path, when the document was served at another address (server/app; solid/lib/heal-address). */
   address?: string;
 }
 

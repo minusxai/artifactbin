@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PREVIEW_CONNECT_CHANNEL } from '@artifactbin/contracts';
-import { connectPreview, previewServerOrigin, previewWorkspaceUrl } from '@/lib/offline/preview-connect';
+import { previewWorkspaceUrl } from '@artifactbin/contracts';
+import { connectPreview, previewServerOrigin } from '@/lib/offline/preview-connect';
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };

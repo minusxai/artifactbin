@@ -1,9 +1,9 @@
 /**
- * ONE VIEW PER DOCUMENT SHOWN (web/artifact-view-report): the app page reports the document it frames with the same
+ * ONE VIEW PER DOCUMENT SHOWN (solid/lib/artifact-view-report): the app page reports the document it frames with the same
  * request the served reader used to send, once per document in this page, and a prerendered page only when shown.
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { initialViewWasReported, reportArtifactView } from '../artifact-view-report';
+import { initialViewWasReported, reportArtifactView } from '@/solid/lib/artifact-view-report';
 
 let fetcher: ReturnType<typeof vi.fn>;
 beforeEach(() => {

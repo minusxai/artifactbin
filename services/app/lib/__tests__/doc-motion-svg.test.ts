@@ -6,7 +6,7 @@
  * of templates from mandatory beat-sheets to genre references.
  */
 import { describe, it, expect } from 'vitest';
-import { renderDoc } from '../skills';
+import { renderDoc } from '@/test/helpers/skill-docs';
 import { publishJsx } from '../story/document/jsx-tier';
 
 const B = 'https://example.test';

@@ -55,7 +55,7 @@ import {
 } from './hover-select';
 import { createImageTransfer, DROP_REPLACE_CSS, EDIT_DROP_REPLACE_ATTR } from './image-transfer';
 import { createFormatLink } from './format-link';
-import type { CompiledEditMount, CompiledEditCallbacks, HeldEditors, ReconcileOptions } from '@/solid/editor/dom-mounter';
+import type { CompiledEditMount, CompiledEditCallbacks, HeldEditors, ReconcileOptions } from './dom-mounter';
 
 /**
  * Selection chrome, injected on entering edit mode and removed on leaving.
@@ -117,7 +117,7 @@ export interface FrameEditSession {
   canApplyDraft(): boolean;
   /**
    * Adopt a draft that changes only the prose the editors already show, keeping every live editor
-   * (solid/editor/dom-mounter `reconcile`); false when it must be drawn.
+   * (lib/story-runtime/edit/dom-mounter `reconcile`); false when it must be drawn.
    */
   reconcileDraft(before: JsxNode[], after: JsxNode[], next: JsxNode[], draft: HTMLElement | null, options?: ReconcileOptions): boolean;
   /** The nodes currently rendered — selection is classified against the SOURCE, not the DOM. */
@@ -143,7 +143,7 @@ interface FrameEditSessionOptions {
   root: HTMLElement;
   /** Ask the runtime to re-render (a new body epoch releases the focus guard). */
   requestRender: () => void;
-  /** Browser-only Solid boundary (solid/editor/dom-mounter). */
+  /** Browser-only Solid boundary (lib/story-runtime/edit/dom-mounter). */
   mountCompiled: (root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks, held?: HeldEditors) => CompiledEditMount;
 }
 
@@ -256,7 +256,7 @@ export function createFrameEditSession({
     return true;
   };
 
-  /** A text host's focus, typing and blur, as solid/editor/dom-mounter reports them. */
+  /** A text host's focus, typing and blur, as lib/story-runtime/edit/dom-mounter reports them. */
   const hostSession = {
     onFocus(path: string, el: HTMLElement) {
       views.last = null;

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {renderDoc} from '../skills';
+import {renderDoc} from '@/test/helpers/skill-docs';
 const doc=(name:string)=>renderDoc(`artifactbin/${name}`,'https://example.test');
 describe('local editing guidance',()=>{
  it('preserves durable body identity through moves and forbids reuse',()=>{

@@ -15,7 +15,7 @@ import ListChecks from 'lucide-solid/icons/list-checks';
 import PanelTop from 'lucide-solid/icons/panel-top';
 import ScrollText from 'lucide-solid/icons/scroll-text';
 import AppWindow from 'lucide-solid/icons/app-window';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged } from '@/solid/lib/page-data-events';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { ARTIFACT_STARTERS, artifactStarter } from '@/lib/workspace/artifact-starters';
 import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';

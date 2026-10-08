@@ -2,7 +2,7 @@
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { LoaderCircle, UserRound } from 'lucide-solid';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
-import { pageDataChanged, profileChanged } from '@/web/page-data-events';
+import { pageDataChanged, profileChanged } from '@/solid/lib/page-data-events';
 import { Avatar } from './Avatar';
 import { Button } from './ui';
 
