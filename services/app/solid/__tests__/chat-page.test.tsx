@@ -492,6 +492,7 @@ it('releases included agent Stop only after a fresh post-acknowledgement poll an
   expect(polls).toBe(2);
   expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
   expect(screen.getByRole('button',{name:'Open afbin'})).toHaveTextContent('Stopping');
+  expect(screen.getByRole('textbox',{name:'Message to agent'})).toHaveAttribute('placeholder','Stopping…');
   await waitFor(()=>expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled(),{timeout:2000});
   expect(screen.getByRole('button',{name:'Open afbin'})).toHaveTextContent('Ready');
   fireEvent.input(screen.getByRole('textbox',{name:'Message to agent'}),{target:{value:'next request'}});
