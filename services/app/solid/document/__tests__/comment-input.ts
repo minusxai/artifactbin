@@ -1,4 +1,3 @@
-import { beforeAll, afterAll } from "vitest";
 import { fireEvent } from "../../__tests__/helpers";
 /** Exercise the editor's real keyboard/paste boundary instead of textarea-only value setters. */
 export function replaceComment(field: HTMLElement, text: string) {
@@ -41,37 +40,3 @@ export async function selectCommentText(
   document.dispatchEvent(new Event("selectionchange"));
   await new Promise((resolve) => setTimeout(resolve, 25));
 }
-
-// JSDOM has no layout; ProseMirror measures the caret after paste and keyboard edits.
-const exec = Object.getOwnPropertyDescriptor(document, "execCommand");
-const rects = Object.getOwnPropertyDescriptor(
-  Range.prototype,
-  "getClientRects",
-);
-const rect = Object.getOwnPropertyDescriptor(
-  Range.prototype,
-  "getBoundingClientRect",
-);
-beforeAll(() => {
-  Object.defineProperty(document, "execCommand", {
-    configurable: true,
-    value: () => false,
-  });
-  Object.defineProperty(Range.prototype, "getClientRects", {
-    configurable: true,
-    value: () => [],
-  });
-  Object.defineProperty(Range.prototype, "getBoundingClientRect", {
-    configurable: true,
-    value: () => new DOMRect(),
-  });
-});
-afterAll(() => {
-  if (exec) Object.defineProperty(document, "execCommand", exec);
-  else Reflect.deleteProperty(document, "execCommand");
-  if (rects) Object.defineProperty(Range.prototype, "getClientRects", rects);
-  else Reflect.deleteProperty(Range.prototype, "getClientRects");
-  if (rect)
-    Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
-  else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
-});
