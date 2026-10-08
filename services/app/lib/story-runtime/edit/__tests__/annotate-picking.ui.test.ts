@@ -221,7 +221,7 @@ describe('drawing an area to comment on', () => {
     const picked = selections().at(-1)!.selection as { path: string; tag: string; quote?: string; range?: unknown };
     expect(picked).toMatchObject({ path: '0', tag: 'section', range: { v: 1, kind: 'area', box: { x: 0.2, y: 0.05, w: 0.5, h: 0.4 } } });
     expect(picked.quote).toBeUndefined();
-    expect(document.getElementById('sec')).toHaveAttribute('data-mx-annotate-selected');
+    expect(document.getElementById('sec')).not.toHaveAttribute('data-mx-annotate-selected');
     // Screenshot handoff must not repaint the band before the host suppresses capture chrome.
     expect(band()).toBeNull();
     // Capture temporarily suppresses paint, including the composing band.
