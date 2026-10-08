@@ -22,7 +22,7 @@ import { DELETE as deleteArtifactRoute, GET as getArtifactRoute, PUT as putArtif
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as myDeleteAnnotationRoute, POST as myActOnAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { avatarUrl } from '@/lib/accounts';

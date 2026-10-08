@@ -63,7 +63,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
           <input type="email" autofocus autocomplete="email" aria-label="Email" placeholder="email" value={email()} onInput={event => setEmail(event.currentTarget.value)} class={INPUT} />
           <button type="submit" aria-label="Log in with email" disabled={busy() || !email()} class={BUTTON}>{busy() ? 'sending…' : 'log in with email'}</button>
         </form>
-        <p class="mt-10 text-xs text-muted"><b>Note:</b> Your guest artifacts and connected agents will join this account.</p>
+        <p class="mt-10 text-xs text-muted"><b>Note:</b> Previously saved guest artifacts and connected agents will join this account.</p>
       </Show>
       <Show when={error()}><p class="mt-3 text-xs text-danger">{error()}</p></Show>
     </FormPage>

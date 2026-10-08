@@ -1,4 +1,5 @@
-import { changeMembership,claimToken,createUser,mintToken } from '@/lib/accounts';
+import { changeMembership, claimToken, createUser } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { updateSharingFor } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
@@ -15,7 +16,7 @@ useAppHarness();
 const imageParams=(id:string,datasetId:string,imageId:string)=>({params:Promise.resolve({id,datasetId,imageId})});
 it('uploads through a real pages actor, replays safely, and rechecks the current dataset read grant',async()=>{
   const owner=await createUser({email:'mxmx_test_image_owner@example.test'}),reporter=await createUser({email:'mxmx_test_image_reporter@example.test'});
-  const token=await mintToken('feedback-images-owner');await claimToken(owner.id,token.token);
+  const token=await mintToken('feedback-images-owner', owner.id);await claimToken(owner.id,token.token);
   const ownerActor={userId:owner.id,tokenId:token.id};
   const make=async(body:object)=>{const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return response.json();};
   const dataset=await make({dataset:[{message:'initial',image_ref:''}],visibility:'private',access:'readwrite'});

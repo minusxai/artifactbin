@@ -29,6 +29,18 @@ export async function userKindOf(userId: string | null | undefined, query?: Quer
   return row.rows[0]?.kind ?? null;
 }
 
+/** Credentials require an email account. Disposable test users are delegated
+ * by such an account; legacy guest owners are only retained for adoption. */
+export async function canAuthenticateUser(userId: string | null | undefined, query?: Queryable): Promise<boolean> {
+  if (!userId) return false;
+  const db = query ?? (await getDb());
+  const result = await db.query(`SELECT 1 FROM users u WHERE u.id = $1 AND (
+    (u.kind = 'account' AND u.email IS NOT NULL)
+    OR (u.kind = 'testuser' AND (u.expires_at IS NULL OR u.expires_at > now()) AND EXISTS
+      (SELECT 1 FROM users parent WHERE parent.id = u.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL)))`, [userId]);
+  return result.rows.length > 0;
+}
+
 /** Is this user one of the kinds that reaches a stranger's document only through the LINK? */
 export async function isLinkOnlyActor(userId: string | null | undefined, query?: Queryable): Promise<boolean> {
   const kind = await userKindOf(userId, query);

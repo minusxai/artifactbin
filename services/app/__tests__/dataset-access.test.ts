@@ -15,7 +15,7 @@ import { GET as sharingGet, PUT as sharingPut } from '@/app/api/my/artifacts/[id
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
@@ -89,8 +89,8 @@ describe('access on the browser surfaces', () => {
   });
 
   it('the sharing surface carries access and the documents that write here, for an account owner', async () => {
-    const t = await mintToken('t');
     const user = await createUser({ email: 'owner@x.com' });
+    const t = await mintToken('t', user.id);
     await claimToken(user.id, t.token);
     const cookie = await agentCookie([t.id]);
     const ds = ((await (await create(t.token, { dataset: ROWS, access: 'readwrite' })).json()) as { id: string }).id;

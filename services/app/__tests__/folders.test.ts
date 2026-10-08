@@ -13,7 +13,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { buildShelf } from '@/lib/workspace';
 
@@ -22,9 +22,9 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 
 async function owner(name = 'owner') {
-  const t = await mintToken(name);
   const u = await createUser({ email: `${name}@example.com` });
-  await claimToken(u.id, t.token);
+  const t = await mintToken(name, u.id);
+    await claimToken(u.id, t.token);
   return { token: t.token, tokenId: t.id, userId: u.id, cookie: await agentCookie([t.id]) };
 }
 const create = async (token: string, body: Record<string, unknown>) => j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));

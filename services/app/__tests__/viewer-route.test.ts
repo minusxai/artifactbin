@@ -11,7 +11,7 @@ import { agentCookie, useAppHarness, request, setSession } from '@/__tests__/har
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as viewerRoute } from '@/app/a/[id]/viewer/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
@@ -25,7 +25,7 @@ beforeEach(() => asSession(null));
 
 async function owner() {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_viewer_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-  const t = await mintToken('viewer'); await claimToken(user.id, t.token);
+  const t = await mintToken('viewer', user.id); await claimToken(user.id, t.token);
   return { user, token: t.token, tokenId: t.id };
 }
 async function publish(token: string, body: Record<string, unknown>): Promise<string> {

@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { displayTitle } from '@/lib/story/document/title';
 import { useAppHarness, request } from '@/__tests__/harness';
 

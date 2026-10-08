@@ -116,7 +116,7 @@ try {
 await postgres;
 b = await launchChromium();
 // ── two connections: a guest, and one the owner account adopts ─────────────────
-const [guestConnection, adoptedConnection] = await Promise.all([connectAgent(B), connectAgent(B)]);
+const [guestConnection, adoptedConnection] = await Promise.all([connectAgent(B), connectAgent(B, { email: OWNER_EMAIL })]);
 const tok = guestConnection.token;
 const ownerTok = adoptedConnection.token;
 const H = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };

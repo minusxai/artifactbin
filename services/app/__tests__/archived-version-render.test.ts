@@ -17,7 +17,7 @@ import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { archivedReadOnly } from '@/lib/serving';
 import {documentEditBody} from './prepared-document';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -82,8 +82,8 @@ describe('?version=N on the served document', () => {
  */
 describe('who may open an archived version', () => {
   const account = async (email: string) => {
-    const token = await mintToken(email);
     const user = await createUser({ email });
+    const token = await mintToken(email, user.id);
     await claimToken(user.id, token.token);
     return token;
   };
@@ -92,7 +92,7 @@ describe('who may open an archived version', () => {
     const { owner, id } = await twoVersions();
     const editor = await account('editor@x.com');
     const reader = await account('reader@x.com');
-    const shared = await updateSharingFor({ tokenId: owner.id, userId: null }, id, {
+    const shared = await updateSharingFor({ tokenId:owner.id,userId:owner.userId }, id, {
       shares: [{ email: 'editor@x.com', role: 'editor' }, { email: 'reader@x.com', role: 'viewer' }],
     });
     expect(shared?.shares).toEqual([{ email: 'editor@x.com', role: 'editor' }, { email: 'reader@x.com', role: 'viewer' }]);

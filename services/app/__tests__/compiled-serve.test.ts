@@ -16,7 +16,8 @@ import { observedRequest } from '@/__tests__/conditional-request';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
 import { artifactPageAnswer, pagesOriginFor, pagesSite, mintExportKey } from '@/lib/serving';
-import { mintToken, claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER, type CompiledPage, ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
@@ -42,7 +43,7 @@ const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8'
 
 async function owner() {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_serve_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-  const t = await mintToken('serve'); await claimToken(user.id, t.token);
+  const t = await mintToken('serve', user.id); await claimToken(user.id, t.token);
   return { user, token: t.token, tokenId: t.id };
 }
 async function publish(token: string, body: Record<string, unknown>): Promise<string> {
@@ -717,7 +718,7 @@ describe('the compiled page carries its engine facts', () => {
   beforeEach(() => asSession(null));
   async function account() {
     const user = await ensureUsername(await createUser({ email: `mxmx_test_page_engine_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-    const t = await mintToken('page-engine'); await claimToken(user.id, t.token);
+    const t = await mintToken('page-engine', user.id); await claimToken(user.id, t.token);
     return { user, token: t.token, session: { id: user.id, email: user.email ?? '' } };
   }
 
@@ -809,7 +810,7 @@ describe('the compiled-page backfill', () => {
   }
   async function owner() {
     const user = await ensureUsername(await createUser({ email: `mxmx_test_backfill_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-    const t = await mintToken('backfill'); await claimToken(user.id, t.token);
+    const t = await mintToken('backfill', user.id); await claimToken(user.id, t.token);
     return t.token;
   }
   /** The server, as the script reaches it: every document it was asked for, in order (its health checks are the pacing's). */

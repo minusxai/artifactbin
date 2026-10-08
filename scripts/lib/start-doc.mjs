@@ -27,8 +27,8 @@ export const pageHeaders = (base) => ({ origin: new URL(base).origin, 'sec-fetch
  * Create an artifact the way the page does, AS a fresh CLI connection, so the
  * caller can also write it. Returns `{ id, token, editId, prompt }`.
  */
-export async function startDocument(base) {
-  const { token } = await connectAgent(base);
+export async function startDocument(base, options) {
+  const { token } = await connectAgent(base, options);
   const res = await fetch(`${base}/api/start`, {
     method: 'POST',
     headers: { ...pageHeaders(base), Authorization: `Bearer ${token}` },
@@ -44,6 +44,11 @@ export async function startDocument(base) {
     throw new Error('the start paste must contain tokenless instructions and an editable brief');
   }
   if ('token' in body) throw new Error('the start response handed out a credential');
+  const shared = await fetch(`${base}/api/my/artifacts/${body.id}/sharing`, {
+    method: 'PUT', headers: { ...pageHeaders(base), cookie: connectionBrowserCookie(base, token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visibility: 'public' }),
+  });
+  if (!shared.ok) throw new Error(`cannot make gate fixture public (${shared.status})`);
   return { id: body.id, token, editId: body.edit_id, prompt: body.prompt };
 }
 

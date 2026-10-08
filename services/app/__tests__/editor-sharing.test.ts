@@ -7,7 +7,7 @@ import {DELETE as remove,PATCH as metadata} from '@/app/api/my/artifacts/[id]/ro
 import {POST as restore} from '@/app/api/my/artifacts/[id]/restore/route';
 import {getArtifactById,effectiveRole,updateSharingFor} from '@/lib/artifacts';
 import {createUser,claimToken} from '@/lib/accounts';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 async function person(name:string){

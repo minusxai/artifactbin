@@ -22,7 +22,7 @@ import { countOpenAnnotations } from '@/lib/annotations';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { getDb } from '@/lib/platform';
 import { dailyViewsByUser, viewSeriesByUser } from '@/lib/workspace';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 useAppHarness();
@@ -30,9 +30,9 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const q = encodeURIComponent(JSON.stringify({ values: {}, only: ['children'] }));
 
 async function trashedWorld() {
-  const t = await mintToken('o');
   const u = await ensureUsername(await createUser({ email: 'o@example.com' }));
-  await claimToken(u.id, t.token);
+  const t = await mintToken('o', u.id);
+    await claimToken(u.id, t.token);
   const cookie = await agentCookie([t.id]);
   const mk = async (body: Record<string, unknown>) => { const r = await createRoute(request('/api/artifacts', { method: 'POST', json: body, token: t.token })); expect(r.status).toBe(201); return (await r.json()) as { id: string }; };
   const folder = await mk({ format: 'folder', title: 'F', visibility: 'public' });

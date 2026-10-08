@@ -14,7 +14,8 @@ import { useAppHarness } from '@/__tests__/harness';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { setServices } from '@/lib/platform';
-import { mintToken, revokeHeldToken, revokeToken } from '@/lib/accounts';
+import { revokeHeldToken, revokeToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, claimTokenById, createUser, revokeUserToken } from '@/lib/accounts';
 import { mountRoutes } from '@/server/api';
 

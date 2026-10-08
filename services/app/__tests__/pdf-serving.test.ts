@@ -24,7 +24,7 @@ import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs
 import { GET as serveRaw, HEAD as headRaw } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { pdfFilename } from '@/lib/story/assets/pdf-store';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 

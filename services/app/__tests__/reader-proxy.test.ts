@@ -5,7 +5,7 @@ import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { BOOTSTRAP_ID, appPagePolicy, candidateDocument, createAppServer } from '@/server/app';
 import { createArtifact } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { agentCookie, useAppHarness } from './harness';
 useAppHarness();
@@ -29,9 +29,9 @@ describe('reader delivery over HTTP',()=>{
   expect(response.headers.get('cache-control')).toBe('no-store');expect(html).toContain('data-mx-document-frame');
   expect(html).not.toContain('>Readable body</h1>');expect(html).toContain(BOOTSTRAP_ID);expect(html).not.toContain('<iframe title="artifact"');
  });
- it('serves anonymous owners the same document policy',async()=>{
+ it('legacy ownership cookies leave public readers unauthenticated',async()=>{
   const {row,token}=await publish();const response=await app.request(`/a/${row.id}`,{headers:{cookie:await agentCookie([token.id])}});
-  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));expect(await response.text()).toContain('"role":"owner"');
+  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));expect(await response.text()).toContain('"role":"viewer"');
  });
  it('never leaks private contents or a canonical redirect to strangers',async()=>{
   const owner=await ensureUsername(await createUser({email:'mxmx_test_reader@example.com'}));const {row}=await publish('private','<p>Private-only words</p>',owner.id);
@@ -53,7 +53,7 @@ describe('reader delivery over HTTP',()=>{
   const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).toMatch(/"authorScript":"[^"]*globalThis\.shouldNotRun = true;/);expect(html).not.toContain('<script>globalThis.shouldNotRun');expect(html).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]*shouldNotRun/);expect(html).toContain('"values":{"count":4}');
  });
  it('keeps datasets on their existing app representation',async()=>{
-  const token=await mintToken('dataset'),row=await createArtifact(token.id,null,{format:'dataset',source:null,meta:{},title:'Data',description:null,visibility:'public'});
+  const token=await mintToken('dataset'),row=await createArtifact(token.id, token.userId,{format:'dataset',source:null,meta:{},title:'Data',description:null,visibility:'public'});
   const response=await app.request(`/a/${row.id}`),html=await response.text();expect(response.status).toBe(200);expect(html).toContain('"format":"dataset"');expect(html).not.toContain('data-mx-initial-story');
  });
 });

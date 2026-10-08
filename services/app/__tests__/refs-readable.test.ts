@@ -20,7 +20,7 @@ import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { dataflowForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
@@ -77,7 +77,7 @@ describe('link-readable refs', () => {
 
   it('a PRIVATE foreign dataset stays invisible — the uniform "does not resolve"', async () => {
     const owner = await createUser({ email: 'refs-owner@example.com' });
-    const t = await mintToken('owner');
+    const t = await mintToken('owner', owner.id);
     await claimToken(owner.id, t.token);
     const created = await create(t.token, { dataset: ROWS, visibility: 'private' });
     const ds = (await created.json()) as { id: string; visibility: string };

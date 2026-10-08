@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import * as css from '@/lib/data/story/story-css.server';
 import * as assets from '@/lib/serving/web-assets';
 import * as artifacts from '@/lib/artifacts';

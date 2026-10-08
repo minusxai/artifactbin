@@ -14,7 +14,7 @@ import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { POST as query } from '@/app/a/[id]/query/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { viewersWritePolicy } from '@artifactbin/utils';
@@ -34,8 +34,8 @@ const dataset = (ownerId: string) => `<Dataset kind="stored">
 </Dataset>`;
 
 it('forks the production Splitwise tracker: the tab is copied with its rows, and the forker joins the COPY', async () => {
-  const owner = await mintToken('owner'); const pavel = await createUser({ email: 'mxmx_test_pavel@example.com' }); await claimToken(pavel.id, owner.token);
-  const friend = await mintToken('friend'); const me = await createUser({ email: 'mxmx_test_me@example.com' }); await claimToken(me.id, friend.token);
+  const pavel = await createUser({ email: 'mxmx_test_pavel@example.com' }); const owner = await mintToken('owner', pavel.id); await claimToken(pavel.id, owner.token);
+  const me = await createUser({ email: 'mxmx_test_me@example.com' }); const friend = await mintToken('friend', me.id); await claimToken(me.id, friend.token);
   const publish = async (body: object) => {
     const r = await create(request('/api/artifacts', { method: 'POST', token: owner.token, json: body }));
     expect(r.status, await r.clone().text()).toBe(201);

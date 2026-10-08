@@ -23,7 +23,7 @@ import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { readEvents } from '@/__tests__/sse';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
@@ -58,7 +58,7 @@ beforeEach(async () => { asSession(null); await resetLiveSubscriptions(); });
 
 async function owner() {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_served_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-  const t = await mintToken('served'); await claimToken(user.id, t.token);
+  const t = await mintToken('served', user.id); await claimToken(user.id, t.token);
   return { user, token: t.token, tokenId: t.id };
 }
 async function publish(token: string, body: Record<string, unknown>): Promise<string> {

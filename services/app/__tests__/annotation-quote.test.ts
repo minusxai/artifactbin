@@ -14,7 +14,7 @@ import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

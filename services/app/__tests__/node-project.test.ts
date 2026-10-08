@@ -5,7 +5,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
 /** Integrated acceptance for identity, atomic batches and relation-only comments. */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, agentCookie } from './harness';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { POST as createRoute } from '@/app/api/artifacts/route';
@@ -56,7 +56,7 @@ async function history(id:string) {
 describe('node project through real routes',()=>{
   it('refuses malformed markup at direct storage instead of bypassing identity validation',async()=>{
     const t=await mintToken('invalid-direct-create');
-    await expect(createArtifact(t.id,null,{format:'markup',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');
+    await expect(createArtifact(t.id, t.userId,{format:'markup',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');
     const db=await getDb();
     expect((await artifactQuery(db,'SELECT id FROM artifacts WHERE token_id=$1',[t.id])).rows).toHaveLength(0);
   });
@@ -121,7 +121,7 @@ describe('node project through real routes',()=>{
   });
   it('stamps direct storage creation rather than relying on an HTTP wire',async()=>{
     const t=await mintToken('direct-create');
-    const row=await createArtifact(t.id,null,{format:'markup',source:'<main><p>Direct</p></main>',meta:{}});
+    const row=await createArtifact(t.id, t.userId,{format:'markup',source:'<main><p>Direct</p></main>',meta:{}});
     const ids=bodyIds(row.source!);expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
   });
   it('normalizes and reserves identities when reverting a pre-identity archive',async()=>{

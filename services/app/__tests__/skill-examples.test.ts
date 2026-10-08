@@ -16,7 +16,7 @@ import type { DatasetColumn } from '@artifactbin/contracts';
 import { POST as create } from '@/app/api/artifacts/route';
 import { parseDatasetDefinition } from '@/lib/datasets/definition';
 import { renderTree, skillTree } from '@/lib/skills';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { examples as starters } from '../../cli/src/teaching';
 import { request, useAppHarness } from './harness';
@@ -99,9 +99,9 @@ const examples = [
 
 async function owner() {
   const email = 'mxmx_test_skill_examples@example.com';
-  const token = await mintToken(email);
   const user = await createUser({ email });
-  await claimToken(user.id, token.token);
+  const token = await mintToken(email, user.id);
+    await claimToken(user.id, token.token);
   return token.token;
 }
 

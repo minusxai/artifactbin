@@ -26,7 +26,7 @@ import { DELETE as deleteAnnotation } from '@/app/api/artifacts/[id]/annotations
 import { runOperation } from '@/lib/operations/http';
 import { remoteRoute } from '@/lib/remote/route';
 import { accountProfile, updateAccountProfile } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -40,9 +40,9 @@ const create = async (token: string, input: Record<string, unknown>) => {
 };
 
 async function claimed(name = 'owner') {
-  const t = await mintToken(name);
   const u = await createUser({ email: `${name}@example.com` });
-  await claimToken(u.id, t.token);
+  const t = await mintToken(name, u.id);
+    await claimToken(u.id, t.token);
   return { token: t.token, tokenId: t.id, userId: u.id };
 }
 
@@ -83,7 +83,7 @@ describe('refusals an afbin command reaches name the afbin action', () => {
 
   it('a session listing on an unclaimed token names afbin auth (afbin list --type session)', async () => {
     const t = await mintToken('anon');
-    const res = await runOperation('list_remote_sessions', request('/api/sessions', { token: t.token }), { tokenId: t.id, userId: null }, {});
+    const res = await runOperation('list_remote_sessions', request('/api/sessions', { token: t.token }), { tokenId:t.id,userId:t.userId }, {});
     expect(res.status).toBe(403);
     const refusal = await body(res);
     expect(refusal.error).toBe('account_required');

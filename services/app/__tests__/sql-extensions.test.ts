@@ -15,7 +15,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { services, setServices } from '@/lib/platform';
 import { useSqlExtensions } from '@/lib/sql/extensions';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createAppHost } from '@/server/host';
 import { request, useAppHarness } from '@/__tests__/harness';
 

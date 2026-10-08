@@ -7,7 +7,7 @@ import {GET as raw} from '@/app/a/[id]/raw/route';
 import {dataflowForRow,findDependentsFor,getArtifactById} from '@/lib/artifacts';
 import {artifactState} from '@/lib/artifacts';
 import {mintExportKey} from '@/lib/serving';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {useAppHarness,request} from './harness';
 
@@ -53,7 +53,7 @@ describe('dataset image references',()=>{
   const {token,images,dataset}=await fixture();
   // A literal-image control also reads the dataset, before row bindings are implemented.
   const doc=await create(token.token,{markup:`<Helmet><Import name="books_data" src="ref:${dataset.id}" /><Query name="books">{\`select * from books_data.rows\`}</Query></Helmet><img src="ref:${images[0]!.id}"/>`});
-  const deps=await findDependentsFor({tokenId:token.id,userId:null},images[1]!.id);
+  const deps=await findDependentsFor({tokenId:token.id,userId:token.userId},images[1]!.id);
   expect(deps.map(row=>row.id).sort()).toEqual([dataset.id,doc.id].sort());
  });
  it('does not let a public document or its owner grant strangers access to private image bytes',async()=>{
@@ -75,7 +75,7 @@ describe('dataset image references',()=>{
   const result=await replace(request(`/api/artifacts/${dataset.id}`,{method:'PUT',token:token.token,json:{dataset:[{...rows[0],cover_ref:rows[1]!.cover_ref}],expectedVersion:head.version,expectedState:artifactState(head)}}),params(dataset.id));
   expect(result.status,await result.clone().text()).toBe(200);
   expect((await dataflowForRow((await getArtifactById(doc.id))!))!.state.tables.books.rows[0]!.cover_ref).toBe(rows[1]!.cover_ref);
-  const actor={tokenId:token.id,userId:null};
+  const actor={tokenId:token.id,userId:token.userId};
   expect(await findDependentsFor(actor,images[0]!.id)).toEqual([]);
   expect((await findDependentsFor(actor,images[1]!.id)).map(row=>row.id).sort()).toEqual([dataset.id,doc.id].sort());
   const url=`/api/artifacts/${images[1]!.id}`;

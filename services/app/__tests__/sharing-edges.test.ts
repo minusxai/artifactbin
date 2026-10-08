@@ -14,8 +14,8 @@ import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/ap
 import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
 import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
-import { mintToken } from '@/lib/accounts';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import {  createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { people } from '@/lib/datasets/user-fields';
 import { getDb } from '@/lib/platform';
 
@@ -42,8 +42,7 @@ async function outcome(p: Promise<unknown>): Promise<'render' | 'redirect' | 'no
 async function ownerFixture() {
   const owner = await ensureUsername(await createUser({ email: 'edge@example.com' }));
   await setUsername(owner.id, 'edgeowner');
-  const t = await mintToken('edge');
-  await claimToken(owner.id, t.token);
+  const t = await mintToken('edge', owner.id);
   return { owner, token: t.token };
 }
 
@@ -215,13 +214,11 @@ describe('what the surfaces disclose', () => {
 
 describe('the advanced HTTP surface preserves sharing policy', () => {
   it('an anonymous token cannot publish private; an account-owned one defaults to it', async () => {
-    const anon = await mintToken('anon');
+    const anon = await mintToken('anon', null);
     const refused = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', visibility: 'private' });
     expect(refused.isError).toBe(true);
-    expect(refused.data.error).toBe('private_requires_account');
+    expect(refused.data.error).toBe('unauthorized');
 
-    const anonDefault = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
-    expect(anonDefault.data.visibility).toBe('public');
 
     const { token } = await ownerFixture();
     const owned = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
@@ -249,13 +246,14 @@ describe('the advanced HTTP surface preserves sharing policy', () => {
   });
 
   it('update_artifact refuses private on an anonymous token, like the REST route', async () => {
-    const anon = await mintToken('anon2');
-    const made = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    const anon = await mintToken('anon2', null);
+    const { token } = await ownerFixture();
+    const made = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', visibility: 'public' });
     const refused = await operationHttp(anon.token, 'update_artifact', {
       id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'private',
     });
     expect(refused.isError).toBe(true);
-    expect(refused.data.error).toBe('private_requires_account');
+    expect(refused.data.error).toBe('unauthorized');
   });
 
   it('rejects an unreachable parent instead of storing it, and names the retired field', async () => {

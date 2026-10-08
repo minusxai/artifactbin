@@ -11,7 +11,7 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById, refDataForRow } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
@@ -259,7 +259,7 @@ describe('markup tier references', () => {
     // Public/unlisted foreign refs RESOLVE now (refs-readable.test.ts); the
     // uniform refusal holds where it must — private, same answer as missing.
     const owner = await createUser({ email: 'tiers-owner@example.com' });
-    const a = await mintToken('a');
+    const a = await mintToken('a', owner.id);
     await claimToken(owner.id, a.token);
     const b = await mintToken('b');
     const ds = await create(a.token, { title: 'sales', dataset: ROWS, visibility: 'private' });

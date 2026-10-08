@@ -9,7 +9,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 

@@ -25,7 +25,7 @@ import { GET as getProfileRoute, PATCH as patchProfileRoute } from '@/app/api/my
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
 
@@ -60,9 +60,9 @@ beforeEach(async () => {
 
 /** A private document + its writable dataset, owned by one account. */
 async function setup() {
-  const t = await mintToken('t');
   const user = await createUser({ email: 'owner@x.com' });
-  await claimToken(user.id, t.token);
+  const t = await mintToken('t', user.id);
+    await claimToken(user.id, t.token);
   const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
   const doc = (await create(t.token, { markup: DOC(ds), visibility: 'private' })).id;
   return { t, user, ds, doc };

@@ -15,7 +15,7 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { createUser } from '@/lib/accounts';
 import { assetBytesForToken, assetByteQuotaExceeded, setAssetByteQuotaForTests } from '@/lib/serving';

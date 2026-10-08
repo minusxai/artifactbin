@@ -1,6 +1,7 @@
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken,createUser,claimToken} from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';

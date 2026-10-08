@@ -4,7 +4,7 @@ import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as sharingGet,PUT as sharingPut} from '@/app/api/my/artifacts/[id]/sharing/route';
 import {getArtifactById} from '@/lib/artifacts';
 import {createDatasetSecret,resolveDatasetConnection} from '@/lib/datasets/secrets';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {agentCookie,request,useAppHarness} from './harness';
 const harness=useAppHarness();
@@ -31,7 +31,7 @@ describe('Postgres dataset access boundaries',()=>{
   expect(await state.json()).toMatchObject({datasetKind:'stored'});
  });
  it('a pending secret created by a token follows it into the claimed account scope',async()=>{
-  const token=await mintToken('connection');const actor={tokenId:token.id,userId:null};
+  const token=await mintToken('connection');const actor={tokenId:token.id,userId:token.userId};
   const saved=await createDatasetSecret(actor,'claim-test-password',target);const connection={...target,passwordSecretId:saved.id};
   const user=await createUser({email:'mxmx_test_connection_claim@example.com'});await claimToken(user.id,token.token);
   await expect(resolveDatasetConnection(connection,{tokenId:'',userId:user.id})).resolves.toMatchObject({host:'db.example',password:'claim-test-password'});

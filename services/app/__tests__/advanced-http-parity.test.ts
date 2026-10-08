@@ -2,7 +2,7 @@ import {documentEditBody,restoreDocument} from './prepared-document';
 import {getArtifactById} from '@/lib/artifacts';
 import {describe,expect,it} from 'vitest';
 import {useAppHarness} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {operationHttp} from './operation-http';
 useAppHarness();
 describe('advanced HTTP parity',()=>{

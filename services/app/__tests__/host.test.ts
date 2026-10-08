@@ -2,7 +2,8 @@ import {it,expect} from 'vitest';
 import {useAppHarness} from './harness';
 import {createAppHost} from '@/server/host';
 import {ANONYMOUS} from '@artifactbin/contracts';
-import {mintToken,resolveToken} from '@/lib/accounts';
+import { resolveToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 useAppHarness();
 it.each([false,true])('assembles identity and an optional host document policy (grant=%s)',async(grant)=>{

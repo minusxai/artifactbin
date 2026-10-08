@@ -15,7 +15,7 @@ import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { avatarUrl, avatarVersion, setAvatar } from '@/lib/accounts';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
 import { createTestUser, eraseTestUser } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
@@ -126,7 +126,7 @@ describe('GET /api/page/session — user', () => {
 describe('erasing a test user', () => {
   it('takes its picture with it, and survives an object that has already gone', async () => {
     const owner = await createUser({ email: 'mxmx_test_eraseowner@example.com' });
-    const token = await mintToken('eraser');
+    const token = await mintToken('eraser', owner.id);
     await claimToken(owner.id, token.token);
 
     const mint = async () => {

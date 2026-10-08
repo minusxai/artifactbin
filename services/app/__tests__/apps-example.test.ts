@@ -6,13 +6,13 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {GET as query} from '@/app/a/[id]/query/route';
 import {getArtifactById} from '@/lib/artifacts';
 import {changeMembership} from '@/lib/accounts';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 useAppHarness();
 it('publishes the reference and exposes accepted members, never pending requests or custom join rows',async()=>{
  const owner=await createUser({email:'mxmx_test_example_owner@example.com'}),reader=await createUser({email:'mxmx_test_example_reader@example.com'});
- const token=await mintToken('apps-example');await claimToken(owner.id,token.token);
+ const token=await mintToken('apps-example', owner.id);await claimToken(owner.id,token.token);
  const reference=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/references/apps.md'),'utf8');
  const source=[...reference.matchAll(/```jsx\n([\s\S]*?)```/g)].map(m=>m[1]!).find(s=>s.includes('<Helmet>'))!;
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:source,visibility:'public'}}));

@@ -13,13 +13,13 @@ import { can } from '@/lib/artifacts';
 import { createTestUser } from '@/lib/accounts';
 import { createGuestOwner } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 
 async function world() {
-  const t = await mintToken('acct'); const acct = await createUser({ email: 'mxmx_test_acct@example.com' }); await claimToken(acct.id, t.token);
+  const acct = await createUser({ email: 'mxmx_test_acct@example.com' }); const t = await mintToken('acct', acct.id); await claimToken(acct.id, t.token);
   const guest = await createGuestOwner();
   const minted = await createTestUser({ tokenId: t.id, userId: acct.id });
   if (!minted.ok) throw new Error(minted.error);

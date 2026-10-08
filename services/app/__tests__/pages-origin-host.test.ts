@@ -10,7 +10,8 @@ import { attachActor } from '@artifactbin/utils';
 import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
-import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, mintToken, pagesSessionActor, revokeToken } from '@/lib/accounts';
+import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, pagesSessionActor, revokeToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/serving/pages-origin';
@@ -33,9 +34,9 @@ const framing = () => createAppServer({ indexHtml: async () => SHELL, pagesSite:
 const DOC = '<Helmet><Value name="rows" type="table" value={[{id: 1}, {id: 2}]} /><Query name="counted">{`select count(*) as n from rows`}</Query></Helmet><h1 id="top">Private plan</h1><DataTable data="$counted" />';
 
 async function world() {
-  const t = await mintToken('pages-owner');
   const user = await createUser({ email: 'pages-owner@example.com' });
-  await claimToken(user.id, t.token);
+  const t = await mintToken('pages-owner', user.id);
+    await claimToken(user.id, t.token);
   const publish = async (markup: string, visibility: string) => {
     const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup, visibility } }));
     expect(res.status, await res.clone().text()).toBe(201);
@@ -443,8 +444,8 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const PLOTLY = 'https://cdn.plot.ly';
     const id = await w.publish(`<Helmet><meta name="csp-connect" content="https://127.0.0.1:${port}" /><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Weather</h1>`, 'public');
     await drainPreparedPageWarmups();
-    const t = await mintToken('pages-reader');
     const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });
+    const t = await mintToken('pages-reader', user.id);
     await claimToken(user.id, t.token);
     const reader: Actor = { credential: 'session', userId: user.id, email: 'mxmx_test_pages_reader@example.com', emailVerified: true };
     const self = pagesOriginFor(id, site);

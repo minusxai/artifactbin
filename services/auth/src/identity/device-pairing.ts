@@ -37,14 +37,6 @@ export function createDevicePairing(db: Queryable, schema = 'auth') {
         AND payload->>'anon' IS DISTINCT FROM 'true' AND expires_at > now() RETURNING credential_hash`, [KIND, userCode, origin, userId, JSON.stringify(approvedBy ? { approvedBy } : {})]);
       return result.rows.length === 1;
     },
-    /** Approve with no account: the CLI receives an anonymous, claimable token. */
-    async approveAnonymously(userCode: string, origin: string, approvedBy?: Actor): Promise<boolean> {
-      const result = await db.query(`UPDATE ${table} SET payload = payload || $4::jsonb
-        WHERE kind = $1 AND group_id = $2 AND payload->>'origin' = $3 AND subject_id IS NULL
-        AND consumed_at IS NULL AND deleted_at IS NULL AND payload->>'denied' IS DISTINCT FROM 'true'
-        AND payload->>'anon' IS DISTINCT FROM 'true' AND expires_at > now() RETURNING credential_hash`, [KIND, userCode, origin, JSON.stringify({ anon: true, ...(approvedBy ? { approvedBy } : {}) })]);
-      return result.rows.length === 1;
-    },
     async deny(userCode: string, origin: string): Promise<boolean> {
       const result = await db.query(`UPDATE ${table} SET payload = payload || '{"denied":true}'::jsonb
         WHERE kind = $1 AND group_id = $2 AND payload->>'origin' = $3 AND subject_id IS NULL
@@ -55,11 +47,10 @@ export function createDevicePairing(db: Queryable, schema = 'auth') {
     async consume(deviceCode: string, origin: string): Promise<PairingResult> {
       if (!/^[A-Za-z0-9_-]{43}$/.test(deviceCode)) return { status: 'invalid' };
       const args = [KIND, hash(deviceCode), origin];
-      // Approved is either a bound account (subject_id) or an anonymous
-      // approval (anon flag, no subject); the returned userId is null for anon.
+      // Only account-bound approvals redeem; persisted legacy anonymous grants are refused.
       const approved = await db.query<{ subject_id: string | null; payload: PairingPayload }>(`UPDATE ${table} SET consumed_at = now()
         WHERE kind = $1 AND credential_hash = $2 AND payload->>'origin' = $3
-        AND (subject_id IS NOT NULL OR payload->>'anon' = 'true')
+        AND subject_id IS NOT NULL AND payload->>'anon' IS DISTINCT FROM 'true'
         AND consumed_at IS NULL AND deleted_at IS NULL AND payload->>'denied' IS DISTINCT FROM 'true' AND expires_at > now() RETURNING subject_id, payload`, args);
       if (approved.rows[0]) return { status: 'approved', userId: approved.rows[0].subject_id ?? null, ...(approved.rows[0].payload.target ? { target: approved.rows[0].payload.target } : {}), ...(approved.rows[0].payload.approvedBy ? { approvedBy: approved.rows[0].payload.approvedBy } : {}) };
       // LIVE, not "still unapproved": an approval that lands between the claim above and this read is
@@ -67,7 +58,7 @@ export function createDevicePairing(db: Queryable, schema = 'auth') {
       // expired (server CI run 35205911571). The poll after this one claims it.
       const pending = await db.query(`SELECT 1 FROM ${table} WHERE kind = $1 AND credential_hash = $2
         AND payload->>'origin' = $3 AND consumed_at IS NULL
-        AND deleted_at IS NULL AND payload->>'denied' IS DISTINCT FROM 'true' AND expires_at > now()`, args);
+        AND deleted_at IS NULL AND payload->>'denied' IS DISTINCT FROM 'true' AND payload->>'anon' IS DISTINCT FROM 'true' AND expires_at > now()`, args);
       if (pending.rows.length) return {status:'pending'};
       const denied = await db.query(`SELECT 1 FROM ${table} WHERE kind = $1 AND credential_hash = $2
         AND payload->>'origin' = $3 AND payload->>'denied' = 'true' AND expires_at > now()`, args);

@@ -314,7 +314,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     // never sees a ref's title, so nobody's page pays for the lookups.
     refs: meta.refs ?? [],
     accountSession: kind === 'account',
-    anonSession: kind === 'anon',
+    anonSession: false,
     // The document's own origin when the app page frames it there (solid/pages/Document posts to it).
     ...(framedOrigin ? { framedOrigin } : {}),
     // The rail's Join/Joined/Pending pill (solid/document/DocumentChrome).

@@ -9,13 +9,13 @@
  * right now. Failures are a uniform 404: for anyone without the secret, the
  * endpoint does not exist. Unset ⇒ it does not exist for anyone.
  */
-import { hasAdminCredential } from '@/lib/accounts';
+import { getUserByEmail, hasAdminCredential } from '@/lib/accounts';
 import { json } from '@/lib/http';
 import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken } from '@/lib/accounts';
 
 export async function POST(request: Request) {
   if (!hasAdminCredential(request)) return json({ error: 'not_found' }, 404);
-  const body = (await request.json().catch(() => ({}))) as { name?: unknown; expiresInHours?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { name?: unknown; expiresInHours?: unknown; email?: unknown };
   const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null;
   let expiresInMs: number | undefined;
   if (body.expiresInHours !== undefined) {
@@ -23,7 +23,10 @@ export async function POST(request: Request) {
     expiresInMs = body.expiresInHours * 60 * 60 * 1000;
     if (expiresInMs < MIN_TOKEN_TTL_MS || expiresInMs > MAX_TOKEN_TTL_MS) return json({ error: 'invalid_expiry' }, 400);
   }
-  // The mint source is the name's default when the operator gave none.
-  const minted = await mintToken(name ?? 'admin', null, undefined, { expiresInMs });
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  if (!email) return json({ error: 'email_auth_required' }, 400);
+  const owner = await getUserByEmail(email);
+  if (!owner || owner.kind !== 'account') return json({ error: 'account_not_found' }, 404);
+  const minted = await mintToken(name ?? 'admin', owner.id, undefined, { expiresInMs });
   return json({ id: minted.id, name, token: minted.token, expiresAt: minted.expiresAt }, 201);
 }

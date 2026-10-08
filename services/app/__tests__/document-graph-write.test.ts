@@ -6,7 +6,8 @@ import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request,setSession,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/platform';
-import {mintToken,createUser,claimToken} from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {createDocumentGraph} from '@/lib/story/graph/document-graph';
@@ -14,7 +15,7 @@ import {prepareGraphOperation} from '@/lib/story/graph/document-graph-admission'
 import {commitGraphOperation} from '@/lib/story/graph/document-graph-write';
 useAppHarness();
 async function setup(){
- const token=await mintToken('mxmx_test_graph_write'),actor={tokenId:token.id,userId:null};
+ const token=await mintToken('mxmx_test_graph_write'),actor={tokenId:token.id,userId:token.userId};
  const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);
  const {id}=await response.json(),row=(await getArtifactById(id))!,document=createDocumentGraph(row.source!,row.version),db=await getDb();
  await db.query('UPDATE artifacts SET document=$2::jsonb,source=NULL WHERE id=$1',[id,JSON.stringify(document)]);

@@ -12,7 +12,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { setArtifactQuotaForTests } from '@/lib/artifacts';
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -36,7 +36,7 @@ describe('per-token artifact quota', () => {
     const first = await (
       await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>1</p>' } }))
     ).json() as { id: string };
-    await (await import('@/lib/workspace/trash')).trashArtifactFor({ tokenId: t.id, userId: null }, first.id);
+    await (await import('@/lib/workspace/trash')).trashArtifactFor({ tokenId:t.id,userId:t.userId }, first.id);
     const next = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>2</p>' } }));
     expect(next.status).toBe(403);
     expect(((await next.json()) as { error: string }).error).toBe('quota_exceeded');

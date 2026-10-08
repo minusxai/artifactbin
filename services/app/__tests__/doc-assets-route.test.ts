@@ -26,7 +26,7 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { setDocAssetImportCapForTests } from '@/lib/accounts';

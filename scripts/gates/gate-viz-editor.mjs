@@ -47,7 +47,8 @@ const api = async (path, init = {}, token) => {
 
 // ── seed: two datasets and a story whose Question renders as a table ────────
 // The token rides the start LINK now, not the response body (lib/agent-session).
-const start = await startDocument(B);
+const sessionEmail = `mxmx_test_viz_${Date.now().toString(36)}@example.com`;
+const start = await startDocument(B, { email: sessionEmail });
 const token = start.token;
 const sales = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({
   title: 'Regional sales', dataset: 'region,revenue\nNorth,4200\nSouth,3100\nEast,5100\nWest,2400',
@@ -176,7 +177,6 @@ const gridLeg = (async () => {
 // journey's token-owned edits are made exactly as before.
 const sink = await startMailSink();
 const sessionPage = await b.newPage({ viewport: { width: 1500, height: 1000 } });
-const sessionEmail = `mxmx_test_viz_${Date.now().toString(36)}@example.com`;
 const signedIn = loginViaEmail(sessionPage, B, sink, sessionEmail).then(() => null, (err) => err);
 
 // ── the journey ─────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import {POST as mutateDirect} from '@/app/api/artifacts/[id]/mutate/route';
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { createUser, claimToken } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
@@ -13,7 +13,7 @@ import { getArtifactById, forkArtifact, dataflowForRow } from '@/lib/artifacts';
 useAppHarness();
 it('allows a recipient through a saved owner artifact only after approval',async()=>{
  const owner=await createUser({email:'mxmx_test_grants_owner@example.com'}),bob=await createUser({email:'mxmx_test_grants_bob@example.com'});
- const token=await mintToken('mxmx_test_grants');await claimToken(owner.id,token.token);
+ const token=await mintToken('mxmx_test_grants', owner.id);await claimToken(owner.id,token.token);
  const actor={userId:owner.id,tokenId:token.id};
  const dsResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));
  expect(dsResponse.status).toBe(201);const ds=(await dsResponse.json()).id;
@@ -33,7 +33,7 @@ it('allows a recipient through a saved owner artifact only after approval',async
 
 it('enforces read grants independently of link visibility and keeps owner administration',async()=>{
  const owner=await createUser({email:'mxmx_test_read_grants@example.com'});
- const token=await mintToken('mxmx_test_read_grants');await claimToken(owner.id,token.token);
+ const token=await mintToken('mxmx_test_read_grants', owner.id);await claimToken(owner.id,token.token);
  const actor={userId:owner.id,tokenId:token.id};
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));
  const {id}=await res.json();
@@ -55,7 +55,7 @@ it('enforces read grants independently of link visibility and keeps owner admini
 
 it('forks even an owners written dataset independently and resets memberships',async()=>{
  const owner=await createUser({email:'mxmx_test_fork_grants@example.com'});
- const token=await mintToken('mxmx_test_fork_grants');await claimToken(owner.id,token.token);
+ const token=await mintToken('mxmx_test_fork_grants', owner.id);await claimToken(owner.id,token.token);
  const actor={userId:owner.id,tokenId:token.id};
  const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
  const ds=await make({dataset:[{n:1}]});
@@ -68,7 +68,7 @@ it('forks even an owners written dataset independently and resets memberships',a
 });
 it('provides accepted membership as a read-only current-artifact table',async()=>{
  const owner=await createUser({email:'mxmx_test_members_table@example.com'});
- const token=await mintToken('mxmx_test_members_table');await claimToken(owner.id,token.token);
+ const token=await mintToken('mxmx_test_members_table', owner.id);await claimToken(owner.id,token.token);
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:'<Helmet><Query name="people">{`select user_id, joined_at from _members`}</Query></Helmet><Table source="$people"/>'}}));
  expect(res.status,await res.clone().text()).toBe(201);const {id}=await res.json();
  const result=await dataflowForRow((await getArtifactById(id))!);
@@ -84,7 +84,7 @@ it('does not disclose private grant-controlled datasets through direct mutation 
 
 it('preserves private dataset visibility in a public fork',async()=>{
  const owner=await createUser({email:'mxmx_test_audit_fork@example.com'});
- const token=await mintToken('mxmx_test_audit_fork');await claimToken(owner.id,token.token);
+ const token=await mintToken('mxmx_test_audit_fork', owner.id);await claimToken(owner.id,token.token);
  const actor={userId:owner.id,tokenId:token.id};
  const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
  const ds=await make({dataset:[{n:1}],visibility:'private'});

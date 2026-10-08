@@ -11,7 +11,7 @@ import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,dataflowForRow,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken, createUser} from '@/lib/accounts';
 import {people} from '@/lib/datasets/user-fields';
 import {avatarUrl} from '@/lib/accounts';
@@ -21,9 +21,9 @@ import {GET as rawRoute} from '@/app/a/[id]/raw/route';
 useAppHarness();
 const ctx = (id:string)=>({params:Promise.resolve({id})});
 async function account(name:string) {
- const token=await mintToken(name);
  const user=await createUser({email:`mxmx_test_${name}@example.com`,name});
- await claimToken(user.id,token.token);
+ const token = await mintToken(name, user.id);
+    await claimToken(user.id,token.token);
  return {token:token.token,tokenId:token.id,user};
 }
 async function create(token:string,body:Record<string,unknown>) {

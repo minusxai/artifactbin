@@ -21,7 +21,7 @@ import sharp from 'sharp';
 import { useAppHarness } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';

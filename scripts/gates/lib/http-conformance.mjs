@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 const mintRequest=(base,cookie)=>({method:'POST',headers:{cookie,origin:base,'content-type':'application/json'},body:'{}'});
 export async function checkGuestHttpIssuance({base,fetch,guestCookie}){
- assert.ok(guestCookie,'Guest session must exist before its account adoption');
+ // Signed-out callers, including retired guest cookies, cannot mint credentials.
  const response=await fetch(`${base}/api/authentication/token`,mintRequest(base,guestCookie));
  assert.equal(response.status,401,'Guest sessions cannot issue direct HTTP bearers');
  assert.equal(response.headers.get('cache-control'),'no-store');

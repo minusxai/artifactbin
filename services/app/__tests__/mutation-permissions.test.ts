@@ -7,7 +7,7 @@ import {GET as anonymousQuery,POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {appPagePolicy,createAppServer} from '@/server/app';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {agentCookie,request,useAppHarness} from './harness';
 import {PATCH as patchArtifact} from '@/app/api/artifacts/[id]/route';
@@ -16,15 +16,15 @@ import {viewersWritePolicy} from '@artifactbin/utils';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 async function fixture(){
- const owner=await mintToken('owner');const friend=await mintToken('friend');
- const user=await createUser({email:'mxmx_test_dataset_friend@example.com'});await claimToken(user.id,friend.token);
+ const owner=await mintToken('owner');const user=await createUser({email:'mxmx_test_dataset_friend@example.com'});const friend = await mintToken('friend', user.id);
+    await claimToken(user.id,friend.token);
  const publish=async(body:object)=>{const r=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:body}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
  const ds=await publish({dataset:[{n:1}],access:'readwrite'});
  const doc=await publish({markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
  const cookie=await agentCookie([friend.id]);
  const write=(auth?:string)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:auth,json:{mutation:'add'}}),ctx(doc));
  const permissions=async(auth?:string)=>{const r=auth?await query(request(`/a/${doc}/query`,{method:'POST',cookie:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};
- const share=(id:string,role:'viewer'|'editor')=>updateSharingFor({tokenId:owner.id,userId:null},id,{shares:[{email:user.email,role}]});
+ const share=(id:string,role:'viewer'|'editor')=>updateSharingFor({tokenId:owner.id,userId:owner.userId},id,{shares:[{email:user.email,role}]});
  // What `afbin push … --policy viewers-write` sends, byte for byte.
  const grantFor=async(id:string)=>{const head=await getArtifactById(id);const r=await patchArtifact(await observedRequest(`/api/artifacts/${id}`,{method:'PATCH',token:owner.token,json:{policy:viewersWritePolicy(),expectedPolicyRevision:head!.policy_revision??0}}),ctx(id));expect(r.status,await r.clone().text()).toBe(200);return r.json();};
  const grant=()=>grantFor(ds);

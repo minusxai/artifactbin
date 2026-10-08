@@ -1,6 +1,7 @@
 import {it,expect,afterEach} from 'vitest';
 import {useAppHarness,request,agentCookie} from './harness';
-import {createUser,claimToken,mintToken} from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {remoteAgents} from '@/lib/remote/agents';
 import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';

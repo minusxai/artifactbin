@@ -107,7 +107,7 @@ export interface CliWorkspace {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invoke(args: string[], fetchImpl?: typeof fetch): Promise<any>;
   /** Mints a token (optionally owned by a user) and saves it as this workspace's connection. */
-  connect(name: string, userId?: string | null): Promise<{ id: string; token: string }>;
+  connect(name: string, userId?: string | null): Promise<{ id: string; token: string; userId: string | null }>;
   /** Saves an ALREADY-minted token as this workspace's connection — for tests that claim it to a user first. */
   useToken(token: string): Promise<void>;
   /** Removes the temporary directories. Call it from a `finally`. */
@@ -165,9 +165,10 @@ export async function cliWorkspace(prefix: string, options: CliWorkspaceOptions 
       return result;
     },
     async connect(name, userId) {
-      const token = await mintToken(name, userId===undefined?(await createUser({email:'mxmx_test_'+randomUUID()+'@example.test'})).id:userId);
+      const ownerId = userId===undefined?(await createUser({email:'mxmx_test_'+randomUUID()+'@example.test'})).id:userId;
+      const token = await mintToken(name, ownerId);
       await saveConnection({ server: CLI_SERVER, token: token.token }, home);
-      return { id: token.id, token: token.token };
+      return { id: token.id, token: token.token, userId: ownerId };
     },
     useToken: (token: string) => saveConnection({ server: CLI_SERVER, token }, home),
     cleanup: () => rm(base, { recursive: true, force: true }),

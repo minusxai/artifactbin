@@ -40,7 +40,7 @@ import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[v
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { roleFor as requestRoleFor } from '@/lib/accounts';
 import { canReadArtifact, committedHeadsSettled, effectiveRole as roleFor, getArtifactById,getVersionFor } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform/db';
 import { storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadata';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
@@ -88,16 +88,16 @@ beforeEach(async () => {
 
 /** Owner A with a public prose document; B and C are accounts with claimed tokens. */
 async function world(markup = PROSE, visibility: 'public' | 'private' = 'public') {
-  const ta = await mintToken('a');
   const owner = await createUser({ email: 'owner@x.com' });
-  await claimToken(owner.id, ta.token);
+  const ta = await mintToken('a', owner.id);
+    await claimToken(owner.id, ta.token);
   const tb = await mintToken('b');
   const bob = await createUser({ email: 'Bob@X.com' });
   const bobNamed = await ensureUsername(bob);
   await claimToken(bob.id, tb.token);
-  const tc = await mintToken('c');
   const carol = await createUser({ email: 'carol@x.com' });
-  await claimToken(carol.id, tc.token);
+  const tc = await mintToken('c', carol.id);
+    await claimToken(carol.id, tc.token);
   const anon = await mintToken('anon');
   const doc = await create(ta.token, { markup, visibility });
   return { ta, tb, tc, anon, owner, bob: bobNamed, carol, doc };
@@ -368,12 +368,12 @@ describe('the share list carries roles', () => {
     const anon = await mintToken('solo');
     const doc = await create(anon.token, { markup: PROSE });
     const bob = await createUser({ email: 'bob@x.com' });
-    const tb = await mintToken('b');
+    const tb = await mintToken('b', bob.id);
     await claimToken(bob.id, tb.token);
     // The sharing surface is browser-only; the anonymous owner reaches it with the agent cookie —
     // covered by the sharing route's own tests. Here the lib call, through the same owner scope.
     const { updateSharingFor } = await import('@/lib/artifacts');
-    const state = await updateSharingFor({ tokenId: anon.id, userId: null }, doc.id, { shares: [{ email: 'bob@x.com', role: 'editor' }] });
+    const state = await updateSharingFor({ tokenId:anon.id,userId:anon.userId }, doc.id, { shares: [{ email: 'bob@x.com', role: 'editor' }] });
     expect(state?.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
     const id = doc.id;
     expect((await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: doc.edit_id, source: PROSE2 }, tb.token), params({ id }))).status).toBe(200);
@@ -501,7 +501,7 @@ describe('roleFor and the read ACL', () => {
 describe('an invited account that has only ever presented a bearer token', () => {
   /** The pair a CLI request really carries: the bearer header AND the proxy's verdict on it. */
   async function cliCaller(userId: string, email: string) {
-    const minted = await mintToken('cli');
+    const minted = await mintToken('cli', userId);
     await claimToken(userId, minted.token);
     return async (path: string, method = 'GET', body?: unknown) =>
       attachActor(

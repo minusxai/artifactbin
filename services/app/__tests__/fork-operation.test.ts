@@ -15,7 +15,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { OPERATIONS as operations } from '@/lib/operations/registry';
 import { getArtifactById, listArtifactsFor } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
@@ -50,12 +50,12 @@ const MUTATING = (ds: string) =>
 beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
 
 async function world(visibility: 'public' | 'private' = 'public') {
-  const ta = await mintToken('a');
   const owner = await createUser({ email: 'owner@x.com' });
-  await claimToken(owner.id, ta.token);
-  const tb = await mintToken('b');
+  const ta = await mintToken('a', owner.id);
+    await claimToken(owner.id, ta.token);
   const bob = await createUser({ email: 'bob@x.com' });
-  await claimToken(bob.id, tb.token);
+  const tb = await mintToken('b', bob.id);
+    await claimToken(bob.id, tb.token);
   const anon = await mintToken('anon');
   const doc = await create(ta.token, { markup: PROSE, visibility, title: 'The NBA payroll stack', description: 'for the dashboard', theme: 'industry' });
   return { ta, tb, anon, owner, bob, doc };

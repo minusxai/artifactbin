@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { POST } from '@/app/api/artifacts/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as resolve, HEAD } from '@/app/a/[id]/resolve/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { assetBytesForToken } from '@/lib/serving';
 import { getDb } from '@/lib/platform';

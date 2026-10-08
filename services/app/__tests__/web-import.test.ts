@@ -27,7 +27,7 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { GET as listArtifacts, POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/assets/asset-url';
 import { getDb } from '@/lib/platform';
@@ -181,7 +181,7 @@ describe('the agent door — an external <img src> is served as written and neve
     let asked=0;
     const update=await prepareClientDocumentPublication({...row,document:row.document},{source:row.source!.replace('</div>',`<img id="logo" src="${web}/logo.png" alt="" /></div>`)},async source=>{
       asked++;
-      return (await prepareDocumentAuthoringContext({tokenId:t.id,userId:null},made.id,{source})).json();
+      return (await prepareDocumentAuthoringContext({tokenId:t.id,userId:t.userId},made.id,{source})).json();
     });
     const res=await editsRoute(request(`/api/artifacts/${made.id}/edits`,{method:'POST',token:t.token,json:{edit_id:row.edit_id,document_update:update}}),params({id:made.id}));
     expect(res.status).toBe(200);

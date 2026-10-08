@@ -1,6 +1,6 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { useAppHarness, request, agentCookie } from "./harness";
-import { mintToken } from "@/lib/accounts";
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, claimToken } from "@/lib/accounts";
 import { remoteRoute } from "@/lib/remote/route";
 import { RemoteRegistry, remoteSessions } from "@/lib/remote/registry";
@@ -57,8 +57,8 @@ describe("remote session relay", () => {
         ).json(),
       ),
     ).not.toContain(made.runnerKey);
-    const b = await mintToken("b");
     const other = await createUser({ email: "mxmx_test_other@example.com" });
+    const b = await mintToken("b", other.id);
     await claimToken(other.id, b.token);
     expect(
       (

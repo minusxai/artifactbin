@@ -15,12 +15,12 @@ import {
 } from '@/lib/artifacts';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { agentCookie, request, useAppHarness } from './harness';
 useAppHarness();
 async function fixture() {
   const owner = await mintToken('policy-owner');
-  const actor = { tokenId: owner.id, userId: null };
+  const actor = { tokenId:owner.id,userId:owner.userId };
   const publish = async (body: object) => {
     const r = await create(
       request('/api/artifacts', {
@@ -79,7 +79,7 @@ it('fences administration by edit access and revision, and removing a policy rev
   const stranger = await mintToken('stranger');
   expect(
     await setDatasetPolicy(
-      { tokenId: stranger.id, userId: null },
+      { tokenId:stranger.id,userId:stranger.userId },
       f.ds,
       f.policy,
       0,

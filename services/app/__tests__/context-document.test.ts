@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { mintToken, createUser, claimToken } from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { pagesSiteFor } from '@/lib/serving/pages-origin';
@@ -10,9 +11,9 @@ import { attachActor } from '@artifactbin/utils';
 useAppHarness();
 
 it('publishes a context reference without granting readers access to its private document', async () => {
-  const owner = await mintToken('context-owner');
   const user = await createUser({ email: 'mxmx_test_context@example.com' });
-  await claimToken(user.id, owner.token);
+  const owner = await mintToken('context-owner', user.id);
+    await claimToken(user.id, owner.token);
   const create = (token: string, markup: string, visibility: string) => createArtifact(request('/api/artifacts', {
     method: 'POST', token, json: { markup, visibility },
   }));

@@ -4,9 +4,8 @@
  * No client mints its own token: the ONLY way a client obtains a
  * credential is the afbin CLI's OAuth device approval, approved in the
  * browser. A gate is a test driving the product, so it walks exactly that
- * flow over HTTP — begin the pairing, approve it anonymously (the
- * "Continue anonymously" button of `/oauth/device`, posted with the page's
- * own Origin), then exchange the device code for the bearer.
+ * flow over HTTP — sign in with email, approve the pairing from that
+ * browser session, then exchange the device code for the bearer.
  *
  * The point of the helper is that the three calls are written ONCE. Every gate
  * that needs "an agent with its own connection" gets it here, and when the
@@ -15,6 +14,9 @@
  * Needs authentication composed with the app (it owns the OAuth routes): a
  * gate pointed at `npm run dev:app` alone has no device door.
  */
+
+import { randomUUID } from 'node:crypto';
+import { startMailSink } from '../../lib/mail-login.mjs';
 
 // Per-process fixture state: the approving browser and the CLI have distinct
 // credentials. Never exchange the API-scoped CLI token for a browser session.
@@ -25,8 +27,24 @@ export function connectionBrowserCookie(base, token) {
   return browser.cookie;
 }
 
-/** Approve a fresh guest connection, retaining its browser credential for gates. */
-export async function connectAgent(base) {
+/** An actual email login, with the code read from the protected test mailbox. */
+export async function signInAccount(base, { origin = new URL(base).origin, sink, email = `mxmx_test_connection_${randomUUID()}@example.com` } = {}) {
+  sink ??= await startMailSink();
+  const post = (route, body) => fetch(`${base}${route}`, { method: 'POST',
+    headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body) });
+  const sent = await post('/api/auth/email-otp/send-verification-otp', { email, type: 'sign-in' });
+  if (!sent.ok) throw new Error(`Email login code request failed (${sent.status})`);
+  const otp = sink.lastCode(email);
+  if (!otp) throw new Error('Email login code did not reach the protected outbox');
+  const verified = await post('/api/auth/sign-in/email-otp', { email, otp });
+  if (!verified.ok) throw new Error(`Email login verification failed (${verified.status})`);
+  const cookie = verified.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+  if (!cookie) throw new Error('Email login did not establish an account session');
+  return { cookie };
+}
+
+/** Approve a fresh account connection, retaining its browser credential for gates. */
+export async function connectAgent(base, { email, cookie: existingCookie } = {}) {
   const origin = new URL(base).origin;
   const begin = await fetch(`${origin}/oauth/device`, { method: 'POST' });
   const pairing = await begin.json().catch(() => null);
@@ -34,16 +52,12 @@ export async function connectAgent(base) {
     throw new Error(`POST ${origin}/oauth/device → ${begin.status}: ${JSON.stringify(pairing)}`);
   }
 
-  // What the browser sends when a person clicks "Continue anonymously": the
-  // form, from the product's own origin (the route refuses any other). That is
-  // the origin the product ADVERTISES — carried in the pairing's verification
-  // URI — not whatever address this script dialed (127.0.0.1 vs localhost
-  // was a 403 invalid_origin in CI).
   const advertised = new URL(pairing.verification_uri ?? pairing.verification_url ?? origin).origin;
+  const cookie = existingCookie ?? (await signInAccount(origin, { origin: advertised, ...(email ? { email } : {}) })).cookie;
   const approve = await fetch(`${origin}/oauth/device/approve`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', origin: advertised },
-    body: new URLSearchParams({ user_code: pairing.user_code, decision: 'anonymous' }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', origin: advertised, Cookie: cookie },
+    body: new URLSearchParams({ user_code: pairing.user_code, decision: 'approve' }),
   });
   if (!approve.ok) {
     throw new Error(`POST ${origin}/oauth/device/approve → ${approve.status}: ${(await approve.text()).slice(0, 200)}`);
@@ -61,8 +75,6 @@ export async function connectAgent(base) {
       : '';
     throw new Error(`POST ${origin}/oauth/device/token → ${exchange.status}${hint}: ${JSON.stringify(granted)}`);
   }
-  const cookie = approve.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-  if (!cookie) throw new Error('Guest approval did not establish a browser session');
   browsers.set(granted.access_token, { origins: [origin, advertised], cookie });
   return { token: granted.access_token };
 }

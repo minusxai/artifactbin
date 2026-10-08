@@ -11,7 +11,7 @@ import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
 import {liveFrameFor} from '@/lib/story/data/frame';
 import {readerIslandData} from '@/lib/story/prepared/prepare-runtime.server';
 import {getDb} from '@/lib/platform';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {services,setServices} from '@/lib/platform';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {newEditId} from '@/lib/story/document/splice';

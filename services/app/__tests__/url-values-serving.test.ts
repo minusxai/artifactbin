@@ -26,7 +26,7 @@ import { setServices } from '@/lib/platform';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { mintExportKey } from '@/lib/serving';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

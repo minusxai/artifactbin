@@ -21,7 +21,7 @@ import { join, resolve } from 'node:path';
 import { tsImport } from 'tsx/esm/api';
 import { lane } from './lane.mjs';
 import { fixtureFetch as fetch } from './fixture-http.mjs';
-import { connectAgent } from './cli-connection.mjs';
+import { connectAgent, signInAccount } from './cli-connection.mjs';
 import { checkGuestHttpIssuance, checkDirectHttp } from './http-conformance.mjs';
 import { loginViaEmail } from '../../lib/mail-login.mjs';
 
@@ -48,7 +48,9 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
   const env = { ...process.env, PATH: `${launcher}:${process.env.PATH ?? ''}`, HOME: root, ARTIFACTBIN_HOME: home, ARTIFACTBIN_URL: BASE, CLI__AUTO_UPDATE: '0' };
   delete env.ARTIFACTBIN_TOKEN;
   delete env.ARTIFACTBIN_REFRESH_TOKEN;
-  let guestCookie = '';
+  const accountEmail = process.env.EVAL_LOGIN_EMAIL ?? `mxmx_test_conformance_${stamp}@example.com`;
+  const approvingAccount = await signInAccount(BASE, { sink, email: accountEmail });
+  let browserCookie = approvingAccount.cookie;
   async function invoke(args, { cwd = workspace, expected = 0, approve = false } = {}) {
     const child = spawn(cli.endsWith('.mjs') ? process.execPath : cli,
       [...(cli.endsWith('.mjs') ? [cli] : []), ...args, '--server', BASE, '--yes', '--json'],
@@ -68,12 +70,10 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
         if (!file) return;
         const pairing = JSON.parse(await readFile(join(home, file), 'utf8'));
         const response = await fetch(`${BASE}/oauth/device/approve`, {
-          method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: BASE },
-          body: new URLSearchParams({ user_code: pairing.userCode, decision: 'anonymous' }),
+          method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: BASE, Cookie: browserCookie },
+          body: new URLSearchParams({ user_code: pairing.userCode, decision: 'approve' }),
         });
         assert.equal(response.status, 200);
-        guestCookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-        assert.ok(guestCookie, 'guest approval establishes the approving browser identity');
         approved = true;
       } catch (error) { approvalError = error; child.kill(); }
       finally { checking = false; }
@@ -100,7 +100,7 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
       const profile = createHash('sha256').update(BASE).digest('hex').slice(0, 16);
       const saved = await readFile(join(home, 'hosts', profile, 'credentials.env'), 'utf8');
       const token = saved.match(/^ARTIFACTBIN_TOKEN=(.+)$/m)?.[1];
-      await step('guest session cannot mint a direct HTTP bearer', () => checkGuestHttpIssuance({base:BASE,fetch:globalThis.fetch,guestCookie}));
+      await step('guest session cannot mint a direct HTTP bearer', () => checkGuestHttpIssuance({base:BASE,fetch:globalThis.fetch,guestCookie: ''}));
       let accountCookie;
       let id;
       let read;
@@ -109,19 +109,19 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
         if (credentialSource) {
           // The eval helper is TypeScript; load it through its existing runner boundary.
           const { acquireCredential } = await tsImport('../../lib/credential.ts', import.meta.url);
-          const email = process.env.EVAL_LOGIN_EMAIL ?? `mxmx_test_conformance_${stamp}@example.com`;
+          const email = accountEmail;
           assert.match(email, /^mxmx_test_/, 'acceptance must use a disposable test account');
           const account = await acquireCredential(credentialSource, {
             base: BASE, env: process.env, email, localOutbox: process.env.EMAIL__DEV_OUTBOX_PATH,
           });
-          accountCookie = `${guestCookie}; ${account.cookie}`;
+          accountCookie = account.cookie;
         } else {
           const owner = await ctx.newPage();
-          await ctx.addCookies(guestCookie.split('; ').map(pair => {
+          await ctx.addCookies(browserCookie.split('; ').map(pair => {
             const separator = pair.indexOf('=');
             return { name: pair.slice(0, separator), value: pair.slice(separator + 1), url: BASE, httpOnly: true, sameSite: 'Lax' };
           }));
-          await loginViaEmail(owner, BASE, sink, `mxmx_test_conformance_${stamp}@example.com`);
+          await loginViaEmail(owner, BASE, sink, accountEmail);
           accountCookie = (await ctx.cookies(BASE)).map(({ name, value }) => `${name}=${value}`).join('; ');
         }
         // A verified browser session merges its guest identity, including the CLI credential.

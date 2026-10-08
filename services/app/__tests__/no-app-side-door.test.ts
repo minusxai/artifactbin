@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { POST as startDocument } from '@/app/api/start/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

@@ -9,7 +9,7 @@ import {drainPreparedPageWarmups} from '@/lib/story/prepared/prepared-page.serve
 import {drainSnapshotRevalidations} from '@/lib/compiled-page/snapshots.server';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,type ArtifactRow,type TokenActor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/story/graph/document-update-client';
@@ -21,7 +21,7 @@ useAppHarness();
 async function setup(){
  const token=await mintToken('mxmx_test_operation_api');
  const created=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));
- const {id}=await created.json();return {token,id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};
+ const {id}=await created.json();return {token,id,actor:{tokenId:token.id,userId:token.userId},row:(await getArtifactById(id))!};
 }
 async function prepare(row:ArtifactRow,actor:TokenActor,change:ClientDocumentChange){
  if(row.document?.kind!=='graph')throw new Error('Missing authoring snapshot');

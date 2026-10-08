@@ -20,7 +20,7 @@ import { POST as myRefreshRoute } from '@/app/api/my/artifacts/[id]/assets/refre
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { webAssetByHash } from '@/lib/serving';
 import { urlHash } from '@/lib/story/assets/asset-url';
 import { agentCookie } from '@/__tests__/harness';

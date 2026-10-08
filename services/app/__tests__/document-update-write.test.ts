@@ -4,7 +4,7 @@ import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHis
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/platform';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,editorScope} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {prepareClientDocumentUpdate,prepareClientDocumentReplacement} from '@/lib/story/graph/document-update-client';
@@ -13,7 +13,7 @@ import {graphIntegrity,graphSource,type DocumentGraph} from '@/lib/story/graph/d
 import {applyGraphPatch} from '@/lib/story/graph/document-graph-patch';
 useAppHarness();
 async function setup(){
- const token=await mintToken('mxmx_test_trusted_ops'),actor={tokenId:token.id,userId:null};
+ const token=await mintToken('mxmx_test_trusted_ops'),actor={tokenId:token.id,userId:token.userId};
  const res=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>'}}));expect(res.status).toBe(201);
  const {id}=await res.json(),db=await getDb(),row=(await getArtifactById(id))!;
  const document=(await db.query<{document:DocumentGraph}>('SELECT document FROM artifacts WHERE id=$1',[id])).rows[0]!.document;

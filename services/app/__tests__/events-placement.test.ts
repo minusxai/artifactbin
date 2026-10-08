@@ -22,7 +22,7 @@ import { POST as restoreRoute } from '@/app/api/my/artifacts/[id]/restore/route'
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceOneRoute } from '@/app/api/artifacts/[id]/route';
 import { setServices } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -40,9 +40,9 @@ const verbs=async()=>(await recorded()).filter(e=>e.object_kind==='artifact').ma
 const said=async(verb:string)=>(await recorded()).filter(e=>e.verb===verb);
 
 async function world() {
-  const t = await mintToken('o');
   const u = await createUser({ email: 'mxmx_test_placement@example.com' });
-  await claimToken(u.id, t.token);
+  const t = await mintToken('o', u.id);
+    await claimToken(u.id, t.token);
   const cookie = await agentCookie([t.id]);
   const mk = async (body: Record<string, unknown>) => {
     const r = await createRoute(request('/api/artifacts', { method: 'POST', json: body, token: t.token }));

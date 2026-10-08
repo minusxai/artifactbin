@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, agentCookie } from './harness';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute } from '@/app/api/artifacts/[id]/route';

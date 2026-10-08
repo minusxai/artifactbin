@@ -22,7 +22,8 @@ import { createGuestOwner } from '@/lib/accounts';
 import { backfillUserKinds, createTestUser, listTestUsers, sweepTestUsers, TESTUSER_LABEL } from '@/lib/accounts';
 import { noteTestUserSession, testUserSessionCount } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken, resolveTokenById } from '@/lib/accounts';
+import { resolveTokenById } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { count, has, link } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness } from './harness';
@@ -31,9 +32,9 @@ const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function account(name: string) {
-  const token = await mintToken(name);
   const user = await createUser({ email: `mxmx_test_${name}@example.com`, name });
-  await claimToken(user.id, token.token);
+  const token = await mintToken(name, user.id);
+    await claimToken(user.id, token.token);
   return { token: token.token, tokenId: token.id, userId: user.id };
 }
 

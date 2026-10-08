@@ -8,7 +8,7 @@ import { createArtifact } from '@/lib/artifacts';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { link } from '@/lib/accounts';
 import { setServices } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, type UserRow } from '@/lib/accounts';
 
 const harness = useAppHarness();

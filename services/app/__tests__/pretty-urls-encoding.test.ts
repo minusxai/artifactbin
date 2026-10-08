@@ -10,7 +10,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, setSession } from '@/__tests__/harness';
 
@@ -38,7 +38,7 @@ async function outcome(p: Promise<unknown>): Promise<{ kind: 'render' | 'redirec
 async function fixtures() {
   const owner = await ensureUsername(await createUser({ email: 'enc@example.com' }));
   await setUsername(owner.id, 'mxmx_owner');
-  const t = await mintToken('enc');
+  const t = await mintToken('enc', owner.id);
   await claimToken(owner.id, t.token);
   const res = await createArtifactRoute(
     new Request(`${BASE}/api/artifacts`, {

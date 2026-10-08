@@ -4,7 +4,7 @@ description: Email-authenticated HTTP integration, artifact operations and condi
 ---
 ## Authentication
 
-Direct HTTP uses email authentication; browser approval and guest access belong to the CLI.
+CLI browser approval and direct HTTP authentication require an email account.
 
 Send JSON to `[[ base ]]` with `Content-Type: application/json`; session requests also send `Origin: [[ base ]]`.
 

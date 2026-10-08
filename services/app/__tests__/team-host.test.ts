@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {useAppHarness} from './harness';
 import {createTeamApplication} from '../../cli/src/team-application';
 import {getDb} from '@/lib/platform';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {AUTH_SECRET} from '@/lib/platform';
 useAppHarness();
 it('team host composes real public auth and preserves separate owners and anonymous denial',async()=>{

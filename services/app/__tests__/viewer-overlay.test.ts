@@ -13,7 +13,7 @@ import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
@@ -27,7 +27,7 @@ beforeEach(() => asSession(null));
 
 async function owner() {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_overlay_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-  const t = await mintToken('overlay'); await claimToken(user.id, t.token);
+  const t = await mintToken('overlay', user.id); await claimToken(user.id, t.token);
   return { user, token: t.token, tokenId: t.id };
 }
 async function create(token: string, body: Record<string, unknown>): Promise<string> {

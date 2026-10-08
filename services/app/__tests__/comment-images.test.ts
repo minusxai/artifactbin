@@ -4,7 +4,7 @@ import {getDb} from '@/lib/platform';
 import {describe,expect,it} from 'vitest';
 import sharp from 'sharp';
 import {useAppHarness,request,agentCookie} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {POST as createComment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {stageCommentImage,readCommentImage} from '@/lib/annotations';
@@ -19,7 +19,7 @@ async function setup(){
  await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[doc.id,'private']);
  const image=await sharp({create:{width:100,height:50,channels:3,background:'red'}}).png().toBuffer();
  const metadata:CommentImageMetadata={v:1,capturedEditId:doc.edit_id,capturedAt:new Date().toISOString(),method:'region',width:100,height:50,rect:{x:0,y:0,width:100,height:50},viewport:{width:1000,height:800},strokes:[]};
- return {token,doc,image,metadata,actor:{tokenId:token.id,userId:null},cookie:await agentCookie([token.id])};
+ return {token,doc,image,metadata,actor:{tokenId:token.id,userId:token.userId},cookie:await agentCookie([token.id])};
 }
 describe('comment image attachment ownership',()=>{
  it('accepts an individual 50 MB image and refuses one byte more',async()=>{
@@ -41,7 +41,7 @@ describe('comment image attachment ownership',()=>{
   expect(await readCommentImage(s.actor,s.doc.id,stage.id,'thumbnail')).not.toBeNull();
   const privateRead=await readImageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images/${stage.id}`),{params:Promise.resolve({id:s.doc.id,imageId:stage.id})});expect(privateRead.status).toBe(404);
   const ownerRead=await readImageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images/${stage.id}`,{cookie:s.cookie}),{params:Promise.resolve({id:s.doc.id,imageId:stage.id})});expect(ownerRead.status).toBe(200);expect(ownerRead.headers.get('cache-control')).toBe('private, no-store');
-  const stranger=await mintToken('agent');expect(await readCommentImage({tokenId:stranger.id,userId:null},s.doc.id,stage.id,'original')).toBeNull();
+  const stranger=await mintToken('agent');expect(await readCommentImage({tokenId:stranger.id,userId:stranger.userId},s.doc.id,stage.id,'original')).toBeNull();
  });
  it('refuses invalid raster and metadata before reserving bytes',async()=>{
   const s=await setup();const result=await stageCommentImage(s.actor,s.doc.id,Buffer.from('not an image'),s.image,s.metadata);
@@ -76,7 +76,7 @@ it('keeps a stale stage unconsumed and retries a committed comment idempotently'
 it('rejects another actor consuming a private stage and malformed stroke coordinates',async()=>{
  const s=await setup();
  const invalid=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,strokes:[{color:'#ff0000',width:2,points:[[200,5]]}]});expect((invalid as Response).status).toBe(400);
- const stranger=await mintToken('agent');const result=await stageCommentImage({tokenId:stranger.id,userId:null},s.doc.id,s.image,s.image,s.metadata);expect((result as Response).status).toBe(404);
+ const stranger=await mintToken('agent');const result=await stageCommentImage({tokenId:stranger.id,userId:stranger.userId},s.doc.id,s.image,s.image,s.metadata);expect((result as Response).status).toBe(404);
 });
 
 it('carries a staged image and its quota into a claimed account',async()=>{

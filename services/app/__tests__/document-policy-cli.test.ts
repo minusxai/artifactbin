@@ -14,7 +14,8 @@ import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {GET as versions} from '@/app/api/artifacts/[id]/versions/route';
 import {GET as version} from '@/app/api/artifacts/[id]/versions/[version]/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {mintToken,revokeToken} from '@/lib/accounts';
+import { revokeToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {createUser,claimToken} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 

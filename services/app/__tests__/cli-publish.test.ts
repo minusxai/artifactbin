@@ -9,7 +9,7 @@ import { writeFile, readFile, stat, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { useAppHarness, request } from './harness';
 import { artifactTransport, CLI_SERVER, cliWorkspace, routesCalled, addressesCalled, type CliCall } from './cli-harness';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { GET as read } from '@/app/api/artifacts/[id]/route';
 import { tracking } from '../../cli/test/tracking';

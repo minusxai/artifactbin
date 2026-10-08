@@ -17,7 +17,7 @@ import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { HOLD_MAX_ROWS } from '@/lib/story/data/placement';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
@@ -70,8 +70,8 @@ describe('POST /a/<id>/query (reader path)', () => {
   });
 
   it('answers the uniform 404 for a private document without a session, and for an unknown id', async () => {
-    const t = await mintToken('t');
     const user = await createUser({ email: 'owner@x.com' });
+    const t = await mintToken('t', user.id);
     await claimToken(user.id, t.token);
     const ds = (await create(t.token, { dataset: ROWS })).id;
     const doc = (await create(t.token, { markup: DOC(ds), visibility: 'private' })).id;
@@ -90,8 +90,8 @@ describe('POST /a/<id>/query (reader path)', () => {
      * only the account session, so the document painted and then every bound
      * control died against a 404 on the first change.
      */
-    const t = await mintToken('t');
     const user = await createUser({ email: 'owner2@x.com' });
+    const t = await mintToken('t', user.id);
     await claimToken(user.id, t.token);
     const ds = (await create(t.token, { dataset: ROWS })).id;
     const doc = (await create(t.token, { markup: DOC(ds), visibility: 'private' })).id;
@@ -163,7 +163,7 @@ describe('POST /api/query (owner path — a draft)', () => {
     // private is the boundary that must hold in the draft path too.
     const mine = await mintToken('mine');
     const owner = await createUser({ email: 'query-owner@example.com' });
-    const theirs = await mintToken('theirs');
+    const theirs = await mintToken('theirs', owner.id);
     await claimToken(owner.id, theirs.token);
     const foreign = (await create(theirs.token, { dataset: ROWS, visibility: 'private' })).id;
     const res = await draftQueryRoute(request('/api/query', { method: 'POST', token: mine.token, json: { markup: DOC(foreign) } }));
@@ -315,8 +315,8 @@ describe('naming the people a page computed', () => {
   });
 
   it('never names the people in a dataset the reader may not hold, though the document reads it for them', async () => {
-    const t = await mintToken('owner');
     const owner = await createUser({ email: 'mxmx_test_people_owner@example.com', name: 'owner' });
+    const t = await mintToken('owner', owner.id);
     await claimToken(owner.id, t.token);
     const [erin] = await users('erin');
     const ds = (await create(t.token, { dataset: [{ id: 1, who: erin!.id }], columns: [{ name: 'who', type: 'user' }], visibility: 'private', access: 'read' })).id;
@@ -361,8 +361,8 @@ describe('holding an import', () => {
   });
 
   it('never hands a reader the rows of a dataset they may not read, though the document reads it for them', async () => {
-    const t = await mintToken('owner');
     const owner = await createUser({ email: 'hold-owner@example.com' });
+    const t = await mintToken('owner', owner.id);
     await claimToken(owner.id, t.token);
     // A dataset without read grants: the document reads it by its owner's reach, whoever is reading.
     const ds = (await create(t.token, { dataset: ROWS, visibility: 'private', access: 'read' })).id;

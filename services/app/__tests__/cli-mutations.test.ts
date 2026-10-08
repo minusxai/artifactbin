@@ -12,7 +12,7 @@ import { POST as reserve } from '@/app/api/artifacts/reservations/route';
 import { POST as create, GET as list } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
 import { GET as read, PUT as replace, PATCH as metadata, PATCH as patch } from '@/app/api/artifacts/[id]/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { GET as versions } from '@/app/api/artifacts/[id]/versions/route';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { getArtifactById } from '@/lib/artifacts';
@@ -338,12 +338,12 @@ describe('cli-datasets-definition', () => {
     expect(journal+operation).not.toContain('hunter2');
 
     // The secret resolves for its creator against that exact target, and nothing else.
-    const actor={tokenId:token.id,userId:null};
+    const actor={tokenId:token.id,userId:token.userId};
     const target={host:'db.example.com',port:5432,database:'commerce',username:'reader',ssl:true};
     expect((await resolveDatasetConnection({...target,passwordSecretId:secretId!},actor)).password).toBe('hunter2');
     await expect(resolveDatasetConnection({...target,database:'other',passwordSecretId:secretId!},actor)).rejects.toBeInstanceOf(DatasetError);
     const other=await mintToken('definition-secret-other');
-    await expect(resolveDatasetConnection({...target,passwordSecretId:secretId!},{tokenId:other.id,userId:null})).rejects.toBeInstanceOf(DatasetError);
+    await expect(resolveDatasetConnection({...target,passwordSecretId:secretId!},{tokenId:other.id,userId:other.userId})).rejects.toBeInstanceOf(DatasetError);
    }finally{await cli.cleanup();}
   });
 

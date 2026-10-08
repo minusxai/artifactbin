@@ -7,26 +7,21 @@
  * for a real, watchable document: they paste it to an agent, and the page they
  * are looking at fills in over the live stream.
  *
- * Signed-in callers keep account ownership. A new guest browser receives a
- * signed HttpOnly ownership cookie; no bearer leaves this route. The CLI must
- * connect to that owner through browser approval before editing.
- *
- * A caller that already HAS a credential (an agent's bearer, a browser holding
- * the agent cookie) keeps acting as it: the document it creates joins the ones
- * that credential already reaches, exactly as any other create does.
+ * Creation requires an email account session or its approved CLI bearer.
+ * No browser ownership cookie or bearer is issued by this route.
  */
 import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/serving';
-import { baseUrl, json } from '@/lib/http';
+import { baseUrl, json, unauthorized } from '@/lib/http';
 import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@/lib/serving';
 import { resolveToken } from '@/lib/accounts';
+import { canAuthenticateUser } from '@/lib/accounts/user-kinds';
 import { sessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/story/document/input';
-import { createGuestOwner } from '@/lib/accounts';
 
 export async function POST(request: Request) {
-  // If no account session resolves, use browser guest ownership below.
+  // A browser session takes precedence over an approved CLI bearer.
   // auth() can throw synchronously outside a request context.
   let userId: string | null = null;
   try {
@@ -35,28 +30,23 @@ export async function POST(request: Request) {
     userId = null;
   }
 
-  // Whatever credential the caller already presented — an agent's own bearer
-  // (afbin, after its browser approval), or the agent cookie a browser holds.
-  // The document joins that identity; only a new guest needs a new owner.
   const offered = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   const bearer = offered ? await resolveToken(offered) : null;
   const actor = bearer ? null : await sessionActor(request);
   const ownerId = userId ?? bearer?.userId ?? actor?.viewer?.userId ?? null;
   const existingTokenId = bearer?.id ?? actor?.tokenId ?? '';
-  const guest = !ownerId && !existingTokenId ? await createGuestOwner() : null;
-  const tokenId = existingTokenId || guest?.tokenId || '';
+  if (!await canAuthenticateUser(ownerId)) return unauthorized(request);
+  const tokenId = existingTokenId;
   const parsed = await parseContentInput({ markup: new URL(request.url).searchParams.get('mode') === 'blank' ? BLANK_REPORT_MARKUP : START_PLACEHOLDER_MARKUP }, {});
   if (parsed instanceof Response) return parsed; // unreachable: both starting documents are fixed and valid
 
-  const row = await createArtifact(tokenId, ownerId ?? guest?.userId ?? null, {
+  const row = await createArtifact(tokenId, ownerId, {
     ...parsed,
     // NULL, not 'Untitled': unnamed must stay distinguishable from named-that,
     // because an unnamed document follows its own heading (lib/story/document/title.ts)
     // and an explicit title never does.
     title: null,
     description: null,
-    // The starter has always been link-readable, including guest creation.
-    ...(guest || actor?.credential === 'agent-cookie' ? { visibility: 'public' as const } : {}),
   });
 
   const base = baseUrl(request);
@@ -69,7 +59,6 @@ export async function POST(request: Request) {
     },
     201,
   );
-  if (guest) response.headers.set('Set-Cookie', guest.cookie);
   response.headers.set('Cache-Control', 'no-store');
   return response;
 }

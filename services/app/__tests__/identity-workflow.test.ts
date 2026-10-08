@@ -1,6 +1,7 @@
 import {it,expect,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken,createGuestOwner,mergeGuestUsers} from '@/lib/accounts';
+import { createGuestOwner, mergeGuestUsers } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as create,GET as list} from '@/app/api/artifacts/route';
 import {GET as read,DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import {GET as readVersion} from '@/app/api/artifacts/[id]/versions/[version]/route';
@@ -25,7 +26,7 @@ async function publication(root:string):Promise<{ids:Record<string,string>}>{
  return JSON.parse(await readFile(join(root,'.artifactbin','publications',digest(CLI_SERVER).slice(0,24),'manifest.json'),'utf8'));
 }
 it('reserves an invisible batch and publishes the exact identity with durable replay',async()=>{
- const token=await mintToken('mxmx_test_reservations');const actor={tokenId:token.id,userId:null};
+ const token=await mintToken('mxmx_test_reservations');const actor={tokenId:token.id,userId:token.userId};
  const ids=await reserveIds(actor,'batch_000000000001');expect(ids).toHaveLength(100);expect(new Set(ids).size).toBe(100);
  expect(await reserveIds(actor,'batch_000000000001')).toEqual(ids);
  const id=ids[0];const ctx={params:Promise.resolve({id})};expect((await read(request('/api/artifacts/'+id,{token:token.token}),ctx)).status).toBe(404);
@@ -39,14 +40,14 @@ it('reserves an invisible batch and publishes the exact identity with durable re
 });
 it('rejects foreign reservations and racing creates; invalid content does not consume an identity',async()=>{
  const token=await mintToken('mxmx_test_reservation_owner'),other=await mintToken('mxmx_test_reservation_other');
- const [id]=await reserveIds({tokenId:token.id,userId:null},'batch_000000000002');
+ const [id]=await reserveIds({tokenId:token.id,userId:token.userId},'batch_000000000002');
  const post=(credential:string,markup:string,key:string)=>create(request('/api/artifacts',{method:'POST',token:credential,headers:{'Idempotency-Key':key},json:{reserved_id:id,markup}}));
  expect((await post(other.token,'<p>Steal</p>','create_000000000003')).status).toBe(403);
  expect((await post(token.token,'<UnknownWidget />','create_000000000004')).status).toBe(400);
  const results=await Promise.all([post(token.token,'<p>A</p>','create_000000000005'),post(token.token,'<p>B</p>','create_000000000006')]);expect(results.map(r=>r.status).sort()).toEqual([201,409]);
 });
 it('keeps dataset reference ids unchanged and refuses unuploaded data dependencies',async()=>{
- const token=await mintToken('mxmx_test_reserved_graph');const ids=await reserveIds({tokenId:token.id,userId:null},'batch_000000000003');
+ const token=await mintToken('mxmx_test_reserved_graph');const ids=await reserveIds({tokenId:token.id,userId:token.userId},'batch_000000000003');
  const markup=`<Helmet><Import name="sales_data" src="ref:${ids[0]}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><p>Sales</p>`;
  const post=(body:Record<string,unknown>)=>create(request('/api/artifacts',{method:'POST',token:token.token,json:body}));
  expect((await post({reserved_id:ids[1],markup})).status).not.toBe(201);
@@ -78,7 +79,7 @@ it('real CLI recovers a lost create response preserving local identity and reser
 it('previews unpublished document and dataset IDs locally with no server reads',async()=>{
  const cli=await cliWorkspace('reserved-preview');let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{
-  const token=await cli.connect('mxmx_test_reserved_preview');const [report,data,appendix,picture]=await reserveIds({tokenId:token.id,userId:null},'batch_000000000005');
+  const token=await cli.connect('mxmx_test_reserved_preview');const [report,data,appendix,picture]=await reserveIds({tokenId:token.id,userId:token.userId},'batch_000000000005');
   await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');await writeFile(join(cli.root,'picture.png'),Buffer.from([1,2,3]));
   const source=`---\nid: ${report}\n---\n<Helmet><Import name="sales_data" src="ref:${data}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows\`}</Query></Helmet><a href="/a/${appendix}">Appendix</a><img src="ref:${picture}" alt="Picture" />`;
   await writeFile(join(cli.root,'report.jsx'),source);await writeFile(join(cli.root,'appendix.jsx'),`---\nid: ${appendix}\n---\n<p>Appendix</p>`);
@@ -107,7 +108,7 @@ it('authenticated reservations survive account token rotation and isolate guest 
  expect((await guestPublish(otherGuest.token)).status).toBe(403);expect((await guestPublish(anonymous.token)).status).toBe(201);
 });
 it('ordinary creates skip reserved identities and reservation allocation skips existing artifacts',async()=>{
- const token=await mintToken('mxmx_test_id_collision'),actor={tokenId:token.id,userId:null};
+ const token=await mintToken('mxmx_test_id_collision'),actor={tokenId:token.id,userId:token.userId};
  const ids=await reserveIds(actor,'batch_collision_0001');
  const spy=vi.spyOn(identifiers,'generateFileId');
  try{

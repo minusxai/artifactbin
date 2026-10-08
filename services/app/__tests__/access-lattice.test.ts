@@ -20,7 +20,7 @@ import {
   ROLE_ORDER, atLeast, canAnnotate, canEdit, canGovern, canRead, maxRole, rankOf, shareRolesAtLeast,
   type ArtifactRole, type ShareRole,
 } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, setUserEmail } from '@/lib/accounts';
 import type { Visibility } from '@/lib/artifacts';
 
@@ -29,7 +29,7 @@ useAppHarness();
 /** An account plus one of its claimed tokens — the ordinary signed-in owner. */
 async function account(email: string) {
   const user = await createUser({ email });
-  const token = await mintToken(email);
+  const token = await mintToken(email, user.id);
   await claimToken(user.id, token.token);
   return { user, token };
 }
@@ -115,7 +115,7 @@ describe('effectiveRole — ownership, the share list and the link, composed by 
 
   it('a bare token owns what it created — an anonymous owner is still an owner', async () => {
     const token = await mintToken('anon');
-    const row = await createArtifact(token.id, null, { format: 'markup', source: '<div><p>x</p></div>', meta: {}, visibility: 'unlisted', title: 't' });
+    const row = await createArtifact(token.id, token.userId, { format: 'markup', source: '<div><p>x</p></div>', meta: {}, visibility: 'unlisted', title: 't' });
     expect(await effectiveRole(row, { userId: null, tokenId: token.id })).toBe('owner');
     expect(await effectiveRole(row, { userId: null, tokenId: 'tok_someone_else' })).toBe('viewer');
   });

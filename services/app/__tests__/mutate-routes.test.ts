@@ -28,7 +28,7 @@ import { setDatasetRowCap } from '@/lib/story/datasets/dataset-mutate';
 
 
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request, type RequestOptions } from '@/__tests__/harness';
 
@@ -162,8 +162,8 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
   });
 
   it('a private document: strangers get the uniform 404, the owner\'s browser writes through the page relay, and a cross-site cookie POST is refused', async () => {
-    const t = await mintToken('t');
     const user = await createUser({ email: 'owner@x.com' });
+    const t = await mintToken('t', user.id);
     await claimToken(user.id, t.token);
     const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
     const doc = (await create(t.token, { markup: POLL(ds), visibility: 'private' })).id;

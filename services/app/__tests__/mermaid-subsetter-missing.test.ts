@@ -12,7 +12,7 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { getDb } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { services, setServices } from '@/lib/platform';
 import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
 import { runNextMermaidHarvest } from '@/lib/mermaid-images/harvester';

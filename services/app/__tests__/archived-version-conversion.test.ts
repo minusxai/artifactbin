@@ -14,7 +14,7 @@ import { documentEditBody } from './prepared-document';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 import { archivedVersionForActor, servedRow } from '@/lib/serving';
 import { PREVIOUS_ENGINE } from '@/lib/story/data/data-syntax';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -79,7 +79,7 @@ describe('?version=N of a version the converter cannot carry over', () => {
     expect(html).toContain(PREVIOUS_ENGINE);
     expect(html).not.toContain('42424');
     const head = (await getArtifactById(id))!;
-    const at = await archivedVersionForActor({ tokenId: owner.id, userId: null }, head, 1);
+    const at = await archivedVersionForActor({ tokenId:owner.id,userId:owner.userId }, head, 1);
     if (at === 'not_found') throw new Error('version 1 should be readable');
     expect(at.previousEngine).toBe(true);
     const ran = await dataflowForRow(await servedRow(head, at));

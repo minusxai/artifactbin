@@ -28,16 +28,16 @@ import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { childrenTableFor } from '@/lib/workspace';
 import { subscribeToArtifact } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 async function owner(name = 'owner') {
-  const t = await mintToken(name);
   const u = await createUser({ email: `${name}@example.com` });
-  await claimToken(u.id, t.token);
+  const t = await mintToken(name, u.id);
+    await claimToken(u.id, t.token);
   return { token: t.token, tokenId: t.id, userId: u.id, email: `${name}@example.com`, cookie: await agentCookie([t.id]) };
 }
 const create = async (token: string, body: Record<string, unknown>) => {

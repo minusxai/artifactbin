@@ -9,7 +9,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor, type AnnotationAuthor } from '@/lib/annotations';
 import { createArtifact, type TokenActor } from '@/lib/artifacts';
 import { setServices } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -49,10 +49,10 @@ async function publish(email: string) {
 /** The same document under an ANONYMOUS token — no account behind it at all. */
 async function publishAnonymously() {
   const tok = await mintToken('agent');
-  const row = await createArtifact(tok.id, null, doc);
+  const row = await createArtifact(tok.id, tok.userId, doc);
   await vi.waitFor(() => expect(fake.events.map((e) => e.verb)).toContain('created'));
   await listen();
-  return { row, actor: { tokenId: tok.id, userId: null } satisfies TokenActor };
+  return { row, actor: { tokenId:tok.id,userId:tok.userId } satisfies TokenActor };
 }
 
 const open = async (actor: TokenActor, artifactId: string, baseEditId: string, body: string) => {

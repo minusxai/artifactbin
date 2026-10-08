@@ -5,7 +5,7 @@ import { createUser } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 import * as feed from '@/lib/workspace/analytics';
 import { accountWorkspaceInsightsFor, accountWorkspaceFor } from '@/lib/workspace';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 const harness = useAppHarness();

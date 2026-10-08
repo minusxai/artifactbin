@@ -13,16 +13,19 @@ import { POST as internalMintRoute } from '@/app/api/internal/tokens/route';
 import { POST as startRoute } from '@/app/api/start/route';
 
 
-import { claimToken, createUser, getUserByEmail, listArtifactsByUser } from '@/lib/accounts';
+import { mintToken, claimToken, createUser, getUserByEmail, listArtifactsByUser } from '@/lib/accounts';
+import { createArtifact } from '@/lib/artifacts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
 
-async function anonMint(ip = '10.0.0.1'): Promise<{ id: string; token: string }> {
-  const res = await internalMintRoute(request('/api/internal/tokens', { method: 'POST', headers: { ...(ip ? { 'x-forwarded-for': ip } : {}) } }));
-  expect(res.status).toBe(201);
-  return res.json();
+async function anonMint(_ip?: string): Promise<{ id: string; token: string }> {
+  return mintToken('legacy', null);
+}
+
+async function legacyPublish(tokenId: string, title: string) {
+  return createArtifact(tokenId, null, { format: 'markup', source: `<h1>${title}</h1>`, meta: { visibility: 'public' }, title, description: null });
 }
 
 async function publish(token: string, title: string) {
@@ -50,17 +53,11 @@ describe('accounts', () => {
 });
 
 describe('anonymous connections + claiming', () => {
-  it('mints an anonymous credential that can publish; artifacts are unowned', async () => {
-    const { id, token } = await anonMint();
-    expect(token).toMatch(/^mx_/);
-    const art = await publish(token, 'anon-page');
-    const db = await harness.db();
-    const row = (await db.query<{ user_id: string | null }>('SELECT user_id FROM artifacts WHERE id = $1', [art.id]))
-      .rows[0];
-    expect(row.user_id).toBeNull();
-    // The name marks the mint source (distinct from OAuth's oauth-<rand>).
-    const named = (await db.query<{ name: string }>('SELECT name FROM tokens WHERE id = $1', [id])).rows[0];
-    expect(named.name).toMatch(/^api-[0-9a-z]{6}$/);
+  it('legacy anonymous credentials cannot publish', async () => {
+    const { token } = await anonMint();
+    const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { title: 'refused', markup: '<h1>Refused</h1>' } }));
+    expect(response.status).toBe(401);
+    expect((await (await harness.db()).query('SELECT 1 FROM artifacts')).rows).toHaveLength(0);
   });
 
   // A door is enforced in exactly one place. The app routes serve the mint and
@@ -73,14 +70,14 @@ describe('anonymous connections + claiming', () => {
   ])('$door carries no in-process valve — the proxy\'s doors are the only count', async ({ door, calls, send }) => {
     for (let i = 0; i < calls; i++) {
       const res = await send();
-      expect(res.status, `${door} ${i + 1} of ${calls}`).toBe(201);
+      expect(res.status, `${door} ${i + 1} of ${calls}`).toBe(401);
     }
   });
 
   it('claiming attaches the token and backfills its artifacts; later publishes are owned', async () => {
     const user = await createUser({ email: 'v@minusx.ai' });
-    const { token } = await anonMint();
-    await publish(token, 'before-claim');
+    const { id, token } = await anonMint();
+    await legacyPublish(id, 'before-claim');
 
     const claimed = await claimToken(user.id, token);
     expect(claimed).toMatchObject({ claimedArtifacts: 1 });
@@ -94,8 +91,8 @@ describe('anonymous connections + claiming', () => {
     const user = await createUser({ email: 'v@minusx.ai' });
     const t1 = await anonMint('10.0.0.1');
     const t2 = await anonMint('10.0.0.2');
-    await publish(t1.token, 'from-laptop');
-    await publish(t2.token, 'from-desktop');
+    await legacyPublish(t1.id, 'from-laptop');
+    await legacyPublish(t2.id, 'from-desktop');
     await claimToken(user.id, t1.token);
     await claimToken(user.id, t2.token);
     const mine = await listArtifactsByUser(user.id);
