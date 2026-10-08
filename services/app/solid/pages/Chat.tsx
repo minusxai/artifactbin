@@ -144,10 +144,12 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
     });
   };
   const online = () => info()?.online ?? false;
-  const canType = () => online() && !connection() && !['stopping', 'stopped'].includes(info()?.activity ?? '') && info()?.exitCode == null;
+  const canType = () => online() && !connection() && !['queued', 'stopping', 'stopped'].includes(info()?.activity ?? '') && info()?.exitCode == null;
   const waiting = () => {
     const session = info();
-    if (!session || session.online || session.exitCode != null) return '';
+    if (!session || session.exitCode != null) return '';
+    if (session.activity === 'queued') return 'Waiting for compute capacity. Your agent will start automatically when a slot is available.';
+    if (session.online) return '';
     if (!session.runId) return 'Reconnecting… Waiting for your local terminal.';
     if (session.activity === 'starting') return 'Starting your hosted box…';
     if (session.activity === 'stopping') return 'Stopping your hosted box…';
@@ -202,7 +204,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
         <button class="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal?.scrollToBottom()}>Latest output</button>
       </div>
       <Show when={!ended()}><form class="mt-3 flex gap-2" onSubmit={submit}>
-        <input aria-label="Message to agent" disabled={!canType() || sending()} value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} class="min-w-0 flex-1 rounded border border-edge bg-surface p-3" placeholder={canType() ? 'Message your agent…' : 'Session offline'} maxLength={16000} />
+        <input aria-label="Message to agent" disabled={!canType() || sending()} value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} class="min-w-0 flex-1 rounded border border-edge bg-surface p-3" placeholder={canType() ? 'Message your agent…' : info()?.activity === 'queued' ? 'Waiting for capacity…' : 'Session offline'} maxLength={16000} />
         <button aria-label="Send message" disabled={!canType() || sending() || !draft().trim()} class="rounded bg-accent px-4 text-bg disabled:opacity-40">Send</button>
       </form></Show>
       <Show when={!ended()}><div class="mt-2 flex flex-wrap gap-2"><For each={([['Enter', '\r'], ['Escape', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['Ctrl+C', '\x03']] as const)}>{([name, data]) => <button aria-label={`Send ${name}`} disabled={!canType()} class="rounded border border-edge px-3 py-2 text-xs disabled:opacity-40" onClick={() => void send({ type: 'input', data }).catch(() => {})}>{name}</button>}</For></div></Show>

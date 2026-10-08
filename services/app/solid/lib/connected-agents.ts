@@ -5,12 +5,13 @@ import { useSession } from './session';
 
 /** The sidebar and agent list agree on which connections are current. */
 export const isConnectedAgent = (session: RemoteSessionInfo): boolean =>
-  (session.online || !!session.runId && ['starting','stopping'].includes(session.activity ?? '')) && session.exitCode == null;
+  (session.online || !!session.runId && ['queued','starting','stopping'].includes(session.activity ?? '')) && session.exitCode == null;
 
 /** Connection and harness readiness are independent; every agent surface uses this label. */
 export function connectedAgentStatus(session: RemoteSessionInfo): string {
   if (session.exitCode != null || session.activity === 'stopped') return 'Ended';
   if (session.activity === 'stopping') return 'Stopping';
+  if (session.activity === 'queued') return 'Waiting for capacity';
   if (!session.online) return session.activity === 'starting' ? 'Starting' : 'Offline';
   switch (session.activity) {
     case 'starting': return 'Online · Starting';

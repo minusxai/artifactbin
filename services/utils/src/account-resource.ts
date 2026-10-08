@@ -16,7 +16,7 @@ export function parseAccountResource(input:unknown):AccountResource{
   else if(key==='state'){if(typeof item!=='string'||!/^[a-f0-9]{64}$/.test(item))throw new Error('Invalid observed state.');}
   else if(key==='status'){if(typeof item!=='string'||!['online','offline','exited'].includes(item.toLowerCase()))throw new Error('Invalid session status.');value[key]=item.toLowerCase();}
   else if(key==='managed'){if(typeof item!=='boolean')throw new Error('Invalid managed state.');}
-  else if(key==='activity'){if(typeof item!=='string'||!['starting','listening','working','blocked','unknown','stopping','stopped'].includes(item))throw new Error('Invalid agent activity.');}
+  else if(key==='activity'){if(typeof item!=='string'||!['queued','starting','listening','working','blocked','unknown','stopping','stopped'].includes(item))throw new Error('Invalid agent activity.');}
   else if(key==='color'){if(typeof item!=='string'||!['blue','violet','teal','amber','rose','slate'].includes(item))throw new Error('Invalid agent color.');}
   else if(key==='cols'||key==='rows'){if(!Number.isSafeInteger(item)||Number(item)<2||Number(item)>300)throw new Error(`${key} must be an integer from 2 to 300.`);}
   else if(key==='controller'){if(item!=='local'&&item!=='web')throw new Error('controller must be local or web.');}

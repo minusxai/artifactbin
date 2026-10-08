@@ -883,6 +883,8 @@ async function hostedRestartLeg(owner) {
     cols: 100, rows: 30, exitCode: null, managed: true, activity: 'working',
   };
   const starting = { ...session, online: false, activity: 'starting' };
+  const capacityMessage = 'Waiting for compute capacity. Your agent will start automatically when a slot is available.';
+  let current = { ...session, online: false, activity: 'queued' };
   const bodies = [];
   try {
     await run(async () => {
@@ -900,8 +902,8 @@ async function hostedRestartLeg(owner) {
       await page.route('**/api/remote/sessions**', route => {
         const url = new URL(route.request().url());
         const body = url.pathname === '/api/remote/sessions'
-          ? { sessions: bodies.length >= 3 ? [session] : [] }
-          : { session: starting, seq: 0, generation: session.runId, frames: [], snapshot: 'Starting your hosted box…\r\n' };
+          ? { sessions: bodies.length >= 3 ? [current] : [] }
+          : { session: current, seq: 0, generation: session.runId, frames: [], snapshot: (current.activity === 'queued' ? capacityMessage : 'Starting your hosted box…') + '\r\n' };
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
       });
       await page.goto(`${BASE}/chat`, { waitUntil: 'load' });
@@ -919,10 +921,20 @@ async function hostedRestartLeg(owner) {
       await page.getByText('Finishing the previous hosted box…', { exact: true }).waitFor({ state: 'visible' });
       await page.getByRole('button', { name: `Open ${session.name}`, exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForFunction(name => [...document.querySelectorAll('button[aria-pressed="true"]')].some(button => button.getAttribute('aria-label') === `Open ${name}`), session.name);
+      await page.getByText('codex · Waiting for capacity', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText('codex · Hosted · Waiting for capacity', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByRole('status').filter({ hasText: capacityMessage }).waitFor({ state: 'visible' });
+      check(await page.getByRole('textbox', { name: 'Message to agent' }).isDisabled(), 'capacity waiting disables terminal input');
+      check(await page.getByRole('button', { name: 'Stop agent', exact: true }).isEnabled(), 'capacity waiting remains cancelable');
+      current = starting;
       await page.getByText('codex · Starting', { exact: true }).waitFor({ state: 'visible' });
       await page.getByText('codex · Hosted · Starting', { exact: true }).waitFor({ state: 'visible' });
       await page.getByRole('status').filter({ hasText: 'Starting your hosted box…' }).waitFor({ state: 'visible' });
       check(await page.getByRole('textbox', { name: 'Message to agent' }).isDisabled(), 'roster and terminal agree on Starting and do not enable input before the hosted terminal is ready');
+      current = { ...session, activity: 'listening' };
+      await page.getByText('codex · Hosted · Online · Ready', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText('codex · Online · Ready', { exact: true }).waitFor({ state: 'visible' });
+      check(await page.getByRole('textbox', { name: 'Message to agent' }).isEnabled(), 'native readiness enables terminal input after capacity and startup');
       must(bodies.length === 3, `a fresh click after Stop waiting retries one pending admission (${bodies.length} total requests)`);
       check(JSON.stringify(bodies[1]) === JSON.stringify(bodies[2]), 'the retried click reuses its exact request body and request id');
       check(typeof bodies[1]?.requestId === 'string' && bodies[1].requestId.length > 0, 'the click carries one stable request id');

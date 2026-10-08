@@ -7,7 +7,7 @@ export const isTerminalManagedRun=(status:string)=>terminalRuns.has(status);
 export function managedRunRosterStatus(status:string,active:boolean,activity?:RemoteActivity):{online:boolean;activity:RemoteActivity}{
  if(isTerminalManagedRun(status))return {online:false,activity:'stopped'};
  if(!active||activity==='stopping')return {online:false,activity:'stopping'};
- if(status==='queued')return {online:false,activity:'starting'};
+ if(status==='queued')return {online:false,activity:'queued'};
  if(status==='running')return {online:true,activity:'working'};
  return {online:false,activity:'unknown'};
 }

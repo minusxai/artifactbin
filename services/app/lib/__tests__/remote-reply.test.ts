@@ -38,3 +38,11 @@ it('labels known terminal failure independently of agent readiness',()=>{
  const work={id:'request',sessionId:'session',artifactId:'doc',threadId:'thread',commentId:'comment',name:'codex',color:'blue' as const,updatedAt:'now',phase:'failed' as const};
  expect(remoteWorkLabel(work)).toBe('Execution failed · retry by mentioning again');
 });
+
+it.each(['online','offline'] as const)('explains capacity waiting even when comment connection is %s',connection=>{
+ const work={id:'capacity',sessionId:'agent',artifactId:'doc',threadId:'thread',commentId:'comment',name:'agent',color:'blue' as const,phase:'dispatching' as const,updatedAt:'now',activity:'queued' as const,connection};
+ expect(remoteWorkLabel(work)).toBe('Waiting for capacity');
+ expect(remoteWorkLabel({...work,phase:'queued'})).toBe('Waiting for capacity');
+ expect(remoteWorkLabel({...work,phase:'completed',connection:'online'})).toBe('Answered');
+ expect(remoteWorkLabel({...work,connection:'stopped'})).toBe('Sending to agent · stopped');
+});

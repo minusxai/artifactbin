@@ -59,7 +59,7 @@ describe('Solid shell', () => {
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       if (String(input) === '/api/remote/sessions') return new Response(JSON.stringify({ sessions: [
         { id: 'online', online, exitCode: null },
-        { id: 'starting', online: false, runId: 'run_1', activity: 'starting', exitCode: null },
+        { id: 'capacity-waiting', online: false, runId: 'run_1', activity: 'queued', exitCode: null },
         { id: 'offline', online: false, exitCode: null },
         { id: 'ended', online: true, exitCode: 0 },
       ] }));
@@ -70,12 +70,12 @@ describe('Solid shell', () => {
     render(() => <App />);
     await vi.dynamicImportSettled();
     const nav = await screen.findByRole('navigation', { name: 'Workspace' });
-    expect(await within(nav).findByLabelText('2 connected agents')).toHaveTextContent('2');
+    expect(await within(nav).findByLabelText('2 active agents')).toHaveTextContent('2');
     expect(await within(nav).findByLabelText('3 unread notifications')).toHaveTextContent('3');
     online = false;
     unread = 0;
     fireEvent(window, new Event(REFRESH_EVENT));
-    expect(await within(nav).findByLabelText('1 connected agent')).toHaveTextContent('1');
+    expect(await within(nav).findByLabelText('1 active agent')).toHaveTextContent('1');
     await waitFor(() => expect(within(nav).queryByLabelText('3 unread notifications')).not.toBeInTheDocument());
     expect(within(nav).queryByLabelText('0 unread notifications')).not.toBeInTheDocument();
   });
