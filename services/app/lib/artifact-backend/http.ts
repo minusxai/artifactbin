@@ -235,7 +235,8 @@ export function createHttpBackend(id: string): ArtifactBackend {
     },
     async remoteSessions(options = {}) {
       const r = await fetch('/api/remote/sessions', { credentials: 'same-origin', signal: options.signal });
-      return r.ok ? ((await r.json()) as RemoteSessionsAnswer) : { sessions: [] };
+      if (!r.ok) throw new BackendRequestError(`Could not load agents (${r.status})`, r.status);
+      return (await r.json()) as RemoteSessionsAnswer;
     },
     async deleteRemoteSession(sessionId) {
       const response = await fetch(`/api/remote/sessions/${sessionId}`, { method: 'DELETE', credentials: 'same-origin' });

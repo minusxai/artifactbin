@@ -205,3 +205,27 @@ it('hides tagged quick choices and restores them when their badge is removed', a
   replaceComment(field,'[@review](/chat?session='+id+') ');
   expect(screen.queryByRole('button',{name:'Tag review'})).toBeNull();
 });
+
+
+it('quick choices report pending before confirmed empty results', async () => {
+ let resolve!: (answer: {sessions: []}) => void;
+ const backend={...http(),remoteSessions:()=>new Promise<{sessions: []}>(done=>{resolve=done;})};
+ render(()=><CommentMarkdownField label="Draft" backend={backend} quickAgents value="" onChange={()=>{}}/>);
+ expect(screen.getByRole('status')).toHaveTextContent('Loading agents…');
+ expect(screen.queryByText('No agents available')).toBeNull();
+ resolve({sessions:[]});
+ await screen.findByText('No agents available');
+ expect(screen.queryByText('Loading agents…')).toBeNull();
+});
+
+it.each(['network','http'])('quick choices report %s failures and retry without changing the draft', async kind => {
+ const agent={id:'d'.repeat(64),name:'retry-agent',harness:'pi',online:true};
+ const request=vi.fn().mockImplementationOnce(()=>kind==='network'?Promise.reject(Error('offline')):Promise.resolve(new Response('{}',{status:503}))).mockImplementation(()=>Promise.resolve(new Response(JSON.stringify({sessions:[agent]}),{status:200})));
+ vi.stubGlobal('fetch',request);
+ render(()=><CommentMarkdownField label="Draft" backend={http()} quickAgents value="Keep this draft" onChange={()=>{}}/>);
+ await screen.findByText('Could not load agents.');
+ expect(screen.queryByText('No agents available')).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Retry loading agents'}));
+ await screen.findByRole('button',{name:'Tag retry-agent'});
+ expect(screen.getByLabelText('Draft')).toHaveTextContent('Keep this draft');
+});
