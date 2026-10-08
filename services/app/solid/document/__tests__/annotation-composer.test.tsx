@@ -71,10 +71,23 @@ describe('the annotation composer', () => {
     knobs.sessions = [online, {...online,id:'second',name:'other'}, {...online,id:'33333333-3333-3333-3333-333333333333',name:'third'}];
     openComposer(); await flush();
     expect(screen.getAllByRole('button', {name:/^Tag /})).toHaveLength(2);
-    expect(screen.getByText('3 agents available')).toBeTruthy();
+    const agents = screen.getByRole('group', {name:'Tag agent'});
+    expect(within(agents).queryByText(/agents available/)).toBeNull();
+    expect(within(agents).getByRole('link', {name:'Manage agents'})).toHaveAttribute('href', '/chat');
     fireEvent.click(screen.getByRole('button',{name:'+1 other'})); await flush();
     fireEvent.click(screen.getByRole('button',{name:/^Mention third/})); await flush();
     expect(screen.getByLabelText('Annotation comment').querySelector('[data-comment-mention]')).toHaveTextContent('@third');
+  });
+
+  it('offers agent setup without navigating away from the comment draft', async () => {
+    knobs.sessions = [];
+    openComposer(); await flush();
+    const agents = screen.getByRole('group', {name:'Tag agent'});
+    expect(within(agents).getByText('No agents available')).toBeTruthy();
+    const add = within(agents).getByRole('link', {name:'Add agent'});
+    expect(add).toHaveAttribute('href', '/chat');
+    expect(add).toHaveAttribute('target', '_blank');
+    expect(add).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
   it('keeps the original view context across geometry updates and sends it with the native comment', async () => {

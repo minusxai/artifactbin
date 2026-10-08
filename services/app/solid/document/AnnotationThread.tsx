@@ -264,7 +264,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
           <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
             label="Reply to annotation" quickAgents
             value={reply()} onChange={setReply} onSubmit={() => void sendReply()}
-             rows={3} placeholder="Write a reply…" />
+             rows={3} />
           <Show when={replyError()}><p role="alert" class="text-xs text-red-500">{replyError()}</p></Show>
           <div class="flex items-center justify-end gap-2">
             <CommentSubmitHint action="reply" />

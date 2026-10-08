@@ -5,10 +5,7 @@
  * keyboard — this list answers ArrowUp/ArrowDown/Enter/Tab through `onReady`'s handle.
  */
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import Check from 'lucide-solid/icons/check';
-import ChevronDown from 'lucide-solid/icons/chevron-down';
-import Copy from 'lucide-solid/icons/copy';
-import Plus from 'lucide-solid/icons/plus';
+import ArrowUpRight from 'lucide-solid/icons/arrow-up-right';
 import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend, MemberPerson } from '@/lib/artifact-backend/types';
 import { personMention } from '@/lib/annotations/person-mentions';
@@ -16,9 +13,6 @@ import { remoteMention } from '@/lib/annotations/remote-reply';
 import { type RemoteSessionInfo } from '../../../contracts/src/remote';
 import { agentNameColor } from '../lib/agent-identity';
 import { Tooltip } from '../components/Tooltip';
-import { copyText } from '../lib/copy-text';
-
-const REQUEST = 'Connect to afbin remote so I can @mention you in artifact comments.';
 const agentLabel = (name: string) => (({ claude: 'Claude Code', codex: 'Codex', pi: 'Pi', opencode: 'OpenCode' } as Record<string, string>)[name] ?? name);
 /** Shared eligibility for quick choices and the full mention picker. */
 export const canTagAgent = (session: RemoteSessionInfo) => !session.runId && (session.managed ? session.exitCode === null && session.activity !== 'stopped' : session.online);
@@ -32,8 +26,6 @@ export function CommentMentionPicker(props: {
   const [people, setPeople] = createSignal<MemberPerson[]>([]);
   const [active, setActive] = createSignal(0);
   const [loaded, setLoaded] = createSignal(false);
-  const [setupExpanded, setSetupExpanded] = createSignal(false);
-  const [copyState, setCopyState] = createSignal<'idle' | 'copied' | 'error'>('idle');
   const [error, setError] = createSignal('');
   const [removing, setRemoving] = createSignal<string | null>(null);
   const sessionsUnavailable = props.backend.unavailable('remoteSessions');
@@ -85,13 +77,10 @@ export function CommentMentionPicker(props: {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not remove agent. Try again.'); }
     finally { setRemoving(null); }
   };
-  const copyRequest = async () => {
-    setCopyState(await copyText(REQUEST) ? 'copied' : 'error');
-  };
   const keep = (event: MouseEvent) => event.preventDefault();
-  return <div aria-label="Agent sessions" class="mb-2 overflow-hidden rounded-lg border border-edge bg-surface p-1.5 text-sm shadow-lg">
+  return <div aria-label="Agent sessions" class="mb-2 overflow-hidden rounded-lg border border-edge bg-surface p-1.5 font-sans text-sm shadow-lg">
     <Show when={props.artifactId}>
-      <p class="px-2 py-1.5 text-xs text-muted">Mention a person</p>
+      <p class="px-2 py-1.5 text-xs font-medium text-muted">Mention a person</p>
       <For each={people()}>{(person, index) => (
         <button type="button" aria-label={`Mention @${person.username}`} class={`block w-full rounded-md px-2 py-2 text-left ${index() === active() ? 'bg-accent-soft' : 'hover:bg-bg'}`}
           onMouseDown={keep} onMouseEnter={() => setActive(index())} onClick={() => props.onSelect(personMention(person))}>
@@ -102,7 +91,7 @@ export function CommentMentionPicker(props: {
         <p role="note" class="px-2 py-1 text-xs text-muted">{peopleUnavailable}</p>
       </Show>
     </Show>
-    <p class="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">Mention an agent</p>
+    <p class="px-2 py-1.5 text-xs font-medium text-muted">Mention an agent</p>
     <For each={matches()}>{(session, index) => (
       <div class="flex items-center">
         <button type="button" aria-label={`Mention ${session.name} (${session.harness})`}
@@ -126,30 +115,12 @@ export function CommentMentionPicker(props: {
       </div>
     )}</For>
     <Show when={error()}><p role="alert" class="px-2 py-1.5 text-sm text-muted">{error()}</p></Show>
-    <Show when={loaded() && matches().length > 0}>
-      <button type="button" aria-expanded={setupExpanded()} onMouseDown={keep} onClick={() => setSetupExpanded((value) => !value)}
-        class="mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md border border-edge bg-bg px-2 py-2 text-left text-xs font-medium text-fg transition-colors hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-        <Plus size={14} aria-hidden="true" />
-        Add another agent
-        <ChevronDown size={14} aria-hidden="true" class={`ml-auto transition-transform ${setupExpanded() ? 'rotate-180' : ''}`} />
-      </button>
-    </Show>
     <Show when={sessionsUnavailable}><p role="note" class="px-2 py-1.5 text-xs text-muted">{sessionsUnavailable}</p></Show>
-    <Show when={!sessionsUnavailable && (!matches().length || setupExpanded())}>
-      <div class="px-2 py-1.5 text-muted">
+    <Show when={!sessionsUnavailable}>
+      <div class="flex flex-wrap items-center gap-2 px-2 py-1.5 font-sans text-xs text-muted">
         <Show when={!matches().length}><p>{loaded() ? 'No matching agents.' : 'Loading sessions…'}</p></Show>
         <Show when={loaded()}>
-          <p class="mt-2">Ask your agent to connect:</p>
-          <div class="mt-2 flex items-start gap-2 rounded-md border border-edge bg-bg p-2">
-            <p class="min-w-0 flex-1 text-xs text-fg">{REQUEST}</p>
-            <Tooltip content={copyState() === 'copied' ? 'Copied' : 'Copy request'}>
-              <button type="button" aria-label="Copy connection request" onMouseDown={keep} onClick={() => void copyRequest()}
-                class="shrink-0 cursor-pointer rounded-md p-1 text-muted hover:text-fg">
-                <Show when={copyState() === 'copied'} fallback={<Copy size={14} aria-hidden="true" />}><Check size={14} aria-hidden="true" /></Show>
-              </button>
-            </Tooltip>
-          </div>
-          <p role="status" class="mt-1 text-xs">{copyState() === 'copied' ? 'Copied — paste into your agent.' : copyState() === 'error' ? 'Could not copy. Select and copy the request above.' : ''}</p>
+          <a class="comment-agents-manage" href="/chat" target="_blank" rel="noopener noreferrer">Manage agents<ArrowUpRight size={12} aria-hidden="true" /></a>
         </Show>
       </div>
     </Show>

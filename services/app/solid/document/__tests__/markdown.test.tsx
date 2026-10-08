@@ -140,11 +140,12 @@ describe('the composer writes markdown, and sends TEXT', () => {
     expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
   });
 
-  it('every marker the toolbar names is offered, with its hint line', async () => {
+  it('offers every formatting marker and puts the mention hint in the empty editor', async () => {
     layer({ railOpen: true, initialSelection: SELECTION });
     await flush();
     for (const label of ['Bold', 'Italic', 'Code', 'Link', 'List']) expect(within(composer()).getByLabelText(label)).toBeTruthy();
-    expect(composer().querySelector('.comment-mention-tip')).toHaveTextContent('Pro tip: Use @ to tag friends or agents.');
+    expect(within(composer()).getByRole('textbox', {name:'Annotation comment'})).toHaveAttribute('aria-placeholder', 'Protip: Use @ to tag friends or agents');
+    expect(composer().querySelector('.comment-mention-tip')).toBeNull();
   });
 
   it('⌘B wraps from the keyboard too', async () => {
