@@ -18,6 +18,7 @@ import type { RemoteSessionInfo, RemoteView } from '../../../contracts/src/remot
 import { newAgentName, agentNameColor } from '../lib/agent-identity';
 import { REMOTE_NAME } from '../../../contracts/src/remote';
 import { connectedAgentStatus, isConnectedAgent } from '../lib/connected-agents';
+import { isTerminalProtocolReply } from '../lib/terminal-input';
 import { Tooltip } from '../components/Tooltip';
 import { Button } from '../components/ui';
 import { usePageData } from '../lib/use-page-data';
@@ -121,7 +122,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
       }
       if (!stopped) timer = setTimeout(() => void poll(), failures ? Math.min(10000, 500 * 2 ** Math.min(failures - 1, 5)) : 250);
     };
-    const data = t.onData((value) => { if (canType()) void send({ type: 'input', data: value }).catch(() => {}); });
+    const data = t.onData((value) => { if (canType() && !isTerminalProtocolReply(value)) void send({ type: 'input', data: value }).catch(() => {}); });
     let touchY: number | undefined;
     const touchStart = (event: TouchEvent) => { touchY = event.touches.length === 1 ? event.touches[0].clientY : undefined; };
     const touchMove = (event: TouchEvent) => {
