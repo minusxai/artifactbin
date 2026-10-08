@@ -13,15 +13,12 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { JSDOM } from 'jsdom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-const settings = vi.hoisted(() => ({ target: 'domains.example.test' as string | null, session: '' }));
-vi.mock('@/lib/platform/config', async (original) => ({
-  ...(await original<typeof import('@/lib/platform/config')>()),
-  get CUSTOM_DOMAINS_TARGET() { return settings.target; },
-  get PUBLIC_BASE_URL() { return 'https://app.example.test'; },
-}));
+const settings = { session: '' };
+const configure = (target: string | null) => overrideConfig({ customDomainsTarget: target, publicBaseUrl: 'https://app.example.test' });
 
+import { overrideConfig } from '@/lib/platform/config';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { fakeBrowser } from '@artifactbin/utils';
@@ -102,7 +99,7 @@ async function world() {
 
 const noCookie = (res: Response) => expect(res.headers.get('set-cookie')).toBeNull();
 
-beforeEach(() => { settings.target = 'domains.example.test'; settings.session = ''; });
+beforeEach(() => { configure('domains.example.test'); settings.session = ''; });
 afterEach(() => { setDomainResolver(null); });
 
 describe('the home page on a verified host', () => {
@@ -489,7 +486,7 @@ describe('the certificate ask check', () => {
   it('answers 200 for a verified host and 404 otherwise, whatever the flag says', async () => {
     const w = await world();
     const ask = (domain: string) => app().request(`${APP}/api/domains/allow?domain=${encodeURIComponent(domain)}`);
-    settings.target = null;
+    configure(null);
     const yes = await ask('blog.example.org');
     expect(yes.status).toBe(200);
     noCookie(yes);
@@ -665,7 +662,7 @@ describe('the settings API', () => {
     expect(await ok.json()).toMatchObject({ status: 'verified' });
 
     // Flag off: attaching and verifying are refused, but the owner still sees and removes it.
-    settings.target = null;
+    configure(null);
     expect(await (await call('GET', '/api/my/domain')).json()).toMatchObject({ enabled: false, target: null, domain: { hostname: 'blog.example.org', status: 'verified' } });
     expect((await call('POST', '/api/my/domain', { hostname: 'blog.example.org' })).status).toBe(403);
     expect((await call('POST', '/api/my/domain/verify', { hostname: 'blog.example.org' })).status).toBe(403);

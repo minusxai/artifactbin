@@ -11,6 +11,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * right. Events are fired unawaited on the request path, so assertions poll.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { overrideRequestHeaders } from '@/lib/platform/request-context';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { artifactPage as ArtifactPage, artifactMetadata as artifactPageMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
@@ -44,10 +45,7 @@ const sessionUser = { id: '', email: '' };
 // holding none — exactly like production code called from a test), populated =
 // a request carrying these headers (lib/request-context).
 const requestHeaders = new Map<string, string>();
-vi.mock('@/lib/platform/request-context', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/platform/request-context')>()),
-  currentHeaders: async () => (requestHeaders.size === 0 ? null : { get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
-}));
+overrideRequestHeaders(() => (requestHeaders.size === 0 ? null : [...requestHeaders]));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

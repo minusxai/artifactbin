@@ -6,7 +6,8 @@
  * `fork` is recorded against the ORIGINAL with the copy as `fork_id`; and
  * `sse_connect` is not a moment anyone cares about, so it emits nothing.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { overrideRequestHeaders } from '@/lib/platform/request-context';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { useAppHarness } from '@/__tests__/harness';
 import { trackEvent } from '@/lib/platform';
@@ -16,10 +17,7 @@ const harness = useAppHarness();
 
 // A request carrying a user-agent, so the visitor hash exists (lib/analytics reads it off the request context).
 const requestHeaders = new Map<string, string>([['user-agent', 'Mozilla/5.0 (test)']]);
-vi.mock('@/lib/platform/request-context', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/platform/request-context')>()),
-  currentHeaders: async () => (requestHeaders.size === 0 ? null : { get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
-}));
+overrideRequestHeaders(() => (requestHeaders.size === 0 ? null : [...requestHeaders]));
 
 let fake: FakeEvents;
 beforeEach(() => { fake = fakeEvents(); setServices({ events: fake }); });

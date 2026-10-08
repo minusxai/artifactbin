@@ -1,7 +1,9 @@
 import {artifactQuery} from '@/lib/artifacts';
 import {beforeEach,expect,it,vi} from 'vitest';
-vi.mock('@/lib/datasets/execute',()=>({executeCatalog:vi.fn(async()=>({columns:[{name:'id',type:'number'}],rows:[{id:1}]}))}));
-vi.mock('@/lib/datasets/postgres',()=>({discoverPostgres:vi.fn(async()=>[{schema:'public',name:'rows',columns:[{name:'id',type:'number'}]}])}));
+overrideCatalogExecutor(vi.fn(async()=>({columns:[{name:'id',type:'number'}],rows:[{id:1}]})) as never);
+overridePostgres({discover:vi.fn<PostgresDriver['discover']>(async()=>[{schema:'public',name:'rows',columns:[{name:'id',type:'number'}]}])});
+import {overridePostgres,type PostgresDriver} from '@/lib/datasets/postgres';
+import {overrideCatalogExecutor} from '@/lib/datasets/execute';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as forkRoute} from '@/app/api/my/artifacts/[id]/fork/route';
 import {POST as tables} from '@/app/a/[id]/tables/route';

@@ -1,10 +1,11 @@
 import {observedRequest} from '@/__tests__/conditional-request';
 import {expect,it,vi} from 'vitest';
-vi.mock('@/lib/datasets/postgres',()=>({
- discoverPostgres:vi.fn(async()=>[{schema:'source',name:'people',columns:[{name:'id',type:'number'},{name:'email',type:'string'}]}]),
- queryPostgres:vi.fn(async()=>({columns:[{name:'id',type:'number'}],rows:[{id:1}]})),
-}));
-vi.mock('@/lib/datasets/execute',()=>({executeCatalog:vi.fn(async()=>({columns:[{name:'id',type:'number'}],rows:[{id:1}]}))}));
+overridePostgres({
+ discover:vi.fn<PostgresDriver['discover']>(async()=>[{schema:'source',name:'people',columns:[{name:'id',type:'number'},{name:'email',type:'string'}]}]),
+ query:vi.fn<PostgresDriver['query']>(async()=>({columns:[{name:'id',type:'number'}],rows:[{id:1}]})),
+});
+const executor=vi.fn(async()=>({columns:[{name:'id',type:'number'}],rows:[{id:1}]}));
+overrideCatalogExecutor(executor as never);
 import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {POST as revert} from '@/app/api/artifacts/[id]/revert/route';
@@ -12,7 +13,8 @@ import {POST as browserRevert} from '@/app/api/my/artifacts/[id]/revert/route';
 import {POST as tables} from '@/app/a/[id]/tables/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {prepareCatalog} from '@/lib/datasets/catalog';
-import {executeCatalog} from '@/lib/datasets/execute';
+import {overridePostgres,type PostgresDriver} from '@/lib/datasets/postgres';
+import {overrideCatalogExecutor} from '@/lib/datasets/execute';
 import {DatasetError} from '@/lib/datasets/errors';
 import {POST as query} from '@/app/api/artifacts/[id]/query/route';
 import {dataflowForRow,getArtifactById} from '@/lib/artifacts';
@@ -45,11 +47,11 @@ it('lets a shared editor add notebook models, expand exposure and replace creden
  const replaced=await prepareCatalog({...model,connection:{...newTarget,passwordSecretId:secret.id}},actor,f.previous);expect(replaced,replaced instanceof Response?await replaced.clone().text():'').not.toBeInstanceOf(Response);
 });
 it('rechecks private dataset access before serving a previously cached Postgres result',async()=>{
- vi.mocked(executeCatalog).mockClear();
+ executor.mockClear();
  const f=await pgFixture();await f.db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);await f.db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'viewer')",[f.id,f.friend.email]);
- const first=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(first.status).toBe(200);expect(executeCatalog).toHaveBeenCalledTimes(1);expect(executeCatalog).toHaveBeenLastCalledWith(expect.anything(),'select * from people',{},expect.objectContaining({datasetId:f.id}));
+ const first=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(first.status).toBe(200);expect(executor).toHaveBeenCalledTimes(1);expect(executor).toHaveBeenLastCalledWith(expect.anything(),'select * from people',{},expect.objectContaining({datasetId:f.id}));
  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND email=$2',[f.id,f.friend.email]);
- const revoked=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(revoked.status).toBe(404);expect(executeCatalog).toHaveBeenCalledTimes(1);
+ const revoked=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(revoked.status).toBe(404);expect(executor).toHaveBeenCalledTimes(1);
 });
 it('reports Postgres mutations as inactive and refuses execution after a writable source changes kind',async()=>{
  const f=await pgFixture();
@@ -84,10 +86,10 @@ it.each([400,503])('translates typed Postgres failures consistently in resource 
  const f=await pgFixture();
  const message=status===400?'Postgres query failed. Check column names and value types against the exposed dataset schema.':'Postgres connection failed. Check connection settings and retry.';
  const failure=new DatasetError(message,status);
- vi.mocked(executeCatalog).mockRejectedValueOnce(failure);
+ executor.mockRejectedValueOnce(failure);
  const native=await query(request(`/api/artifacts/${f.id}/query`,{method:'POST',token:f.ownerToken.token,json:{sql:'select missing_column from people',refresh:true}}),ctx(f.id));
  expect(native.status).toBe(status);expect(await native.json()).toMatchObject({error:'query_failed',message});
- vi.mocked(executeCatalog).mockRejectedValueOnce(failure);
+ executor.mockRejectedValueOnce(failure);
  const browser=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.owner),json:{sql:'select missing_column from people',refresh:true}}),ctx(f.id));
  expect(browser.status).toBe(status);expect(await browser.json()).toMatchObject({error:'dataset_error',details:[message]});
 });

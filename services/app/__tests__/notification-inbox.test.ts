@@ -1,6 +1,6 @@
 import {seedOwnerJoin} from '@/lib/accounts';
 import {notificationArtifactAuthority,notificationSourceSchema} from '@/lib/notifications';
-import {expect,it,vi} from 'vitest';
+import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness,request,setSession} from './harness';
 import {PATCH as patchInbox} from '@/app/api/my/people/route';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -10,9 +10,10 @@ import {getDb} from '@/lib/platform';
 import {membershipInbox,updateMembershipInbox} from '@/lib/accounts';
 import {POST as delivery} from '@/app/api/internal/notifications/route';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
-vi.mock('@/lib/platform/config',async original=>({...await original<typeof import('@/lib/platform/config')>(),INTERNAL_SERVICE_SECRET:'notification-test-service'}));
+import {overrideConfig} from '@/lib/platform/config';
 import {notifyThread,recordNotification} from '@/lib/notifications/write';
 useAppHarness();
+beforeEach(()=>overrideConfig({internalServiceSecret:'notification-test-service'}));
 async function fixture(){
  const sender=await createUser({email:'sender@example.com'}),recipient=await createUser({email:'recipient@example.com'}),token=await mintToken('test',sender.id);
  const publish=async(body:object)=>(await create(request('/api/artifacts',{method:'POST',token:token.token,json:body}))).json();

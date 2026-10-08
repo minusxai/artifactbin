@@ -11,6 +11,8 @@ import { overrideSession, type Session } from '@/auth';
 import { AGENT_COOKIE, encodeAgentSession } from '@/lib/accounts/agent-session';
 import { resetRateLimit } from '@/lib/accounts/auth';
 import { EVENTS_SCHEMA } from '@/lib/platform/config';
+import { overridePostgres } from '@/lib/datasets/postgres';
+import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
@@ -187,8 +189,12 @@ export function useAppHarness(): AppHarness {
   });
 
   afterAll(async () => {
-    // The api project shares one module graph per worker: the next file starts with no session named.
+    // The api project shares one module graph per worker: the next file starts with no session named and
+    // none of the overrides below (the Postgres driver, dataset execution; configuration and request headers are
+    // cleared by the setup file, which also covers files that do not use the harness).
     overrideSession(undefined);
+    overridePostgres(undefined);
+    overrideCatalogExecutor(undefined);
     await drainPreparedPageWarmups();
     await drainSnapshotRevalidations();
     // The export cache holds the database it was opened on; the next file on this worker (the api

@@ -14,7 +14,7 @@ import {createDatasetResultCache} from './result-cache';
 export interface CatalogQueryOptions {timeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/story/datasets/dataset-shape').DatasetColumn['type']>;datasetId?:string;actor?:RoleActor;signal?:AbortSignal;authorize?:()=>Promise<void>}
 export type CatalogResult=TableResult&{refreshedAt:string};
 /** Callers authorize dataset access before entering this execution/cache boundary. */
-export async function executeCatalog(catalog:DatasetCatalog,sql:string,params:Record<string,Scalar>={},opts:CatalogQueryOptions={}):Promise<CatalogResult> {
+async function executeCatalogDirect(catalog:DatasetCatalog,sql:string,params:Record<string,Scalar>={},opts:CatalogQueryOptions={}):Promise<CatalogResult> {
  const limit=Math.min(10000,Math.max(1,Math.floor(opts.limit??1000)));const offset=Math.max(0,Math.floor(opts.offset??0));
  if(!Number.isFinite(limit)||!Number.isSafeInteger(offset))throw new DatasetError('Invalid query window');
  const config=catalog.kind==='postgres'?(catalog.connection?await resolveDatasetConnection(catalog.connection,opts.actor,opts.datasetId):(()=>{throw new DatasetError('Postgres dataset credentials are unavailable')})()):null;
@@ -51,3 +51,15 @@ export async function executeCatalog(catalog:DatasetCatalog,sql:string,params:Re
   return createDatasetResultCache(await getDb()).run(cacheKey,load,{ttlSeconds:catalog.refreshSeconds,refresh:opts.refresh,signal:opts.signal,authorize});
  const response=await load();await authorize();return response;
 }
+
+let executorOverride: typeof executeCatalogDirect | undefined;
+
+/**
+ * THE TEST OVERRIDE for dataset execution: every `executeCatalog` call goes to this function instead (a test that
+ * counts or fails executions). The test harness clears it after every file; production code never sets it.
+ */
+export function overrideCatalogExecutor(executor: typeof executeCatalogDirect | undefined): void {
+  executorOverride = executor;
+}
+
+export const executeCatalog: typeof executeCatalogDirect = (...args) => (executorOverride ?? executeCatalogDirect)(...args);

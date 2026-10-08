@@ -1,9 +1,10 @@
 import { expect, it, vi } from 'vitest';
 const pg=vi.hoisted(()=>({hold:null as null|(()=>Promise<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>) }));
-vi.mock('@/lib/datasets/postgres',()=>({
-  discoverPostgres:async()=>[{schema:'source',name:'numbers',columns:[{name:'n',type:'number'}]}],
-  queryPostgres:async()=>pg.hold?pg.hold():{rows:[{n:314159265}],columns:[{name:'n',type:'number'}]},
-}));
+import {overridePostgres} from '@/lib/datasets/postgres';
+overridePostgres({
+  discover:async()=>[{schema:'source',name:'numbers',columns:[{name:'n',type:'number'}]}],
+  query:async()=>pg.hold?pg.hold():{rows:[{n:314159265}],columns:[{name:'n',type:'number'}]},
+});
 import {useAppHarness,request,agentCookie} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as queryDocument,POST as queryPrivateDocument} from '@/app/a/[id]/query/route';

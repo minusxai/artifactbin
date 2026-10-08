@@ -10,25 +10,18 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { request } from '@/__tests__/harness';
+import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { GET as apiHealth } from '@/app/api/health/route';
 import { stackHealth } from '@/lib/runtime';
 
-/** What `@/lib/config` answers for the three URLs in THIS file — live, so one file covers both outcomes. */
-const urls: { sql?: string; browser?: string; events?: string } = {};
-vi.mock('@/lib/platform/config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/platform/config')>()),
-  get SQL_SERVICE_URL() { return urls.sql; },
-  get BROWSER_SERVICE_URL() { return urls.browser; },
-  get EVENTS_SERVICE_URL() { return urls.events; },
-}));
 
 const servers: RunningServer[] = [];
 const seen: Array<Record<string, string | string[] | undefined>> = [];
 afterEach(async () => {
   for (const s of servers.splice(0)) await s.close();
   seen.length = 0;
-  delete urls.sql; delete urls.browser; delete urls.events;
+  resetConfigOverrides();
   vi.restoreAllMocks();
 });
 
@@ -74,7 +67,7 @@ describe('stackHealth', () => {
 
 describe('GET /api/health', () => {
   it('answers 200 {"ok":true} exactly, never cached, with no credential, when every service is healthy', async () => {
-    urls.sql = await serve(200);
+    overrideConfig({ sqlServiceUrl: await serve(200) });
     const res = await apiHealth(request('/api/health'));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
@@ -83,8 +76,8 @@ describe('GET /api/health', () => {
   it('answers 503 {"ok":false} and NOTHING more when a service is down, and tells the operator which in the log', async () => {
     const logged: string[] = [];
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { logged.push(args.map(String).join(' ')); });
-    urls.sql = await serve(200);
-    urls.events = 'http://127.0.0.1:9';
+    overrideConfig({ sqlServiceUrl: await serve(200) });
+    overrideConfig({ eventsServiceUrl: 'http://127.0.0.1:9' });
     const res = await apiHealth(request('/api/health'));
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ ok: false });

@@ -5,6 +5,7 @@
 // all hand them services/app as the cwd.
 process.chdir(process.env.APP_PACKAGE_ROOT ?? path.resolve(import.meta.dirname, '../..')); // cwd = services/app
 
+import { afterAll } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -39,7 +40,8 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
  * launch, nothing to close, for a suite that never asks for a picture.
  */
 const { setServices } = await import('@/lib/platform/services');
-const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } = await import('@/lib/platform/config');
+const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, resetConfigOverrides } = await import('@/lib/platform/config');
+const { overrideRequestHeaders } = await import('@/lib/platform/request-context');
 const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
 const { createEvents } = await import('@artifactbin/events/local');
 const { getDb } = await import('@/lib/platform/db');
@@ -67,4 +69,11 @@ setServices({
     // suites that took no picture at all.
     close: async () => { await localBrowser?.close?.(); localBrowser = undefined; },
   },
+});
+
+// The api project shares one module graph per worker, so a file's test overrides (`overrideConfig`,
+// `overrideRequestHeaders`) end with the file: the next one starts on the process's real configuration.
+afterAll(() => {
+  resetConfigOverrides();
+  overrideRequestHeaders(undefined);
 });
