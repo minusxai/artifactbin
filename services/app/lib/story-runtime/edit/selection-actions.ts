@@ -165,7 +165,11 @@ export function createFrameSelectionActions({
     toolbar.setAttribute('aria-label', context ? 'Document actions' : 'Text selection actions');
     toolbar.replaceChildren();
     if (capabilities.edit && !isTargetRange(activeSelection?.range)) toolbar.appendChild(makeButton('edit'));
-    if (capabilities.annotate && !context) toolbar.appendChild(makeButton('annotate'));
+    if (capabilities.annotate) {
+      const comment = makeButton('annotate');
+      if (context) comment.setAttribute('aria-label', 'Comment');
+      toolbar.appendChild(comment);
+    }
     if (capabilities.annotate) toolbar.appendChild(makeButton('select'));
     return toolbar;
   };
