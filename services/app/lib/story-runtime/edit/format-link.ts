@@ -8,7 +8,7 @@
  * host's new HTML goes back through the text-edit channel.
  */
 import type { JsxElement } from '@/lib/jsx';
-import { editorSchema } from '@/lib/editor-v2/model';
+import { setLink } from '@/lib/editor-v2/links';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel } from '../pristine';
@@ -74,31 +74,8 @@ export function createFormatLink({ win, root, views, channel, post, republishRec
   const applyLink = (path: string, href: string | null) => {
     const view = views.last;
     if (view && views.all.has(view)) {
-      const { from, to } = view.state.selection,
-        tr = view.state.tr;
-      const safe = href ? normalizeLinkHref(href) : null;
-      if (href && !safe) return;
-      view.state.doc.nodesBetween(from, to, (node) => {
-        for (const mark of node.marks) if (mark.attrs.tag === 'a') tr.removeMark(from, to, mark);
-      });
-      if (safe)
-        tr.addMark(
-          from,
-          to,
-          editorSchema.marks.inline.create({
-            tag: 'a',
-            source: {
-              type: 'element',
-              tag: 'a',
-              isComponent: false,
-              attributes: [{ name: 'href', value: { static: true, json: safe }, start: 0, end: 0 }],
-              children: [],
-              selfClosing: false,
-              start: 0,
-              end: 0,
-            },
-          }),
-        );
+      const tr = setLink(view.state, href);
+      if (!tr) return;
       view.dispatch(tr.setMeta('mx-command', true));
       view.focus();
       return;

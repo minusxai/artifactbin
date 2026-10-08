@@ -84,6 +84,8 @@ export interface InPlaceEditOptions {
   onFlush?: () => void;
   /** …and the comment shortcut (⌘⌥M) pressed inside it. */
   onCommentKey?: () => void;
+  /** …and the link shortcut (⌘K) pressed in its text. */
+  onLinkKey?: () => void;
   /** "Edit script" on a script component's mount badge: open the Helmet script at that component's export. */
   onOpenScript?: (component: string) => void;
   /** A slide was renamed from the deck's own rail. */
@@ -111,6 +113,8 @@ export interface InPlaceEditController {
   /** Ask the frame to link the live text selection; it answers with a text edit. */
   applyLink: (path: string, href: string | null) => void;
   applyInline: (tag: 'strong' | 'em' | 'u') => void;
+  /** Return the caret to the document's text (page chrome that took focus closed without a change). */
+  focusText: () => void;
   pasteMarkdown: (value: string) => void;
   restoreSelection: (bookmark: EditorBookmark) => void;
   /** Select a node by path (a breadcrumb click, a panel opening) or clear it. */
@@ -162,6 +166,9 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
               break;
             case 'mx:comment-key':
               options.onCommentKey?.();
+              break;
+            case 'mx:link-key':
+              options.onLinkKey?.();
               break;
             case 'mx:open-script':
               if (typeof event.data.component === 'string') options.onOpenScript?.(event.data.component);
@@ -353,6 +360,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
     applyFormat,
     applyLink,
     applyInline: (tag: 'strong' | 'em' | 'u') => postToFrame({ type: 'mx:inline', tag }),
+    focusText: () => postToFrame({ type: 'mx:focus-text' }),
     pasteMarkdown: (value: string) => postToFrame({ type: 'mx:paste', kind: 'markdown', value }),
     select,
     spotlight: (paths: string[]) => postToFrame({ type: STORY_SPOTLIGHT_MESSAGE, paths }),

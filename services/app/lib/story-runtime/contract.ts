@@ -471,6 +471,10 @@ export interface StoryEditSelection {
   editor?: 'prose';
   customHeight?:boolean;
   inline?:Record<'strong'|'em'|'u',boolean|'mixed'>;
+  /** Prose only: where the caret or selected words are, so link chrome can sit beside them. */
+  textRect?: StoryEditRect;
+  /** Prose only: the href of the link the caret is in or the selection covers. */
+  link?: string;
   /** 'text': a focused editable host · 'element': a click-selected container · 'embed': a component. */
   kind: 'text' | 'element' | 'embed';
   /**
@@ -583,6 +587,10 @@ interface StoryApplyFormatMessage { type: typeof STORY_APPLY_FORMAT_MESSAGE; pat
  */
 export const STORY_APPLY_LINK_MESSAGE = 'mx:apply-link';
 interface StoryApplyLinkMessage { type: typeof STORY_APPLY_LINK_MESSAGE; path: string; href: string | null }
+
+/** Parent → frame: put the caret back in the text it left for page chrome (a link box closed without a change). */
+export const STORY_FOCUS_TEXT_MESSAGE = 'mx:focus-text';
+interface StoryFocusTextMessage { type: typeof STORY_FOCUS_TEXT_MESSAGE }
 
 /**
  * Frame → parent: a `<GridItem>` was dragged or resized to a new rect.
@@ -778,6 +786,10 @@ interface StoryEditFlushMessage { type: typeof STORY_EDIT_FLUSH_MESSAGE; nonce: 
 export const STORY_COMMENT_KEY_MESSAGE = 'mx:comment-key';
 interface StoryCommentKeyMessage { type: typeof STORY_COMMENT_KEY_MESSAGE; nonce: string }
 
+/** Frame → parent: the link shortcut (⌘K / Ctrl-K) pressed in the document's text while editing. */
+export const STORY_LINK_KEY_MESSAGE = 'mx:link-key';
+interface StoryLinkKeyMessage { type: typeof STORY_LINK_KEY_MESSAGE; nonce: string }
+
 /* ────────────────────────────────────────────────────────────────────────────
  * THE FRAME BRIDGE — the controller (`StoryController` above) across a window
  * boundary, for a document served on its own origin and framed by the app page
@@ -856,9 +868,9 @@ type StoryEditFrameMessage =
   | StorySelectionActionMessage
   | StoryEditKeyMessage | StoryCommittedMessage | StoryLayoutEditMessage | StorySlideTitleMessage
   | StoryImageDropMessage | StoryImageReplaceMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage
-  | StoryEditFlushMessage | StoryCommentKeyMessage | StoryOpenScriptMessage;
+  | StoryEditFlushMessage | StoryCommentKeyMessage | StoryLinkKeyMessage | StoryOpenScriptMessage;
 export type StoryEditParentMessage =
-  | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
+  | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StoryFocusTextMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
   | StoryAnnotationsMessage | StorySelectionActionsMessage;
 
 const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
@@ -867,11 +879,11 @@ const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
   STORY_EDIT_KEY_MESSAGE, STORY_COMMITTED_MESSAGE,
   STORY_LAYOUT_EDIT_MESSAGE, STORY_SLIDE_TITLE_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_IMAGE_REPLACE_MESSAGE,
   STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE,
-  STORY_EDIT_FLUSH_MESSAGE, STORY_COMMENT_KEY_MESSAGE,
+  STORY_EDIT_FLUSH_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE,
   STORY_OPEN_SCRIPT_MESSAGE,
 ]);
 const EDIT_PARENT_TYPES: ReadonlySet<string> = new Set([
-  STORY_INLINE_MESSAGE, STORY_PASTE_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,
+  STORY_INLINE_MESSAGE, STORY_PASTE_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_FOCUS_TEXT_MESSAGE, STORY_SELECT_MESSAGE,
   STORY_SPOTLIGHT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE,
 ]);
 

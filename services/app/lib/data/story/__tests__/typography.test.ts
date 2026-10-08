@@ -291,3 +291,18 @@ describe('crumbHint', () => {
     expect(crumbHint('py-14 border-b')).toBe('');
   });
 });
+
+describe('stepIndentClass', () => {
+  it('steps one 2rem level at a time, clamps at both ends and leaves no class at the margin', async () => {
+    const { stepIndentClass, currentIndentLevel, STORY_WYSIWYG_CLASSES, INDENT_SCALE } = await import('../typography');
+    expect(stepIndentClass('', 1)).toBe('ml-8');
+    expect(stepIndentClass('text-lg ml-8', 1)).toBe('text-lg ml-16');
+    expect(stepIndentClass('text-lg ml-8', -1)).toBe('text-lg');
+    expect(stepIndentClass('', -1)).toBe('');
+    expect(stepIndentClass('ml-48', 1)).toBe('ml-48');
+    expect(stepIndentClass('ml-[13px]', 1)).toBe('ml-8');
+    expect(currentIndentLevel('mt-4 ml-24')).toBe(3);
+    expect(currentIndentLevel('mt-4')).toBe(0);
+    for (const token of INDENT_SCALE.slice(1)) expect(STORY_WYSIWYG_CLASSES).toContain(token);
+  });
+});

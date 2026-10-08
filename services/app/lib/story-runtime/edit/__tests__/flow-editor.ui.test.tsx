@@ -704,3 +704,153 @@ describe('selection during collaborative Markdown updates', () => {
   });
 
 });
+
+describe('document-editor keys: Tab indents, links are typed, pasted and found', () => {
+  function editor(source: string) {
+    let engine: EditorView | null = null;
+    const initial = serializeJsx(nodes(source));
+    const store = createEditorSource({ initial, live: { queue: () => {} }, draw: () => {}, commitPending: async () => {} });
+    const view = render(() => <FlowEditor nodes={nodes(initial)} path="0" onChange={(next, group, selection) => store.apply(serializeJsx(next), { origin: 'local', group, selection })} onView={(v) => { if (v) engine = v; }} />);
+    const v = () => engine!;
+    const type = (text: string) => {
+      for (const ch of text) {
+        const { from, to } = v().state.selection;
+        const typing = () => v().state.tr.insertText(ch, from, to);
+        if (!v().someProp('handleTextInput', (f) => f(v(), from, to, ch, typing))) v().dispatch(typing());
+      }
+      flushFlowView(v());
+    };
+    /** The key as the browser delivers it; true when the editor kept it (default prevented). */
+    const key = (init: KeyboardEventInit) => {
+      const event = new KeyboardEvent('keydown', { cancelable: true, bubbles: true, ...init });
+      v().dom.dispatchEvent(event);
+      flushFlowView(v());
+      return event.defaultPrevented;
+    };
+    const at = (text: string, offset = 0) => {
+      let pos = -1;
+      v().state.doc.descendants((n, p) => { if (pos < 0 && n.isText && n.text!.includes(text)) pos = p + n.text!.indexOf(text) + offset; });
+      return pos;
+    };
+    const select = (from: number, to = from) => v().dispatch(v().state.tr.setSelection(TextSelection.create(v().state.doc, from, to)));
+    const paste = (plain: string, html = '') => {
+      fireEvent.paste(v().dom, { clipboardData: { files: [], getData: (type: string) => type === 'text/html' ? html : type === 'text/plain' ? plain : '' } });
+      flushFlowView(v());
+    };
+    /** The saved source, without the ids the editor mints for new elements. */
+    const saved = () => store.current().replace(/ id="e[0-9a-f]{32}"/g, '');
+    return { view, store, saved, type, key, at, select, paste, v };
+  }
+
+  it('indents and outdents paragraphs and checklist items a level at a time, keeping Tab in the document', async () => {
+    const e = editor('<p id="note">Note</p><p id="task"><input id="box" type="checkbox" aria-label="Task completed" disabled checked={false} /> Task</p>');
+    e.select(e.at('Task'));
+    expect(e.key({ key: 'Tab' })).toBe(true);
+    expect(e.key({ key: 'Tab' })).toBe(true);
+    expect(e.store.current()).toContain('<p id="task" className="ml-16">');
+    expect(e.view.container.querySelector('#task')?.className).toBe('ml-16');
+    expect(e.key({ key: 'Tab', shiftKey: true })).toBe(true);
+    expect(e.store.current()).toContain('<p id="task" className="ml-8">');
+    // Shift-Tab at the margin is still the document's: focus does not leave.
+    e.select(e.at('Note'));
+    expect(e.key({ key: 'Tab', shiftKey: true })).toBe(true);
+    expect(e.store.current()).toContain('<p id="note">Note</p>');
+    // Both paragraphs at once; the checkbox's identity survives.
+    e.select(e.at('Note'), e.at('Task', 2));
+    e.key({ key: 'Tab' });
+    expect(e.store.current()).toContain('<p id="note" className="ml-8">');
+    expect(e.store.current()).toContain('<p id="task" className="ml-16"><input id="box"');
+    await e.store.undo();
+    expect(e.store.current()).toContain('<p id="note">Note</p>');
+  });
+
+  it('keeps authored classes, caps the indent, and outdents with Backspace at the start of an indented line', () => {
+    const e = editor('<p id="lead" className="text-lg ml-48">Lead</p>');
+    e.select(e.at('Lead'));
+    e.key({ key: 'Tab' });
+    expect(e.store.current()).toContain('className="text-lg ml-48"');
+    e.key({ key: 'Backspace' });
+    expect(e.store.current()).toContain('<p id="lead" className="text-lg ml-40">Lead</p>');
+    // Not at the start: Backspace is the browser's, as always.
+    e.select(e.at('Lead', 4));
+    expect(e.key({ key: 'Backspace' })).toBe(false);
+    expect(e.store.current()).toContain('ml-40">Lead</p>');
+  });
+
+  it('indents code lines with spaces and still nests list items', () => {
+    const e = editor('<pre id="code">one\ntwo</pre><ul id="list"><li id="a"><p>A</p></li><li id="b"><p>B</p></li></ul>');
+    e.select(e.at('one'));
+    e.key({ key: 'Tab' });
+    expect(e.store.current()).toContain('<pre id="code">  one\ntwo</pre>');
+    e.select(e.at('one'), e.at('two', 3));
+    e.key({ key: 'Tab' });
+    expect(e.store.current()).toContain('<pre id="code">    one\n  two</pre>');
+    e.key({ key: 'Tab', shiftKey: true });
+    e.key({ key: 'Tab', shiftKey: true });
+    expect(e.store.current()).toContain('<pre id="code">one\ntwo</pre>');
+    e.select(e.at('B'));
+    expect(e.key({ key: 'Tab' })).toBe(true);
+    expect(e.view.container.querySelector('#a > ul > #b')).not.toBeNull();
+  });
+
+  it('links a typed address when a space or Enter ends it, leaving sentence punctuation and code alone', () => {
+    const e = editor('<p id="p"></p>');
+    e.type('see www.example.com/docs. ');
+    expect(e.view.container.querySelector('a')).toBeNull();
+    e.type('and https://example.com/a?b=1 now');
+    expect(e.view.container.querySelector('a')?.getAttribute('href')).toBe('https://example.com/a?b=1');
+    expect(e.view.container.querySelector('a')?.textContent).toBe('https://example.com/a?b=1');
+    // The space after it is not part of the link, nor is what follows.
+    expect(e.saved()).toContain('<a href="https://example.com/a?b=1">https://example.com/a?b=1</a> now');
+    e.select(e.at('now', 3));
+    e.type(' example.org');
+    e.key({ key: 'Enter' });
+    expect([...e.view.container.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['https://example.com/a?b=1']);
+    const code = editor('<pre id="c"></pre>');
+    code.type('https://example.com ');
+    expect(code.view.container.querySelector('a')).toBeNull();
+    const list = editor('<ul><li><p id="item"></p></li></ul>');
+    list.type('www.example.com ');
+    expect(list.view.container.querySelector('li a')?.getAttribute('href')).toBe('https://www.example.com');
+  });
+
+  it('turns a typed [text](url) into linked text, and leaves an unsafe one literal', async () => {
+    const e = editor('<p id="p"></p>');
+    e.type('Read [the guide](example.com/guide) first');
+    expect(e.saved()).toBe('<p id="p">Read <a href="https://example.com/guide">the guide</a> first</p>');
+    const unsafe = editor('<p id="p"></p>');
+    unsafe.type('[x](javascript:alert(1))');
+    expect(unsafe.view.container.querySelector('a')).toBeNull();
+  });
+
+  it('links selected words to a pasted address, and pastes a lone address as a link', () => {
+    const e = editor('<p id="p">Read the guide</p>');
+    e.select(e.at('guide'), e.at('guide', 5));
+    e.paste('https://example.com/guide');
+    expect(e.saved()).toBe('<p id="p">Read the <a href="https://example.com/guide">guide</a></p>');
+    e.select(e.at('Read', 4));
+    e.paste(' https://example.org ');
+    expect(e.saved()).toContain('Read<a href="https://example.org">https://example.org</a> the');
+    // Prose that is not an address pastes as before.
+    e.paste('just words');
+    expect(e.store.current()).toContain('just words');
+  });
+
+  it('finds the whole link at a caret, edits or removes all of it, and inserts the address at a bare caret', async () => {
+    const { linkAt, setLink } = await import('@/lib/editor-v2/links');
+    const e = editor('<p id="p">Go <a href="https://a.example"><strong>to</strong> here</a> now</p>');
+    e.select(e.at(' here', 2));
+    expect(linkAt(e.v().state)).toEqual({ href: 'https://a.example', from: e.at('to'), to: e.at(' here', 5) });
+    e.v().dispatch(setLink(e.v().state, 'b.example')!);
+    flushFlowView(e.v());
+    expect(e.saved()).toContain('<a href="https://b.example"><strong>to</strong> here</a>');
+    e.v().dispatch(setLink(e.v().state, null)!);
+    flushFlowView(e.v());
+    expect(e.saved()).toBe('<p id="p">Go <strong>to</strong> here now</p>');
+    e.select(e.at('now', 3));
+    e.v().dispatch(setLink(e.v().state, 'https://c.example')!);
+    flushFlowView(e.v());
+    expect(e.saved()).toContain('now<a href="https://c.example">https://c.example</a></p>');
+    expect(setLink(e.v().state, 'javascript:alert(1)')).toBeNull();
+  });
+});

@@ -66,6 +66,11 @@ export const PAD_LEFT_SCALE: readonly string[] = SPACING_STEPS.map(s => `pl-${s}
 export const PAD_RIGHT_SCALE: readonly string[] = SPACING_STEPS.map(s => `pr-${s}`);
 
 /**
+ * Paragraph indentation (Tab / Shift-Tab in prose), 2rem a level like a nested list. Level 0 is no class.
+ */
+export const INDENT_SCALE: readonly string[] = ['ml-0', 'ml-8', 'ml-16', 'ml-24', 'ml-32', 'ml-40', 'ml-48'];
+
+/**
  * The full-bleed recipe (the story skill's own idiom): escape the page gutter with negative
  * margins and re-add it as inner padding so content stays aligned with the rest of the page.
  */
@@ -81,6 +86,7 @@ export const STORY_WYSIWYG_CLASSES: readonly string[] = [
     ...WIDTH_SCALE,
     ...PAD_LEFT_SCALE,
     ...PAD_RIGHT_SCALE,
+    ...INDENT_SCALE,
     ...FULL_BLEED_CLASSES,
   ]),
 ];
@@ -264,6 +270,18 @@ export function currentPaddingStep(className: string, side: 'left' | 'right'): s
   const spec = PADDING_SPECS[side];
   const token = tokens(className).find(t => (spec.tokens as readonly string[]).includes(t));
   return token ? token.slice(token.indexOf('-') + 1) : null;
+}
+
+const INDENT_SPEC: ClassScaleSpec = { tokens: INDENT_SCALE, defaultToken: 'ml-0', arbitraryRe: /^ml-\[/ };
+
+/** Indent or outdent one level; outdenting to the margin removes the class rather than writing `ml-0`. */
+export function stepIndentClass(className: string, direction: 1 | -1): string {
+  return tokens(stepScaleClass(className, INDENT_SPEC, direction)).filter(t => t !== 'ml-0').join(' ');
+}
+
+/** The bare indent level (0 for none). */
+export function currentIndentLevel(className: string): number {
+  return Math.max(0, ...tokens(className).map(t => INDENT_SCALE.indexOf(t)));
 }
 
 /**
