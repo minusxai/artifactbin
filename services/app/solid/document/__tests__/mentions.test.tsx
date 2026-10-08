@@ -135,6 +135,42 @@ it('excludes native boxes without a comment relay while retaining the hosted def
  expect(screen.queryByLabelText('Mention Native (codex)')).toBeNull();
 });
 
+it.each([
+ {harness:'claude',activity:'listening',online:true},
+ {harness:'codex',activity:'listening',online:true},
+ {harness:'opencode',activity:'listening',online:true},
+ {harness:'pi',activity:'listening',online:true},
+ {harness:'opencode',activity:'starting',online:true},
+ {harness:'codex',activity:'starting',online:false},
+ {harness:'claude',activity:'unknown',online:true},
+ {harness:'pi',activity:'blocked',online:true},
+])('offers hosted native comments in both picker and quick choices: %j', async ({harness,activity,online}) => {
+ const id='a'.repeat(64),name='hosted-review',select=vi.fn(),submit=vi.fn();
+ vi.stubGlobal('fetch',sessions([{id,name,harness,runId:'hosted-run',hostedGeneration:'generation-one',managed:true,exitCode:null,activity,online}]));
+ render(()=>{const [value,change]=createSignal('');return <>
+  <CommentMentionPicker backend={http()} query="hosted" onSelect={select}/>
+  <CommentMarkdownField label="Hosted draft" backend={http()} quickAgents value={value()} onChange={change} onSubmit={()=>submit(value())}/>
+ </>;});
+ fireEvent.click(await screen.findByLabelText(`Mention ${name} (${harness})`));
+ expect(select).toHaveBeenCalledWith(`[@${name}](/chat?session=${id}) `);
+ fireEvent.click(await screen.findByRole('button',{name:`Tag ${name}`}));
+ const field=screen.getByLabelText('Hosted draft');expect(field.textContent).toBe(`@${name} `);
+ fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});expect(submit).toHaveBeenCalledWith(`[@${name}](/chat?session=${id}) `);
+});
+
+it.each([
+ {harness:'bash',runId:'raw-run',managed:true,online:true,exitCode:null,activity:'working'},
+ {harness:'codex',runId:'raw-run',managed:true,online:true,exitCode:null,activity:'working'},
+ {harness:'opencode',runId:'hosted-run',hostedGeneration:'generation-one',managed:true,online:true,exitCode:0,activity:'listening'},
+ {harness:'opencode',runId:'hosted-run',hostedGeneration:'generation-one',managed:true,online:true,exitCode:null,activity:'stopped'},
+])('keeps non-comment terminals and ended agents out of both choices: %j', async session => {
+ vi.stubGlobal('fetch',sessions([{id:'b'.repeat(64),name:'excluded',...session}]));
+ render(()=><><CommentMentionPicker backend={http()} query="" onSelect={vi.fn()}/><CommentMarkdownField label="Draft" backend={http()} quickAgents value="" onChange={()=>{}}/></>);
+ await screen.findByText('No matching agents.');
+ expect(screen.queryByLabelText(`Mention excluded (${session.harness})`)).toBeNull();
+ expect(screen.queryByRole('button',{name:'Tag excluded'})).toBeNull();
+});
+
 it('quick choices and typed mentions insert identical badges and keep the caret after them', async () => {
   const id='b'.repeat(64);
   vi.stubGlobal('fetch', sessions([{id,name:'koala-8e44ad',harness:'claude',online:true}]));
