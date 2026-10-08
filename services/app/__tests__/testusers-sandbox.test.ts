@@ -18,7 +18,7 @@ import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { POST as followRoute } from '@/app/api/users/[id]/follow/route';
 import { getArtifactById, viewerIdentityFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import { agentCookie, request, useAppHarness } from './harness';
+import { request, useAppHarness } from './harness';
 import { createTestUser } from '@/lib/accounts';
 import { userOptions } from '@/lib/datasets/user-fields';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -57,10 +57,10 @@ it('acts as a full person inside the sandbox and is refused by name outside it',
   const copy = (await forked.json()) as { id: string; owner: string };
   expect(copy.owner).toBe(testuser.id);
 
-  const asTestUser = await agentCookie([testuser.tokenId]);
+  const asTestUser = { credential: 'bearer' as const, tokenId: testuser.tokenId, userId: testuser.id };
   const inside = async (id: string) => ({
-    like: await likeRoute(request(`/api/my/artifacts/${id}/like`, { method: 'POST', cookie: asTestUser, origin: 'same' }), params(id)),
-    comment: await annotateWeb(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', cookie: asTestUser, origin: 'same', json: { node_id: 'n1', body: 'mine to say' } }), params(id)),
+    like: await likeRoute(request(`/api/my/artifacts/${id}/like`, { method: 'POST', actor: asTestUser, origin: 'same' }), params(id)),
+    comment: await annotateWeb(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor: asTestUser, origin: 'same', json: { node_id: 'n1', body: 'mine to say' } }), params(id)),
     fork: await forkOperation(request(`/api/artifacts/${id}/fork`, { method: 'POST', token: testuser.token, json: {} }), params(id)),
   });
 
@@ -82,7 +82,7 @@ it('acts as a full person inside the sandbox and is refused by name outside it',
     expect(String(body.hint), name).toContain('--as');
   }
   // And it cannot follow the account that made it, either.
-  const follow = await followRoute(request(`/api/users/${owner.userId}/follow`, { method: 'POST', cookie: asTestUser, origin: 'same' }), params(owner.userId));
+  const follow = await followRoute(request(`/api/users/${owner.userId}/follow`, { method: 'POST', actor: asTestUser, origin: 'same' }), params(owner.userId));
   expect(follow.status).toBe(403);
   expect((await follow.json()).error).toBe('sandbox_only');
 });

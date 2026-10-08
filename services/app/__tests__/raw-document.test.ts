@@ -15,7 +15,7 @@ const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const publish = async (markup: string): Promise<string> => {
   const token = await mintToken('raw-document');
-  const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token.token, json: { markup } }));
+  const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token.token, json: { markup, visibility: 'public' } }));
   expect(response.status).toBe(201);
   return ((await response.json()) as { id: string }).id;
 };

@@ -15,7 +15,7 @@ it.each([false,true])('assembles identity and an optional host document policy (
   // A bearer-only identity in front of the app: the host hands every request to it with the app as its upstream.
   const offered=/^Bearer (.+)$/.exec(request.headers.get('authorization')??'')?.[1];
   const found=offered?await resolveToken(offered):null;
-  return upstream(request,found?{credential:'bearer',userId:found.userId??undefined,tokenId:found.id}:ANONYMOUS);
+  return upstream(request,found?{credential:'bearer',userId:found.userId??undefined,tokenId:found.id,email:'local@self.invalid',emailVerified:true}:ANONYMOUS);
  }})});
  const created=await host.fetch(new Request(origin+'/api/artifacts',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({markup:'<p>Hello self</p>',visibility:'private'})}));
  expect(created.status).toBe(201);const artifact=await created.json();
@@ -23,7 +23,8 @@ it.each([false,true])('assembles identity and an optional host document policy (
  expect(owner.status).toBe(200);expect((await owner.json()).markup).toContain('Hello self');
  const anonymous=await host.fetch(new Request(origin+'/api/artifacts/'+artifact.id));
  expect([401,404]).toContain(anonymous.status);
- const foreign=await host.request(new Request(origin+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({markup:'<p>Other owner</p>',visibility:'private'})}),{credential:'bearer',tokenId:'tok_other',userId:'usr_other'});
+ const otherToken=await mintToken('other','usr_other');
+ const foreign=await host.request(new Request(origin+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({markup:'<p>Other owner</p>',visibility:'private'})}),{credential:'bearer',tokenId:otherToken.id,userId:'usr_other',email:'other@self.invalid',emailVerified:true});
  expect(foreign.status).toBe(201);const other=await foreign.json();
  const access=await host.fetch(new Request(origin+'/api/artifacts/'+other.id,{headers:{authorization:'Bearer '+token}}));
  expect(access.status).toBe(grant?200:404);

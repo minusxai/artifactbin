@@ -31,7 +31,7 @@ const PNG =
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }];
 
 const create = async (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
 
 const queryDoc = (ds: string) =>
   `<Helmet><Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><Question data="$sales" viz={{"kind":"table"}} />`;

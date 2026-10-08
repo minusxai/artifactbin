@@ -57,7 +57,7 @@ describe('sharing', () => {
 
 describe('tokens', () => {
   it('mintToken says token.minted from its one insert: the owner as subject when there is one, else null', async () => {
-    const anon = await mintToken('anon-abc123');
+    const anon = await mintToken('anon-abc123', null);
     expect(fake.events).toHaveLength(1);
     expect(fake.events[0]).toMatchObject({ verb: 'minted', subject_kind: null, subject_id: null, object_kind: 'token', object_id: anon.id, payload: { name: 'anon-abc123' } });
     const owner = await createUser({ email: 'mxmx_test_mint@example.com' });
@@ -69,7 +69,7 @@ describe('tokens', () => {
   it('a claim says token.claimed with the claimer as subject and the token name; a refused or repeated no-op claim still says it only when it attached', async () => {
     const user = await createUser({ email: 'mxmx_test_claim@example.com' });
     const other = await createUser({ email: 'mxmx_test_claim_other@example.com' });
-    const t = await mintToken('cli-one');
+    const t = await mintToken('cli-one', null);
     listen();
     expect(await claimToken(user.id, t.token)).toMatchObject({ tokenId: t.id });
     expect(fake.events).toHaveLength(1);
@@ -77,7 +77,7 @@ describe('tokens', () => {
     expect(await claimToken(other.id, t.token), 'someone else\'s').toBeNull();
     expect(await claimToken(user.id, 'mx_not_a_token')).toBeNull();
     expect(fake.events).toHaveLength(1);
-    const t2 = await mintToken('cli-two');
+    const t2 = await mintToken('cli-two', null);
     listen();
     expect(await claimTokenById(user.id, t2.id)).toMatchObject({ tokenId: t2.id });
     expect(fake.events).toHaveLength(1);

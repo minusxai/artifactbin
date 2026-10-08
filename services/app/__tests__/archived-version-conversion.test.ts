@@ -40,7 +40,7 @@ describe('?version=N of a version written for the previous engine', () => {
   it('serves the converted document, and leaves the stored version as it was', async () => {
     const { owner, id } = await history(true);
     expect((await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).status).toBe(200);
-    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { token: owner.token }), params({ id }))).json());
+    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { actor: { credential: 'session', userId: owner.userId!, email: owner.email!, emailVerified: true } }), params({ id }))).json());
     expect(page).toContain('select 7 * 1.0 / 2 as h');
     const db = await harness.db();
     expect((await db.query<{ marked: boolean }>("SELECT meta ? 'dataSyntax' AS marked FROM artifact_versions WHERE artifact_id=$1 AND version=1", [id])).rows).toEqual([{ marked: false }]);
@@ -49,7 +49,7 @@ describe('?version=N of a version written for the previous engine', () => {
   it('never converts a version already in the current syntax', async () => {
     const { owner, id } = await history(false);
     expect((await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).status).toBe(200);
-    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { token: owner.token }), params({ id }))).json());
+    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { actor: { credential: 'session', userId: owner.userId!, email: owner.email!, emailVerified: true } }), params({ id }))).json());
     expect(page).toContain('select 7 / 2 as h');
     expect(page).not.toContain('* 1.0');
   });

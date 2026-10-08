@@ -98,9 +98,9 @@ afterAll(async () => {
 
 afterEach(() => setAssetByteQuotaForTests(null));
 
-const anonToken = async () => {
-  const { id } = await mintToken('t');
-  return { tokenId: id, userId: null };
+const accountToken = async () => {
+  const { id, userId } = await mintToken('t');
+  return { tokenId: id, userId };
 };
 
 // Every test in this file reaches a loopback server, which the guard refuses
@@ -110,7 +110,7 @@ const allowLocal = () => setWebIngestPolicyForTests({ allowPrivate: true, allowH
 describe('importWebAsset', () => {
   it('concurrent first readers fetch a source image once', async()=>{
     allowLocal();hits=[];
-    const actor=await anonToken();
+    const actor=await accountToken();
     const rows=await Promise.all(Array.from({length:3},()=>importWebAsset(`${base}/photo.png`,actor)));
     expect(new Set(rows.map(row=>row.object_key)).size).toBe(1);
     expect(hits.filter(path=>path==='/photo.png')).toHaveLength(1);
@@ -118,8 +118,8 @@ describe('importWebAsset', () => {
   it('stores one object per URL, however many documents name it', async () => {
     allowLocal();
     hits = [];
-    const a = await anonToken();
-    const b = await anonToken();
+    const a = await accountToken();
+    const b = await accountToken();
     const first = await importWebAsset(`${base}/photo.png`, a);
     const second = await importWebAsset(`${base}/photo.png`, b);
 
@@ -136,7 +136,7 @@ describe('importWebAsset', () => {
 
   it('records the box and the blur, and optimises the bytes', async () => {
     allowLocal();
-    const row = await importWebAsset(`${base}/photo.png`, await anonToken());
+    const row = await importWebAsset(`${base}/photo.png`, await accountToken());
     expect(row.content_type).toBe('image/webp');
     expect(row.width).toBe(64);
     expect(row.height).toBe(64);
@@ -154,7 +154,7 @@ describe('importWebAsset', () => {
    */
   it('stores the narrow copy beside the full one, charged together', async () => {
     allowLocal();
-    const row = await importWebAsset(`${base}/wide.webp`, await anonToken());
+    const row = await importWebAsset(`${base}/wide.webp`, await accountToken());
     expect(row.small_object_key).toBeTruthy();
     expect(row.small_width).toBe(1280);
     expect(row.small_object_key).not.toBe(row.object_key);
@@ -166,7 +166,7 @@ describe('importWebAsset', () => {
 
   it('records no narrow copy for an image that never needed one', async () => {
     allowLocal();
-    const row = await importWebAsset(`${base}/photo.png`, await anonToken());
+    const row = await importWebAsset(`${base}/photo.png`, await accountToken());
     expect(row.small_object_key).toBeNull();
     expect(row.small_width).toBeNull();
     expect(row.bytes).toBe((await objectStore().get(row.object_key)).length);
@@ -174,14 +174,14 @@ describe('importWebAsset', () => {
 
   it('leaves an SVG byte-identical', async () => {
     allowLocal();
-    const row = await importWebAsset(`${base}/logo.svg`, await anonToken());
+    const row = await importWebAsset(`${base}/logo.svg`, await accountToken());
     expect(row.content_type).toBe('image/svg+xml');
     expect(await objectStore().get(row.object_key)).toEqual(SVG);
   });
 
   it('imports a FONT as a font — sniffed, stored untouched, never optimised', async () => {
     allowLocal();
-    const row = await importWebAsset(`${base}/face.woff2`, await anonToken(), 'font');
+    const row = await importWebAsset(`${base}/face.woff2`, await accountToken(), 'font');
     expect(row.content_type).toBe('font/woff2');
     expect(row.width).toBeNull();
     expect(await objectStore().get(row.object_key)).toEqual(WOFF2);
@@ -189,7 +189,7 @@ describe('importWebAsset', () => {
 
   it('refuses by NAME, and stores nothing', async () => {
     allowLocal();
-    const actor = await anonToken();
+    const actor = await accountToken();
     await expect(importWebAsset(`${base}/gone.png`, actor)).rejects.toMatchObject({ code: 'bad_status' });
     await expect(importWebAsset(`${base}/not-an-image.png`, actor)).rejects.toMatchObject({ code: 'unsupported_type' });
     await expect(importWebAsset('https://169.254.169.254/latest/meta-data', actor)).rejects.toBeInstanceOf(WebAssetRefused);
@@ -199,7 +199,7 @@ describe('importWebAsset', () => {
 
   it('charges the importer once — never a cache hit', async () => {
     allowLocal();
-    const payer = await anonToken();
+    const payer = await accountToken();
     await importWebAsset(`${base}/photo.png`, payer);
     // A cap the payer's own import has already blown: REFERENCING what is
     // cached still works (nothing is fetched or stored, so nothing is charged),
@@ -221,7 +221,7 @@ describe('importWebAsset', () => {
 describe('lookupWebAssets', () => {
   it('answers the rows for the urls we hold, keyed by the canonical url', async () => {
     allowLocal();
-    await importWebAsset(`${base}/photo.png`, await anonToken());
+    await importWebAsset(`${base}/photo.png`, await accountToken());
     const found = await lookupWebAssets([`${base}/photo.png`, `${base}/never-seen.png`]);
     expect([...found.keys()]).toEqual([`${base}/photo.png`]);
     expect(found.get(`${base}/photo.png`)?.width).toBe(64);
@@ -231,7 +231,7 @@ describe('lookupWebAssets', () => {
 describe('refreshWebAsset', () => {
   it('re-fetches and repoints the row, keeping its address', async () => {
     allowLocal();
-    const actor = await anonToken();
+    const actor = await accountToken();
     photoColour = '#204080';
     const before = await importWebAsset(`${base}/photo.png`, actor);
     photoColour = '#ff0000';
@@ -252,7 +252,7 @@ describe('refreshWebAsset', () => {
    */
   it('changes the url every later render emits, at the same address', async () => {
     allowLocal();
-    const actor = await anonToken();
+    const actor = await accountToken();
     photoColour = '#0b7a3c';
     const before = await importWebAsset(`${base}/photo.png`, actor);
     photoColour = '#c21807';
@@ -271,7 +271,7 @@ describe('refreshWebAsset', () => {
 
   it('imports a url nobody has held yet', async () => {
     allowLocal();
-    const row = await refreshWebAsset(`${base}/logo.svg`, await anonToken());
+    const row = await refreshWebAsset(`${base}/logo.svg`, await accountToken());
     expect(row.content_type).toBe('image/svg+xml');
   });
 });
@@ -288,7 +288,7 @@ describe('refreshWebAsset', () => {
 describe('a refresh is charged', () => {
   it('refuses a refresher who is already over the cap', async () => {
     allowLocal();
-    const payer = await anonToken();
+    const payer = await accountToken();
     await importWebAsset(`${base}/photo.png`, payer);
     setAssetByteQuotaForTests(1);
     photoColour = '#0f0f0f';
@@ -298,8 +298,8 @@ describe('a refresh is charged', () => {
 
   it("charges the REFRESHER the new object's bytes when the object moves", async () => {
     allowLocal();
-    const first = await anonToken();
-    const second = await anonToken();
+    const first = await accountToken();
+    const second = await accountToken();
     photoColour = '#204080';
     await importWebAsset(`${base}/photo.png`, first);
     expect(await assetBytesForToken(first.tokenId)).toBeGreaterThan(0);
@@ -316,8 +316,8 @@ describe('a refresh is charged', () => {
 
   it('charges nothing when the source is the same bytes — an unchanged key is free', async () => {
     allowLocal();
-    const first = await anonToken();
-    const second = await anonToken();
+    const first = await accountToken();
+    const second = await accountToken();
     photoColour = '#204080';
     await importWebAsset(`${base}/photo.png`, first);
     const before = await assetBytesForToken(first.tokenId);
@@ -336,7 +336,7 @@ describe('a refresh is charged', () => {
 describe('refreshWebAssets charges the hourly bucket PER URL', () => {
   it('reports the URLs it could not pay for, rather than fetching them all on one slot', async () => {
     allowLocal();
-    const actor = await anonToken();
+    const actor = await accountToken();
     for (const n of [1, 2, 3]) await importWebAsset(`${base}/photo.png?n=${n}`, actor);
     // Two slots left in this token's hour.
     for (let i = 0; i < WEB_INGEST_MAX_PER_HOUR - 2; i++) webIngestRateLimited(`ingest:${actor.tokenId}`);

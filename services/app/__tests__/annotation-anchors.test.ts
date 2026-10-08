@@ -25,7 +25,7 @@ import { POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/ann
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
@@ -54,15 +54,15 @@ async function setup() {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: DOC } }));
   expect(res.status, await res.clone().text()).toBe(201);
   const doc = (await res.json()) as { id: string; edit_id: string; version: number };
-  const cookie = await agentCookie([t.id]);
+  const browserActor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
   // Annotate the <div> — body path '1' (no Helmet in this fixture, so body == source).
   const made = await myCreateAnnotationRoute(
-    request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '1', edit_id: doc.edit_id, body: 'check this figure' } }),
+    request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { path: '1', edit_id: doc.edit_id, body: 'check this figure' } }),
     params({ id: doc.id }),
   );
   expect(made.status, await made.clone().text()).toBe(201);
   const ann = (await made.json()) as AnnotationWire;
-  return { t, doc, cookie, ann };
+  return { t, doc, browserActor, ann };
 }
 
 const list = async (token: string, id: string) => {
@@ -141,10 +141,10 @@ describe('the annotation anchor', () => {
   });
 
   it('a second comment on the same node reuses its key — no second attribute, no version bump', async () => {
-    const { t, doc, cookie, ann } = await setup();
+    const { t, doc, browserActor, ann } = await setup();
     const h = await head(t.token, doc.id);
     const second = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '1', edit_id: h.edit_id, body: 'also this' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { path: '1', edit_id: h.edit_id, body: 'also this' } }),
       params({ id: doc.id }),
     );
     expect(second.status, await second.clone().text()).toBe(201);
@@ -156,9 +156,9 @@ describe('the annotation anchor', () => {
   });
 
   it('deleting the last thread on a node cleans its attribute back out of the source', async () => {
-    const { t, doc, cookie, ann } = await setup();
+    const { t, doc, browserActor, ann } = await setup();
     const del = await myDeleteAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${ann.id}`, { method: 'DELETE', cookie: cookie }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${ann.id}`, { method: 'DELETE', actor: browserActor }),
       params({ id: doc.id, annId: ann.id }),
     );
     expect(del.status).toBe(200);
@@ -167,9 +167,9 @@ describe('the annotation anchor', () => {
   });
 
   it('a prior comment does not stale the document head', async () => {
-    const { t, doc, cookie } = await setup();
+    const { t, doc, browserActor } = await setup();
     const res = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '0', edit_id: doc.edit_id, body: 'x' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor: browserActor, json: { path: '0', edit_id: doc.edit_id, body: 'x' } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(201);

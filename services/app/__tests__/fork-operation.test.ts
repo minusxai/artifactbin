@@ -56,7 +56,7 @@ async function world(visibility: 'public' | 'private' = 'public') {
   const bob = await createUser({ email: 'bob@x.com' });
   const tb = await mintToken('b', bob.id);
     await claimToken(bob.id, tb.token);
-  const anon = await mintToken('anon');
+  const anon = await mintToken('independent-account');
   const doc = await create(ta.token, { markup: PROSE, visibility, title: 'The NBA payroll stack', description: 'for the dashboard', theme: 'industry' });
   return { ta, tb, anon, owner, bob, doc };
 }
@@ -97,7 +97,7 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     expect(String(body.markup)).not.toContain('data-annotation-anchor');
     const copy = await head(String(body.id));
     expect(copy.token_id).toBe(w.anon.id);
-    expect(copy.user_id).toBeNull();
+    expect(copy.user_id).toBe(w.anon.userId);
     expect(copy.title).toBe('The NBA payroll stack');
     const source = await head(w.doc.id);
     expect(source.version).toBe(w.doc.version);
@@ -133,11 +133,12 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     expect(((await res.json()) as { error: string }).error).toBe('invalid_parent');
   });
 
-  it('an anonymous token cannot make the copy private: the existing visibility rule, never a silent downgrade', async () => {
+  it('a legacy anonymous token cannot authenticate to make a private copy', async () => {
     const w = await world();
-    const res = await fork(w.doc.id, w.anon.token, { visibility: 'private' });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBeTruthy();
+    const legacy = await mintToken('legacy', null);
+    const res = await fork(w.doc.id, legacy.token, { visibility: 'private' });
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe('unauthorized');
   });
 
   it('unreadable and unknown are the uniform 404; no credential is 401', async () => {

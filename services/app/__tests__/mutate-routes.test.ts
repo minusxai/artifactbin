@@ -30,14 +30,14 @@ import { setDatasetRowCap } from '@/lib/story/datasets/dataset-mutate';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
-import { agentCookie, useAppHarness, request, type RequestOptions } from '@/__tests__/harness';
+import { useAppHarness, request, type RequestOptions } from '@/__tests__/harness';
 
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string; version: number; edit_id: string };
 };
@@ -168,10 +168,10 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
     const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
     const doc = (await create(t.token, { markup: POLL(ds), visibility: 'private' })).id;
     expect((await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } })).status).toBe(404);
-    const cookie = await agentCookie([t.id]);
-    const ok = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } }, { cookie, origin: BASE });
+    const browserActor = { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true };
+    const ok = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } }, { actor: browserActor, origin: BASE });
     expect(ok.status, await ok.clone().text()).toBe(200);
-    const csrf = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } }, { cookie, origin: 'https://evil.example' });
+    const csrf = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } }, { actor: browserActor, origin: 'https://evil.example' });
     expect(csrf.status).toBe(403);
     expect((await getArtifactById(ds))!.version).toBe(2);
   });

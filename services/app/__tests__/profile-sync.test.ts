@@ -100,7 +100,7 @@ describe('profile sync at the bearer door', () => {
     await ok(cliRequest(token, { credential: 'bearer', tokenId: 'tok_somethingelse', userId: 'usr_cli0000000002', email: 'other@example.com' }));
     await ok(cliRequest(token, { credential: 'bearer', tokenId: token.id, userId: 'usr_someoneelse00', email: 'other@example.com' }));
     expect(profileWrites()).toBe(before);
-    expect((await (await harness.db()).query('SELECT 1 FROM users')).rows).toEqual([]);
+    expect((await (await harness.db()).query('SELECT id,email FROM users')).rows).toEqual([{id:token.userId,email:token.email}]);
   });
 
   /**
@@ -172,7 +172,7 @@ describe('profile sync at the bearer door', () => {
     expect(dry.status).toBe(200);
     expect(profileWrites()).toBe(before);
     const db = await harness.db();
-    expect((await db.query('SELECT 1 FROM users WHERE id = $1', ['usr_cli0000000004'])).rows).toEqual([]);
+    expect((await db.query('SELECT email FROM users WHERE id = $1', ['usr_cli0000000004'])).rows).toEqual([{email:token.email}]);
 
     expect((await ok(cliRequest(token, claims))).status).toBe(200);
     expect(profileWrites() - before).toBe(1);
@@ -204,11 +204,10 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     const db = await harness.db();
     await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')", [id, 'firstcall@invited.example']);
 
-    // The invitee: a token, an account and an invitation — and no `users` row, because nothing has
-    // ever brought a cookie and this is their first request of any kind.
+    // An email account's first bearer request synchronizes the verified invitation address.
     const invitee = await mintToken('invitee', 'usr_cli0000000005');
     await claimToken('usr_cli0000000005', invitee.token);
-    expect((await db.query('SELECT 1 FROM users WHERE id = $1', ['usr_cli0000000005'])).rows).toEqual([]);
+    expect((await db.query('SELECT email FROM users WHERE id = $1', ['usr_cli0000000005'])).rows).toEqual([{email:invitee.email}]);
 
     const response = await createSecretRoute(attachActor(
       request('/api/my/secrets', { method: 'POST', token: invitee.token, json: { value: 'a-password', connection: TARGET, datasetId: id } }),

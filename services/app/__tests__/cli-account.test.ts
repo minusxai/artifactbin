@@ -213,10 +213,10 @@ describe('cli-sessions', () => {
    const ownerToken=await mintToken('mxmx_test_session_owner', owner.id);await claimToken(owner.id,ownerToken.token);
    const stranger=await createUser({email:'mxmx_test_session_stranger@example.com'});
    const strangerToken=await mintToken('mxmx_test_session_stranger', stranger.id);await claimToken(stranger.id,strangerToken.token);
-   const unclaimed=await mintToken('mxmx_test_session_unclaimed');
+   const unclaimed=await mintToken('mxmx_test_session_unclaimed', null);
    const session=remoteSessions.create(owner.id,registration);
 
-   expect((await listRoute(request('/api/sessions',{token:unclaimed.token}))).status).toBe(403);
+   expect((await listRoute(request('/api/sessions',{token:unclaimed.token}))).status).toBe(401);
    expect(await(await listRoute(request('/api/sessions',{token:strangerToken.token}))).json()).toEqual({sessions:[]});
    expect((await readRoute(request(`/api/sessions/${session.id}`,{token:strangerToken.token}),params(session.id))).status).toBe(404);
    expect((await terminateRoute(request(`/api/sessions/${session.id}`,{method:'DELETE',token:strangerToken.token}),params(session.id))).status).toBe(404);
@@ -306,7 +306,7 @@ describe('cli-governance', () => {
 describe('cli-readable', () => {
   it('viewer CLI reads follow the same private sharing ACL without exposing invitations or gaining write access',async()=>{
    const ownerUser=await createUser({email:'mxmx_test_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_reader@example.com'});
-   const owner = await mintToken('mxmx_test_owner'),reader=await mintToken('mxmx_test_reader'),stranger=await mintToken('mxmx_test_stranger', ownerUser.id);
+   const owner = await mintToken('mxmx_test_owner',ownerUser.id),reader=await mintToken('mxmx_test_reader',readerUser.id),stranger=await mintToken('mxmx_test_stranger');
     await claimToken(ownerUser.id,owner.token);await claimToken(readerUser.id,reader.token);
    const created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{markup:'<p>Private content</p>',visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));
    expect(created.status).toBe(201);const doc=await created.json();const path=`/api/artifacts/${doc.id}`,params={params:Promise.resolve({id:doc.id})};
@@ -328,7 +328,7 @@ describe('cli-readable', () => {
 
   it('editing another invitation preserves an existing grant bound to an account after its email changes',async()=>{
    const ownerUser=await createUser({email:'mxmx_test_sticky_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_old_address@example.com'});
-   const owner = await mintToken('mxmx_test_sticky_owner'),reader=await mintToken('mxmx_test_sticky_reader', ownerUser.id);
+   const owner = await mintToken('mxmx_test_sticky_owner',ownerUser.id),reader=await mintToken('mxmx_test_sticky_reader',readerUser.id);
     await claimToken(ownerUser.id,owner.token);await claimToken(readerUser.id,reader.token);
    const initial=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{markup:'<p>Account bound</p>',visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));const doc=await initial.json();const context={params:Promise.resolve({id:doc.id})},path=`/api/artifacts/${doc.id}`;
    expect((await read(request(path,{token:reader.token}),context)).status).toBe(200);
@@ -336,13 +336,13 @@ describe('cli-readable', () => {
    const head=await (await read(request(path,{token:owner.token}),context)).json();
    const changed=await replace(request(path,{method:'PUT',token:owner.token,json:documentPublicationBody((await getArtifactById(doc.id))!,{markup:head.markup,shares:[{email:readerUser.email,role:'viewer'},{email:'mxmx_test_another@example.com',role:'viewer'}]},true)}),context);expect(changed.status).toBe(200);
    expect((await read(request(path,{token:reader.token}),context)).status).toBe(200);
-   const newcomer=await createUser({email:readerUser.email}),token=await mintToken('mxmx_test_reused_email');await claimToken(newcomer.id,token.token);
+   const newcomer=await createUser({email:readerUser.email}),token=await mintToken('mxmx_test_reused_email',newcomer.id);await claimToken(newcomer.id,token.token);
    expect((await read(request(path,{token:token.token}),context)).status).toBe(404);
   });
 
   it('native collections include explicit viewer shares and filter before paging without listing unrelated public resources',async()=>{
    const ownerUser=await createUser({email:'mxmx_test_collection_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_collection_reader@example.com'});
-   const owner = await mintToken('mxmx_test_collection_owner'),reader=await mintToken('mxmx_test_collection_reader', ownerUser.id);
+   const owner = await mintToken('mxmx_test_collection_owner',ownerUser.id),reader=await mintToken('mxmx_test_collection_reader',readerUser.id);
     await claimToken(ownerUser.id,owner.token);await claimToken(readerUser.id,reader.token);
    const shared=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],title:'Quarterly Sales',visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));expect(shared.status).toBe(201);const sharedId=(await shared.json()).id;
    await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{markup:'<p>Unrelated public</p>',visibility:'public'}}));

@@ -21,7 +21,7 @@ import {request,useAppHarness} from './harness';
 
 const harness=useAppHarness();
 it('ordinary afbin pull/push works across owners through proxy and real handlers, and loses access on verification, policy removal or token revocation',async()=>{
- const user=await createUser({email:'admin@example.com'}),token=await mintToken('mxmx_test_admin_cli');await claimToken(user.id,token.token);
+ const user=await createUser({email:'admin@example.com'}),token=await mintToken('mxmx_test_admin_cli',user.id);await claimToken(user.id,token.token);
  setDocumentEditorPolicy(actor=>actor.userId===user.id && actor.emailVerified===true);
  const db=await harness.db();
  await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,format,visibility,edit_id) VALUES ('abc123','tok_owner','usr_owner','Private document','<p id="intro">Before</p>','markup','private','base-edit')`);
