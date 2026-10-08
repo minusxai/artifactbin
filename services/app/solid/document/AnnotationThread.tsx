@@ -16,7 +16,7 @@ import EllipsisVertical from 'lucide-solid/icons/ellipsis-vertical';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { hasReplyText, remoteWorkLabel } from '@/lib/annotations/remote-reply';
+import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
 import { Tooltip } from '../components/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
@@ -142,9 +142,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     </Show>
     <Show when={!props.folded}>
       <For each={agents()}>{(work) => (
-        <p role="status" class="flex items-center gap-1.5 border-b border-edge px-3 py-1.5 text-[11px] text-muted">
-          <a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
-          <span>{remoteWorkLabel(work)}</span>
+        <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-[11px] text-muted">
+          <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
+          <Show when={remoteWorkActive(work)}><span class="comment-agent-spinner" aria-hidden="true" /></Show>
+          <Tooltip content={remoteWorkLabel(work)}><span class="comment-agent-status-label" tabIndex={0}>{work.phase === 'delivered' && remoteWorkActive(work) ? 'Awaiting acknowledgment' : remoteWorkLabel(work)}</span></Tooltip>
         </p>
       )}</For>
       <Show when={props.a.view_state}>
