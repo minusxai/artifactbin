@@ -30,6 +30,8 @@ import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { compiledPageFailures } from '@/lib/compiled-page/serve.server';
 import path from 'node:path';
+import { createDocumentGraph } from '@/lib/story/graph/document-graph';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const spies = vi.hoisted(() => ({ parse: 0, css: 0, nodes: 0, render: 0 }));
 vi.mock('@/lib/jsx/parse', async (original) => {
@@ -122,6 +124,35 @@ describe('the reader payload', () => {
 });
 
 describe('the prepared page store', () => {
+  it('repairs a cached legacy list on its first read without rewriting the document or changing its version', async () => {
+    const valid = '<ul id="list"><li id="outer"><ul id="nested"><li id="child"><p id="text">B</p></li><li id="empty"><p id="blank"></p></li></ul></li></ul>';
+    const legacy = '<ul id="list"><li id="outer"><li id="child"><p id="text">B</p></li><li id="empty"><p id="blank"></p></li></li></ul>';
+    const { id } = await world(valid);
+    const db = await harness.db(), original = (await getArtifactById(id))!;
+    // Seed the graph and prepared output exactly as an earlier deployment could
+    // have stored them. No publisher normalizes this simulated historical write.
+    const graph = createDocumentGraph(legacy, original.version);
+    await db.query('UPDATE artifacts SET document = $2::jsonb WHERE id = $1', [id, JSON.stringify(graph)]);
+    const cached = (await db.query<{ page: { data: { nodes: unknown }; compiled: CompiledPage } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.page;
+    cached.data.nodes = parseJsxOrThrow(legacy).nodes;
+    cached.compiled.html = legacy;
+    await db.query('UPDATE prepared_pages SET page = $2::jsonb WHERE artifact_id = $1', [id, JSON.stringify(cached)]);
+    resetSpies();
+    const html = await (await rawRoute(request(`/a/${id}/raw`), params(id))).text();
+    const document = new JSDOM(html).window.document;
+    expect(document.querySelector('#outer > ul > #child > #text')?.textContent).toBe('B');
+    expect(document.querySelector('#outer > ul > #empty > #blank')).not.toBeNull();
+    const after = (await getArtifactById(id))!;
+    expect(after.version).toBe(original.version);
+    expect(after.source).toBe(legacy);
+    expect(after.document).toEqual(graph);
+    expect((await slots(id))[0]!.page_key).toBe(`v:${original.version}`);
+    expect(spies.parse).toBeGreaterThan(0);
+    // The repaired cache is stable: the next reader needs no new preparation.
+    resetSpies();
+    await readPage(id);
+    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
+  });
   it('stores compiled output without a legacy React render', async () => {
     const { id } = await world();
     const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;

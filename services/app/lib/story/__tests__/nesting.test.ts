@@ -13,12 +13,28 @@ import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import { fixHtmlNesting } from '@/lib/story/document/nesting';
 import { canonicalizeMarkup } from '@/lib/story/document/jsx-tier';
+import { stampNodeIds } from '@/lib/story/document/node-ids';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const fix = (src: string): string => {
   const parsed = parseJsxOrThrow(src);
   return serializeJsx(fixHtmlNesting(parsed.nodes));
 };
+
+it('wraps legacy direct list-item runs in the nearest list kind, retaining every authored node', () => {
+  const src = '<ol id="list"><li id="outer"><p id="a">A</p><li id="b">B<li id="c">C</li></li><li id="empty"><p id="blank"></p></li><p id="tail">tail</p></li></ol>';
+  const expected = '<ol id="list"><li id="outer"><p id="a">A</p><ol><li id="b">B<ol><li id="c">C</li></ol></li><li id="empty"><p id="blank"></p></li></ol><p id="tail">tail</p></li></ol>';
+  expect(fix(src)).toBe(expected);
+  expect(fix(expected)).toBe(expected);
+});
+
+it('assigns publication identities after list repair and retains them on repeated canonicalization', () => {
+  const repaired = canonicalizeMarkup('<ul id="list"><li id="outer"><li id="child">B</li></li></ul>');
+  const stamped = stampNodeIds(repaired, { mint: () => 'wrap' }).source;
+  expect(stamped).toBe('<ul id="list"><li id="outer"><ul id="wrap"><li id="child">B</li></ul></li></ul>');
+  expect(canonicalizeMarkup(stamped)).toBe(stamped);
+  expect(stampNodeIds(canonicalizeMarkup(stamped), { previousSource: stamped }).source).toBe(stamped);
+});
 
 describe('a paragraph holding block content becomes a div', () => {
   it('rewrites the tag and nothing else', () => {

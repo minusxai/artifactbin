@@ -22,6 +22,119 @@ function nodes(source: string) {
   if (!p.ok) throw Error(p.error);
   return p.nodes;
 }
+
+it.each(['ul', 'ol'])('Tab and Shift-Tab preserve valid %s nesting through repeated and multilevel indentation', tag => {
+  let engine: EditorView | null = null;
+  const onChange = vi.fn();
+  const original = `<${tag} id="list"><li id="first"><p id="a">A</p></li><li id="second"><p id="b">B</p></li><li id="third"><p id="c">C</p></li></${tag}>`;
+  const view = render(() => <FlowEditor nodes={nodes(original)} path="0" onChange={onChange} onView={v => { engine = v; }} />);
+  const v = engine!;
+  const select = (text: string) => {
+    let at = 0;
+    v.state.doc.descendants((n, pos) => { if (n.isText && n.text === text) at = pos; });
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, at)));
+  };
+  const key = (shiftKey = false) => fireEvent.keyDown(v.dom, { key: 'Tab', shiftKey });
+  const source = () => serializeJsx(sourceNodes(v.state.doc));
+  select('B'); key();
+  expect(view.container.querySelector(`#first > ${tag} > #second`)).not.toBeNull();
+  key(true);
+  expect(source()).toBe(original);
+  key();
+  select('C'); key(); key();
+  expect(view.container.querySelector(`#second > ${tag} > #third`)).not.toBeNull();
+  key(true); key(true);
+  expect(view.container.querySelector('li > li')).toBeNull();
+  expect(view.container.querySelector(`#list > #third`)).not.toBeNull();
+  expect(onChange).toHaveBeenCalled();
+});
+
+it.each(['ul', 'ol'])('leaves the first %s item unchanged and indents/lifts a selected item range', tag => {
+  let engine: EditorView | null = null;
+  const original = `<${tag} id="list"><li id="first"><p id="a">A</p></li><li id="second"><p id="b">B</p></li><li id="third"><p id="c">C</p></li><li id="last"><p id="d">D</p></li></${tag}>`;
+  const view = render(() => <FlowEditor nodes={nodes(original)} path="0" onChange={() => {}} onView={v => { engine = v; }} />);
+  const v = engine!, positions = new Map<string, number>();
+  v.state.doc.descendants((n, pos) => { if (n.isText) positions.set(n.text!, pos); });
+  v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, positions.get('A')!)));
+  fireEvent.keyDown(v.dom, { key: 'Tab' });
+  expect(serializeJsx(sourceNodes(v.state.doc))).toBe(original);
+  v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, positions.get('B')!, positions.get('C')! + 1)));
+  fireEvent.keyDown(v.dom, { key: 'Tab' });
+  expect(view.container.querySelectorAll(`#first > ${tag} > li`)).toHaveLength(2);
+  expect(view.container.querySelector(`#list > #last`)).not.toBeNull();
+  fireEvent.keyDown(v.dom, { key: 'Tab', shiftKey: true });
+  expect(serializeJsx(sourceNodes(v.state.doc))).toBe(original);
+  expect(view.container.querySelector('li > li')).toBeNull();
+});
+
+it.each([
+  '<p id="destination">before after</p>',
+  '<ul id="list"><li id="first"><p id="destination">before after</p></li><li id="last"><p>end</p></li></ul>',
+])('inserts an orphan list selection into prose without rejecting it or losing adjacent text: %s', source => {
+  let engine: EditorView | null = null;
+  const onChange = vi.fn(), onError = vi.fn();
+  const view = render(() => <FlowEditor nodes={nodes(source)} path="0" onChange={onChange} onError={onError} onView={v => { engine = v; }} />);
+  const v = engine!;
+  let at = 0;
+  v.state.doc.descendants((n, pos) => { if (n.isText && n.text === 'before after') at = pos + 'before '.length; });
+  v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, at)));
+  fireEvent.paste(v.dom, { clipboardData: { files: [], getData: (type: string) => type === 'text/html' ? '<li id="foreign"><p>B</p></li><li><p>C</p></li>' : 'B\nC' } });
+  expect(onError).not.toHaveBeenCalled();
+  expect(onChange).toHaveBeenCalledTimes(1);
+  expect(v.state.doc.textContent).toContain('before');
+  expect(v.state.doc.textContent).toContain('after');
+  expect(v.state.doc.textContent).toContain('B');
+  expect(v.state.doc.textContent).toContain('C');
+  expect(view.container.querySelector('li > li')).toBeNull();
+  expect(serializeJsx(sourceNodes(v.state.doc))).not.toContain('foreign');
+  expect(() => v.state.doc.check()).not.toThrow();
+});
+
+it('pastes block fragments with an outer formatting wrapper through the real insertion handler', () => {
+  const onChange = vi.fn(), onError = vi.fn();
+  const view = render(() => <FlowEditor nodes={nodes('<p id="destination">after</p>')} path="0" onChange={onChange} onError={onError} />);
+  fireEvent.paste(view.getByRole('textbox'), { clipboardData: { files: [], getData: (type: string) => type === 'text/html' ? '<b><p>B</p><ul><li>C</li></ul></b>' : 'B\nC' } });
+  expect(onError).not.toHaveBeenCalled();
+  expect(onChange).toHaveBeenCalledTimes(1);
+  const source = serializeJsx(onChange.mock.calls[0]![0]);
+  expect(source).toMatch(/<strong[^>]*>B<\/strong>/);
+  expect(source).toMatch(/<strong[^>]*>C<\/strong>/);
+  expect(source).toContain('after');
+  expect(view.container.querySelector('li > li')).toBeNull();
+});
+
+it.each(['single', 'range'])('copies and pastes the editor\'s own nested list %s through the clipboard handlers', kind => {
+  let engine: EditorView | null = null;
+  const onChange = vi.fn(), onError = vi.fn();
+  const source = '<ul id="list"><li id="outer"><p id="a">Alpha</p><ul id="nested"><li id="b"><strong id="bold">Bravo</strong></li><li id="c"><em id="italic">Charlie</em></li></ul></li><li id="last"><p id="d">Delta</p></li></ul>';
+  const view = render(() => <FlowEditor nodes={nodes(source)} path="0" onChange={onChange} onError={onError} onView={v => { engine = v; }} />);
+  const v = engine!, positions = new Map<string, number>();
+  v.state.doc.descendants((n, pos) => { if (n.isText) positions.set(n.text!, pos); });
+  const values = new Map<string, string>();
+  const clipboardData = {
+    files: [], clearData: () => values.clear(),
+    setData: (type: string, value: string) => values.set(type, value),
+    getData: (type: string) => values.get(type) ?? '',
+  };
+  const end = kind === 'single' ? positions.get('Bravo')! + 'Bravo'.length : positions.get('Charlie')! + 'Charlie'.length;
+  v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, positions.get('Bravo')!, end)));
+  fireEvent.copy(v.dom, { clipboardData });
+  expect(values.get('text/html')).toContain('data-pm-slice');
+  expect(values.get('text/html')).toContain('Bravo');
+  v.dispatch(v.state.tr.setSelection(TextSelection.atEnd(v.state.doc)));
+  fireEvent.paste(v.dom, { clipboardData });
+  expect(onError).not.toHaveBeenCalled();
+  expect(onChange).toHaveBeenCalledTimes(1);
+  const saved = serializeJsx(sourceNodes(v.state.doc));
+  expect(saved.match(/Bravo/g)).toHaveLength(2);
+  expect(saved.match(/Charlie/g)).toHaveLength(kind === 'single' ? 1 : 2);
+  expect(saved.match(/id="b"/g)).toHaveLength(1);
+  expect(saved.match(/id="bold"/g)).toHaveLength(1);
+  expect(saved).not.toContain('data-pm-slice');
+  expect(view.container.querySelector('li > li')).toBeNull();
+  expect(() => v.state.doc.check()).not.toThrow();
+  expect(serializeJsx(sourceNodes(editorDocument(nodes(saved))))).toBe(saved);
+});
 describe('mounted editor flow', () => {
   it('creates one editable root for adjacent source paragraphs and commits one paste transaction', () => {
     const onChange = vi.fn();

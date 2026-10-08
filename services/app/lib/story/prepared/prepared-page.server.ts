@@ -18,7 +18,8 @@
  * request data through the compiled page's pinned SSR module.
  *
  * A slot's key is only the document version. A deploy, compiler change, CSS
- * change or dependency change does not rebuild a published version. The
+ * change or dependency change does not rebuild a published version. An invalid
+ * cached HTML tree is repaired on its next read without editing that version. The
  * separate recorded columns let an operator select old versions for a
  * deliberate backfill. A version miss prepares, serves and writes back; the
  * write never fails the read.
@@ -62,6 +63,7 @@ import { archiveSharedBuild } from '@/lib/compiled-page/shared-builds.server';
 import type { CompilerBuild, StoredCompile } from '@/lib/compiled-page/contract';
 import { MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
 import { prepareWorkers } from './prepare-workers.server';
+import { fixHtmlNesting } from '../document/nesting';
 
 /** Raise manually when older prepared pages cannot be read. */
 const PAGE_FORMAT = MIN_PAGE_FORMAT;
@@ -338,6 +340,15 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
   const db = await getDb();
   const found = (await db.query<StoredRow>('SELECT page_key, deps, page, page_format, handover_contract, css_version FROM prepared_pages WHERE artifact_id = $1 AND slot = $2', [row.id, slot])).rows[0];
   if (found && found.page_key === key && found.page.compiled) {
+    // Older list commands stored li > li. A new runtime cannot correct pinned
+    // compiled HTML, and recompiling cached nodes would retain that malformed
+    // input. Re-prepare only affected trees from the unchanged stored document,
+    // waiting so the first reader receives the repair; write only this cache key.
+    if (fixHtmlNesting(found.page.data.nodes) !== found.page.data.nodes) {
+      const page = await prepareNow(row, at);
+      await store(row, slot, page, key);
+      return { row, page };
+    }
     const page = { ...found.page, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version };
     if (found.css_version === preparedCssVersion()) return { row, page };
     queueRestyle(stored, at);
