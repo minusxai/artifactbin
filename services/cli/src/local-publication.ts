@@ -299,7 +299,7 @@ async function publishProjection(workspace:Workspace,paths:string[],client:HttpC
     base.body=stampNodeIds(base.body,{previousSource:confirmed.body}).source;
     local.body=stampNodeIds(local.body,{previousSource:base.body}).source;
     const merged=reconcileDocument(base,local,confirmed);
-    if(!merged.ok)throw new CliError('merge_conflict',`Publication normalization overlaps local changes in ${path}.`,'Preserve the local source and inspect its publication copy.',{base:writeDocument(base),local:writeDocument(local),remote:writeDocument(confirmed),fields:merged.fields});
+    if(!merged.ok)throw new CliError('merge_conflict',`Publication normalization overlaps local changes in ${path}.`,`The readable normalized copy is ${join(relative(workspace.root,publication),'files',path)}; ${merged.fields.join(', ')} overlap your changes. Either copy the fence (id, edit_id, head_version, state) from that file into yours, or run afbin pull <id> --output <path> --force and re-apply your body.`,{base:writeDocument(base),local:writeDocument(local),remote:writeDocument(confirmed),fields:merged.fields});
     mapped=Buffer.from(writeDocument(merged.document));
    }
    await atomicWrite(target,mapped);manifest.inputs[path]={bytes:bytes.toString('base64'),hash,ids:{...manifest.ids},...(reverse[path]?{localId:reverse[path]}:{})};

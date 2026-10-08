@@ -274,7 +274,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.home,workspace.root,staged,plan.confirmed,client.account);
    const snapshot=await recoverRequest(workspace,client,staged);workspace=await loadWorkspace(workspace.cwd,workspace.home);
-   const operation:Record<string,unknown>={path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...sourceRewrite(snapshot,plan.file.document?.body),...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
+   const operation:Record<string,unknown>={path:plan.file.path,status:'published',id:snapshot.id,url:`${client.connection.server}/a/${snapshot.id}`,version:snapshot.version,...sourceRewrite(snapshot,plan.file.document?.body),...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
    operations.push(operation);
    // The policy the content write could not carry, on the published dataset, inside the same command.
    if(plan.policy!==undefined){await writeDatasetPolicy(workspace,client,plan,snapshot);workspace=await loadWorkspace(workspace.cwd,workspace.home);}

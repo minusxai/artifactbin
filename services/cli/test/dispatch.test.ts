@@ -216,6 +216,7 @@ test('validate numbers a fenced document\'s diagnostics by FILE line and offset,
   assert.match(diag.message,/`viz=\{` opened on line 7 is never closed/,diag.message);
   assert.doesNotMatch(diag.message,/line 3\b/,diag.message);
   assert.ok(diag.start>=fence.length,`start ${diag.start} is inside the fence`);
+  const offset=diag.start as number,whole=fence+body;assert.equal(diag.line,whole.slice(0,offset).split('\n').length,JSON.stringify(diag));assert.equal(diag.column,offset-whole.slice(0,offset).lastIndexOf('\n'),JSON.stringify(diag));
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
@@ -287,7 +288,7 @@ test('a refused push prints the diagnostics it already carries, so reading them 
   const text=err.join('');
   const lines=text.trimEnd().split('\n');
   assert.equal(lines[0],'validation_failed: Local validation failed.');
-  assert.match(lines[1]!,/^doc\.jsx: JSX syntax error/,text);
+  assert.match(lines[1]!,/^doc\.jsx:\d+:\d+: JSX syntax error/,text);
   assert.match(lines[1]!,/never closed/,'the diagnostic itself, not a restatement of the code');
   assert.equal(lines[lines.length-1],'Run afbin validate and correct the reported errors.','the fix stays last');
   assert.equal(text.split('never closed').length-1,1,'printed exactly once');
@@ -357,7 +358,7 @@ test('a refusal that names files stops at three and counts the rest',async()=>{
   const code=await runCli(['push','a.jsx','b.jsx','c.jsx','d.jsx','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,color:false,
    stdout:()=>{},stderr:s=>err.push(s),fetch:async()=>assert.fail('a local validation failure must never reach the network')});
   assert.equal(code,2,err.join(''));
-  const named=['a.jsx','b.jsx','c.jsx','d.jsx'].filter(name=>err.join('').includes(`${name}: JSX syntax error`));
+  const named=['a.jsx','b.jsx','c.jsx','d.jsx'].filter(name=>err.join('').includes(`${name}:1:`)&&err.join('').includes(`${name}:1:52: JSX syntax error`));
   assert.equal(named.length,3,`three files named, not ${named.length}: ${err.join('')}`);
   assert.match(err.join(''),/… and 1 more files?; run afbin validate for the rest\./,err.join(''));
  }finally{await rm(root,{recursive:true,force:true});}
@@ -474,5 +475,23 @@ test('managed review reads the hosted thread after pulling its artifact into the
   sent.length=0;const afterInvalid=await invoke(['comment','doc.jsx']);assert.deepEqual(afterInvalid.result,beforeInvalid.result);assert.equal(sent.length,0);
   const fresh=await invoke(['comment','other.jsx','--node','local','--body','Unpublished local']);assert.equal(fresh.code,0);assert.equal(fresh.result.local,true);assert.equal(sent.length,0);
   const localById=await invoke(['comment','abc123'],unmanaged);assert.equal(localById.code,0);assert.equal(localById.result.local,true);assert.equal(localById.result.annotations[0].thread.length,2);assert.equal(sent.length,0);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('a refused push prints script details with line and column, and a merge_conflict names its fields',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-object-details-'));
+ try{
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},root);
+  await writeFile(join(root,'doc.jsx'),'---\ntitle: Sales\n---\n<article><p>Hello</p></article>\n');
+  const run=async(payload:Record<string,unknown>)=>{
+   const err:string[]=[];
+   const code=await runCli(['push','doc.jsx','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,color:false,
+    stdout:()=>{},stderr:s=>err.push(s),fetch:async()=>Response.json(payload,{status:400,headers:{'X-Artifactbin-Account':'usr_seed'}})});
+   return{code,text:err.join('')};
+  };
+  const script=await run({error:'invalid_script',message:'The script was refused.',details:[{message:'Unexpected token',line:10,column:40}]});
+  assert.ok(script.text.includes('line 10:40: Unexpected token'),script.text);
+  const conflict=await run({error:'merge_conflict',message:'Overlap.',details:{fields:['title','source']}});
+  assert.ok(conflict.text.includes('Conflicting fields: title, source')||conflict.text.includes('merge_conflict'),conflict.text);
  }finally{await rm(root,{recursive:true,force:true});}
 });

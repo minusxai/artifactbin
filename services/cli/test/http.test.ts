@@ -123,3 +123,12 @@ test('successful incompatible protocol names the server release without asking t
  const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async()=>Response.json({okay:true},{headers:{'X-Artifactbin-CLI-Version':'2.0.0','X-Artifactbin-Protocol':'99'}})});
  await assert.rejects(client.request('/artifacts'),(error:unknown)=>error instanceof CliError&&error.code==='protocol_mismatch'&&error.fix==='Run afbin update, then retry.'&&(error.details as any)?.required_version==='2.0.0');
 });
+
+test('object details with a message (a script refusal with line and column) are named in the message, as --json already shows them',async()=>{
+ const details=[{message:'Unexpected token',line:10,column:40},{message:'plain'}];
+ const client=new HttpClient({connection:{server:'https://example.com',token:'t'},fetch:async()=>Response.json({error:'invalid_script',details},{status:400})});
+ await assert.rejects(client.request('/artifacts/abc123','PUT',{markup:'<p/>'}),(error:unknown)=>{
+  assert.ok(error instanceof CliError);assert.equal(error.message,'invalid_script: line 10:40: Unexpected token; plain');
+  return true;
+ });
+});
