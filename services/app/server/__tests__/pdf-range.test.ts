@@ -17,7 +17,7 @@ import { getRequestListener } from '@hono/node-server';
 import { describe, expect, it } from 'vitest';
 import { samplePdf, samplePdfDataUrl } from '../../../../scripts/lib/sample-pdf.mjs';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createAppServer } from '../app';
 import { request, useAppHarness } from '@/__tests__/harness';
 import { readRawResponse, withHttpServer } from '@artifactbin/test-support/net';

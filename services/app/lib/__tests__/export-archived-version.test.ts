@@ -26,7 +26,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import {documentEditBody} from '@/__tests__/prepared-document';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

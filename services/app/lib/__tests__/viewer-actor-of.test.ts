@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { attachActor, signActor } from '@artifactbin/utils';
 import { ACTOR_HEADER, BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
 import { sessionActor, tokenActorForRequest } from '@/lib/accounts';
-import { mintToken, revokeToken } from '@/lib/accounts';
+import { revokeToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken, useAppHarness } from '@/__tests__/harness';
+
+useAppHarness();
 
 describe('sessionActor', () => {
   it('prefers the actor attached to the Request over any header', async () => {
@@ -25,7 +28,7 @@ describe('sessionActor', () => {
   it('revalidates a long-lived browser session identity after its token is revoked', async () => {
     const token = await mintToken('mxmx_test_browser_session');
     const request = new Request('http://x/a/abc123', { headers: { [BROWSER_SESSION_HEADER]: '1' } });
-    attachActor(request, { credential: 'bearer', tokenId: token.id });
+    attachActor(request, { credential: 'bearer', tokenId: token.id, userId: token.userId! });
     try {
       expect((await sessionActor(request)).tokenId).toBe(token.id);
       await revokeToken(token.id);
