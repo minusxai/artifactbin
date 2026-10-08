@@ -17,6 +17,7 @@ vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { proposeDimensions() { ret
 import { ChatPage } from '@/solid/pages/Chat';
 import { AGENT_PALETTE } from '@/solid/lib/agent-identity';
 
+const metadataMatch = (text:string) => (_content:string, node:Element|null) => node?.tagName === 'P' && node.textContent === text;
 const sidebar = () => within(screen.getByRole('complementary', {name:'Agents'}));
 
 function open(session: string) {
@@ -72,7 +73,7 @@ it.each(['listening','unknown'])('shows a connected hosted agent without calling
   open(session.id);
   const status=activity==='listening'?'Online · Ready':'Online · Waiting for readiness';
   expect(await screen.findByRole('button',{name:'Open Claude'})).toHaveTextContent('claude · '+status);
-  expect(await screen.findByText('claude · Hosted · '+status)).toBeInTheDocument();
+  expect(await screen.findByText(metadataMatch(status+' · claude · Cloud box'))).toBeInTheDocument();
   expect(screen.queryByText('claude · Offline')).toBeNull();
   expect(screen.queryByText('claude · Unavailable')).toBeNull();
 });
@@ -311,7 +312,7 @@ it('updates the selected sidebar from the terminal connection instead of waiting
   const session = { id:'fresh-connection',name:'Fresh Claude',harness:'claude',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null,runId:'fresh-run',managed:true,activity:'blocked' };
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[{...session,online:false}]}:url==='/api/run-capabilities'?{managedProcesses:false}:{session,seq:0,frames:[],snapshot:''}})));
   open(session.id);
-  expect(await screen.findByText('claude · Hosted · Online · Waiting for approval')).toBeInTheDocument();
+  expect(await screen.findByText(metadataMatch('Online · Waiting for approval · claude · Cloud box'))).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Open Fresh Claude'})).toHaveTextContent('claude · Online · Waiting for approval');
 });
 
@@ -320,9 +321,9 @@ it.each(['pi', 'opencode'])('offers and starts hosted %s with the selected harne
   const session={id:'new-agent',name:'my-agent',harness,machine:'Hosted',online:false,runId:'new-run',activity:'starting',exitCode:null,cols:100,rows:30};
   const fetch=vi.fn(async(url:string)=>({ok:true,status:202,headers:new Headers(),json:async()=>url==='/api/run-capabilities'?{version:1,managedProcesses:true}:url==='/api/remote/sessions'?{sessions:[]}:url==='/api/runs'?{session}:{session,seq:0,frames:[],snapshot:''}}));
   vi.stubGlobal('fetch',fetch);open('');
-  const menu=await screen.findByRole('combobox',{name:'Hosted program'});
-  expect(Array.from(menu.querySelectorAll('option')).map(option=>option.textContent)).toEqual(['Shell','Claude Code','Codex','Pi','OpenCode']);
-  fireEvent.change(menu,{target:{value:harness}});fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
+  await waitFor(()=>expect(sidebar().getByRole('button',{name:'Provision cloud agent'})).toBeEnabled());
+  fireEvent.click(sidebar().getByRole('button',{name:'Provision cloud agent'}));
+  fireEvent.click(await screen.findByRole('button',{name:harness==='pi'?'Pi':'OpenCode'}));fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
   await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/runs',expect.objectContaining({body:expect.stringContaining('"command":["'+harness+'"]')})));
   expect(await screen.findByText(/Sign in from this terminal/)).not.toHaveTextContent('in a shell');
 });
@@ -334,7 +335,7 @@ it('shows the same offline state in the selected header and list while keeping r
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:url==='/api/run-capabilities'?{managedProcesses:false}:{session,seq:0,frames:[],snapshot:''}})));
   open(session.id);
   expect(await screen.findByRole('button',{name:'Open Offline Claude'})).toHaveTextContent('claude · Offline');
-  expect(await screen.findByText('claude · Hosted · Offline')).toBeInTheDocument();
+  expect(await screen.findByText(metadataMatch('Offline · claude · Cloud box'))).toBeInTheDocument();
   expect(screen.getByText('Waiting for your hosted terminal…')).toBeInTheDocument();
 });
 
@@ -345,16 +346,16 @@ it('shows one stopping state and disables input while a stop receipt and termina
  const receipt=new Promise(resolve=>{completeStop=resolve;});
  vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>options?.method==='POST'?receipt:{ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,snapshot:'Ready',frames:[]}}));
  open(session.id);
- await screen.findByText('claude · Hosted · Online · Ready');
+ await screen.findByText(metadataMatch('Online · Ready · claude · Cloud box'));
  fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
- await waitFor(()=>expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument());
+ await waitFor(()=>expect(screen.getByText(metadataMatch('Stopping · claude · Cloud box'))).toBeInTheDocument());
  expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
  expect(screen.getByRole('button',{name:'Send Enter'})).toBeDisabled();
  terminalInput.send('must not reach shutdown');
  completeStop({ok:true,json:async()=>({ok:true})});
  await waitFor(()=>expect(screen.getByRole('button',{name:'Stop agent'})).toBeDisabled());
- expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument();
+ expect(screen.getByText(metadataMatch('Stopping · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
 });
 
@@ -365,18 +366,18 @@ it('keeps stopping through stale polls, blocks raw terminal input, and accepts a
  let polls=0;
  const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>options?.method==='POST'?{ok:true}:url==='/api/remote/sessions'?{sessions:[session]}:(polls++,{session,seq:0,snapshot:'Ready',frames:[]})}));
  vi.stubGlobal('fetch',fetch);open(session.id);
- await screen.findByText('claude · Hosted · Online · Ready');
+ await screen.findByText(metadataMatch('Online · Ready · claude · Cloud box'));
  const pollsAtStop = polls;
  fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
  await waitFor(()=>expect(polls).toBeGreaterThan(pollsAtStop));
- expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument();
+ expect(screen.getByText(metadataMatch('Stopping · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
  terminalInput.send('shutdown input');
  fireEvent.submit(screen.getByRole('textbox',{name:'Message to agent'}).closest('form')!);
  await new Promise(resolve=>setTimeout(resolve,0));
  expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(1);
  session={...session,online:false,activity:'stopped',exitCode:0};
- expect(await screen.findByText('claude · Hosted · Ended')).toBeInTheDocument();
+ expect(await screen.findByText(metadataMatch('Ended · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Ended')).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Remove session'})).toBeEnabled();
 });
@@ -388,12 +389,12 @@ it('restores the latest usable session and shows the error when Stop fails', asy
  const receipt=new Promise((_resolve,reject)=>{rejectStop=reject;});
  const fetch=vi.fn(async(url:string,options?:RequestInit)=>options?.method==='POST'?receipt:{ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,snapshot:'Ready',frames:[]}});
  vi.stubGlobal('fetch',fetch);open(session.id);
- await screen.findByText('claude · Hosted · Online · Ready');
+ await screen.findByText(metadataMatch('Online · Ready · claude · Cloud box'));
  fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
  rejectStop(new Error('Stop could not be confirmed'));
  expect(await screen.findByRole('alert')).toHaveTextContent('Stop could not be confirmed');
- expect(screen.getByText('claude · Hosted · Online · Ready')).toBeInTheDocument();
+ expect(screen.getByText(metadataMatch('Online · Ready · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Online · Ready')).toBeInTheDocument();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled();
  expect(screen.getByRole('button',{name:'Stop agent'})).toBeEnabled();
