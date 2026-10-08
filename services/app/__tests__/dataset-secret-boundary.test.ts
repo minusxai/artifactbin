@@ -1,8 +1,9 @@
 import {observedRequest} from '@/__tests__/conditional-request';
 import { expect, it, vi } from 'vitest';
-vi.mock('@/lib/datasets/postgres', () => ({
-  discoverPostgres: vi.fn(async () => [{ schema: 'sales', name: 'orders', columns: [{name:'id',type:'number'},{name:'private_note',type:'string'}] }]),
-}));
+import { overridePostgres, type PostgresDriver } from '@/lib/datasets/postgres';
+overridePostgres({
+  discover: vi.fn<PostgresDriver['discover']>(async () => [{ schema: 'sales', name: 'orders', columns: [{name:'id',type:'number'},{name:'private_note',type:'string'}] }]),
+});
 import { POST as createSecret } from '@/app/api/my/secrets/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as readArtifact } from '@/app/api/artifacts/[id]/route';

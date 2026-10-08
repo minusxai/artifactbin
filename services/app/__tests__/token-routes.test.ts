@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 
 import { createUser } from '@/lib/accounts';
+import { overrideConfig } from '@/lib/platform/config';
 import { mintToken } from '@/lib/accounts';
 import { POST as mintAdmin } from '@/app/api/tokens/route';
 import { DELETE as revokeAdmin } from '@/app/api/tokens/[id]/route';
@@ -27,7 +28,7 @@ const harness = useAppHarness();
 const ADMIN = 'admin-secret-for-tests';
 const ADMIN_EMAIL = 'mxmx_test_operator@example.com';
 beforeEach(async () => { await createUser({ email: ADMIN_EMAIL }); });
-process.env.ADMIN__SECRET = ADMIN;
+beforeEach(() => overrideConfig({}, { ADMIN__SECRET: ADMIN }));
 const params = (p: Record<string, string>) => ({ params: Promise.resolve(p) });
 const json = (r: Response) => r.json() as Promise<Record<string, unknown>>;
 type TokenRow = { id: string; status: string; expires_at: string | null; last_used_at: string | null };

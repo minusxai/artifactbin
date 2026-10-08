@@ -149,7 +149,7 @@ function jsonSafe(value: unknown): unknown {
 }
 
 /** Executes compiler output only, with remote pagination and one lookahead row. */
-export async function queryPostgres(config: PostgresConfig, sql: string, values: Scalar[], opts: { limit?: number; offset?: number; timeoutMs?: number } = {}): Promise<TableResult> {
+async function queryPostgresDirect(config: PostgresConfig, sql: string, values: Scalar[], opts: { limit?: number; offset?: number; timeoutMs?: number } = {}): Promise<TableResult> {
   const limit = bounded(opts.limit, MAX_ROWS, 1, MAX_ROWS);
   const offset = bounded(opts.offset, 0, 0, Number.MAX_SAFE_INTEGER);
   const timeout = bounded(opts.timeoutMs, MAX_TIMEOUT, 1, MAX_TIMEOUT);
@@ -190,7 +190,7 @@ export async function queryPostgres(config: PostgresConfig, sql: string, values:
 }
 
 /** PostgreSQL privilege predicates include column-level grants and inherited roles. */
-export async function discoverPostgres(config: PostgresConfig): Promise<DiscoveredTable[]> {
+async function discoverPostgresDirect(config: PostgresConfig): Promise<DiscoveredTable[]> {
   return transaction(config, MAX_TIMEOUT, async client => {
     const result = await client.query<{ schema: string; name: string; column: string; oid: number }>(`
       SELECT n.nspname AS schema, c.relname AS name, a.attname AS column,
@@ -215,3 +215,21 @@ export async function discoverPostgres(config: PostgresConfig): Promise<Discover
     return [...tables.values()];
   });
 }
+
+/** The two operations the datasets module asks of a remote Postgres: run compiled SQL, list readable tables. */
+export interface PostgresDriver {
+  query: typeof queryPostgresDirect;
+  discover: typeof discoverPostgresDirect;
+}
+let driverOverride: Partial<PostgresDriver> | undefined;
+
+/**
+ * THE TEST OVERRIDE for the network: replaces either operation so a test needs no Postgres server, without
+ * replacing the module. The test harness clears it after every file; production code never sets it.
+ */
+export function overridePostgres(driver: Partial<PostgresDriver> | undefined): void {
+  driverOverride = driver;
+}
+
+export const queryPostgres: PostgresDriver['query'] = (...args) => (driverOverride?.query ?? queryPostgresDirect)(...args);
+export const discoverPostgres: PostgresDriver['discover'] = (...args) => (driverOverride?.discover ?? discoverPostgresDirect)(...args);

@@ -2,8 +2,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { inProcess, overHttp } from '@artifactbin/utils';
-import {it,expect,vi} from 'vitest';
-vi.mock('@/lib/platform/config',async original=>({...await original<typeof import('@/lib/platform/config')>(),get PUBLIC_BASE_URL(){return 'https://example.test';},ASSETS_ORIGIN:'https://assets.example.test'}));
+import {it,expect,beforeEach,vi} from 'vitest';
+import {overrideConfig} from '@/lib/platform/config';
 import {useAppHarness} from '@/__tests__/harness';
 import {exportAssetUrl} from '@/lib/export/assets';
 import {getDb} from '@/lib/platform';
@@ -19,6 +19,7 @@ import {getRequestListener} from '@hono/node-server';
 import {createAuthHost} from '@artifactbin/auth';
 import {testAuthOptions} from '../../../auth/__tests__/helpers';
 useAppHarness();
+beforeEach(()=>overrideConfig({publicBaseUrl:'https://example.test',assetsOrigin:'https://assets.example.test'}));
 it('serves the compiled page SQLite wasm to opaque-origin readers as immutable bytes',async()=>{
  const app=createAppServer({indexHtml:async()=>'<head></head>'});
  const url=loadCompilerBuild().sqliteWasm!;

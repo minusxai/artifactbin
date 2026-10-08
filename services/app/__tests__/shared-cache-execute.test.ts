@@ -1,6 +1,7 @@
 import {expect,it,vi,beforeEach} from 'vitest';
 const upstream=vi.hoisted(()=>({query:vi.fn()}));
-vi.mock('@/lib/datasets/postgres',()=>({queryPostgres:upstream.query}));
+import {overridePostgres} from '@/lib/datasets/postgres';
+overridePostgres({query:upstream.query});
 import {useAppHarness,request} from './harness';
 import {getDb} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

@@ -3,7 +3,8 @@
  * per UTC day on the subject (a null subject counts once), zero-filled to today; with no log table the answers
  * are empty, never an error. And live: the real in-process writer, two opens by one visitor today count once.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { overrideRequestHeaders } from '@/lib/platform/request-context';
 import type { Queryable } from '@artifactbin/contracts';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
@@ -16,10 +17,7 @@ const harness = useAppHarness();
 
 // The request the live test's views arrive on: a user-agent is what makes a visitor hash.
 const requestHeaders = new Map<string, string>();
-vi.mock('@/lib/platform/request-context', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/platform/request-context')>()),
-  currentHeaders: async () => (requestHeaders.size === 0 ? null : { get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
-}));
+overrideRequestHeaders(() => (requestHeaders.size === 0 ? null : [...requestHeaders]));
 
 /** One view sentence in the log: subject = the daily visitor hash (null counts once), object = the artifact. */
 type Moment = [verb: 'viewed' | 'exported' | 'forked', artifact: string, subject: string | null, at: string];

@@ -17,7 +17,21 @@ export function currentRequest(): Request | null {
   return storage.getStore()?.request ?? null;
 }
 
+let headersOverride: (() => HeadersInit | null) | undefined;
+
+/**
+ * THE TEST OVERRIDE for the request a direct handler call never has: the headers `currentHeaders` answers (null =
+ * off-request), asked on every call. The test harness clears it after every file; production code never sets it.
+ */
+export function overrideRequestHeaders(headers: (() => HeadersInit | null) | undefined): void {
+  headersOverride = headers;
+}
+
 /** The current request's headers, or null off-request. Never throws. */
 export async function currentHeaders(): Promise<Headers | null> {
+  if (headersOverride) {
+    const headers = headersOverride();
+    return headers ? new Headers(headers) : null;
+  }
   return currentRequest()?.headers ?? null;
 }

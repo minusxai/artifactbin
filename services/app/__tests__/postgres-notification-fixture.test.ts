@@ -1,5 +1,5 @@
 /** Real gate HTTP setup/job/inbox contracts; only the external SQL adapter is deterministic. */
-import {expect,it,vi} from 'vitest';
+import {expect,it} from 'vitest';
 import type {Actor} from '@artifactbin/contracts';
 import {request,useAppHarness} from './harness';
 import {POST as create} from '@/app/api/my/artifacts/route';
@@ -12,15 +12,11 @@ import {notificationDemoDataset,notificationDemoDocument} from '../../../scripts
 import {getArtifactById} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {createUser} from '@/lib/accounts';
-import {executeCatalog} from '@/lib/datasets/execute';
+import {overrideCatalogExecutor} from '@/lib/datasets/execute';
 import {notificationJobStore} from '@/lib/notifications';
 import {evaluateNotificationQuery} from '@/lib/notifications';
 import {createNotificationWorker} from '@/lib/notifications';
 import {notificationDocumentPayload,notificationMutationPayload,modelNoticeSql,physicalNoticeSql,invalidRecipientSql} from '../../../scripts/fixtures/postgres-notifications.mjs';
-vi.mock('@/lib/datasets/execute',async importOriginal=>{
- const actual=await importOriginal<typeof import('@/lib/datasets/execute')>();
- return {...actual,executeCatalog:vi.fn(actual.executeCatalog)};
-});
 useAppHarness();
 it('uses the gate create/join/approve/mutate/job/inbox payloads, including suppressed and failed runs',async()=>{
  const owner=await createUser({email:'mxmx_test_pg_fixture_owner@example.com'}),recipient=await createUser({email:'mxmx_test_pg_fixture_recipient@example.com'});
@@ -33,7 +29,7 @@ it('uses the gate create/join/approve/mutate/job/inbox payloads, including suppr
  const trigger=await publish({access:'readwrite',dataset:'<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>'});
  const model=await publish({dataset:[{total:155}],visibility:'unlisted'}),physical=await publish({dataset:[{id:1}],visibility:'unlisted'});
  await share(trigger.id,'unlisted');
- vi.mocked(executeCatalog).mockImplementation(async(_catalog,sql,params)=>{
+ overrideCatalogExecutor(async(_catalog,sql,params)=>{
   expect([modelNoticeSql,physicalNoticeSql,invalidRecipientSql]).toContain(sql);
   const to=params?.recipient??recipient.id;
   return {refreshedAt:'2026-09-29T00:00:00Z',columns:[{name:'to',type:'string'},{name:'message',type:'string'}],rows:[{to:sql===modelNoticeSql?[to,to]:sql===invalidRecipientSql?JSON.stringify([to]):to,message:sql===physicalNoticeSql?'Order 1':sql===modelNoticeSql?'West total 155':'Invalid recipient representation'}]};
@@ -67,7 +63,7 @@ it('uses the gate create/join/approve/mutate/job/inbox payloads, including suppr
 });
 
 it('lets a joined non-owner assign a demo task to themselves and receive one notification from either completion button',async()=>{
- vi.mocked(executeCatalog).mockImplementation((await vi.importActual<typeof import('@/lib/datasets/execute')>('@/lib/datasets/execute')).executeCatalog);
+ overrideCatalogExecutor(undefined);
  const owner=await createUser({email:'mxmx_test_demo_owner@example.com'}),reader=await createUser({email:'mxmx_test_demo_reader@example.com'});
  const actor=(user:typeof owner):Actor=>({credential:'session',userId:user.id,email:user.email!,emailVerified:true});
  const ownerActor=actor(owner),readerActor=actor(reader);

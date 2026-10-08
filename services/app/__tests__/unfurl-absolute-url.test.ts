@@ -10,14 +10,11 @@
  * The app already knows its public origin from the forwarding headers
  * (lib/http baseUrl) — everything else it prints uses it. The card must too.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { overrideRequestHeaders } from '@/lib/platform/request-context';
 
 const headerBag = { host: 'localhost:3000', 'x-forwarded-host': 'artifactbin.dev', 'x-forwarded-proto': 'https' };
-vi.mock('@/lib/platform/request-context', () => ({
-  currentHeaders: async () => ({ get: (k: string) => (headerBag as Record<string, string>)[k.toLowerCase()] ?? null }),
-  currentRequest: () => null,
-  runWithRequest: <T,>(_r: unknown, fn: () => Promise<T>) => fn(),
-}));
+overrideRequestHeaders(() => headerBag);
 
 import { artifactMetadata as artifactPageMetadata } from '@/test/helpers/pages';
 import type { ArtifactRow } from '@/lib/artifacts';

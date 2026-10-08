@@ -27,14 +27,17 @@ import { DEFAULT_UPLOAD_MAX_BYTES, normalizeOrigin } from '@artifactbin/contract
  * announces itself instead of silently doing nothing.
  */
 const asked = new Set<string>();
+/** Settings a test has replaced (`overrideConfig`), answered by `env()` before the process environment. */
+const envOverrides = new Map<string, string | undefined>();
 export const envNamesRead = (): ReadonlySet<string> => asked;
 
 /** Read `${module}__${name}`. There is no other spelling. */
 export function env(module: string, name: string): string | undefined {
   const key = `${module}__${name}`;
   asked.add(key);
-  return process.env[key];
+  return envOverrides.has(key) ? envOverrides.get(key) : process.env[key];
 }
+
 
 /**
  * Names of OUR shape (`MODULE__NAME`) that nothing read — a typo, or a setting
@@ -221,9 +224,9 @@ export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
  * The externally-visible origin, for absolute URLs built OUTSIDE a request
  * scope (`publicOrigin()`'s fallback). HTTP routes derive it from the request.
  */
-export const PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhost:${APP_PORT ?? '3030'}`;
+export let PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhost:${APP_PORT ?? '3030'}`;
 const assetsOriginSetting = env('APP', 'ASSETS_ORIGIN');
-export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, null, assetsOriginSetting) : null;
+export let ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, null, assetsOriginSetting) : null;
 
 /**
  * OTHER ADDRESSES THIS SAME DEPLOYMENT ANSWERS AT — a marketing hostname that
@@ -252,7 +255,7 @@ export function parseAliasOrigins(value: string | undefined): readonly string[] 
   }
   return Object.freeze(origins);
 }
-export const ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
+export let ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**
  * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/serving/pages-origin) — the only way a document is rendered.
@@ -321,7 +324,7 @@ export function parseCustomDomainsTarget(value: string | undefined): string | nu
   const target = value?.trim().toLowerCase().replace(/\.$/, '') ?? '';
   return target || null;
 }
-export const CUSTOM_DOMAINS_TARGET = parseCustomDomainsTarget(env('FLAG', 'CUSTOM_DOMAINS'));
+export let CUSTOM_DOMAINS_TARGET = parseCustomDomainsTarget(env('FLAG', 'CUSTOM_DOMAINS'));
 
 /**
  * Where Chromium runs. Set, the export renders through an HTTP client to the
@@ -330,8 +333,8 @@ export const CUSTOM_DOMAINS_TARGET = parseCustomDomainsTarget(env('FLAG', 'CUSTO
  * composition root registered a local one and it launches in this process.
  * Either way the app calls `services().browser.render(...)` and cannot tell.
  */
-export const BROWSER_SERVICE_URL = env('BROWSER', 'SERVICE_URL');
-export const INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
+export let BROWSER_SERVICE_URL = env('BROWSER', 'SERVICE_URL');
+export let INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
 
 /**
  * Where the SQL engine runs. Unset (the self-host default) it runs IN THIS
@@ -340,7 +343,7 @@ export const INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
  * under the same guards: what leaves this process is the SQL, the params and
  * the rows to register, never a document and never a credential.
  */
-export const SQL_SERVICE_URL = env('SQL', 'SERVICE_URL');
+export let SQL_SERVICE_URL = env('SQL', 'SERVICE_URL');
 
 /**
  * Where the events log is WRITTEN. Set, every `emit` travels to that service
@@ -349,7 +352,7 @@ export const SQL_SERVICE_URL = env('SQL', 'SERVICE_URL');
  * noop: no event is persisted or forwarded. The app calls
  * `services().events.emit(...)` and cannot tell which.
  */
-export const EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
+export let EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
 
 /**
  * The schema the events service OWNS, which this app reads with SELECT only
@@ -364,3 +367,33 @@ export const RUNNER_SERVICE_URL = env('RUNNER','SERVICE_URL');
 export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
 /** Optional managed agent service. Unset means no hosted/default agent is installed. */
 export const HOSTED_AGENT_SERVICE_URL = env('HOSTED_AGENT','SERVICE_URL');
+
+/**
+ * THE TEST OVERRIDE for configuration: replaces the settings below, and `env()` reads, without touching the
+ * process environment or the module graph, so a test file that needs a deployment shape (a public origin, a
+ * service URL, an operator secret) shares its worker's graph. The settings are live bindings, so every importer
+ * sees the replacement. `{ setting: undefined }` means unset. The test harness calls `resetConfigOverrides` after
+ * every file; production code never calls either.
+ */
+const SETTING_DEFAULTS = {
+  publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, customDomainsTarget: CUSTOM_DOMAINS_TARGET,
+  browserServiceUrl: BROWSER_SERVICE_URL, internalServiceSecret: INTERNAL_SERVICE_SECRET, sqlServiceUrl: SQL_SERVICE_URL, eventsServiceUrl: EVENTS_SERVICE_URL,
+};
+export type ConfigOverrides = { [K in keyof typeof SETTING_DEFAULTS]?: (typeof SETTING_DEFAULTS)[K] };
+export function overrideConfig(settings: ConfigOverrides, environment: Record<string, string | undefined> = {}): void {
+  if ('publicBaseUrl' in settings) PUBLIC_BASE_URL = settings.publicBaseUrl!;
+  if ('assetsOrigin' in settings) ASSETS_ORIGIN = settings.assetsOrigin!;
+  if ('aliasOrigins' in settings) ALIAS_ORIGINS = settings.aliasOrigins!;
+  if ('customDomainsTarget' in settings) CUSTOM_DOMAINS_TARGET = settings.customDomainsTarget!;
+  if ('browserServiceUrl' in settings) BROWSER_SERVICE_URL = settings.browserServiceUrl;
+  if ('internalServiceSecret' in settings) INTERNAL_SERVICE_SECRET = settings.internalServiceSecret;
+  if ('sqlServiceUrl' in settings) SQL_SERVICE_URL = settings.sqlServiceUrl;
+  if ('eventsServiceUrl' in settings) EVENTS_SERVICE_URL = settings.eventsServiceUrl;
+  for (const [key, value] of Object.entries(environment)) envOverrides.set(key, value);
+}
+export function resetConfigOverrides(): void {
+  PUBLIC_BASE_URL = SETTING_DEFAULTS.publicBaseUrl; ASSETS_ORIGIN = SETTING_DEFAULTS.assetsOrigin; ALIAS_ORIGINS = SETTING_DEFAULTS.aliasOrigins;
+  CUSTOM_DOMAINS_TARGET = SETTING_DEFAULTS.customDomainsTarget; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
+  INTERNAL_SERVICE_SECRET = SETTING_DEFAULTS.internalServiceSecret; SQL_SERVICE_URL = SETTING_DEFAULTS.sqlServiceUrl; EVENTS_SERVICE_URL = SETTING_DEFAULTS.eventsServiceUrl;
+  envOverrides.clear();
+}
