@@ -1,37 +1,5 @@
-# Report: back edges and the module-graph check
+# Native Codex/Claude terminal submission
 
-PR: https://github.com/minusxai/artifactbin/pull/464. One commit, empty body, single-line message, CLI bumped 0.4.51 → 0.4.52.
+The managed terminal adapter now treats a complete line ending in CR as one bracketed paste for Codex and Claude, regardless of whether it came from the terminal relay keyboard source or an artifact comment. It writes the exact payload without CR, writes the paste-end marker, waits 200 ms, and then writes one separate CR if the PTY remains writable. Incomplete/raw keyboard chunks and unmanaged/provider-shell input keep their existing behavior. Comment payload transformation still occurs before framing.
 
-## How each edge was cut
-| edge | how it was cut |
-|---|---|
-| `pkg/cli → app/server` | `team-application.ts` moved to `services/app/server/`. CLI `team-entry.startTeamHost` now takes the application as a parameter (`TeamApplication`). The new runtime entry `services/app/server/team-host.ts` composes the two and lazy-loads the app only after the operator env is installed, as before. `build-host.mjs` bundles that entry, and `bootstrap.cjs`'s `startTeamHost` keeps its name. |
-| `lib/skills → pkg/cli` | `renderDoc`, `buildQuickSheet` and `QUICK_SHEET_MAX_BYTES` were only used by tests. They moved to `services/app/test/helpers/skill-docs.ts`, which is the only place that reads the CLI's `teaching.json`. 18 tests changed only their import. |
-| `app/solid → lib/offline` | `previewWorkspaceUrl` (pure) moved to `services/contracts/src/preview-connect.ts`, next to the `PREVIEW_CONNECT_*` protocol. |
-| `lib/story-runtime → app/solid` | The compiled-DOM editor (`dom-mounter.tsx`, `FlowEditor.tsx`, `GridEdit.tsx`, `rgl-kernel.ts`) imports only libs, so it moved down to `lib/story-runtime/edit/`. Its 3 tests moved with it as `*.ui.test.tsx`, which takes them from the shared `islands` project to the isolated `ui` project. `build-offline.mjs`'s Solid transform now also covers `lib/story-runtime/edit`. |
-| `pkg/cli → scripts` | `npm-dependency-cache.mjs` and `npm-consumer-install.mjs` moved to `services/cli/scripts/`. The `ci.yml` run lines and seed cache key (`hashFiles`) changed, so the first run is one cold seed cache. Also updated: the `.ps1` line and the paths `ci-cache-contracts` expects. |
-| `app/scripts ↔ scripts` | `precompress.mjs` and `.d.mts` moved to `services/app/scripts/`. Root `scripts`, `vite.config.mts` and `server-reader-cache` now point there. |
-| `app/solid ↔ app/web` | The 8 web helpers that solid uses moved to `services/app/solid/lib/`. `web/` keeps the HTML entry, `solid-entry.tsx`, `restore-reader.ts` and the CSS. The 5 web tests stayed in `web/__tests__` with only their imports changed: moving them would have put non-isolated tests into the shared `islands` project (`artifact-view-report` keeps module state). |
-
-New edges: `app/server → pkg/cli` (team-host and chromium). The CLI no longer reaches `app/server`, so this forms no cycle.
-
-## Check (`scripts/ci/module-graph.mjs`, run by `npm run validate`)
-- It has three separate parts: a scanner (`scanImports`, using the TypeScript AST), a graph (`moduleOf`, `resolveImport`, `buildModuleGraph`, `cyclesOf`) and a policy (`checkModuleGraph`, `recordAllowedCycles`). Nothing is cached.
-- It enforces three rules:
-  - Nothing in `ENTRY_OR_UI` may sit in a cycle, even if allow-listed.
-  - Packages other than cli may import only `contracts`, `utils` or themselves.
-  - Every edge inside a cycle must be in the allow-list, and an allow-list entry that is no longer cyclic fails, so the list can only shrink.
-- Allow-list (`scripts/ci/module-graph.allowed-cycles.json`): it records **one cycle of 33 modules and 247 edges**. The 33 are `app-root` plus 32 `lib/*`.
-- Runtime on a warm machine: about 1.06–1.3 s inside validate, and 1.19 s wall for the whole process.
-- Test: `scripts/__tests__/module-graph.test.mjs`, written first. It ran red (module missing) and then green: 9 tests on small temporary git trees covering cycle detection, the allow-list passing, new edges, stale entries, entry/UI cycles and package rules. It also checks that the real repo passes.
-- `AGENTS.md` gets a 4-line "Layers" rule under Working rules.
-
-## What ran
-- `npm run validate`: clean. This covers the residual-name guard, the module graph and the full type check.
-- `npm test -- --files` with 31 files: 30 vitest files, 609 tests. The one failure was a too-broad assertion in my new test; I fixed it and reran. The CLI `team-entry.test.ts` passed: it boots a real team host through the new `app/server/team-host.ts`.
-- Not run locally: bare `npm test`, gates, builds (build-offline, build-islands frame editor, CLI build-host) and the Windows `.ps1`. These are left to PR CI. I did not inspect CI before writing this.
-
-## Not verified / notes
-- `docs/editing.md:34` still names `solid/editor/FlowEditor.tsx`. That file is in the docs implementer's area, so I left it.
-- The worktree's ports collided at 5000. The brief's 5200 block is taken by `reader-evidence`, so this worktree uses 5300–5399.
-- The first CI run after merge will see a cold npm seed cache, because the cache key path changed.
+The selected CLI runner test file passed 19/19 tests, including large keyboard/comment paste framing, one submit after the settle gap, suppression when the PTY exits during settling, duplicate relay delivery, and raw text/CR/Escape chunks. `npm run validate` passed. An exact built native Codex paste proof remains pending; the observed manual UI failure needs that confirmation before claiming end-to-end resolution.
