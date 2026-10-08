@@ -27,13 +27,12 @@ import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { getDb } from '@/lib/platform';
-import { createGuestOwner } from '@/lib/accounts';
 import { createTestUser } from '@/lib/accounts';
 import { tokenStatus } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { services, setServices } from '@/lib/platform';
-import { request, useAppHarness } from './harness';
+import { request, useAppHarness, createGuestOwner } from './harness';
 
 useAppHarness();
 const operation = OPERATIONS.find(op => op.name === 'browser_session')!;

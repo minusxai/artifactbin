@@ -10,7 +10,7 @@ export class DocumentOperationError extends Error {
 }
 const validPath=(path:unknown):path is DocumentPath=>Array.isArray(path)&&path.length<=128&&path.every(index=>Number.isSafeInteger(index)&&index>=0);
 const validValue=(value:unknown,depth=0):value is DocumentValue=>depth<128&&(value===null||typeof value==='string'||typeof value==='boolean'||typeof value==='number'&&Number.isFinite(value)||Array.isArray(value)&&value.every(x=>validValue(x,depth+1))||!!value&&typeof value==='object'&&Object.getPrototypeOf(value)===Object.prototype&&Object.values(value).every(x=>validValue(x,depth+1)));
-export function parseDocumentOperations(value:unknown):DocumentOperation[]|null {
+function parseDocumentOperations(value:unknown):DocumentOperation[]|null {
  if(!Array.isArray(value)||!value.length||value.length>MAX_DOCUMENT_OPERATIONS)return null;
  for(const op of value){
   if(!op||typeof op!=='object')return null;

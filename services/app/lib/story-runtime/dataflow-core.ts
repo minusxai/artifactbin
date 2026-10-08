@@ -25,7 +25,7 @@ import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/data/d
 import { checkedLocalRows } from '@/lib/story/datasets/local-tables';
 import { graphDefaults, graphInlineTables, type GraphReads, type RuntimeGraph } from './runtime-graph';
 import type { MutationAnswer } from './store';
-import type { ServedResults } from './contract';
+import { ACCESS_PENDING, type ServedResults } from './contract';
 
 /** What one run answers: rows and errors for its queries, and the write checks. */
 export type RunAnswer = Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess' | 'userOptions' | 'people'>;
@@ -174,7 +174,7 @@ const hasFailed = (state: CoreState, node: NodeKey): boolean => state.failed[nod
 export const accessSettled = (state: CoreState): boolean =>
   indexOf(state.graph).computed.every((k) => !k.startsWith('access:') || isCurrent(state, k) || hasFailed(state, k));
 
-export const ACCESS_PENDING = 'Checking edit access…';
+export { ACCESS_PENDING };
 export const ACCESS_FAILED = 'Access check failed. Reload.';
 
 /** The permission answer, or a pending/failed check; never infer an access grant. */

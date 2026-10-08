@@ -13,7 +13,7 @@ export const ARTIFACT_STARTERS = [
   { template: 'app', label: 'App' },
 ] as const satisfies ReadonlyArray<{ template: StoryTemplateName; label: string }>;
 
-export const BLANK_DOCUMENT_MARKUP = '<article id="document" data-design="tw"><h1 id="headline" data-placeholder="Headline" className="min-h-12 text-4xl font-semibold tracking-tight"></h1><p id="body" data-placeholder="Start writing…" className="mt-6 min-h-7 text-base leading-relaxed"></p></article>';
+const BLANK_DOCUMENT_MARKUP = '<article id="document" data-design="tw"><h1 id="headline" data-placeholder="Headline" className="min-h-12 text-4xl font-semibold tracking-tight"></h1><p id="body" data-placeholder="Start writing…" className="mt-6 min-h-7 text-base leading-relaxed"></p></article>';
 
 export function artifactStarter(template: StoryTemplateName, parentId?: string | null) {
   return { markup: template === 'doc' ? BLANK_DOCUMENT_MARKUP : EMPTY_ARTIFACT_MARKUP, template, title: null, visibility: 'private' as const, parent_id: parentId ?? null };

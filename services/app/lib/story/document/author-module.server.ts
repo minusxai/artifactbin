@@ -24,9 +24,9 @@ import type * as esbuild from 'esbuild';
 import { transformAsync, type PluginObj, type types as BabelTypes } from '@babel/core';
 import solidPreset from 'babel-preset-solid';
 import { AUTHOR_VENDOR_EXPORTS } from '@/lib/islands/contract';
+import { PAGE_GLOBAL } from '@/lib/story-runtime/contract';
 import type { HelmetContent } from './helmet';
 
-export const PAGE_GLOBAL = '__mxPageBindings';
 /** Where a bare npm specifier resolves (`three` → `https://esm.sh/three`): the module host every script may load from. */
 export const ESM_CDN_ORIGIN = 'https://esm.sh';
 export const PAGE_SPECIFIER = 'page';

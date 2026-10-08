@@ -15,7 +15,7 @@ export function sourceStorage(format:string,source:string|null,certified=false,v
  const document=encodeDocument(source);
  return {source:null,document:JSON.stringify(certified&&document.kind==='jsx'?createDocumentGraph(source,version):document)};
 }
-export function decodeArtifactDocument<T>(value:T):T {
+function decodeArtifactDocument<T>(value:T):T {
  const row=value as T&SourceRow;
  const {document,...rest}=row;
  if(document==null)return rest as T;

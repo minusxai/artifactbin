@@ -97,6 +97,7 @@
     "zod": "4.5.2"
   },
   "devDependencies": {
+    "@artifactbin/test-support": "0.1.0",
     "@codemirror/commands": "6.11.1",
     "@codemirror/lang-javascript": "6.2.5",
     "@codemirror/language": "6.12.4",
@@ -132,7 +133,6 @@
     "@types/nunjucks": "3.2.6",
     "@types/pg": "8.16.0",
     "@types/pg-cursor": "2.7.2",
-    "@types/three": "^0.183.1",
     "@types/topojson-client": "3.1.5",
     "h3-js": "4.5.0",
     "jsdom": "30.0.1",

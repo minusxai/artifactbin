@@ -23,6 +23,7 @@
  *
  *   usage: node scripts/gates/gate-live.mjs [base]
  */
+import { sleep } from './lib/sleep.mjs';
 import { documentFrame, documentLocator, inlineStory } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { lane } from './lib/lane.mjs';
@@ -34,7 +35,6 @@ import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('live');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Wait for `read()` to satisfy `want`, or give up. Returns the last value seen. */
 async function until(read, want, budgetMs = 8000) {

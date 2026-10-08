@@ -15,7 +15,7 @@
  * since authors may write either the SVG form (`xlink:href`) or React's
  * (`xlinkHref`).
  */
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet } from '@/lib/jsx/immutable-set';
 
 /** URL-bearing attributes; URL_LIST_ATTRS takes precedence for list-valued ones. */
 export const URL_ATTRS = immutableSet([

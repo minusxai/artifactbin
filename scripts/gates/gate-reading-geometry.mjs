@@ -24,6 +24,7 @@
  *
  *   usage: node scripts/gates/gate-reading-geometry.mjs [base]
  */
+import { sleep } from './lib/sleep.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { checkViewportGeometry } from './lib/viewport-geometry.mjs';
@@ -34,7 +35,6 @@ import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('reading-geometry');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** One leg's failure is reported and the walk goes on, so a run names every broken leg at once. */
 const section = async (name, run) => {
   console.log(`█ ${name}`);
@@ -76,8 +76,7 @@ await section('decks', async () => {
   const PLAIN = '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">Ordinary</h1>'
     + '<p className="mt-4 text-lg">No slides here.</p></div>';
   /*
-   * The FULL-BLEED idiom, copied from what we teach (orchestrator/prompts/
-   * skills/templates, lib/data/story/typography.ts
+   * The FULL-BLEED idiom, copied from what we teach (the skills/templates, lib/data/story/typography.ts
    * FULL_BLEED_CLASSES): the page wrapper carries the gutter and a full-bleed
    * slide cancels it with a negative margin, re-adding it as padding.
    *

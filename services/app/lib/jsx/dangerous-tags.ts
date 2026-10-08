@@ -34,7 +34,7 @@
  * are each allowed on their own and are driven from the `<Helmet>` script,
  * which is what the rejection tells the author (lib/jsx/validate.ts).
  */
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet } from '@/lib/jsx/immutable-set';
 
 export const DANGEROUS_TAGS = immutableSet([
   'script', 'object', 'embed', 'base', 'meta', 'link', 'form',

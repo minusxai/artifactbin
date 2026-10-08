@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { mintToken, createUser, createGuestOwner, resolveToken, sessionActor } from '@/lib/accounts';
+import { mintToken, createUser, resolveToken, sessionActor } from '@/lib/accounts';
 import { POST as start } from '@/app/api/start/route';
 import { POST as connect } from '@/app/api/internal/artifact-approval/route';
 import { POST as mint } from '@/app/api/internal/tokens/route';
@@ -8,7 +8,7 @@ import { issuePagesTicket, exchangePagesTicket, pagesSessionOf } from '@/lib/acc
 import { getDb } from '@/lib/platform/db';
 import { sha256 } from '@/lib/accounts/tokens';
 import { markPagesRequest, pagesSiteFor } from '@/lib/serving/pages-origin';
-import { agentCookie, request, useAppHarness } from './harness';
+import { agentCookie, request, useAppHarness, createGuestOwner } from './harness';
 
 useAppHarness();
 

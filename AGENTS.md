@@ -97,7 +97,8 @@ From the repo root; keep this list current.
   it from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale, so recopy.
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
 - `npm run validate` — FAST: name guard, incremental TypeScript (`tsgo` where installed, else
-  tsc) with unused declarations; utils/contracts add `noUncheckedIndexedAccess`.
+  tsc) with unused declarations, the module-graph check (`scripts/ci/module-graph.mjs`);
+  utils/contracts add `noUncheckedIndexedAccess`.
 - `npm test` — affected api/node/ui/islands + CLI tests, ≤50 files; exit 2 means PR CI, never widen.
   `-- --files <paths>` is the FAST inner loop; bare and `-- <ref>` (branch changes) are SLOW, pre-merge
   only; `-- --reuse` reuses evidence. Config/package edits may defer everything (expected).

@@ -55,7 +55,7 @@ const MODES = MERMAID_MODES;
 type Mode = MermaidMode;
 
 /** Where a stored drawing is served (app/assets/mermaid/[file]/route.ts). */
-export const mermaidImagePath = (key: string): string => `/assets/mermaid/${key}.svg`;
+const mermaidImagePath = (key: string): string => `/assets/mermaid/${key}.svg`;
 export const MERMAID_IMAGE_FILE = /^([0-9a-f]{64})\.svg$/;
 export const mermaidObjectKey = (key: string): string => `mermaid/${key}.svg`;
 

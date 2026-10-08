@@ -1,7 +1,7 @@
 /** Legacy guest data survives, but adopting it requires a verified email login. */
 import { describe, expect, it } from 'vitest';
-import { agentCookie, useAppHarness } from './harness';
-import { mintToken, resolveToken, revokeToken, createGuestOwner } from '@/lib/accounts';
+import { agentCookie, useAppHarness, createGuestOwner } from './harness';
+import { mintToken, resolveToken, revokeToken } from '@/lib/accounts';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
 import { createTeamApplication } from '../server/team-host';
 import { createOAuthStore } from '../../auth/src/identity/oauth';

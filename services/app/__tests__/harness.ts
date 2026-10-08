@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { overrideSession, type Session } from '@/auth';
-import { AGENT_COOKIE, encodeAgentSession } from '@/lib/accounts/agent-session';
+import { AGENT_COOKIE, agentSessionSetCookie, encodeAgentSession } from '@/lib/accounts/agent-session';
 import { resetRateLimit } from '@/lib/accounts/auth';
 import { EVENTS_SCHEMA } from '@/lib/platform/config';
 import { overridePostgres } from '@/lib/datasets/postgres';
@@ -21,7 +21,8 @@ import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.ser
 import { drainSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
-import { mintToken as mintRawToken } from '@/lib/accounts/tokens';
+import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
+import { generateInternalId } from '@/lib/platform/ids';
 
 const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
   const table = /^CREATE TABLE IF NOT EXISTS (\w+)/.exec(statement)?.[1];
@@ -106,11 +107,14 @@ async function registerAgentCookieValue(value: string, previousValue?: string): 
   );
 }
 
-/** Model the proxy's post-response cookie registration around a direct route call. */
-export async function registerAgentCookie(response: Response, previousCookie?: string): Promise<void> {
-  const next = cookieValue(response).value;
-  const previous = previousCookie?.split(';').map(part => part.trim()).find(part => part.startsWith(`${AGENT_COOKIE}=`))?.slice(AGENT_COOKIE.length + 1);
-  if (next) await registerAgentCookieValue(next, previous);
+/** A legacy guest row (no login identity) with one token: no product code mints one any more, but adoption and the guest ceiling still meet them. */
+export async function createGuestOwner(options: { name?: string; tokenName?: string; expiresInMs?: number } = {}): Promise<{ userId: string; tokenId: string; cookie: string }> {
+  const userId = 'usr_' + generateInternalId();
+  const tokenId = await (await getDb()).transaction(async (tx) => {
+    await tx.query("INSERT INTO users (id, email, kind, name) VALUES ($1, NULL, 'guest', $2)", [userId, options.name ?? null]);
+    return (await mintRawToken(options.tokenName ?? 'guest-browser', userId, tx, { expiresInMs: options.expiresInMs ?? MAX_TOKEN_TTL_MS })).id;
+  });
+  return { userId, tokenId, cookie: agentSessionSetCookie(await encodeAgentSession({ tokenIds: [tokenId] })) };
 }
 
 /** Read one Set-Cookie from a response: its value (null when absent) and whether it CLEARS the cookie (Max-Age=0). */

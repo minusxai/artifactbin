@@ -19,7 +19,6 @@ import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { artifactQuotaExceeded, getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
-import { createGuestOwner } from '@/lib/accounts';
 import { backfillUserKinds, createTestUser, listTestUsers, sweepTestUsers, TESTUSER_LABEL } from '@/lib/accounts';
 import { noteTestUserSession, testUserSessionCount } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
@@ -27,7 +26,7 @@ import { resolveTokenById } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { count, has, link } from '@/lib/accounts';
-import { request, useAppHarness } from './harness';
+import { request, useAppHarness, createGuestOwner } from './harness';
 
 const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

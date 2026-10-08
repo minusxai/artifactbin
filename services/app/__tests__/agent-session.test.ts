@@ -4,10 +4,10 @@ import { POST as exchangeRoute, DELETE as clearSession } from '@/app/api/session
 import { GET as listMine } from '@/app/api/my/artifacts/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as events } from '@/app/a/[id]/events/route';
-import { AGENT_COOKIE, createGuestOwner, createUser, mintToken, resolveToken, sessionActor } from '@/lib/accounts';
+import { AGENT_COOKIE, createUser, mintToken, resolveToken, sessionActor } from '@/lib/accounts';
 import { claimTokenById, claimableTokensById } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
-import { agentCookie, request, setSession, useAppHarness } from './harness';
+import { agentCookie, request, setSession, useAppHarness, createGuestOwner } from './harness';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

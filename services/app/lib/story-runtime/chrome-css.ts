@@ -30,7 +30,7 @@
  * `container-type: inline-size` is the load-bearing half, and it is here to
  * make the full-bleed idiom we ship actually cancel. That idiom
  * (lib/data/story/typography FULL_BLEED_CLASSES, taught in the artifactbin
- * skill's template references and orchestrator/prompts/story-guidance.yaml)
+ * skill's template references and lib/data/story/story-guidance.yaml)
  * pairs `px-6 @2xl:px-12` on the page
  * wrapper with `-mx-6 @2xl:-mx-12` on a slide that wants the whole column — and
  * the two only cancel if both queries resolve against the SAME container.

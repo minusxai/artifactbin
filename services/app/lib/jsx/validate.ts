@@ -9,7 +9,7 @@ import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { validateDeckMap } from '@/lib/viz/deck-spec';
 import { parseRowRef } from '@/lib/story/data/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet } from '@/lib/jsx/immutable-set';
 // Shared with the render-time gate in lib/story-ui/interpreter-primitives — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
 import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl, urlListUrls } from './url-attrs';
