@@ -152,3 +152,10 @@ test('independent processes publish identical cache objects without leaving part
  assert.equal(await readFile(path,'utf8'),'complete compiled module');
  assert.deepEqual(await readdir(root),['compiled-module']);
 }));
+test('a path outside the workspace is the typed outside_workspace refusal with its fix, keeping the message',()=>fixture(async(_home,root)=>{
+ await assert.rejects(confinedPath(root,'../escape'),(error:unknown)=>{
+  const typed=error as {code?:string;message:string;fix?:string;exitCode?:number};
+  assert.equal(typed.code,'outside_workspace');assert.match(typed.message,/^Path is outside the workspace: /);assert.match(typed.fix??'',/inside the workspace/);assert.equal(typed.exitCode,1);
+  return true;
+ });
+}));

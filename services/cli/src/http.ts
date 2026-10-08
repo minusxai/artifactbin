@@ -119,7 +119,8 @@ export class HttpClient {
     // A refusal without a message but with a list of details (a bad column, a refused SQL function)
     // names the details: the human line used to read "invalid_sql: Bad Request" and only --json
     // showed why (two pushes to learn "strptime is not allowed").
-    const detailed=Array.isArray(data?.details)&&data.details.length&&data.details.every((d:unknown)=>typeof d==='string')?data.details.join('; '):undefined;
+    const detailLines=Array.isArray(data?.details)?data.details.map(detailLine):[];
+    const detailed=detailLines.length&&detailLines.every((d:string|undefined)=>d!==undefined)?detailLines.join('; '):undefined;
     throw new CliError(code,`${code}: ${data?.message??detailed??response.statusText??'request refused'}`,typeof data?.hint==='string'?data.hint:typeof data?.recovery==='string'?data.recovery:undefined,{...data,http_status:response.status,...(response.headers.has('X-Artifactbin-Mutation-Receipt')?{mutation_receipt:response.headers.get('X-Artifactbin-Mutation-Receipt')}:{})},response.status===409?3:1);
    }
    if(!data||typeof data!=='object')throw new CliError('invalid_response','The server returned an incomplete JSON response.','Keep pending recovery state before retrying a write.');
@@ -143,6 +144,14 @@ export class HttpClient {
  }
 }
 
+/** One refusal detail as a line: a string, or the `{message, line?, column?}` entry a script refusal carries (`line 10:40: Unexpected token`). */
+export function detailLine(detail:unknown):string|undefined{
+ if(typeof detail==='string')return detail;
+ if(!detail||typeof detail!=='object')return undefined;
+ const {message,line,column}=detail as {message?:unknown;line?:unknown;column?:unknown};
+ if(typeof message!=='string')return undefined;
+ return typeof line==='number'?`line ${line}${typeof column==='number'?`:${column}`:''}: ${message}`:message;
+}
 /** The refusal for a request that never reached the server: the cause, and the origin the caller can fix. */
 export function transportFailure(server:string,error:unknown):CliError{
  const cause=error instanceof Error&&error.cause instanceof Error?error.cause.message:error instanceof Error?error.message:String(error);

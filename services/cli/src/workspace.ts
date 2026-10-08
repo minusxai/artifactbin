@@ -84,7 +84,7 @@ export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Wo
   const pin=portable.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)?.value;
   const local=Object.fromEntries(portable.list<TrackedFile>(LOCAL_WORKSPACE_SCOPE,'tracked').map(row=>[row.key,row.value]));
   const cached=Object.fromEntries(state.list<TrackedFile>(legacy.root,'tracked').map(row=>[row.key,row.value]));
-  if(pin&&(pin.server!==legacy.value.server||pin.account!==legacy.value.account||JSON.stringify(local)!==JSON.stringify(cached)))throw new CliError('tracking_divergence','Home and portable authoring baselines disagree.','Preserve both stores; finish any interrupted push or explicit workspace rebind before proceeding.',{home_store:state.path,portable_store:portable.path},3);
+  if(pin&&(pin.server!==legacy.value.server||pin.account!==legacy.value.account||JSON.stringify(local)!==JSON.stringify(cached)))throw new CliError('tracking_divergence','Home and portable authoring baselines disagree.','Preserve both stores; finish any interrupted push or explicit workspace rebind before proceeding.',{home_store:state.path,portable_store:portable.path,workspace_root:portableRoot},3);
  }
  if(!found)return{home,root:portableRoot??cwd,cwd,tracking:null};
  const {root,value}=found;

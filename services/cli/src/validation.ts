@@ -9,7 +9,9 @@ import {assetInput} from './upload-input';
 import {atomicWrite,digest,readOptional} from './files';
 import {CliError} from './commands';
 import {resourceContent} from './resource-file';
-interface Diagnostic {code:string;message:string;fix?:string;start?:number;end?:number;severity?:'error'|'notice'}
+interface Diagnostic {code:string;message:string;fix?:string;start?:number;end?:number;line?:number;column?:number;severity?:'error'|'notice'}
+/** 1-based file line and column of a character offset, so a diagnostic can be opened without counting characters. */
+const locate=(text:string,offset:number)=>{const before=text.slice(0,offset);const line=(before.match(/\n/g)??[]).length+1;return{line,column:offset-(before.lastIndexOf('\n')+1)+1};};
 export async function validateFiles(workspace:Workspace,paths?:string[],fix=false,options:{skipMissingTracked?:boolean}={}){
  const files:Array<{path:string;valid:boolean;fixed:boolean;diagnostics:Diagnostic[]}>=[];
  for(const file of await inspectWorkspace(workspace,paths)){
@@ -46,7 +48,7 @@ export async function validateFiles(workspace:Workspace,paths?:string[],fix=fals
     // and offsets are moved past the metadata fence here.
     const relocate=(error:{message:string;start?:number;end?:number})=>({code:'invalid_markup',
      message:fenceLines?error.message.replace(/\bline (\d+)\b/g,(_,n:string)=>`line ${Number(n)+fenceLines}`):error.message,
-     ...(typeof error.start==='number'?{start:error.start+fence.length}:{}),...(typeof error.end==='number'?{end:error.end+fence.length}:{})});
+     ...(typeof error.start==='number'?{start:error.start+fence.length,...locate(source,error.start+fence.length)}:{}),...(typeof error.end==='number'?{end:error.end+fence.length}:{})});
     diagnostics.push(...checked.errors.map(relocate));
     if(fix&&!diagnostics.length){
      const formatted=formatMarkupSource(markup);
