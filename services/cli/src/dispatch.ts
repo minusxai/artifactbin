@@ -423,10 +423,10 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
     }finally{state.close();}
    }else if(basename(launch.command).replace(/\.exe$/i,'')==='claude'){
     const originalArgs=[...launch.args];const planned=planClaudeConversation(originalArgs,randomUUID());launch={...launch,args:planned.args};
-    if(planned.sessionId){assertSafeClaudeConversationArgs(originalArgs);const explicit=typeof env.CLAUDE_CONFIG_DIR==='string';const directory=claudeConfigDirectory(home,cwd,env);env=claudeConfigEnvironment(directory,explicit,env);conversation={sessionId:planned.sessionId,command:launch.command,args:originalArgs,cwd,claudeConfigDir:directory,claudeConfigDirExplicit:explicit};}else if(!hasClaudeSessionSelector(originalArgs)){resumeUnavailable=true;}
+    if(planned.sessionId){assertSafeClaudeConversationArgs(originalArgs);const explicit=typeof env.CLAUDE_CONFIG_DIR==='string';const directory=claudeConfigDirectory(home,cwd,env);env=claudeConfigEnvironment(directory,explicit,env);conversation={sessionId:planned.sessionId,command:launch.command,args:originalArgs,cwd,claudeConfigDir:directory,claudeConfigDirExplicit:explicit,name:typeof flags.name==='string'?flags.name:basename(launch.command).replace(/\.exe$/i,'').toLowerCase()};}else if(!hasClaudeSessionSelector(originalArgs)){resumeUnavailable=true;}
    }
    let receipt:Awaited<ReturnType<typeof launchRemote>>;
-   try{receipt=await launchRemote({connection:client.connection,...launch,name:typeof flags.name==='string'?flags.name:undefined,history,cwd,home,env,...(conversation?{conversation}:{}),...(resumeReservation?{resumeReservation}:{})});}
+   try{receipt=await launchRemote({connection:client.connection,...launch,name:typeof flags.name==='string'?flags.name:conversation?.name,history,cwd,home,env,...(conversation?{conversation}:{}),...(resumeReservation?{resumeReservation}:{})});}
    finally{if(resumeReservation){const state=await State.openIfPresent(home,context.env);if(state)try{releaseClaudeConversationReservation(state,resumeReservation);}finally{state.close();}}}
    emit(json?receipt:`Started ${receipt.name} · ${resuming?'resuming the saved Claude conversation':'loading context'}\nMention @${receipt.name} in artifact comments.${conversation?`\nResume this Claude conversation later with: afbin remote --resume ${receipt.id}`:''}${resumeUnavailable?'\nClaude resume is unavailable for this launch because its arguments cannot be safely saved.':''}\nOpen session: ${receipt.url}`);return 0;
   }
