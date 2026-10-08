@@ -6,6 +6,110 @@ import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {saveTestConnection} from './connection';
 import {digest} from '../src/files';
+import {loadWorkspace,saveTracking} from '../src/workspace';
+
+test('managed review uses its connected origin inside a workspace registered to another server',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-managed-origin-')),home=join(root,'home'),work=join(root,'work'),scratch=join(work,'scratch');
+ await mkdir(home);await mkdir(work);await mkdir(scratch);
+ const connected='https://managed-origin.example',foreign='https://workspace-origin.example';
+ const env={ARTIFACTBIN_URL:connected,ARTIFACTBIN_TOKEN:'mxmx_test_connected_token',ARTIFACTBIN__REMOTE_SESSION:'mxmx_test_connected_session',ARTIFACTBIN__REMOTE_PROOF:'mxmx_test_connected_proof',ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'0'};
+ try{
+  await saveTracking(await loadWorkspace(work,home),{server:foreign,account:'mxmx_test_foreign_account'});
+  await saveTestConnection({server:foreign,token:'mxmx_test_foreign_token'},home);
+  const calls:Array<{origin:string;path:string;headers:Headers}>=[],out:string[]=[];
+  const code=await runCli(['comment','abc123','--json'],{cwd:scratch,home,env,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+   const url=new URL(String(input));calls.push({origin:url.origin,path:url.pathname,headers:new Headers(init?.headers)});
+   if(url.pathname.includes('annotations'))return Response.json({annotations:[{id:'ann_connected',thread:[{body:'Connected request'}]}],next_cursor:null});
+   return Response.json({error:{code:'not_found',message:'No synthetic identity metadata'}},{status:404});
+  }});
+  assert.equal(code,0,out.join(''));
+  assert.equal(JSON.parse(out.join('')).annotations[0]?.id,'ann_connected');
+  assert.ok(calls.some(call=>call.path.includes('annotations')));
+  assert.ok(calls.every(call=>call.origin===connected),'managed request must not follow the inherited workspace origin');
+  assert.equal(calls.find(call=>call.path.includes('annotations'))?.headers.get('Authorization'),'Bearer mxmx_test_connected_token');
+  assert.equal(calls.find(call=>call.path.includes('annotations'))?.headers.get('X-Artifactbin-Account'),null,'a foreign workspace account must not be claimed at the managed origin');
+
+  calls.length=0;out.length=0;
+  const unmanagedEnv={ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'0'};
+  const unmanagedCode=await runCli(['comment','abc123','--json'],{cwd:scratch,home,env:unmanagedEnv,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+   const url=new URL(String(input));calls.push({origin:url.origin,path:url.pathname,headers:new Headers(init?.headers)});
+   if(url.pathname.includes('annotations'))return Response.json({annotations:[{id:'ann_foreign',thread:[{body:'Workspace request'}]}],next_cursor:null},{headers:{'X-Artifactbin-Account':'mxmx_test_foreign_account'}});
+   return Response.json({error:{code:'not_found',message:'No synthetic identity metadata'}},{status:404});
+  }});
+  assert.equal(unmanagedCode,0,out.join(''));
+  assert.ok(calls.some(call=>call.path.includes('annotations')&&call.origin===foreign),'unmanaged clients retain workspace-origin selection');
+  assert.equal(calls.find(call=>call.path.includes('annotations'))?.headers.get('Authorization'),'Bearer mxmx_test_foreign_token');
+
+  calls.length=0;out.length=0;
+  const sameOriginCode=await runCli(['comment','abc123','--server',connected,'--json'],{cwd:scratch,home,env,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+   const url=new URL(String(input));calls.push({origin:url.origin,path:url.pathname,headers:new Headers(init?.headers)});
+   if(url.pathname.includes('annotations'))return Response.json({annotations:[{id:'ann_connected',thread:[{body:'Connected request'}]}],next_cursor:null});
+   return Response.json({error:{code:'not_found',message:'No synthetic identity metadata'}},{status:404});
+  }});
+  assert.equal(sameOriginCode,0,`explicit selection of the connected origin remains valid: ${out.join('')}`);
+  assert.ok(calls.some(call=>call.path.includes('annotations')&&call.origin===connected));
+  assert.equal(calls.find(call=>call.path.includes('annotations'))?.headers.get('Authorization'),'Bearer mxmx_test_connected_token');
+  assert.equal(calls.find(call=>call.path.includes('annotations'))?.headers.get('X-Artifactbin-Remote-Proof'),null,'read requests do not carry scoped proof');
+
+  calls.length=0;out.length=0;
+  const foreignCode=await runCli(['comment','abc123','--server',foreign,'--json'],{cwd:scratch,home,env,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+   const url=new URL(String(input));calls.push({origin:url.origin,path:url.pathname,headers:new Headers(init?.headers)});
+   return Response.json({error:{code:'not_found',message:'No synthetic identity metadata'}},{status:404});
+  }});
+  assert.notEqual(foreignCode,0);
+  assert.equal(JSON.parse(out.join('')).error.code,'wrong_server');
+  assert.ok(calls.every(call=>!call.headers.has('Authorization')&&!call.headers.has('X-Artifactbin-Remote-Session')&&!call.headers.has('X-Artifactbin-Remote-Proof')),'foreign origin discovery must not receive a managed credential or proof');
+  assert.ok(!calls.some(call=>call.path.includes('annotations')),'a foreign explicit server is refused before the managed request');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('a managed explicit alias is verified credential-free and all authenticated comment traffic uses its canonical origin',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-managed-alias-')),home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const canonical='https://managed-canonical.example',alias='https://managed-alias.example';
+ const env={ARTIFACTBIN_URL:canonical,ARTIFACTBIN_TOKEN:'mxmx_test_alias_token',ARTIFACTBIN__REMOTE_SESSION:'mxmx_test_alias_session',ARTIFACTBIN__REMOTE_PROOF:'mxmx_test_alias_proof',ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'0'};
+ const head={id:'abc123',version:1,edit_id:'edit1',state:digest('managed-alias-head'),markup:'<p id="p001">Synthetic</p>',format:'markup',title:'Synthetic',theme:null,template:null,visibility:'private',link_role:'viewer',parent_id:null,capabilities:{comment_receipts:true}};
+ const sent:Array<{origin:string;path:string;method:string;headers:Headers}>=[],out:string[]=[];
+ try{
+  const code=await runCli(['comment','abc123','--thread','ann_alias','--body','Acknowledged','--request','request_alias','--phase','acknowledged','--server',alias,'--json'],{cwd,home,env,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+   const url=new URL(String(input)),path=url.pathname,headers=new Headers(init?.headers);sent.push({origin:url.origin,path,method:init?.method??'GET',headers});
+   if(path==='/api/server')return Response.json(url.origin===alias?{origin:canonical,aliases:[]}:{origin:canonical,aliases:[alias]});
+   if(path==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'mxmx_test_alias_account'}});
+   if(path==='/api/artifacts/abc123/annotations')return Response.json({annotations:[{id:'ann_alias',thread:[{body:'Request'}]}],next_cursor:null},{headers:{'X-Artifactbin-Account':'mxmx_test_alias_account'}});
+   if(path==='/api/artifacts/abc123/annotations/ann_alias')return Response.json({id:'ann_alias',status:'open',thread:[{body:'Request'},{body:'Acknowledged'}]},{headers:{'X-Artifactbin-Account':'mxmx_test_alias_account'}});
+   return Response.json({error:{code:'not_found',message:'Unexpected route'}},{status:404});
+  }});
+  assert.equal(code,0,out.join(''));
+  const identityCalls=sent.filter(call=>call.path==='/api/server');assert.ok(identityCalls.length>=2,'both the selected alias and canonical identity are checked');
+  for(const call of identityCalls)assert.ok(!call.headers.has('Authorization')&&!call.headers.has('X-Artifactbin-Remote-Session')&&!call.headers.has('X-Artifactbin-Remote-Proof'),'identity discovery is unauthenticated');
+  const authenticated=sent.filter(call=>call.headers.has('Authorization'));
+  assert.ok(authenticated.length>0);
+  assert.ok(authenticated.every(call=>call.origin===canonical),'alias selection resolves authenticated traffic to the canonical origin');
+  assert.ok(sent.filter(call=>call.origin===alias).every(call=>call.path==='/api/server'),'no command request is sent to the alias');
+  const reply=sent.find(call=>call.method==='POST'&&call.path.endsWith('/ann_alias'));
+  assert.ok(reply,'the hosted reply reached the canonical server');
+  assert.equal(reply.origin,canonical);
+  assert.equal(reply.headers.get('Authorization'),'Bearer mxmx_test_alias_token');
+  assert.equal(reply.headers.get('X-Artifactbin-Remote-Session'),env.ARTIFACTBIN__REMOTE_SESSION);
+  assert.equal(reply.headers.get('X-Artifactbin-Remote-Proof'),env.ARTIFACTBIN__REMOTE_PROOF);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('a managed command refuses an account workspace manifest from another origin before authenticated requests',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-managed-account-origin-')),home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const connected='https://managed-account.example',foreign='https://foreign-account.example';
+ const env={ARTIFACTBIN_URL:connected,ARTIFACTBIN_TOKEN:'mxmx_test_account_token',ARTIFACTBIN__REMOTE_SESSION:'mxmx_test_account_session',ARTIFACTBIN__REMOTE_PROOF:'mxmx_test_account_proof',ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'0'};
+ const sent:Array<{origin:string;path:string;headers:Headers}>=[],out:string[]=[];
+ try{
+  await saveTracking(await loadWorkspace(cwd,home),{server:foreign,account:'mxmx_test_foreign_account'});
+  const code=await runCli(['pull','me','--type','profile','--json'],{cwd,home,env,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+   const url=new URL(String(input));sent.push({origin:url.origin,path:url.pathname,headers:new Headers(init?.headers)});
+   return Response.json({error:{code:'not_found',message:'Synthetic identity only'}},{status:404});
+  }});
+  assert.notEqual(code,0);
+  const failure=JSON.parse(out.join('')).error;
+  assert.equal(failure.code,'wrong_server');
+  assert.match(failure.message,/outside the managed session/);
+  assert.ok(sent.every(call=>call.path==='/api/server'&&!call.headers.has('Authorization')&&!call.headers.has('X-Artifactbin-Remote-Session')&&!call.headers.has('X-Artifactbin-Remote-Proof')),'the account mismatch is rejected before credentials or proof can be used');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test('local commands and malformed invocations never load credentials, call the server or create state',async()=>{
  const base=await mkdtemp(join(tmpdir(),'afbin-dispatch-'));const home=join(base,'home'),root=join(base,'work');await mkdir(home);await mkdir(root);
  try{
