@@ -203,8 +203,8 @@ export function remoteWorkerEnv(directory:string,separator:string,connection:Con
 }
 
 /** Shared native login with private per-agent CLI state; baked skills stay read-only. */
-export function hostedWorkerEnv(command:string,home:string,directory:string,separator:string,connection:Connection,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
- return {...remoteWorkerEnv(directory,separator,connection,env),HOME:home,ARTIFACTBIN_HOME:dirname(directory),ARTIFACTBIN_SKILLS:'off',CLI__DISABLE_AUTO_UPDATES:'1',...(command==='opencode'?{OPENCODE_DB:join(directory,'opencode.db')}:{})};
+export function hostedWorkerEnv(command:string,home:string,directory:string,separator:string,connection:Connection,env:NodeJS.ProcessEnv=process.env,cwd=home):NodeJS.ProcessEnv {
+ return {...remoteWorkerEnv(directory,separator,connection,env),HOME:home,PWD:cwd,ARTIFACTBIN_HOME:dirname(directory),ARTIFACTBIN_SKILLS:'off',CLI__DISABLE_AUTO_UPDATES:'1',...(command==='opencode'?{OPENCODE_DB:join(directory,'opencode.db')}:{})};
 }
 
 /** Portable workspace state never follows the machine-wide ARTIFACTBIN_HOME override. */

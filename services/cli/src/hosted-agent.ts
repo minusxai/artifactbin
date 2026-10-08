@@ -9,6 +9,7 @@ import {remoteChildEnv,hostedWorkerEnv,type Connection} from './config.js';
 import {createRemoteContextBridge} from './remote-context-bridge';
 import {REMOTE_CONTEXT_ARG} from './entry-args';
 import {REMOTE_REVIEW_POLICY,remoteArguments} from './remote-context';
+import {relocatePinnedOpenCodeSession} from './hosted-opencode';
 const execute=promisify(execFile);
 const openCodeId=/^ses_[a-zA-Z0-9]+$/;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -83,7 +84,7 @@ export async function runHostedAgent(options:HostedAgentPaths&{id:string;generat
  const directory=options.stateDirectory??join(home,'.artifactbin','hosted-agent');await mkdir(directory,{recursive:true,mode:0o700});
  await mkdir(cwd,{recursive:true,mode:0o700});
  const executable=join(directory,'afbin'),context=join(directory,'context.md');
- const baseEnv=hostedWorkerEnv(command,home,directory,delimiter,connection);
+ const baseEnv=hostedWorkerEnv(command,home,directory,delimiter,connection,process.env,cwd);
  const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
  let bridge:Awaited<ReturnType<typeof createRemoteContextBridge>>|undefined;
  try{return await runRemote({client:new HttpClient({connection,home,env:baseEnv}),command,args:[],name:options.name,cwd,interactive:false,managed:true,hostedSessionId:options.id,hostedGeneration:options.generation,commentCommand:executable,signal:options.signal,onOutput:data=>process.stdout.write(data),
@@ -107,6 +108,8 @@ export async function prepareHostedHarness(options:HostedAgentPaths&{command:str
  const args=await hostedHarnessArguments(options.command,options.home,options.context,list,options);
  options.signal?.throwIfAborted();
  if(options.command!=='opencode'||args[0]!=='--session')return args;
+ await relocatePinnedOpenCodeSession({home:options.home,cwd:options.cwd??options.home,stateDirectory:options.stateDirectory??join(options.home,'.artifactbin','hosted-agent'),databasePath:options.env.OPENCODE_DB,sessionId:args[1]!});
+ options.signal?.throwIfAborted();
  const runStartup=options.runStartup??(async(startupArgs,nativeOptions)=>{
   const pending=execute('opencode',startupArgs,{...nativeOptions,timeout:60000,maxBuffer:1024*1024,killSignal:'SIGKILL'});
   // Native `run` waits for non-TTY stdin EOF before executing even an argv prompt.
