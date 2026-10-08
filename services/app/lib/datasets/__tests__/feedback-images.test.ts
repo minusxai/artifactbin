@@ -82,6 +82,11 @@ describe('dataset-bound feedback images',()=>{
     const request=new Request('http://localhost/a/doc123/datasets/data12/files',{method:'POST',headers:{'Content-Length':'1000000000000','X-Filename':'note.txt'},body:'hello'});
     expect((await POST(request,{params:Promise.resolve({id:'doc123',datasetId:'data12'})})).status).toBe(413);
   });
+  it('rejects replaying a generic non-image upload through the legacy image endpoint',async()=>{
+    await uploadDatasetFile({actor,documentId:'doc123',datasetId:'data12',editId:'edit123',bytes:Buffer.from('pixels'),contentType:'text/plain',filename:'note.txt',operationKey:'retry-key-123'});
+    await expect(upload()).rejects.toThrow(/already used/);
+    expect(state.records).toHaveLength(1);
+  });
   it('rechecks insert grants after object storage before committing the receipt',async()=>{
     const original=state.dataset.dataset_policy;
     state.put.mockImplementationOnce(async()=>{state.dataset.dataset_policy={version:2,allow:[{actions:['read'],from:{artifact:'doc123'}}]};});

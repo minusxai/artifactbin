@@ -37,6 +37,7 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   expect((await read(ownerSession)).status).toBe(200);
   const reporterToken=await mintToken('dataset-file-reporter');await claimToken(reporter.id,reporterToken.token);
   const filePost=(filename='note.txt',body='hello',key='generic-upload-123',editId=document.edit_id)=>uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(filename),'X-Edit-Id':editId,'Idempotency-Key':key},body}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  expect((await uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',body:'hello'}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})})).status).toBe(403);
   const simultaneous=await Promise.all([filePost(),filePost()]);
   for(const response of simultaneous)expect(response.status,await response.clone().text()).toBe(201);
   const files=await Promise.all(simultaneous.map(response=>response.json()));

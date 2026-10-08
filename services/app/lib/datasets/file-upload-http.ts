@@ -9,6 +9,7 @@ const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nos
 export async function uploadFileRequest(request:Request, documentId:string, datasetId:string):Promise<Response> {
   const actor=await requestOrSessionActor(request);
   if(refusesCrossSite(request,actor))return json({error:'forbidden'},403,headers);
+  if(!actor.viewer?.userId&&!actor.tokenId)return json({error:'dataset_file_upload_failed',detail:'Sign in to upload a file'},403,headers);
   let filename:string;
   try { filename=decodeURIComponent(request.headers.get('X-Filename')??''); } catch { return json({error:'invalid_filename'},400,headers); }
   const bytes=await readFileUpload(request);
