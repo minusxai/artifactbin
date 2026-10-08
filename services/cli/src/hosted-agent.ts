@@ -34,11 +34,22 @@ export async function hostedHarnessArguments(command:string,home:string,context:
   const candidates:Array<{id:string;modified:number}>=[];
   for(const path of files){
    const file=await open(path,'r');try{
-    const buffer=Buffer.alloc(16384);const {bytesRead}=await file.read(buffer,0,buffer.length,0);
-    let row;try{row=JSON.parse(buffer.toString('utf8',0,bytesRead).split('\n')[0]!);}catch{continue;}
-    if(row.type==='session_meta'&&row.payload?.cwd===home&&row.payload?.source==='cli'&&uuid.test(row.payload?.id??''))candidates.push({id:row.payload.id,modified:Number.isFinite(Date.parse(row.payload.timestamp))?Date.parse(row.payload.timestamp):(await stat(path)).birthtimeMs});
+    // Native metadata includes base instructions and can exceed one read buffer.
+    // Read the complete first record, without loading the conversation transcript.
+    const chunks:Buffer[]=[];let length=0,complete=false;
+    while(length<1024*1024){
+     const buffer=Buffer.alloc(Math.min(65536,1024*1024-length));const {bytesRead}=await file.read(buffer,0,buffer.length,null);
+     if(!bytesRead){complete=true;break;}
+     const newline=buffer.subarray(0,bytesRead).indexOf(10),end=newline<0?bytesRead:newline;
+     chunks.push(buffer.subarray(0,end));length+=end;
+     if(newline>=0){complete=true;break;}
+    }
+    if(!complete)continue;
+    let row;try{row=JSON.parse(Buffer.concat(chunks,length).toString('utf8'));}catch{continue;}
+    if(row.type==='session_meta'&&row.payload?.cwd===home&&['cli','vscode'].includes(row.payload?.source)&&uuid.test(row.payload?.id??''))candidates.push({id:row.payload.id,modified:Number.isFinite(Date.parse(row.payload.timestamp))?Date.parse(row.payload.timestamp):(await stat(path)).birthtimeMs});
    }finally{await file.close();}
   }
+  // Current Codex TUI sessions use the shared daemon source "vscode".
   // The first interactive root belongs to this agent; exec/subagent transcripts cannot replace it.
   candidates.sort((a,b)=>a.modified-b.modified);const id=candidates[0]?.id;
   if(id)await writeFile(identity,id,{flag:'wx',mode:0o600});

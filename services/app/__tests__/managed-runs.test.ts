@@ -113,10 +113,11 @@ it('projects durable hosted lifecycle instead of leaving ended runs starting in 
  const response=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'roster',name:'roster-box'}}),'create',{enabled:true,runner,db});
  const {session}=await response.json(),registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
  try{
+  expect(await agents.read('alice',session.id)).toMatchObject({online:false,activity:'queued'});
   expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'queued'});
-  status='running';expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:true,activity:'working'});
-  await agents.stop('alice',session.id);expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopping'});
-  status='failed';expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopped'});
+  status='running';expect(await agents.read('alice',session.id)).toMatchObject({online:true,activity:'working'});expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:true,activity:'working'});
+  await agents.stop('alice',session.id);expect(await agents.read('alice',session.id)).toMatchObject({online:false,activity:'stopping'});expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopping'});
+  status='failed';expect(await agents.read('alice',session.id)).toMatchObject({online:false,activity:'stopped'});expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopped'});
  }finally{registry.clear();}
 });
 
@@ -187,7 +188,8 @@ it('fences old proofs before replacement connects and visibly interrupts ambiguo
   ended=true;expect((await create('two')).status).toBe(202);ended=false;
   await expect(agents.ready('alice',session.id,first.runnerKey)).rejects.toThrow(/credential/);
   await expect(agents.exchange('alice',session.id,{runnerKey:first.runnerKey,cols:100,rows:30,ack:0,outputSeq:0,output:''})).rejects.toThrow(/credential/);
-  expect((await agents.read('alice',session.id)).online).toBe(false);
+  expect(await agents.read('alice',session.id)).toMatchObject({online:false,hostedGeneration:'two'});
+  expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,hostedGeneration:'two'});
   await agents.create('alice',{...registration,hostedGeneration:'two',recoveryKey:'b'.repeat(64)});
   expect((await agents.work(db,'doc','thread'))[0]).toMatchObject({phase:'failed',reason:'interrupted'});
   await agents.remove('alice',session.id);ended=true;expect((await create('three')).status).toBe(202);
