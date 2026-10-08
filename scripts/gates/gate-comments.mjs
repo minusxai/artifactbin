@@ -379,7 +379,7 @@ async function ownerLeg(browser, { id, token }) {
     await strangerDoc.locator('#figure').click();
     await strangerDoc.locator('#figure').click({ button: 'right' });
     await strangerDoc.getByRole('button', { name: 'Comment', exact: true }).click();
-    await until(() => stranger.url(), (url) => new URL(url).pathname === '/login');
+    await until(async () => stranger.url(), (url) => new URL(url).pathname === '/login');
     const loginAddress = new URL(stranger.url());
     check(loginAddress.pathname === '/login' && loginAddress.searchParams.get('callbackUrl')?.includes('intent=comment'),
       'a logged-out right-click Comment opens login with the return intent');
