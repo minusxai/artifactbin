@@ -14,16 +14,16 @@ const flow: CompiledDataflow = { imports: [{ name: 'attachments', ref: 'Attach00
 ], queries:[],mutations:[] };
 const stops: Array<()=>void> = [];
 afterEach(()=>{ for(const stop of stops.splice(0))stop(); document.body.innerHTML=''; });
-function setup(fetchFn: (input:string,init?:RequestInit)=>Promise<Response>, signedIn=true) {
+function setup(fetchFn: (input:string,init?:RequestInit)=>Promise<Response>, signedIn=true, multiple=true) {
   document.body.setAttribute('data-mx-live-id','abc123'); document.body.setAttribute('data-mx-live-edit','edit1234');
   const transport: QueryTransport={run:async()=>({tables:{},errors:{}}),page:async()=>({rows:[],columns:[]}),image:['/a/abc123/query',fetchFn,'include']};
-  const runtime=createIslandRuntime({dataflow:{flow}}, input=>createDataflowStore(input,{transport}));
-  runtime.context.viewer=()=>signedIn?{hinted:true}:null;
+  const runtime=createIslandRuntime({dataflow:{flow:multiple?flow:{...flow,values:flow.values.map(value=>value.name==='refs'?{...value,default:null}:value)}}}, input=>createDataflowStore(input,{transport}));
+  runtime.setViewer(signedIn?{hinted:true}:null);
   const host=document.createElement('div'); document.body.append(host);
-  const dispose=render(()=><IslandProvider value={runtime.context}><FileUpload dataset="attachments" value="$refs" busy="$uploading" multiple label="Screenshots" accept="image/png" maxFiles={3}/></IslandProvider>,host);
+  const dispose=render(()=><IslandProvider value={runtime.context}><FileUpload dataset="attachments" value="$refs" busy="$uploading" multiple={multiple} label="Screenshots" accept="image/png" maxFiles={3}/></IslandProvider>,host);
   stops.push(()=>{dispose();bindPage(runtime.store!).dispose();runtime.dispose();host.remove();});
   const choose=(files:File[])=>{const field=host.querySelector('input')!;Object.defineProperty(field,'files',{configurable:true,value:files});field.dispatchEvent(new Event('change',{bubbles:true}));};
-  return {host,choose,store:runtime.store!,dispose};
+  return {host,choose,store:runtime.store!,dispose,setViewer:runtime.setViewer};
 }
 const receipt=(ref:string,name='screen.png')=>Response.json({ref,url:'/ignored',name,contentType:'image/png',size:3});
 describe('FileUpload over the bound page store',()=>{
@@ -56,6 +56,20 @@ describe('FileUpload over the bound page store',()=>{
     expect(guest.host.querySelector('input')!.disabled).toBe(true);guest.choose([new File(['a'],'x.png',{type:'image/png'})]);expect(fetch).not.toHaveBeenCalled();
     const signed=setup(fetch);signed.choose([new File(['a'],'notes.txt',{type:'text/plain'})]);
     expect(signed.host.querySelector('[role="alert"]')?.textContent).toContain('accepted');expect(fetch).not.toHaveBeenCalled();
+  });
+  it('binds one nullable reference, preserves it on a failed replacement, and removes it to null',async()=>{
+    const upload=vi.fn().mockResolvedValueOnce(receipt('dfile:abc234def456','first.png')).mockResolvedValueOnce(Response.json({error:'Try again'},{status:503})).mockResolvedValueOnce(receipt('dfile:def234abc456','replacement.png'));
+    const s=setup(upload,true,false);
+    expect(s.store.getValue('refs')).toBeNull();expect(s.host.querySelector('input')!.multiple).toBe(false);
+    s.choose([new File(['a'],'first.png',{type:'image/png'})]);await vi.waitFor(()=>expect(s.store.getValue('refs')).toBe('dfile:abc234def456'));
+    s.choose([new File(['b'],'replacement.png',{type:'image/png'})]);await vi.waitFor(()=>expect(s.host.querySelector('[role="alert"]')?.textContent).toContain('Try again'));
+    expect(s.store.getValue('refs')).toBe('dfile:abc234def456');
+    s.host.querySelector<HTMLButtonElement>('[aria-label="Retry replacement.png"]')!.click();await vi.waitFor(()=>expect(s.store.getValue('refs')).toBe('dfile:def234abc456'));
+    s.host.querySelector<HTMLButtonElement>('[aria-label="Remove replacement.png"]')!.click();expect(s.store.getValue('refs')).toBeNull();
+  });
+  it('ignores a pending result after the reader becomes signed out',async()=>{
+    let resolve!:(v:Response)=>void;const s=setup(()=>new Promise(r=>{resolve=r;}));s.choose([new File(['a'],'x.png',{type:'image/png'})]);s.setViewer(null);resolve(receipt('dfile:abc234def456'));
+    await vi.waitFor(()=>expect(s.store.getValue('uploading')).toBe(false));expect(s.store.getValue('refs')).toBe('[]');expect(s.host.querySelector('input')!.disabled).toBe(true);
   });
   it('limits selections before sending bytes and keeps busy false',()=>{
     const fetch=vi.fn(async()=>receipt('dfile:abc234def456'));const s=setup(fetch);
