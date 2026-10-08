@@ -13,12 +13,26 @@ const workflow = yaml.parse(workflowText);
 const ci = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
 
 describe('the page-speed workflow', () => {
-  it('runs beside CI for app changes and main pushes, including changes to the lab itself', () => {
-    for (const trigger of [workflow.on.pull_request, workflow.on.push]) {
-      expect(trigger.paths).toEqual(expect.arrayContaining(['services/app/**', 'scripts/ci/performance-loads.mjs', 'scripts/lib/document-views.mjs', 'scripts/fixtures/page-speed/**', '.github/workflows/page-speed.yml']));
-    }
+  it('runs beside CI on every pull request and on main pushes touching the lab, including the lab itself', () => {
+    expect(workflow.on.pull_request).toBeNull();
+    expect(workflow.on.push.paths).toEqual(expect.arrayContaining(['services/app/**', 'scripts/ci/performance-loads.mjs', 'scripts/lib/document-views.mjs', 'scripts/fixtures/page-speed/**', '.github/workflows/page-speed.yml']));
     expect(workflow.on.push.branches).toEqual(['main']);
     expect(workflow.concurrency['cancel-in-progress']).toContain("github.event_name == 'pull_request'");
+  });
+
+  it('always reports as a required check: an irrelevant pull request skips measuring but still finishes the report job', () => {
+    const { scope, measure, report } = workflow.jobs;
+    expect(report.name).toBe('page speed report');
+    expect(scope.outputs.relevant).toBe('${{ steps.scope.outputs.relevant }}');
+    expect(measure.if).toBe("needs.scope.outputs.relevant == 'true'");
+    expect(report.needs).toEqual(['scope', 'measure']);
+    expect(report.if).toContain('!cancelled()');
+    expect(report.if).toContain("needs.measure.result != 'failure'");
+    const [summary, ...rest] = report.steps;
+    expect(summary.if).toBe("needs.scope.outputs.relevant != 'true'");
+    expect(summary.run).toContain('No relevant changes');
+    expect(summary.run).toContain('GITHUB_STEP_SUMMARY');
+    for (const step of rest) expect(step.if, step.name ?? step.uses ?? step.run).toContain("needs.scope.outputs.relevant == 'true'");
   });
 
   it('never lengthens or gates CI: no ci.yml job waits on it or runs the lab', () => {
@@ -26,7 +40,7 @@ describe('the page-speed workflow', () => {
     expect(ciText).not.toContain('performance-loads');
     expect(ciText).not.toContain('page-speed');
     for (const job of Object.values(ci.jobs)) expect(job.needs ?? []).not.toContain('lab');
-    expect(Object.keys(workflow.jobs)).toEqual(['measure', 'report']);
+    expect(Object.keys(workflow.jobs)).toEqual(['scope', 'measure', 'report']);
   });
 
   it('only reads the repository and posts no PR comment', () => {
@@ -40,7 +54,7 @@ describe('the page-speed workflow', () => {
 
   it('keeps the combined report artifact when the strict size targets fail', () => {
     const upload = workflow.jobs.report.steps.find(step => String(step.uses).startsWith('actions/upload-artifact@') && step.with.name === 'page-speed');
-    expect(upload.if).toBe('always()');
+    expect(upload.if).toBe("always() && needs.scope.outputs.relevant == 'true'");
   });
 
   it('pins every action to a full commit SHA', () => {
@@ -54,7 +68,7 @@ describe('the page-speed workflow', () => {
     const runs = workflow.jobs.measure.steps.map(step => step.run ?? '').join('\n');
     expect(runs).toContain('node scripts/ci/performance-loads.mjs');
     expect(runs).toContain('--size-only');
-    expect(workflow.jobs.report.needs).toEqual(['measure']);
+    expect(workflow.jobs.report.needs).toEqual(['scope', 'measure']);
     expect(workflow.jobs.report.steps.some(step => String(step.uses).startsWith('actions/download-artifact@'))).toBe(true);
     const report = workflow.jobs.report.steps.map(step => step.run ?? '').join('\n');
     expect(report).toContain('node scripts/ci/page-speed-base.mjs');

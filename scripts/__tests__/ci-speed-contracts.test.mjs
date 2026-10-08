@@ -396,6 +396,25 @@ it('does not accept a candidate after requests consume the artifact deadline',as
  await expect(waitForCurrentArtifact({startedAt:'2026-10-06T00:00:00Z',timeout:100,now:()=>time,jobs:async()=>{time=100;return{jobs:[]};},artifacts:async()=>({artifacts:[{name:'afbin-npm-release',created_at:'2026-10-06T00:01:00Z'}]})})).rejects.toThrow(/artifact timed out/);
 });
 
+it('retries a 404 or 5xx on the zip of an artifact the listing already reported, within a bounded window',async()=>{
+ const {downloadCurrentArtifactArchive}=await import('../lib/ci-artifact-wait.mjs');
+ const artifact={id:7,digest:'sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'};
+ let time=0,calls=0;const delays=[];
+ const notFound=()=>Object.assign(Error('gh failed'),{status:1,stderr:Buffer.from('gh: Not Found (HTTP 404)')});
+ const options={repo:'o/r',deadline:1e9,now:()=>time,sleep:async delay=>{delays.push(delay);time+=delay;},request:async()=>{if(++calls<=2)throw notFound();return Buffer.from('abc');}};
+ expect((await downloadCurrentArtifactArchive(artifact,options)).toString()).toBe('abc');
+ expect(calls).toBe(3);expect(delays).toEqual([2000,4000]);
+ calls=0;time=0;delays.length=0;
+ await expect(downloadCurrentArtifactArchive(artifact,{...options,request:async()=>{calls++;throw Object.assign(new Error('gh failed'),{status:1,stderr:'gh: Bad Gateway (HTTP 502)'});}})).rejects.toThrow('gh failed');
+ expect(time).toBeLessThanOrEqual(60000);expect(calls).toBeGreaterThan(3);
+ calls=0;await expect(downloadCurrentArtifactArchive(artifact,{...options,request:async()=>{calls++;throw Object.assign(new Error('gh failed'),{status:1,stderr:'HTTP 403 forbidden'});}})).rejects.toThrow('gh failed');expect(calls).toBe(1);
+ calls=0;time=0;await expect(downloadCurrentArtifactArchive(artifact,{...options,deadline:3000,request:async()=>{calls++;throw notFound();}})).rejects.toThrow('gh failed');expect(time).toBeLessThan(3000);
+});
+it('explains on a rerun attempt that only a full rerun recovers a packed candidate',()=>{
+ const source=readFileSync(new URL('../lib/ci-artifact-wait.mjs',import.meta.url),'utf8');
+ expect(source).toContain('GITHUB_RUN_ATTEMPT');expect(source).toContain('gh run rerun <run-id>');
+});
+
 it('leaves malformed API responses and non-transport process failures authoritative',async()=>{
  const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');let calls=0;
  const options={deadline:Date.now()+1000,request:()=>{calls++;return '{not-json';}};

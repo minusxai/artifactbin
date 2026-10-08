@@ -80,3 +80,20 @@ and Docker gates, and production builds run in CI; see [AGENTS.md](../AGENTS.md)
 The CLI conformance gate exercises real login, ID registration, publication,
 permissions, queries, conflicting edits and Chromium export against a running
 host. Test accounts use the `mxmx_test_*` prefix and disposable state.
+
+## CI reruns and required checks
+
+- Recover a red CLI matrix cell with a **full** `gh run rerun <run-id>`. The cells wait for the packed
+  candidate and platform seeds of their own run attempt (`scripts/lib/ci-artifact-wait.mjs`), and that
+  provenance is deliberately never relaxed to an earlier attempt. `gh run rerun --failed` starts a new
+  attempt in which the already-green pack job does not run again, so the cell times out with
+  "Current-attempt artifact timed out" and a hint naming this section. A 404 or 5xx on an artifact the
+  listing already reports is retried for up to 60 seconds, which absorbs the delay before a new blob is
+  downloadable.
+- Pull requests run a reduced CLI matrix (Linux x64, macOS 14 and Windows on Node 22.22.3: 12 cells);
+  main, the nightly and dispatch run all 28. Release PRs therefore prove fewer platforms before merge,
+  and main still proves the rest.
+- `page speed report` (`.github/workflows/page-speed.yml`) runs on every pull request so it always
+  reports and can be a required check. A `scope` job compares the PR with its merge base against the
+  push trigger's paths; when none changed, the report job only writes "No relevant changes" to the
+  step summary.
