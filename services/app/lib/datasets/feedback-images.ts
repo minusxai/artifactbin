@@ -30,8 +30,16 @@ function actorKey(actor:RoleActor):string {
 function imageUrl(documentId:string,datasetId:string,imageId:string):string {
   return `/a/${documentId}/datasets/${datasetId}/images/${imageId}`;
 }
+const IMAGE_DOWNLOAD_EXTENSIONS:Readonly<Record<string,string>>={'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif','image/svg+xml':'svg'};
+/** Keep the uploaded name in metadata for replay, but name downloads for the bytes actually stored. */
+function downloadFilename(row:DatasetImageRow):string {
+  const filename=String(row.meta.filename??row.id),contentType=String(row.meta.contentType??'');
+  if(row.meta.format!=='image'||fileContentType(filename)===contentType)return filename;
+  const extension=IMAGE_DOWNLOAD_EXTENSIONS[contentType];
+  return extension?filename.replace(/\.[^.]+$/,`.${extension}`):filename;
+}
 function fileAnswer(row:DatasetImageRow,replayed=false):DatasetUploadResult {
-  return {ref:`dfile:${row.id}`,url:`/a/${row.document_id}/datasets/${row.dataset_id}/files/${row.id}`,name:String(row.meta.filename??row.id),contentType:String(row.meta.contentType??'application/octet-stream'),size:Number(row.meta.bytes??0),...(replayed?{replayed:true}:{})};
+  return {ref:`dfile:${row.id}`,url:`/a/${row.document_id}/datasets/${row.dataset_id}/files/${row.id}`,name:downloadFilename(row),contentType:String(row.meta.contentType??'application/octet-stream'),size:Number(row.meta.bytes??0),...(replayed?{replayed:true}:{})};
 }
 function answer(row:DatasetImageRow,replayed=false):DatasetImageUpload {
   return {ref:refFor(row.id),url:imageUrl(row.document_id,row.dataset_id,row.id),...(replayed?{replayed:true}:{})};
@@ -126,7 +134,7 @@ async function readContent(input:{actor:RoleActor;documentId:string;datasetId:st
     if(!row||(imageOnly&&row.meta.format&&row.meta.format!=='image'))return null;
     const objectKey=row.meta?.objectKey;
     if(typeof objectKey!=='string'||!objectKey)return null;
-    return {filename:String(row.meta.filename??row.id),image:!row.meta.format||row.meta.format==='image',body:await objectStore().get(objectKey),contentType:typeof row.meta.contentType==='string'?row.meta.contentType:'application/octet-stream'};
+    return {filename:downloadFilename(row),image:!row.meta.format||row.meta.format==='image',body:await objectStore().get(objectKey),contentType:typeof row.meta.contentType==='string'?row.meta.contentType:'application/octet-stream'};
   });
 }
 

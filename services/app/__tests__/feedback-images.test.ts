@@ -36,7 +36,7 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const ownerSession={credential:'session' as const,userId:owner.id,email:owner.email!,emailVerified:true};
   expect((await read(ownerSession)).status).toBe(200);
   const reporterToken=await mintToken('dataset-file-reporter');await claimToken(reporter.id,reporterToken.token);
-  const filePost=(filename='note.txt',body='hello',key='generic-upload-123',editId=document.edit_id)=>uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(filename),'X-Edit-Id':editId,'Idempotency-Key':key},body}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  const filePost=(filename='note.txt',body:BodyInit='hello',key='generic-upload-123',editId=document.edit_id)=>uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(filename),'X-Edit-Id':editId,'Idempotency-Key':key},body}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
   expect((await uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',body:'hello'}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})})).status).toBe(403);
   const simultaneous=await Promise.all([filePost(),filePost()]);
   for(const response of simultaneous)expect(response.status,await response.clone().text()).toBe(201);
@@ -52,6 +52,17 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const download=await fileRead();expect(download.status).toBe(200);expect(await download.text()).toBe('hello');
   expect(download.headers.get('content-disposition')).toContain('attachment;');
   expect(download.headers.get('content-security-policy')).toContain('sandbox');
+  const imageUpload=await filePost('proof.png',new Uint8Array(bytes),'generic-image-123');
+  expect(imageUpload.status,await imageUpload.clone().text()).toBe(201);
+  const imageFile=await imageUpload.json();
+  expect(imageFile.contentType).toBe('image/webp');
+  expect(imageFile.name).toBe('proof.webp');
+  const imageDownload=await readFile(request(imageFile.url,{actor:pageActor}),{params:Promise.resolve({id:document.id,datasetId:dataset.id,fileId:imageFile.ref.slice(6)})});
+  expect((await sharp(Buffer.from(await imageDownload.arrayBuffer())).metadata()).format).toBe('webp');
+  expect(imageDownload.headers.get('content-disposition')).toContain('inline; filename="proof.webp"');
+  const replayedImage=await filePost('proof.png',new Uint8Array(bytes),'generic-image-123');
+  expect(await replayedImage.json()).toMatchObject({...imageFile,replayed:true});
+  expect((await (await getDb()).query<{meta:{filename:string}}>('SELECT meta FROM dataset_images WHERE id=$1',[imageFile.ref.slice(6)])).rows[0]?.meta.filename).toBe('proof.png');
   await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:owner.id}},{actions:['insert'],from:{artifact:document.id}}]},1);
   expect((await read(pageActor)).status).toBe(404);expect((await read(ownerSession)).status).toBe(200);
   expect((await fileRead()).status).toBe(404);
@@ -59,5 +70,5 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   expect((await filePost()).status).toBe(403);
   const db=await getDb();await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[dataset.id]);
   expect((await read(ownerSession)).status).toBe(404);
-  expect((await db.query('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[dataset.id])).rows[0]?.count).toBe(2);
+  expect((await db.query('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[dataset.id])).rows[0]?.count).toBe(3);
 });

@@ -27,5 +27,5 @@ export async function readFileRequest(request:Request,documentId:string,datasetI
   if(!file)return json({error:'not_found'},404,headers);
   const ascii=file.filename.replace(/[^a-zA-Z0-9._ -]/g,'_');
   const encoded=encodeURIComponent(file.filename).replace(/['()*]/g,c=>`%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-  return new Response(new Uint8Array(file.body),{headers:{...headers,'Content-Type':file.contentType,'Content-Disposition':file.image?'inline':`attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`}});
+  return new Response(new Uint8Array(file.body),{headers:{...headers,'Content-Type':file.contentType,'Content-Disposition':`${file.image?'inline':'attachment'}; filename="${ascii}"; filename*=UTF-8''${encoded}`}});
 }
