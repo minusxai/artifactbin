@@ -108,6 +108,13 @@ describe('creating (browser door, owner only)', () => {
     expect(body.edit_id).toBe(doc.edit_id);
   });
 
+  it('the retired body-path door is a 400: a node id is the only address', async () => {
+    const { doc, actor } = await publish();
+    const res = await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'x' });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_annotation_body');
+  });
+
   it('a path that names nothing is a 400; a non-markup artifact is a 400', async () => {
     const { t, doc, actor } = await publish();
     const bad = await annotate(doc.id, actor, { node_id: 'nowhere', edit_id: doc.edit_id, body: 'x' });

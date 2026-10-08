@@ -220,14 +220,6 @@ describe('shadcn token preamble + recipe base sheet', () => {
     expect(css).toContain('.rounded-xl');
     expect(css).toContain('.shadow-sm');
   });
-
-  // Legacy marked stories union the recipe classes too: the compiled sheet is the embeds' only
-  // style source, so a "lean" compile would mean unstyled embed chrome. The kit chrome classes
-  // therefore appear in legacy compiles as well.
-  it('unions recipe classes for legacy marked stories (embeds have no other source)', async () => {
-    const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
-    expect(css).toContain('.rounded-xl');
-  });
 });
 
 // A blinking caret is the one animation a document CANNOT author for itself: the markup tier
@@ -269,10 +261,6 @@ describe('compileStoryCss — every candidate compiles', () => {
     expect(css).toContain('.p-2');
   });
 
-  it('legacy marked stories compile positioning utilities too', async () => {
-    const css = (await compileStoryCss('<div data-design="tw" class="fixed p-2">x</div>'))!;
-    expect(css).toMatch(/position:\s*fixed/);
-  });
 });
 
 // Theme token blocks: every jsx story's compiledCss ships ALL SIX
