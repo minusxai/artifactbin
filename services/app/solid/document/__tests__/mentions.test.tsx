@@ -11,7 +11,7 @@ import { createSignal } from 'solid-js';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { fireEvent, render } from '../../__tests__/helpers';
-import { CommentMarkdownField } from '../CommentMarkdown';
+import { CommentMarkdownField } from '../CommentMarkdownField';
 import { CommentMentionPicker } from '../CommentMentionPicker';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });

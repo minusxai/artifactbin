@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
-import { documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams, documentMeasurementMode } from '../lib/document-views.mjs';
+import { documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams, documentMeasurementMode, waitForQuiet } from '../lib/document-views.mjs';
 import { PAGE_SPEED_FIXTURES, publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
 import { loadsSummary, reportMarkdown } from '../ci/performance-report.mjs';
 
@@ -38,6 +38,11 @@ describe('the page-speed workflow', () => {
     expect(workflow.jobs.measure.steps.some(step => String(step.uses).startsWith('actions/upload-artifact@'))).toBe(true);
   });
 
+  it('keeps the combined report artifact when the strict size targets fail', () => {
+    const upload = workflow.jobs.report.steps.find(step => String(step.uses).startsWith('actions/upload-artifact@') && step.with.name === 'page-speed');
+    expect(upload.if).toBe('always()');
+  });
+
   it('pins every action to a full commit SHA', () => {
     const refs = [...workflowText.matchAll(/uses:\s+([^\s#]+)/g)].map(m => m[1]);
     expect(refs.length).toBeGreaterThan(0);
@@ -65,9 +70,36 @@ describe('the page-speed workflow', () => {
 });
 
 describe('size-only document measurements', () => {
-  it('uses one unthrottled pass per fixture and route', () => {
-    expect(documentMeasurementMode(true)).toEqual({ runs: 1, throttle: null, sizeOnly: true });
+  it('takes three unthrottled passes per fixture and route', () => {
+    expect(documentMeasurementMode(true)).toEqual({ runs: 3, throttle: null, sizeOnly: true });
     expect(documentMeasurementMode(false)).toEqual({ runs: 5, throttle: { latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4 }, sizeOnly: false });
+  });
+});
+
+describe('size-only determinism', () => {
+  const sample = (route, gzip, extra = {}) => ({ fixture: 'prose', route, ready: true, requests: 50, bytes: { html: { decoded: 0, gzip: 1000 }, js: { decoded: 0, gzip }, css: { decoded: 0, gzip: 0 }, other: { decoded: 0, gzip: 0 } }, jsBeforeReady: null, scriptMs: 0, ...extra });
+
+  it('reports the median of the samples, so one run that caught a late chunk cannot move a target', () => {
+    const summary = summarizeDocumentViews([sample('view', 100_000), sample('view', 180_000), sample('view', 102_000)]);
+    expect(summary.prose.view).toMatchObject({ runs: 3, jsGzip: 102_000, totalGzip: 103_000 });
+  });
+
+  it('reads the bytes only after the network has been quiet for the settle window', async () => {
+    let clock = 0;
+    const busyUntil = 1200; // a late chunk is still in flight until t=1200
+    const settled = await waitForQuiet({ busy: () => clock < busyUntil, quietMs: 500, maxMs: 8000, pollMs: 100, now: () => clock, sleep: async ms => { clock += ms; } });
+    expect(settled).toBe(true);
+    expect(clock).toBeGreaterThanOrEqual(busyUntil + 500);
+  });
+
+  it('restarts the quiet window when a request begins during it, and gives up at the bound', async () => {
+    let clock = 0;
+    const flaps = new Set([100, 400, 700]);
+    const calls = [];
+    const result = await waitForQuiet({ busy: () => { calls.push(clock); return flaps.has(clock); }, quietMs: 500, maxMs: 1000, pollMs: 100, now: () => clock, sleep: async ms => { clock += ms; } });
+    expect(result).toBe(false);
+    let neverQuiet = 0;
+    expect(await waitForQuiet({ busy: () => true, maxMs: 300, pollMs: 100, now: () => neverQuiet, sleep: async ms => { neverQuiet += ms; } })).toBe(false);
   });
 });
 

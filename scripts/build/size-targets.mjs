@@ -8,7 +8,8 @@
  * One line per target: pass, fail, or "no data" when the lab did not measure
  * what the target needs (a fixture missing, a build that never signalled
  * ready). Exit 0 always, unless `--strict`, which fails on any target that is
- * not a pass — CI runs it non-blocking until Phase 2 flips it on (T7).
+ * not a pass — the page-speed report job runs it strict, so a red target fails that
+ * job (which is not a required check).
  *
  * Units: bytes on the wire as the lab measures them (`bytes.*.gzip` — brotli
  * where the server compressed, gzip where the gateway did), medians over the

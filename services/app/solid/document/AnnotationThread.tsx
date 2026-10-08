@@ -23,7 +23,8 @@ import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
 import { AuthorIdentity, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
 import { CommentFoldingBody } from './CommentFoldingBody';
-import { CommentMarkdownField, CommentSubmitHint } from './CommentMarkdown';
+import { CommentSubmitHint } from './CommentMarkdown';
+import { CommentMarkdownField } from './LazyCommentField';
 import { CommentScreenshot } from './CommentScreenshot';
 
 const threadClass = 'rounded-[6px] border border-edge bg-comment text-sm';
