@@ -124,3 +124,13 @@ test('hosted OpenCode registration and native startup precede PTY spawn and comm
   assert.deepEqual(events.slice(0,3),['register','pty','exchange']);
  }finally{if(priorPath===undefined)delete process.env.PATH;else process.env.PATH=priorPath;await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(home,{recursive:true,force:true});}
 });
+
+
+test('resumed OpenCode processes startup in the same interactive session that receives queued input',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'af-opencode-single-process-'));try{
+  let headlessStarts=0;
+  const args=await prepareHostedHarness({command:'opencode',home,context:'Synthetic startup context',env:{HOME:home},listOpenCodeSessions:async()=>JSON.stringify([{id:'ses_owned',directory:home,created:1}]),runStartup:async()=>{headlessStarts++;}});
+  assert.deepEqual(args,['--mini','--session','ses_owned','--prompt','Synthetic startup context']);
+  assert.equal(headlessStarts,0,'readiness must not come from a different process before the interactive agent can accept input');
+ }finally{await rm(home,{recursive:true,force:true});}
+});

@@ -479,3 +479,19 @@ test('native composer does not submit if the PTY exits during paste settling',as
   assert.ok(!writes.includes('\r'),'a dead PTY cannot receive submit');
  }
 });
+
+
+test('unattended native terminal answers device and cursor queries without browser input',async(t)=>{
+ let onData:((value:string)=>void)|undefined,onExit:((event:{exitCode:number})=>void)|undefined;
+ const writes:string[]=[];let queried=false,exchanges=0;
+ t.mock.method(process,'kill',()=>true);
+ t.mock.method(pty,'spawn',()=>({pid:12345,onData:(listener:(value:string)=>void)=>{onData=listener;return{dispose(){}};},onExit:(listener:(event:{exitCode:number})=>void)=>{onExit=listener;return{dispose(){}};},resize(){},kill(){},write(data:string){writes.push(data);if(data==='\x1b[1;1R'){onData?.('NATIVE_TERMINAL_READY');onExit?.({exitCode:0});}}} as unknown as import('node-pty').IPty));
+ const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async(_url,init)=>{
+  const body=JSON.parse(String(init?.body));if(!body.runnerKey)return Response.json({id:'native-query',runnerKey:'proof'});
+  if(!queried){queried=true;onData?.('\x1b[c\x1b[6n');}
+  if(++exchanges===5&&!writes.length)onExit?.({exitCode:1});
+  return Response.json({controller:'web',inputs:[]});
+ }});
+ assert.equal(await runRemote({client,command:'opencode',args:[],interactive:false,managed:true,onOutput:()=>{}}),0,'native startup must complete with no human or browser keystrokes');
+ assert.deepEqual(writes,['\x1b[?1;2c','\x1b[1;1R']);
+});
