@@ -188,7 +188,7 @@ async function resolveActor(request: Request, o: AuthOptions): Promise<Actor> {
   if(browser&&(!held?.sessionId||!heldPrimary||!await browser.live(held.sessionId,heldPrimary)))held=null;
   const heldIds = held?.tokenIds.length ? { heldTokenIds: held.tokenIds } : {};
   const session = await o.sessions.resolve(request).catch(() => null);
-  if (session) {
+  if (session?.userId && session.email && session.emailVerified === true) {
     return {
       credential: 'session',
       userId: session.userId,

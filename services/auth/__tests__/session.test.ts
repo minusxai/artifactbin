@@ -27,6 +27,14 @@ const proxy = async (o: Partial<AuthOptions> = {}) => assemble(authParts(await t
 beforeEach(async () => { await resetTestDb(); seenActor = null; seenHeaders = null; answer = new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }); });
 
 describe('the session part', () => {
+  it('refuses a browser session without a verified email identity', async () => {
+    for (const identity of [ { userId: 'legacy' }, { userId: 'legacy', email: 'mxmx_test_unverified@example.com', emailVerified: false } ]) {
+      const app = await proxy({ sessions: { resolve: async () => identity } });
+      await app.request('/api/artifacts');
+      expect(seenActor).toEqual(ANONYMOUS);
+    }
+  });
+
   it('forwards an unauthenticated request as credential none, and the app\'s 401 is the app\'s — the proxy never answers one', async () => {
     answer = new Response('{"error":"unauthorized"}', { status: 401, headers: { 'www-authenticate': 'Bearer realm="x"' } });
     const res = await (await proxy()).request('/api/my/artifacts/x');
