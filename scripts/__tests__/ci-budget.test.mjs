@@ -75,7 +75,7 @@ it('keeps a cold standard-user query without repeating native offline acceptance
  expect(script).toContain("throw 'Expected standard user'");
  expect(script).toContain("throw 'Expected Node-free PATH'");
  expect(script).toContain("throw 'Expected genuinely cold npm cache'");
- expect(script).toContain("Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\\candidate.tgz','afbin','query',$rows,'--json')");
+ expect(script).toContain("Invoke-Candidate 'npx.cmd' @('--yes','--package',('@afbin/cli@'+$ready.version),'afbin','query',$rows,'--json')");
  expect(script).not.toContain('warmed-npx-consumer');
  expect(script).not.toContain('warmed-offline-query');
  expect(script).not.toContain('expected-package.json');

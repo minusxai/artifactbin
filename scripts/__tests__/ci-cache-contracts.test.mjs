@@ -432,7 +432,8 @@ it('caches only Linux browser deb archives and still provisions the full browser
 it('reuses the verified first-npx entry for real candidate setup while published setup stays npx',()=>{
  const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
  expect(source).toContain("Copy-Item services/cli/scripts/windows-bootstrap-candidate.mjs (Join-Path $root 'windows-bootstrap-candidate.mjs')");
- expect(source).toContain("$result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\\candidate.tgz','afbin','query',$rows,'--json')");
+ expect(source).toContain("$result=Invoke-Candidate 'npx.cmd' @('--yes','--package',('@afbin/cli@'+$ready.version),'afbin','query',$rows,'--json')");
+ expect(source.indexOf("$phase='candidate registry startup'")).toBeLessThan(source.indexOf("$phase='standard-user online npx query'"));
  const setup=source.slice(source.indexOf("$phase='candidate registry startup'"),source.indexOf("$phase='repeat setup retains skills'"));
  expect(setup).toContain("$phase='verify npm-owned candidate entry'");expect(setup).toContain("$env:npm_config_cache,'__ROOT__\\candidate.tgz',$ready.version");
  expect(setup).toContain("$setupCommand=Join-Path $private 'node.exe'");expect(setup).toContain("$setupArgs=@($entry,'setup')");
@@ -479,4 +480,15 @@ it('uses full cached npm metadata without fetching it and fetches missing depend
   expect(readFileSync(join(consumer,'lifecycle-ran'),'utf8')).toBe('yes');
   for(const name of ['cached-fixture','missing-fixture'])expect(createRequire(join(consumer,'package.json'))(name)).toBe(42);
  }finally{await new Promise(resolve=>server.close(resolve));rmSync(directory,{recursive:true,force:true});}
+});
+
+
+it('retains full native stderr but batches its replay without changing phase summaries',()=>{
+ const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ expect(source).toContain("'native-stderr.log'");
+ expect(source).toContain('[IO.File]::AppendAllText');
+ expect(source).not.toContain("foreach($record in $output){if($record -is [Management.Automation.ErrorRecord]){Write-Host");
+ const writer=source.slice(source.indexOf('function Write-StandardOutput'),source.indexOf('function Write-StandardFailure'));
+ expect(writer).toContain('-join');expect(writer).not.toContain('Write-Host $lines[$Printed.Value]');
+ expect(source).toContain("Write-Host ('Native phase: '+$phase)");expect(source).toContain("Write-Host ('Native timing: '+$phase");
 });

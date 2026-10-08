@@ -46,7 +46,15 @@ function Invoke-Candidate([string]$Command,[string[]]$Arguments) {
     Write-PhaseEvent 'complete' $phase $startedAt $seconds $code
     Write-Host ('Native timing: '+$phase+' '+$seconds.ToString('F1')+'s')
   }
-  foreach($record in $output){if($record -is [Management.Automation.ErrorRecord]){Write-Host ('Native stderr: '+$record)}}
+  $stderr=@($output | Where-Object {$_ -is [Management.Automation.ErrorRecord]} | ForEach-Object {'Native stderr: '+$_})
+  if($stderr.Count){
+    $stderrText=$stderr -join "`n"
+    # Keep the complete owned diagnostic independently of bounded console chunks.
+    [IO.File]::AppendAllText((Join-Path '__DIAGNOSTICS__' 'native-stderr.log'),('Native phase: '+$phase+"`n"+$stderrText+"`n"),[Text.UTF8Encoding]::new($false))
+    for($offset=0;$offset -lt $stderrText.Length;$offset+=16384){
+      Write-Host $stderrText.Substring($offset,[Math]::Min(16384,$stderrText.Length-$offset))
+    }
+  }
   $text=($output | Where-Object {$_ -isnot [Management.Automation.ErrorRecord]} | Out-String)
   Write-Host $text
   if($code -ne 0){throw "$phase failed with exit $code : $text"}
@@ -140,9 +148,6 @@ if($seededCache){
   $env:npm_config_full_metadata='true'
   Write-Host 'Verified same-run Windows npm dependency seed is active'
 }
-$phase='standard-user online npx query'
-$result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\candidate.tgz','afbin','query',$rows,'--json')
-if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){throw 'Standard-user npx candidate query failed'}
 }
 # Real setup, not a mocked npm runner: the scoped registry serves only the exact
 # candidate. Dependencies reuse the validated seed and npm may fetch cache misses online.
@@ -158,6 +163,11 @@ try {
   }
   $ready=Get-Content '__ROOT__\registry.json' -Raw | ConvertFrom-Json
   [IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.npmrc'),('@afbin:registry='+$ready.origin+"`n"))
+  # Resolve metadata from the exact scoped manifest; npm still freshly installs the
+  # unmodified candidate tarball and executes its native query under this user.
+  $phase='standard-user online npx query'
+  $result=Invoke-Candidate 'npx.cmd' @('--yes','--package',('@afbin/cli@'+$ready.version),'afbin','query',$rows,'--json')
+  if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){throw 'Standard-user npx candidate query failed'}
   # The first npx query already installed this exact candidate. Verify its npm
   # provenance before reusing its entry; setup still performs real global npm install.
   $phase='verify npm-owned candidate entry'
@@ -236,8 +246,9 @@ function Write-StandardOutput([string]$Path,[ref]$Printed) {
   if (!$Path -or !(Test-Path $Path)) { return }
   $lines=@(Get-Content $Path)
   while($Printed.Value -lt $lines.Count) {
-    Write-Host $lines[$Printed.Value]
-    $Printed.Value++
+    $first=[int]$Printed.Value;$last=[Math]::Min($first+64,$lines.Count)
+    Write-Host (($lines[$first..($last-1)]) -join "`n")
+    $Printed.Value=$last
   }
 }
 function Write-StandardFailure {
