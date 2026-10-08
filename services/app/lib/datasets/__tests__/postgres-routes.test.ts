@@ -29,7 +29,7 @@ import { PUT as sharing } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { POST as membership } from '@/app/api/my/artifacts/[id]/members/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as tables } from '@/app/a/[id]/tables/route';
-import { POST as query } from '@/app/a/[id]/query/route';
+import { GET as anonymousQuery } from '@/app/a/[id]/query/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { GET as publicPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as jobs } from '@/app/api/notification-runs/[runId]/jobs/route';
@@ -95,25 +95,30 @@ describe.skipIf(!dockerAvailable)('an external PostgreSQL source through the rea
     await claimToken(ownerUser.id, ownerToken.token);
     const owner = actorOf(ownerUser), recipient = actorOf(recipientUser);
     const target = { host: '127.0.0.1', port, database: 'postgres', username: 'dataset_reader', ssl: false };
-    const secret = await body(await createSecret(request('/api/my/secrets', { method: 'POST', origin: 'same', actor: owner, json: { value: readerPassword, connection: target } })), 201);
-    const connection = { ...target, passwordSecretId: secret.secret.id as string };
+    /** A connection behind a NEW secret: a secret belongs to the one dataset that claims it, as a person re-typing
+     * the password in the editor for a second dataset makes a second one. */
+    const freshConnection = async () => {
+      const secret = await body(await createSecret(request('/api/my/secrets', { method: 'POST', origin: 'same', actor: owner, json: { value: readerPassword, connection: target } })), 201);
+      return { ...target, passwordSecretId: secret.secret.id as string };
+    };
+    const connection = await freshConnection();
     const discovered = await body(await discover(request('/api/my/datasets/discover', { method: 'POST', origin: 'same', actor: owner, json: { connection } })));
     // Three exposed columns of orders, all of tickets, `sales` by default.
     const physical = { kind: 'postgres', connection, defaultSchema: 'sales', refreshSeconds: 0, tables: [
       { schema: 'sales', name: 'orders', source: { schema: 'sales', table: 'orders' }, columns: ['id', 'region', 'amount'] },
       { schema: 'support', name: 'tickets', source: { schema: 'support', table: 'tickets' }, columns: ['id', 'subject'] },
     ] };
-    const dataset = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: owner, json: { title: 'Postgres warehouse', dataset: physical } })), 201);
+    const dataset = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: owner, json: { title: 'Postgres warehouse', dataset: physical, visibility: 'private' } })), 201);
     const share = async (id: string, visibility: string) => body(await sharing(request(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', origin: 'same', actor: owner, json: { visibility } }), params(id)));
     if (visibility === 'unlisted') await share(dataset.id, 'unlisted');
-    return { ownerUser, recipientUser, ownerToken, owner, recipient, connection, discovered, dataset, share };
+    return { ownerUser, recipientUser, ownerToken, owner, recipient, connection, freshConnection, discovered, dataset, share };
   }
   const NOTEBOOK = { cells: [
     { id: 'raw', name: 'raw_orders', sql: 'select region, amount from sales.orders' },
     { id: 'totals', name: 'region_totals', sql: 'select region, sum(amount)::int as total from raw_orders group by region order by region' },
   ] };
   const modelled = (connection: unknown) => ({ kind: 'postgres', connection, defaultSchema: 'models', refreshSeconds: 0, notebook: NOTEBOOK,
-    tables: [{ schema: 'models', name: 'region_totals', modelCellId: 'totals', columns: [{ name: 'region', type: 'string' }, { name: 'total', type: 'number' }] }] });
+    tables: [{ schema: 'models', name: 'region_totals', modelCellId: 'totals', columns: ['region', 'total'] }] });
   const westTotal = async () => Number((await admin.query("select sum(amount)::int as n from sales.orders where region='west'")).rows[0].n);
 
   it('discovers exactly what the role may read, exposes column by column, and serves a stranger only once it is link-readable', async () => {
@@ -142,7 +147,7 @@ describe.skipIf(!dockerAvailable)('an external PostgreSQL source through the rea
       + '<div><h1>Regional orders</h1><DataTable data="$orders" /></div>';
     const doc = await body(await createArtifact(request('/api/artifacts', { method: 'POST', token: w.ownerToken.token, json: { title: 'Postgres sourced document', markup, visibility: 'unlisted' } })), 201);
     // The anonymous reader's door: GET with the run in `q` (what the framed document of a session-less reader asks).
-    const ran = async (region: string) => (await body(await query(request(`/a/${doc.id}/query?q=${encodeURIComponent(JSON.stringify({ values: { region }, only: ['orders'] }))}`), params(doc.id)))).tables.orders.rows.map((r: { id: number }) => r.id);
+    const ran = async (region: string) => (await body(await anonymousQuery(request(`/a/${doc.id}/query?q=${encodeURIComponent(JSON.stringify({ values: { region }, only: ['orders'] }))}`), params(doc.id)))).tables.orders.rows.map((r: { id: number }) => r.id);
     expect(await ran('west')).toEqual([1, 3]);
     expect(await ran('east')).toEqual([2]);
 
@@ -157,15 +162,16 @@ describe.skipIf(!dockerAvailable)('an external PostgreSQL source through the rea
   it('models through a notebook whose intermediate cell never reaches a reader, and a manual refresh reads an external update', async () => {
     const w = await connected();
     const west = await westTotal();
-    const cell1 = await body(await notebookPreview(request('/api/my/datasets/notebook/preview', { method: 'POST', origin: 'same', actor: w.owner, json: { connection: w.connection, notebook: NOTEBOOK, cellId: 'raw' } })));
+    const notebookConnection = await w.freshConnection();
+    const cell1 = await body(await notebookPreview(request('/api/my/datasets/notebook/preview', { method: 'POST', origin: 'same', actor: w.owner, json: { connection: notebookConnection, notebook: NOTEBOOK, cellId: 'raw' } })));
     expect(cell1.rows).toHaveLength(3);
-    const cell2 = await body(await notebookPreview(request('/api/my/datasets/notebook/preview', { method: 'POST', origin: 'same', actor: w.owner, json: { connection: w.connection, notebook: NOTEBOOK, cellId: 'totals' } })));
+    const cell2 = await body(await notebookPreview(request('/api/my/datasets/notebook/preview', { method: 'POST', origin: 'same', actor: w.owner, json: { connection: notebookConnection, notebook: NOTEBOOK, cellId: 'totals' } })));
     expect(cell2.rows).toEqual([{ region: 'east', total: 90 }, { region: 'west', total: west }]);
-    const draft = await body(await datasetPreview(request('/api/my/datasets/preview', { method: 'POST', origin: 'same', actor: w.owner, json: { dataset: modelled(w.connection), sql: 'select * from models.region_totals' } })));
+    const draft = await body(await datasetPreview(request('/api/my/datasets/preview', { method: 'POST', origin: 'same', actor: w.owner, json: { dataset: modelled(notebookConnection), sql: 'select * from models.region_totals' } })));
     expect(draft.rows).toEqual([{ region: 'east', total: 90 }, { region: 'west', total: west }]);
-    const deniedDraft = await body(await datasetPreview(request('/api/my/datasets/preview', { method: 'POST', origin: 'same', actor: w.owner, json: { dataset: modelled(w.connection), sql: 'select * from sales.orders' } })), 400);
+    const deniedDraft = await body(await datasetPreview(request('/api/my/datasets/preview', { method: 'POST', origin: 'same', actor: w.owner, json: { dataset: modelled(notebookConnection), sql: 'select * from sales.orders' } })), 400);
     expect(deniedDraft.error).toBeTruthy();
-    const model = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: { title: 'Postgres model-only notebook', dataset: modelled(w.connection) } })), 201);
+    const model = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: { title: 'Postgres model-only notebook', dataset: modelled(notebookConnection) } })), 201);
     await w.share(model.id, 'unlisted');
     const modelPage = await body(await publicPage(request(`/api/page/artifact/${model.id}`), params(model.id)));
     expect(modelPage.surface.catalog.tables).toHaveLength(1);
@@ -186,7 +192,7 @@ describe.skipIf(!dockerAvailable)('an external PostgreSQL source through the rea
   it('notifies through the same native catalogs — arrays, concatenation and chained models — once per recipient and run', async () => {
     const w = await connected();
     const west = await westTotal();
-    const model = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: { title: 'Postgres model-only notebook', dataset: modelled(w.connection) } })), 201);
+    const model = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: { title: 'Postgres model-only notebook', dataset: modelled(await w.freshConnection()) } })), 201);
     await w.share(model.id, 'unlisted');
     const trigger = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: {
       access: 'readwrite',
