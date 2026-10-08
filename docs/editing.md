@@ -31,7 +31,8 @@ for anyone invited as an editor:
 
 - **In place**: edit mode opens on the page you were reading, not on a copy of it. Click into text to
   edit it; click any element to select it and use the format toolbar and the right-hand panel. A
-  ProseMirror view (`lib/editor-v2`, `solid/editor/FlowEditor.tsx`) edits the document's flow and every
+  ProseMirror view (`lib/editor-v2`,
+  `services/app/lib/story-runtime/edit/FlowEditor.tsx`) edits the document's flow and every
   change is composed back into your **markup source** as a surgical patch, so source stays the truth;
   the draft is previewed through the server compiler and saved through the save-less protocol above.
   **Done** returns to reading in place.
