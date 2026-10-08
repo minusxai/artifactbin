@@ -539,7 +539,7 @@ async function editing(engineName, browser) {
       const thread = second.getByLabel('Annotation thread', { exact: true }).first();
       await expect(thread).toContainText('Ravi');
       await expect(thread).toContainText('monthly table');
-      if (!(await second.getByRole('textbox', { name: 'Reply to annotation' }).isVisible().catch(() => false))) await second.getByRole('button', { name: 'Open annotation thread' }).first().click();
+      if (!(await second.getByRole('textbox', { name: 'Reply to annotation' }).waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false))) await second.getByRole('button', { name: 'Open annotation thread' }).first().click();
       await second.bringToFront();
       await second.getByRole('textbox', { name: 'Reply to annotation' }).first().pressSequentially('Checked: it is the Q3 view.');
       await second.getByRole('button', { name: 'Send reply' }).first().click();

@@ -3,7 +3,7 @@ import { replaceComment } from '../document/__tests__/comment-input';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { EditorView } from 'prosemirror-view';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, waitFor } from '@testing-library/dom';
 import { screen, trustedText, trustedQuery } from './trusted-screen';
 import { storyBodyFor } from '@/lib/story/document/body';
@@ -14,6 +14,7 @@ import { draftKey, readDraft, writeDraft } from '@/lib/offline/local-state';
 import { suggestedFileName } from '@/lib/offline/save-file';
 import { disposeSolidOfflineFile, mountSolidOfflineFile, queryConsumersOf } from '@/lib/offline/solid-entry';
 import type { CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
+import { preloadCommentField } from '../document/LazyCommentField';
 
 // The real mounter, with the callbacks the offline shell hands it kept for the flow-edit cases.
 const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null, view: null as EditorView | null, onFlush: null as (() => void) | null }));
@@ -74,6 +75,7 @@ const shownSource = (): string => {
 afterEach(() => { disposeSolidOfflineFile(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Solid offline file', () => {
+  beforeAll(() => preloadCommentField());
   it('synchronizes the document root with the opened file metadata', async () => {
     const original = fixture();
     const file = { ...original, metadata: { ...original.metadata, theme: 'manuscript', colorMode: 'dark' as const } };

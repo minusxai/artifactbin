@@ -210,7 +210,7 @@ async function ownerLeg(browser, { id, token }) {
     await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
     await frame.locator('#figure[data-mx-annotation-open]').waitFor({ timeout: 8000 });
     check(await page.evaluate(() => location.hash) === '', 'opening a thread never touches the URL');
-    check((await thread.first().textContent())?.includes('Q3 sheet') && await page.locator('[aria-label="Reply to annotation"]').first().isVisible(),
+    check((await thread.first().textContent())?.includes('Q3 sheet') && await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false),
       'clicking the floating marker opens the rail focused and ready to reply');
 
     // ── the agent's side, over plain HTTP ─────────────────────────────────
@@ -618,8 +618,8 @@ async function markdownLeg(browser, { id, token }) {
   const thread = page.locator('[aria-label="Annotation thread"]').first();
   await thread.waitFor({ timeout: 8000 });
   await page.locator('[aria-label="Open annotation thread"]').first().click();
-  check(await page.locator('[aria-label="Reply to annotation"]').first().isVisible(), 'the thread opens ready to reply');
-  check(await page.locator('[aria-label="Bold"]').first().isVisible(), 'the reply box carries the markdown toolbar');
+  check(await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false), 'the thread opens ready to reply');
+  check(await page.locator('[aria-label="Bold"]').first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false), 'the reply box carries the markdown toolbar');
 
   // THE AGENT ANSWERS over plain HTTP, with a fenced block in the reply.
   const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
