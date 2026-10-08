@@ -190,8 +190,8 @@ describe('read events', () => {
     rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params({ id }));
 
   it('an explicit raw read logs one view; fetching page data or metadata logs none', async () => {
-    const t = await mintToken('anon');
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const t = await mintToken('public-reader-owner');
+    const doc = await create(t.token, { markup: '<p>x</p>', visibility: 'public' });
     await settle(); // let the create event land so counts below are stable
 
     await artifactPageMetadata(doc.id);
@@ -236,8 +236,8 @@ describe('read events', () => {
   });
 
   it('the export route logs export; the SSE connect logs sse_connect once', async () => {
-    const t = await mintToken('anon');
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const t = await mintToken('public-reader-owner');
+    const doc = await create(t.token, { markup: '<p>x</p>', visibility: 'public' });
 
     await exportRoute(request(`/a/${doc.id}/export`), params({ id: doc.id }));
     await expectEvent(doc.id, 'export');
