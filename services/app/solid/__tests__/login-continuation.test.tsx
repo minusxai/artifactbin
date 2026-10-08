@@ -76,3 +76,14 @@ it('returns to code entry with the same email after a reload, and keeps the code
  await waitFor(()=>expect(done).toHaveBeenCalledOnce());
  expect(sessionStorage.length).toBe(0);
 });
+
+const guestNote=/Guest sessions ended on 8 October 2026/;
+it('explains the end of guest sessions only to a signed-out redirect',()=>{
+ render(()=> <LoginPage onAuthenticated={vi.fn()}/>);
+ expect(screen.getByRole('textbox',{name:'Email'})).toBeTruthy();expect(screen.queryByText(guestNote)).toBeNull();cleanup();
+ for(const search of ['?callbackUrl=%2Fa%2Fabc123','?signedOut=1']){
+  window.history.replaceState(null,'','/login'+search);
+  render(()=> <LoginPage onAuthenticated={vi.fn()}/>);
+  expect(screen.getByRole('note').textContent).toMatch(guestNote);cleanup();
+ }
+});
