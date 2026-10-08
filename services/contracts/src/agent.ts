@@ -12,10 +12,12 @@
  * ACCESS on it; it decides attribution and copy only.
  */
 
-/** Exact values accepted from `Artifactbin-Agent`. No substring matching: it is an explicit declaration. */
+/** Known values recognized from `Artifactbin-Agent`. Unknown declarations remain valid display names. */
 export const DECLARED_AGENT_SLUGS = [
   'chatgpt',
   'codex',
+  'pi',
+  'opencode',
   'claude-code',
   'claude',
   'claude-web',

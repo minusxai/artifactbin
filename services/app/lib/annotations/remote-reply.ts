@@ -20,11 +20,17 @@ export function remoteWorkLabel(work:RemoteWork):string{
  if(work.connection==='offline')return phase+' · offline';
  if(work.phase==='queued'&&work.activity==='unknown')return phase+' · readiness unknown, check terminal';
  if(work.phase==='queued'&&work.activity==='starting')return phase+' · loading context';
- if(work.phase==='completed'&&work.activity==='listening')return phase+' · listening';
  return phase;
 }
 
 /** One canonical mention format for manual choices and composer defaults. */
 export function remoteMention(session: Pick<RemoteSessionInfo, 'id' | 'name'>): string {
  return `[@${session.name.replace(/[\[\]\\\n]/g, '')}](/chat?session=${session.id}) `;
+}
+
+/** Pending delivery or execution, excluding states that need user intervention. */
+export function remoteWorkActive(work: RemoteWork): boolean {
+ return work.connection !== 'offline' && work.connection !== 'stopped'
+  && work.reason !== 'queue_full' && work.reason !== 'unauthorized'
+  && ['queued','dispatching','delivered','acknowledged'].includes(work.phase);
 }

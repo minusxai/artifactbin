@@ -16,14 +16,14 @@ import EllipsisVertical from 'lucide-solid/icons/ellipsis-vertical';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { hasReplyText, remoteWorkLabel, replyMentionPrefix } from '@/lib/annotations/remote-reply';
-import { REMOTE_COLOR_CSS } from '../../../contracts/src/remote';
+import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
+import { agentNameColor } from '../lib/agent-identity';
 import { Tooltip } from '../components/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
 import { AuthorIdentity, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
 import { CommentFoldingBody } from './CommentFoldingBody';
-import { CommentMarkdownField } from './CommentMarkdown';
+import { CommentMarkdownField, CommentSubmitHint } from './CommentMarkdown';
 import { CommentScreenshot } from './CommentScreenshot';
 
 const threadClass = 'rounded-[6px] border border-edge bg-comment text-sm';
@@ -83,13 +83,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     onCleanup(() => observer.disconnect());
   });
 
-  const prefix = () => replyMentionPrefix(props.a.thread);
-  const [reply, setReply] = createSignal(prefix());
-  let touched = false;
+  const [reply, setReply] = createSignal('');
   let sending = false;
   const [replyError, setReplyError] = createSignal('');
-  createEffect(() => { const next = prefix(); if (!touched) setReply(next); });
-  const [replyPreviewing, setReplyPreviewing] = createSignal(false);
   const [menuOpen, setMenuOpen] = createSignal(false);
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
@@ -101,7 +97,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     sending = true; setReplyError('');
     try {
       if (!await props.onReply(reply())) throw new Error('Could not send reply. Your draft is saved here.');
-      touched = false; setReply(prefix()); setReplyPreviewing(false);
+      setReply('');
     } catch { setReplyError('Could not send reply. Your draft is saved here.'); }
     finally { sending = false; }
   };
@@ -122,7 +118,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     data-thread-id={props.a.id}
     data-hovered={props.hovered ? 'true' : undefined}
     onMouseEnter={() => props.onHover(props.a.id)}
-    onMouseLeave={() => props.onHover(null)}
+    onMouseLeave={(event) => { if (!event.currentTarget.matches(':focus-within')) props.onHover(null); }}
+    onFocusIn={() => props.onHover(props.a.id)}
+    onFocusOut={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !event.currentTarget.matches(':hover')) props.onHover(null); }}
     onClick={(event) => {
       const target = event.target as Element;
       // `[role="button"]`: the author line is a toggle, and collapsing a comment in a closed thread must not open it.
@@ -144,9 +142,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     </Show>
     <Show when={!props.folded}>
       <For each={agents()}>{(work) => (
-        <p role="status" class="flex items-center gap-1.5 border-b border-edge px-3 py-1.5 text-[11px] text-muted">
-          <a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: REMOTE_COLOR_CSS[work.color] }}>@{work.name}</a>
-          <span>{remoteWorkLabel(work)}</span>
+        <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-[11px] text-muted">
+          <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
+          <Show when={remoteWorkActive(work)}><span class="comment-agent-spinner" aria-hidden="true" /></Show>
+          <Tooltip content={remoteWorkLabel(work)}><span class="comment-agent-status-label" tabIndex={0}>{work.phase === 'delivered' && remoteWorkActive(work) ? 'Awaiting acknowledgment' : remoteWorkLabel(work)}</span></Tooltip>
         </p>
       )}</For>
       <Show when={props.a.view_state}>
@@ -183,7 +182,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
           // `scroll-mb-14` is what the open-scroll aims at: on a phone the page's action bar floats over the sheet's bottom.
           return <li data-comment-id={c().id} class="scroll-mb-14 sm:scroll-mb-0">
             <div class="mb-1.5 flex min-w-0 items-center gap-2">
-              <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
               {/* The author line is the comment's own toggle where there is a body to fold (an open thread). */}
               <span role={props.open ? 'button' : undefined} tabIndex={props.open ? 0 : undefined}
                 aria-label={props.open ? (commentFolded() ? 'Expand comment' : 'Collapse comment') : undefined}
@@ -202,6 +200,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                 <AuthorIdentity author={c().author} />
                 <CommentTimestamp iso={c().created_at} class="ml-auto shrink-0 font-mono text-[10px] text-faint" />
               </span>
+              <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
               <Show when={index() === 0 && props.resolved}>
                 <Tooltip content="resolved">
                   <span class="inline-flex h-5 w-5 items-center justify-center text-accent"><Check size={13} strokeWidth={2} /></span>
@@ -253,21 +252,22 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       </ul>
       <Show when={!props.open}>
         <button type="button" aria-label={props.resolved ? 'Show resolved conversation' : 'Open annotation thread'} aria-expanded={props.resolved ? false : undefined}
-          onClick={() => props.onOpen()} onFocus={() => props.onHover(props.a.id)} onBlur={() => props.onHover(null)}
+          onClick={() => props.onOpen()}
           class="flex w-full cursor-pointer items-center justify-between gap-2 border-t border-edge px-3 py-1.5 font-mono text-[10px] text-faint transition-colors hover:bg-raised hover:text-accent">
           <ThreadContinuation thread={props.a.thread} />
           <span class="shrink-0">open →</span>
         </button>
       </Show>
       <Show when={props.open && !props.resolved}>
-        <div class="border-t border-edge px-3 py-2">
+        <div class="border-t border-edge bg-raised p-3">
           <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
-            label="Reply to annotation" previewLabel="Reply preview" previewToggleLabel="Preview reply"
-            value={reply()} onChange={(value) => { touched = true; setReply(value); }} onSubmit={() => void sendReply()}
-            previewing={replyPreviewing()} onPreviewingChange={setReplyPreviewing} rows={2} placeholder="reply…" />
+            label="Reply to annotation" quickAgents
+            value={reply()} onChange={setReply} onSubmit={() => void sendReply()}
+             rows={3} placeholder="Write a reply…" />
           <Show when={replyError()}><p role="alert" class="text-xs text-red-500">{replyError()}</p></Show>
-          <div class="flex justify-end gap-2">
-            <button type="button" aria-label="Cancel reply" onClick={() => { touched = true; setReply(''); setReplyPreviewing(false); props.onOpen(); }}
+          <div class="flex items-center justify-end gap-2">
+            <CommentSubmitHint action="reply" />
+            <button type="button" aria-label="Cancel reply" onClick={() => { setReply(''); props.onOpen(); }}
               class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>
             <button type="button" aria-label="Send reply" disabled={props.busy || !hasReplyText(reply())} onClick={() => void sendReply()}
               class="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40">reply</button>

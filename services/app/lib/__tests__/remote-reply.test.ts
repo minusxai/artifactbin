@@ -1,3 +1,4 @@
+import {remoteWorkActive} from '@/lib/annotations/remote-reply';
 import {it,expect} from 'vitest';
 import {replyMentionPrefix,hasReplyText,remoteWorkLabel} from '@/lib/annotations';
 const mention=(name:string,id:string)=>`[@${name}](/chat?session=${id.repeat(64)})`;
@@ -45,4 +46,18 @@ it.each(['online','offline'] as const)('explains capacity waiting even when comm
  expect(remoteWorkLabel({...work,phase:'queued'})).toBe('Waiting for capacity');
  expect(remoteWorkLabel({...work,phase:'completed',connection:'online'})).toBe('Answered');
  expect(remoteWorkLabel({...work,connection:'stopped'})).toBe('Sending to agent · stopped');
+});
+
+it('keeps completed status concise even when the agent is listening',()=>{
+ const work={id:'request',sessionId:'session',artifactId:'doc',threadId:'thread',commentId:'comment',name:'codex',color:'blue' as const,updatedAt:'now',phase:'completed' as const,activity:'listening' as const};
+ expect(remoteWorkLabel(work)).toBe('Answered');
+});
+
+it('shows activity only during pending delivery or execution',()=>{
+ const work={id:'request',sessionId:'session',artifactId:'doc',threadId:'thread',commentId:'comment',name:'codex',color:'blue' as const,updatedAt:'now',phase:'acknowledged' as const};
+ for(const phase of ['queued','dispatching','delivered','acknowledged'] as const)expect(remoteWorkActive({...work,phase})).toBe(true);
+ for(const phase of ['completed','failed','blocked','uncertain','unavailable','superseded'] as const)expect(remoteWorkActive({...work,phase})).toBe(false);
+ expect(remoteWorkActive({...work,connection:'offline'})).toBe(false);
+ expect(remoteWorkActive({...work,connection:'stopped'})).toBe(false);
+ expect(remoteWorkActive({...work,reason:'queue_full'})).toBe(false);
 });

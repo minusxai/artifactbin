@@ -48,6 +48,37 @@ it('resolves Markdown reference links through the same safe link dialect', () =>
   expect(clipboardAst('markdown', '[link][ref]\n\n[ref]: javascript:bad()')).toEqual(clipboardAst('text', 'link'));
 });
 
+it('accepts partial HTML list selections while retaining text and stripping source metadata', () => {
+  const ast = clipboardAst('html', '<li id="foreign" class="bad"><p>B</p><ul><li>C</li></ul></li><li></li>');
+  expect(() => validateClipboardAst(ast)).not.toThrow();
+  expect(ast.children[0]?.type).toBe('list');
+  expect(JSON.stringify(ast)).not.toMatch(/foreign|bad|position|checked|spread/);
+  const list = ast.children[0];
+  expect(list?.type === 'list' && list.children).toHaveLength(2);
+  expect(JSON.stringify(ast)).toContain('B');
+  expect(JSON.stringify(ast)).toContain('C');
+});
+
+it('wraps only orphan item runs, leaving surrounding prose and complete lists in order', () => {
+  const ast = clipboardAst('html', '<p>before</p><li>B</li>\n<li></li><p>between</p><ol><li>C</li></ol><li>D</li><p>after</p>');
+  expect(() => validateClipboardAst(ast)).not.toThrow();
+  expect(ast.children.map(n => n.type)).toEqual(['paragraph', 'list', 'paragraph', 'list', 'list', 'paragraph']);
+  expect(ast.children[1]?.type === 'list' && ast.children[1].children).toHaveLength(2);
+  expect(ast.children[3]?.type === 'list' && ast.children[3].ordered).toBe(true);
+});
+
+it('accepts rich HTML formatting around block fragments without dropping text or formatting', () => {
+  const ast = clipboardAst('html', '<b><p>B</p><ul><li>C</li><li><em>D</em></li></ul></b>');
+  expect(() => validateClipboardAst(ast)).not.toThrow();
+  expect(ast).toEqual(clipboardAst('markdown', '**B**\n\n- **C**\n- **_D_**'));
+});
+
+it('retains inline runs and nested formatting when block wrappers are normalized', () => {
+  const ast = clipboardAst('html', '<b>before<p><em>B</em></p>after</b>');
+  expect(() => validateClipboardAst(ast)).not.toThrow();
+  expect(ast).toEqual(clipboardAst('markdown', '**before**\n\n**_B_**\n\n**after**'));
+});
+
 it('independently rejects converter metadata and invalid structural children', () => {
   expect(() =>
     validateClipboardAst({

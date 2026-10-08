@@ -13,9 +13,9 @@ import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations/st
 import type { StoryEditRect } from '@/lib/story-runtime/contract';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
-import { REMOTE_COLOR_CSS, remoteColor } from '../../../contracts/src/remote';
+import { agentNameColor } from '../lib/agent-identity';
 import { Avatar } from '../components/Avatar';
-import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '../components/brand-icons';
+import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeIcon } from '../components/brand-icons';
 import { Tooltip } from '../components/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 
@@ -38,6 +38,11 @@ export const previewText = (body: string) => plainText(parseMarkdownLite(body));
 export const firstLine = (body: string) => previewText(body).split('\n', 1)[0] ?? '';
 
 export const authorLabel = (author: Author) => author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
+/** Prefer connected-session identity; legacy named authors still get their known logo. */
+const agentProgram = (author: Author): string => {
+  const names: Record<string,string> = {claude:'Claude Code','claude-code':'Claude Code','claude code':'Claude Code','claude-web':'Claude',codex:'Codex',pi:'Pi',opencode:'OpenCode',chatgpt:'ChatGPT'};
+  return names[(author.harness ?? author.label ?? '').toLowerCase()] ?? 'Agent';
+};
 const authorKey = (author: Author) => `${author.kind}:${authorLabel(author).toLowerCase()}`;
 
 /** Distinct people/agents who replied, oldest first. The root author is already named above. */
@@ -57,18 +62,25 @@ function PersonFace(props: { author: Author; size: number }): JSX.Element {
   return <Avatar image={props.author.image ?? null} initial={label()} userId={props.author.user_id ?? `label:${label()}`} size={props.size} />;
 }
 
-function AgentMark(props: { label: string; compact?: boolean; decorative?: boolean; borderless?: boolean }): JSX.Element {
+function PixelGhost(props: { size: number }): JSX.Element {
+  return <svg width={props.size} height={props.size} viewBox="0 0 14 14" fill="currentColor" shape-rendering="crispEdges" aria-hidden="true"><path fill-rule="evenodd" d="M5 1h4v1h2v2h1v8h-2v-2H8v2H6v-2H4v2H2V4h1V2h2V1Zm-1 3v3h2V4H4Zm4 0v3h2V4H8Z" /></svg>;
+}
+
+function AgentMark(props: { label: string; name?: string; compact?: boolean; decorative?: boolean; borderless?: boolean }): JSX.Element {
   const icon = () => {
     switch (props.label.toLowerCase()) {
-      case 'codex': return <CodexIcon size={props.compact ? 13 : 17} />;
-      case 'chatgpt': return <ChatGPTIcon size={props.compact ? 12 : 16} />;
-      case 'claude code': return <ClaudeCodeIcon size={props.compact ? 12 : 16} />;
-      case 'claude': return <ClaudeAIIcon size={props.compact ? 12 : 16} />;
-      default: return <span aria-hidden="true" class={`${props.compact ? 'text-[10px]' : 'text-[12px]'} leading-none text-accent`}>✦</span>;
+      case 'pi': return <PiIcon size={props.compact ? 12 : 14} />;
+      case 'opencode': return <OpenCodeIcon size={props.compact ? 12 : 14} />;
+      case 'codex': return <CodexIcon size={props.compact ? 12 : 14} />;
+      case 'chatgpt': return <ChatGPTIcon size={props.compact ? 12 : 14} />;
+      case 'claude code': return <ClaudeCodeIcon size={props.compact ? 12 : 14} />;
+      case 'claude': return <ClaudeAIIcon size={props.compact ? 12 : 14} />;
+      default: return <PixelGhost size={props.compact ? 12 : 14} />;
     }
   };
   return <span aria-label={props.decorative ? undefined : `${props.label} agent`} aria-hidden={props.decorative || undefined}
-    class={`inline-flex shrink-0 items-center justify-center rounded-full bg-surface text-fg ${props.borderless ? '' : 'border border-edge'} ${props.compact ? 'h-[18px] w-[18px]' : 'h-[22px] w-[22px]'}`}>
+    style={{color:agentNameColor(props.name ?? props.label), background:`color-mix(in srgb, ${agentNameColor(props.name ?? props.label)} 12%, var(--color-surface))`, "border-color":`color-mix(in srgb, ${agentNameColor(props.name ?? props.label)} 22%, transparent)`}}
+    class={`inline-flex shrink-0 items-center justify-center rounded-full ${props.borderless ? '' : 'border border-edge'} ${props.compact ? 'h-[18px] w-[18px]' : 'h-[22px] w-[22px]'}`}>
     {icon()}
   </span>;
 }
@@ -78,22 +90,22 @@ export function AuthorIdentity(props: { author: Author }): JSX.Element {
   const label = () => authorLabel(props.author);
   const offline = useContext(CommentsOffline);
   return <span class="flex min-w-0 items-center gap-2">
-    <Show when={props.author.kind === 'human'} fallback={<AgentMark label={label()} />}>
+    <Show when={props.author.kind === 'human'} fallback={<AgentMark label={agentProgram(props.author)} name={authorLabel(props.author)} />}>
       <span aria-label={`${label()} avatar`} class="inline-flex h-[22px] w-[22px] shrink-0 rounded-full"><PersonFace author={props.author} size={22} /></span>
     </Show>
     <Show when={props.author.sessionId} fallback={
       <Show when={props.author.kind === 'human' && props.author.label && !offline} fallback={
-        <span class={`truncate text-[11px] font-semibold ${props.author.kind === 'agent' ? 'text-accent' : 'text-fg'}`}>{label()}</span>
+        <span style={props.author.kind === 'agent' ? {color:agentNameColor(label())} : undefined} class={`truncate text-[11px] font-semibold ${props.author.kind === 'agent' ? 'text-accent' : 'text-fg'}`}>{label()}</span>
       }>
         <a href={`/@${encodeURIComponent(props.author.label!)}`} aria-label={`View @${props.author.label} profile`}
           class="pointer-events-auto truncate text-[11px] font-semibold text-fg underline-offset-2 hover:text-accent hover:underline">{label()}</a>
       </Show>
     }>{(sessionId) => (
       <a href={`/chat?session=${sessionId()}`} target="_blank" rel="noopener noreferrer" class="truncate text-[11px] font-semibold"
-        style={{ color: REMOTE_COLOR_CSS[props.author.color ?? remoteColor(sessionId())] }}>@{label()}</a>
+        style={{ color: agentNameColor(label()) }}>@{label()}</a>
     )}</Show>
-    <Show when={props.author.kind === 'agent' && props.author.transport !== 'unknown'}>
-      <span aria-label={`Transport ${props.author.transport.toUpperCase()}`} class="shrink-0 font-mono text-[9px] uppercase tracking-[0.08em] text-faint">· {props.author.transport}</span>
+    <Show when={props.author.kind === 'agent'}>
+      <span aria-label={`Agent type ${agentProgram(props.author)}`} class="shrink-0 font-sans text-[10px] text-faint">· {agentProgram(props.author)}</span>
     </Show>
   </span>;
 }
@@ -101,7 +113,7 @@ export function AuthorIdentity(props: { author: Author }): JSX.Element {
 function ParticipantMark(props: { author: Author }): JSX.Element {
   // Bare, not wrapped: the stack's ring lands on its direct children.
   return <Show when={props.author.kind === 'agent'} fallback={<PersonFace author={props.author} size={18} />}>
-    <AgentMark label={authorLabel(props.author)} compact decorative />
+    <AgentMark label={agentProgram(props.author)} name={authorLabel(props.author)} compact decorative />
   </Show>;
 }
 
@@ -121,7 +133,7 @@ export function ThreadContinuation(props: { thread: AnnotationCommentWire[] }): 
 
 function CompactAuthorMark(props: { author: Author }): JSX.Element {
   return <Show when={props.author.kind === 'agent'} fallback={<PersonFace author={props.author} size={22} />}>
-    <AgentMark label={authorLabel(props.author)} compact decorative borderless />
+    <AgentMark label={agentProgram(props.author)} name={authorLabel(props.author)} compact decorative borderless />
   </Show>;
 }
 
@@ -201,7 +213,7 @@ export function AnnotationPreview(props: {
     class={`${working() ? 'motion-safe:animate-pulse' : ''} group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${props.hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
     style={{
       position: 'fixed',
-      outline: work() ? `2px solid ${REMOTE_COLOR_CSS[work()!.color]}` : undefined,
+      outline: work() ? `2px solid ${agentNameColor(work()!.name)}` : undefined,
       top: `${props.top}px`,
       right: `${(props.rightInset ?? 0) + VIEW_COMMENT_INSET}px`,
       width: `${props.hovered ? 288 : compactWidth()}px`,

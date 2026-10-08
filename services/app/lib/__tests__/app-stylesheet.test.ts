@@ -32,6 +32,14 @@ async function appStylesheet(): Promise<string> {
 }
 
 describe('the compiled app stylesheet', () => {
+  it('ships rich comment fields and mention badges inside the trusted app sheet', async () => {
+    const css = await appStylesheet();
+    expect(css).toContain('.comment-rich-editor {');
+    expect(css).toContain('min-height: max(6rem, var(--comment-min-height, 8rem))');
+    expect(css).toContain('.comment-rich-editor [data-comment-mention], .comment-agent-mention {');
+    expect(css).toContain('.comment-rich-editor [data-comment-mention]::before, .comment-agent-mention::before {');
+  }, 60_000);
+
   it('paints kit popups inside the trusted overlay using the app palette', async () => {
     const css = await appStylesheet();
     for (const [name, property, token] of [
@@ -61,9 +69,9 @@ describe('the compiled app stylesheet', () => {
     for (const rule of ['.block', '.absolute', '.h-full', '.inset-0']) {
       expect(css, `${rule} must be in the app stylesheet`).toContain(rule);
     }
-    // Chat's desktop split is declared in the Solid route source, not the React tree.
-    expect(css).toContain('.md\\:flex-row');
-    expect(css).toContain('.md\\:w-80');
+    // The comment field's layout utilities come from the shared Solid source.
+    expect(css).toContain('.min-w-0');
+    expect(css).toContain('.flex-1');
   }, 60_000);
 
   it('does not carry what a test merely TALKS about', async () => {

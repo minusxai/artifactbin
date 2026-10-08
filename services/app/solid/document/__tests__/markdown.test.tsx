@@ -1,3 +1,4 @@
+import { replaceComment, selectCommentText } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * A COMMENT BODY IS MARKDOWN TO READ AND TEXT TO SEND (components/__tests__/annotation-markdown.ui.test.tsx
@@ -119,10 +120,9 @@ describe('the compact surfaces show the plain text', () => {
 describe('the composer writes markdown, and sends TEXT', () => {
   const composer = () => screen.getByRole('dialog', { name: 'Annotation composer' });
   const typeDraft = async (value: string, start = value.length, end = value.length) => {
-    const field = screen.getByLabelText('Annotation comment') as HTMLTextAreaElement;
-    fireEvent.input(field, { target: { value } });
-    field.setSelectionRange(start, end);
-    fireEvent.select(field);
+    const field = screen.getByLabelText('Annotation comment') as HTMLElement;
+    replaceComment(field, value);
+    if(value && !value.includes(`\n`)) await selectCommentText(field,start,end);
     return field;
   };
 
@@ -132,19 +132,19 @@ describe('the composer writes markdown, and sends TEXT', () => {
     const field = await typeDraft('make it loud', 8, 12);
     fireEvent.click(within(composer()).getByLabelText('Bold'));
     await flush();
-    expect(field.value).toBe('make it **loud**');
+    expect(field.querySelector('strong')?.textContent).toBe('loud');
     // The WORDS stay selected, not the markers — so a second verb nests inside the first.
     fireEvent.click(within(composer()).getByLabelText('Code'));
     await flush();
-    expect(field.value).toBe('make it **`loud`**');
+    expect(field.querySelector('strong code')?.textContent).toBe('loud');
     expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
   });
 
   it('every marker the toolbar names is offered, with its hint line', async () => {
     layer({ railOpen: true, initialSelection: SELECTION });
     await flush();
-    for (const label of ['Bold', 'Italic', 'Code', 'Link', 'List', 'Preview comment']) expect(within(composer()).getByLabelText(label)).toBeTruthy();
-    expect(within(composer()).getByText('Type @ to mention an agent · Ctrl/⌘ + Enter to send')).toBeTruthy();
+    for (const label of ['Bold', 'Italic', 'Code', 'Link', 'List']) expect(within(composer()).getByLabelText(label)).toBeTruthy();
+    expect(composer().querySelector('.comment-mention-tip')).toHaveTextContent('Pro tip: Use @ to tag friends or agents.');
   });
 
   it('⌘B wraps from the keyboard too', async () => {
@@ -153,20 +153,16 @@ describe('the composer writes markdown, and sends TEXT', () => {
     const field = await typeDraft('make it loud', 8, 12);
     fireEvent.keyDown(field, { key: 'b', metaKey: true });
     await flush();
-    expect(field.value).toBe('make it **loud**');
+    expect(field.querySelector('strong')?.textContent).toBe('loud');
   });
 
-  it('Preview swaps the textarea for the rendered draft, and back', async () => {
-    layer({ railOpen: true, initialSelection: SELECTION });
-    await flush();
-    await typeDraft('run `npm test`\n\n- then push');
-    fireEvent.click(within(composer()).getByLabelText('Preview comment'));
-    expect(screen.queryByLabelText('Annotation comment')).toBeNull();
-    const preview = within(composer()).getByLabelText('Comment preview');
-    expect(preview.querySelector('code')?.textContent).toBe('npm test');
-    expect(preview.querySelectorAll('li')).toHaveLength(1);
-    fireEvent.click(within(composer()).getByLabelText('Preview comment'));
-    expect((screen.getByLabelText('Annotation comment') as HTMLTextAreaElement).value).toBe('run `npm test`\n\n- then push');
+  it('renders formatting directly in the editable field without a preview toggle', async () => {
+    layer({ railOpen:true, initialSelection:SELECTION }); await flush();
+    const field=await typeDraft('run `npm test`\n\n- then push');
+    expect(field).toHaveAttribute('contenteditable','true');
+    expect(field.querySelector('code')?.textContent).toBe('npm test');
+    expect(field.querySelectorAll('li')).toHaveLength(1);
+    expect(screen.queryByLabelText('Preview comment')).toBeNull();
   });
 
   it('⌘↵ still posts the RAW markdown — the wire never carries the rendering', async () => {
@@ -181,11 +177,23 @@ describe('the composer writes markdown, and sends TEXT', () => {
 
   it('a reply box carries the same toolbar', async () => {
     const thread = await openThread();
-    const reply = within(thread).getByLabelText('Reply to annotation') as HTMLTextAreaElement;
-    fireEvent.input(reply, { target: { value: 'call it' } });
-    reply.setSelectionRange(5, 7);
+    const reply = within(thread).getByLabelText('Reply to annotation') as HTMLElement;
+    replaceComment(reply, 'call it');
+    await selectCommentText(reply,5,7);
     fireEvent.click(within(thread).getByLabelText('Code'));
     await flush();
-    expect(reply.value).toBe('call `it`');
+    expect(reply.querySelector('code')?.textContent).toBe('it');
   });
+});
+
+it('displays saved Markdown headings as headings, not hash-prefixed text', () => {
+  render(() => <CommentMarkdown text={'This is new\n## This is a heading'} />);
+  expect(screen.getByRole('heading', {level:2, name:'This is a heading'})).toBeInTheDocument();
+});
+
+it('renders saved agent badges using the same name color as the editor', () => {
+  render(() => <CommentMarkdown text={`[@koala-8e44ad](/chat?session=${'a'.repeat(64)})`} />);
+  const badge=screen.getByRole('link',{name:'@koala-8e44ad'});
+  expect(badge.style.getPropertyValue('--mention-color')).toBe('#8e44ad');
+  expect(badge).toHaveClass('comment-agent-mention');
 });

@@ -1,3 +1,4 @@
+import { replaceComment } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * @MENTIONS in a comment draft: people
@@ -35,18 +36,18 @@ it.each(['7d545566-1a47-4aaf-be61-cffcb7b8e8f2', 'b'.repeat(64)])('selects sessi
   const backend = http();
   render(() => {
     const [value, change] = createSignal('');
-    return <div onKeyDown={escape}><CommentMarkdownField label="Draft" previewLabel="Draft preview" previewToggleLabel="Toggle preview" backend={backend}
+    return <div onKeyDown={escape}><CommentMarkdownField label="Draft" backend={backend}
       value={value()} onChange={change} onSubmit={() => submit(value())} /></div>;
   });
-  const field = screen.getByLabelText('Draft') as HTMLTextAreaElement;
-  fireEvent.input(field, { target: { value: '@cl', selectionStart: 3 } });
+  const field = screen.getByLabelText('Draft') as HTMLElement;
+  replaceComment(field, '@cl');
   await screen.findByLabelText('Mention Claude (claude)');
   fireEvent.keyDown(field, { key: 'Enter' });
-  expect(field.value).toBe('@Claude ');
+  expect(field.textContent).toBe('@Claude ');
   expect(submit).not.toHaveBeenCalled();
   fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true });
   expect(submit).toHaveBeenCalledWith(`[@Claude](/chat?session=${id}) `);
-  fireEvent.input(field, { target: { value: '@', selectionStart: 1 } });
+  replaceComment(field, '@');
   await screen.findByLabelText('Mention Claude (claude)');
   escape.mockClear();
   fireEvent.keyDown(field, { key: 'Escape' });
@@ -127,11 +128,11 @@ it('treats @ as a plain character where no one can be mentioned (an offline file
   } as unknown as ArtifactBackend;
   render(() => {
     const [value, change] = createSignal('');
-    return <CommentMarkdownField label="Draft" previewLabel="Draft preview" previewToggleLabel="Toggle preview" backend={offline} value={value()} onChange={change} onSubmit={() => {}} />;
+    return <CommentMarkdownField label="Draft" backend={offline} value={value()} onChange={change} onSubmit={() => {}} />;
   });
   expect(screen.queryByText(/Type @ to mention/)).toBeNull();
-  expect(screen.getByText(/Ctrl\/⌘ \+ Enter to send/)).toBeTruthy();
-  fireEvent.input(screen.getByLabelText('Draft'), { target: { value: 'thanks @Asha', selectionStart: 12 } });
+  expect(screen.queryByText(/Ctrl\/⌘ \+ Enter to send/)).toBeNull();
+  replaceComment(screen.getByLabelText('Draft'), 'thanks @Asha');
   expect(screen.queryByLabelText('Agent sessions')).toBeNull();
   expect(offline.remoteSessions).not.toHaveBeenCalled();
 });
@@ -141,4 +142,38 @@ it('excludes native boxes without a comment relay while retaining the hosted def
  render(()=><CommentMentionPicker backend={http()} query="" onSelect={()=>{}} />);
  await screen.findByLabelText('Mention Default (pi)');
  expect(screen.queryByLabelText('Mention Native (codex)')).toBeNull();
+});
+
+it('quick choices and typed mentions insert identical badges and keep the caret after them', async () => {
+  const id='b'.repeat(64);
+  vi.stubGlobal('fetch', sessions([{id,name:'koala-8e44ad',harness:'claude',online:true}]));
+  const submit=vi.fn();
+  render(()=>{const [value,change]=createSignal('');return <CommentMarkdownField label="Draft" backend={http()} quickAgents value={value()} onChange={change} onSubmit={()=>submit(value())}/>;});
+  const field=screen.getByLabelText('Draft');
+  fireEvent.click(await screen.findByRole('button',{name:'Tag koala-8e44ad'}));
+  const quick=field.querySelector('[data-comment-mention]')?.outerHTML;
+  expect(quick).toBeTruthy();
+  fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});
+  expect(submit).toHaveBeenLastCalledWith(`[@koala-8e44ad](/chat?session=${id}) `);
+  replaceComment(field,'@ko');
+  fireEvent.click(await screen.findByLabelText('Mention koala-8e44ad (claude)'));
+  expect(field.querySelector('[data-comment-mention]')?.outerHTML).toBe(quick);
+  fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});
+  expect(submit).toHaveBeenLastCalledWith(`[@koala-8e44ad](/chat?session=${id}) `);
+});
+
+it('hides tagged quick choices and restores them when their badge is removed', async () => {
+  const id='c'.repeat(64);
+  vi.stubGlobal('fetch', sessions([{id,name:'review',harness:'claude',online:true}]));
+  render(()=>{const [value,change]=createSignal('');return <CommentMarkdownField label="Draft" backend={http()} quickAgents value={value()} onChange={change}/>;});
+  const field=screen.getByLabelText('Draft');
+  fireEvent.click(await screen.findByRole('button',{name:'Tag review'}));
+  expect(screen.queryByRole('button',{name:'Tag review'})).toBeNull();
+  expect(screen.queryByRole('group',{name:'Tag agent'})).toBeNull();
+  replaceComment(field,'Just a comment');
+  expect(screen.getByRole('button',{name:'Tag review'})).toBeTruthy();
+  replaceComment(field,'`[@review](/chat?session='+id+')`');
+  expect(screen.getByRole('button',{name:'Tag review'})).toBeTruthy();
+  replaceComment(field,'[@review](/chat?session='+id+') ');
+  expect(screen.queryByRole('button',{name:'Tag review'})).toBeNull();
 });

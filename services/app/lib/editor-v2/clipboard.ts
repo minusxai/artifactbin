@@ -58,6 +58,8 @@ const elements = new Set([
   'th',
   'td',
 ]);
+const formattingElements = new Set(['strong', 'b', 'em', 'i', 'del', 's', 'a']);
+const blockElements = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre']);
 
 function cleanHtml(tree: HastRoot | HastElement): void {
   tree.children = tree.children.flatMap((child): HastChild[] => {
@@ -157,6 +159,8 @@ export function clipboardAst(kind: ClipboardKind, value: string): Root {
   if (kind === 'html') {
     const parsed = html.parse(value) as HastRoot;
     cleanHtml(parsed);
+    normalizeBlockFormatting(parsed);
+    wrapPartialListItems(parsed);
     tree = converter.runSync(parsed) as unknown as Root;
   } else tree = markdown.parse(value) as Root;
   const definitions = new Map<string, string>();
@@ -168,4 +172,52 @@ export function clipboardAst(kind: ClipboardKind, value: string): Root {
   };
   collect(tree);
   return { type: 'root', children: tree.children.flatMap((child) => dialect(child, definitions)) };
+}
+
+/** A rich selection can carry <b><p>...</p></b>. mdast marks accept inline
+ * children only, so distribute that formatting into the block's prose while
+ * preserving the block hierarchy and every intervening inline run. */
+function distributeFormatting(children: HastElement['children'], format: HastElement): HastElement['children'] {
+  const out: HastElement['children'] = [];
+  let run: HastElement['children'] = [];
+  const flush = () => {
+    if (run.length) out.push({ ...format, children: run });
+    run = [];
+  };
+  for (const child of children) {
+    if (child.type === 'element' && blockElements.has(child.tagName)) {
+      flush();
+      out.push({ ...child, children: distributeFormatting(child.children, format) });
+    } else run.push(child);
+  }
+  flush();
+  return out;
+}
+function normalizeBlockFormatting(tree: HastRoot | HastElement): void {
+  tree.children = tree.children.flatMap((child): HastChild[] => {
+    if (child.type !== 'element') return [child];
+    normalizeBlockFormatting(child);
+    return formattingElements.has(child.tagName) && child.children.some(n => n.type === 'element' && blockElements.has(n.tagName))
+      ? distributeFormatting(child.children, child) : [child];
+  });
+}
+
+/** Browser selections may omit their list wrapper. Repair that allowed HTML
+ * fragment before conversion; the independent mdast insertion gate stays strict. */
+function wrapPartialListItems(tree: HastRoot | HastElement): void {
+  const children: HastChild[] = [];
+  let items: HastElement['children'] = [];
+  const flush = () => {
+    if (!items.length) return;
+    children.push({ type: 'element', tagName: 'ul', properties: {}, children: items });
+    items = [];
+  };
+  for (const child of tree.children) {
+    if (child.type === 'element') wrapPartialListItems(child);
+    if ((tree.type === 'root' || !['ul', 'ol'].includes(tree.tagName)) && child.type === 'element' && child.tagName === 'li') items.push(child);
+    else if (items.length && child.type === 'text' && !child.value.trim()) items.push(child);
+    else { flush(); children.push(child); }
+  }
+  flush();
+  tree.children = children;
 }

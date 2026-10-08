@@ -1,7 +1,6 @@
-import { afbinInstallCommand } from '@/lib/serving/agent-discovery-tags';
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
 
@@ -16,6 +15,10 @@ vi.mock('@xterm/xterm', () => ({ Terminal: class {
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { proposeDimensions() { return { cols: 80, rows: 24 }; } } }));
 
 import { ChatPage } from '@/solid/pages/Chat';
+import { AGENT_PALETTE } from '@/solid/lib/agent-identity';
+
+const metadataMatch = (text:string) => (_content:string, node:Element|null) => node?.tagName === 'P' && node.textContent === text;
+const sidebar = () => within(screen.getByRole('complementary', {name:'Agents'}));
 
 function open(session: string) {
   const history = createMemoryHistory();
@@ -70,7 +73,7 @@ it.each(['listening','unknown'])('shows a connected hosted agent without calling
   open(session.id);
   const status=activity==='listening'?'Online · Ready':'Online · Waiting for readiness';
   expect(await screen.findByRole('button',{name:'Open Claude'})).toHaveTextContent('claude · '+status);
-  expect(await screen.findByText('claude · Hosted · '+status)).toBeInTheDocument();
+  expect(await screen.findByText(metadataMatch(status+' · claude · Cloud box'))).toBeInTheDocument();
   expect(screen.queryByText('claude · Offline')).toBeNull();
   expect(screen.queryByText('claude · Unavailable')).toBeNull();
 });
@@ -88,6 +91,8 @@ it('lets the user stop waiting and start again with a fresh client wait', async 
   });
   vi.stubGlobal('fetch',fetch);
   open('');
+  await waitFor(() => expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeEnabled());
+ fireEvent.click(sidebar().getByRole('button', {name:'Provision cloud agent'}));
   fireEvent.click(await screen.findByRole('button',{name:'Start hosted box'}));
   fireEvent.click(await screen.findByRole('button',{name:'Stop waiting'}));
   expect(await screen.findByText(/Check your sessions before starting again/)).toBeInTheDocument();
@@ -164,13 +169,35 @@ it('keeps offline and ended sessions behind history without hiding a directly op
   expect(screen.queryByRole('button', { name: 'Open Offline agent' })).toBeNull();
 });
 
-it('keeps install and remote startup commands on the app origin', async () => {
+it('keeps connection commands on demand without installation instructions', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })));
   open('');
-  expect(screen.getByText(afbinInstallCommand(window.location.origin), { normalizer: text => text })).toBeInTheDocument();
-  expect(screen.getByText(`afbin remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
-  fireEvent.change(screen.getByRole('combobox', { name: 'Choose your agent' }), { target: { value: 'codex' } });
-  expect(screen.getByText(`afbin remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
+  expect(screen.queryByRole('heading', {name:'Connected Agents'})).toBeNull();
+  expect(screen.getByRole('region', {name:'Local agents'})).toHaveTextContent('No connected local agents');
+  expect(screen.getByRole('region', {name:'Cloud agents'})).toHaveTextContent('No cloud agents yet');
+  expect(screen.queryByText('Install CLI')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Claude Code' })).toBeNull();
+  const trigger = sidebar().getByRole('button', {name:'Connect your agent'});
+  expect(screen.getByRole('region', {name:'Local agents'})).toContainElement(trigger);
+  trigger.focus();
+  fireEvent.click(trigger);
+  expect(screen.getByRole('dialog', {name:'Connect your agent'})).toHaveAttribute('aria-modal','true');
+  expect(screen.getByRole('main')).not.toContainElement(screen.getByRole('dialog'));
+  const localName = screen.getByRole('textbox', {name:'Agent name'});
+  expect((localName as HTMLInputElement).value).toMatch(/^[a-z]+-[0-9a-f]{6}$/);
+  fireEvent.input(localName, {target:{value:'otter-12ab34'}});
+  expect(screen.getByText(`afbin remote --server '${window.location.origin}' --name otter-12ab34 claude`)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Codex' }));
+  expect(screen.getByRole('button', { name: 'Codex' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText(`afbin remote --server '${window.location.origin}' --name otter-12ab34 codex`)).toBeInTheDocument();
+  fireEvent.input(localName, {target:{value:'bad; command'}});
+  expect(screen.queryByRole('button', {name:'Copy run in your terminal'})).toBeNull();
+  expect(screen.getByRole('alert')).toHaveTextContent('Use 1–32');
+  fireEvent.keyDown(window, {key:'Escape'});
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(trigger).toHaveFocus();
+  fireEvent.click(within(screen.getByRole('region', {name:'No agent selected'})).getByRole('button', {name:'Connect your agent'}));
+  expect(screen.getByRole('dialog', {name:'Connect your agent'})).toBeInTheDocument();
 });
 
 it('offers native hosted boxes only when the configured service advertises managed processes',async()=>{
@@ -178,12 +205,30 @@ it('offers native hosted boxes only when the configured service advertises manag
  const session={id:'native',runId:'run-one',name:'my-agent',harness:'codex',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null};
  const fetch=vi.fn(async(url:string,_options?:RequestInit)=>({ok:true,json:async()=>url==='/api/run-capabilities'?{version:1,managedProcesses:true}:url==='/api/runs'?{session,runId:'run-one'}:url==='/api/remote/sessions'?{sessions:[]}:{session,seq:0,frames:[],snapshot:'Log in to Codex'}}));
  vi.stubGlobal('fetch',fetch);open('');
- const program=await screen.findByRole('combobox',{name:'Hosted program'});fireEvent.change(program,{target:{value:'codex'}});
+ const provision = sidebar().getByRole('button', {name:'Provision cloud agent'});
+ await waitFor(() => expect(provision).toBeEnabled());
+ expect(screen.getByRole('region',{name:'Cloud agents'})).toContainElement(provision);
+ fireEvent.click(provision);
+ expect(screen.getByRole('dialog',{name:'Provision cloud agent'})).toHaveAttribute('aria-modal','true');
+ const agentName = screen.getByRole('textbox', {name:'Agent name'});
+ expect((agentName as HTMLInputElement).value).toMatch(/^[a-z]+-[0-9a-f]{6}$/);
+ expect(AGENT_PALETTE).toContain('#' + (agentName as HTMLInputElement).value.split('-').at(-1));
+ fireEvent.input(agentName, {target:{value:'koala'}});
+ const color = screen.getByRole('img', {name:/Agent color #[0-9a-f]{6}/}).getAttribute('aria-label');
+ expect(AGENT_PALETTE).toContain(color?.replace('Agent color ', ''));
+ fireEvent.input(agentName, {target:{value:'otter'}});
+ expect(screen.getByRole('img', {name:/Agent color #[0-9a-f]{6}/})).not.toHaveAttribute('aria-label',color);
+ fireEvent.input(agentName, {target:{value:'koala'}});
+ expect(screen.getByRole('img', {name:/Agent color #[0-9a-f]{6}/})).toHaveAttribute('aria-label',color);
+ fireEvent.input(agentName, {target:{value:'koala-a234f4'}});
+ expect(screen.getByRole('img', {name:'Agent color #a234f4'})).toHaveStyle({'background-color':'#a234f4'});
+ fireEvent.click(screen.getByRole('button', {name:'Codex'}));
+ expect(screen.getByRole('button', {name:'Codex'})).toHaveAttribute('aria-pressed','true');
  fireEvent.input(screen.getByRole('textbox',{name:'SSH public key'}),{target:{value:'ssh-ed25519 fixture-only'}});
  fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/runs',expect.objectContaining({method:'POST'})));
  const call=fetch.mock.calls.find(([url])=>url==='/api/runs')!;
- expect(JSON.parse(call[1]!.body as string)).toMatchObject({name:'my-agent',command:['codex'],sshPublicKey:'ssh-ed25519 fixture-only',compute:{vcpu:1,memoryMiB:2048}});
+ expect(JSON.parse(call[1]!.body as string)).toMatchObject({name:'koala-a234f4',command:['codex'],sshPublicKey:'ssh-ed25519 fixture-only',compute:{vcpu:1,memoryMiB:2048}});
  await waitFor(()=>expect(write).toHaveBeenCalledWith('Log in to Codex',expect.any(Function)));
 });
 
@@ -201,10 +246,12 @@ it('retries a stopped-box admission with one frozen request and visible progress
   return {ok:true,json:async()=>({session,seq:0,frames:[],snapshot:'ready'})};
  });
  vi.stubGlobal('fetch',fetch);open('');
- const name=await screen.findByRole('textbox',{name:'Box name'});
+ await waitFor(() => expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeEnabled());
+ fireEvent.click(sidebar().getByRole('button', {name:'Provision cloud agent'}));
+ const name=await screen.findByRole('textbox',{name:'Agent name'});
  fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
  expect(await screen.findByText('Finishing the previous hosted box…')).toBeInTheDocument();
- expect(name).toBeDisabled();expect(screen.getByRole('combobox',{name:'Hosted program'})).toBeDisabled();
+ expect(name).toBeDisabled();expect(screen.getByRole('button',{name:'Shell'})).toBeDisabled();expect(screen.getByRole('button',{name:'Codex'})).toBeDisabled();
  await waitFor(()=>expect(attempts).toBe(2));
  expect(bodies).toHaveLength(2);expect(bodies[1]).toBe(bodies[0]);
  expect(JSON.parse(bodies[0]!).requestId).toBeTruthy();
@@ -257,6 +304,8 @@ it('guides an ended hosted run back to Start hosted box with retained home files
  open(session.id);const endedNotice=await screen.findByText(/Session ended \(exit 0\)/,{selector:'[role="status"]'});
  expect(endedNotice).toHaveTextContent(/Start hosted box/);expect(endedNotice).toHaveTextContent(/same name/);expect(endedNotice).toHaveTextContent(/home files/i);
  expect(endedNotice).not.toHaveTextContent('afbin remote');expect(screen.getByRole('button',{name:'Remove session'})).toBeEnabled();
+ await waitFor(() => expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeEnabled());
+ fireEvent.click(sidebar().getByRole('button', {name:'Provision cloud agent'}));
  expect(screen.getByRole('button',{name:'Start hosted box'})).toBeEnabled();
 });
 
@@ -266,7 +315,7 @@ it('updates the selected sidebar from the terminal connection instead of waiting
   const session = { id:'fresh-connection',name:'Fresh Claude',harness:'claude',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null,runId:'fresh-run',managed:true,activity:'blocked' };
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[{...session,online:false}]}:url==='/api/run-capabilities'?{managedProcesses:false}:{session,seq:0,frames:[],snapshot:''}})));
   open(session.id);
-  expect(await screen.findByText('claude · Hosted · Online · Waiting for approval')).toBeInTheDocument();
+  expect(await screen.findByText(metadataMatch('Online · Waiting for approval · claude · Cloud box'))).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Open Fresh Claude'})).toHaveTextContent('claude · Online · Waiting for approval');
 });
 
@@ -275,9 +324,9 @@ it.each(['pi', 'opencode'])('offers and starts hosted %s with the selected harne
   const session={id:'new-agent',name:'my-agent',harness,machine:'Hosted',online:false,runId:'new-run',activity:'starting',exitCode:null,cols:100,rows:30};
   const fetch=vi.fn(async(url:string)=>({ok:true,status:202,headers:new Headers(),json:async()=>url==='/api/run-capabilities'?{version:1,managedProcesses:true}:url==='/api/remote/sessions'?{sessions:[]}:url==='/api/runs'?{session}:{session,seq:0,frames:[],snapshot:''}}));
   vi.stubGlobal('fetch',fetch);open('');
-  const menu=await screen.findByRole('combobox',{name:'Hosted program'});
-  expect(Array.from(menu.querySelectorAll('option')).map(option=>option.textContent)).toEqual(['Shell','Claude Code','Codex','Pi','OpenCode']);
-  fireEvent.change(menu,{target:{value:harness}});fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
+  await waitFor(()=>expect(sidebar().getByRole('button',{name:'Provision cloud agent'})).toBeEnabled());
+  fireEvent.click(sidebar().getByRole('button',{name:'Provision cloud agent'}));
+  fireEvent.click(await screen.findByRole('button',{name:harness==='pi'?'Pi':'OpenCode'}));fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
   await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/runs',expect.objectContaining({body:expect.stringContaining('"command":["'+harness+'"]')})));
   expect(await screen.findByText(/Sign in from this terminal/)).not.toHaveTextContent('in a shell');
 });
@@ -289,7 +338,7 @@ it('shows the same offline state in the selected header and list while keeping r
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:url==='/api/run-capabilities'?{managedProcesses:false}:{session,seq:0,frames:[],snapshot:''}})));
   open(session.id);
   expect(await screen.findByRole('button',{name:'Open Offline Claude'})).toHaveTextContent('claude · Offline');
-  expect(await screen.findByText('claude · Hosted · Offline')).toBeInTheDocument();
+  expect(await screen.findByText(metadataMatch('Offline · claude · Cloud box'))).toBeInTheDocument();
   expect(screen.getByText('Waiting for your hosted terminal…')).toBeInTheDocument();
 });
 
@@ -300,16 +349,16 @@ it('shows one stopping state and disables input while a stop receipt and termina
  const receipt=new Promise(resolve=>{completeStop=resolve;});
  vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>options?.method==='POST'?receipt:{ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,snapshot:'Ready',frames:[]}}));
  open(session.id);
- await screen.findByText('claude · Hosted · Online · Ready');
+ await screen.findByText(metadataMatch('Online · Ready · claude · Cloud box'));
  fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
- await waitFor(()=>expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument());
+ await waitFor(()=>expect(screen.getByText(metadataMatch('Stopping · claude · Cloud box'))).toBeInTheDocument());
  expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
  expect(screen.getByRole('button',{name:'Send Enter'})).toBeDisabled();
  terminalInput.send('must not reach shutdown');
  completeStop({ok:true,json:async()=>({ok:true})});
  await waitFor(()=>expect(screen.getByRole('button',{name:'Stop agent'})).toBeDisabled());
- expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument();
+ expect(screen.getByText(metadataMatch('Stopping · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
 });
 
@@ -320,18 +369,18 @@ it('keeps stopping through stale polls, blocks raw terminal input, and accepts a
  let polls=0;
  const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>options?.method==='POST'?{ok:true}:url==='/api/remote/sessions'?{sessions:[session]}:(polls++,{session,seq:0,snapshot:'Ready',frames:[]})}));
  vi.stubGlobal('fetch',fetch);open(session.id);
- await screen.findByText('claude · Hosted · Online · Ready');
+ await screen.findByText(metadataMatch('Online · Ready · claude · Cloud box'));
  const pollsAtStop = polls;
  fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
  await waitFor(()=>expect(polls).toBeGreaterThan(pollsAtStop));
- expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument();
+ expect(screen.getByText(metadataMatch('Stopping · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
  terminalInput.send('shutdown input');
  fireEvent.submit(screen.getByRole('textbox',{name:'Message to agent'}).closest('form')!);
  await new Promise(resolve=>setTimeout(resolve,0));
  expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(1);
  session={...session,online:false,activity:'stopped',exitCode:0};
- expect(await screen.findByText('claude · Hosted · Ended')).toBeInTheDocument();
+ expect(await screen.findByText(metadataMatch('Ended · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Ended')).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Remove session'})).toBeEnabled();
 });
@@ -343,12 +392,12 @@ it('restores the latest usable session and shows the error when Stop fails', asy
  const receipt=new Promise((_resolve,reject)=>{rejectStop=reject;});
  const fetch=vi.fn(async(url:string,options?:RequestInit)=>options?.method==='POST'?receipt:{ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,snapshot:'Ready',frames:[]}});
  vi.stubGlobal('fetch',fetch);open(session.id);
- await screen.findByText('claude · Hosted · Online · Ready');
+ await screen.findByText(metadataMatch('Online · Ready · claude · Cloud box'));
  fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
  rejectStop(new Error('Stop could not be confirmed'));
  expect(await screen.findByRole('alert')).toHaveTextContent('Stop could not be confirmed');
- expect(screen.getByText('claude · Hosted · Online · Ready')).toBeInTheDocument();
+ expect(screen.getByText(metadataMatch('Online · Ready · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Online · Ready')).toBeInTheDocument();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled();
  expect(screen.getByRole('button',{name:'Stop agent'})).toBeEnabled();
@@ -360,7 +409,7 @@ it('shows capacity waiting consistently, disables input, and transitions through
  let session={id:'capacity-wait',runId:'capacity-run',name:'Capacity Claude',harness:'claude',machine:'Hosted',managed:true,online:false,activity:'queued',exitCode:null,cols:100,rows:30};
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,snapshot:'Waiting for compute capacity. Your agent will start automatically when a slot is available.',frames:[]}})));
  open(session.id);
- expect(await screen.findByText('claude · Hosted · Waiting for capacity')).toBeInTheDocument();
+ expect(await screen.findByText(metadataMatch('Waiting for capacity · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Waiting for capacity')).toBeInTheDocument();
  expect(screen.getByText('Waiting for compute capacity. Your agent will start automatically when a slot is available.')).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:/Show previous sessions/})).toBeNull();
@@ -370,12 +419,12 @@ it('shows capacity waiting consistently, disables input, and transitions through
  expect(screen.getByRole('button',{name:'Send Enter'})).toBeDisabled();
  session={...session,online:true};
  await waitFor(()=>expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled());
- expect(screen.getByText('claude · Hosted · Waiting for capacity')).toBeInTheDocument();
+ expect(screen.getByText(metadataMatch('Waiting for capacity · claude · Cloud box'))).toBeInTheDocument();
  session={...session,online:false,activity:'starting'};
- expect(await screen.findByText('claude · Hosted · Starting')).toBeInTheDocument();
+ expect(await screen.findByText(metadataMatch('Starting · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
  session={...session,online:true,activity:'listening'};
- expect(await screen.findByText('claude · Hosted · Online · Ready')).toBeInTheDocument();
+ expect(await screen.findByText(metadataMatch('Online · Ready · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Online · Ready')).toBeInTheDocument();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled();
  expect(screen.queryByText('Waiting for compute capacity. Your agent will start automatically when a slot is available.')).toBeNull();
@@ -387,12 +436,26 @@ it('can cancel a capacity-waiting agent and keeps Stop above stale queued polls'
  let polls=0;
  const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>options?.method==='POST'?{ok:true}:url==='/api/remote/sessions'?{sessions:[session]}:(polls++,{session,seq:0,snapshot:'',frames:[]})}));
  vi.stubGlobal('fetch',fetch);open(session.id);
- await screen.findByText('claude · Hosted · Waiting for capacity');
+ await screen.findByText(metadataMatch('Waiting for capacity · claude · Cloud box'));
  const pollsAtStop=polls;fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
  await waitFor(()=>expect(polls).toBeGreaterThan(pollsAtStop));
- expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument();
+ expect(screen.getByText(metadataMatch('Stopping · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Stop agent'})).toBeDisabled();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
  expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(1);
+});
+
+it('keeps the included agent visible offline and identifies it without treating local Pi as included', async () => {
+ vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+ const base = { harness:'pi',machine:'Hosted',cols:80,rows:24,controller:'web',exitCode:null };
+ const sessions = [{...base,id:'included',name:'afbin',included:true,online:false}, {...base,id:'local-pi',name:'My Pi',online:true}];
+ vi.stubGlobal('fetch', vi.fn(async (url:string) => ({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions}:url==='/api/run-capabilities'?{version:1,managedProcesses:false}:{session:sessions[0],seq:0,frames:[]} })));
+ open('included');
+ expect(await screen.findByRole('button',{name:'Open afbin'})).toHaveTextContent('Included for free');
+ expect(screen.getByRole('region',{name:'Cloud agents'})).toContainElement(screen.getByRole('button',{name:'Open afbin'}));
+ expect(screen.getByRole('region',{name:'Local agents'})).toContainElement(screen.getByRole('button',{name:'Open My Pi'}));
+ expect(screen.getByRole('button',{name:'Open My Pi'})).not.toHaveTextContent('Included');
+ expect(screen.getByText(/Your included Pi agent/)).toBeInTheDocument();
+ expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeDisabled();
 });

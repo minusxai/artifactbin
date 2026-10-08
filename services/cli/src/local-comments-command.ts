@@ -1,4 +1,5 @@
 /** CLI discussion over the same portable annotation store as the local browser editor. */
+import {annotationAuthorForAgent} from '../../app/lib/annotations/author';
 import {resolve,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -48,7 +49,7 @@ export async function localCommentCommand(workspace:Workspace,parsed:ParsedComma
   for(const target of targets){
    const original=await readFile(await confinedPath(workspace.root,target.path),'utf8'),document=parseDocument(original);
    const source=mutations&&!flags.thread&&flags.quote?stampNodeIds(document.body).source:document.body;
-   const annotations=previewAnnotations(store,LOCAL_WORKSPACE_SCOPE,target.path,source);
+   const annotations=previewAnnotations(store,LOCAL_WORKSPACE_SCOPE,target.path,source,typeof flags.agent==='string'?annotationAuthorForAgent(flags.agent):undefined);
    const id=(await localIdentities(workspace));const documentId=Object.entries(id).find(([,path])=>path===target.path)?.[0];
    const context={local:true,path:target.path,...(documentId?{artifact_id:documentId}:{})};
    try{

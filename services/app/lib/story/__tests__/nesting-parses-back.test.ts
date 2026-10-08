@@ -55,6 +55,14 @@ const HEADER_WITH_DIVS =
   + '</p></header></div>';
 
 describe('a served document parses back as the tree it was rendered from', () => {
+  it('keeps legacy direct list nesting in the same hierarchy as the editor', async () => {
+    const html = await serve('<ol id="list"><li id="outer"><li id="child"><p>B</p></li><li id="empty"><p></p></li></li></ol>');
+    expect(reparented(html)).toEqual([]);
+    const { document } = new JSDOM(html).window;
+    expect(document.querySelector('#outer > ol > #child')).not.toBeNull();
+    expect(document.querySelector('#outer > ol > #empty')).not.toBeNull();
+    expect(document.querySelector('li > li')).toBeNull();
+  });
   it('moves nothing, for the shape that was moving eight nodes in production', async () => {
     expect(reparented(await serve(HEADER_WITH_DIVS))).toEqual([]);
   });

@@ -1,3 +1,4 @@
+import { replaceComment } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * PICKING — the Select tool. Opening
@@ -35,7 +36,7 @@ describe('picking a block from the rail', () => {
     expect(screen.getByRole('button', { name: 'Screenshot' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Screenshot' })).toHaveAttribute('aria-pressed', 'false');
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
-    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Node comment' } });
+    replaceComment(screen.getByLabelText('Annotation comment'), 'Node comment');
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
     expect(screen.queryByLabelText('Upload screenshot')).toBeNull();
     expect(beginCapture).not.toHaveBeenCalled();
@@ -46,7 +47,7 @@ describe('picking a block from the rail', () => {
     expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, path: '2.2', nodeId: 'node-2-2' } });
-    expect(screen.getByLabelText('Annotation comment')).toHaveValue('');
+    expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('');
     expect(beginCapture).not.toHaveBeenCalled();
   });
 
@@ -73,7 +74,7 @@ describe('picking a block from the rail', () => {
     expect(capture.mock.calls[0]![0]).toMatchObject({ x: 5, y: 106, width: 200, height: 40 });
     await flush();
     expect(screen.getByLabelText('Upload screenshot')).toBeTruthy();
-    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Area comment' } });
+    replaceComment(screen.getByLabelText('Annotation comment'), 'Area comment');
     expect(screen.getByLabelText('Save annotation')).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Continue without screenshot' }));
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
@@ -97,7 +98,7 @@ describe('picking a block from the rail', () => {
     await waitFor(() => expect(screen.getByLabelText('Screenshot editor')).toBeTruthy());
     expect(screen.queryByText('page on hold')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Continue without screenshot' })).toBeNull();
-    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Area with a drawing' } });
+    replaceComment(screen.getByLabelText('Annotation comment'), 'Area with a drawing');
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
   });
 
@@ -126,7 +127,7 @@ describe('picking a block from the rail', () => {
     vi.spyOn(captureScreen, 'beginCapture').mockImplementation(() => new Promise((resolve) => { grant = resolve; }));
     const view = layer({ railOpen: true, editId: 'edit-current' }); await flush();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
-    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Keep my draft' } });
+    replaceComment(screen.getByLabelText('Annotation comment'), 'Keep my draft');
     fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
     fireEvent.click(screen.getByLabelText('Select'));
     const session = { capture: vi.fn(async () => { throw new Error('Unused capture'); }), dispose: vi.fn() };
@@ -134,7 +135,7 @@ describe('picking a block from the rail', () => {
     expect(session.dispose).toHaveBeenCalledOnce();
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: 'block' });
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
-    expect(screen.getByLabelText('Annotation comment')).toHaveValue('Keep my draft');
+    expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('Keep my draft');
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
   });
 
@@ -142,14 +143,14 @@ describe('picking a block from the rail', () => {
     const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
     const view = layer({ railOpen: true, editId: 'edit-current' }); await flush();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
-    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Discard this draft' } });
+    replaceComment(screen.getByLabelText('Annotation comment'), 'Discard this draft');
     if (dismiss === 'Escape') fireEvent.keyDown(window, { key: 'Escape' });
     else fireEvent.click(screen.getByRole('button', { name: dismiss }));
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
     expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: 'block', selectedPath: null });
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, path: '2.2', nodeId: 'next-node' } });
-    expect(screen.getByLabelText('Annotation comment')).toHaveValue('');
+    expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('');
     expect(view.runtime.posts().at(-1)).toMatchObject({ selectedPath: '2.2' });
     expect(beginCapture).not.toHaveBeenCalled();
   });
@@ -207,7 +208,7 @@ describe('picking a block from the rail', () => {
     expect(pill()).toBeNull();
     expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'false');
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: null, selectedPath: '2.1' });
-    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'picked note' } });
+    replaceComment(screen.getByLabelText('Annotation comment'), 'picked note');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     const body = JSON.parse(String(creates()[0]!.init!.body)) as Record<string, unknown>;
@@ -344,7 +345,7 @@ describe('drawing an area from the rail', () => {
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: null, selectedPath: '2' });
     // The document re-reports the SAME node's geometry on scroll, without the range; the area survives it.
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED_AREA, range: undefined, rect: { x: 5, y: 60, width: 400, height: 200 } } });
-    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'this whole region' } });
+    replaceComment(screen.getByLabelText('Annotation comment'), 'this whole region');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     const body = JSON.parse(String(creates()[0]!.init!.body)) as Record<string, unknown>;
