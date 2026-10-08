@@ -1,20 +1,30 @@
-import {canAuthenticateUser} from '@/lib/accounts/user-kinds';
-/** OSS team composition reuses the shared login and identity; the app owns authorization. */
+/**
+ * OSS team composition reuses the shared login and identity; the app owns authorization. The app host
+ * is a parameter (services/app/server/team-host passes createAppHost), so the CLI never imports the server.
+ */
+import {canAuthenticateUser} from '../../app/lib/accounts/user-kinds';
 import {join} from 'node:path';
 import {createTokenReader} from '@artifactbin/utils';
 import {createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,createAuthHost,readEnv,sessionStoreOf} from '@artifactbin/auth';
 import {createSql} from '@artifactbin/sql/local';
 import {createBrowser,sessionProcessPaths} from '@artifactbin/browser/local';
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
-import {createAppHost,type AppHost} from './host';
-import {EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '@/lib/platform/config';
-import {setServices} from '@/lib/platform/services';
-import {chromiumExecutable} from '../../cli/src/chromium';
+import type {Actor,Upstream} from '@artifactbin/contracts';
+import type {Db} from '../../app/lib/platform';
+import {EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '../../app/lib/platform/config';
+import {setServices} from '../../app/lib/platform/services';
+import {chromiumExecutable} from './chromium';
 
-export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string):Promise<AppHost>{
+/** What team hosting needs of the app host (services/app/server/host `createAppHost`). */
+export interface TeamAppHost {fetch:(request:Request)=>Promise<Response>;close:()=>Promise<void>;request:(request:Request,actor:Actor)=>Promise<Response>}
+export type CreateTeamAppHost=(options:{webDir:string;publicDir:string;actorSecret:string|undefined;
+ services:{sql:ReturnType<typeof createSql>;browser:ReturnType<typeof createBrowser>};shutdown:()=>Promise<void>;onTokenRevoked:(id?:string)=>void;
+ initialize:(db:Db)=>Promise<void>;identity:(upstream:Upstream)=>{fetch:(request:Request)=>Promise<Response>}})=>Promise<TeamAppHost>;
+
+export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string,createAppHost:CreateTeamAppHost):Promise<TeamAppHost>{
  const origin=readEnv(env,'APP__PUBLIC_BASE_URL'),secret=readEnv(env,'AUTH__SECRET');
  if(!origin||!secret)throw new Error('Team hosting requires APP__PUBLIC_BASE_URL and AUTH__SECRET.');
- let host:AppHost,identity:Parameters<typeof createAuthHost>[0];
+ let host:TeamAppHost,identity:Parameters<typeof createAuthHost>[0];
  let reader:ReturnType<typeof createTokenReader>;
  const browser=createBrowser({executablePath:chromiumExecutable,sessions:{browserExecutable:chromiumExecutable,...sessionProcessPaths(env),baseURL:origin,request:async(request,actor)=>host.request(request,actor)}});
  const sql=createSql({maxRows:MAX_QUERY_ROWS,timeoutMs:QUERY_TIMEOUT_MS});

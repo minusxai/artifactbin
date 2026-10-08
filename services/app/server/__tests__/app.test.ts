@@ -92,7 +92,7 @@ describe('a document address', () => {
  * pretty URL answer 200 with the same document the canonical address serves —
  * its data inlined for the canonical path, `<link rel="canonical">`, and the
  * canonical `address` the page puts in the address bar before its router reads
- * it (solid/lib/heal-address). No round trip for a shared link. It runs AFTER the
+ * it (web/heal-address). No round trip for a shared link. It runs AFTER the
  * ACL: an unreadable document still answers 404 and never names its owner.
  */
 const payloadOf = (html: string) => JSON.parse(/<script type="application\/json" id="mx-page-data">([\s\S]*?)<\/script>/.exec(html)![1]!) as { path: string; address?: string; profile?: unknown; artifact?: unknown };

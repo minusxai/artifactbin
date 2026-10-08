@@ -4,7 +4,7 @@
  * A module is a path: `server` (server.ts), `scripts` (root scripts/), `pkg/<name>` (services/<name>),
  * `lib/<name>` (services/app/lib/<name>, or the single file lib/<name>.ts), `app/<dir>` (services/app/
  * <solid|server|app|web|src|orchestrator|scripts>) and `app-root` (anything else under services/app).
- * An edge is any import of non-test source — static, `export from`, dynamic `import()`, `require()` and
+ * An edge is any import of non-test source — static, `export from`, dynamic import calls, CommonJS require calls and
  * `import("x")` types, type-only included — read with the TypeScript parser.
  *
  * Three rules:
