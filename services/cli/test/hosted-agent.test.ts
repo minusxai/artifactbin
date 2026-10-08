@@ -45,3 +45,22 @@ test('OpenCode pins the first owned root session and never switches to a newer t
  assert.deepEqual(await hostedHarnessArguments('opencode',home,'context',async()=>{throw Error('must not rediscover pinned identity');}),args);
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+
+test('Codex recovers shared-daemon interactive sessions and pins the earliest owned root',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'af-hosted-daemon-'));try{
+ const dir=join(home,'.codex','sessions','2026');await mkdir(dir,{recursive:true});
+ const original='01a11937-c9fe-7461-8e50-a882225062d6';
+ const rows=[
+  {id:'11111111-1111-4111-8111-111111111111',cwd:'/other',source:'vscode',timestamp:'2026-10-08T01:00:00Z'},
+  {id:'22222222-2222-4222-8222-222222222222',cwd:home,source:'exec',timestamp:'2026-10-08T01:01:00Z'},
+  {id:'33333333-3333-4333-8333-333333333333',cwd:home,source:{subagent:{thread_spawn:{parent_thread_id:original}}},timestamp:'2026-10-08T01:02:00Z'},
+  {id:original,cwd:home,source:'vscode',timestamp:'2026-10-08T01:54:09Z',base_instructions:{text:'native instructions '.repeat(2048)}},
+  {id:'01a1193d-4437-7882-bd5a-cc20aed14c90',cwd:home,source:'cli',timestamp:'2026-10-08T02:00:08Z'}
+ ];
+ for(const [i,payload] of rows.entries())await writeFile(join(dir,i+'.jsonl'),JSON.stringify({type:'session_meta',payload})+'\n');
+ const args=await hostedHarnessArguments('codex',home,'context');assert.equal(args[0],'resume');assert.equal(args[1],original);
+ await writeFile(join(dir,'earlier.jsonl'),JSON.stringify({type:'session_meta',payload:{id:'44444444-4444-4444-8444-444444444444',cwd:home,source:'vscode',timestamp:'2026-10-08T01:30:00Z'}})+'\n');
+ assert.deepEqual(await hostedHarnessArguments('codex',home,'context'),args);
+ }finally{await rm(home,{recursive:true,force:true});}
+});
