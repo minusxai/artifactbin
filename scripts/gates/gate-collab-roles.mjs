@@ -14,9 +14,10 @@
  * The NAMED-PEOPLE walk that used to follow (invite, promote, two editors typing, demotion) left for the tests that
  * own each fact: the share menu's invite and role rows → solid/document/__tests__/sharing.test.tsx; what an editor
  * and a commenter are drawn → solid/__tests__/document-chrome.test.tsx; the commenter's thread and refused edits →
- * services/app/__tests__/collab-commenters.test.ts; the editor's sharing door → editor-sharing.test.ts; an editor's
- * write and a demotion that takes effect on the next write → collab-editors.test.ts; concurrent edits landing →
- * edits.test.ts, collab-editors.test.ts ("the browser edit answer") and gate-inplace-edit's remote-edit section; the
+ * services/app/__tests__/roles.test.ts ("the commenter role, through the routes"); the editor's sharing door → its
+ * "what an editor may do with sharing"; an editor's write and a demotion that takes effect on the next write → its
+ * "editors through every door"; concurrent edits landing → edits.test.ts, roles.test.ts ("the browser edit answer")
+ * and gate-inplace-edit's remote-edit section; the
  * shared-with-you role → home-progressive.test.ts and solid/components/__tests__/browse-extras.test.tsx.
  *
  * Isolated in CI (CI_ISOLATED_GATES): the concurrent typing that lost races under a neighbour's load has left with the

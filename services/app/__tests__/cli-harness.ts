@@ -1,6 +1,4 @@
 import {POST as reserveIdentities} from '@/app/api/artifacts/reservations/route';
-import {createUser} from '@/lib/accounts/users';
-import {randomUUID} from 'node:crypto';
 /**
  * THE CLI boot harness — the one way an app test drives the REAL `afbin` against the REAL route
  * handlers. Every `cli-*` test used to hand-roll the same four things: a temp workspace, a minted
@@ -20,7 +18,7 @@ import { expect } from 'vitest';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mintToken } from '@/lib/accounts/tokens';
+import { mintAccountToken } from './harness';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
 import { GET as readArtifact, PUT as replaceArtifact, PATCH as patchArtifact, DELETE as deleteArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as readContent } from '@/app/api/artifacts/[id]/content/route';
@@ -165,10 +163,10 @@ export async function cliWorkspace(prefix: string, options: CliWorkspaceOptions 
       return result;
     },
     async connect(name, userId) {
-      const ownerId = userId===undefined?(await createUser({email:'mxmx_test_'+randomUUID()+'@example.test'})).id:userId;
-      const token = await mintToken(name, ownerId);
+      // The app harness's one account-token mint: an email account unless the caller names one (or null).
+      const token = await mintAccountToken(name, userId);
       await saveConnection({ server: CLI_SERVER, token: token.token }, home);
-      return { id: token.id, token: token.token, userId: ownerId };
+      return { id: token.id, token: token.token, userId: token.userId };
     },
     useToken: (token: string) => saveConnection({ server: CLI_SERVER, token }, home),
     cleanup: () => rm(base, { recursive: true, force: true }),

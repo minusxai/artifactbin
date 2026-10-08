@@ -32,6 +32,7 @@ import { runGateProcess } from './gates.process.mjs';
 import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
+import { stopServer, waitUntilServing } from './lib/server-process.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.dirname(HERE);
@@ -108,18 +109,11 @@ const freePort = () => new Promise((resolve, reject) => {
   });
 });
 
-const answers = async (url) => {
-  try { return (await fetch(url, { signal: AbortSignal.timeout(2000) })).status < 500; } catch { return false; }
-};
-
-const waitForServer = async (base, child) => {
-  for (let i = 0; i < 120; i++) {
-    if (child.exitCode !== null) throw new Error(`server for ${base} exited with ${child.exitCode}`);
-    if (await answers(base)) return;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`server at ${base} never answered`);
-};
+/** Answering at all (any status under 500) is serving: the app's home redirects a stranger to /login. */
+const waitForServer = (base, child) => waitUntilServing(child, {
+  url: base, ready: (response) => response.status < 500, timeoutMs: 60_000, intervalMs: 500, requestTimeoutMs: 2000,
+  exited: (code) => `server for ${base} exited with ${code}`, never: () => `server at ${base} never answered`,
+});
 
 const started = [];
 const scratch = path.join(os.tmpdir(), `artifact-gates-${process.pid}`);
@@ -200,12 +194,7 @@ const kill = (signal) => { for (const child of started) { if (alive(child)) { tr
  * server per run behind — MEASURED: nine of them, oldest forty minutes, each
  * holding a port and a Chromium-shaped amount of memory. So: ask, wait, insist.
  */
-const stopAll = async () => {
-  kill('SIGTERM');
-  const deadline = Date.now() + 2000;
-  while (started.some(alive) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
-  kill('SIGKILL');
-};
+const stopAll = () => Promise.all(started.map((child) => stopServer(child, { graceMs: 2000 })));
 // The last word, for the paths that cannot await: an uncaught throw, a signal,
 // `process.exit` from anywhere. A SIGKILLed RUNNER can still leak — nothing in
 // it can run then — which is why the escalation above exists at all.

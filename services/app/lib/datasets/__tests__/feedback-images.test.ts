@@ -95,7 +95,9 @@ describe('dataset-bound feedback images',()=>{
       expect(state.records).toHaveLength(0);
     } finally {state.dataset.dataset_policy=original;}
   });
-  it('runs upload and read handlers with current ACL and attachment safety headers',async()=>{
+  // The download's attachment, nosniff and sandbox headers are services/app/__tests__/media-headers.test.ts's
+  // ("a dataset file download"), through the real handlers rather than these doubles.
+  it('runs upload and read handlers with current ACL',async()=>{
     const request=new Request('http://localhost/a/doc123/datasets/data12/files',{method:'POST',headers:{'X-Filename':encodeURIComponent('note.txt'),'X-Edit-Id':'edit123','Content-Type':'text/plain','Idempotency-Key':'route-key-123'},body:'hello'});
     const response=await POST(request,{params:Promise.resolve({id:'doc123',datasetId:'data12'})});
     expect(response.status).toBe(201);
@@ -104,9 +106,6 @@ describe('dataset-bound feedback images',()=>{
     const get=new Request('http://localhost/a/doc123/datasets/data12/files/abc234def456');
     const file=await GET(get,params);
     expect(file.status).toBe(200);
-    expect(file.headers.get('content-disposition')).toContain('attachment;');
-    expect(file.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(file.headers.get('content-security-policy')).toContain('sandbox');
     state.readAllowed=false;
     expect((await GET(get,params)).status).toBe(404);
     expect(await readDatasetFile({actor,documentId:'doc123',datasetId:'data12',fileId:'abc234def456'})).toBeNull();

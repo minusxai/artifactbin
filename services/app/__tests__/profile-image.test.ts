@@ -131,17 +131,13 @@ describe('GET /api/users/<id>/avatar', () => {
 
     const matching = await getAvatar(request(`/api/users/${user.id}/avatar?v=${version}`), avatarCtx(user.id));
     expect(matching.status).toBe(200);
-    expect(matching.headers.get('Content-Type')).toBe('image/webp');
-    expect(matching.headers.get('X-Content-Type-Options')).toBe('nosniff');
-    expect(matching.headers.get('Content-Disposition')).toBe('inline');
-    expect(matching.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    // Its headers (type, nosniff, inline, immutable here and no-cache elsewhere) are media-headers.test.ts's rows.
     const served = Buffer.from(await matching.arrayBuffer());
     expect((await sharp(served).metadata()).format).toBe('webp');
 
     for (const query of ['', '?v=stale', `?v=${version}x`]) {
       const stale = await getAvatar(request(`/api/users/${user.id}/avatar${query}`), avatarCtx(user.id));
       expect(stale.status).toBe(200);
-      expect(stale.headers.get('Cache-Control')).toBe('no-cache');
     }
   });
 
@@ -160,7 +156,6 @@ describe('GET /api/users/<id>/avatar', () => {
     const version = avatarVersion((await getUserById(two.id))!.image_key!);
     const served = await getAvatar(request(`/api/users/${two.id}/avatar?v=${version}`), avatarCtx(two.id));
     expect(served.status).toBe(200);
-    expect(served.headers.get('Content-Type')).toBe('image/webp');
     expect((await getAvatar(request(`/api/users/${one.id}/avatar`), avatarCtx(one.id))).status).toBe(404);
   });
 

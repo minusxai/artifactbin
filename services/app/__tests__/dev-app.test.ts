@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { freePort } from '@artifactbin/test-support/net';
+import { stopServer, waitUntilServing } from '../../../scripts/lib/server-process.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const APP_ROOT = path.join(ROOT, 'services', 'app');
@@ -88,17 +89,11 @@ describe('server.ts --app-only', () => {
       child.stdout!.on('data', (d: Buffer) => { output += d; });
       child.stderr!.on('data', (d: Buffer) => { output += d; });
     };
-    const ready = async (): Promise<void> => {
-      const deadline = Date.now() + 90_000;
-      while (Date.now() < deadline) {
-        if (child.exitCode !== null) throw new Error(`server exited (${child.exitCode}) before answering /health:\n${output}`);
-        try {
-          if ((await fetch(`${base}/health`)).ok) return;
-        } catch { /* not up yet */ }
-        await new Promise((r) => setTimeout(r, 250));
-      }
-      throw new Error(`server never answered /health:\n${output}`);
-    };
+    const ready = (): Promise<void> => waitUntilServing(child, {
+      url: `${base}/health`, timeoutMs: 90_000, intervalMs: 250,
+      exited: (code: number | null) => `server exited (${code}) before answering /health:\n${output}`,
+      never: () => `server never answered /health:\n${output}`,
+    });
 
     // App-only has no login routes. Obtain its account bearer through the real
     // composition, then release that process's PGLite handle before reopening
@@ -140,16 +135,7 @@ describe('server.ts --app-only', () => {
     await ready();
   }, 120_000);
 
-  async function stopChild(): Promise<void> {
-    if (!child || child.exitCode !== null || child.signalCode !== null) return;
-    const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
-    child.kill('SIGTERM');
-    await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 5_000))]);
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill('SIGKILL');
-      await exited;
-    }
-  }
+  const stopChild = (): Promise<void> => stopServer(child, { graceMs: 5_000 });
 
   afterAll(async () => {
     await stopChild();

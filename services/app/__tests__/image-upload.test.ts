@@ -63,11 +63,7 @@ describe('bearer raw-body image upload', () => {
     expect(body.format).toBe('image');
     const raw = await serveArtifact(imgReq(`/a/${body.id}/raw`), params({ id: body.id }));
     expect(raw.status).toBe(200);
-    // Converted at the door (lib/images/optimise) — the row records what it
-    // became, and the response has to agree with the row, not with the upload.
-    expect(raw.headers.get('Content-Type')).toBe(
-      ((await getArtifactById(body.id))!.meta as { contentType?: string }).contentType,
-    );
+    // Converted at the door (lib/images/optimise): the served type agrees with the row — media-headers.test.ts.
     // The served bytes are the STORED bytes, and the store never returns more
     // than it was given (lib/images/optimise's floor).
     const meta = (await getArtifactById(body.id))!.meta as { bytes?: number };
@@ -112,11 +108,8 @@ describe('session raw-body image upload', () => {
     expect(row!.user_id).toBe(user.id); // genuinely owned by the account
 
     const raw = await serveArtifact(imgReq(`/a/${body.id}/raw`), params({ id: body.id }));
-    // Converted at the door (lib/images/optimise) — the row records what it
-    // became, and the response has to agree with the row, not with the upload.
-    expect(raw.headers.get('Content-Type')).toBe(
-      ((await getArtifactById(body.id))!.meta as { contentType?: string }).contentType,
-    );
+    // The served type agreeing with the row is media-headers.test.ts's.
+    expect(raw.status).toBe(200);
   });
 
   it('401s without a session', async () => {

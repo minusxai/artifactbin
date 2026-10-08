@@ -21,7 +21,9 @@ async function upload(query = '', contentType = 'model/gltf-binary', body = byte
 }
 
 describe('generic file artifacts', () => {
-  it('uploads exact bytes, keeps metadata, charges quota, and serves a safe download', async () => {
+  // Every header these doors answer with (the safe download's attachment and sandbox, the extension's type under
+  // nosniff for a file claiming text/html, the resolve door's CORS and no-store) is media-headers.test.ts's.
+  it('uploads exact bytes, keeps metadata, charges quota, and serves the download', async () => {
     const { response, token } = await upload();
     expect(response.status).toBe(201);
     const file = await response.json();
@@ -31,19 +33,7 @@ describe('generic file artifacts', () => {
     expect(await assetBytesForToken(token.id)).toBe(bytes.length);
     const download = await raw(new Request(`${base}/a/${file.id}/raw`), ctx(file.id));
     expect(download.status).toBe(200);
-    expect(download.headers.get('content-disposition')).toContain('attachment;');
-    expect(download.headers.get('content-security-policy')).toContain('sandbox');
     expect(new Uint8Array(await download.arrayBuffer())).toEqual(bytes);
-  });
-
-  it('uses the extension MIME type, preserving bytes as an inert download', async () => {
-    const { response } = await upload('', 'text/html', new TextEncoder().encode('<script>alert(1)</script>'));
-    expect(response.status).toBe(201);
-    const file = await response.json();
-    const res = await raw(new Request(`${base}/a/${file.id}/raw`), ctx(file.id));
-    expect(res.headers.get('content-type')).toBe('model/gltf-binary');
-    expect(res.headers.get('content-disposition')).toContain('attachment;');
-    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
   it.each(['page.html', 'script.js', 'program.exe', 'archive.tar', 'clip.mp4.exe', 'README', '.mp3', 'song.mp3.'])('rejects unsupported raw upload %s before storing it', async filename => {
@@ -70,7 +60,7 @@ describe('generic file artifacts', () => {
     expect(await assetBytesForToken(token.id)).toBe(0);
   });
 
-  it('resolves public bytes with CORS and supports a cheap HEAD', async () => {
+  it('resolves public bytes and supports a cheap HEAD', async () => {
     const { response } = await upload();
     const file = await response.json();
     const url = `${base}/a/Doc123/resolve?ref=ref:${file.id}`;
@@ -78,8 +68,6 @@ describe('generic file artifacts', () => {
     expect(head.status).toBe(200);
     expect(await head.text()).toBe('');
     const res = await resolve(new Request(url), ctx('Doc123'));
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
-    expect(res.headers.get('cache-control')).toBe('no-store');
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
   });
 
