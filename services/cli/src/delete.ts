@@ -6,11 +6,9 @@ import {recoverableOperation} from './recoverable-operation';
 import {pendingOperation} from './restore';
 import {recoverFiles} from './journal';
 import {terminateSession} from './sessions';
+import {resourceKind} from './pull';
 import {loadWorkspace,saveTracking,type Workspace} from './workspace';
 import type {HttpClient} from './http';
-
-/** The server's stored format, named in the resource vocabulary the CLI uses. */
-export const resourceKind=(format:unknown):string=>format==='markup'?'artifact':format==='folder'?'folder':format==='dataset'?'dataset':'file';
 
 /**
  * Delete is one command over two resource families: artifacts and their kinds

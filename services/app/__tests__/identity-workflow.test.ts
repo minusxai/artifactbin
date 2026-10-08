@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';
-import {useAppHarness,request} from './harness';
-import { createGuestOwner, mergeGuestUsers } from '@/lib/accounts';
+import {useAppHarness,request, createGuestOwner } from './harness';
+import { mergeGuestUsers } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as create,GET as list} from '@/app/api/artifacts/route';
 import {GET as read,DELETE as remove} from '@/app/api/artifacts/[id]/route';

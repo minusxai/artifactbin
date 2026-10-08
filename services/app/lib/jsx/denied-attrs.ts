@@ -1,4 +1,4 @@
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet } from '@/lib/jsx/immutable-set';
 
 /** Shared save/render gate. */
 export const DENIED_JSX_ATTRS = immutableSet([

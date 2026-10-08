@@ -39,7 +39,6 @@
       ],
       "edges": [
         "app-root -> lib/accounts",
-        "app-root -> lib/story",
         "lib/accounts -> app-root",
         "lib/accounts -> lib/annotations",
         "lib/accounts -> lib/artifacts",

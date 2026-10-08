@@ -90,7 +90,7 @@ async function admitRecipients(tx:Queryable,input:MutationNotificationJobInput,p
  }
  return admitted;
 }
-export async function validateNotificationPlan(tx:Queryable,input:MutationNotificationJobInput,plan:MutationNotificationPlan):Promise<void>{
+async function validateNotificationPlan(tx:Queryable,input:MutationNotificationJobInput,plan:MutationNotificationPlan):Promise<void>{
  const names=input.rules.map(rule=>rule.name).sort();
  if(JSON.stringify(names)!==JSON.stringify(plan.rules.map(rule=>rule.ruleName).sort()))throw new NotificationExecutionError('notification_context_invalid');
  const fence=await notificationExecutionFence(tx,input);
@@ -105,7 +105,7 @@ export async function validateNotificationPlan(tx:Queryable,input:MutationNotifi
   }
  }
 }
-export async function canManageNotificationDocument(tx:Queryable,principal:MutationInitiator['principal'],documentId:string):Promise<boolean>{
+async function canManageNotificationDocument(tx:Queryable,principal:MutationInitiator['principal'],documentId:string):Promise<boolean>{
  try{
   const identity=await notificationPrincipal(tx,principal),authority=await notificationArtifactAuthority(tx,documentId),{row,shares}=authority;
   if(row.format!=='markup')return false;

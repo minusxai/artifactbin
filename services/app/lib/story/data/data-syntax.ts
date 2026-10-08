@@ -11,7 +11,7 @@
  * one-off migration (lib/sqlite-syntax-migration) converts each unmarked
  * document once; nothing converts a marked one.
  */
-export const DATA_SYNTAX = 2;
+const DATA_SYNTAX = 2;
 
 /** The marker as the metadata patch a write merges in. */
 export const DATA_SYNTAX_META = { dataSyntax: DATA_SYNTAX } as const;

@@ -11,27 +11,14 @@
  *   // pages.app, pages.port, pages.origin(id), pages.browserArgs, pages.booted; pages.stop() on exit (also automatic)
  */
 import { spawn } from 'node:child_process';
-import dns from 'node:dns';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PAGES_BROWSER_ARGS, PAGES_HOST } from './browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-export const PAGES_HOST = 'lvh.me';
-
-// ── *.lvh.me is loopback, in this process too (the container may have no DNS) ──
-const originalLookup = dns.lookup;
-dns.lookup = function lookup(hostname, options, callback) {
-  if (typeof hostname === 'string' && (hostname === PAGES_HOST || hostname.endsWith(`.${PAGES_HOST}`))) {
-    const cb = typeof options === 'function' ? options : callback;
-    const all = typeof options === 'object' && options?.all;
-    process.nextTick(() => (all ? cb(null, [{ address: '127.0.0.1', family: 4 }]) : cb(null, '127.0.0.1', 4)));
-    return {};
-  }
-  return originalLookup.call(this, hostname, options, callback);
-};
 
 /** The DNS label a document id rides as (lib/serving/pages-origin pagesLabel). */
 export const pagesLabel = (id) => Buffer.from(id, 'utf8').toString('hex');
@@ -98,7 +85,7 @@ export async function pagesServer(given, name) {
     port,
     app: `http://app.${PAGES_HOST}:${port}`,
     origin: (id) => `http://${pagesLabel(id)}.${PAGES_HOST}:${port}`,
-    browserArgs: [`--host-resolver-rules=MAP *.${PAGES_HOST} 127.0.0.1, MAP ${PAGES_HOST} 127.0.0.1`],
+    browserArgs: PAGES_BROWSER_ARGS,
     booted: !!child,
     stop,
   };

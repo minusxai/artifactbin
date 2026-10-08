@@ -146,7 +146,7 @@ export function sessionPlainPlan(runtime: string, executable: string, options: {
  * Playwright's own default browser directory for this host. The worker runs with a
  * private HOME, so it cannot find that directory itself — the parent has to name it.
  */
-export function playwrightBrowsersDir(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
+function playwrightBrowsersDir(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
   if (env.PLAYWRIGHT_BROWSERS_PATH) return env.PLAYWRIGHT_BROWSERS_PATH;
   if (process.platform === 'darwin') return path.join(home, 'Library/Caches/ms-playwright');
   if (process.platform === 'win32') return path.join(env.LOCALAPPDATA ?? path.join(home, 'AppData/Local'), 'ms-playwright');

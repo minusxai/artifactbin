@@ -38,13 +38,14 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchChromium } from './lib/browser.mjs';
+import { sleep } from './lib/sleep.mjs';
+import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent, connectionBrowserCookie } from './lib/cli-connection.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { DOCUMENT_FRAME, documentFrame, documentLocator } from './lib/page-facts.mjs';
-import { PAGES_HOST, pagesServer } from './lib/pages-server.mjs';
+import { pagesServer } from './lib/pages-server.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const check = createChecker('own-origin-script');
@@ -53,7 +54,6 @@ const APP = pages.app;
 const pagesOrigin = pages.origin;
 check.note(`driving ${APP} (pages at *.${PAGES_HOST}:${pages.port}${pages.booted ? ', booted by this gate' : ''})`);
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const until = async (probe, ok, timeout) => {
   const end = Date.now() + timeout;
   let value = await probe().catch(() => undefined);

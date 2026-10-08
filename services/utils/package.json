@@ -25,6 +25,7 @@
     "@hono/node-server": "2.1.1"
   },
   "devDependencies": {
+    "@artifactbin/test-support": "0.1.0",
     "vitest": "4.1.11"
   }
 }

@@ -67,5 +67,13 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@artifactbin/test-support": "0.1.0",
+    "@babel/core": "7.29.7",
+    "@tailwindcss/node": "4.2.1",
+    "babel-preset-solid": "1.9.15",
+    "lucide-solid": "1.30.0",
+    "parse5": "8.0.1"
   }
 }

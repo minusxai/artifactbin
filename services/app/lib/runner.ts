@@ -44,7 +44,7 @@ export async function invokeArtifact(request: Request, artifactId: string) {
     } catch(error) { return runnerError(error); }
 }
 /** Resolve the latest readable server handler or owner-controlled native program at execution time. */
-export async function resolveArtifactExecution(spec: ScheduleInput): Promise<ScheduledExecution> {
+async function resolveArtifactExecution(spec: ScheduleInput): Promise<ScheduledExecution> {
     const artifact = await getArtifactById(spec.artifactId);
     if (!artifact || artifact.deleted_at || !await canReadArtifact(artifact,{userId:spec.userId,email:null})) throw Error('not_found');
     if (artifact.format === 'program') {

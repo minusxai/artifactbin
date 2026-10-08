@@ -2,9 +2,9 @@
 export { accountProfile, updateAccountProfile } from './account-profile';
 export { hasAdminCredential } from './admin-auth';
 export { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, decodeAgentSessionEnvelope, encodeAgentSession, liveAgentSession, withToken, withoutToken } from './agent-session';
-export { browserActor, documentFetchRateLimited, refusesCrossSite, resetRateLimit, setDocumentFetchCapForTests, resetWebIngestRateLimit, setDocAssetImportCapForTests, webIngestRateLimited, withTokenAuth } from './auth';
+export { browserActor, documentFetchRateLimited, refusesCrossSite, resetRateLimit, resetWebIngestRateLimit, setDocAssetImportCapForTests, webIngestRateLimited, withTokenAuth } from './auth';
 export { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from './avatars';
-export { createGuestOwner, mergeGuestUsers } from './guest-owner';
+export { mergeGuestUsers } from './guest-owner';
 export { membershipInbox, updateMembershipInbox } from './membership-inbox';
 export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates } from './membership';
 export { PERSON_FACE_LIGHTNESS, PERSON_FACE_SATURATION, personFaceBackground, personHue, personInitial } from './person-face';
@@ -20,5 +20,4 @@ export { USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensB
 export type { SharedArtifactSummary, UserRow } from './users';
 export { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, isOwner, requestOrSessionActor, roleFor, sessionActor, tokenActorForRequest } from './viewer';
 export type { RequestActor } from './viewer';
-export { PAGES_COOKIE, PAGES_SESSION_TTL_MS, PAGES_TICKET_TTL_MS, endPagesSession, exchangePagesTicket, issuePagesTicket, pagesSessionActor, pagesSessionOf } from './pages-sessions';
-export type { PagesCarried } from './pages-sessions';
+export { exchangePagesTicket, issuePagesTicket, pagesSessionActor } from './pages-sessions';

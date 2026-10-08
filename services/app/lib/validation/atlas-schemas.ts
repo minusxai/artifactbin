@@ -6,8 +6,8 @@
  */
 import { Type, type Static, type TSchema } from 'typebox';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
-import { STORY_THEME_NAMES, type StoryThemeName, type StoryDesignName } from './story-theme-names';
-import { STORY_SYSTEM_NAMES, type StorySystemName } from './story-system-names';
+import { STORY_THEME_NAMES, type StoryDesignName } from './story-theme-names';
+import { STORY_SYSTEM_NAMES } from './story-system-names';
 
 /** Shared helper: a string enum with an optional description. */
 const StringEnum = <const T extends readonly string[]>(values: T, description?: string) =>
@@ -23,8 +23,7 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
  * (`./story-theme-names`) so the reader can name themes without loading
  * typebox; it is re-exported here for every schema-side caller.
  */
-export { STORY_THEME_NAMES, type StoryThemeName };
-export { STORY_SYSTEM_NAMES, type StorySystemName };
+export { STORY_THEME_NAMES };
 /** Everything a fence `theme` may name: the six themes, then the design systems (lib/data/story/story-systems). */
 export const STORY_DESIGN_NAMES: readonly StoryDesignName[] = [...STORY_THEME_NAMES, ...STORY_SYSTEM_NAMES];
 export type { StoryDesignName };
@@ -79,7 +78,7 @@ const VIZ_TYPES = [
   'trend', 'waterfall', 'combo', 'radar', 'geo', 'single_value', 'row',
   'choropleth', 'point_map',
 ] as const;
-export const VisualizationType = StringEnum(VIZ_TYPES);
+const VisualizationType = StringEnum(VIZ_TYPES);
 export type VisualizationType = Static<typeof VisualizationType>;
 
 // -- Geo configs (discriminated by subType) --
@@ -90,7 +89,7 @@ const geoBase = {
   pinnedZoom: Nullable(Type.Integer({ description: 'pinned map zoom level' })),
 };
 
-export const ChoroplethConfig = Type.Object({
+const ChoroplethConfig = Type.Object({
   ...geoBase,
   subType: Type.Literal('choropleth', { description: 'geo visualization sub-type' }),
   regionCol: Nullable(Type.String({ description: 'column matching GeoJSON feature names' })),
@@ -99,7 +98,7 @@ export const ChoroplethConfig = Type.Object({
 }, { title: 'ChoroplethConfig' });
 export type ChoroplethConfig = Static<typeof ChoroplethConfig>;
 
-export const PointsConfig = Type.Object({
+const PointsConfig = Type.Object({
   ...geoBase,
   subType: Type.Literal('points', { description: 'geo visualization sub-type' }),
   latCol: Nullable(Type.String({ description: 'latitude column' })),
@@ -112,7 +111,7 @@ export const PointsConfig = Type.Object({
 }, { title: 'PointsConfig' });
 export type PointsConfig = Static<typeof PointsConfig>;
 
-export const LinesConfig = Type.Object({
+const LinesConfig = Type.Object({
   ...geoBase,
   subType: Type.Literal('lines', { description: 'geo visualization sub-type' }),
   latCol: Nullable(Type.String({ description: 'origin latitude column' })),
@@ -122,7 +121,7 @@ export const LinesConfig = Type.Object({
 }, { title: 'LinesConfig' });
 export type LinesConfig = Static<typeof LinesConfig>;
 
-export const HeatmapConfig = Type.Object({
+const HeatmapConfig = Type.Object({
   ...geoBase,
   subType: Type.Literal('heatmap', { description: 'geo visualization sub-type' }),
   latCol: Nullable(Type.String({ description: 'latitude column' })),
@@ -132,22 +131,22 @@ export const HeatmapConfig = Type.Object({
 }, { title: 'HeatmapConfig' });
 export type HeatmapConfig = Static<typeof HeatmapConfig>;
 
-export const GeoConfig = Type.Union([ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig]);
+const GeoConfig = Type.Union([ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig]);
 export type GeoConfig = Static<typeof GeoConfig>;
 
-export const AggregationFunction = StringEnum(['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']);
+const AggregationFunction = StringEnum(['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']);
 export type AggregationFunction = Static<typeof AggregationFunction>;
 
-export const FormulaOperator = StringEnum(['+', '-', '*', '/']);
+const FormulaOperator = StringEnum(['+', '-', '*', '/']);
 export type FormulaOperator = Static<typeof FormulaOperator>;
 
-export const PivotValueConfig = Type.Object({
+const PivotValueConfig = Type.Object({
   column: Type.String({ description: 'column name for the measure' }),
   aggFunction: Type.Optional(StringEnum(['SUM', 'AVG', 'COUNT', 'MIN', 'MAX'], 'aggregation function to apply (SUM, AVG, COUNT, MIN, MAX)')),
 }, { title: 'PivotValueConfig' });
 export type PivotValueConfig = Static<typeof PivotValueConfig>;
 
-export const PivotFormula = Type.Object({
+const PivotFormula = Type.Object({
   name: Type.String({ description: "display label, e.g. 'YoY Change'" }),
   operandA: Type.String({ description: "dimension value, e.g. '2024'" }),
   operandB: Type.String({ description: "dimension value, e.g. '2023'" }),
@@ -157,7 +156,7 @@ export const PivotFormula = Type.Object({
 }, { title: 'PivotFormula' });
 export type PivotFormula = Static<typeof PivotFormula>;
 
-export const PivotConfig = Type.Object({
+const PivotConfig = Type.Object({
   rows: Type.Array(Type.String(), { description: 'dimension columns for row headers' }),
   columns: Type.Array(Type.String(), { description: 'dimension columns for column headers' }),
   values: Type.Array(PivotValueConfig, { description: 'measures with per-value aggregation functions' }),
@@ -171,10 +170,10 @@ export const PivotConfig = Type.Object({
 }, { title: 'PivotConfig' });
 export type PivotConfig = Static<typeof PivotConfig>;
 
-export const AxisScale = StringEnum(['linear', 'log']);
+const AxisScale = StringEnum(['linear', 'log']);
 export type AxisScale = Static<typeof AxisScale>;
 
-export const AxisConfig = Type.Object({
+const AxisConfig = Type.Object({
   xScale: Nullable(StringEnum(['linear', 'log'], "X-axis scale type: 'linear' (default) or 'log'")),
   yScale: Nullable(StringEnum(['linear', 'log'], "Y-axis scale type: 'linear' (default) or 'log'")),
   xMin: Nullable(Type.Number({ description: 'explicit X-axis minimum value' })),
@@ -199,7 +198,7 @@ export const ColumnFormatConfig = Type.Object({
 }, { title: 'ColumnFormatConfig' });
 export type ColumnFormatConfig = Static<typeof ColumnFormatConfig>;
 
-export const ConditionFormatRule = Type.Object({
+const ConditionFormatRule = Type.Object({
   id: Type.String({ description: 'stable unique id for this rule' }),
   column: Type.String({ description: 'the column whose value the condition is checked against' }),
   operator: StringEnum(['=', '!=', '>', '<', '>=', '<=', 'contains'], 'comparison operator'),
@@ -209,7 +208,7 @@ export const ConditionFormatRule = Type.Object({
 }, { title: 'ConditionFormatRule' });
 export type ConditionFormatRule = Static<typeof ConditionFormatRule>;
 
-export const ColorScaleFormatRule = Type.Object({
+const ColorScaleFormatRule = Type.Object({
   id: Type.String({ description: 'stable unique id for this rule' }),
   column: Type.String({ description: 'numeric column whose cells are painted with a min→max colour ramp over the column values (heatmap cells)' }),
   scale: StringEnum(['red-yellow-green', 'green', 'blue'], "colour ramp: 'red-yellow-green' (diverging, default), 'green' (single-hue, GitHub-like), 'blue' (single-hue)"),
@@ -218,10 +217,10 @@ export type ColorScaleFormatRule = Static<typeof ColorScaleFormatRule>;
 
 // A conditional format is EITHER a condition rule (paint when a predicate holds)
 // or a colour-scale rule (min→max ramp over a numeric column).
-export const ConditionalFormatRule = Type.Union([ConditionFormatRule, ColorScaleFormatRule], { title: 'ConditionalFormatRule' });
+const ConditionalFormatRule = Type.Union([ConditionFormatRule, ColorScaleFormatRule], { title: 'ConditionalFormatRule' });
 export type ConditionalFormatRule = Static<typeof ConditionalFormatRule>;
 
-export const VisualizationStyleConfig = Type.Object({
+const VisualizationStyleConfig = Type.Object({
   colors: Nullable(Type.Record(Type.String(), Type.String(), { description: "color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'})." })),
   opacity: Nullable(Type.Number({ description: 'series opacity from 0.1 to 1.0' })),
   markerSize: Nullable(Type.Integer({ description: 'point marker size for charts that render markers, such as scatter and line' })),
@@ -231,17 +230,17 @@ export const VisualizationStyleConfig = Type.Object({
 }, { title: 'VisualizationStyleConfig' });
 export type VisualizationStyleConfig = Static<typeof VisualizationStyleConfig>;
 
-export const TrendCompareMode = StringEnum(['last', 'previous']);
+const TrendCompareMode = StringEnum(['last', 'previous']);
 export type TrendCompareMode = Static<typeof TrendCompareMode>;
 
-export const TrendConfig = Type.Object({
+const TrendConfig = Type.Object({
   compareMode: Nullable(StringEnum(['last', 'previous'], "which periods to compare: 'last' (default, last vs second-to-last) or 'previous' (second-to-last vs third-to-last, skips partial current period)")),
 }, { title: 'TrendConfig' });
 export type TrendConfig = Static<typeof TrendConfig>;
 
 // Typographic control for the single_value (big number) viz. The number is ALWAYS live (read
 // from the query result) — these props only style/decorate it; they never replace the value.
-export const SingleValueConfig = Type.Object({
+const SingleValueConfig = Type.Object({
   label: Nullable(Type.String({ description: 'override the displayed label (defaults to the metric column name); set to an empty string to hide the label' })),
   prefix: Nullable(Type.String({ description: "text shown immediately before the number, e.g. '$'" })),
   suffix: Nullable(Type.String({ description: "text shown immediately after the number, e.g. '%' or ' MRR'" })),
@@ -253,14 +252,14 @@ export const SingleValueConfig = Type.Object({
 }, { title: 'SingleValueConfig' });
 export type SingleValueConfig = Static<typeof SingleValueConfig>;
 
-export const ChartAnnotation = Type.Object({
+const ChartAnnotation = Type.Object({
   x: Type.Union([Type.String(), Type.Number()], { description: 'X-axis value to anchor the annotation to' }),
   series: Nullable(Type.String({ description: 'series name to anchor the annotation to' })),
   text: Type.String({ description: 'annotation label text' }),
 }, { title: 'ChartAnnotation' });
 export type ChartAnnotation = Static<typeof ChartAnnotation>;
 
-export const VizSettings = Type.Object({
+const VizSettings = Type.Object({
   type: StringEnum(VIZ_TYPES, 'type of the visualization (default is table)'),
   typeLocked: Nullable(Type.Boolean({ description: 'true once the user manually picked the chart type — semantic (GUI) exploration then stops auto-switching it. Unset/false = the type still tracks the query shape.' })),
   xCols: Nullable(Type.Array(Type.String(), { description: 'list of column names in the x axis (for non-pivot chart types)' })),
@@ -287,10 +286,10 @@ export type VizSettings = Static<typeof VizSettings>;
 // Do NOT reproduce the grammars in TypeBox.
 // ============================================================================
 
-export const VIZ_GRAMMAR_VEGA_LITE = 'vega-lite@6';
-export const VIZ_GRAMMAR_VEGA = 'vega@6';
+const VIZ_GRAMMAR_VEGA_LITE = 'vega-lite@6';
+const VIZ_GRAMMAR_VEGA = 'vega@6';
 
-export const VizSourceRecipe = Type.Object({
+const VizSourceRecipe = Type.Object({
   kind: Type.Literal('recipe'),
   recipe: Type.String({ description:
     "a SHIPPED recipe id, e.g. 'minusx/funnel@1' or 'minusx/waterfall@1'. The chart is generated from the " +
@@ -307,7 +306,7 @@ export const VizSourceRecipe = Type.Object({
 }, { title: 'VizSourceRecipe' });
 export type VizSourceRecipe = Static<typeof VizSourceRecipe>;
 
-export const VizSourceVegaLite = Type.Object({
+const VizSourceVegaLite = Type.Object({
   kind: Type.Literal('vega-lite'),
   grammar: Type.Literal(VIZ_GRAMMAR_VEGA_LITE, { description: 'pinned grammar major version; never fetched from the network' }),
   spec: Type.Record(Type.String(), Type.Unknown(), { description:
@@ -326,7 +325,7 @@ export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
 // `kind: 'vega-lite'` instead. `assets` carries any named boundary datasets the spec
 // references (geo maps), injected at render exactly like a recipe's assets. `detachedFrom`
 // keeps the original recipe source so the chart can be RE-ATTACHED (reset), discarding edits.
-export const VizSourceVega = Type.Object({
+const VizSourceVega = Type.Object({
   kind: Type.Literal('vega'),
   grammar: Type.Literal(VIZ_GRAMMAR_VEGA, { description: 'pinned grammar major version; never fetched from the network' }),
   spec: Type.Record(Type.String(), Type.Unknown(), { description:
@@ -339,7 +338,7 @@ export type VizSourceVega = Static<typeof VizSourceVega>;
 
 // The DOM grid tier: tables never route through vega. The only persisted
 // state is display formatting — sorting/filtering/visibility are ephemeral UI state.
-export const VizSourceTable = Type.Object({
+const VizSourceTable = Type.Object({
   kind: Type.Literal('table'),
   wrapColumns: Type.Optional(Nullable(Type.Array(Type.String(), { description:
     'result column names whose body cells wrap onto multiple lines. Omit/null/[] for the default ' +
@@ -368,7 +367,7 @@ export type VizSourceTable = Static<typeof VizSourceTable>;
 // The pivot grid: same DOM tier + css contract as table; the pivot
 // STRUCTURE (rows/columns/values) is real config, so it stays typed — reusing the
 // classic PivotConfig schema wholesale (subtotals, heatmap, formulas included).
-export const VizSourcePivot = Type.Object({
+const VizSourcePivot = Type.Object({
   kind: Type.Literal('pivot'),
   config: PivotConfig,
   columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
@@ -388,7 +387,7 @@ export const VizSourcePivot = Type.Object({
 export type VizSourcePivot = Static<typeof VizSourcePivot>;
 
 // Discriminated on `kind`, so a new source kind joins additively.
-export const VizSource = Type.Union([VizSourceVegaLite, VizSourceVega, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
+const VizSource = Type.Union([VizSourceVegaLite, VizSourceVega, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
 export type VizSource = Static<typeof VizSource>;
 
 export const VizEnvelope = Type.Object({

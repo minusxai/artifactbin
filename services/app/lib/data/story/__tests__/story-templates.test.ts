@@ -1,7 +1,7 @@
 /**
  * Story templates — registry contract (the structural-genre dimension next to design themes).
  *
- * One registry (`STORY_TEMPLATES`), projected from `orchestrator/prompts/story-guidance.yaml`
+ * One registry (`STORY_TEMPLATES`), projected from `lib/data/story/story-guidance.yaml`
  * (the human-edited prose source). These tests pin:
  *  - completeness: one entry per schema enum name, in enum order,
  *  - the mini-skill contract: every template carries label/description/personality, a beat

@@ -28,7 +28,7 @@ import {
 import { validateJsx, hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet } from '@/lib/jsx/immutable-set';
 import { isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
 /*

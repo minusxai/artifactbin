@@ -4,7 +4,8 @@
  * against the Helmet's declarations, by name and by kind, before anything is served.
  */
 import { describe, expect, it } from 'vitest';
-import { buildAuthorModule, pageModuleSource, PAGE_GLOBAL } from '../document/author-module.server';
+import { buildAuthorModule, pageModuleSource } from '../document/author-module.server';
+import { PAGE_GLOBAL } from '@/lib/story-runtime/contract';
 import { AUTHOR_VENDOR_EXPORTS } from '@/lib/islands/contract';
 
 const NAMES = { values: ['region'], tables: ['sales'], queries: ['monthly'], mutations: ['rename'] };

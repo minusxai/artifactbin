@@ -48,25 +48,28 @@
     "hono": "4.13.5",
     "kysely": "0.28.17",
     "pg": "8.17.1",
-    "vega": "6.3.1",
     "@artifactbin/runner": "0.1.0"
   },
   "devDependencies": {
+    "@babel/core": "7.29.7",
     "@rollup/plugin-yaml": "5.0.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "^22.13.0",
     "@types/pg": "8.16.0",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "babel-preset-solid": "1.9.15",
     "esbuild": "0.28.2",
     "jsdom": "30.0.1",
+    "picomatch": "4.0.7",
+    "playwright": "1.62.1",
+    "sharp": "0.35.4",
     "tailwindcss": "4.2.1",
     "tsx": "4.23.11",
     "typescript": "5.9.3",
     "vite": "8.2.2",
     "vite-plugin-solid": "2.11.14",
     "vitest": "4.1.11",
-    "yaml": "2.9.0",
-    "zod": "4.5.2"
+    "yaml": "2.9.0"
   },
   "workspaces": [
     "services/contracts",

@@ -9,8 +9,8 @@ import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
  * resolve never falls back to a cookie identity. The operator's secret is
  * lib/admin-auth's, with its own uniform 404.
  */
-import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR } from '../platform/config';
-import { ARTIFACTBIN_AGENT_HEADER, forwardedFor, identifyClient } from '../platform/client-identity';
+import { WEB_INGEST_MAX_PER_HOUR } from '../platform/config';
+import { ARTIFACTBIN_AGENT_HEADER, identifyClient } from '../platform/client-identity';
 import { isCrossSiteRequest, json, unauthorized } from '../http/http';
 import { rememberTokenClient, resolveToken, touchToken } from './tokens';
 import { sessionActor, syncProfileForToken } from './viewer';
@@ -105,31 +105,6 @@ export function documentFetchRateLimited(id: string, reader: string, now = Date.
 
 export function resetWebIngestRateLimit(): void {
   webIngestTimes.clear();
-}
-
-/**
- * WHO is being rate-limited. Identity is the whole valve: a caller who can
- * choose their own key has no limit at all.
- *
- * `X-Forwarded-For` is a list that each hop APPENDS to, so it reads
- * `<whatever the client sent>, <what proxy1 saw>, <what proxy2 saw>, …`. The
- * address our outermost TRUSTED proxy observed therefore sits `hops` from the
- * END; everything left of that is text the caller typed. Reading `[0]` — the
- * intuitive choice — would hand every caller a fresh
- * bucket per request behind exactly the appending proxies (Caddy, Traefik,
- * nginx's `$proxy_add_x_forwarded_for`) that a self-hosted server sits behind
- * for TLS (docs/operations.md).
- *
- * The index is clamped at the front so a SHORT list cannot walk the selection
- * back onto a caller-supplied entry.
- *
- * `unknown` is a real answer, not a failure: with no forwarding header at all
- * every caller shares one bucket. That is a misconfiguration to fix at the
- * proxy — the alternative, skipping the limit when the client is
- * unidentifiable, turns a missing header into a way to opt out of it.
- */
-export function clientIp(request: Request, hops: number = TRUSTED_PROXY_HOPS): string {
-  return forwardedFor(request.headers, hops) || 'unknown';
 }
 
 /**

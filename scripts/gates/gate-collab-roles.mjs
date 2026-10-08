@@ -26,6 +26,7 @@
  *   node scripts/gates/gate-collab-roles.mjs [base]
  */
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
+import { sleep } from './lib/sleep.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
@@ -55,7 +56,6 @@ const OWNER_EMAIL = `mxmx_test_collab_owner_${stamp}@example.com`;
 const EDITOR_EMAIL = `mxmx_test_collab_editor_${stamp}@example.com`;
 const COMMENTER_EMAIL = `mxmx_test_collab_commenter_${stamp}@example.com`;
 const STRANGER_EMAIL = `mxmx_test_link_stranger_${stamp}@example.com`;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function until(read, want, budgetMs = 10000) {
   const deadline = Date.now() + budgetMs;
