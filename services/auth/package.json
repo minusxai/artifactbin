@@ -14,7 +14,7 @@
     "@artifactbin/contracts": "*",
     "@artifactbin/utils": "*",
     "better-auth": "1.7.2",
-    "hono": "4.13.5",
+    "hono": "4.13.7",
     "kysely": "0.28.17",
     "pg": "8.23.0"
   },
