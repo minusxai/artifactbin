@@ -6,7 +6,7 @@ export function installEditorGeometry(): () => void {
     [Range.prototype, 'getBoundingClientRect', () => new DOMRect()],
   ] as const;
   const originals = targets.map(([target, key]) => Object.getOwnPropertyDescriptor(target, key));
-  targets.forEach(([target, key, value]) => Object.defineProperty(target, key, { configurable: true, value }));
+  targets.forEach(([target, key, value]) => Object.defineProperty(target, key, { configurable: true, writable: true, value }));
   return () => targets.forEach(([target, key], index) => {
     const original = originals[index];
     if (original) Object.defineProperty(target, key, original);
