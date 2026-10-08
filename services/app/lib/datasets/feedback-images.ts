@@ -3,7 +3,6 @@ import { generateInternalId, ID_RE } from '@/lib/platform';
 import { getArtifactById, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { dataflowForRow } from '@/lib/artifacts/dataflow';
-import { canReadArtifact } from '@/lib/artifacts/access';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { grantsOf, grantContext, grantsPermitRead, readThrough, type GrantDocument } from '@/lib/datasets/policy/grants';
 import { DatasetError } from '@/lib/datasets/errors';
@@ -11,7 +10,10 @@ import { imageInsertAllowed } from './image-upload-policy';
 import { storeImageContent } from '@/lib/story/data/data-tiers';
 import { objectStore } from '@/lib/object-store';
 import { IMAGE_CONTENT_TYPES } from '@/lib/story/assets/image-store';
-import { uploadedSha256 } from '@/lib/story/assets/file-store';
+import type { DatasetUploadResult } from '@artifactbin/contracts';
+import { assetFormatOf, fileContentType } from '@/lib/story/assets/file-types';
+import { MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform/config';
+import { uploadedSha256, storeFileContent } from '@/lib/story/assets/file-store';
 
 const MAX_DATASET_IMAGES = 1000;
 const MAX_DATASET_IMAGE_BYTES = 500_000_000;
@@ -25,9 +27,11 @@ function actorKey(actor:RoleActor):string {
   if(!key)throw new DatasetError('Sign in to upload an image',403);
   return key;
 }
-function actorViewer(actor:RoleActor) { return actor.userId?{userId:actor.userId,email:actor.email??null}:null; }
 function imageUrl(documentId:string,datasetId:string,imageId:string):string {
   return `/a/${documentId}/datasets/${datasetId}/images/${imageId}`;
+}
+function fileAnswer(row:DatasetImageRow,replayed=false):DatasetUploadResult {
+  return {ref:`dfile:${row.id}`,url:`/a/${row.document_id}/datasets/${row.dataset_id}/files/${row.id}`,name:String(row.meta.filename??row.id),contentType:String(row.meta.contentType??'application/octet-stream'),size:Number(row.meta.bytes??0),...(replayed?{replayed:true}:{})};
 }
 function answer(row:DatasetImageRow,replayed=false):DatasetImageUpload {
   return {ref:refFor(row.id),url:imageUrl(row.document_id,row.dataset_id,row.id),...(replayed?{replayed:true}:{})};
@@ -53,19 +57,27 @@ async function datasetReadable(dataset:ArtifactRow,document:ArtifactRow,actor:Ro
   return await readThrough(tx,dataset,actor)&&await readThrough(tx,document,actor);
 }
 
-export async function uploadDatasetImage(input:{actor:RoleActor;documentId:string;editId:string;datasetId:string;bytes:Buffer;contentType:string;operationKey:string}):Promise<DatasetImageUpload>{
+type UploadInput={actor:RoleActor;documentId:string;editId:string;datasetId:string;bytes:Buffer;contentType:string;operationKey:string};
+export async function uploadDatasetImage(input:UploadInput):Promise<DatasetImageUpload>{return uploadContent(input);}
+export async function uploadDatasetFile(input:UploadInput&{filename:string}):Promise<DatasetUploadResult>{return uploadContent(input,true) as Promise<DatasetUploadResult>;}
+async function uploadContent(input:UploadInput&{filename?:string},generic=false):Promise<DatasetImageUpload|DatasetUploadResult>{
   const {actor,documentId,datasetId,editId,bytes,contentType,operationKey}=input;
   if(!ID_RE.test(documentId)||!ID_RE.test(datasetId))throw new DatasetError('Dataset image is unavailable',404);
   if(!KEY_RE.test(operationKey))throw new DatasetError('A valid Idempotency-Key is required',400);
+  const filename=input.filename??'image.png';
+  const format=generic?assetFormatOf(filename):'image';
+  if(generic&&(!filename||filename.length>255||!filename.isWellFormed()||/[\x00-\x1f\x7f/\\]/.test(filename)))throw new DatasetError('Invalid filename',400);
+  if(!format)throw new DatasetError('Unsupported file type',400);
+  if(bytes.length>(format==='image'?MAX_IMAGE_BYTES:MAX_FILE_BYTES))throw new DatasetError('File is too large',413);
   if(bytes.length===0)throw new DatasetError('Image is empty',400);
-  if(!(IMAGE_CONTENT_TYPES as readonly string[]).includes(contentType))throw new DatasetError('Unsupported image type',400);
+  if(!generic&&!(IMAGE_CONTENT_TYPES as readonly string[]).includes(contentType))throw new DatasetError('Unsupported image type',400);
   const doc=await getArtifactById(documentId),dataset=await getArtifactById(datasetId);
-  if(!doc||doc.edit_id!==editId||!(await canReadArtifact(doc,actorViewer(actor)))||!dataset||dataset.format!=='dataset'||dataset.deleted_at||catalogOf(dataset)?.kind!=='stored'||!await declaredDataset(doc,datasetId))throw new DatasetError('Dataset image is unavailable',404);
+  if(!doc||doc.edit_id!==editId||!(await readThrough(await getDb(),doc,actor))||!dataset||dataset.format!=='dataset'||dataset.deleted_at||catalogOf(dataset)?.kind!=='stored'||!await declaredDataset(doc,datasetId))throw new DatasetError('Dataset image is unavailable',404);
   await authorizeInsert(dataset,doc,actor);
   const actorId=actorKey(actor),sha256=uploadedSha256(bytes),db=await getDb();
   const replay=async(tx:import('@/lib/platform/db').Queryable):Promise<DatasetImageRow|null>=>{
     const found=(await tx.query<DatasetImageRow>('SELECT * FROM dataset_images WHERE dataset_id=$1 AND actor_id=$2 AND operation_key=$3',[datasetId,actorId,operationKey])).rows[0]??null;
-    if(found&&found.sha256!==sha256)throw new DatasetError('Idempotency-Key was already used for another image',409);
+    if(found&&(found.document_id!==documentId||found.sha256!==sha256||(generic&&found.meta.filename!==filename)))throw new DatasetError('Idempotency-Key was already used for another image',409);
     return found;
   };
   const authorizeCurrent=async(tx:import('@/lib/platform/db').Queryable,lock:'UPDATE'|'SHARE')=>{
@@ -79,25 +91,30 @@ export async function uploadDatasetImage(input:{actor:RoleActor;documentId:strin
     await authorizeCurrent(tx,'UPDATE');
     return replay(tx);
   });
-  if(cached)return answer(cached,true);
-  const media=await storeImageContent(bytes,contentType);
+  const receipt=generic?fileAnswer:answer;
+  if(cached)return receipt(cached,true);
+  const media=await (format==='image'?storeImageContent(bytes,generic?fileContentType(filename)!:contentType):storeFileContent(bytes,contentType,filename));
   if(media instanceof Response)throw new DatasetError((await media.json().catch(()=>({error:'invalid_image'}))).error??'Invalid image',media.status);
-  const currentImageId=generateInternalId(),meta=media.meta as Record<string,unknown>;
+  const currentImageId=generateInternalId(),meta={...media.meta,...(generic?{format:media.format,filename}:{})} as Record<string,unknown>;
   return db.transaction(async tx=>{
     await authorizeCurrent(tx,'UPDATE');
-    const found=await replay(tx); if(found)return answer(found,true);
+    const found=await replay(tx); if(found)return receipt(found,true);
     const usage=(await tx.query<{count:string;bytes:string}>("SELECT count(*)::text AS count,coalesce(sum((meta->>'bytes')::bigint),0)::text AS bytes FROM dataset_images WHERE dataset_id=$1",[datasetId])).rows[0];
     if(Number(usage?.count??0)>=MAX_DATASET_IMAGES||Number(usage?.bytes??0)+Number(meta.bytes??0)>MAX_DATASET_IMAGE_BYTES)throw new DatasetError('This dataset has reached its image storage limit',409);
     await tx.query('INSERT INTO dataset_images (id,dataset_id,document_id,actor_id,operation_key,sha256,meta) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)',[currentImageId,datasetId,documentId,actorId,operationKey,sha256,JSON.stringify(meta)]);
-    return answer({id:currentImageId,dataset_id:datasetId,document_id:documentId,actor_id:actorId,operation_key:operationKey,sha256,meta});
+    return receipt({id:currentImageId,dataset_id:datasetId,document_id:documentId,actor_id:actorId,operation_key:operationKey,sha256,meta});
   });
 }
 
-export async function readDatasetImage(input:{actor:RoleActor;documentId:string;datasetId:string;imageId:string}):Promise<{body:Buffer;contentType:string}|null>{
+export async function readDatasetFile(input:{actor:RoleActor;documentId:string;datasetId:string;fileId:string}):Promise<{body:Buffer;contentType:string;filename:string;image:boolean}|null>{
+  return readContent({...input,imageId:input.fileId});
+}
+export async function readDatasetImage(input:{actor:RoleActor;documentId:string;datasetId:string;imageId:string}):Promise<{body:Buffer;contentType:string}|null>{return readContent(input,true);}
+async function readContent(input:{actor:RoleActor;documentId:string;datasetId:string;imageId:string},imageOnly=false):Promise<{body:Buffer;contentType:string;filename:string;image:boolean}|null>{
   const {actor,documentId,datasetId,imageId}=input;
   if(!ID_RE.test(documentId)||!ID_RE.test(datasetId)||!/^\w{10,30}$/.test(imageId))return null;
   const initialDoc=await getArtifactById(documentId);
-  if(!initialDoc||initialDoc.format!=='markup'||!(await canReadArtifact(initialDoc,actorViewer(actor)))||!await declaredDataset(initialDoc,datasetId))return null;
+  if(!initialDoc||initialDoc.format!=='markup'||!(await readThrough(await getDb(),initialDoc,actor))||!await declaredDataset(initialDoc,datasetId))return null;
   const db=await getDb();
   return db.transaction(async tx=>{
     await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE',[[datasetId,documentId]]);
@@ -106,10 +123,10 @@ export async function readDatasetImage(input:{actor:RoleActor;documentId:string;
     try { dataset=liveRow(rows,datasetId,'dataset');doc=liveRow(rows,documentId,'markup'); } catch { return null; }
     if(doc.edit_id!==initialDoc.edit_id||catalogOf(dataset)?.kind!=='stored'||!(await datasetReadable(dataset,doc,actor,tx)))return null;
     const row=(await tx.query<DatasetImageRow>('SELECT * FROM dataset_images WHERE id=$1 AND dataset_id=$2 AND document_id=$3',[imageId,datasetId,documentId])).rows[0];
-    if(!row)return null;
+    if(!row||(imageOnly&&row.meta.format&&row.meta.format!=='image'))return null;
     const objectKey=row.meta?.objectKey;
     if(typeof objectKey!=='string'||!objectKey)return null;
-    return {body:await objectStore().get(objectKey),contentType:typeof row.meta.contentType==='string'?row.meta.contentType:'application/octet-stream'};
+    return {filename:String(row.meta.filename??row.id),image:!row.meta.format||row.meta.format==='image',body:await objectStore().get(objectKey),contentType:typeof row.meta.contentType==='string'?row.meta.contentType:'application/octet-stream'};
   });
 }
 
