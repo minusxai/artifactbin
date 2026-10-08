@@ -518,3 +518,10 @@ body {
 .comment-mention-tip { margin:4px 0 6px; padding-top:7px; border-top:1px solid var(--color-edge); font:10px/1.6 var(--font-sans); color:var(--color-muted); }
 .comment-mention-tip strong { color:var(--color-fg); font-weight:600; }
 .comment-mention-tip kbd { display:inline-block; margin:0 2px; padding:0 4px; border:1px solid var(--color-edge); border-radius:4px; background:var(--color-surface); color:var(--color-fg); }
+
+.comment-agent-status { display:flex; align-items:center; gap:6px; min-width:0; white-space:nowrap; font-family:var(--font-sans); }
+.comment-agent-status-name { flex:0 1 auto; min-width:0; max-width:48%; overflow:hidden; text-overflow:ellipsis; }
+.comment-agent-status-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.comment-agent-spinner { width:11px; height:11px; flex:none; border:1.5px solid var(--color-edge-bright); border-top-color:var(--color-accent); border-radius:50%; animation:comment-agent-spin 1s linear infinite; }
+@keyframes comment-agent-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .comment-agent-spinner { animation:none; } }
