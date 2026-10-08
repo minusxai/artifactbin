@@ -1,3 +1,4 @@
+import { setSession } from './harness';
 import {expect,it,afterEach} from 'vitest';
 import {useAppHarness} from './harness';
 import {RemoteRegistry} from '@/lib/remote/registry';
@@ -78,6 +79,7 @@ import {remoteSessions} from '@/lib/remote/registry';
 afterEach(()=>remoteSessions.clear());
 it('commits mention delivery with the comment, authenticates receipts, and refuses resolving over a later human comment',async()=>{
  const user = await createUser({email:'mxmx_test_receipt@example.com'}); const token = await mintToken('review', user.id);await claimToken(user.id,token.token);
+ setSession({user:{id:token.userId!,email:token.email!}});
  const cookie=await agentCookie([token.id]);
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Review me</p>'}}));expect(made.status).toBe(201);const doc=await made.json();
  const s=await remoteAgents.create(user.id,registration);

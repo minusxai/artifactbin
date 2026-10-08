@@ -39,7 +39,7 @@ const HTML_DOC = '<Helmet><script>{`window.x=1;`}</script></Helmet><h1>Stored ht
 
 let token: string;
 async function publish(body: Record<string, unknown>): Promise<{ id: string; url: string }> {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
   expect(res.status, JSON.stringify(await res.clone().json())).toBe(201);
   return res.json();
 }

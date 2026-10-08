@@ -6,7 +6,6 @@ import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request,setSession,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/platform';
-import { createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
@@ -116,7 +115,7 @@ it.each(['omitted inserted touches','wrong inserted parts'])('refuses a partial 
  expect(read.status).toBe(200);const actual=await read.json();expect(actual.version).toBe(row.version);expect(actual.markup).not.toContain('Caption');
  expect((await db.query('SELECT edit_id,document_state FROM artifact_edits WHERE artifact_id=$1',[row.id])).rows).toEqual(history);
  expect((await db.query('SELECT version FROM artifact_versions WHERE artifact_id=$1',[row.id])).rows).toEqual(versions);
- const owner=await createUser({email:'mxmx_test_graph_read@example.com'});await claimToken(owner.id,token.token);
+ const owner={id:token.userId!,email:token.email!};
  setSession(()=>({user:{id:owner.id,email:owner.email}}));
  const shared=await shareRoute(request(`/api/my/artifacts/${row.id}/sharing`,{method:'PUT',origin:'same',json:{visibility:'unlisted'}}),{params:Promise.resolve({id:row.id})});
  expect(shared.status).toBe(200);

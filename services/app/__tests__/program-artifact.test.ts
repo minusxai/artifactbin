@@ -10,7 +10,7 @@ import {parseProgramDefinition,resolveProgramArtifact} from '@/lib/runner/progra
 useAppHarness();
 const definition={version:1,command:['python','/home/runner/task.py'],env:{REPORT:'daily'}};
 it('publishes, reads, exports and replaces validated native program definitions',async()=>{
- const owner=await createUser({email:'mxmx_test_program_owner@example.com'}),token=await mintToken('program');await claimToken(owner.id,token.token);
+ const owner=await createUser({email:'mxmx_test_program_owner@example.com'}),token=await mintToken('program',owner.id);await claimToken(owner.id,token.token);
  const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{program:definition,title:'Daily report',visibility:'unlisted'}}));expect(response.status,await response.clone().text()).toBe(201);const made=await response.json();
  expect(made.format).toBe('program');const ctx={params:Promise.resolve({id:made.id})};
  const content=await (await read(request(`/api/artifacts/${made.id}`,{token:token.token}),ctx)).json();expect(content.program).toEqual(definition);

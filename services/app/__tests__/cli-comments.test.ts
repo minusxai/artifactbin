@@ -18,15 +18,15 @@ useAppHarness();
 
 it('creates agent comments by unambiguous quote without editing the document, and refuses ambiguous quotes',async()=>{
  const token=await mintToken('comments');const actor={tokenId:token.id,userId:token.userId};
- const row=await createArtifact(token.id, token.userId,{title:'comments',format:'markup',source:'<div id="container"><p id="first">One unique sentence.</p><p id="second">Repeated</p><p id="third">Repeated</p></div>',meta:{}});
+ const row=await createArtifact(token.id, token.userId,{visibility:'unlisted',title:'comments',format:'markup',source:'<div id="container"><p id="first">One unique sentence.</p><p id="second">Repeated</p><p id="third">Repeated</p></div>',meta:{}});
  const post=(annotations as unknown as {POST:typeof annotations.GET}).POST;expect(post).toBeTypeOf('function');
  const call=(body:Record<string,unknown>)=>post(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:token.token,json:body}),{params:Promise.resolve({id:row.id})});
  const made=await call({quote:'unique sentence',body:'Clarify this'});expect(made.status).toBe(201);expect((await made.json()).anchor.nodeId).toBe('first');
  const after=await getArtifactFor(actor,row.id);expect(after?.source).toBe(row.source);expect(after?.version).toBe(row.version);
  const ambiguous=await call({quote:'Repeated',body:'Which one?'});expect(ambiguous.status).toBe(400);expect((await ambiguous.json()).error).toBe('ambiguous_quote');
- const outsider=await mintToken('outsider');const denied=await post(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:outsider.token,json:{node_id:'first',body:'No'}}),{params:Promise.resolve({id:row.id})});
- // The outsider can READ this (link-visible) document, so the answer is the sign-in door, not the uniform 404 an unreadable id keeps (lib/capabilities).
- expect(denied.status).toBe(401);expect((await denied.json()).error).toBe('sign_in_required');
+ const outsider=await mintToken('outsider',null);const denied=await post(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:outsider.token,json:{node_id:'first',body:'No'}}),{params:Promise.resolve({id:row.id})});
+ // A legacy anonymous bearer cannot authenticate even on a link-visible document.
+ expect(denied.status).toBe(401);expect((await denied.json()).error).toBe('unauthorized');
 });
 
 it('pages comment threads in creation order with a bounded database read',async()=>{
@@ -51,8 +51,8 @@ it('deletes a thread for an account-claimed owner, refuses anonymous tokens and 
  const made=await createComment(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:token.token,json:{node_id:'paragraph',body:'Remove me'}}),ctx);expect(made.status).toBe(201);
  const annId=(await made.json()).id as string;
  const annCtx={params:Promise.resolve({id:row.id,annId})};
- const anonymous=await mintToken('mxmx_test_comment_anon');
- expect((await removeComment(request(`/api/artifacts/${row.id}/annotations/${annId}`,{method:'DELETE',token:anonymous.token}),annCtx)).status).toBe(403);
+ const anonymous=await mintToken('mxmx_test_comment_anon',null);
+ expect((await removeComment(request(`/api/artifacts/${row.id}/annotations/${annId}`,{method:'DELETE',token:anonymous.token}),annCtx)).status).toBe(401);
  const outsider=await createUser({email:'mxmx_test_comment_outsider@example.com'});const outsiderToken=await mintToken('mxmx_test_comment_outsider', outsider.id);await claimToken(outsider.id,outsiderToken.token);
  expect((await removeComment(request(`/api/artifacts/${row.id}/annotations/${annId}`,{method:'DELETE',token:outsiderToken.token}),annCtx)).status).toBe(404);
  expect((await removeComment(request(`/api/artifacts/${row.id}/annotations/${annId}`,{method:'DELETE',token:token.token}),annCtx)).status).toBe(200);

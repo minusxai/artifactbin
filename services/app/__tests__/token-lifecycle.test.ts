@@ -1,3 +1,4 @@
+import { mintAccountToken, setSession } from './harness';
 /**
  * THE TOKEN LIFECYCLE — through the REAL handlers and the real module, no proxy, no mocks.
  *
@@ -8,7 +9,7 @@
  *   touch     → last_used_at is stamped where the app first trusts a token-bearing actor, sampled per minute
  *   reject    → POST /api/tokens/reject revokes a cookie-held token and rewrites the cookie without it
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { claimTokenById, createUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import {
@@ -41,6 +42,7 @@ const setExpiry = async (id: string, msFromNow: number | null) => {
   else await db.query('UPDATE tokens SET expires_at = $2 WHERE id = $1', [id, new Date(Date.now() + msFromNow).toISOString()]);
 };
 describe('mint: expiry is a property of every token', () => {
+  beforeEach(async () => { const user = await createUser({email:'mxmx_test_token_mint@example.com'}); setSession({user:{id:user.id,email:user.email}}); });
   it('a minted token expires six hours from now by default, and the mint says so', async () => {
     const before = Date.now();
     const res = await mintAnonymous(request('/api/internal/tokens', { method: 'POST' }));
@@ -69,7 +71,7 @@ describe('mint: expiry is a property of every token', () => {
   });
 
   it("the module's own mint carries the same default and range", async () => {
-    const t = await mintToken('t');
+    const t = await mintAccountToken('t');
     expect(Math.abs(Date.parse(t.expiresAt!) - (Date.now() + DEFAULT_TOKEN_TTL_MS))).toBeLessThan(5_000);
     await expect(mintToken('t', null, undefined, { expiresInMs: HOUR / 2 })).rejects.toThrow(RangeError);
     await expect(mintToken('t', null, undefined, { expiresInMs: 366 * 24 * HOUR })).rejects.toThrow(RangeError);
@@ -108,7 +110,7 @@ describe('status: derived, never stored twice', () => {
   it('the live clause, resolve and the table all say deleted_at, never revoked_at', async () => {
     expect(LIVE_TOKEN_SQL).toContain('deleted_at IS NULL');
     expect(LIVE_TOKEN_SQL).not.toContain('revoked_at');
-    const t = await mintToken('t');
+    const t = await mintAccountToken('t');
     expect(await resolveToken(t.token)).not.toBeNull();
     const db = await harness.db();
     await db.query('UPDATE tokens SET deleted_at = now() WHERE id = $1', [t.id]);
@@ -121,7 +123,7 @@ describe('status: derived, never stored twice', () => {
 
 describe('resolve: expired is nothing, on both paths', () => {
   it('an expired token resolves to null by secret and by id; a grandfathered NULL still resolves', async () => {
-    const t = await mintToken('t');
+    const t = await mintAccountToken('t');
     expect(await resolveToken(t.token)).not.toBeNull();
     expect(await resolveTokenById(t.id)).not.toBeNull();
     await setExpiry(t.id, -1_000);
@@ -156,9 +158,9 @@ describe('claim: ownership transfers, usability never returns', () => {
 
 describe('touch: last_used_at, sampled', () => {
   it('a token-bearing actor the app trusts stamps last_used_at once, then at most once per interval', async () => {
-    const t = await mintToken('agent');
+    const t = await mintAccountToken('agent');
     expect((await row(t.id)).last_used_at).toBeNull();
-    const actor = { credential: 'bearer' as const, tokenId: t.id };
+    const actor = { credential: 'bearer' as const, tokenId: t.id, userId: t.userId! };
     expect((await listArtifacts(request('/api/artifacts', { actor }))).status).toBe(200);
     const first = (await row(t.id)).last_used_at;
     expect(first).not.toBeNull();

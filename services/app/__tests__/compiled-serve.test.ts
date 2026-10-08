@@ -619,7 +619,7 @@ describe('the compiled page behaves like today', () => {
     + '<div><Button run="$vote">Vote</Button></div>';
 
   describe('a held connection is a credentialed reader on the document the app page frames', () => {
-    it('the guest owner\'s page carries signedIn (the session doors); a guest\'s does not', async () => {
+    it('the email account owner\'s page carries signedIn; a guest\'s does not', async () => {
       const t = await mintToken('behaviour');
       const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'votes', dataset: [{ choice: 'ramen' }], columns: [{ name: 'choice', type: 'string' }], access: 'readwrite', visibility: 'unlisted' } }));
       const ds = ((await made.json()) as { id: string }).id;
@@ -629,6 +629,7 @@ describe('the compiled page behaves like today', () => {
       expect(guest.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect(islandData(await guest.text()).signedIn).toBe(false);
 
+      setSession({user:{id:t.userId!,email:t.email!}});
       const held = (await framedDocument(app, `/a/${id}?reader=compiled`, { headers: { accept: 'text/html', cookie: await agentCookie([t.id]) } }))!;
       expect(held.headers.get(READER_MODE_HEADER)).toBe('compiled');
       const data = islandData(await held.text());

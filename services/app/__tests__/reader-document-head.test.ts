@@ -35,7 +35,7 @@ const serve = async (id: string, query = '') => {
 
 const publish = async (source: string, title: string | null) => {
   const t = await mintToken('t');
-  return createArtifact(t.id, t.userId, { format: 'markup', source, meta: {}, title, description: 'A summary' });
+  return createArtifact(t.id, t.userId, { visibility: 'public', format: 'markup', source, meta: {}, title, description: 'A summary' });
 };
 
 describe('the served document unfurls on its own', () => {

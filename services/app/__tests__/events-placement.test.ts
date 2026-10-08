@@ -1,3 +1,4 @@
+import { setSession } from './harness';
 import {getDb} from '@/lib/platform';
 import type {EventEnvelope} from '@artifactbin/contracts';
 import {observedRequest} from '@/__tests__/conditional-request';
@@ -43,7 +44,8 @@ async function world() {
   const u = await createUser({ email: 'mxmx_test_placement@example.com' });
   const t = await mintToken('o', u.id);
     await claimToken(u.id, t.token);
-  const cookie = await agentCookie([t.id]);
+  setSession({user:{id:t.userId!,email:t.email!}});
+ const cookie = await agentCookie([t.id]);
   const mk = async (body: Record<string, unknown>) => {
     const r = await createRoute(request('/api/artifacts', { method: 'POST', json: body, token: t.token }));
     expect(r.status).toBe(201);

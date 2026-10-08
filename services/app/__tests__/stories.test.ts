@@ -63,7 +63,7 @@ describe('retired themes on stored rows', () => {
     const t = await mintToken('t');
     const created = await (
       await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Legacy</h1>', theme: 'modernist' } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<h1>Legacy</h1>', theme: 'modernist' } }),
       )
     ).json();
     // Shape the row like a document published before the retirement: the old

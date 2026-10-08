@@ -34,7 +34,7 @@ useAppHarness();
 const BASE = 'http://localhost:3000';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const create = async (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: body }));
+  createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));
 
 const ROWS = [{ region: 'EU', revenue: 800 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 40 }];
 
