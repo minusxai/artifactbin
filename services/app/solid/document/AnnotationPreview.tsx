@@ -14,6 +14,7 @@ import type { StoryEditRect } from '@/lib/story-runtime/contract';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
+import Ghost from 'lucide-solid/icons/ghost';
 import { Avatar } from '../components/Avatar';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeIcon } from '../components/brand-icons';
 import { Tooltip } from '../components/Tooltip';
@@ -71,7 +72,7 @@ function AgentMark(props: { label: string; compact?: boolean; decorative?: boole
       case 'chatgpt': return <ChatGPTIcon size={props.compact ? 12 : 16} />;
       case 'claude code': return <ClaudeCodeIcon size={props.compact ? 12 : 16} />;
       case 'claude': return <ClaudeAIIcon size={props.compact ? 12 : 16} />;
-      default: return <span aria-hidden="true" class={`${props.compact ? 'text-[10px]' : 'text-[12px]'} leading-none`} style={{color:agentNameColor(props.label)}}>✦</span>;
+      default: return <Ghost size={props.compact ? 13 : 17} strokeWidth={1.8} aria-hidden="true" style={{color:agentNameColor(props.label)}} />;
     }
   };
   return <span aria-label={props.decorative ? undefined : `${props.label} agent`} aria-hidden={props.decorative || undefined}
