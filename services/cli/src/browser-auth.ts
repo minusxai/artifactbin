@@ -17,7 +17,7 @@ interface Pending { connectionKey?: string; server: string; deviceCode: string; 
 interface DeviceResponse { authorized?: boolean; device_code: string; user_code: string; verification_uri_complete: string; expires_in: number; interval: number }
 /** An unattended agent gives up polling for approval after this bound, failing fast with an actionable error instead of holding the full device-code window. */
 const AGENT_APPROVAL_WAIT_MS = 45_000;
-export const EMAIL_AUTH_HINT = 'If a browser is unavailable, run afbin auth --email <email> (add --server <origin> for another server).';
+export const EMAIL_AUTH_HINT = 'On a chat or phone, or if a browser is unavailable, run afbin auth --email <email> and ask the user for the code (add --server <origin> for another server).';
 export class ApprovalRequired extends Error {
   readonly code = 'approval_required';
   constructor(readonly verificationUrl: string, readonly userCode: string, readonly expiresAt: number) {

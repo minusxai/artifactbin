@@ -22,6 +22,9 @@ function writeProgress(email: string, sent: boolean) {
   } catch { /* storage unavailable */ }
 }
 
+/** Visitors sent here by a signed-out redirect (a document or `/start` that wanted a session, or a browser with an old guest cookie). */
+const cameFromSignedOutRedirect = () => { const query = new URLSearchParams(window.location.search); return query.has('callbackUrl') || query.get('signedOut') === '1'; };
+
 export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
   const { session, sessionError } = useSession();
   const saved = readProgress();
@@ -76,6 +79,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
         </form>
         <div class="mt-4 flex items-center justify-between text-xs text-muted"><button type="button" aria-label="Change email" class="cursor-pointer underline hover:text-accent" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress('', false); }}>change email</button><button type="button" aria-label="Resend code" class="cursor-pointer underline hover:text-accent" disabled={busy()} onClick={() => void requestCode()}>resend code</button></div>
       </>}>
+        <Show when={cameFromSignedOutRedirect()}><p role="note" class="mt-2 text-xs text-fg">Guest sessions ended on 8 October 2026. Sign in with your email on this browser and documents you made as a guest will join your account.</p></Show>
         <p class="mt-2 text-xs text-muted">We’ll email you a 6-digit code. No password to remember.</p>
         <form class="mt-5 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void requestCode(); }}>
           <input type="email" autofocus autocomplete="email" aria-label="Email" placeholder="email" value={email()} onInput={event => setEmail(event.currentTarget.value)} class={INPUT} />

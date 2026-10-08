@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {AGENT_COOKIE} from '@/lib/accounts/agent-session';
 import {createAppServer} from '../app';
 import {request,useAppHarness} from '@/__tests__/harness';
 useAppHarness();
@@ -17,6 +18,10 @@ describe('application home',()=>{
  it('renders the shared workspace shell for an authenticated account',async()=>{
   const response=await app.request(request('/',{actor:{credential:'session',userId:'home-user',email:'private@example.test'}}));
   expect(response.status).toBe(200);expect(await response.text()).toContain('id="root"');
+ });
+ it('flags the login redirect for a browser still holding its old guest cookie',async()=>{
+  const response=await app.request('/',{headers:{cookie:`${AGENT_COOKIE}=stale`}});
+  expect(response.status).toBe(302);expect(response.headers.get('location')).toBe('/login?signedOut=1');
  });
  it('sends anonymous held-token sessions to login without exposing drafts',async()=>{
   const response=await app.request(request('/',{actor:{credential:'agent-cookie',tokenId:'held-token',heldTokenIds:['held-token']}}));

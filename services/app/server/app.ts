@@ -32,6 +32,7 @@ import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { SPA_PATHS } from '@/lib/http/app-pages';
 import { ownerUsername } from '@/lib/accounts';
+import { AGENT_COOKIE } from '@/lib/accounts/agent-session';
 import { canEdit } from '@/lib/artifacts';
 import { roleFor, sessionActor } from '@/lib/accounts';
 import { baseUrl, json } from '@/lib/http';
@@ -643,7 +644,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
     if (signedIn) return page(c);
     c.header('Cache-Control', 'no-store');
-    return c.redirect('/login', 302);
+    // A browser still holding its old guest cookie was signed out when guest sessions ended: say so on the login page.
+    const wasGuest = (c.req.header('cookie') ?? '').split(/;\s*/).some(part => part.startsWith(`${AGENT_COOKIE}=`));
+    return c.redirect(wasGuest ? '/login?signedOut=1' : '/login', 302);
   });
   app.on(['GET', 'HEAD'], '/login', async c => {
     c.header('Cache-Control', 'no-store');
