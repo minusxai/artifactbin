@@ -52,3 +52,8 @@ export function PreviewSelect({ p }: { p: Props }) {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
   </button></div></Shell>;
 }
+
+/** Edit/slide previews stay inert and never open an upload door. */
+export function PreviewFileUpload({ p }: { p: Props }) {
+  return <Shell p={p} extra={['dataset', 'busy', 'accept', 'maxFiles']}><button type="button" disabled class={fieldClass}>{p.multiple === true ? 'Choose files' : 'Choose file'}</button></Shell>;
+}
