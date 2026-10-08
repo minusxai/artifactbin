@@ -82,7 +82,7 @@ export class RemoteRegistry {
     if (!this.info(s).online) throw new RemoteError("Session is offline", 409);
   }
   restore(owner:string,id:string,info:RemoteSessionInfo):void { const s=this.get(owner,id);s.info={...info}; }
-  ready(owner:string,id:string,proof:string):void { const s=this.get(owner,id);if(s.key!==proof)throw new RemoteError("Invalid runner credential",403);if(s.info.activity==='starting')s.info.activity='listening'; }
+  ready(owner:string,id:string,proof:string):void { const s=this.get(owner,id);if(s.key!==proof)throw new RemoteError("Invalid runner credential",403);if(s.info.activity==='queued'||s.info.activity==='starting')s.info.activity='listening'; }
   stop(owner:string,id:string):void { const s=this.get(owner,id);if(!s.info.managed)throw new RemoteError("This session is not managed; use Disconnect.");if(s.info.exitCode===null)s.info.activity='stopping'; }
   list(userId: string): RemoteSessionInfo[] {
     this.prune();

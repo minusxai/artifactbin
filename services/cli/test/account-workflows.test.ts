@@ -67,3 +67,15 @@ test('account resource tracking lives in the state store as account records plus
   assert.deepEqual(await readdir(root),['profile.yaml']);
  }finally{await rm(root,{recursive:true,force:true});await rm(home,{recursive:true,force:true});}
 });
+
+test('lists and pulls capacity-waiting sessions without rejecting their activity',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-capacity-session-')),home=await mkdtemp(join(tmpdir(),'afbin-capacity-home-'));
+ try{
+  await saveTestConnection({server:'https://example.com',token:'test-token'},home);
+  const session={type:'session',id:'capacity-agent',name:'agent',status:'offline',managed:true,activity:'queued'};
+  const transport:typeof fetch=async(input)=>Response.json(new URL(String(input)).pathname.endsWith('/capacity-agent')?{session}:{sessions:[session]},{headers:{'X-Artifactbin-Account':'usr_example'}});
+  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--server','https://example.com','--json'],{cwd:root,home,env:{},stdout:s=>out.push(s),stderr:()=>{},fetch:transport});return {code,result:JSON.parse(out.join(''))};};
+  const listed=await invoke(['list','--type','session']);assert.equal(listed.code,0,JSON.stringify(listed));assert.equal(listed.result.sessions[0].activity,'queued');
+  const pulled=await invoke(['pull','capacity-agent','--type','session','--output','capacity.yaml']);assert.equal(pulled.code,0,JSON.stringify(pulled));assert.equal(parse(await readFile(join(root,'capacity.yaml'),'utf8')).activity,'queued');
+ }finally{await rm(root,{recursive:true,force:true});await rm(home,{recursive:true,force:true});}
+});

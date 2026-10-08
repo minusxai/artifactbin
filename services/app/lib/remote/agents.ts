@@ -84,7 +84,7 @@ export class RemoteAgents {
   }
   const saved=(await db.query<AgentRow>("SELECT * FROM remote_agents WHERE owner=$1 AND COALESCE(info->>'removed','false')<>'true' ORDER BY seen_at DESC LIMIT 100",[owner])).rows;
   await Promise.all(saved.filter(r=>r.info.runId).map(async r=>{try{const run=await services().runner.getRun({userId:owner,runId:r.info.runId!});if(!r.info.hostedGeneration||run.status!=='running'||!r.active)Object.assign(r.info,managedRunRosterStatus(run.status,r.active,r.info.activity));else r.info.online=this.relay.list(owner).some(s=>s.id===r.id&&s.online&&s.hostedGeneration===r.info.hostedGeneration);}catch{r.info.online=false;r.info.activity='unknown';}}));
-  const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,online:r.info.runId?r.info.online:defaultAgent?.id===r.id?defaultAgent.online:live.some(s=>s.id===r.id&&s.online)})),...(defaultAgent&&!saved.some(r=>r.id===defaultAgent.id)?[defaultAgent]:[])];
+  const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,...(defaultAgent?.id===r.id?{activity:defaultAgent.activity}:{}),online:r.info.runId?r.info.online:defaultAgent?.id===r.id?defaultAgent.online:live.some(s=>s.id===r.id&&s.online)})),...(defaultAgent&&!saved.some(r=>r.id===defaultAgent.id)?[defaultAgent]:[])];
  }
  async read(owner:string,id:string){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.ensure(owner);const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);let online=false;try{const live=this.relay.read(owner,id);online=saved.active&&live.online&&(!saved.info.hostedGeneration||live.hostedGeneration===saved.info.hostedGeneration);}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
  async view(owner:string,id:string,since:number){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.view(owner,id,since);const session=await this.read(owner,id);if(session.runId&&(!session.hostedGeneration||!session.online))return managedTerminalView(owner,session);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
@@ -93,7 +93,7 @@ export class RemoteAgents {
   const db=await getDb();await db.transaction(async tx=>{
    const r=await this.row(tx,owner,id,true);if(!r){this.relay.ready(owner,id,proof);return;}
    this.check(r,proof);if(!r.active)throw new RemoteError('Session stopped',410);
-   if(r.info.activity==='starting'||r.info.activity==='unknown'){r.info.activity='listening';await this.save(tx,r);await this.notifyAgent(tx,id);}
+   if(r.info.activity==='queued'||r.info.activity==='starting'||r.info.activity==='unknown'){r.info.activity='listening';await this.save(tx,r);await this.notifyAgent(tx,id);}
    try{this.relay.restore(owner,id,r.info);}catch(error){if(!(error instanceof RemoteError))throw error;}
   });
  }

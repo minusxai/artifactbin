@@ -26,6 +26,16 @@ it('registers external managed-agent mention metadata without granting a local r
  await db.transaction(tx=>agents.enqueue(tx,owner,'artifact','thread',{id:'comment',body:`[@artifactbin](/chat?session=${id}) help`,author:{kind:'human',label:'Owner'}}));
  expect((await agents.work(db,'artifact','thread'))[0]?.phase).toBe('queued');
 });
+it('projects the current external default activity instead of its saved registration',async()=>{
+ const owner='external-status',id=hostedAgentSessionId(owner);
+ let activity:'listening'|'working'|'queued'='listening';
+ const session={id,name:'artifactbin',harness:'pi',cwd:'/home/runner',machine:'External',cols:100,rows:30,online:true,exitCode:null,controller:'web' as const,createdAt:new Date().toISOString(),managed:true};
+ setHostedRemoteAgent(hostedAgentClient('https://service.test',async()=>Response.json({...session,activity})));
+ const agents=fresh();
+ expect((await agents.list(owner)).find(s=>s.id===id)?.activity).toBe('listening');
+ activity='working';expect((await agents.list(owner)).find(s=>s.id===id)?.activity).toBe('working');
+ activity='queued';expect((await agents.list(owner)).find(s=>s.id===id)).toMatchObject({online:true,activity:'queued'});
+});
 it('reserves names across relays, keeps stable proof and color on reconnect, and persists stop',async()=>{
  const a=fresh(),b=fresh();const s=await a.create('owner',registration);
  await expect(b.create('owner',{...registration,recoveryKey:'b'.repeat(64)})).rejects.toThrow(/already running/);

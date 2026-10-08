@@ -56,7 +56,7 @@ it('shows startup status until a native terminal exists and rejects input after 
  const response=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'first',name:'starting-box'}}),'create',{enabled:true,runner,db});
  const {session}=await response.json(),registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
  try{
-  const queued=await agents.view('alice',session.id,-1);expect(queued.session).toMatchObject({online:false,activity:'starting'});expect(queued.snapshot).toContain('Starting');expect(runner.terminal).not.toHaveBeenCalled();
+  const queued=await agents.view('alice',session.id,-1);expect(queued.session).toMatchObject({online:false,activity:'queued'});expect(queued.snapshot).toContain('Waiting for compute capacity');expect(runner.terminal).not.toHaveBeenCalled();
   status='running';expect((await agents.view('alice',session.id,-1)).snapshot).toContain('Starting');
   await agents.stop('alice',session.id);await expect(agents.input('alice',session.id,'hello')).rejects.toThrow(/stopped/);
  }finally{registry.clear();}
@@ -113,7 +113,7 @@ it('projects durable hosted lifecycle instead of leaving ended runs starting in 
  const response=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'roster',name:'roster-box'}}),'create',{enabled:true,runner,db});
  const {session}=await response.json(),registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
  try{
-  expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'starting'});
+  expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'queued'});
   status='running';expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:true,activity:'working'});
   await agents.stop('alice',session.id);expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopping'});
   status='failed';expect((await agents.list('alice')).find(s=>s.id===session.id)).toMatchObject({online:false,activity:'stopped'});
@@ -135,6 +135,7 @@ it.each(['claude','codex','pi','opencode'])('connects hosted %s to its reserved 
   await db.transaction(async tx=>{await agents.enqueue(tx,'alice','doc-a','thread-a',comment);await agents.enqueue(tx,'alice','doc-a','thread-a',comment);await agents.enqueue(tx,'alice','doc-b','thread-b',{...comment,id:'two'});});
   expect(await agents.work(db,'doc-a','thread-a')).toHaveLength(1);expect((await agents.work(db,'doc-b','thread-b'))[0]?.phase).toBe('queued');
   expect((await agents.exchange('alice',session.id,{runnerKey:attached.runnerKey,cols:100,rows:30,ack:0,outputSeq:0,output:''})).inputs).toEqual([]);
+  await db.query("UPDATE remote_agents SET info=jsonb_set(info,'{activity}','\"queued\"'::jsonb) WHERE id=$1",[session.id]);
   await agents.ready('alice',session.id,attached.runnerKey);
   expect((await agents.view('alice',session.id,-1)).session.activity).toBe('listening');
   await agents.input('alice',session.id,'manual task\r');expect(runner.write).not.toHaveBeenCalled();expect((await agents.read('alice',session.id)).activity).toBe('unknown');

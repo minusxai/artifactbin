@@ -350,3 +350,46 @@ it('restores the latest usable session and shows the error when Stop fails', asy
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled();
  expect(screen.getByRole('button',{name:'Stop agent'})).toBeEnabled();
 });
+
+
+it('shows capacity waiting consistently, disables input, and transitions through startup to Ready',async()=>{
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ let session={id:'capacity-wait',runId:'capacity-run',name:'Capacity Claude',harness:'claude',machine:'Hosted',managed:true,online:false,activity:'queued',exitCode:null,cols:100,rows:30};
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,snapshot:'Waiting for compute capacity. Your agent will start automatically when a slot is available.',frames:[]}})));
+ open(session.id);
+ expect(await screen.findByText('claude · Hosted · Waiting for capacity')).toBeInTheDocument();
+ expect(screen.getByText('claude · Waiting for capacity')).toBeInTheDocument();
+ expect(screen.getByText('Waiting for compute capacity. Your agent will start automatically when a slot is available.')).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:/Show previous sessions/})).toBeNull();
+ expect(screen.getByRole('textbox',{name:'Message to agent'})).toHaveAttribute('placeholder','Waiting for capacity…');
+ expect(screen.getByRole('button',{name:'Stop agent'})).toBeEnabled();
+ expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
+ expect(screen.getByRole('button',{name:'Send Enter'})).toBeDisabled();
+ session={...session,online:true};
+ await waitFor(()=>expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled());
+ expect(screen.getByText('claude · Hosted · Waiting for capacity')).toBeInTheDocument();
+ session={...session,online:false,activity:'starting'};
+ expect(await screen.findByText('claude · Hosted · Starting')).toBeInTheDocument();
+ expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
+ session={...session,online:true,activity:'listening'};
+ expect(await screen.findByText('claude · Hosted · Online · Ready')).toBeInTheDocument();
+ expect(screen.getByText('claude · Online · Ready')).toBeInTheDocument();
+ expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled();
+ expect(screen.queryByText('Waiting for compute capacity. Your agent will start automatically when a slot is available.')).toBeNull();
+});
+
+it('can cancel a capacity-waiting agent and keeps Stop above stale queued polls',async()=>{
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ const session={id:'capacity-stop',runId:'capacity-stop-run',name:'Cancel Queued',harness:'claude',machine:'Hosted',managed:true,online:false,activity:'queued',exitCode:null,cols:100,rows:30};
+ let polls=0;
+ const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>options?.method==='POST'?{ok:true}:url==='/api/remote/sessions'?{sessions:[session]}:(polls++,{session,seq:0,snapshot:'',frames:[]})}));
+ vi.stubGlobal('fetch',fetch);open(session.id);
+ await screen.findByText('claude · Hosted · Waiting for capacity');
+ const pollsAtStop=polls;fireEvent.click(screen.getByRole('button',{name:'Stop agent'}));
+ await waitFor(()=>expect(polls).toBeGreaterThan(pollsAtStop));
+ expect(screen.getByText('claude · Hosted · Stopping')).toBeInTheDocument();
+ expect(screen.getByText('claude · Stopping')).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Stop agent'})).toBeDisabled();
+ expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
+ expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(1);
+});

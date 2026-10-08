@@ -15,8 +15,9 @@ export function remoteWorkLabel(work:RemoteWork):string{
  if(work.reason==='queue_full')return 'Queue full · mention again after pending work finishes';
  if(work.reason==='unauthorized')return 'Unavailable · mention one of your agents';
  const phase=({superseded:'Follow-up received',dispatching:'Sending to agent',queued:'Queued',delivered:'Sent · awaiting acknowledgment…',acknowledged:'Working',completed:'Answered',failed:'Execution failed · retry by mentioning again',blocked:'Needs your input',uncertain:'Delivery uncertain · check terminal',unavailable:'Agent unavailable'})[work.phase];
- if(work.connection==='offline')return phase+' · offline';
  if(work.connection==='stopped')return phase+' · stopped';
+ if(work.activity==='queued'&&(work.phase==='queued'||work.phase==='dispatching'))return 'Waiting for capacity';
+ if(work.connection==='offline')return phase+' · offline';
  if(work.phase==='queued'&&work.activity==='unknown')return phase+' · readiness unknown, check terminal';
  if(work.phase==='queued'&&work.activity==='starting')return phase+' · loading context';
  if(work.phase==='completed'&&work.activity==='listening')return phase+' · listening';

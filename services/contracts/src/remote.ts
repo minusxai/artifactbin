@@ -76,7 +76,7 @@ export const REMOTE_WORK_LIMIT = 100;
 export const REMOTE_WORK_BYTES = 128 * 1024;
 export const REMOTE_COLORS = ['blue', 'violet', 'teal', 'amber', 'rose', 'slate'] as const;
 export type RemoteColor = typeof REMOTE_COLORS[number];
-export type RemoteActivity = 'starting' | 'listening' | 'working' | 'blocked' | 'unknown' | 'stopping' | 'stopped';
+export type RemoteActivity = 'queued' | 'starting' | 'listening' | 'working' | 'blocked' | 'unknown' | 'stopping' | 'stopped';
 export type RemoteWorkPhase = 'queued' | 'dispatching' | 'superseded' | 'delivered' | 'acknowledged' | 'completed' | 'failed' | 'blocked' | 'uncertain' | 'unavailable';
 export interface RemoteWork {
  id:string; sessionId:string; artifactId:string; threadId:string; commentId:string;

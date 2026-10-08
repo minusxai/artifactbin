@@ -8,7 +8,7 @@ export async function managedTerminalView(owner:string,info:RemoteSessionInfo):P
  const lookup={userId:owner,runId:info.runId};
  const run=await runner.getRun(lookup);
  const progress=(message:string,activity?:RemoteSessionInfo['activity']):RemoteView=>({session:{...info,online:false,activity:isTerminalManagedRun(run.status)?'stopped':info.activity==='stopping'?'stopping':activity??'starting'},generation:info.runId,seq:0,frames:[],snapshot:message+'\r\n'});
- if(run.status==='queued')return progress(info.activity==='stopping'?'Stopping your hosted box…':'Starting your hosted box…');
+ if(run.status==='queued')return progress(info.activity==='stopping'?'Stopping your hosted box…':'Waiting for compute capacity. Your agent will start automatically when a slot is available.','queued');
  let terminal;
  try{terminal=await runner.terminal(lookup);}
  catch(error){
