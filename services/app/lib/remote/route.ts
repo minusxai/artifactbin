@@ -75,6 +75,7 @@ export async function remoteRoute(
     if (!id) return json(await remoteAgents.create(owner, body), 201);
     if (exchange) return json(await remoteAgents.exchange(owner, id, body));
     if(body.type==='ready')await remoteAgents.ready(owner,id,body.proof);
+    else if(body.type==='resume-artifact-work')await remoteAgents.resumeArtifactWork(owner,id);
     else if(body.type==='stopped')await remoteAgents.stopped(owner,id,body.exitCode);
     else if(body.type==='stop')await remoteAgents.stop(owner,id);
     else if (body.type === "input") await remoteAgents.input(owner, id, body.data);

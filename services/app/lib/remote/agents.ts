@@ -99,6 +99,21 @@ export class RemoteAgents {
  async read(owner:string,id:string){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return {...await hosted.ensure(owner),included:true};const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);if(saved.info.runId)return this.managedSession(owner,saved);let online=false;try{const live=this.relay.read(owner,id);online=saved.active&&live.online&&(!saved.info.hostedGeneration||live.hostedGeneration===saved.info.hostedGeneration);}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
  async view(owner:string,id:string,since:number){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id)){const view=await hosted.view(owner,id,since);return {...view,session:{...view.session,included:true}};}const session=await this.read(owner,id);if(session.runId&&(!session.hostedGeneration||!session.online))return managedTerminalView(owner,session);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
  async owns(owner:string,id:string){return !!hostedRemoteAgent()?.owns(owner,id)||this.relay.owns(owner,id)||!!await this.row(await getDb(),owner,id);}
+ /** An explicit account-owner confirmation that manual terminal work is finished.
+  * This only opens the queued-work gate for an online native managed session;
+  * runner operations still require their independent proof credential. */
+ async resumeArtifactWork(owner:string,id:string){
+  if(hostedRemoteAgent()?.owns(owner,id))throw new RemoteError('Session not found',404);
+  const db=await getDb();await db.transaction(async tx=>{
+   const r=await this.row(tx,owner,id,true);if(!r)throw new RemoteError('Session not found',404);
+   if(!r.info.managed||r.info.runId||r.info.hostedGeneration)throw new RemoteError('Owner readiness is available only for a native managed agent',409);
+   if(!r.active||r.info.exitCode!==null)throw new RemoteError('Session stopped',410);
+   if(r.info.activity!=='unknown')throw new RemoteError('Session is not waiting for owner readiness',409);
+   let live:RemoteSessionInfo;try{live=this.relay.read(owner,id);}catch{throw new RemoteError('Session is offline',409);}
+   if(!live.online||live.exitCode!==null)throw new RemoteError('Session is offline',409);
+   r.info.activity='listening';await this.save(tx,r);this.relay.restore(owner,id,r.info);await this.notifyAgent(tx,id);
+  });
+ }
  async ready(owner:string,id:string,proof:string){
   const db=await getDb();await db.transaction(async tx=>{
    const r=await this.row(tx,owner,id,true);if(!r){this.relay.ready(owner,id,proof);return;}

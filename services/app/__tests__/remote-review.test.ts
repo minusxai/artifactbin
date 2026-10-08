@@ -114,6 +114,33 @@ it('manual terminal input invalidates idle readiness until the agent explicitly 
  expect((await a.read('owner',s.id)).activity).toBe('listening');
 });
 
+it('lets only the session owner resume queued artifact work after manual input and delivers it once',async()=>{
+ const user=await createUser({email:'mxmx_test_owner_ready@example.com'});const token=await mintToken('owner-ready',user.id);const owner=user.id;
+ const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>owner readiness</p>'}}));const artifactId=(await made.json()).id;
+ const a=fresh(),s=await a.create(owner,registration),db=await getDb();
+ await a.ready(owner,s.id,s.runnerKey);
+ await expect(a.resumeArtifactWork(owner,s.id)).rejects.toMatchObject({status:409});
+ await db.transaction(tx=>a.enqueue(tx,owner,artifactId,'thread',{id:'owner-ready',body:`[@claude](/chat?session=${s.id}) continue`,author:{kind:'human',label:'Owner'}}));
+ await a.input(owner,s.id,'finish the manual task\r');
+ expect((await a.exchange(owner,s.id,exchange(s.runnerKey))).inputs).not.toContainEqual(expect.objectContaining({requestId:expect.any(String)}));
+ await expect(a.resumeArtifactWork('another-owner',s.id)).rejects.toMatchObject({status:404});
+ await a.resumeArtifactWork(owner,s.id);
+ const delivered=await a.exchange(owner,s.id,exchange(s.runnerKey));
+ expect(delivered.inputs.filter(input=>input.requestId)).toHaveLength(1);
+ const next=await a.exchange(owner,s.id,{...exchange(s.runnerKey),ack:delivered.inputs.at(-1)!.id});
+ expect(next.inputs.filter(input=>input.requestId)).toEqual([]);
+ expect((await a.work(db,artifactId,'thread'))[0]?.phase).toBe('delivered');
+});
+
+it('refuses owner readiness recovery for offline or ended sessions',async()=>{
+ const owner='ready-states',a=fresh(),s=await a.create(owner,registration);
+ await a.ready(owner,s.id,s.runnerKey);await a.input(owner,s.id,'manual task\r');
+ a.relay.clear();
+ await expect(a.resumeArtifactWork(owner,s.id)).rejects.toMatchObject({status:409});
+ const next=fresh(),ended=await next.create('ended-owner',registration);await next.stopped('ended-owner',ended.id,0);
+ await expect(next.resumeArtifactWork('ended-owner',ended.id)).rejects.toMatchObject({status:410});
+});
+
 it('a blocked request releases the agent to handle another thread while preserving the question',async()=>{
  const user = await createUser({email:'mxmx_test_blocked@example.com'}); const token = await mintToken('blocked', user.id);await claimToken(user.id,token.token);
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>blocked review</p>'}}));const artifactId=(await made.json()).id;

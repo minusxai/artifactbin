@@ -76,6 +76,41 @@ it.each(['listening','unknown'])('shows a connected hosted agent without calling
   expect(await screen.findByText(metadataMatch(status+' · claude · Cloud box'))).toBeInTheDocument();
   expect(screen.queryByText('claude · Offline')).toBeNull();
   expect(screen.queryByText('claude · Unavailable')).toBeNull();
+  expect(screen.queryByRole('button',{name:'Resume artifact requests'})).toBeNull();
+});
+
+it('offers an explicit owner readiness action for an online native managed agent waiting after manual input', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id:'owner-ready',name:'Claude',harness:'claude',machine:'laptop',online:true,controller:'web',cols:80,rows:24,exitCode:null,managed:true,activity:'unknown' };
+  let activity=session.activity,resolvePost:(()=>void)|undefined;
+  const fetch = vi.fn(async (url:string,options?:RequestInit) => {
+    if(url==='/api/remote/sessions')return {ok:true,json:async()=>({sessions:[session]})};
+    if(options?.method==='POST')return new Promise<{ok:boolean,json:()=>Promise<{ok:boolean}>}>(resolve=>{resolvePost=()=>resolve({ok:true,json:async()=>({ok:true})});});
+    return {ok:true,json:async()=>({session:{...session,activity},seq:0,frames:[],snapshot:''})};
+  });
+  vi.stubGlobal('fetch',fetch);
+  open(session.id);
+  expect(await screen.findByText('Use this only after the agent has finished the manual task and no approval is pending.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Resume artifact requests'}));
+  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/remote/sessions/owner-ready',expect.objectContaining({method:'POST',body:JSON.stringify({type:'resume-artifact-work'})})));
+  activity='working';
+  expect(await screen.findByText(metadataMatch('Online · Running · claude · laptop'))).toBeInTheDocument();
+  resolvePost?.();
+  expect(await screen.findByText(metadataMatch('Online · Running · claude · laptop'))).toBeInTheDocument();
+});
+
+it.each([
+  {id:'offline-owner-ready',online:false,activity:'unknown',managed:true},
+  {id:'ended-owner-ready',online:false,activity:'stopped',managed:true,exitCode:0},
+  {id:'hosted-owner-ready',online:true,activity:'unknown',managed:true,runId:'hosted-run'},
+  {id:'unmanaged-owner-ready',online:true,activity:'unknown',managed:false},
+])('does not offer owner readiness recovery for an ineligible session (%s)', async session => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const selected = {name:'Review',harness:'claude',machine:'laptop',controller:'web',cols:80,rows:24,exitCode:null,...session};
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[selected]}:{session:selected,seq:0,frames:[],snapshot:''}})));
+  open(selected.id);
+  await screen.findByRole('button',{name:/Open Review/});
+  expect(screen.queryByRole('button',{name:'Resume artifact requests'})).toBeNull();
 });
 
 it('lets the user stop waiting and start again with a fresh client wait', async () => {
