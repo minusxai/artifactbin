@@ -27,7 +27,7 @@ test('Pi journal and pinned Codex identity stay agent-scoped while shared provid
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
-test('Codex and OpenCode discovery select only the agent cwd and startup uses its private database',async()=>{
+test('Codex and OpenCode discovery select only the agent cwd and resumed OpenCode uses its private database',async()=>{
  const home=await mkdtemp(join(tmpdir(),'af-shared-discovery-'));try{
   const a={cwd:join(home,'agents','a'),stateDirectory:join(home,'agents','a','.artifactbin','hosted-agent')};
   const original='11111111-1111-4111-8111-111111111111',foreign='22222222-2222-4222-8222-222222222222';
@@ -36,10 +36,10 @@ test('Codex and OpenCode discovery select only the agent cwd and startup uses it
   assert.equal((await hostedHarnessArguments('codex',home,'context',undefined,a))[1],original);
   const env=hostedWorkerEnv('opencode',home,a.stateDirectory,':',{server:'http://localhost:7845',token:'mxmx_test_connection'},{PATH:'/fixture/bin',HOME:'/foreign',ARTIFACTBIN_HOME:'/foreign/state'},a.cwd);
   assert.equal(env.HOME,home);assert.equal(env.PWD,a.cwd);assert.equal(env.ARTIFACTBIN_HOME,join(a.cwd,'.artifactbin'));assert.equal(env.OPENCODE_DB,join(a.stateDirectory,'opencode.db'));assert.equal(env.ARTIFACTBIN_SKILLS,'off');assert.equal(env.CLI__DISABLE_AUTO_UPDATES,'1');
-  const startup:Array<{cwd:string;env:NodeJS.ProcessEnv}>=[];
-  await mkdir(a.stateDirectory,{recursive:true});seedNativeDatabase(a.stateDirectory,'ses_owned',a.cwd);
-  const args=await prepareHostedHarness({command:'opencode',home,...a,context:'context',env,listOpenCodeSessions:async()=>JSON.stringify([{id:'ses_foreign',directory:home,created:0},{id:'ses_owned',directory:a.cwd,created:1}]),runStartup:async(_args,options)=>{startup.push(options);}});
-  assert.deepEqual(args,['--session','ses_owned']);assert.equal(startup[0]?.cwd,a.cwd);assert.equal(startup[0]?.env.OPENCODE_DB,env.OPENCODE_DB);
+  await mkdir(a.stateDirectory,{recursive:true});seedNativeDatabase(a.stateDirectory,'ses_owned',home);
+  const args=await prepareHostedHarness({command:'opencode',home,...a,context:'context',env,listOpenCodeSessions:async()=>JSON.stringify([{id:'ses_foreign',directory:home,created:0},{id:'ses_owned',directory:a.cwd,created:1}])});
+  assert.deepEqual(args,['--mini','--session','ses_owned','--prompt','context']);assert.equal(env.OPENCODE_DB,join(a.stateDirectory,'opencode.db'));
+  const db=new DatabaseSync(env.OPENCODE_DB,{readOnly:true});try{assert.equal(db.prepare('SELECT directory FROM session WHERE id=?').get('ses_owned')?.directory,a.cwd);}finally{db.close();}
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
@@ -61,11 +61,11 @@ test('resumed OpenCode startup routes the original session to its private cwd an
   await mkdir(a.stateDirectory,{recursive:true});await mkdir(b,{recursive:true});
   await writeFile(join(a.stateDirectory,'opencode-session'),'ses_original');
   seedNativeDatabase(a.stateDirectory,'ses_original',home);seedNativeDatabase(b,'ses_sibling',home);
-  const sibling=await readFile(join(b,'opencode.db'));let startups=0;let startupUnavailable=false;
+  const sibling=await readFile(join(b,'opencode.db'));
   const env=hostedWorkerEnv('opencode',home,a.stateDirectory,':',{server:'http://localhost:8040',token:'mxmx_test_connection'},{PWD:home},a.cwd);
-  for(let attempt=0;attempt<2;attempt++)await prepareHostedHarness({command:'opencode',home,...a,context:'Synthetic startup',env,onStartupUnavailable:()=>{startupUnavailable=true;},runStartup:async(args,options)=>{
-   startups++;assert.equal(args[args.indexOf('--session')+1],'ses_original');assert.equal(options.cwd,a.cwd);
-   assert.equal(options.env.PWD,a.cwd,'native event subscription and launch directory must agree');
+  for(let attempt=0;attempt<2;attempt++){
+   const args=await prepareHostedHarness({command:'opencode',home,...a,context:'Synthetic startup',env});
+   assert.deepEqual(args,['--mini','--session','ses_original','--prompt','Synthetic startup']);
    const db=new DatabaseSync(join(a.stateDirectory,'opencode.db'),{readOnly:true});try{
     assert.equal(db.prepare('SELECT directory FROM session WHERE id=?').get('ses_original')?.directory,a.cwd,'native session requests must route to the same directory as events');
     assert.equal(db.prepare('SELECT directory FROM session WHERE id=?').get('ses_other')?.directory,home);
@@ -73,8 +73,8 @@ test('resumed OpenCode startup routes the original session to its private cwd an
     assert.equal(db.prepare('SELECT worktree FROM project WHERE id=?').get('global')?.worktree,home);
     assert.equal(db.prepare('SELECT data FROM message WHERE id=?').get('msg_original')?.data,JSON.stringify({role:'assistant',content:'synthetic-original-marker'}));
    }finally{db.close();}
-  }});
-  assert.equal(startupUnavailable,false,'directory mismatch must not fall back to a stuck native terminal');assert.equal(startups,2);assert.deepEqual(await readFile(join(b,'opencode.db')),sibling);
+  }
+  assert.deepEqual(await readFile(join(b,'opencode.db')),sibling);
   assert.equal(await readFile(join(a.stateDirectory,'opencode-session'),'utf8'),'ses_original');
  }finally{await rm(home,{recursive:true,force:true});}
 });
@@ -85,7 +85,7 @@ test('OpenCode startup refuses a shared database before touching another agent s
   await writeFile(join(paths.stateDirectory,'opencode-session'),'ses_original');await mkdir(join(home,'.local','share','opencode'),{recursive:true});
   const globalDatabase=join(home,'.local','share','opencode','opencode.db');const db=new DatabaseSync(globalDatabase);db.exec('CREATE TABLE session(id TEXT PRIMARY KEY,directory TEXT);');db.prepare('INSERT INTO session VALUES (?,?)').run('ses_original',home);db.close();
   const before=await readFile(globalDatabase);
-  await assert.rejects(prepareHostedHarness({command:'opencode',home,...paths,context:'Synthetic startup',env:{OPENCODE_DB:globalDatabase},runStartup:async()=>assert.fail('unsafe startup must not launch')}),/private.*database|database.*private/);
+  await assert.rejects(prepareHostedHarness({command:'opencode',home,...paths,context:'Synthetic startup',env:{OPENCODE_DB:globalDatabase}}),/private.*database|database.*private/);
   assert.deepEqual(await readFile(globalDatabase),before);
  }finally{await rm(home,{recursive:true,force:true});}
 });

@@ -93,16 +93,15 @@ export async function runHostedAgent(options:HostedAgentPaths&{id:string;generat
    await writeFile(executable,`#!/bin/sh\nexec ${[options.executable,REMOTE_CONTEXT_ARG,bridge.path,session.id].map(quote).join(' ')} "$@"\n`,{mode:0o700});
    await writeFile(context,`${REMOTE_REVIEW_POLICY}\n\nYou are ${options.name}, a hosted ${command} agent. Your working directory is ${cwd}. This one conversation serves all artifacts assigned to this agent. Provider login is shared through ${home}; keep agent workspace files in ${cwd}. Each tagged request supplies its own artifact_id, annotation_id and request_id; previous conversation targets never override them. Process one request at a time. After recovery, do not repeat interrupted work from history: its delivery is marked interrupted. Wait for a new tagged request; the user can ask again after checking prior effects.\nUse the absolute CLI ${JSON.stringify(executable)} for every afbin command. After startup or recovery, run ${quote(executable)} remote --ready ${session.id}. After any manual terminal task or login, run it again when ready. Never report readiness while a login or approval is pending.\n`,{mode:0o600});
    const env=remoteChildEnv(session.id,session.runnerKey,baseEnv);
-   const args=await prepareHostedHarness({command,home,cwd,stateDirectory:directory,context:`Read ${JSON.stringify(context)} and follow its startup and review workflow. Wait for tagged requests.`,env,signal:options.signal,
-    onStartupUnavailable:()=>process.stdout.write('OpenCode startup could not complete. Finish login or approval in the terminal, then ask the agent to signal readiness.\n')});
+   const args=await prepareHostedHarness({command,home,cwd,stateDirectory:directory,context:`Read ${JSON.stringify(context)} and follow its startup and review workflow. Wait for tagged requests.`,env,signal:options.signal});
    return {args,env};
   }
  });}finally{await bridge?.close();}
 }
 
 
-/** Restore startup workflow before opening a resumed native TUI. */
-export async function prepareHostedHarness(options:HostedAgentPaths&{command:string;home:string;context:string;env:NodeJS.ProcessEnv;signal?:AbortSignal;listOpenCodeSessions?:()=>Promise<string>;runStartup?:(args:string[],options:{cwd:string;env:NodeJS.ProcessEnv;signal?:AbortSignal})=>Promise<void>;onStartupUnavailable?:()=>void}):Promise<string[]>{
+/** Prepare the resumed native harness without starting a second process. */
+export async function prepareHostedHarness(options:HostedAgentPaths&{command:string;home:string;context:string;env:NodeJS.ProcessEnv;signal?:AbortSignal;listOpenCodeSessions?:()=>Promise<string>}):Promise<string[]>{
  options.signal?.throwIfAborted();
  const list=options.listOpenCodeSessions??(async()=> (await execute('opencode',['session','list','--format','json'],{cwd:options.cwd??options.home,env:options.env,timeout:30000,maxBuffer:1024*1024})).stdout);
  const args=await hostedHarnessArguments(options.command,options.home,options.context,list,options);
@@ -110,19 +109,7 @@ export async function prepareHostedHarness(options:HostedAgentPaths&{command:str
  if(options.command!=='opencode'||args[0]!=='--session')return args;
  await relocatePinnedOpenCodeSession({home:options.home,cwd:options.cwd??options.home,stateDirectory:options.stateDirectory??join(options.home,'.artifactbin','hosted-agent'),databasePath:options.env.OPENCODE_DB,sessionId:args[1]!});
  options.signal?.throwIfAborted();
- const runStartup=options.runStartup??(async(startupArgs,nativeOptions)=>{
-  const pending=execute('opencode',startupArgs,{...nativeOptions,timeout:60000,maxBuffer:1024*1024,killSignal:'SIGKILL'});
-  // Native `run` waits for non-TTY stdin EOF before executing even an argv prompt.
-  pending.child.stdin?.end();await pending;
- });
- try{
-  await runStartup(['run','--session',args[1]!,'--format','json',options.context],{cwd:options.cwd??options.home,env:options.env,...(options.signal?{signal:options.signal}:{})});
-  options.signal?.throwIfAborted();
- }catch(error){
-  options.signal?.throwIfAborted();
-  // Retain the login-capable TUI; only the actual generation-bound ready command
-  // can release queued work. A successful native exit alone never implies ready.
-  options.onStartupUnavailable?.();
- }
- return ['--session',args[1]!];
+ // Mini mode queues the startup prompt on the resumed native session and keeps
+ // that same PTY interactive, so readiness and follow-up requests share one TUI.
+ return ['--mini',...args];
 }
