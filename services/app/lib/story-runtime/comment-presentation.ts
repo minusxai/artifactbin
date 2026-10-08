@@ -42,6 +42,8 @@ export const COMMENT_PRESENTATION = {
   `[data-mx-annotated]:not([data-mx-annotation-ranged]) { outline: 1px solid rgba(245, 158, 11, .15); outline-offset: 3px; }`,
   `[data-mx-annotation-open]:not([data-mx-annotation-ranged]), [data-mx-annotation-hover]:not([data-mx-annotation-ranged]) { ${SELECTION_PRESENTATION.selectedCss} }`,
   `[data-mx-annotate-selected] { ${SELECTION_PRESENTATION.selectedCss} }`,
+  // Transient inset paint preserves authored backgrounds/images and disappears during capture.
+  `:root:not(.mx-taking-screenshot) :is([data-mx-annotation-open], [data-mx-annotation-hover], [data-mx-annotate-selected]):not([data-mx-annotation-ranged]) { box-shadow: inset 0 0 0 9999px rgba(245, 158, 11, .08) !important; }`,
   // The pick: a crosshair everywhere, and an outline on the block under it. The
   // doubled attribute is deliberate — it out-specifies the edit session's own
   // `[data-mx-edit-hover]` when both stamp the same node while editing.

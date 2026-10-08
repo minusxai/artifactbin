@@ -46,7 +46,7 @@ Before writing, read `afbin help <page type>`; avoid content flush to the viewpo
 - [design systems](references/design-systems.md) — `afbin help design-systems`, then `system-<slug>.md`; [worked briefs](references/worked-briefs.md).
 - [sync and recovery](references/publishing.md).
 - [errors](references/errors.md) — refusal codes and fixes.
-- [comments](references/publishing-annotations.md) — `afbin comment`; `afbin help remote-review`.
+- [comments](references/publishing-annotations.md) — `afbin comment --agent <name>` for posts/replies.
 - [apps](references/apps.md) — shared pages; interactive wireframes: `afbin help review-state`.
 - [datasets and media](references/publishing-datasets.md), [catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.

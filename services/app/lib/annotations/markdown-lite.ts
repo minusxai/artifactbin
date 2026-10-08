@@ -18,7 +18,7 @@ import { isSessionMentionHref } from './session-mentions';
  * the renderer emits elements only (no `dangerouslySetInnerHTML` anywhere).
  *
  * Three rules the subset lives by:
- *   · NO raw HTML, no images, no headings, no tables — anything unrecognised
+ *   · NO raw HTML, no images, no tables — anything unrecognised
  *     is text, so an unclosed construct degrades to what was typed.
  *   · A LINK is `http:`, `https:` or `mailto:` and nothing else. Any other
  *     scheme renders as the literal source it was written as, so a
@@ -52,6 +52,7 @@ interface MdListItem {
 
 export type MdNode =
   | { kind: 'paragraph'; children: MdInline[] }
+  | { kind: 'heading'; level: number; children: MdInline[] }
   | { kind: 'code_block'; lang: string | null; text: string }
   | { kind: 'list'; ordered: boolean; items: MdListItem[] }
   | { kind: 'quote'; children: MdNode[] };
@@ -103,6 +104,12 @@ export function safeHref(url: string): string | null {
  * of n backticks whose length differs at every position inside a run, so a
  * cache keyed by the needle can never hit. See `backtickClosers`.
  */
+function escapedAt(text: string, at: number): boolean {
+  let slashes = 0;
+  while (at > 0 && text[--at] === '\\') slashes++;
+  return slashes % 2 === 1;
+}
+
 class Scanner {
   private readonly exhausted = new Set<string>();
 
@@ -110,7 +117,8 @@ class Scanner {
 
   find(needle: string, from: number): number {
     if (this.exhausted.has(needle)) return -1;
-    const at = this.src.indexOf(needle, from);
+    let at = this.src.indexOf(needle, from);
+    while (at >= 0 && escapedAt(this.src, at)) at = this.src.indexOf(needle, at + needle.length);
     if (at === -1) this.exhausted.add(needle);
     return at;
   }
@@ -232,6 +240,10 @@ export function parseInline(src: string): MdInline[] {
   while (i < src.length) {
     const ch = src[i];
 
+    if (ch === '\\' && i + 1 < src.length && /[\\`*_\[\]()>.+#-]/.test(src[i + 1])) {
+      flush(i); pushText(out, src[i + 1]); i += 2; plain = i; continue;
+    }
+
     if (ch === '\n') {
       flush(i);
       // Markdown's "two trailing spaces" break is honoured by dropping them:
@@ -308,6 +320,7 @@ export function parseInline(src: string): MdInline[] {
 
 /* ── blocks ──────────────────────────────────────────────────────────── */
 
+const HEADING_RE = /^\s{0,3}(#{1,6})(?:[ \t]+(.*)|$)$/;
 const FENCE_RE = /^\s{0,3}```(.*)$/;
 const FENCE_CLOSE_RE = /^\s{0,3}```\s*$/;
 const QUOTE_RE = /^\s{0,3}> ?(.*)$/;
@@ -316,7 +329,7 @@ const LIST_RE = /^(\s*)(?:([-*])|(\d{1,9})[.)])\s+(.*)$/;
 const BLANK_RE = /^\s*$/;
 
 const startsBlock = (line: string) =>
-  BLANK_RE.test(line) || FENCE_RE.test(line) || QUOTE_RE.test(line) || LIST_RE.test(line);
+  BLANK_RE.test(line) || HEADING_RE.test(line) || FENCE_RE.test(line) || QUOTE_RE.test(line) || LIST_RE.test(line);
 
 const listItem = (content: string): MdListItem => ({ children: [{ kind: 'paragraph', children: parseInline(content) }] });
 
@@ -373,6 +386,12 @@ export function parseMarkdownLite(text: string, depth = 0): MdNode[] {
   while (i < lines.length) {
     const line = lines[i];
     if (BLANK_RE.test(line)) { i += 1; continue; }
+
+    const heading = HEADING_RE.exec(line);
+    if (heading) {
+      out.push({kind:'heading',level:heading[1].length,children:parseInline((heading[2] ?? '').replace(/[ \t]+#+[ \t]*$/, ''))});
+      i += 1; continue;
+    }
 
     const fence = FENCE_RE.exec(line);
     if (fence) {
@@ -437,6 +456,7 @@ function inlineText(nodes: MdInline[]): string {
 export function plainText(nodes: MdNode[]): string {
   return nodes.map((node) => {
     switch (node.kind) {
+      case 'heading':
       case 'paragraph': return inlineText(node.children);
       case 'code_block': return node.text;
       case 'quote': return plainText(node.children);

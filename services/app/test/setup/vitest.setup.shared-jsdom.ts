@@ -5,7 +5,8 @@
  * the window to how a fresh jsdom starts: no mounted roots, an empty document, clear storage, the
  * root URL, real timers and unstubbed globals.
  */
-import { afterAll, afterEach, vi } from 'vitest';
+import { installEditorGeometry } from './editor-geometry';
+import { beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { cleanupSharedJsdom } from './shared-jsdom-lifecycle';
 
 const clearAttributes = (element: Element) => { for (const { name } of [...element.attributes]) element.removeAttribute(name); };
@@ -22,3 +23,7 @@ afterAll(async () => {
   try { localStorage.clear(); sessionStorage.clear(); } catch { /* storage unavailable */ }
   window.history.replaceState(null, '', '/');
 });
+
+let restoreEditorGeometry: () => void;
+beforeAll(() => { restoreEditorGeometry = installEditorGeometry(); });
+afterAll(() => restoreEditorGeometry());

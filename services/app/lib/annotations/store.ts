@@ -59,6 +59,8 @@ interface AnnotationAnchor {
 export interface AnnotationAuthor {
   kind: 'human' | 'agent';
   sessionId?:string;
+  /** Connected program snapshot; independent of the user-chosen session name. */
+  harness?:string;
   color?:RemoteColor;
   /** Display snapshot (username, token name…); stored beside the row so reads never join. */
   label: string | null;
@@ -174,7 +176,7 @@ interface AnnotationRowDb {
   /** Who wrote it, when they had an account — the only thing that can say "your own". */
   author_user_id: string | null;
   author_transport: AnnotationAuthor['transport'];
-  author_remote: {sessionId:string;color:RemoteColor}|null;
+  author_remote: {sessionId:string;color:RemoteColor;harness?:string}|null;
   /** The author account's picture key, JOINED in the read (`ANNOTATIONS_READ`) — never stored here. */
   author_image_key: string | null;
   status: 'open' | 'resolved';
@@ -537,7 +539,7 @@ export async function actOnAnnotationFor(
         `INSERT INTO annotations
            (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10)`,
-        [replyId, artifactId, root.id, action.reply, remote?'agent':author.kind, actor.tokenId, actor.userId, remote?.label??author.label, author.transport,remote?JSON.stringify({sessionId:remote.sessionId,color:remote.color}):null],
+        [replyId, artifactId, root.id, action.reply, remote?'agent':author.kind, actor.tokenId, actor.userId, remote?.label??author.label, author.transport,remote?JSON.stringify({sessionId:remote.sessionId,color:remote.color,harness:remote.harness}):null],
       );
     }
     if(replied)await commentMentions(tx,row,actor,action.reply!,replyId);

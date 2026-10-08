@@ -388,3 +388,140 @@ body {
   background: #69727b; color: #fff;
   box-shadow: none;
 }
+
+/* Comments render in trusted shadow roots; keep their editor styles in the shared sheet. */
+.comment-rich-editor {
+  position: relative;
+  min-height: max(6rem, var(--comment-min-height, 8rem));
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-edge);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.comment-rich-editor:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.comment-rich-editor p {
+  margin: 0;
+}
+.comment-rich-editor > * + * {
+  margin-top: 8px;
+}
+.comment-rich-editor strong {
+  font-weight: 600;
+}
+.comment-rich-editor em {
+  font-style: italic;
+}
+.comment-rich-editor code {
+  background: var(--color-raised);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.comment-rich-editor pre {
+  padding: 8px;
+  background: var(--color-raised);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+.comment-rich-editor pre code {
+  padding: 0;
+}
+.comment-rich-editor ul,
+.comment-rich-editor ol {
+  padding-left: 20px;
+  list-style-type: disc;
+}
+.comment-rich-editor ol {
+  list-style-type: decimal;
+}
+.comment-rich-editor blockquote {
+  border-left: 2px solid var(--color-edge);
+  padding-left: 10px;
+}
+.comment-rich-editor a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.comment-rich-editor [data-comment-mention], .comment-agent-mention {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  border-radius: 5px;
+  vertical-align: baseline;
+  line-height: 1.4;
+  font-family: var(--font-sans);
+  color: var(--mention-color);
+  background: color-mix(
+    in srgb,
+    var(--mention-color) 10%,
+    var(--color-surface)
+  );
+  border: 1px solid color-mix(in srgb, var(--mention-color) 25%, transparent);
+  font-size: 0.92em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.comment-rich-editor .ProseMirror-selectednode {
+  outline: 2px solid var(--color-accent);
+}
+.comment-rich-editor:has(> p:only-child > br:only-child)::before {
+  content: attr(data-placeholder);
+  color: var(--color-faint);
+  pointer-events: none;
+  position: absolute;
+}
+
+.comment-rich-editor [data-comment-mention]::before, .comment-agent-mention::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Comment headings stay compact enough for a discussion rail. */
+.comment-heading, .comment-rich-editor :is(h1,h2,h3,h4,h5,h6) { font-family: var(--font-sans); font-weight: 600; font-size: 15px; line-height: 1.4; }
+.comment-heading[data-level='1'], .comment-rich-editor h1 { font-size: 20px; }
+.comment-heading[data-level='2'], .comment-rich-editor h2 { font-size: 18px; }
+.comment-heading[data-level='3'], .comment-rich-editor h3 { font-size: 16px; }
+
+.comment-editor-tools { display: flex; align-items: center; min-height: 28px; margin-bottom: 6px; }
+.comment-editor-tools.has-context { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.comment-editor-context { min-width: 0; overflow: hidden; white-space: nowrap; }
+.comment-editor-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 2px; margin-left: auto; }
+.comment-editor-tools.has-context .comment-editor-toolbar { justify-content: flex-end; }
+.comment-editor-toolbar button { flex-shrink: 0; }
+
+/* Compact comment recipients share the editor's mention appearance and insertion path. */
+.comment-agent-choices { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 0 4px; font:11px/1.5 var(--font-sans); color:var(--color-muted); }
+.comment-agent-choice { display:inline-flex; align-items:center; gap:5px; max-width:100%; overflow-wrap:anywhere; border:1px solid color-mix(in srgb,var(--mention-color) 12%,transparent); border-radius:999px; padding:2px 7px; color:var(--color-muted); background:color-mix(in srgb,var(--mention-color) 4%,transparent); font-weight:400; cursor:pointer; }
+.comment-agent-choice span { font-size:6px; color:var(--mention-color); opacity:.65; }
+.comment-agent-choice:hover, .comment-agent-choice:focus-visible { color:var(--color-fg); background:color-mix(in srgb,var(--mention-color) 8%,transparent); }
+.comment-agent-more { padding:3px; cursor:pointer; }
+.comment-agent-more:hover { text-decoration:underline; }
+.comment-mention-tip { margin:4px 0 6px; padding-top:7px; border-top:1px solid var(--color-edge); font:10px/1.6 var(--font-sans); color:var(--color-muted); }
+.comment-mention-tip strong { color:var(--color-fg); font-weight:600; }
+.comment-mention-tip kbd { display:inline-block; margin:0 2px; padding:0 4px; border:1px solid var(--color-edge); border-radius:4px; background:var(--color-surface); color:var(--color-fg); }
+
+.comment-agent-status { display:flex; align-items:center; gap:6px; min-width:0; white-space:nowrap; font-family:var(--font-sans); }
+.comment-agent-status-name { flex:0 1 auto; min-width:0; max-width:48%; overflow:hidden; text-overflow:ellipsis; }
+.comment-agent-status-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.comment-agent-spinner { width:11px; height:11px; flex:none; border:1.5px solid var(--color-edge-bright); border-top-color:var(--color-accent); border-radius:50%; animation:comment-agent-spin 1s linear infinite; }
+@keyframes comment-agent-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .comment-agent-spinner { animation:none; } }

@@ -49,6 +49,21 @@ test('comment selects listing, anchored creation, or a combined reply and resolu
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+test('comments and replies accept optional known or custom agent attribution',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-agent-comment-'));
+ try{
+  await saveTestConnection({server:'https://example.com',token:'test-token'},root);
+  for(const agent of ['codex','pi','opencode','my-custom-agent'])for(const target of [['--node','heading'],['--thread','ann_123']]){
+   const out:string[]=[];let posted=false;
+   const code=await runCli(['comment','abc123',...target,'--body','Hello','--agent',agent,'--server','https://example.com','--json'],{cwd:root,home:root,interactive:false,stdout:s=>out.push(s),stderr:s=>out.push(s),fetch:async(_input,init)=>{
+    if(init?.method==='GET')return Response.json({capabilities:{comment_receipts:true}});
+    assert.equal(new Headers(init?.headers).get('Artifactbin-Agent'),agent);posted=true;return Response.json({ok:true});
+   }});
+   assert.equal(code,0,out.join(''));assert.equal(posted,true);
+  }
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 describe('exporting and opening a published artifact', () => {
   const tracked=(id:string,markup:string)=>`---\nid: ${id}\nedit_id: e1\nhead_version: 1\nstate: ${'a'.repeat(64)}\nversion: 1\ntitle: Report\nvisibility: unlisted\nshares:\n  - email: a@example.com\n    role: editor\n---\n${markup}\n`;
    const harness=(prefix:string)=>cliHarness(prefix,{account:null});
@@ -333,4 +348,22 @@ test('published default HTML names use the downloaded carrier without another me
   assert.equal(h.last().operations[0].path,'abc123-regional-sales.jsx.html');
   assert.equal(readArtifactFileHtml(await readFile(join(h.root,'abc123-regional-sales.jsx.html'),'utf8')).artifactId,'abc123');
  }finally{await h.cleanup();}
+});
+
+test('retrying a comment preserves its agent identity and idempotency key',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-agent-retry-'));let lose=true;const keys:string[]=[];
+ try{
+  await saveTestConnection({server:'https://example.com',token:'test-token'},root);
+  const invoke=async(agent:string)=>{
+   const out:string[]=[];
+   const code=await runCli(['comment','abc123','--thread','ann_123','--body','Hello','--agent',agent,'--server','https://example.com','--json'],{cwd:root,home:root,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{
+    if(init?.method==='GET')return Response.json({capabilities:{comment_receipts:true}});
+    const headers=new Headers(init?.headers);assert.equal(headers.get('Artifactbin-Agent'),'custom-bot');keys.push(headers.get('Idempotency-Key')!);
+    if(lose){lose=false;throw Error('lost response');}return Response.json({ok:true});
+   }});return {code,result:JSON.parse(out.join(''))};
+  };
+  assert.equal((await invoke('custom-bot')).result.error.code,'outcome_unknown');
+  assert.equal((await invoke('codex')).result.error.code,'pending_recovery');
+  assert.equal((await invoke('custom-bot')).code,0);assert.equal(keys.length,2);assert.equal(keys[0],keys[1]);
+ }finally{await rm(root,{recursive:true,force:true});}
 });

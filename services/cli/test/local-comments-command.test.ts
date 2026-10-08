@@ -68,3 +68,15 @@ test('nested working directories retain workspace-relative discussion paths and 
   assert.notEqual(first.annotations[0].id,second.annotations[0].id);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('local comments retain custom agent identity on both posts and replies',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-agent-comments-'));
+ try{
+  await writeFile(join(root,'report.jsx'),'<p id="p">Report</p>');
+  const workspace=await loadWorkspace(root,join(root,'home'));
+  const created:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--node','p','--body','Hello','--agent','custom-bot']));
+  assert.equal(created.thread[0].author.kind,'agent');assert.equal(created.thread[0].author.label,'custom-bot');
+  const replied:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--thread',created.id,'--body','Done','--agent','pi']));
+  assert.equal(replied.thread[1].author.label,'Pi');
+ }finally{await rm(root,{recursive:true,force:true});}
+});

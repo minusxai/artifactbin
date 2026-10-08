@@ -82,7 +82,7 @@ export class RemoteAgents {
   }catch{return {...info,online:false,activity:row.active?'unknown':info.activity==='stopped'?'stopped':'stopping'};}
  }
  async list(owner:string){
-  const hosted=hostedRemoteAgent();const defaultAgent=hosted?await hosted.ensure(owner):undefined;
+  const hosted=hostedRemoteAgent();const defaultAgent=hosted?{...await hosted.ensure(owner),included:true}:undefined;
   const db=await getDb();
   if(defaultAgent){
    // External services do not share app storage. Keep only routing/mention metadata here;
@@ -94,10 +94,10 @@ export class RemoteAgents {
   }
   const saved=(await db.query<AgentRow>("SELECT * FROM remote_agents WHERE owner=$1 AND COALESCE(info->>'removed','false')<>'true' ORDER BY seen_at DESC LIMIT 100",[owner])).rows;
   await Promise.all(saved.filter(r=>r.info.runId).map(async row=>{row.info=await this.managedSession(owner,row);}));
-  const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,...(defaultAgent?.id===r.id?{activity:defaultAgent.activity}:{}),online:r.info.runId?r.info.online:defaultAgent?.id===r.id?defaultAgent.online:live.some(s=>s.id===r.id&&s.online)})),...(defaultAgent&&!saved.some(r=>r.id===defaultAgent.id)?[defaultAgent]:[])];
+  const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,...(defaultAgent?.id===r.id?{included:true,activity:defaultAgent.activity}:{}),online:r.info.runId?r.info.online:defaultAgent?.id===r.id?defaultAgent.online:live.some(s=>s.id===r.id&&s.online)})),...(defaultAgent&&!saved.some(r=>r.id===defaultAgent.id)?[defaultAgent]:[])];
  }
- async read(owner:string,id:string){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.ensure(owner);const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);if(saved.info.runId)return this.managedSession(owner,saved);let online=false;try{const live=this.relay.read(owner,id);online=saved.active&&live.online&&(!saved.info.hostedGeneration||live.hostedGeneration===saved.info.hostedGeneration);}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
- async view(owner:string,id:string,since:number){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.view(owner,id,since);const session=await this.read(owner,id);if(session.runId&&(!session.hostedGeneration||!session.online))return managedTerminalView(owner,session);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
+ async read(owner:string,id:string){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return {...await hosted.ensure(owner),included:true};const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);if(saved.info.runId)return this.managedSession(owner,saved);let online=false;try{const live=this.relay.read(owner,id);online=saved.active&&live.online&&(!saved.info.hostedGeneration||live.hostedGeneration===saved.info.hostedGeneration);}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
+ async view(owner:string,id:string,since:number){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id)){const view=await hosted.view(owner,id,since);return {...view,session:{...view.session,included:true}};}const session=await this.read(owner,id);if(session.runId&&(!session.hostedGeneration||!session.online))return managedTerminalView(owner,session);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
  async owns(owner:string,id:string){return !!hostedRemoteAgent()?.owns(owner,id)||this.relay.owns(owner,id)||!!await this.row(await getDb(),owner,id);}
  async ready(owner:string,id:string,proof:string){
   const db=await getDb();await db.transaction(async tx=>{
@@ -219,7 +219,7 @@ export class RemoteAgents {
   const busy=(await tx.query("SELECT id FROM remote_work WHERE session_id=$1 AND phase IN ('dispatching','delivered','acknowledged','uncertain') LIMIT 1",[agent.id])).rows.length;
   agent.info.hostedWakeAttempts=0;
   agent.info.activity=busy?'working':receipt.phase==='blocked'?'blocked':'listening';await this.save(tx,agent);
-  return {label:agent.info.name,sessionId:agent.id,color:agent.info.color};
+  return {label:agent.info.name,sessionId:agent.id,color:agent.info.color,harness:agent.info.harness};
  }
  private async notify(tx:Queryable,artifactId:string,threadId:string){await tx.query('SELECT pg_notify($1,$2)',[channelForAnnotations(artifactId),threadId]);}
 }

@@ -1,5 +1,12 @@
-import WorkspaceHeading from '../components/WorkspaceHeading';
-import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
+import { Portal } from 'solid-js/web';
+import { DialogShell } from '../components/DialogShell';
+import { trustedPortalOf } from '@/lib/islands/trusted-portal';
+import './chat.css';
+import { Plus } from 'lucide-solid';
+import TerminalIcon from 'lucide-solid/icons/terminal';
+import Cloud from 'lucide-solid/icons/cloud';
+import Monitor from 'lucide-solid/icons/monitor';
+import X from 'lucide-solid/icons/x';
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import { useSearchParams } from '@solidjs/router';
@@ -8,6 +15,8 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import type {RunnerCapabilities} from '@artifactbin/contracts';
 import type { RemoteSessionInfo, RemoteView } from '../../../contracts/src/remote';
+import { newAgentName, agentNameColor } from '../lib/agent-identity';
+import { REMOTE_NAME } from '../../../contracts/src/remote';
 import { connectedAgentStatus, isConnectedAgent } from '../lib/connected-agents';
 import { Tooltip } from '../components/Tooltip';
 import { Button } from '../components/ui';
@@ -181,34 +190,35 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
       .then(() => setDraft('')).catch(() => {}).finally(() => setSending(false));
   };
 
-  return <section class="min-w-0 flex-1">
-    <div class="mb-3 flex flex-wrap items-center gap-3">
-      <div class="mr-auto"><h2 class="font-semibold">{info()?.name ?? 'Connecting…'}</h2>
-        <p class="text-xs text-muted">{info()?.harness} · {info()?.machine} · {connection() || (info() ? connectedAgentStatus(info()!) : 'Connecting…')}</p></div>
+  return <section class="agent-workspace" aria-label="Selected agent">
+    <div class="agent-toolbar">
+      <div class="mr-auto"><h2 class="agent-title"><Show when={agentNameColor(info()?.name ?? '')}>{color => <span class="agent-color-swatch" aria-hidden="true" style={{'background-color':color()}} />}</Show>{info()?.name ?? 'Connecting…'}</h2>
+        <p class="agent-metadata"><span class={`agent-dot ${online() ? 'is-online' : ''}`} aria-hidden="true" />{connection() || (info() ? connectedAgentStatus(info()!) : 'Connecting…')}<span aria-hidden="true"> · </span>{info()?.harness} · {info()?.included ? 'Included cloud agent' : info()?.runId ? 'Cloud box' : info()?.machine}</p></div>
       <Show when={!ended()}><button aria-label={mobile() ? 'Switch to desktop' : 'Switch to mobile'} disabled={!online() || resizing()} class="rounded border border-edge px-3 py-2 disabled:opacity-40" onClick={switchView}>{mobile() ? 'Switch to desktop' : 'Switch to mobile'}</button></Show>
       <button aria-label={actionLabel()} disabled={!info() || acting() || (canStop() && info()?.activity === 'stopping')} class="rounded border border-edge px-3 py-2 disabled:opacity-40" onClick={removeOrStop}>{acting() ? (canStop() ? 'Stopping…' : 'Removing…') : canStop() && info()?.activity === 'stopping' ? 'Stopping…' : actionLabel()}</button>
     </div>
-    <Show when={info()?.runId}><p class="mb-3 text-xs text-muted">Hosted terminals use a fixed 100 × 30 size; narrow views scroll horizontally.</p><p class="mb-3 text-xs text-muted">Sign in from this terminal: Claude Code uses <code>/login</code>; Codex offers Sign in with Device Code; Pi uses <code>/login</code> for supported providers; OpenCode uses <code>/connect</code>.</p><p class="mb-3 text-xs text-muted">Each agent keeps one conversation across your artifacts. Mention this agent in a comment to queue work. Comments wait until login and startup are complete.</p></Show>
+    <Show when={info()?.included}><p class="agent-included-note">Your included {info()?.harness === 'pi' ? 'Pi' : info()?.harness} agent · A personal, durable cloud session. Mention @{info()?.name} in an artifact comment to work with it.</p></Show>
+    <details class="agent-help" hidden={!info()?.runId}><summary>Hosted connection details</summary><Show when={info()?.runId}><p class="mb-3 text-xs text-muted">Hosted terminals use a fixed 100 × 30 size; narrow views scroll horizontally.</p><p class="mb-3 text-xs text-muted">Sign in from this terminal: Claude Code uses <code>/login</code>; Codex offers Sign in with Device Code; Pi uses <code>/login</code> for supported providers; OpenCode uses <code>/connect</code>.</p><p class="mb-3 text-xs text-muted">Each agent keeps one conversation across your artifacts. Mention this agent in a comment to queue work. Comments wait until login and startup are complete.</p></Show>
     <Show when={info()?.sshCommand}><CopyCommand label="SSH into this box" command={info()!.sshCommand!} /></Show>
-    <Show when={info()?.sshHostKey}><CopyCommand label="SSH known_hosts entry" command={info()!.sshHostKey!} /><p class="mb-3 text-xs text-muted">Add this entry to your SSH known_hosts file to verify this box before connecting.</p></Show>
+    <Show when={info()?.sshHostKey}><CopyCommand label="SSH known_hosts entry" command={info()!.sshHostKey!} /><p class="mb-3 text-xs text-muted">Add this entry to your SSH known_hosts file to verify this box before connecting.</p></Show></details>
     <Show when={connection() || waiting()}><p role="status" class="mb-2 text-sm text-muted">{connection() || waiting()}</p></Show>
     <Show when={error()}><p role="alert" class="mb-2 text-sm text-red-500">{error()}</p></Show>
-    <div style={{ 'max-width': mobile() ? '420px' : undefined }}>
+    <div class="agent-console" style={{ 'max-width': mobile() ? '420px' : undefined }}>
       <Show when={ended()}><p role="status" class="mb-3 rounded border border-edge bg-surface p-4 text-sm">Session ended (exit {info()?.exitCode}). {info()?.runId
-        ? 'Choose Start hosted box above with the same name to open a new terminal. Your home files are retained.'
+        ? 'Choose Provision cloud agent, then Start hosted box with the same name to open a new terminal. Your home files are retained.'
         : 'Start a new session with afbin remote to reconnect.'}</p></Show>
-      <div class="overflow-x-auto rounded border border-edge bg-[#111214] p-2" hidden={ended()}><div ref={container} aria-label="Remote terminal" style={{ height: 'min(58dvh, 650px)', 'min-height': '240px' }} /></div>
-      <div class="mt-2 flex flex-wrap gap-2" aria-label="Terminal scroll controls" hidden={ended()}>
+      <div class="agent-terminal-frame" hidden={ended()}><div ref={container} aria-label="Remote terminal" class="agent-terminal" /></div>
+      <div class="agent-scroll-controls" aria-label="Terminal scroll controls" hidden={ended()}>
         <button class="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal?.scrollPages(-1)}>Scroll up</button>
         <button class="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal?.scrollPages(1)}>Scroll down</button>
         <button class="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal?.scrollToBottom()}>Latest output</button>
       </div>
-      <Show when={!ended()}><form class="mt-3 flex gap-2" onSubmit={submit}>
+      <Show when={!ended()}><form class="agent-composer" onSubmit={submit}>
         <input aria-label="Message to agent" disabled={!canType() || sending()} value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} class="min-w-0 flex-1 rounded border border-edge bg-surface p-3" placeholder={canType() ? 'Message your agent…' : info()?.activity === 'queued' ? 'Waiting for capacity…' : 'Session offline'} maxLength={16000} />
         <button aria-label="Send message" disabled={!canType() || sending() || !draft().trim()} class="rounded bg-accent px-4 text-bg disabled:opacity-40">Send</button>
       </form></Show>
-      <Show when={!ended()}><div class="mt-2 flex flex-wrap gap-2"><For each={([['Enter', '\r'], ['Escape', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['Ctrl+C', '\x03']] as const)}>{([name, data]) => <button aria-label={`Send ${name}`} disabled={!canType()} class="rounded border border-edge px-3 py-2 text-xs disabled:opacity-40" onClick={() => void send({ type: 'input', data }).catch(() => {})}>{name}</button>}</For></div></Show>
-      <p class="mt-3 text-xs text-muted" hidden={ended()}>Swipe up or down in the terminal to scroll its history, or use the scroll buttons. Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect until you switch views. {info()?.runId ? (canStop() ? 'Stop agent ends this run. The same agent keeps its login, files and conversation across artifacts and restarts.' : 'This terminal belongs to a hosted run. Home files are retained when the run ends; removing the entry does not erase them.') : info()?.managed ? (canStop() ? 'Stop agent ends this background process.' : 'Remove agent removes remote access and prevents this session from reconnecting. The local process may still be running.') : 'Disconnect removes remote access; your local process keeps running.'}</p>
+      <Show when={!ended()}><div class="agent-key-controls"><span class="agent-key-label">Send key</span><For each={([['Enter', '\r'], ['Escape', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['Ctrl+C', '\x03']] as const)}>{([name, data]) => <button aria-label={`Send ${name}`} disabled={!canType()} class="rounded border border-edge px-3 py-2 text-xs disabled:opacity-40" onClick={() => void send({ type: 'input', data }).catch(() => {})}>{name}</button>}</For></div></Show>
+      <details class="agent-help" hidden={ended()}><summary>Terminal controls & session details</summary><p class="mt-3 text-xs text-muted">Swipe up or down in the terminal to scroll its history, or use the scroll buttons. Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect until you switch views. {info()?.runId ? (canStop() ? 'Stop agent ends this run. The same agent keeps its login, files and conversation across artifacts and restarts.' : 'This terminal belongs to a hosted run. Home files are retained when the run ends; removing the entry does not erase them.') : info()?.managed ? (canStop() ? 'Stop agent ends this background process.' : 'Remove agent removes remote access and prevents this session from reconnecting. The local process may still be running.') : 'Disconnect removes remote access; your local process keeps running.'}</p></details>
     </div>
   </section>;
 }
@@ -226,23 +236,25 @@ function CopyCommand(props: { label: string; command: string }): JSX.Element {
   </div><span class="sr-only" role="status">{copied() ? 'Copied to clipboard' : ''}</span><Show when={error()}><p role="alert" class="mt-1 text-xs text-muted">{error()}</p></Show></div>;
 }
 
-function InstallInstructions(): JSX.Element {
+function AgentNameField(props: { value: string; onInput: (value: string) => void; disabled?: boolean }): JSX.Element {
+  return <label class="block text-sm">Agent name<div class="agent-name-field"><Show when={agentNameColor(props.value)}>{color => <span class="agent-color-swatch" role="img" aria-label={`Agent color ${color()}`} style={{'background-color':color()}} />}</Show><input aria-label="Agent name" disabled={props.disabled} value={props.value} onInput={event => props.onInput(event.currentTarget.value)} pattern={REMOTE_NAME.source} maxLength={32} required aria-invalid={!REMOTE_NAME.test(props.value)} class="min-w-0 flex-1 bg-transparent p-2" /></div></label>;
+}
+
+function ConnectInstructions(): JSX.Element {
   const [harness, setHarness] = createSignal('claude');
+  const [name, setName] = createSignal(newAgentName());
   const origin = window.location.origin;
-  return <div class="mt-4 space-y-4">
-    <CopyCommand label="Install CLI" command={afbinInstallCommand(origin)} />
-    <p class="text-xs text-muted">macOS / Linux: one command installs Node if needed, afbin and agent skills. Open a new terminal after installation.</p>
-    <CopyCommand label="Install Windows CLI for artifacts" command={afbinWindowsInstallCommand(origin)} />
-    <p class="text-xs text-muted">Windows: run this command in PowerShell. It installs Node if needed, afbin and agent skills without changing script execution policy.</p>
-    <p class="text-xs text-muted">Use the command below to sign in to this server and start your installed agent.</p>
-    <div><label for="remote-harness" class="mb-2 block text-sm">Choose your agent</label><select id="remote-harness" value={harness()} onChange={(event) => setHarness(event.currentTarget.value)} class="w-full rounded border border-edge bg-surface p-2 text-sm"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="pi">Pi</option><option value="opencode">OpenCode</option></select></div>
-    <CopyCommand label="Start a session" command={`afbin remote --server '${origin}' ${harness()}`}  />
-    <p class="text-xs text-muted">Your agent must already be installed. Type @ in an artifact comment to mention an online session.</p>
+  return <div class="space-y-3">
+    <h2 class="font-semibold">Connect your agent</h2><p class="text-xs text-muted">Run this command in your terminal with afbin and your agent already installed.</p>
+    <AgentNameField value={name()} onInput={setName} />
+    <div class="agent-harness-choices" role="group" aria-label="Choose your agent"><For each={([['claude', 'Claude Code'], ['codex', 'Codex'], ['pi', 'Pi'], ['opencode', 'OpenCode']] as const)}>{([value, label]) => <button type="button" aria-pressed={harness() === value} onClick={() => setHarness(value)}>{label}</button>}</For></div>
+    <Show when={REMOTE_NAME.test(name())} fallback={<p role="alert" class="text-xs text-muted">Use 1–32 lowercase letters, digits, hyphens or underscores, starting with a letter.</p>}><CopyCommand label="Run in your terminal" command={`afbin remote --server '${origin}' --name ${name()} ${harness()}`} /></Show>
+    <p class="text-xs text-muted">Once connected, your agent appears here. Mention it with @ in artifact comments.</p>
   </div>;
 }
 
 function ManagedRunSetup(props:{onCreated:(session:RemoteSessionInfo)=>void}):JSX.Element {
-  const [name,setName]=createSignal('my-agent'),[command,setCommand]=createSignal('claude'),[key,setKey]=createSignal('');
+  const [name,setName]=createSignal(newAgentName()),[command,setCommand]=createSignal('claude'),[key,setKey]=createSignal('');
   const [busy,setBusy]=createSignal(false),[error,setError]=createSignal(''),[progress,setProgress]=createSignal('');
   let activeController:AbortController|undefined;let disposed=false;
   onCleanup(()=>{disposed=true;activeController?.abort();});
@@ -256,11 +268,11 @@ function ManagedRunSetup(props:{onCreated:(session:RemoteSessionInfo)=>void}):JS
     }catch(reason){if(!disposed&&!(reason instanceof DOMException&&reason.name==='AbortError'))setError(reason instanceof Error?reason.message:'Could not start your agent');}finally{if(activeController===controller)activeController=undefined;if(!disposed){setBusy(false);setProgress('');}}
   };
   return <form class="mb-5 space-y-3 rounded border border-edge p-3" onSubmit={start}>
-    <h2 class="font-semibold">Add a hosted agent</h2>
-    <label class="block text-sm">Box name<input aria-label="Box name" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={name()} onInput={e=>setName(e.currentTarget.value)} pattern="[a-z][a-z0-9_-]{0,31}" required /></label>
-    <label class="block text-sm">Program<select aria-label="Hosted program" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={command()} onChange={e=>setCommand(e.currentTarget.value)}><option value="bash">Shell</option><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="pi">Pi</option><option value="opencode">OpenCode</option></select></label>
+    <h2 class="font-semibold">Start a hosted box</h2><p class="text-xs text-muted">Run a shell or agent on a hosted machine. Sign in to Claude or Codex after the terminal opens.</p>
+    <AgentNameField value={name()} onInput={setName} disabled={busy()} />
+    <div><p class="mb-2 text-sm">Program</p><div class="agent-harness-choices" role="group" aria-label="Hosted program"><For each={([['bash', 'Shell'], ['claude', 'Claude Code'], ['codex', 'Codex'], ['pi', 'Pi'], ['opencode', 'OpenCode']] as const)}>{([value, label]) => <button type="button" disabled={busy()} aria-pressed={command() === value} onClick={() => setCommand(value)}>{label}</button>}</For></div></div>
     <label class="block text-sm">SSH public key (optional)<textarea aria-label="SSH public key" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={key()} onInput={e=>setKey(e.currentTarget.value)} placeholder="ssh-ed25519 …" /></label>
-    <p class="text-xs text-muted">1 vCPU · 2 GiB RAM · up to 1 hour. Sign in to your agent in the terminal. The same agent keeps its login, files and conversation across artifacts and restarts.</p>
+    <p class="text-xs text-muted">1 vCPU · 2 GiB RAM · up to 1 hour. Sign in to your agent in the terminal. Your home files are retained for the same agent name.</p>
     <button class="rounded bg-accent px-3 py-2 text-bg disabled:opacity-40" disabled={busy()}>{busy()?'Starting…':'Start hosted box'}</button>
     <Show when={busy()}><button type="button" class="rounded border border-edge px-3 py-2" onClick={stopWaiting}>Stop waiting</button></Show>
     <Show when={progress()}><p role="status" class="text-sm">{progress()}</p></Show>
@@ -276,13 +288,24 @@ export function ChatPage(): JSX.Element {
   void fetch('/api/run-capabilities',{credentials:'same-origin',signal:capabilitiesAbort.signal}).then(async response=>{if(response.ok){const value=await response.json() as RunnerCapabilities;setManaged(value.version===1&&value.managedProcesses);}}).catch(()=>{});
   onCleanup(()=>capabilitiesAbort.abort());
   const [setupExpanded, setSetupExpanded] = createSignal(false);
+  const [setupMode, setSetupMode] = createSignal<'local' | 'cloud'>('local');
+  const setupButton = (mode: 'local' | 'cloud') => <button type="button" class="agent-connect-button" disabled={mode === 'cloud' && !managed()} aria-expanded={setupExpanded() && setupMode() === mode} aria-haspopup="dialog" aria-controls="agent-setup" onClick={() => {setSetupMode(mode);setSetupExpanded(true);}}>{mode === 'local' ? <Plus size={14} /> : <Cloud size={14} />}{mode === 'local' ? 'Connect your agent' : 'Provision cloud agent'}</button>;
   const [historyExpanded, setHistoryExpanded] = createSignal(false);
   const page = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions', { loader: (signal) => request('', undefined, 'GET', signal) });
   const [selectedSession, setSelectedSession] = createSignal<RemoteSessionInfo | null>(null);
-  // The selected terminal polls faster than the list. Use its current snapshot on both surfaces.
-  const sessions = () => (page.data()?.sessions ?? []).map((session) => session.id === id() && selectedSession()?.id === session.id ? selectedSession()! : session);
-  const previousCount = () => sessions().filter((session) => !isConnectedAgent(session)).length;
-  const visibleSessions = () => sessions().filter((session) => isConnectedAgent(session) || historyExpanded() || session.id === id());
+  // The terminal polls faster than the list; share its fresh status with the sidebar.
+  const sessions = () => (page.data()?.sessions ?? []).map(session => session.id === id() && selectedSession()?.id === session.id ? selectedSession()! : session);
+  const previousCount = () => sessions().filter((session) => !session.included && !isConnectedAgent(session)).length;
+  const visibleSessions = () => sessions().filter((session) => session.included || isConnectedAgent(session) || historyExpanded() || session.id === id());
+  createEffect(() => {
+    if (id()) return;
+    const first = sessions().find(session => session.included) ?? sessions().find(isConnectedAgent);
+    if (first) setParams({session:first.id}, {replace:true});
+  });
+  const groups = [
+    {kind:'local' as const, label:'Local agents', empty:'No connected local agents', get sessions() { return visibleSessions().filter(session => !session.included && !session.runId); }},
+    {kind:'cloud' as const, label:'Cloud agents', empty:'No cloud agents yet', get sessions() { return visibleSessions().filter(session => session.included || session.runId); }},
+  ];
   const error = () => page.error() ? connectionMessage(page.error()) : '';
   let stopped = false, timer: ReturnType<typeof setTimeout>;
   let failures = 0;
@@ -294,15 +317,22 @@ export function ChatPage(): JSX.Element {
   void poll();
   onCleanup(() => { stopped = true; clearTimeout(timer); });
   const close = () => { const closed = id(); setParams({}); page.seed({ sessions: sessions().filter((session) => session.id !== closed) }); };
-  return <main class="workspace-page">
-    <WorkspaceHeading title="Connected agents" description="Your agents, on your machine or hosted for you." />
+  return <main class="workspace-page agents-page" aria-label="Connected Agents">
+    <Show when={setupExpanded()}><Portal mount={trustedPortalOf(document) ?? document.body}><DialogShell onClose={() => setSetupExpanded(false)} lockScroll initialFocus={setupMode() === 'local' ? '[aria-pressed="true"]' : 'input'}>
+      <div class="agent-modal-backdrop" onClick={event => { if (event.target === event.currentTarget) setSetupExpanded(false); }}>
+      <section id="agent-setup" class="agent-setup" role="dialog" aria-modal="true" aria-label={setupMode() === 'local' ? 'Connect your agent' : 'Provision cloud agent'}>
+      <button class="agent-setup-close" type="button" aria-label="Close agent setup" onClick={() => setSetupExpanded(false)}><X size={16} /></button>
+      <Show when={setupMode() === 'local'} fallback={<ManagedRunSetup onCreated={session=>{page.seed({sessions:[...sessions().filter(s=>s.id!==session.id),session]});setParams({session:session.id});setSetupExpanded(false);}} />}><ConnectInstructions /></Show>
+    </section></div></DialogShell></Portal></Show>
     <Show when={error()}><p role="alert" class="mb-4 text-sm">{error()} <Show when={error().startsWith('Sign in')}><a href={`/login?callbackUrl=${encodeURIComponent(`/chat${id() ? `?session=${id()}` : ''}`)}`} class="underline">Sign in</a></Show></p></Show>
-    <div class="flex flex-col gap-6 md:flex-row"><aside class="shrink-0 md:w-80">
-      <For each={visibleSessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {connectedAgentStatus(session)}</span></button>}</For>
-      <Show when={previousCount() > 0}><button type="button" aria-expanded={historyExpanded()} class="mb-4 w-full rounded border border-edge px-3 py-2 text-left text-sm text-muted" onClick={() => setHistoryExpanded((value) => !value)}>{historyExpanded() ? 'Hide' : 'Show'} previous sessions ({previousCount()})</button></Show>
-      <Show when={id()}><button type="button" aria-expanded={setupExpanded()} aria-controls="cli-setup" class="mt-2 flex w-full items-center justify-between rounded border border-edge px-3 py-2 text-sm md:hidden" onClick={() => setSetupExpanded((value) => !value)}>CLI setup <span aria-hidden="true">{setupExpanded() ? '−' : '+'}</span></button></Show>
-      <Show when={managed()}><ManagedRunSetup onCreated={session=>{page.seed({sessions:[...sessions().filter(s=>s.id!==session.id),session]});setParams({session:session.id});}} /></Show>
-      <div id="cli-setup" class={id() && !setupExpanded() ? 'hidden md:block' : ''}><InstallInstructions /></div>
-    </aside><Show when={id()} keyed fallback={<div class="rounded border border-edge p-8 text-muted">Select a session, or start one from your CLI.</div>}>{(sessionId) => <SessionTerminal id={sessionId} onClose={close} onSession={setSelectedSession} />}</Show></div>
+    <div class="agents-layout"><aside class="agent-sidebar" aria-label="Agents">
+      <div class="agent-list-heading"><h2>Agents</h2><span>{sessions().filter(isConnectedAgent).length} connected</span></div>
+      <For each={groups}>{group => <section class="agent-session-group" data-agent-location={group.kind} aria-label={group.label}><h3>{group.kind === 'local' ? <Monitor size={12} aria-hidden="true" /> : <Cloud size={12} aria-hidden="true" />}{group.label}</h3><div class="agent-group-action">{setupButton(group.kind)}</div><Show when={!group.sessions.length}><p class="agent-group-empty">{group.empty}</p></Show>
+      <For each={group.sessions}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`agent-session ${session.id === id() ? 'is-selected' : ''}`} onClick={() => setParams({ session: session.id })}><span class="agent-session-name"><Show when={agentNameColor(session.name)}>{color => <span class="agent-color-swatch" aria-hidden="true" style={{'background-color':color()}} />}</Show><span class="truncate">{session.name}</span><Show when={session.included}><span class="agent-included-tag">Included for free</span></Show><span class={`agent-dot ${isConnectedAgent(session) ? 'is-online' : ''}`} aria-hidden="true" /></span><span class="text-xs text-muted">{session.harness} · {connectedAgentStatus(session)}</span></button>}</For>
+      </section>}</For>
+      <Show when={previousCount() > 0}><button type="button" aria-expanded={historyExpanded()} class="agent-history-toggle" onClick={() => setHistoryExpanded((value) => !value)}>{historyExpanded() ? 'Hide' : 'Show'} previous sessions ({previousCount()})</button></Show>
+
+      <p class="agent-sidebar-note">Mention an online agent with <strong>@</strong> in any artifact comment.</p>
+    </aside><Show when={id()} keyed fallback={<div class="agent-empty" role="region" aria-label="No agent selected"><TerminalIcon size={32} stroke-width={1.3} /><h2>{visibleSessions().length ? 'Choose an agent' : 'Your next session starts here'}</h2><p>{visibleSessions().length ? 'Select a session to view its terminal and send a message.' : 'Connect an agent to work on your artifacts and follow its progress here.'}</p><div class="agent-empty-actions">{setupButton('local')}{setupButton('cloud')}</div></div>}>{(sessionId) => <SessionTerminal id={sessionId} onClose={close} onSession={setSelectedSession} />}</Show></div>
   </main>;
 }

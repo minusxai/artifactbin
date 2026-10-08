@@ -16,7 +16,8 @@ it('registers external managed-agent mention metadata without granting a local r
  const session={id,name:'artifactbin',harness:'native',cwd:'/home/runner',machine:'External',cols:80,rows:24,online:true,exitCode:null,controller:'web' as const,createdAt:new Date().toISOString(),managed:true};
  setHostedRemoteAgent(hostedAgentClient('https://service.test',async()=>Response.json(session)));
  const agents=fresh();
- expect(await agents.list(owner)).toContainEqual(session);
+ expect(await agents.list(owner)).toContainEqual({...session,included:true});
+ expect(await agents.read(owner,id)).toMatchObject({included:true});
  expect(await agents.owns(owner,id)).toBe(true);
  expect(await agents.owns('other-owner',id)).toBe(false);
  const db=await getDb();
@@ -86,7 +87,7 @@ it('commits mention delivery with the comment, authenticates receipts, and refus
  const answer=async(phase:string,proof:string,resolve=false)=>{const req=request(`/api/artifacts/${doc.id}/annotations/${thread.id}`,{method:'POST',token:token.token,json:{reply:'Review response',request_id:work.id,phase,resolve}});req.headers.set('X-Artifactbin-Remote-Session',s.id);req.headers.set('X-Artifactbin-Remote-Proof',proof);return reply(req,{params:Promise.resolve({id:doc.id,annId:thread.id})});};
  expect((await answer('acknowledged','wrong')).status).toBe(403);
  expect((await answer('completed',s.runnerKey)).status).toBe(409);
- const ack=await answer('acknowledged',s.runnerKey);expect(ack.status).toBe(200);expect((await ack.json()).thread.at(-1).author).toMatchObject({label:'claude',sessionId:s.id,color:s.color});
+ const ack=await answer('acknowledged',s.runnerKey);expect(ack.status).toBe(200);expect((await ack.json()).thread.at(-1).author).toMatchObject({label:'claude',sessionId:s.id,color:s.color,harness:'claude'});
  const db=await getDb();await db.query("INSERT INTO annotations (id,artifact_id,root_id,body,author_kind,author_user_id) VALUES ('later',$1,$2,'another thing','human',$3)",[doc.id,thread.id,user.id]);
  expect((await answer('completed',s.runnerKey,true)).status).toBe(409);
  expect((await remoteAgents.work(db,doc.id,thread.id))[0].phase).toBe('acknowledged');

@@ -1,3 +1,4 @@
+import { replaceComment } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * THE RAIL AND THE PINS. Open threads
@@ -14,7 +15,7 @@ import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_
 import { personHue } from '@/lib/accounts/person-face';
 import { Avatar } from '../../components/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
-import { positionedComments } from '../AnnotationPreview';
+import { AuthorIdentity, positionedComments } from '../AnnotationPreview';
 import {
   ADA_IMAGE, ANN, FACES, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot,
 } from './annotation-rig';
@@ -75,7 +76,8 @@ describe('AnnotationLayer', () => {
     expect(first).toBeDefined();
     expect(reply).toBeDefined();
     expect(first!.textContent).not.toBe(reply!.textContent);
-    expect(first!.textContent).toMatch(/27 Aug.*\d+:\d{2}/);
+    expect(first!.textContent).toContain(new Intl.DateTimeFormat('en-GB', { day:'numeric', month:'short' }).format(new Date(ANN.thread[0]!.created_at)));
+    expect(first!.textContent).toMatch(/\d+:\d{2}/);
     expect(first).toHaveAttribute('aria-label', expect.stringMatching(/2026/));
   });
 
@@ -223,11 +225,12 @@ describe('AnnotationLayer', () => {
     await flush();
     view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
     await screen.findByLabelText('Annotation thread');
-    fireEvent.input(screen.getByLabelText('Reply to annotation'), { target: { value: 'never mind' } });
+    replaceComment(screen.getByLabelText('Reply to annotation'), 'never mind');
     fireEvent.click(screen.getByLabelText('Send reply'));
     await flush();
     const reply = fetchCalls.find((c) => c.url.endsWith('/annotations/ann_1') && c.init?.method === 'POST');
     expect(JSON.parse(String(reply!.init!.body))).toMatchObject({ reply: 'never mind' });
+    expect(screen.getByLabelText('Reply to annotation').textContent).toBe('');
 
     fireEvent.click(screen.getByLabelText('Resolve annotation'));
     await flush();
@@ -262,12 +265,12 @@ describe('AnnotationLayer', () => {
     const view = layer({ railOpen: true });
     await flush();
     fireEvent.click(await screen.findByLabelText('Open annotation thread'));
-    fireEvent.input(screen.getByLabelText('Reply to annotation'), { target: { value: 'half written' } });
+    replaceComment(screen.getByLabelText('Reply to annotation'), 'half written');
     const field = screen.getByLabelText('Reply to annotation');
     view.set({ railOpen: true, liveAnnotations: [{ ...ANN, thread: [...ANN.thread] }] });
     await flush();
     expect(field.isConnected).toBe(true);
-    expect(screen.getByLabelText('Reply to annotation')).toHaveValue('half written');
+    expect(screen.getByLabelText('Reply to annotation')).toHaveTextContent('half written');
   });
 
   it('lists resolved threads below a divider, collapsed until clicked; close shuts the rail', async () => {
@@ -318,7 +321,7 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('Annotation thread').getAttribute('data-hovered')).toBe('true');
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.getByLabelText('Codex agent')).toBeTruthy();
-    expect(screen.getByLabelText('Transport MCP')).toBeTruthy();
+    expect(screen.getByLabelText('Agent type Codex')).toBeTruthy();
   });
 
   it('names the agent an MCP reply came from, with its own glyph and the MCP chip', async () => {
@@ -330,7 +333,7 @@ describe('AnnotationLayer', () => {
     const marker = await screen.findByLabelText('Open annotation conversation by Claude Code, 1 message');
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     expect(screen.getByText('Claude Code')).toBeTruthy();
-    expect(screen.getByLabelText('Transport MCP')).toBeTruthy();
+    expect(screen.getByLabelText('Agent type Claude Code')).toBeTruthy();
     const mark = screen.getByLabelText('Claude Code agent');
     expect(mark.querySelector('path')?.getAttribute('d')?.startsWith('M20.998')).toBe(true);
   });
@@ -344,7 +347,7 @@ describe('AnnotationLayer', () => {
     const marker = await screen.findByLabelText('Open annotation conversation by Agent, 1 message');
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     expect(screen.getByLabelText('Agent agent')).toBeTruthy();
-    expect(screen.getByLabelText('Transport HTTP')).toBeTruthy();
+    expect(screen.getByLabelText('Agent type Agent')).toBeTruthy();
   });
 
   it('delete asks first, then erases the thread and its pin', async () => {
@@ -454,20 +457,30 @@ describe('AnnotationLayer', () => {
   });
 });
 
-it('prefills the linked agent, permits removing it, and retains a failed reply', async () => {
+it('starts replies empty even in a tagged thread and retains a failed reply', async () => {
   const mention = `[@claude](/chat?session=${'a'.repeat(64)})`;
   const tagged = { ...ANN, thread: [{ ...ANN.thread[0]!, body: `${mention} help` }] };
   knobs.open = [tagged];
   const view = layer({ railOpen: true, liveAnnotations: [tagged] });
   await screen.findByText('help', { exact: false });
   view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
-  const field = await screen.findByPlaceholderText('reply…');
-  expect(field).toHaveValue('@claude ');
+  const field = await screen.findByLabelText('Reply to annotation');
+  expect(field.textContent).toBe('');
   expect(screen.getByLabelText('Send reply')).toBeDisabled();
-  fireEvent.input(field, { target: { value: 'my draft' } });
-  expect(field).toHaveValue('my draft');
+  replaceComment(field, `${mention} how is it going?`);
+  fireEvent.click(screen.getByLabelText('Send reply')); await flush();
+  expect(field.textContent).toBe('');
+  replaceComment(field, 'my draft');
+  expect(field).toHaveTextContent('my draft');
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
   fireEvent.click(screen.getByLabelText('Send reply'));
   await screen.findByRole('alert');
-  expect(field).toHaveValue('my draft');
+  expect(field).toHaveTextContent('my draft');
+});
+
+it('shows a connected agent program instead of its transport', () => {
+  render(() => <AuthorIdentity author={{kind:'agent',label:'koala-8e44ad',sessionId:'a'.repeat(64),harness:'pi',transport:'http',user_id:null,image:null}} />);
+  expect(screen.getByLabelText('Agent type Pi')).toBeTruthy();
+  expect(screen.getByLabelText('Pi agent').querySelector('svg')).toBeTruthy();
+  expect(screen.queryByLabelText('Transport HTTP')).toBeNull();
 });

@@ -529,7 +529,10 @@ async function editing(engineName, browser) {
       }
       await second.getByRole('button', { name: 'Comment on selected text' }).click();
       await answerName(second, 'Ravi');
-      await second.getByRole('textbox', { name: 'Annotation comment' }).fill('Is "Quarterly" right for a monthly table?');
+      // WebKit fill() can leave rich-editor input unchanged; exercise native typing.
+      await second.bringToFront();
+      await second.getByRole('textbox', { name: 'Annotation comment' }).pressSequentially('Is "Quarterly" right for a monthly table?');
+      await expect(second.getByRole('button', { name: 'Save annotation' })).toBeEnabled();
       await second.getByRole('button', { name: 'Save annotation' }).click();
       await expect(doc.locator(`#${headingId}[data-mx-annotated]`)).toHaveCount(1, { timeout: 10_000 });
       if (!(await second.getByRole('complementary', { name: 'Annotation sidebar' }).isVisible().catch(() => false))) await second.getByRole('button', { name: 'Comment', exact: true }).click();
@@ -537,7 +540,8 @@ async function editing(engineName, browser) {
       await expect(thread).toContainText('Ravi');
       await expect(thread).toContainText('monthly table');
       if (!(await second.getByRole('textbox', { name: 'Reply to annotation' }).isVisible().catch(() => false))) await second.getByRole('button', { name: 'Open annotation thread' }).first().click();
-      await second.getByRole('textbox', { name: 'Reply to annotation' }).first().fill('Checked: it is the Q3 view.');
+      await second.bringToFront();
+      await second.getByRole('textbox', { name: 'Reply to annotation' }).first().pressSequentially('Checked: it is the Q3 view.');
       await second.getByRole('button', { name: 'Send reply' }).first().click();
       await expect(thread).toContainText('Checked: it is the Q3 view.');
       await second.getByRole('button', { name: 'Resolve annotation' }).first().click();
@@ -825,7 +829,8 @@ async function connecting(engineName, browser) {
           document.dispatchEvent(new Event('selectionchange'));
         });
         await page.getByRole('button', { name: 'Comment on selected text' }).click();
-        await page.getByRole('textbox', { name: 'Annotation comment' }).fill('This comment must travel to the local editor.');
+        await page.bringToFront();
+        await page.getByRole('textbox', { name: 'Annotation comment' }).pressSequentially('This comment must travel to the local editor.');
         await page.getByRole('button', { name: 'Save annotation' }).click();
         await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
       });
@@ -991,7 +996,7 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
       await expect(editor.getByRole('button', { name: 'Undo stroke' })).toBeEnabled();
       // Strokes paint on requestAnimationFrame; wait for the pixels, not just the undo button.
       await expect.poll(() => canvas.evaluate(c => { const pixels = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let count = 0; for (let i = 0; i < pixels.length; i += 4) if (pixels[i] < 30 && pixels[i + 1] > 200 && pixels[i + 2] < 30) count++; return count; })).toBeGreaterThan(100);
-      await expect(editor.getByLabel('Annotation comment', { exact: true })).toHaveValue(`Screenshot from ${engineName} at DPR ${dpr}`);
+      await expect(editor.getByLabel('Annotation comment', { exact: true })).toHaveText(`Screenshot from ${engineName} at DPR ${dpr}`);
     });
     await step('the comment saves and its screenshot persists through a reload', async () => {
       await page.getByLabel('Save annotation', { exact: true }).click();

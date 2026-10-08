@@ -1,3 +1,4 @@
+import { replaceComment } from '../document/__tests__/comment-input';
 /** Solid offline chrome over the same serialized file as the three-browser gate. */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -142,12 +143,12 @@ describe('Solid offline file', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open annotation thread' }));
     const reply = screen.getByRole('textbox', { name: 'Reply to annotation' });
-    fireEvent.input(reply, { target: { value: 'Keep this draft' } });
+    replaceComment(reply, 'Keep this draft');
     fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
     await screen.findByRole('dialog', { name: 'What should we call you?' });
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Your draft is saved here'));
-    expect((reply as HTMLTextAreaElement).value).toBe('Keep this draft');
+    expect(reply.textContent).toBe('Keep this draft');
     fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
     await screen.findByRole('dialog', { name: 'What should we call you?' });
     fireEvent.input(screen.getByRole('textbox', { name: 'Your name' }), { target: { value: 'Asha' } });
@@ -164,7 +165,7 @@ describe('Solid offline file', () => {
     shell(file); await mountSolidOfflineFile();
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open annotation thread' }));
-    fireEvent.input(screen.getByRole('textbox', { name: 'Reply to annotation' }), { target: { value: 'Reviewed offline' } });
+    replaceComment(screen.getByRole('textbox', { name: 'Reply to annotation' }), 'Reviewed offline');
     fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
     await waitFor(() => expect(trustedText()).toContain('Reviewed offline'));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Resolve annotation' }).hasAttribute('disabled')).toBe(false));
@@ -309,7 +310,7 @@ describe('Solid offline file', () => {
     await waitFor(() => expect(written).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open annotation thread' }));
-    fireEvent.input(screen.getByRole('textbox', { name: 'Reply to annotation' }), { target: { value: 'Comment while saving' } });
+    replaceComment(screen.getByRole('textbox', { name: 'Reply to annotation' }), 'Comment while saving');
     fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
     await waitFor(() => expect(trustedText()).toContain('Comment while saving'));
     fireEvent.keyDown(document, { key: 's', metaKey: true });

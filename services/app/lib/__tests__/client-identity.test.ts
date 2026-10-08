@@ -16,6 +16,10 @@ describe(`${ARTIFACTBIN_AGENT_HEADER} — explicit HTTP agent identity`, () => {
     expect(id).toMatchObject({ harness: 'codex', label: 'codex', source: 'agent-header' });
   });
 
+  it.each(['pi', 'opencode'])('recognizes an explicit %s declaration', harness => {
+    expect(identifyClient({agentHeader:harness,userAgent:'afbin/0.4'})).toMatchObject({harness,source:'agent-header'});
+  });
+
   it('accepts human-readable spelling but ignores unknown declarations', () => {
     expect(identifyClient({ agentHeader: 'Claude Code', userAgent: 'node' }).harness).toBe('claude-code');
     expect(identifyClient({ agentHeader: 'definitely-not-an-agent', userAgent: 'codex-mcp-client/1' }).harness).toBe('codex');

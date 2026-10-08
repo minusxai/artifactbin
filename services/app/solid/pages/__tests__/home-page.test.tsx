@@ -168,7 +168,7 @@ it('puts creation and all workspace destinations in the left navigation, separat
   homeFetch({ ...core }); open();
   const nav = await screen.findByRole('navigation', { name: 'Workspace' });
   expect(within(nav).getByRole('button', { name: 'Create' })).toBeInTheDocument();
-  for (const [name, href] of Object.entries({ Artifacts: '/', Assets: '/assets', Trash: '/trash', Schedules: '/schedules', 'Connected agents': '/chat', Notifications: '/notifications' })) {
+  for (const [name, href] of Object.entries({ Artifacts: '/', Assets: '/assets', Trash: '/trash', Schedules: '/schedules', 'Connected Agents': '/chat', Notifications: '/notifications' })) {
     expect(within(nav).getByRole('link', { name })).toHaveAttribute('href', href);
   }
   expect(within(nav).getByRole('link', { name: 'Artifacts' })).toHaveAttribute('aria-current', 'page');
