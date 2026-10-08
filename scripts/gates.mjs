@@ -23,7 +23,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { PAGES_HOST } from './gates/lib/browser.mjs';
 import { spawn } from 'node:child_process';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +31,7 @@ import { runGateProcess } from './gates.process.mjs';
 import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
+import { claimFreePort } from './lib/free-port.mjs';
 import { stopServer, waitUntilServing } from './lib/server-process.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -99,16 +99,6 @@ if (serversFor(servers, selected.map((g) => g.name), CI_ISOLATED_GATES) !== serv
   console.log(`only gates that lose races under a neighbour's load (${selected.map((g) => g.name).join(', ')}): one server, one at a time`);
 }
 
-/** A port nothing holds right now — asked of the OS, not guessed. */
-const freePort = () => new Promise((resolve, reject) => {
-  const probe = net.createServer();
-  probe.on('error', reject);
-  probe.listen(0, '127.0.0.1', () => {
-    const { port } = probe.address();
-    probe.close(() => resolve(port));
-  });
-});
-
 /** Answering at all (any status under 500) is serving: the app's home redirects a stranger to /login. */
 const waitForServer = (base, child) => waitUntilServing(child, {
   url: base, ready: (response) => response.status < 500, timeoutMs: 60_000, intervalMs: 500, requestTimeoutMs: 2000,
@@ -129,7 +119,7 @@ async function bootServer(index, mailOutbox, authSecret) {
     console.error(`--servers needs a build: ${path.relative(ROOT, BUNDLE)} is missing. Run \`npm run build\`.`);
     process.exit(2);
   }
-  const port = await freePort();
+  const port = await claimFreePort();
   const base = `http://app.${PAGES_HOST}:${port}`;
   const objects = path.join(scratch, `objects-${index}`);
   mkdirSync(objects, { recursive: true });
