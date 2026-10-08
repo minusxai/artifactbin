@@ -33,7 +33,8 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const repeated=await post(bytes);expect(repeated.status).toBe(201);expect((await repeated.json()).ref).toBe(uploaded.ref);
   const conflict=await post(Buffer.from('different'),'upload-operation-123');expect(conflict.status).toBe(409);
   const imageId=uploaded.ref.slice('dimg:'.length),read=(who:{credential:'session';userId:string;email:string;emailVerified:boolean})=>readImage(request(uploaded.url,{actor:who}),imageParams(document.id,dataset.id,imageId));
-  const visible=await read(pageActor);expect(visible.status).toBe(200);expect(visible.headers.get('x-content-type-options')).toBe('nosniff');expect(visible.headers.get('cache-control')).toBe('private, no-store');
+  // The image, file and picture headers are media-headers.test.ts's rows; this file owns the flow and the ACL.
+  const visible=await read(pageActor);expect(visible.status).toBe(200);
   const ownerSession={credential:'session' as const,userId:owner.id,email:owner.email!,emailVerified:true};
   expect((await read(ownerSession)).status).toBe(200);
   const reporterToken=await mintToken('dataset-file-reporter',reporter.id);await claimToken(reporter.id,reporterToken.token);
@@ -51,8 +52,6 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const fileRead=(who=pageActor)=>readFile(request(files[0].url,{actor:who}),{params:Promise.resolve({id:document.id,datasetId:dataset.id,fileId:files[0].ref.slice(6)})});
   expect((await readFile(request(files[0].url),{params:Promise.resolve({id:document.id,datasetId:dataset.id,fileId:files[0].ref.slice(6)})})).status).toBe(404);
   const download=await fileRead();expect(download.status).toBe(200);expect(await download.text()).toBe('hello');
-  expect(download.headers.get('content-disposition')).toContain('attachment;');
-  expect(download.headers.get('content-security-policy')).toContain('sandbox');
   const imageUpload=await filePost('proof.png',new Uint8Array(bytes),'generic-image-123');
   expect(imageUpload.status,await imageUpload.clone().text()).toBe(201);
   const imageFile=await imageUpload.json();
@@ -60,7 +59,6 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   expect(imageFile.name).toBe('proof.webp');
   const imageDownload=await readFile(request(imageFile.url,{actor:pageActor}),{params:Promise.resolve({id:document.id,datasetId:dataset.id,fileId:imageFile.ref.slice(6)})});
   expect((await sharp(Buffer.from(await imageDownload.arrayBuffer())).metadata()).format).toBe('webp');
-  expect(imageDownload.headers.get('content-disposition')).toContain('inline; filename="proof.webp"');
   const replayedImage=await filePost('proof.png',new Uint8Array(bytes),'generic-image-123');
   expect(await replayedImage.json()).toMatchObject({...imageFile,replayed:true});
   expect((await (await getDb()).query<{meta:{filename:string}}>('SELECT meta FROM dataset_images WHERE id=$1',[imageFile.ref.slice(6)])).rows[0]?.meta.filename).toBe('proof.png');
