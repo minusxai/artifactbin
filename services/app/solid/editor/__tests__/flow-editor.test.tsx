@@ -102,6 +102,39 @@ it('pastes block fragments with an outer formatting wrapper through the real ins
   expect(source).toContain('after');
   expect(view.container.querySelector('li > li')).toBeNull();
 });
+
+it.each(['single', 'range'])('copies and pastes the editor\'s own nested list %s through the clipboard handlers', kind => {
+  let engine: EditorView | null = null;
+  const onChange = vi.fn(), onError = vi.fn();
+  const source = '<ul id="list"><li id="outer"><p id="a">Alpha</p><ul id="nested"><li id="b"><strong id="bold">Bravo</strong></li><li id="c"><em id="italic">Charlie</em></li></ul></li><li id="last"><p id="d">Delta</p></li></ul>';
+  const view = render(() => <FlowEditor nodes={nodes(source)} path="0" onChange={onChange} onError={onError} onView={v => { engine = v; }} />);
+  const v = engine!, positions = new Map<string, number>();
+  v.state.doc.descendants((n, pos) => { if (n.isText) positions.set(n.text!, pos); });
+  const values = new Map<string, string>();
+  const clipboardData = {
+    files: [], clearData: () => values.clear(),
+    setData: (type: string, value: string) => values.set(type, value),
+    getData: (type: string) => values.get(type) ?? '',
+  };
+  const end = kind === 'single' ? positions.get('Bravo')! + 'Bravo'.length : positions.get('Charlie')! + 'Charlie'.length;
+  v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, positions.get('Bravo')!, end)));
+  fireEvent.copy(v.dom, { clipboardData });
+  expect(values.get('text/html')).toContain('data-pm-slice');
+  expect(values.get('text/html')).toContain('Bravo');
+  v.dispatch(v.state.tr.setSelection(TextSelection.atEnd(v.state.doc)));
+  fireEvent.paste(v.dom, { clipboardData });
+  expect(onError).not.toHaveBeenCalled();
+  expect(onChange).toHaveBeenCalledTimes(1);
+  const saved = serializeJsx(sourceNodes(v.state.doc));
+  expect(saved.match(/Bravo/g)).toHaveLength(2);
+  expect(saved.match(/Charlie/g)).toHaveLength(kind === 'single' ? 1 : 2);
+  expect(saved.match(/id="b"/g)).toHaveLength(1);
+  expect(saved.match(/id="bold"/g)).toHaveLength(1);
+  expect(saved).not.toContain('data-pm-slice');
+  expect(view.container.querySelector('li > li')).toBeNull();
+  expect(() => v.state.doc.check()).not.toThrow();
+  expect(serializeJsx(sourceNodes(editorDocument(nodes(saved))))).toBe(saved);
+});
 describe('mounted editor flow', () => {
   it('creates one editable root for adjacent source paragraphs and commits one paste transaction', () => {
     const onChange = vi.fn();
