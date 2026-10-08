@@ -13,7 +13,7 @@ const artifactTimeout=()=>Error('Current-attempt artifact timed out');
 export const MAX_ARTIFACT_ARCHIVE_BYTES=128*1024*1024;
 /** Three transport attempts share the caller's original readiness deadline.
  * Transient GitHub HTTP failures are read-only API failures, not schema or auth failures. */
-export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:pause=sleep,request=execFileSync,command='gh',requestTimeout=30000,retryDelay=1000,encoding='utf8',maxBuffer=1024*1024}){
+export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:pause=sleep,request=execFileSync,command='gh',requestTimeout=30000,retryDelay=1000,retryArtifactNotFound=false,encoding='utf8',maxBuffer=1024*1024}){
  for(let attempt=0;attempt<3;attempt++){
   const remaining=deadline-now();
   if(remaining<=0)throw artifactTimeout();
@@ -22,7 +22,10 @@ export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:p
    if(now()>=deadline)throw artifactTimeout();
    return result;
   }catch(error){
-   const transientHttp=error.status===1&&/\bHTTP (?:429|500|502|503|504)\b/.test(String(error.stderr??''));
+   // A listed upload may precede ZIP visibility. Restrict this exception to the
+   // exact archive endpoint; metadata/auth errors still fail immediately.
+   const archiveNotFound=retryArtifactNotFound&&args.length===2&&args[0]==='api'&&/^\/repos\/[\w.-]+\/[\w.-]+\/actions\/artifacts\/\d+\/zip$/.test(args[1])&&/\bHTTP 404\b/.test(String(error.stderr??''));
+   const transientHttp=error.status===1&&(/\bHTTP (?:429|500|502|503|504)\b/.test(String(error.stderr??''))||archiveNotFound);
    if(!['ETIMEDOUT','ECONNRESET','EAI_AGAIN'].includes(error.code)&&!transientHttp)throw error;
    if(now()>=deadline)throw artifactTimeout();
    if(attempt===2)throw error;
@@ -52,7 +55,7 @@ export function verifyArtifactArchive(bytes,digest){
 }
 export async function downloadCurrentArtifactArchive(artifact,{repo,deadline,request=requestCurrentArtifact}={}){
  if(Number.isFinite(artifact.size_in_bytes)&&artifact.size_in_bytes>MAX_ARTIFACT_ARCHIVE_BYTES)throw Error(`Current-run artifact archive exceeds ${MAX_ARTIFACT_ARCHIVE_BYTES} byte download limit`);
- const bytes=await request(['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{deadline,encoding:null,maxBuffer:MAX_ARTIFACT_ARCHIVE_BYTES});
+ const bytes=await request(['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{deadline,encoding:null,maxBuffer:MAX_ARTIFACT_ARCHIVE_BYTES,retryArtifactNotFound:true,retryDelay:5000});
  verifyArtifactArchive(bytes,artifact.digest);
  return bytes;
 }
