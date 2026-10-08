@@ -438,8 +438,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   /** Stamp idempotent state: all annotate-mode outlines, or only the transient view-mode hover. */
   const applyState = () => {
     // Nothing painted since the last sweep and nothing to paint (edit mode, typing): no query over the page per key.
-    if ((!state || state.mode === 'off') && !dirty) return;
-    dirty = !!state && state.mode !== 'off';
+    const suppressPaint = !state || state.mode === 'off' || captureHandoff;
+    if (suppressPaint && !dirty) return;
+    dirty = !suppressPaint;
     for (const el of stamped) {
       el.removeAttribute(ANNOTATED_ATTR);
       el.removeAttribute(ANNOTATION_OPEN_ATTR);
@@ -448,7 +449,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       el.removeAttribute(ANNOTATION_RANGED_ATTR);
     }
     stamped.clear();
-    if (!state || state.mode === 'off') {
+    // Clear all transient paint before handing the selected rectangle to the host.
+    // Its mode=off message crosses the frame boundary after capture has started.
+    if (!state || suppressPaint) {
       clearHighlights();
       removeBand();
       return;
