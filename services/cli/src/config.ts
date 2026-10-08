@@ -3,7 +3,7 @@ import {validVersion} from './version-order';
 import { readFile } from "node:fs/promises";
 import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { DEFAULT_SERVER as CONTRACT_DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
 
@@ -200,6 +200,11 @@ export function remotePermissionEnv(command:string,env:NodeJS.ProcessEnv=process
 }
 export function remoteWorkerEnv(directory:string,separator:string,connection:Connection,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
  return {...env,PATH:directory+separator+(env.PATH??''),ARTIFACTBIN_URL:connection.server,ARTIFACTBIN_TOKEN:connection.token,ARTIFACTBIN__REMOTE_REFRESH_TOKEN:connection.refreshToken,ARTIFACTBIN__REMOTE_CLIENT_ID:connection.clientId};
+}
+
+/** Shared native login with private per-agent CLI state; baked skills stay read-only. */
+export function hostedWorkerEnv(command:string,home:string,directory:string,separator:string,connection:Connection,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
+ return {...remoteWorkerEnv(directory,separator,connection,env),HOME:home,ARTIFACTBIN_HOME:dirname(directory),ARTIFACTBIN_SKILLS:'off',CLI__DISABLE_AUTO_UPDATES:'1',...(command==='opencode'?{OPENCODE_DB:join(directory,'opencode.db')}:{})};
 }
 
 /** Portable workspace state never follows the machine-wide ARTIFACTBIN_HOME override. */
