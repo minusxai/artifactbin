@@ -374,7 +374,7 @@ test('Windows natural PTY exit releases ConPTY handles and still sends final out
 });
 
 
-// Codex must see a paste boundary before submit, not guess where a burst ended.
+// Managed Codex and Claude must see a paste boundary before submit, not guess where a burst ended.
 test('managed Codex comment input frames the paste and submits it once',async(t)=>{
  let onExit:((event:{exitCode:number})=>void)|undefined; const writes:string[]=[];
  t.mock.method(process,'kill',()=>true);
@@ -393,10 +393,29 @@ test('managed Codex comment input frames the paste and submits it once',async(t)
  const payload=JSON.parse(wire.slice('\x1b[200~'.length,-'\x1b[201~\r'.length));assert.equal(payload.request_id,'request-test');assert.equal(payload.cli_executable,'/synthetic/afbin');
 });
 
-test('other-provider comments and manual Codex keystrokes retain terminal input semantics',async()=>{
+test('managed Claude comment input preserves a large request in one framed paste',async(t)=>{
+ let onExit:((event:{exitCode:number})=>void)|undefined; const writes:string[]=[];
+ t.mock.method(process,'kill',()=>true);
+ t.mock.method(pty,'spawn',()=>({pid:12345,onData:()=>({dispose(){}}),onExit:(listener:(event:{exitCode:number})=>void)=>{onExit=listener;return{dispose(){}};},kill(){},resize(){},write(data:string){writes.push(data);if(data==='\r')onExit?.({exitCode:0});}} as unknown as import('node-pty').IPty));
+ const body='Synthetic request body. '.repeat(70);
+ const original=JSON.stringify({type:'artifactbin.comment',artifact_id:'artifact-test',request_id:'request-test',body})+'\r';
+ let delivered=false;const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async(_url,init)=>{
+  const payload=JSON.parse(String(init?.body));if(!payload.runnerKey)return Response.json({id:'claude-paste',runnerKey:'proof'});
+  if(!delivered){delivered=true;return Response.json({controller:'local',inputs:[{id:1,kind:'input',source:'comment',data:original}]});}
+  return Response.json({controller:'local',inputs:[]});
+ }});
+ assert.equal(await runRemote({client,command:'claude',args:[],interactive:false,managed:true,commentCommand:'/synthetic/afbin',onOutput:()=>{},signal:AbortSignal.timeout(3000)}),0);
+ const wire=writes.join('');assert.ok(wire.startsWith('\x1b[200~'),'large comment starts with an explicit bracketed paste');
+ assert.ok(wire.endsWith('\x1b[201~\r'),'paste end precedes a distinct submit');
+ assert.equal(writes.filter(value=>value==='\r').length,1,'request is submitted once');
+ const payload=JSON.parse(wire.slice('\x1b[200~'.length,-'\x1b[201~\r'.length));
+ assert.equal(payload.artifact_id,'artifact-test');assert.equal(payload.request_id,'request-test');assert.equal(payload.body,body);assert.equal(payload.cli_executable,'/synthetic/afbin');
+});
+
+test('unmanaged Claude comments and manual Codex keystrokes retain terminal input semantics',async()=>{
  const comment=JSON.stringify({type:'artifactbin.comment',request_id:'other-provider',body:'Keep provider input generic'})+'\r';
  const otherWrites:string[]=[];
- await deliverRemoteInput(data=>otherWrites.push(data),comment,{source:'comment',command:'claude',managed:true,commentCommand:'/synthetic/afbin'});
+ await deliverRemoteInput(data=>otherWrites.push(data),comment,{source:'comment',command:'claude',commentCommand:'/synthetic/afbin'});
  const otherInput=otherWrites.join('');
  assert.ok(otherInput.endsWith('\r'));
  assert.ok(!otherInput.includes('\x1b[200~'));
@@ -409,14 +428,16 @@ test('other-provider comments and manual Codex keystrokes retain terminal input 
  assert.ok(!manualWrites.join('').includes('\x1b[200~'));
 });
 
-test('managed Codex paste omits Enter if the PTY exits before submission',async()=>{
- const writes:string[]=[];
- await deliverRemoteInput(data=>writes.push(data),JSON.stringify({type:'artifactbin.comment',request_id:'exit-before-submit',body:'Do not submit after exit'})+'\r',{
-  source:'comment',command:'codex',managed:true,commentCommand:'/synthetic/afbin',canWrite:()=>false,
- });
- assert.equal(writes[0],'\x1b[200~');
- assert.equal(writes.at(-1),'\x1b[201~');
- assert.ok(!writes.includes('\r'));
+test('managed Codex and Claude pastes omit Enter if the PTY exits before submission',async()=>{
+ for(const command of ['codex','claude']){
+  const writes:string[]=[];
+  await deliverRemoteInput(data=>writes.push(data),JSON.stringify({type:'artifactbin.comment',request_id:'exit-before-submit',body:'Do not submit after exit'})+'\r',{
+   source:'comment',command,managed:true,commentCommand:'/synthetic/afbin',canWrite:()=>false,
+  });
+  assert.equal(writes[0],'\x1b[200~');
+  assert.equal(writes.at(-1),'\x1b[201~');
+  assert.ok(!writes.includes('\r'));
+ }
 });
 
 test('a hosted bootstrap failure preserves the reserved agent identity for recovery',async()=>{
