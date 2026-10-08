@@ -270,7 +270,7 @@ function ManagedRunSetup(props:{onCreated:(session:RemoteSessionInfo)=>void}):JS
   return <form class="mb-5 space-y-3 rounded border border-edge p-3" onSubmit={start}>
     <h2 class="font-semibold">Start a hosted box</h2><p class="text-xs text-muted">Run a shell or agent on a hosted machine. Sign in to Claude or Codex after the terminal opens.</p>
     <AgentNameField value={name()} onInput={setName} disabled={busy()} />
-    <div><p class="mb-2 text-sm">Program</p><div class="agent-harness-choices" role="group" aria-label="Hosted program"><For each={([['bash', 'Shell'], ['claude', 'Claude Code'], ['codex', 'Codex']] as const)}>{([value, label]) => <button type="button" disabled={busy()} aria-pressed={command() === value} onClick={() => setCommand(value)}>{label}</button>}</For></div></div>
+    <div><p class="mb-2 text-sm">Program</p><div class="agent-harness-choices" role="group" aria-label="Hosted program"><For each={([['bash', 'Shell'], ['claude', 'Claude Code'], ['codex', 'Codex'], ['pi', 'Pi'], ['opencode', 'OpenCode']] as const)}>{([value, label]) => <button type="button" disabled={busy()} aria-pressed={command() === value} onClick={() => setCommand(value)}>{label}</button>}</For></div></div>
     <label class="block text-sm">SSH public key (optional)<textarea aria-label="SSH public key" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={key()} onInput={e=>setKey(e.currentTarget.value)} placeholder="ssh-ed25519 …" /></label>
     <p class="text-xs text-muted">1 vCPU · 2 GiB RAM · up to 1 hour. Sign in to your agent in the terminal. Your home files are retained for the same agent name.</p>
     <button class="rounded bg-accent px-3 py-2 text-bg disabled:opacity-40" disabled={busy()}>{busy()?'Starting…':'Start hosted box'}</button>
@@ -292,7 +292,9 @@ export function ChatPage(): JSX.Element {
   const setupButton = (mode: 'local' | 'cloud') => <button type="button" class="agent-connect-button" disabled={mode === 'cloud' && !managed()} aria-expanded={setupExpanded() && setupMode() === mode} aria-haspopup="dialog" aria-controls="agent-setup" onClick={() => {setSetupMode(mode);setSetupExpanded(true);}}>{mode === 'local' ? <Plus size={14} /> : <Cloud size={14} />}{mode === 'local' ? 'Connect your agent' : 'Provision cloud agent'}</button>;
   const [historyExpanded, setHistoryExpanded] = createSignal(false);
   const page = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions', { loader: (signal) => request('', undefined, 'GET', signal) });
-  const sessions = () => page.data()?.sessions ?? [];
+  const [selectedSession, setSelectedSession] = createSignal<RemoteSessionInfo | null>(null);
+  // The terminal polls faster than the list; share its fresh status with the sidebar.
+  const sessions = () => (page.data()?.sessions ?? []).map(session => session.id === id() && selectedSession()?.id === session.id ? selectedSession()! : session);
   const previousCount = () => sessions().filter((session) => !session.included && !isConnectedAgent(session)).length;
   const visibleSessions = () => sessions().filter((session) => session.included || isConnectedAgent(session) || historyExpanded() || session.id === id());
   createEffect(() => {
