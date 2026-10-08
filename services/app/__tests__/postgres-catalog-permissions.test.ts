@@ -19,7 +19,7 @@ import {dataflowForRow,getArtifactById} from '@/lib/artifacts';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
-import {agentCookie,request,useAppHarness} from './harness';
+import {request,useAppHarness} from './harness';
 const harness=useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 const session=(user:{id:string;email:string|null})=>({credential:'session' as const,userId:user.id,email:user.email??'',emailVerified:true});
@@ -74,7 +74,7 @@ it.each(['bearer','browser'] as const)('returns a controlled unavailable-secret 
  try{
   result=transport==='bearer'
    ?await revert(await observedRequest(`/api/artifacts/${f.id}/revert`,{method:'POST',token:f.ownerToken.token,json:{version:1}}),ctx(f.id))
-   :await browserRevert(await observedRequest(`/api/my/artifacts/${f.id}/revert`,{method:'POST',cookie:await agentCookie([f.ownerToken.id]),json:{version:1}}),ctx(f.id));
+   :await browserRevert(await observedRequest(`/api/my/artifacts/${f.id}/revert`,{method:'POST',actor:session(f.owner),json:{version:1}}),ctx(f.id));
  }catch(error){result=error;}
  expect(await getArtifactById(f.id)).toMatchObject({version:before.version,edit_id:before.edit_id,source:before.source,meta:before.meta});
  expect(result).toBeInstanceOf(Response);const response=result as Response;expect(response.status).toBe(503);expect(await response.json()).toMatchObject({error:'dataset_error',details:['Dataset credentials are unavailable']});
