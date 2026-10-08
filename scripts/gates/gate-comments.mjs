@@ -597,13 +597,13 @@ async function markdownLeg(browser, { id, token }) {
 
   // The comment itself through the browser door, with the session the page
   // already holds — the selection dance is the leg above's subject, not this
-  // one's. `0.1` is the paragraph: BODY paths, the Helmet already hoisted off.
+  // one's. `cap` is the paragraph, addressed by its node id.
   const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
   const created = await page.evaluate(async ([docId, editId]) => {
     const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: '0.1', edit_id: editId, body: 'why is the cap 5?' }),
+      body: JSON.stringify({ node_id: 'cap', edit_id: editId, body: 'why is the cap 5?' }),
     });
     return { status: res.status, body: await res.text() };
   }, [id, head.edit_id]);
@@ -698,7 +698,7 @@ async function foldLeg(browser, { id, token }) {
     const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: '0.1', edit_id: editId, body: 'why is the cap 5?' }),
+      body: JSON.stringify({ node_id: 'cap', edit_id: editId, body: 'why is the cap 5?' }),
     });
     return { status: res.status, body: await res.text() };
   }, [id, head.edit_id]);

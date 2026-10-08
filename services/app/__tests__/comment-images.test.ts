@@ -14,7 +14,7 @@ useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 async function setup(){
  const token=await mintToken('agent');
- const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Capture me</p>'}}));
+ const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="capture">Capture me</p>'}}));
  expect(response.status).toBe(201);const doc=await response.json();
  await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[doc.id,'private']);
  const image=await sharp({create:{width:100,height:50,channels:3,background:'red'}}).png().toBuffer();
@@ -34,7 +34,7 @@ describe('comment image attachment ownership',()=>{
   expect(stage).not.toBeInstanceOf(Response);if(stage instanceof Response)return;
   expect(await assetBytesForToken(s.token.id)).toBeGreaterThan(0);
   expect(await readCommentImage(s.actor,s.doc.id,stage.id,'preview')).toBeNull();
-  const response=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{path:'0',edit_id:s.doc.edit_id,body:'Look here',attachment_id:stage.id}}),params(s.doc.id));
+  const response=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{node_id:'capture',edit_id:s.doc.edit_id,body:'Look here',attachment_id:stage.id}}),params(s.doc.id));
   expect(response.status,await response.clone().text()).toBe(201);
   const wire=await response.json();expect(wire.image).toMatchObject({id:stage.id,width:100,height:50,capturedEditId:s.doc.edit_id});
   expect(JSON.stringify(wire)).not.toContain('objectKey');
@@ -63,7 +63,7 @@ describe('comment image attachment ownership',()=>{
 it('keeps a stale stage unconsumed and retries a committed comment idempotently',async()=>{
  const s=await setup();const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
  const db=await getDb();await db.query("UPDATE artifacts SET edit_id='new-head' WHERE id=$1",[s.doc.id]);
- const make=(edit:string,key?:string)=>createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,headers:key?{'Idempotency-Key':key}:undefined,json:{path:'0',edit_id:edit,body:'Saved once',attachment_id:stage.id}}),params(s.doc.id));
+ const make=(edit:string,key?:string)=>createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,headers:key?{'Idempotency-Key':key}:undefined,json:{node_id:'capture',edit_id:edit,body:'Saved once',attachment_id:stage.id}}),params(s.doc.id));
  expect((await make(s.doc.edit_id)).status).toBe(409);
  expect((await db.query<{annotation_id:string|null}>('SELECT annotation_id FROM comment_images WHERE id=$1',[stage.id])).rows[0].annotation_id).toBeNull();
  await db.query('UPDATE artifacts SET edit_id=$2 WHERE id=$1',[s.doc.id,s.doc.edit_id]);
@@ -91,7 +91,7 @@ it('carries a staged image and its quota into a claimed account',async()=>{
  s.browserActor={credential:'session',userId:user.id,email:user.email!,emailVerified:true};
  const row=(await (await getDb()).query<{user_id:string}>('SELECT user_id FROM comment_images WHERE id=$1',[stage.id])).rows[0];
  expect(row.user_id).toBe(user.id);
- const response=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{path:'0',edit_id:s.doc.edit_id,body:'Claimed screenshot',attachment_id:stage.id}}),params(s.doc.id));
+ const response=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{node_id:'capture',edit_id:s.doc.edit_id,body:'Claimed screenshot',attachment_id:stage.id}}),params(s.doc.id));
  expect(response.status,await response.clone().text()).toBe(201);
 });
 
@@ -102,7 +102,7 @@ it('serves annotated pixels through bearer auth and preserves attachment access 
  const read=(token:string|undefined,id=s.doc.id,variant='')=>readAgentImage(request(`/api/artifacts/${id}/comment-images/${stage.id}${variant?`?variant=${variant}`:''}`,{token}),{params:Promise.resolve({id,imageId:stage.id})});
  expect((await read(undefined)).status).toBe(401);
  expect((await read(s.token.token)).status).toBe(404); // Unconsumed stages stay private.
- const created=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{path:'0',edit_id:s.doc.edit_id,body:'Look at the blue marks',attachment_id:stage.id}}),params(s.doc.id));
+ const created=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{node_id:'capture',edit_id:s.doc.edit_id,body:'Look at the blue marks',attachment_id:stage.id}}),params(s.doc.id));
  const annotation=await created.json();expect(created.status).toBe(201);
  const downloaded=await read(s.token.token);expect(downloaded.status).toBe(200);
  expect(downloaded.headers.get('Content-Type')).toBe('image/webp');expect(downloaded.headers.get('Cache-Control')).toBe('private, no-store');

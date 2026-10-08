@@ -107,7 +107,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'which quarter?');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ path: '1', node_id: 'node-1', body: 'which quarter?', quote: 'grew 40% in Q3,', range });
+    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ node_id: 'node-1', body: 'which quarter?', quote: 'grew 40% in Q3,', range });
   });
 
   it('keeps the captured words when the document re-reports the SAME node', async () => {
@@ -141,7 +141,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'draft follows explicit target');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ path: '1', node_id: 'new-node', body: 'draft follows explicit target' });
+    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ node_id: 'new-node', body: 'draft follows explicit target' });
   });
 
   it('drops them when the composer is widened to a DIFFERENT node — they no longer describe it', async () => {
@@ -151,7 +151,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'about the whole section');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ path: '0', node_id: 'node-0', body: 'about the whole section' });
+    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ node_id: 'node-0', body: 'about the whole section' });
   });
 
   it('sends no quote for a selection that has none — a caret comment is still a comment', async () => {
@@ -160,7 +160,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'no words');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ path: '1', node_id: 'node-1', body: 'no words' });
+    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ node_id: 'node-1', body: 'no words' });
   });
 
   it('a handed-in selection opens an anchored page composer; save moves the comment to the rail', async () => {
@@ -185,7 +185,7 @@ describe('the annotation composer', () => {
     replaceComment(composer, 'fresh note');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ path: '2.1', node_id: 'node-2-1', body: 'fresh note' });
+    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ node_id: 'node-2-1', body: 'fresh note' });
     expect(selects(view.runtime.send).at(-1)).toMatchObject({ path: null });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
     expect(screen.getAllByLabelText('Annotation thread').some((thread) => thread.textContent?.includes('fresh note'))).toBe(true);

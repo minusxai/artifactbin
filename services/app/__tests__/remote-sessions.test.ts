@@ -202,7 +202,7 @@ it.each([undefined, "b".repeat(64)])("the real comment and reply routes notify t
     request("/api/artifacts", {
       method: "POST",
       token: t.token,
-      json: { markup: "<p>Review this paragraph.</p>" },
+      json: { markup: '<p id="review">Review this paragraph.</p>' },
     }),
   );
   expect(created.status).toBe(201);
@@ -212,7 +212,7 @@ it.each([undefined, "b".repeat(64)])("the real comment and reply routes notify t
     request(`/api/my/artifacts/${doc.id}/annotations`, {
       method: "POST",
       actor,
-      json: { path: "0", edit_id: doc.edit_id, body: `${mention} review this` },
+      json: { node_id: "review", edit_id: doc.edit_id, body: `${mention} review this` },
     }),
     { params: Promise.resolve({ id: doc.id }) },
   );

@@ -173,7 +173,7 @@ describe('the composer writes markdown, and sends TEXT', () => {
     fireEvent.keyDown(field, { key: 'Enter', metaKey: true });
     await flush();
     const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '1', node_id: 'node-1', body: 'Fixed in `lib/config.ts`:\n\n```ts\nconst MAX = 10;\n```' });
+    expect(JSON.parse(String(create!.init!.body))).toEqual({ node_id: 'node-1', body: 'Fixed in `lib/config.ts`:\n\n```ts\nconst MAX = 10;\n```' });
   });
 
   it('a reply box carries the same toolbar', async () => {

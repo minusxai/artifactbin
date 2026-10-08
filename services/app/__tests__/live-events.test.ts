@@ -236,7 +236,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
 
   async function annotationSetup() {
     const t = await mintToken('agent');
-    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>alpha</p><div>beta figure</div>', visibility: 'public' } }));
+    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>alpha</p><div id="figure">beta figure</div>', visibility: 'public' } }));
     expect(res.status, await res.clone().text()).toBe(201);
     const doc = (await res.json()) as { id: string; edit_id: string };
     const actor = { userId: t.userId!, email: t.email!, emailVerified: true, credential: 'session' as const };
@@ -245,7 +245,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
 
   const annotate = (id: string, actor: { userId: string; email: string; emailVerified: boolean; credential: 'session' }, editId: string) =>
     myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor, json: { path: '1', edit_id: editId, body: 'look here' } }),
+      request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor, json: { node_id: 'figure', edit_id: editId, body: 'look here' } }),
       params({ id }),
     );
 
