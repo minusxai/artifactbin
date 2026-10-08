@@ -18,6 +18,7 @@ import type { RemoteSessionInfo, RemoteView } from '../../../contracts/src/remot
 import { newAgentName, agentNameColor } from '../lib/agent-identity';
 import { REMOTE_NAME } from '../../../contracts/src/remote';
 import { connectedAgentStatus, isConnectedAgent } from '../lib/connected-agents';
+import { isTerminalProtocolReply } from '../lib/terminal-input';
 import { Tooltip } from '../components/Tooltip';
 import { Button } from '../components/ui';
 import { usePageData } from '../lib/use-page-data';
@@ -121,7 +122,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
       }
       if (!stopped) timer = setTimeout(() => void poll(), failures ? Math.min(10000, 500 * 2 ** Math.min(failures - 1, 5)) : 250);
     };
-    const data = t.onData((value) => { if (canType()) void send({ type: 'input', data: value }).catch(() => {}); });
+    const data = t.onData((value) => { if (canType() && !isTerminalProtocolReply(value)) void send({ type: 'input', data: value }).catch(() => {}); });
     let touchY: number | undefined;
     const touchStart = (event: TouchEvent) => { touchY = event.touches.length === 1 ? event.touches[0].clientY : undefined; };
     const touchMove = (event: TouchEvent) => {
@@ -217,7 +218,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
       <button aria-label={actionLabel()} disabled={!info() || acting() || (canStop() && info()?.activity === 'stopping')} class="rounded border border-edge px-3 py-2 disabled:opacity-40" onClick={removeOrStop}>{acting() ? (canStop() ? 'Stopping…' : 'Removing…') : canStop() && info()?.activity === 'stopping' ? 'Stopping…' : actionLabel()}</button>
     </div>
     <Show when={info()?.included}><p class="agent-included-note">Your included {info()?.harness === 'pi' ? 'Pi' : info()?.harness} agent · A personal, durable cloud session. Mention @{info()?.name} in an artifact comment to work with it.</p></Show>
-    <details class="agent-help" hidden={!info()?.runId}><summary>Hosted connection details</summary><Show when={info()?.runId}><p class="mb-3 text-xs text-muted">Hosted terminals use a fixed 100 × 30 size; narrow views scroll horizontally.</p><p class="mb-3 text-xs text-muted">Sign in from this terminal: Claude Code uses <code>/login</code>; Codex offers Sign in with Device Code; Pi uses <code>/login</code> for supported providers; OpenCode uses <code>/connect</code>.</p><p class="mb-3 text-xs text-muted">Each agent keeps one conversation across your artifacts. Mention this agent in a comment to queue work. Comments wait until login and startup are complete.</p></Show>
+    <details class="agent-help" hidden={!info()?.runId}><summary>Hosted connection details</summary><Show when={info()?.runId}><p class="mb-3 text-xs text-muted">Hosted terminals use a fixed 100 × 30 size; narrow views scroll horizontally.</p><p class="mb-3 text-xs text-muted">Sign in from this terminal: Claude Code uses <code>/login</code>; Codex offers Sign in with Device Code; Pi uses <code>/login</code> for supported providers; OpenCode uses <code>/connect</code> on first start. To refresh an existing OpenCode login, run <code>opencode auth login</code> in a Shell agent, then restart OpenCode.</p><p class="mb-3 text-xs text-muted">Each agent keeps one conversation across your artifacts. Mention this agent in a comment to queue work. Comments wait until login and startup are complete.</p></Show>
     <Show when={info()?.sshCommand}><CopyCommand label="SSH into this box" command={info()!.sshCommand!} /></Show>
     <Show when={info()?.sshHostKey}><CopyCommand label="SSH known_hosts entry" command={info()!.sshHostKey!} /><p class="mb-3 text-xs text-muted">Add this entry to your SSH known_hosts file to verify this box before connecting.</p></Show></details>
     <Show when={connection() || waiting()}><p role="status" class="mb-2 text-sm text-muted">{connection() || waiting()}</p></Show>

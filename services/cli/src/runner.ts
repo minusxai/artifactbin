@@ -77,6 +77,11 @@ export async function runRemote(options: RunOptions): Promise<number> {
     seq = 0,
     exitCode: number | undefined,
     remote = true;
+  // Unattended native TUIs still need terminal protocol replies. Interactive
+  // sessions receive them from their real terminal; never send a duplicate there.
+  const terminalReplies = history.onData(data => {
+    if (!interactive && exitCode === undefined) child.write(data);
+  });
   let needsRegistration = false;
   let droppedOutput = false;
   let failures = 0;
@@ -277,6 +282,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
     shutdown.abort();
     clearTimeout(killTimer);
     if (exitCode === undefined) {if(options.managed)killManaged('SIGKILL');else child.kill();}
+    terminalReplies.dispose();
     history.dispose();
     out.dispose();
     exited.dispose();

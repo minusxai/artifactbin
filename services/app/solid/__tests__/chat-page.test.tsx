@@ -28,6 +28,21 @@ function open(session: string) {
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); write.mockClear(); window.history.replaceState(null, '', '/'); });
 
+it('relays terminal keystrokes without forwarding generated protocol replies', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = {id:'terminal-replies',name:'Codex',harness:'codex',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null,runId:'terminal-run',managed:true,activity:'listening'};
+  const inputs: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url:string,options?:RequestInit) => {
+    if(options?.method==='POST') { const input=JSON.parse(String(options.body)); if(input.type==='input') inputs.push(input.data); }
+    return {ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:url==='/api/run-capabilities'?{managedProcesses:true}:{session,seq:0,frames:[],snapshot:''}};
+  }));
+  open(session.id);
+  await waitFor(()=>expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled());
+  for(const reply of ['\x1b[?1;2c','\x1b[>0;276;0c','\x1b[1;1R','\x1b[0n','\x1b[8;30;100t','\x1b]10;rgb:1111/2222/3333\x1b\\']) terminalInput.send(reply);
+  for(const key of ['hello','\x1b[A','\r']) terminalInput.send(key);
+  await waitFor(()=>expect(inputs).toEqual(['hello','\x1b[A','\r']));
+});
+
 it('keeps polling through empty terminal frames and renders later output', async () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   const session = { id: 'test', name: 'Demo', harness: 'claude', machine: 'laptop', online: true, controller: 'local', cols: 80, rows: 24, exitCode: null };
@@ -363,7 +378,9 @@ it.each(['pi', 'opencode'])('offers and starts hosted %s with the selected harne
   fireEvent.click(sidebar().getByRole('button',{name:'Provision cloud agent'}));
   fireEvent.click(await screen.findByRole('button',{name:harness==='pi'?'Pi':'OpenCode'}));fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
   await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/runs',expect.objectContaining({body:expect.stringContaining('"command":["'+harness+'"]')})));
-  expect(await screen.findByText(/Sign in from this terminal/)).not.toHaveTextContent('in a shell');
+  const loginHelp=await screen.findByText(/Sign in from this terminal/);
+  expect(loginHelp).not.toHaveTextContent('in a shell');
+  if(harness==='opencode')expect(loginHelp).toHaveTextContent('To refresh an existing OpenCode login, run opencode auth login in a Shell agent, then restart OpenCode.');
 });
 
 

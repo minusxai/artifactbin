@@ -423,8 +423,11 @@ test('unmanaged Claude comments and manual Codex keystrokes retain terminal inpu
  assert.equal(otherPayload.cli_executable,'/synthetic/afbin');
  assert.match(otherPayload.instruction,/Use the absolute cli_executable/);
  const manualWrites:string[]=[];
- await deliverRemoteInput(data=>manualWrites.push(data),'typed\r',{source:'keyboard',command:'codex',managed:true,commentCommand:'/synthetic/afbin'});
- assert.deepEqual(manualWrites,['typed','\r']);
+ const manualOptions={source:'keyboard' as const,command:'codex',managed:true,commentCommand:'/synthetic/afbin'};
+ await deliverRemoteInput(data=>manualWrites.push(data),'typed',manualOptions);
+ await deliverRemoteInput(data=>manualWrites.push(data),'\r',manualOptions);
+ await deliverRemoteInput(data=>manualWrites.push(data),'\x1b',manualOptions);
+ assert.deepEqual(manualWrites,['typed','\r','\x1b']);
  assert.ok(!manualWrites.join('').includes('\x1b[200~'));
 });
 
@@ -448,4 +451,47 @@ test('a hosted bootstrap failure preserves the reserved agent identity for recov
   await assert.rejects(runRemote({client:new HttpClient({connection:{server:`http://127.0.0.1:${(server.address() as {port:number}).port}`,token:'mxmx_test_token'}}),command:'claude',args:[],interactive:false,managed:true,hostedSessionId:'reserved',hostedGeneration:'one',prepare:async()=>{throw Error('bootstrap failure');}}),/bootstrap failure/);
   assert.deepEqual(requests,['POST /api/remote/sessions']);
  }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+
+test('managed native composer lines settle after framed paste before a single submit',async()=>{
+ for(const source of ['keyboard','comment'] as const){
+  const writes:{data:string;time:number}[]=[];
+  await deliverRemoteInput(data=>writes.push({data,time:performance.now()}),'Synthetic request '+ 'x'.repeat(7000)+'\r',{
+   source,command:'codex',managed:true,...(source==='comment'?{commentCommand:'/synthetic/afbin'}:{}),
+  });
+  assert.equal(writes[0]?.data,'\x1b[200~','composer content must bypass native burst heuristics');
+  assert.equal(writes[1]?.data,'Synthetic request '+ 'x'.repeat(7000),'paste payload stays byte-for-byte complete and excludes the submit CR');
+  assert.equal(writes.at(-2)?.data,'\x1b[201~');
+  assert.equal(writes.at(-1)?.data,'\r');
+  assert.ok(writes.at(-1)!.time-writes.at(-2)!.time>=190,'submit waits for the native paste to settle');
+  assert.equal(writes.filter(write=>write.data==='\r').length,1);
+ }
+});
+
+test('native composer does not submit if the PTY exits during paste settling',async()=>{
+ for(const source of ['keyboard','comment'] as const){
+  let alive=true;const writes:string[]=[];
+  await deliverRemoteInput(data=>{writes.push(data);if(data==='\x1b[201~')setTimeout(()=>{alive=false;},10);},'Synthetic controlled request\r',{
+   source,command:'codex',managed:true,...(source==='comment'?{commentCommand:'/synthetic/afbin'}:{}),canWrite:()=>alive,
+  });
+  assert.equal(writes.at(-1),'\x1b[201~');
+  assert.ok(!writes.includes('\r'),'a dead PTY cannot receive submit');
+ }
+});
+
+
+test('unattended native terminal answers device and cursor queries without browser input',async(t)=>{
+ let onData:((value:string)=>void)|undefined,onExit:((event:{exitCode:number})=>void)|undefined;
+ const writes:string[]=[];let queried=false,exchanges=0;
+ t.mock.method(process,'kill',()=>true);
+ t.mock.method(pty,'spawn',()=>({pid:12345,onData:(listener:(value:string)=>void)=>{onData=listener;return{dispose(){}};},onExit:(listener:(event:{exitCode:number})=>void)=>{onExit=listener;return{dispose(){}};},resize(){},kill(){},write(data:string){writes.push(data);if(data==='\x1b[1;1R'){onData?.('NATIVE_TERMINAL_READY');onExit?.({exitCode:0});}}} as unknown as import('node-pty').IPty));
+ const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async(_url,init)=>{
+  const body=JSON.parse(String(init?.body));if(!body.runnerKey)return Response.json({id:'native-query',runnerKey:'proof'});
+  if(!queried){queried=true;onData?.('\x1b[c\x1b[6n');}
+  if(++exchanges===5&&!writes.length)onExit?.({exitCode:1});
+  return Response.json({controller:'web',inputs:[]});
+ }});
+ assert.equal(await runRemote({client,command:'opencode',args:[],interactive:false,managed:true,onOutput:()=>{}}),0,'native startup must complete with no human or browser keystrokes');
+ assert.deepEqual(writes,['\x1b[?1;2c','\x1b[1;1R']);
 });

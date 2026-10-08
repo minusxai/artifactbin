@@ -15,21 +15,20 @@ export async function deliverRemoteInput(
   const input = options.source === "comment" && options.commentCommand
     ? remoteRequestInput(data, options.commentCommand)
     : data;
-  if (options.managed && (harness === "codex" || harness === "claude") && options.source === "comment" && options.commentCommand) {
-    // remoteRequestInput appends the submit key; send the request as one explicit
-    // bracketed paste, then submit in its own write. Codex consumes the boundary
-    // directly, and Claude's terminal input can truncate large unframed requests.
-    // Neither provider needs a timing guess or replay for this managed paste.
+  if (options.managed && (harness === "codex" || harness === "claude") && input.length > 1 && input.endsWith("\r")) {
+    // Complete composer lines need an explicit paste boundary: large Codex input
+    // may otherwise be inserted without being submitted. Give both native TUIs
+    // time to consume the paste before sending its separate submit key.
     write(PASTE_START);
-    write(input.endsWith("\r") ? input.slice(0, -1) : input);
+    write(input.slice(0, -1));
     write(PASTE_END);
+    await delay(200);
     if (options.canWrite?.() !== false) write("\r");
     return;
   }
 
   // Preserve the established terminal behavior for shells, other providers,
-  // unmanaged comments, and keyboard input. Managed Codex and Claude comments
-  // have an explicit paste boundary.
+  // unmanaged comments, and incomplete/manual keyboard input.
   if (input.length > 1 && input.endsWith("\r")) {
     write(input.slice(0, -1));
     await delay(200);

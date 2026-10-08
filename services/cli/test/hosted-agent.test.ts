@@ -1,9 +1,10 @@
 import {test} from 'node:test';
 import {createServer} from 'node:http';
-import {existsSync,readFileSync,realpathSync} from 'node:fs';
+import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {pty} from '../src/pty';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {DatabaseSync} from 'node:sqlite';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {hostedHarnessArguments,prepareHostedHarness,runHostedAgent} from '../src/hosted-agent';
@@ -69,39 +70,34 @@ test('Codex recovers shared-daemon interactive sessions and pins the earliest ow
 });
 
 
-test('resumed OpenCode completes native startup in its explicit session before opening the TUI',async()=>{
+test('resumed OpenCode carries startup context into one interactive native session',async()=>{
  const home=await mkdtemp(join(tmpdir(),'af-opencode-startup-'));try{
- const env={HOME:home,AFBIN_TEST:'private'},calls:Array<{args:string[];env:NodeJS.ProcessEnv;cwd:string}>=[];
- const runStartup=async(args:string[],options:{cwd:string;env:NodeJS.ProcessEnv})=>{calls.push({args,...options});};
- const fresh=await prepareHostedHarness({command:'opencode',home,context:'startup-context',env,listOpenCodeSessions:async()=>'[]',runStartup});
- assert.deepEqual(fresh,['--prompt','startup-context']);assert.equal(calls.length,0);
- const args=await prepareHostedHarness({command:'opencode',home,context:'startup-context',env,listOpenCodeSessions:async()=>JSON.stringify([{id:'ses_original',directory:home,created:1}]),runStartup});
- assert.deepEqual(args,['--session','ses_original']);assert.equal(calls.length,1);assert.deepEqual(calls[0],{args:['run','--session','ses_original','--format','json','startup-context'],cwd:home,env});
- let notice=false;
- const login=await prepareHostedHarness({command:'opencode',home,context:'startup-context',env,runStartup:async()=>{throw Error('provider_auth_required');},onStartupUnavailable:()=>{notice=true;}});
- assert.deepEqual(login,args);assert.equal(notice,true);
+ const env={HOME:home,AFBIN_TEST:'private'};
+ const fresh=await prepareHostedHarness({command:'opencode',home,context:'startup-context',env,listOpenCodeSessions:async()=>'[]'});
+ assert.deepEqual(fresh,['--prompt','startup-context']);
+ const args=await prepareHostedHarness({command:'opencode',home,context:'startup-context',env,listOpenCodeSessions:async()=>JSON.stringify([{id:'ses_original',directory:home,created:1}])});
+ assert.deepEqual(args,['--mini','--session','ses_original','--prompt','startup-context']);
+ assert.deepEqual(await prepareHostedHarness({command:'opencode',home,context:'startup-context',env}),args,'a pinned session must reuse the same native UUID without rediscovery');
  const abort=new AbortController();abort.abort(new Error('cancelled'));
- await assert.rejects(prepareHostedHarness({command:'opencode',home,context:'startup-context',env,signal:abort.signal,runStartup:async()=>{throw abort.signal.reason;}}),/cancelled/);
+ await assert.rejects(prepareHostedHarness({command:'opencode',home,context:'startup-context',env,signal:abort.signal}),/cancelled/);
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
 
-test('OpenCode native startup receives EOF and retained environment before returning TUI arguments',{skip:process.platform==='win32'},async()=>{
- const home=await mkdtemp(join(tmpdir(),'af-opencode-native-startup-'));try{
- const bin=join(home,'bin');await mkdir(bin);
- await writeFile(join(bin,'opencode'),`#!${process.execPath}
-const fs=require('node:fs');(async()=>{for await(const chunk of process.stdin){};fs.writeFileSync(${JSON.stringify(join(home,'startup-proof'))},JSON.stringify({args:process.argv.slice(2),proof:process.env.AFBIN_TEST}));})();
-`,{mode:0o700});
- const args=await prepareHostedHarness({command:'opencode',home,context:'startup-context',env:{PATH:bin,HOME:home,AFBIN_TEST:'mxmx_test_retained'},listOpenCodeSessions:async()=>JSON.stringify([{id:'ses_native',directory:home,created:1}])});
- assert.deepEqual(JSON.parse(await readFile(join(home,'startup-proof'),'utf8')),{args:['run','--session','ses_native','--format','json','startup-context'],proof:'mxmx_test_retained'});
- assert.deepEqual(args,['--session','ses_native']);
+test('resumed OpenCode argument preparation never launches an EOF-only native process',{skip:process.platform==='win32'},async()=>{
+ const home=await mkdtemp(join(tmpdir(),'af-opencode-no-headless-startup-'));try{
+ const bin=join(home,'bin'),proof=join(home,'native-launched');await mkdir(bin);
+ await writeFile(join(bin,'opencode'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(proof)},'unexpected');\n`,{mode:0o700});
+ const args=await prepareHostedHarness({command:'opencode',home,context:'startup-context',env:{PATH:bin,HOME:home},listOpenCodeSessions:async()=>JSON.stringify([{id:'ses_native',directory:home,created:1}])});
+ assert.deepEqual(args,['--mini','--session','ses_native','--prompt','startup-context']);
+ assert.equal(existsSync(proof),false,'startup and subsequent turns must stay in the native PTY process');
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
 
-test('hosted OpenCode registration and native startup precede PTY spawn and comment exchange',{skip:process.platform==='win32'},async t=>{
+test('hosted OpenCode registration prepares one native PTY before comment exchange',{skip:process.platform==='win32'},async t=>{
  const home=await mkdtemp(join(tmpdir(),'af-opencode-launch-order-')),priorPath=process.env.PATH;
- const bin=join(home,'bin'),proof=join(home,'startup-proof'),events:string[]=[];
+ const bin=join(home,'bin'),proof=join(home,'pty-proof'),nativeLaunch=join(home,'native-startup-ran'),events:string[]=[];
  const cwd=join(home,'agents','fixture'),stateDirectory=join(cwd,'.artifactbin','hosted-agent');
  let onExit:((event:{exitCode:number})=>void)|undefined;
  const server=createServer(async(req,res)=>{for await(const _ of req){};res.setHeader('Content-Type','application/json');
@@ -110,15 +106,20 @@ test('hosted OpenCode registration and native startup precede PTY spawn and comm
  });
  try{
   await mkdir(bin);await mkdir(stateDirectory,{recursive:true});await writeFile(join(stateDirectory,'opencode-session'),'ses_owned');
-  await writeFile(join(bin,'opencode'),`#!${process.execPath}\nconst fs=require('node:fs');(async()=>{for await(const chunk of process.stdin){};fs.writeFileSync(${JSON.stringify(proof)},JSON.stringify({args:process.argv.slice(2),id:process.env.ARTIFACTBIN__REMOTE_SESSION,proof:process.env.ARTIFACTBIN__REMOTE_PROOF,home:process.env.HOME,state:process.env.ARTIFACTBIN_HOME,db:process.env.OPENCODE_DB,cwd:process.cwd()}));})();\n`,{mode:0o700});process.env.PATH=bin;
+  const nativeDb=new DatabaseSync(join(stateDirectory,'opencode.db'));try{nativeDb.exec('CREATE TABLE session(id TEXT PRIMARY KEY,directory TEXT NOT NULL,project_id TEXT NOT NULL); CREATE TABLE message(id TEXT PRIMARY KEY,session_id TEXT); CREATE TABLE part(id TEXT PRIMARY KEY,message_id TEXT,session_id TEXT); CREATE TABLE project(id TEXT PRIMARY KEY);');nativeDb.prepare('INSERT INTO session VALUES (?,?,?)').run('ses_owned',home,'project');}finally{nativeDb.close();}
+  await writeFile(join(bin,'opencode'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(nativeLaunch)},'unexpected second process');\n`,{mode:0o700});process.env.PATH=bin;
   t.mock.method(process,'kill',()=>true);
-  t.mock.method(pty,'spawn',(_command:string,args:string[],nativeOptions:import('node-pty').IPtyForkOptions)=>{
-   const saved=JSON.parse(readFileSync(proof,'utf8'));assert.equal(saved.id,'mxmx_test_reserved');assert.equal(saved.proof,'mxmx_test_current_proof');assert.deepEqual(saved.args.slice(0,5),['run','--session','ses_owned','--format','json']);
-   assert.deepEqual(args,['--session','ses_owned']);assert.equal(nativeOptions.cwd,cwd);assert.equal(nativeOptions.env?.HOME,home);assert.equal(saved.home,home);assert.equal(saved.cwd,realpathSync(cwd));assert.equal(saved.state,join(cwd,'.artifactbin'));assert.equal(saved.db,join(stateDirectory,'opencode.db'));assert.ok(existsSync(join(stateDirectory,'context.md')));assert.ok(!existsSync(join(home,'.artifactbin','hosted-agent','context.md')));events.push('pty');
+  t.mock.method(pty,'spawn',(command:string,args:string[],nativeOptions:import('node-pty').IPtyForkOptions)=>{
+   assert.equal(command,'opencode');assert.equal(args[0],'--mini');assert.deepEqual(args.slice(0,3),['--mini','--session','ses_owned']);
+   const promptIndex=args.indexOf('--prompt');assert.ok(promptIndex>=0);assert.match(args[promptIndex+1]!,/context\.md/);assert.ok(!args.includes('run'));assert.ok(!args.includes('--format'));
+   assert.equal(existsSync(nativeLaunch),false,'the pinned native binary must not be started headlessly before the PTY');
+   assert.equal(nativeOptions.cwd,cwd);assert.equal(nativeOptions.env?.HOME,home);assert.equal(nativeOptions.env?.PWD,cwd);assert.equal(nativeOptions.env?.ARTIFACTBIN_HOME,join(cwd,'.artifactbin'));assert.equal(nativeOptions.env?.OPENCODE_DB,join(stateDirectory,'opencode.db'));assert.ok(existsSync(join(stateDirectory,'context.md')));assert.ok(!existsSync(join(home,'.artifactbin','hosted-agent','context.md')));
+   writeFileSync(proof,JSON.stringify({args,home:nativeOptions.env?.HOME,pwd:nativeOptions.env?.PWD,state:nativeOptions.env?.ARTIFACTBIN_HOME,db:nativeOptions.env?.OPENCODE_DB,cwd:nativeOptions.cwd}));events.push('pty');
    return {pid:12345,onData:()=>({dispose(){}}),onExit:(listener:(event:{exitCode:number})=>void)=>{onExit=listener;return {dispose(){}};},kill(){},resize(){},write(){}} as unknown as import('node-pty').IPty;
   });
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   assert.equal(await runHostedAgent({id:'mxmx_test_reserved',generation:'mxmx_test_generation',name:'fixture',command:'opencode',home,cwd,stateDirectory,connection:{server:`http://127.0.0.1:${(server.address() as {port:number}).port}`,token:'mxmx_test_token'},executable:process.execPath,signal:AbortSignal.timeout(5000)}),0);
   assert.deepEqual(events.slice(0,3),['register','pty','exchange']);
+  const saved=JSON.parse(readFileSync(proof,'utf8'));assert.deepEqual(saved.args.slice(0,3),['--mini','--session','ses_owned']);assert.equal(saved.home,home);assert.equal(saved.pwd,cwd);assert.equal(saved.cwd,cwd);assert.equal(saved.state,join(cwd,'.artifactbin'));assert.equal(saved.db,join(stateDirectory,'opencode.db'));assert.equal(existsSync(nativeLaunch),false);
  }finally{if(priorPath===undefined)delete process.env.PATH;else process.env.PATH=priorPath;await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(home,{recursive:true,force:true});}
 });
