@@ -284,6 +284,48 @@ describe('Select', () => {
 });
 
 describe('DataTable', () => {
+  it.each([false, true])('bounds complete long text in static/virtual cells (virtual=%s)', async (virtual) => {
+    const evidence = 'Synthetic investigation note ' + 'long-unbroken-token-'.repeat(40);
+    const source = 'https://example.invalid/' + 'synthetic-path-'.repeat(40);
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return virtual ? 300 : 0; } });
+    const ctx = fakeIsland();
+    ctx.table = ctx.tableSnapshot = () => ({
+      rows: [{ id: 1, evidence, date: '2026-10-10', source }],
+      columns: [{ name: 'id', type: 'number' }, { name: 'evidence', type: 'string' }, { name: 'date', type: 'date' }, { name: 'source', type: 'string' }],
+    });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$synthetic" rowKey="id" templates={[
+      { col: 'evidence', props: { col: 'evidence', width: 280 }, nodes: [], path: '0' },
+      { col: 'date', props: { col: 'date', width: 120 }, nodes: [], path: '1' },
+      { col: 'source', props: { col: 'source' }, nodes: [{ type: 'text', value: 'source' }], path: '2' },
+    ]} renderCell={(_template, row) => <a href={String(row.source)}>{String(row.source)}</a>} />);
+    try {
+      if (virtual) await vi.waitFor(() => expect(host.querySelector('table')?.style.display).toBe('block'));
+      const cells = [...host.querySelectorAll<HTMLTableCellElement>('tbody td')];
+      expect(cells.map(cell => cell.style.width)).toEqual(['280px', '120px', '']);
+      for (const cell of cells) {
+        expect(cell.classList.contains('min-w-0')).toBe(true);
+        expect(cell.classList.contains('overflow-hidden')).toBe(true);
+        const content = cell.lastElementChild!;
+        expect(content.classList.contains('block')).toBe(true);
+        expect(content.classList.contains('truncate')).toBe(true);
+      }
+      expect(cells[0]!.textContent).toBe(evidence);
+      expect(cells[1]!.textContent).toContain('2026');
+      expect(cells[2]!.textContent).toBe(source);
+      const link = cells[2]!.querySelector('a')!;
+      expect(link.getAttribute('href')).toBe(source);
+      link.focus();
+      expect(document.activeElement).toBe(link);
+      for (const head of host.querySelectorAll('th')) expect(head.classList.contains('overflow-hidden')).toBe(true);
+      if (virtual) expect(host.querySelector('thead tr')?.getAttribute('style')).toContain('280px 120px minmax(0, 1fr)');
+    } finally {
+      dispose();
+      if (height) Object.defineProperty(HTMLElement.prototype, 'clientHeight', height);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+
   it('repaints a server query result through the store bridge', async () => {
     const columns: TableResult['columns'] = [{ name: 'id', type: 'number' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }];
     const west = { rows: [{ id: 1, region: 'west', amount: 120 }, { id: 3, region: 'west', amount: 30 }], columns };

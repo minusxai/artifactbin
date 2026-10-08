@@ -32,8 +32,15 @@ export function applyCurrentLayoutContracts(html: string): string {
     const updated = `${style[1]}${style[1]!.endsWith(';') ? '' : ';'}min-width:0`;
     return opening.replace(style[0], `style="${updated}"`);
   });
-  if (!withDataTableWidth.includes('data-mx-slide')) return withDataTableWidth;
-  const root = new JSDOM(`<div id="__slide-layout-reference">${withDataTableWidth}</div>`).window.document.getElementById('__slide-layout-reference')!;
+  // Fixed virtual grid tracks now clip at the cell boundary; preserve complete captured text.
+  // Adapt only the shared DataGrid, leaving authored HTML tables and frozen records untouched.
+  const withDataTableCells = withDataTableWidth.replace(/<table\b[^>]*\bdata-mx-kit-table[^>]*>[\s\S]*?<\/table>/g, table => table
+    .replace(/class="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-bold"/g, 'class="min-w-0 cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap px-3 py-2 font-bold"')
+    .replace(/<td\b[^>]*class="relative whitespace-nowrap[^>]*>[\s\S]*?<\/td>/g, cell => cell
+      .replace('class="relative whitespace-nowrap', 'class="relative min-w-0 overflow-hidden whitespace-nowrap')
+      .replace('<span class="relative">', '<span class="relative block min-w-0 max-w-full truncate">')));
+  if (!withDataTableCells.includes('data-mx-slide')) return withDataTableCells;
+  const root = new JSDOM(`<div id="__slide-layout-reference">${withDataTableCells}</div>`).window.document.getElementById('__slide-layout-reference')!;
   for (const slide of root.querySelectorAll<HTMLElement>('[data-mx-slide]')) {
     const classes = slide.getAttribute('class') ?? '';
     if (/(?:^|\s)w-full(?:\s|$)/.test(classes) && /(?:^|\s)min-w-0(?:\s|$)/.test(classes)) continue;

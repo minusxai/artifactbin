@@ -193,7 +193,11 @@ describe('editable cells on the compiled page', () => {
       for (const [column, legacy] of Object.entries(columns)) {
         const td = cellOf(host, table, column);
         expect(td, `${table}.${column}`).toBeTruthy();
-        expect(shapesOf(td!.innerHTML), `${table}.${column}`).toEqual(shapesOf(legacy));
+        // The shared DataGrid now bounds its content wrapper; all refused controls, reasons,
+        // IDs and descendant attributes remain compared exactly with the frozen capture.
+        expect(legacy).toMatch(/^<span class="relative">/);
+        const current = legacy.replace(/^<span class="relative">/, '<span class="relative block min-w-0 max-w-full truncate">');
+        expect(shapesOf(td!.innerHTML), `${table}.${column}`).toEqual(shapesOf(current));
       }
     }
   });
