@@ -81,7 +81,7 @@ In Helmet script text, split `</script` as `'</scr' + 'ipt'`.
 
 | Specifier | Gives |
 | --- | --- |
-| `page` | `signal`, `query`, `mutation` (below); [dataset screenshots](dataset-images.md); [`reviewState`](review-state.md); `proxy` (Other hosts) |
+| `page` | `signal`, `query`, `mutation` (below); [dataset attachments](markup-upload.md); [`reviewState`](review-state.md); `proxy` (Other hosts) |
 | `solid-js` | `createSignal`, `createEffect`, `createMemo`, `createRoot`, `batch`, `untrack`, `on`, `onMount`, `onCleanup`, `For`, `Show`, `Switch`, `Match`, `mergeProps`, `splitProps` |
 | `solid-js/web` | `render`, and what JSX compiles to |
 | `solid-js/store` | `createStore`, `reconcile` |
