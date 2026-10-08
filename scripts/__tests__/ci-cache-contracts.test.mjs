@@ -1,12 +1,14 @@
-import {it,expect} from 'vitest';
+import {it,expect,vi} from 'vitest';
 import {readFileSync,mkdtempSync,writeFileSync,rmSync,mkdirSync,existsSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {execFile,execFileSync,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 import {gzipSync} from 'node:zlib';
+import {createServer} from 'node:http';
+import {promisify} from 'node:util';
 import yaml from 'yaml';
 import * as seeds from '../lib/npm-dependency-cache.mjs';
 import {installNpmConsumer} from '../lib/npm-consumer-install.mjs';
@@ -197,35 +199,56 @@ it('does not retry generic, corrupt, auth, lifecycle, or repeated candidate inst
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
-it('keeps candidate EOF retries inside the original install deadline and never retries a timeout',async()=>{
- const directory=mkdtempSync(join(tmpdir(),'afbin-install-eof-deadline-'));
- const script=join(directory,'npm.cjs'),tarball=join(directory,'candidate.tgz'),countFile=join(directory,'attempts'),marker=join(directory,'late-marker');
+it('keeps candidate EOF retries inside the original deadline and never retries a timeout',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-install-eof-deadline-')),tarball=join(directory,'candidate.tgz');
+ vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
  try{
   writeFileSync(tarball,gzipSync('valid candidate gzip'));
-  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)},marker=${JSON.stringify(marker)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));if(process.env.FAILURE_MODE==='initial-timeout'||attempt>1){setTimeout(()=>fs.writeFileSync(marker,'late'),220);setInterval(()=>{},1000)}else setTimeout(()=>{process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251},35);`);
-  const started=performance.now();
-  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env},seeded:true,onOutput:()=>{},timeoutMs:140})).rejects.toThrow(/exceeded 0\.1s|exceeded 0\.14s|retry.*exceeded/i);
-  expect(readFileSync(countFile,'utf8')).toBe('2');
-  expect(performance.now()-started).toBeLessThan(500);
-  await new Promise(resolve=>setTimeout(resolve,250));
+  let clock=0;const budgets=[];
+  const options={npm:'unused',tarball,cwd:directory,env:{},seeded:true,onOutput:()=>{},timeoutMs:140,now:()=>clock};
+  await expect(installNpmConsumer({...options,attemptRunner:async({attempt,timeoutMs})=>{
+   budgets.push(timeoutMs);
+   if(attempt===1){clock=100;return {code:251,output:'candidate.tgz npm error code Z_BUF_ERROR',timedOut:false,seconds:0.1};}
+   clock+=timeoutMs;return {code:null,output:'',timedOut:true,seconds:timeoutMs/1000};
+  }})).rejects.toThrow(/exceeded/);
+  expect(budgets).toEqual([140,40]);expect(clock).toBe(140);
+  clock=0;const attempts=[];
+  await expect(installNpmConsumer({...options,attemptRunner:async({attempt})=>{
+   attempts.push(attempt);clock=140;return {code:null,output:'',timedOut:true,seconds:0.14};
+  }})).rejects.toThrow(/exceeded/);
+  expect(attempts).toEqual([1]);
+ }finally{vi.useRealTimers();rmSync(directory,{recursive:true,force:true});}
+});
+
+it('kills the real npm child after readiness without allowing its late side effect',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-install-ready-timeout-')),script=join(directory,'npm.cjs'),marker=join(directory,'late-marker');
+ vi.useFakeTimers({toFake:['setTimeout','clearTimeout','setInterval','clearInterval']});
+ try{
+  writeFileSync(script,`process.stdout.write('READY');setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(marker)},'late'),220);setInterval(()=>{},1000);`);
+  let ready;const readiness=new Promise(resolve=>{ready=resolve;});
+  const install=installNpmConsumer({npm:script,tarball:'unused',cwd:directory,env:{...process.env},timeoutMs:100,onOutput:chunk=>{if(chunk.includes('READY'))ready();}});
+  const rejected=expect(install).rejects.toThrow(/exceeded/);
+  await readiness;
+  vi.advanceTimersByTime(100);await rejected;
+  vi.useRealTimers();await new Promise(resolve=>setTimeout(resolve,250));
   expect(existsSync(marker)).toBe(false);
-  rmSync(countFile,{force:true});
-  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,FAILURE_MODE:'initial-timeout'},seeded:true,onOutput:()=>{},timeoutMs:100})).rejects.toThrow(/exceeded/);
-  expect(readFileSync(countFile,'utf8')).toBe('1');
- }finally{rmSync(directory,{recursive:true,force:true});}
+ }finally{vi.useRealTimers();rmSync(directory,{recursive:true,force:true});}
 });
 
 it('kills lifecycle descendants that inherit npm output pipes when the install deadline expires',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-install-tree-'));
  const script=join(directory,'npm.cjs'),marker=join(directory,'orphan');
+ vi.useFakeTimers({toFake:['setTimeout','clearTimeout','setInterval','clearInterval']});
  try{
-  writeFileSync(script,`require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify("setTimeout(()=>{require('fs').writeFileSync("+JSON.stringify(marker)+",'orphan');},700)")}],{stdio:'inherit'});setInterval(()=>{},1000);`);
-  const started=performance.now();
-  await expect(installNpmConsumer({npm:script,tarball:'candidate.tgz',cwd:directory,env:{...process.env},timeoutMs:150,onOutput:()=>{}})).rejects.toThrow(/exceeded/);
-  expect(performance.now()-started).toBeLessThan(600);
-  await new Promise(resolve=>setTimeout(resolve,750));
+  const descendant=`setTimeout(()=>{require('fs').writeFileSync(${JSON.stringify(marker)},'orphan');},700);process.stdout.write('DESCENDANT_READY');`;
+  writeFileSync(script,`require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{stdio:'inherit'});setInterval(()=>{},1000);`);
+  let ready;const readiness=new Promise(resolve=>{ready=resolve;});
+  const install=installNpmConsumer({npm:script,tarball:'candidate.tgz',cwd:directory,env:{...process.env},timeoutMs:150,onOutput:chunk=>{if(chunk.includes('DESCENDANT_READY'))ready();}});
+  const rejected=expect(install).rejects.toThrow(/exceeded/);
+  await readiness;vi.advanceTimersByTime(150);await rejected;
+  vi.useRealTimers();await new Promise(resolve=>setTimeout(resolve,750));
   expect(existsSync(marker)).toBe(false);
- }finally{rmSync(directory,{recursive:true,force:true});}
+ }finally{vi.useRealTimers();rmSync(directory,{recursive:true,force:true});}
 });
 
 it('does not restore and save a duplicate npm download cache when every consumer receives a complete seed',()=>{
@@ -403,4 +426,69 @@ it('caches only Linux browser deb archives and still provisions the full browser
  expect(install.run).toContain('linux-acceptance-deps.mjs');expect(install.run).toContain('playwright/cli.js');expect(install.if).not.toContain('cache-hit');
  expect(install.if).toContain("matrix.phase == 'preview'");expect(install.if).toContain("matrix.phase == 'local'");
  expect(cli.strategy.matrix.os).toEqual(['ubuntu-24.04','ubuntu-24.04-arm','macos-14','macos-15-intel','windows-2022']);
+});
+
+
+it('reuses the verified first-npx entry for real candidate setup while published setup stays npx',()=>{
+ const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ expect(source).toContain("Copy-Item services/cli/scripts/windows-bootstrap-candidate.mjs (Join-Path $root 'windows-bootstrap-candidate.mjs')");
+ expect(source).toContain("$result=Invoke-Candidate 'npx.cmd' @('--yes','--package',('@afbin/cli@'+$ready.version),'afbin','query',$rows,'--json')");
+ expect(source.indexOf("$phase='candidate registry startup'")).toBeLessThan(source.indexOf("$phase='standard-user online npx query'"));
+ const setup=source.slice(source.indexOf("$phase='candidate registry startup'"),source.indexOf("$phase='repeat setup retains skills'"));
+ expect(setup).toContain("$phase='verify npm-owned candidate entry'");expect(setup).toContain("$env:npm_config_cache,'__ROOT__\\candidate.tgz',$ready.version");
+ expect(setup).toContain("$setupCommand=Join-Path $private 'node.exe'");expect(setup).toContain("$setupArgs=@($entry,'setup')");
+ expect(setup).toContain("$setupCommand='npx.cmd'");expect(setup).toContain("$setupArgs=@('--yes','@afbin/cli@latest','setup')");
+ expect(setup).toContain('Invoke-Candidate $setupCommand $setupArgs');expect(setup).toContain("$setup.global.status -ne 'installed'");
+ expect(setup).not.toContain("$setupArgs=@('--yes','--package'");
+});
+
+it('prefers verified full-metadata seeds online only on the unpublished seeded path',()=>{
+ const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ const seed=source.slice(source.indexOf('if($seededCache){'),source.indexOf("$phase='standard-user online npx query'"));
+ expect(seed).toContain("$env:npm_config_prefer_offline='true'");
+ expect(seed).toContain("$env:npm_config_full_metadata='true'");
+ expect(source.match(/npm_config_prefer_offline=/g)).toHaveLength(1);
+ expect(source).not.toContain("npm_config_offline='true'");
+});
+
+
+it('uses full cached npm metadata without fetching it and fetches missing dependencies online in a fresh install',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-real-prefer-offline-')),npm=npmCli(),cache=join(directory,'cache'),consumer=join(directory,'consumer');
+ const cacache=createRequire(npm)('cacache'),requests=[],routes=new Map();
+ const server=createServer((req,res)=>{requests.push(req.url);const route=routes.get(req.url);if(!route){res.writeHead(404);res.end();return;}res.setHeader('content-type',route.type);res.end(route.bytes);});
+ try{
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const registry=`http://127.0.0.1:${server.address().port}`;
+  for(const name of ['cached-fixture','missing-fixture']){
+   const root=join(directory,name),pkg=join(root,'package');mkdirSync(pkg,{recursive:true});
+   writeFileSync(join(pkg,'package.json'),JSON.stringify({name,version:'1.0.0',main:'index.cjs'}));writeFileSync(join(pkg,'index.cjs'),'module.exports=42;');
+   const archive=join(root,'fixture.tgz');execFileSync('tar',['-czf',archive,'-C',root,'package']);
+   const bytes=readFileSync(archive),path=`/${name}/-/fixture.tgz`,url=registry+path;
+   const manifest=JSON.stringify({name,'dist-tags':{latest:'1.0.0'},versions:{'1.0.0':{name,version:'1.0.0',dist:{tarball:url,integrity:'sha512-'+createHash('sha512').update(bytes).digest('base64')}}}});
+   routes.set(path,{type:'application/octet-stream',bytes});routes.set('/'+name,{type:'application/json',bytes:manifest});
+   if(name==='cached-fixture'){
+    // Exactly the full-manifest representation written by npm view seed production.
+    for(const [cacheUrl,body,accept,type] of [[registry+'/'+name,manifest,'application/json','application/json'],[url,bytes,undefined,'application/octet-stream']]){
+     await cacache.put(join(cache,'_cacache'),'make-fetch-happen:request-cache:'+cacheUrl,body,{metadata:{time:Date.now()-86400000,url:cacheUrl,reqHeaders:accept?{accept}:{},resHeaders:{'content-type':type,'cache-control':'max-age=0'}}});
+    }
+   }
+  }
+  mkdirSync(consumer);writeFileSync(join(consumer,'package.json'),JSON.stringify({name:'consumer',version:'1.0.0',dependencies:{'cached-fixture':'1.0.0','missing-fixture':'1.0.0'},scripts:{postinstall:`node -e "require('fs').writeFileSync('lifecycle-ran','yes')"`}}));
+  expect(existsSync(join(consumer,'node_modules'))).toBe(false);
+  await promisify(execFile)(process.execPath,[npm,'install','--no-audit','--no-fund'],{cwd:consumer,env:{...process.env,npm_config_cache:cache,npm_config_registry:registry,npm_config_prefer_offline:'true',npm_config_full_metadata:'true',npm_config_fetch_retries:'0'},timeout:15000});
+  expect(requests.filter(path=>path.includes('cached-fixture'))).toEqual([]);
+  expect(requests).toContain('/missing-fixture');expect(requests).toContain('/missing-fixture/-/fixture.tgz');
+  expect(readFileSync(join(consumer,'lifecycle-ran'),'utf8')).toBe('yes');
+  for(const name of ['cached-fixture','missing-fixture'])expect(createRequire(join(consumer,'package.json'))(name)).toBe(42);
+ }finally{await new Promise(resolve=>server.close(resolve));rmSync(directory,{recursive:true,force:true});}
+});
+
+
+it('retains full native stderr but batches its replay without changing phase summaries',()=>{
+ const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ expect(source).toContain("'native-stderr.log'");
+ expect(source).toContain('[IO.File]::AppendAllText');
+ expect(source).not.toContain("foreach($record in $output){if($record -is [Management.Automation.ErrorRecord]){Write-Host");
+ const writer=source.slice(source.indexOf('function Write-StandardOutput'),source.indexOf('function Write-StandardFailure'));
+ expect(writer).toContain('-join');expect(writer).not.toContain('Write-Host $lines[$Printed.Value]');
+ expect(source).toContain("Write-Host ('Native phase: '+$phase)");expect(source).toContain("Write-Host ('Native timing: '+$phase");
 });

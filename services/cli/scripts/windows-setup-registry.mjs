@@ -25,16 +25,18 @@ export function candidateManifest(bytes){
  }
  throw Error('Candidate package manifest missing');
 }
-export async function startCandidateRegistry(bytes){
+export async function startCandidateRegistry(bytes,{onRequest=()=>{}}={}){
  const manifest=candidateManifest(bytes);
  const server=createServer((request,response)=>{
   const path=decodeURIComponent(new URL(request.url,'http://localhost').pathname);
+  // CI probes observe only known route identities, never arbitrary request contents.
+  onRequest(path==='/@afbin/cli'||path==='/candidate.tgz'?path:'other');
   if(path==='/@afbin/cli'){
    const dist={tarball:`http://127.0.0.1:${server.address().port}/candidate.tgz`,integrity:'sha512-'+createHash('sha512').update(bytes).digest('base64'),shasum:createHash('sha1').update(bytes).digest('hex')};
-   response.writeHead(200,{'Content-Type':'application/json'});
+   response.writeHead(200,{'Content-Type':'application/json','Cache-Control':'public, max-age=86400, immutable'});
    response.end(JSON.stringify({name:manifest.name,'dist-tags':{latest:manifest.version},versions:{[manifest.version]:{...manifest,dist}}}));
   }else if(path==='/candidate.tgz'){
-   response.writeHead(200,{'Content-Type':'application/octet-stream'});response.end(bytes);
+   response.writeHead(200,{'Content-Type':'application/octet-stream','Cache-Control':'public, max-age=86400, immutable'});response.end(bytes);
   }else{response.writeHead(404);response.end();}
  });
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});

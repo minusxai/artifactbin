@@ -54,6 +54,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
   let current: RemoteSessionInfo | null = null;
   let latest: RemoteSessionInfo | null = null;
   let stopRequested = false;
+  let stopAcknowledged = false;
   let queue = Promise.resolve();
   const [info, setInfo] = createSignal<RemoteSessionInfo | null>(null);
   const [error, setError] = createSignal('');
@@ -66,7 +67,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
   // A pending Stop is one effective session state, including while older polls arrive.
   const publishSession = (session: RemoteSessionInfo) => {
     latest = session;
-    if (session.exitCode != null || session.activity === 'stopped') stopRequested = false;
+    if (session.exitCode != null || session.activity === 'stopped') { stopRequested = false; stopAcknowledged = false; }
     current = stopRequested ? { ...session, activity: 'stopping' } : session;
     setInfo(current); props.onSession(current);
   };
@@ -84,6 +85,9 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
     const abort = new AbortController();
     let failures = 0, generation: string | undefined, stopped = false, timer: ReturnType<typeof setTimeout>, cursor = -1;
     const poll = async () => {
+      // Included agents stop work without exiting. Only a poll begun after the receipt
+      // may replace Stopping; an older response can still describe canceled work.
+      const acknowledgedAtStart = stopAcknowledged;
       try {
         let view = await request<RemoteView>(`/${props.id}?since=${cursor}`, undefined, 'GET', abort.signal);
         if (stopped) return;
@@ -92,6 +96,9 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
           if (stopped) return;
         }
         generation = view.generation;
+        if (acknowledgedAtStart && stopAcknowledged && view.session.included && !view.session.runId) {
+          stopRequested = false; stopAcknowledged = false;
+        }
         publishSession(view.session);
         if (view.snapshot !== undefined) {
           t.resize(view.session.cols, view.session.rows); t.reset();
@@ -138,7 +145,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
     onCleanup(() => {
       stopped = true; abort.abort(); clearTimeout(timer); observer.disconnect(); data.dispose();
       container.removeEventListener('touchstart', touchStart); container.removeEventListener('touchmove', touchMove, true);
-      t.dispose(); terminal = null; fit = null; current = null;
+      t.dispose(); terminal = null; fit = null; current = null; stopRequested = false; stopAcknowledged = false;
     });
   });
 
@@ -170,15 +177,16 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
   // Hosted lifetime is independent of terminal connectivity: missing history must still let
   // the owner cancel the live run. Local managed agents keep their online-only stop contract.
   const canStop = () => !!info()?.managed && !ended() && (info()?.runId ? info()?.activity !== 'stopped' : online());
-  const actionLabel = () => ended() ? 'Remove session' : info()?.managed ? (canStop() ? 'Stop agent' : 'Remove agent') : 'Disconnect remote session';
+  const actionLabel = () => ended() ? 'Remove session' : info()?.managed ? (canStop() ? (info()?.included && !info()?.runId ? 'Stop current work' : 'Stop agent') : 'Remove agent') : 'Disconnect remote session';
   const removeOrStop = () => {
     if (acting()) return;
     const stopping = canStop();
-    setActing(true);
+    setActing(true); stopAcknowledged = false;
     if (stopping && latest) { stopRequested = true; publishSession(latest); }
     void request(`/${props.id}`, stopping ? { type: 'stop' } : undefined, stopping ? 'POST' : 'DELETE')
-      .then(() => { if (!stopping) props.onClose(); })
+      .then(() => { if (stopping) stopAcknowledged = true; else props.onClose(); })
       .catch((reason) => {
+        stopAcknowledged = false;
         if (stopping && latest) { stopRequested = false; publishSession(latest); }
         setError(reason.message);
       }).finally(() => setActing(false));
@@ -226,11 +234,11 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
         <button class="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal?.scrollToBottom()}>Latest output</button>
       </div>
       <Show when={!ended()}><form class="agent-composer" onSubmit={submit}>
-        <input aria-label="Message to agent" disabled={!canType() || sending()} value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} class="min-w-0 flex-1 rounded border border-edge bg-surface p-3" placeholder={canType() ? 'Message your agent…' : info()?.activity === 'queued' ? 'Waiting for capacity…' : 'Session offline'} maxLength={16000} />
+        <input aria-label="Message to agent" disabled={!canType() || sending()} value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} class="min-w-0 flex-1 rounded border border-edge bg-surface p-3" placeholder={canType() ? 'Message your agent…' : info()?.activity === 'queued' ? 'Waiting for capacity…' : info()?.activity === 'stopping' ? 'Stopping…' : info()?.activity === 'starting' ? 'Starting…' : connection() || 'Session offline'} maxLength={16000} />
         <button aria-label="Send message" disabled={!canType() || sending() || !draft().trim()} class="rounded bg-accent px-4 text-bg disabled:opacity-40">Send</button>
       </form></Show>
       <Show when={!ended()}><div class="agent-key-controls"><span class="agent-key-label">Send key</span><For each={([['Enter', '\r'], ['Escape', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['Ctrl+C', '\x03']] as const)}>{([name, data]) => <button aria-label={`Send ${name}`} disabled={!canType()} class="rounded border border-edge px-3 py-2 text-xs disabled:opacity-40" onClick={() => void send({ type: 'input', data }).catch(() => {})}>{name}</button>}</For></div></Show>
-      <details class="agent-help" hidden={ended()}><summary>Terminal controls & session details</summary><p class="mt-3 text-xs text-muted">Swipe up or down in the terminal to scroll its history, or use the scroll buttons. Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect until you switch views. {info()?.runId ? (canStop() ? 'Stop agent ends this run. The same agent keeps its login, files and conversation across artifacts and restarts.' : 'This terminal belongs to a hosted run. Home files are retained when the run ends; removing the entry does not erase them.') : info()?.managed ? (canStop() ? 'Stop agent ends this background process.' : 'Remove agent removes remote access and prevents this session from reconnecting. The local process may still be running.') : 'Disconnect removes remote access; your local process keeps running.'}</p></details>
+      <details class="agent-help" hidden={ended()}><summary>Terminal controls & session details</summary><p class="mt-3 text-xs text-muted">Swipe up or down in the terminal to scroll its history, or use the scroll buttons. Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect until you switch views. {info()?.included && !info()?.runId ? 'Stop current work cancels current and queued requests and keeps your agent available.' : info()?.runId ? (canStop() ? 'Stop agent ends this run. The same agent keeps its login, files and conversation across artifacts and restarts.' : 'This terminal belongs to a hosted run. Home files are retained when the run ends; removing the entry does not erase them.') : info()?.managed ? (canStop() ? 'Stop agent ends this background process.' : 'Remove agent removes remote access and prevents this session from reconnecting. The local process may still be running.') : 'Disconnect removes remote access; your local process keeps running.'}</p></details>
     </div>
   </section>;
 }
@@ -338,7 +346,7 @@ export function ChatPage(): JSX.Element {
     </section></div></DialogShell></Portal></Show>
     <Show when={error()}><p role="alert" class="mb-4 text-sm">{error()} <Show when={error().startsWith('Sign in')}><a href={`/login?callbackUrl=${encodeURIComponent(`/chat${id() ? `?session=${id()}` : ''}`)}`} class="underline">Sign in</a></Show></p></Show>
     <div class="agents-layout"><aside class="agent-sidebar" aria-label="Agents">
-      <div class="agent-list-heading"><h2>Agents</h2><span>{sessions().filter(isConnectedAgent).length} connected</span></div>
+      <div class="agent-list-heading"><h2>Agents</h2><span>{sessions().filter(isConnectedAgent).length} active</span></div>
       <For each={groups}>{group => <section class="agent-session-group" data-agent-location={group.kind} aria-label={group.label}><h3>{group.kind === 'local' ? <Monitor size={12} aria-hidden="true" /> : <Cloud size={12} aria-hidden="true" />}{group.label}</h3><div class="agent-group-action">{setupButton(group.kind)}</div><Show when={!group.sessions.length}><p class="agent-group-empty">{group.empty}</p></Show>
       <For each={group.sessions}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`agent-session ${session.id === id() ? 'is-selected' : ''}`} onClick={() => setParams({ session: session.id })}><span class="agent-session-name"><Show when={agentNameColor(session.name)}>{color => <span class="agent-color-swatch" aria-hidden="true" style={{'background-color':color()}} />}</Show><span class="truncate">{session.name}</span><Show when={session.included}><span class="agent-included-tag">Included for free</span></Show><span class={`agent-dot ${isConnectedAgent(session) ? 'is-online' : ''}`} aria-hidden="true" /></span><span class="text-xs text-muted">{session.harness} · {connectedAgentStatus(session)}</span></button>}</For>
       </section>}</For>

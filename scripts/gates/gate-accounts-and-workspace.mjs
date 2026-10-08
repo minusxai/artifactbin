@@ -573,7 +573,8 @@ async function forkLeg(owner) {
     // ── 6. the copy is theirs, and says where it came from ──
     // The new reader can still be navigating (or handing a new account to Welcome).
     // Use the browser context's authenticated request instead of its unloading page.
-    const copyResponse = await forker.request.get(`${BASE}/api/my/artifacts/${copyId}`);
+    // Retry connection resets only for this idempotent read; never replay the fork POST.
+    const copyResponse = await forker.request.get(`${BASE}/api/my/artifacts/${copyId}`, { maxRetries: 2 });
     check(copyResponse.ok(), `the fork owner can read the new copy (${copyResponse.status()})`);
     const copyRow = await copyResponse.json();
     check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);

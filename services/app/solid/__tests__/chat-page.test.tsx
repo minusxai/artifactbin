@@ -131,6 +131,9 @@ it('lets the user stop waiting and start again with a fresh client wait', async 
   fireEvent.click(await screen.findByRole('button',{name:'Start hosted box'}));
   fireEvent.click(await screen.findByRole('button',{name:'Stop waiting'}));
   expect(await screen.findByText(/Check your sessions before starting again/)).toBeInTheDocument();
+  // Cross the server's retry delay: a canceled wait must never send admission again.
+  await new Promise(resolve=>setTimeout(resolve,1100));
+  expect(starts).toBe(1);
   fireEvent.click(await screen.findByRole('button',{name:'Start hosted box'}));
   await waitFor(()=>expect(starts).toBe(2));
 });
@@ -443,6 +446,8 @@ it('shows capacity waiting consistently, disables input, and transitions through
  open(session.id);
  expect(await screen.findByText(metadataMatch('Waiting for capacity · claude · Cloud box'))).toBeInTheDocument();
  expect(screen.getByText('claude · Waiting for capacity')).toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:'Agents'}).parentElement).toHaveTextContent('1 active');
+ expect(screen.getByRole('heading',{name:'Agents'}).parentElement).not.toHaveTextContent('connected');
  expect(screen.getByText('Waiting for compute capacity. Your agent will start automatically when a slot is available.')).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:/Show previous sessions/})).toBeNull();
  expect(screen.getByRole('textbox',{name:'Message to agent'})).toHaveAttribute('placeholder','Waiting for capacity…');
@@ -490,4 +495,42 @@ it('keeps the included agent visible offline and identifies it without treating 
  expect(screen.getByRole('button',{name:'Open My Pi'})).not.toHaveTextContent('Included');
  expect(screen.getByText(/Your included Pi agent/)).toBeInTheDocument();
  expect(sidebar().getByRole('button', {name:'Provision cloud agent'})).toBeDisabled();
+});
+
+
+it('releases included agent Stop only after a fresh post-acknowledgement poll and accepts new work', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = {id:'included-stop',name:'afbin',harness:'pi',machine:'Hosted',included:true,managed:true,online:true,controller:'web',cols:100,rows:30,exitCode:null,activity:'working'};
+  let polls=0, acknowledge!:()=>void, stale!:()=>void, stopPosted=false, inputCount=0;
+  const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+    if(url==='/api/run-capabilities')return {ok:true,json:async()=>({managedProcesses:true})};
+    if(url==='/api/remote/sessions')return {ok:true,json:async()=>({sessions:[session]})};
+    if(init?.method==='POST'){
+      const body=JSON.parse(String(init.body));
+      if(body.type==='stop'){stopPosted=true;await new Promise<void>(resolve=>{acknowledge=resolve;});}
+      if(body.type==='input')inputCount++;
+      return {ok:true,json:async()=>({})};
+    }
+    const n=++polls;
+    if(n===2)await new Promise<void>(resolve=>{stale=resolve;});
+    return {ok:true,json:async()=>({session:{...session,activity:n>=3?'listening':'working'},seq:n,frames:n===2?[{seq:n,cols:100,rows:30,data:'stale pre-stop response'}]:[],...(n===1?{snapshot:''}:{})})};
+  });
+  vi.stubGlobal('fetch',fetch);open(session.id);
+  await waitFor(()=>expect(polls).toBe(2));
+  expect(screen.getByText(/Stop current work cancels current and queued requests and keeps your agent available/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Stop current work'}));
+  await waitFor(()=>expect(stopPosted).toBe(true));
+  acknowledge();
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Stop current work'})).toHaveTextContent('Stopping…'));
+  stale();
+  await waitFor(()=>expect(write).toHaveBeenCalledWith('stale pre-stop response',expect.any(Function)));
+  expect(polls).toBe(2);
+  expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Open afbin'})).toHaveTextContent('Stopping');
+  expect(screen.getByRole('textbox',{name:'Message to agent'})).toHaveAttribute('placeholder','Stopping…');
+  await waitFor(()=>expect(screen.getByRole('textbox',{name:'Message to agent'})).toBeEnabled(),{timeout:2000});
+  expect(screen.getByRole('button',{name:'Open afbin'})).toHaveTextContent('Ready');
+  fireEvent.input(screen.getByRole('textbox',{name:'Message to agent'}),{target:{value:'next request'}});
+  fireEvent.submit(screen.getByRole('textbox',{name:'Message to agent'}).closest('form')!);
+  await waitFor(()=>expect(inputCount).toBe(1));
 });

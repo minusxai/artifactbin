@@ -85,7 +85,34 @@ export async function runHostedAgent(options:{id:string;generation:string;name:s
    bridge=await createRemoteContextBridge({id:session.id,proof:session.runnerKey,home:join(home,'.artifactbin'),server:connection.server,connection});
    await writeFile(executable,`#!/bin/sh\nexec ${[options.executable,REMOTE_CONTEXT_ARG,bridge.path,session.id].map(quote).join(' ')} "$@"\n`,{mode:0o700});
    await writeFile(context,`${REMOTE_REVIEW_POLICY}\n\nYou are ${options.name}, a hosted ${command} agent. Your working directory is ${home}. This one session serves all artifacts for your owner. Retain login and workspace files here. Each tagged request supplies its own artifact_id, annotation_id and request_id; previous conversation targets never override them. Process one request at a time. After recovery, do not repeat interrupted work from history: its delivery is marked interrupted. Wait for a new tagged request; the user can ask again after checking prior effects.\nUse the absolute CLI ${JSON.stringify(executable)} for every afbin command. After startup or recovery, run ${quote(executable)} remote --ready ${session.id}. After any manual terminal task or login, run it again when ready. Never report readiness while a login or approval is pending.\n`,{mode:0o600});
-   return {args:await hostedHarnessArguments(command,home,`Read ${JSON.stringify(context)} and follow its startup and review workflow. Wait for tagged requests.`),env:remoteChildEnv(session.id,session.runnerKey,remoteWorkerEnv(directory,delimiter,connection))};
+   const env=remoteChildEnv(session.id,session.runnerKey,remoteWorkerEnv(directory,delimiter,connection));
+   const args=await prepareHostedHarness({command,home,context:`Read ${JSON.stringify(context)} and follow its startup and review workflow. Wait for tagged requests.`,env,signal:options.signal,
+    onStartupUnavailable:()=>process.stdout.write('OpenCode startup could not complete. Finish login or approval in the terminal, then ask the agent to signal readiness.\n')});
+   return {args,env};
   }
  });}finally{await bridge?.close();}
+}
+
+
+/** Restore startup workflow before opening a resumed native TUI. */
+export async function prepareHostedHarness(options:{command:string;home:string;context:string;env:NodeJS.ProcessEnv;signal?:AbortSignal;listOpenCodeSessions?:()=>Promise<string>;runStartup?:(args:string[],options:{cwd:string;env:NodeJS.ProcessEnv;signal?:AbortSignal})=>Promise<void>;onStartupUnavailable?:()=>void}):Promise<string[]>{
+ options.signal?.throwIfAborted();
+ const args=await hostedHarnessArguments(options.command,options.home,options.context,options.listOpenCodeSessions);
+ options.signal?.throwIfAborted();
+ if(options.command!=='opencode'||args[0]!=='--session')return args;
+ const runStartup=options.runStartup??(async(startupArgs,nativeOptions)=>{
+  const pending=execute('opencode',startupArgs,{...nativeOptions,timeout:60000,maxBuffer:1024*1024,killSignal:'SIGKILL'});
+  // Native `run` waits for non-TTY stdin EOF before executing even an argv prompt.
+  pending.child.stdin?.end();await pending;
+ });
+ try{
+  await runStartup(['run','--session',args[1]!,'--format','json',options.context],{cwd:options.home,env:options.env,...(options.signal?{signal:options.signal}:{})});
+  options.signal?.throwIfAborted();
+ }catch(error){
+  options.signal?.throwIfAborted();
+  // Retain the login-capable TUI; only the actual generation-bound ready command
+  // can release queued work. A successful native exit alone never implies ready.
+  options.onStartupUnavailable?.();
+ }
+ return ['--session',args[1]!];
 }
