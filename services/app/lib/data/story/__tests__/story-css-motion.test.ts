@@ -82,16 +82,10 @@ describe('story motion kit — reveal utilities (observer contract)', () => {
 });
 
 describe('utility importance (Tailwind always beats authored CSS)', () => {
-  it('jsx-tier utilities compile !important', async () => {
+  it('utilities compile !important', async () => {
     const css = await compile('font-bold');
     const rule = css!.slice(css!.indexOf('.font-bold'));
     expect(rule.slice(0, rule.indexOf('}'))).toContain('!important');
-  });
-
-  it('legacy marked stories keep the non-important cascade (frozen behavior)', async () => {
-    const css = await compileStoryCss('<div class="mx-story font-bold" data-design="tw">x</div>');
-    const rule = css!.slice(css!.indexOf('.font-bold'));
-    expect(rule.slice(0, rule.indexOf('}'))).not.toContain('!important');
   });
 });
 

@@ -74,7 +74,8 @@ describe('the reader sheet', () => {
   });
 
   it('serves a legacy (non-jsx) sheet whole', async () => {
-    const legacy = (await compileStoryCss('<div data-design="tw" class="p-4">x</div>'))!;
+    // A sheet frozen before the theme blocks were appended: it has no theme tail to trim.
+    const legacy = '.p-4{padding:1rem}';
     expect(legacy.endsWith(storyThemeCss())).toBe(false);
     expect(readerStorySheet(legacy, { source: '<div class="p-4">x</div>', nodes: [], theme: null })).toBe(legacy);
     expect(readerStorySheet(null, { source: '', nodes: [], theme: null })).toBeNull();

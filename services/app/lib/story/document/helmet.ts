@@ -415,6 +415,16 @@ export function splitHelmet(nodes: JsxNode[]): HelmetSplit {
 const splits = new WeakMap<JsxNode[], HelmetSplit>();
 
 /**
+ * The browser `<script>` source of an untyped Lambda: a Helmet `<script>` with no attributes. The
+ * runner (lib/runner/resolve) still runs it as the document's server handler when no
+ * `<script type="server">` exists — the compatibility contract the bare-script detector counts.
+ */
+export function bareHelmetScript(split: HelmetSplit): string | null {
+  const bare = split.helmet?.children.some((child) => child.type === 'element' && child.tag.toLowerCase() === 'script' && !child.attributes.length);
+  return bare ? split.content.script : null;
+}
+
+/**
  * Canonical placement: the Helmet (if any) as FIRST top-level node, body order
  * preserved. Pure node transform, a fixpoint — canonicalizeMarkup serializes
  * its output, so stored documents always carry the Helmet first.
