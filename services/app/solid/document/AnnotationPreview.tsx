@@ -15,7 +15,7 @@ import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
 import { Avatar } from '../components/Avatar';
-import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '../components/brand-icons';
+import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeIcon } from '../components/brand-icons';
 import { Tooltip } from '../components/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 
@@ -38,6 +38,11 @@ export const previewText = (body: string) => plainText(parseMarkdownLite(body));
 export const firstLine = (body: string) => previewText(body).split('\n', 1)[0] ?? '';
 
 export const authorLabel = (author: Author) => author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
+/** Prefer connected-session identity; legacy named authors still get their known logo. */
+const agentProgram = (author: Author): string => {
+  const names: Record<string,string> = {claude:'Claude Code','claude-code':'Claude Code','claude code':'Claude Code','claude-web':'Claude',codex:'Codex',pi:'Pi',opencode:'OpenCode',chatgpt:'ChatGPT'};
+  return names[(author.harness ?? author.label ?? '').toLowerCase()] ?? 'Agent';
+};
 const authorKey = (author: Author) => `${author.kind}:${authorLabel(author).toLowerCase()}`;
 
 /** Distinct people/agents who replied, oldest first. The root author is already named above. */
@@ -60,6 +65,8 @@ function PersonFace(props: { author: Author; size: number }): JSX.Element {
 function AgentMark(props: { label: string; compact?: boolean; decorative?: boolean; borderless?: boolean }): JSX.Element {
   const icon = () => {
     switch (props.label.toLowerCase()) {
+      case 'pi': return <PiIcon size={props.compact ? 13 : 17} />;
+      case 'opencode': return <OpenCodeIcon size={props.compact ? 13 : 17} />;
       case 'codex': return <CodexIcon size={props.compact ? 13 : 17} />;
       case 'chatgpt': return <ChatGPTIcon size={props.compact ? 12 : 16} />;
       case 'claude code': return <ClaudeCodeIcon size={props.compact ? 12 : 16} />;
@@ -78,7 +85,7 @@ export function AuthorIdentity(props: { author: Author }): JSX.Element {
   const label = () => authorLabel(props.author);
   const offline = useContext(CommentsOffline);
   return <span class="flex min-w-0 items-center gap-2">
-    <Show when={props.author.kind === 'human'} fallback={<AgentMark label={label()} />}>
+    <Show when={props.author.kind === 'human'} fallback={<AgentMark label={agentProgram(props.author)} />}>
       <span aria-label={`${label()} avatar`} class="inline-flex h-[22px] w-[22px] shrink-0 rounded-full"><PersonFace author={props.author} size={22} /></span>
     </Show>
     <Show when={props.author.sessionId} fallback={
@@ -92,8 +99,8 @@ export function AuthorIdentity(props: { author: Author }): JSX.Element {
       <a href={`/chat?session=${sessionId()}`} target="_blank" rel="noopener noreferrer" class="truncate text-[11px] font-semibold"
         style={{ color: agentNameColor(label()) }}>@{label()}</a>
     )}</Show>
-    <Show when={props.author.kind === 'agent' && props.author.transport !== 'unknown'}>
-      <span aria-label={`Transport ${props.author.transport.toUpperCase()}`} class="shrink-0 font-mono text-[9px] uppercase tracking-[0.08em] text-faint">· {props.author.transport}</span>
+    <Show when={props.author.kind === 'agent'}>
+      <span aria-label={`Agent type ${agentProgram(props.author)}`} class="shrink-0 font-sans text-[10px] text-faint">· {agentProgram(props.author)}</span>
     </Show>
   </span>;
 }
@@ -101,7 +108,7 @@ export function AuthorIdentity(props: { author: Author }): JSX.Element {
 function ParticipantMark(props: { author: Author }): JSX.Element {
   // Bare, not wrapped: the stack's ring lands on its direct children.
   return <Show when={props.author.kind === 'agent'} fallback={<PersonFace author={props.author} size={18} />}>
-    <AgentMark label={authorLabel(props.author)} compact decorative />
+    <AgentMark label={agentProgram(props.author)} compact decorative />
   </Show>;
 }
 
@@ -121,7 +128,7 @@ export function ThreadContinuation(props: { thread: AnnotationCommentWire[] }): 
 
 function CompactAuthorMark(props: { author: Author }): JSX.Element {
   return <Show when={props.author.kind === 'agent'} fallback={<PersonFace author={props.author} size={22} />}>
-    <AgentMark label={authorLabel(props.author)} compact decorative borderless />
+    <AgentMark label={agentProgram(props.author)} compact decorative borderless />
   </Show>;
 }
 

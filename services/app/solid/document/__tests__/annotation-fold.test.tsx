@@ -86,7 +86,7 @@ describe('a comment folds to its author line', () => {
     const collapsed = within(thread).getByLabelText('Expand comment');
     expect(collapsed.getAttribute('aria-expanded')).toBe('false');
     expect(within(collapsed).getByText('Claude Code')).toBeTruthy();
-    expect(within(thread).getByLabelText('Transport MCP')).toBeTruthy();
+    expect(within(thread).getByLabelText('Agent type Claude Code')).toBeTruthy();
     expect(thread.textContent).toContain("line 1 of the agent's answer");
     expect(thread.textContent).not.toContain('line 2 of the agent');
     expect(thread.textContent).toContain(SHORT_REPLY);

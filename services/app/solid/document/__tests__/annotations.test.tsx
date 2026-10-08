@@ -15,7 +15,7 @@ import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_
 import { personHue } from '@/lib/accounts/person-face';
 import { Avatar } from '../../components/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
-import { positionedComments } from '../AnnotationPreview';
+import { AuthorIdentity, positionedComments } from '../AnnotationPreview';
 import {
   ADA_IMAGE, ANN, FACES, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot,
 } from './annotation-rig';
@@ -321,7 +321,7 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('Annotation thread').getAttribute('data-hovered')).toBe('true');
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.getByLabelText('Codex agent')).toBeTruthy();
-    expect(screen.getByLabelText('Transport MCP')).toBeTruthy();
+    expect(screen.getByLabelText('Agent type Codex')).toBeTruthy();
   });
 
   it('names the agent an MCP reply came from, with its own glyph and the MCP chip', async () => {
@@ -333,7 +333,7 @@ describe('AnnotationLayer', () => {
     const marker = await screen.findByLabelText('Open annotation conversation by Claude Code, 1 message');
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     expect(screen.getByText('Claude Code')).toBeTruthy();
-    expect(screen.getByLabelText('Transport MCP')).toBeTruthy();
+    expect(screen.getByLabelText('Agent type Claude Code')).toBeTruthy();
     const mark = screen.getByLabelText('Claude Code agent');
     expect(mark.querySelector('path')?.getAttribute('d')?.startsWith('M20.998')).toBe(true);
   });
@@ -347,7 +347,7 @@ describe('AnnotationLayer', () => {
     const marker = await screen.findByLabelText('Open annotation conversation by Agent, 1 message');
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     expect(screen.getByLabelText('Agent agent')).toBeTruthy();
-    expect(screen.getByLabelText('Transport HTTP')).toBeTruthy();
+    expect(screen.getByLabelText('Agent type Agent')).toBeTruthy();
   });
 
   it('delete asks first, then erases the thread and its pin', async () => {
@@ -476,4 +476,11 @@ it('starts replies empty even in a tagged thread and retains a failed reply', as
   fireEvent.click(screen.getByLabelText('Send reply'));
   await screen.findByRole('alert');
   expect(field).toHaveTextContent('my draft');
+});
+
+it('shows a connected agent program instead of its transport', () => {
+  render(() => <AuthorIdentity author={{kind:'agent',label:'koala-8e44ad',sessionId:'a'.repeat(64),harness:'pi',transport:'http',user_id:null,image:null}} />);
+  expect(screen.getByLabelText('Agent type Pi')).toBeTruthy();
+  expect(screen.getByLabelText('Pi agent').querySelector('svg')).toBeTruthy();
+  expect(screen.queryByLabelText('Transport HTTP')).toBeNull();
 });

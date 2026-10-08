@@ -219,7 +219,7 @@ export class RemoteAgents {
   const busy=(await tx.query("SELECT id FROM remote_work WHERE session_id=$1 AND phase IN ('dispatching','delivered','acknowledged','uncertain') LIMIT 1",[agent.id])).rows.length;
   agent.info.hostedWakeAttempts=0;
   agent.info.activity=busy?'working':receipt.phase==='blocked'?'blocked':'listening';await this.save(tx,agent);
-  return {label:agent.info.name,sessionId:agent.id,color:agent.info.color};
+  return {label:agent.info.name,sessionId:agent.id,color:agent.info.color,harness:agent.info.harness};
  }
  private async notify(tx:Queryable,artifactId:string,threadId:string){await tx.query('SELECT pg_notify($1,$2)',[channelForAnnotations(artifactId),threadId]);}
 }
