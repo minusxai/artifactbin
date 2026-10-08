@@ -7,6 +7,21 @@ import { useSession } from './session';
 export const isConnectedAgent = (session: RemoteSessionInfo): boolean =>
   (session.online || !!session.runId && ['starting','stopping'].includes(session.activity ?? '')) && session.exitCode == null;
 
+/** Connection and harness readiness are independent; every agent surface uses this label. */
+export function connectedAgentStatus(session: RemoteSessionInfo): string {
+  if (session.exitCode != null || session.activity === 'stopped') return 'Ended';
+  if (session.activity === 'stopping') return 'Stopping';
+  if (!session.online) return session.activity === 'starting' ? 'Starting' : 'Offline';
+  switch (session.activity) {
+    case 'starting': return 'Online · Starting';
+    case 'listening': return 'Online · Ready';
+    case 'working': return 'Online · Running';
+    case 'blocked': return 'Online · Waiting for approval';
+    case 'unknown': return 'Online · Waiting for readiness';
+    default: return 'Online';
+  }
+}
+
 /** Shares the agent page's session-scoped resource; its faster poll owns updates while open. */
 export function useConnectedAgentCount(agentPageOpen: Accessor<boolean>): Accessor<number | null> {
   const { session } = useSession();

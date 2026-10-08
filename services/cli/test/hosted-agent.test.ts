@@ -27,3 +27,21 @@ test('Codex resumes an explicit retained session and ignores malformed or other 
  assert.deepEqual(await hostedHarnessArguments('codex',home,'context'),args);assert.equal(args[0],'resume');assert.ok(args.includes(id));assert.ok(!args.includes('--last'));
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+test('Pi always opens its one explicit retained journal',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'af-hosted-'));try{
+ const args=await hostedHarnessArguments('pi',home,'context');
+ assert.equal(args[0],'--session');assert.equal(args[1],join(home,'.artifactbin','hosted-agent','pi-session.jsonl'));
+ await writeFile(args[1]!,'{"type":"session"}\n');assert.deepEqual(await hostedHarnessArguments('pi',home,'context'),args);
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+test('OpenCode pins the first owned root session and never switches to a newer thread',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'af-hosted-'));try{
+ let rows='';const list=async()=>rows;
+ assert.deepEqual(await hostedHarnessArguments('opencode',home,'context',list),['--prompt','context']);
+ rows=JSON.stringify([{id:'ses_later',directory:home,created:200},{id:'ses_first',directory:home,created:100},{id:'ses_other',directory:'/other',created:1},{id:'ses_child',directory:home,parentID:'ses_first',created:0}]);
+ const args=await hostedHarnessArguments('opencode',home,'context',list);assert.deepEqual(args,['--session','ses_first','--prompt','context']);
+ assert.deepEqual(await hostedHarnessArguments('opencode',home,'context',async()=>{throw Error('must not rediscover pinned identity');}),args);
+ }finally{await rm(home,{recursive:true,force:true});}
+});

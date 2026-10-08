@@ -54,13 +54,25 @@ it('labels hosted runner lifecycle separately from local online status', async (
   const sessions = [make('box-starting','starting'),make('box-running','working'),make('box-stopping','stopping'),make('box-ended','stopped'),make('box-unknown','unknown')];
   vi.stubGlobal('fetch', vi.fn(async (url:string) => ({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions}:url==='/api/run-capabilities'?{managedProcesses:false}:{session:sessions[1],seq:1,snapshot:'',frames:[]} })));
   open('box-running');
-  expect(await screen.findByText('codex · Running')).toBeInTheDocument();
+  expect(await screen.findByText('codex · Online · Running')).toBeInTheDocument();
   expect(screen.getByText('codex · Starting')).toBeInTheDocument();
   expect(screen.getByText('codex · Stopping')).toBeInTheDocument();
   expect(screen.queryByText('codex · Online')).toBeNull();
   fireEvent.click(screen.getByRole('button',{name:'Show previous sessions (2)'}));
   expect(screen.getByText('codex · Ended')).toBeInTheDocument();
-  expect(screen.getByText('codex · Unavailable')).toBeInTheDocument();
+  expect(screen.getByText('codex · Offline')).toBeInTheDocument();
+});
+
+it.each(['listening','unknown'])('shows a connected hosted agent without calling its %s readiness offline', async (activity) => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id:'hosted-ready',name:'Claude',harness:'claude',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null,runId:'run-ready',managed:true,activity };
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:url==='/api/run-capabilities'?{managedProcesses:true}:{session,seq:0,frames:[],snapshot:''}})));
+  open(session.id);
+  const status=activity==='listening'?'Online · Ready':'Online · Waiting for readiness';
+  expect(await screen.findByRole('button',{name:'Open Claude'})).toHaveTextContent('claude · '+status);
+  expect(await screen.findByText('claude · Hosted · '+status)).toBeInTheDocument();
+  expect(screen.queryByText('claude · Offline')).toBeNull();
+  expect(screen.queryByText('claude · Unavailable')).toBeNull();
 });
 
 it('lets the user stop waiting and start again with a fresh client wait', async () => {
@@ -243,4 +255,37 @@ it('guides an ended hosted run back to Start hosted box with retained home files
  expect(endedNotice).toHaveTextContent(/Start hosted box/);expect(endedNotice).toHaveTextContent(/same name/);expect(endedNotice).toHaveTextContent(/home files/i);
  expect(endedNotice).not.toHaveTextContent('afbin remote');expect(screen.getByRole('button',{name:'Remove session'})).toBeEnabled();
  expect(screen.getByRole('button',{name:'Start hosted box'})).toBeEnabled();
+});
+
+
+it('updates the selected sidebar from the terminal connection instead of waiting for the slower list poll', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id:'fresh-connection',name:'Fresh Claude',harness:'claude',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null,runId:'fresh-run',managed:true,activity:'blocked' };
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[{...session,online:false}]}:url==='/api/run-capabilities'?{managedProcesses:false}:{session,seq:0,frames:[],snapshot:''}})));
+  open(session.id);
+  expect(await screen.findByText('claude · Hosted · Online · Waiting for approval')).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Open Fresh Claude'})).toHaveTextContent('claude · Online · Waiting for approval');
+});
+
+it.each(['pi', 'opencode'])('offers and starts hosted %s with the selected harness', async (harness) => {
+  vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+  const session={id:'new-agent',name:'my-agent',harness,machine:'Hosted',online:false,runId:'new-run',activity:'starting',exitCode:null,cols:100,rows:30};
+  const fetch=vi.fn(async(url:string)=>({ok:true,status:202,headers:new Headers(),json:async()=>url==='/api/run-capabilities'?{version:1,managedProcesses:true}:url==='/api/remote/sessions'?{sessions:[]}:url==='/api/runs'?{session}:{session,seq:0,frames:[],snapshot:''}}));
+  vi.stubGlobal('fetch',fetch);open('');
+  const menu=await screen.findByRole('combobox',{name:'Hosted program'});
+  expect(Array.from(menu.querySelectorAll('option')).map(option=>option.textContent)).toEqual(['Shell','Claude Code','Codex','Pi','OpenCode']);
+  fireEvent.change(menu,{target:{value:harness}});fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
+  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/runs',expect.objectContaining({body:expect.stringContaining('"command":["'+harness+'"]')})));
+  expect(await screen.findByText(/Sign in from this terminal/)).not.toHaveTextContent('in a shell');
+});
+
+
+it('shows the same offline state in the selected header and list while keeping recovery guidance', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id:'offline-connection',name:'Offline Claude',harness:'claude',machine:'Hosted',online:false,controller:'web',cols:100,rows:30,exitCode:null,runId:'offline-run',managed:true,activity:'unknown' };
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:url==='/api/run-capabilities'?{managedProcesses:false}:{session,seq:0,frames:[],snapshot:''}})));
+  open(session.id);
+  expect(await screen.findByRole('button',{name:'Open Offline Claude'})).toHaveTextContent('claude · Offline');
+  expect(await screen.findByText('claude · Hosted · Offline')).toBeInTheDocument();
+  expect(screen.getByText('Waiting for your hosted terminal…')).toBeInTheDocument();
 });

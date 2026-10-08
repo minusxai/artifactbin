@@ -919,9 +919,10 @@ async function hostedRestartLeg(owner) {
       await page.getByText('Finishing the previous hosted box…', { exact: true }).waitFor({ state: 'visible' });
       await page.getByRole('button', { name: `Open ${session.name}`, exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForFunction(name => [...document.querySelectorAll('button[aria-pressed="true"]')].some(button => button.getAttribute('aria-label') === `Open ${name}`), session.name);
-      await page.getByText('codex · Running', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText('codex · Starting', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText('codex · Hosted · Starting', { exact: true }).waitFor({ state: 'visible' });
       await page.getByRole('status').filter({ hasText: 'Starting your hosted box…' }).waitFor({ state: 'visible' });
-      check(await page.getByRole('textbox', { name: 'Message to agent' }).isDisabled(), 'runner Running status does not enable input before the hosted terminal is ready');
+      check(await page.getByRole('textbox', { name: 'Message to agent' }).isDisabled(), 'roster and terminal agree on Starting and do not enable input before the hosted terminal is ready');
       must(bodies.length === 3, `a fresh click after Stop waiting retries one pending admission (${bodies.length} total requests)`);
       check(JSON.stringify(bodies[1]) === JSON.stringify(bodies[2]), 'the retried click reuses its exact request body and request id');
       check(typeof bodies[1]?.requestId === 'string' && bodies[1].requestId.length > 0, 'the click carries one stable request id');

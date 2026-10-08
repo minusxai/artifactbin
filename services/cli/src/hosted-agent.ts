@@ -1,3 +1,5 @@
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {randomUUID} from 'node:crypto';
 import {mkdir,open,readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import {join,delimiter} from 'node:path';
@@ -7,13 +9,15 @@ import {remoteChildEnv,remoteWorkerEnv,type Connection} from './config.js';
 import {createRemoteContextBridge} from './remote-context-bridge';
 import {REMOTE_CONTEXT_ARG} from './entry-args';
 import {REMOTE_REVIEW_POLICY,remoteArguments} from './remote-context';
+const execute=promisify(execFile);
+const openCodeId=/^ses_[a-zA-Z0-9]+$/;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 async function transcripts(directory:string):Promise<string[]>{
  try{const entries=await readdir(directory,{withFileTypes:true});return (await Promise.all(entries.map(entry=>entry.isDirectory()?transcripts(join(directory,entry.name)):entry.isFile()&&entry.name.endsWith('.jsonl')?[join(directory,entry.name)]:[]))).flat();}
  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return [];throw error;}
 }
 /** Select native history only in this agent's retained home; never resume an unrelated workspace. */
-export async function hostedHarnessArguments(command:string,home:string,context:string):Promise<string[]>{
+export async function hostedHarnessArguments(command:string,home:string,context:string,listOpenCodeSessions:()=>Promise<string>=async()=> (await execute('opencode',['session','list','--format','json'],{cwd:home,timeout:30000,maxBuffer:1024*1024})).stdout):Promise<string[]>{
  if(command==='claude'){
   const directory=join(home,'.artifactbin','hosted-agent');await mkdir(directory,{recursive:true,mode:0o700});
   const path=join(directory,'claude-session');
@@ -39,6 +43,22 @@ export async function hostedHarnessArguments(command:string,home:string,context:
   candidates.sort((a,b)=>a.modified-b.modified);const id=candidates[0]?.id;
   if(id)await writeFile(identity,id,{flag:'wx',mode:0o600});
   return remoteArguments(command,id?['resume',id]:[],context);
+ }
+ if(command==='pi'){
+  const directory=join(home,'.artifactbin','hosted-agent');await mkdir(directory,{recursive:true,mode:0o700});
+  return remoteArguments(command,['--session',join(directory,'pi-session.jsonl')],context);
+ }
+ if(command==='opencode'){
+  const directory=join(home,'.artifactbin','hosted-agent');await mkdir(directory,{recursive:true,mode:0o700});
+  const identity=join(directory,'opencode-session');
+  try{const id=(await readFile(identity,'utf8')).trim();if(!openCodeId.test(id))throw Error('invalid_hosted_session');return remoteArguments(command,['--session',id],context);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+  // The official list command scopes root sessions to cwd. Pin the earliest
+  // root once, so a later manual or child thread cannot replace this agent.
+  const output=await listOpenCodeSessions();const rows:unknown=output.trim()?JSON.parse(output):[];
+  if(!Array.isArray(rows))throw Error('invalid_hosted_session_list');
+  const roots=rows.filter((row):row is {id:string;directory:string;created:number}=>!!row&&typeof row==='object'&&openCodeId.test(row.id)&&row.directory===home&&!row.parentID&&Number.isFinite(row.created)).sort((a,b)=>a.created-b.created);
+  const id=roots[0]?.id;if(id)await writeFile(identity,id,{flag:'wx',mode:0o600});
+  return remoteArguments(command,id?['--session',id]:[],context);
  }
  throw Error('unsupported_hosted_harness');
 }
