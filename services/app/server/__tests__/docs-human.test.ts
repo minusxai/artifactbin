@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createAppServer } from '../app';
-import { useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, useAppHarness } from '@/__tests__/harness';
 
 const SHELL = fs.readFileSync(path.resolve(__dirname, '../../web/solid-app.html'), 'utf8');
 const app = createAppServer({ actorSecret: 'test-secret', indexHtml: async () => SHELL });
@@ -42,10 +42,12 @@ describe('docs addresses', () => {
   });
 
   // The start-link brief, its claim door and the public anonymous mint are GONE, not merely unadvertised: the CLI's
-  // device approval is the only door to a credential (moved here from the browser gate that started documents).
+  // email login and device approval are the doors to a credential (moved here from the browser gate that started documents).
   it('the retired start-link and anonymous-mint doors are 404', async () => {
     // A REAL document, so the 404 is the door's absence and not a missing artifact's.
-    const started = await app.request('/api/start', { method: 'POST' });
+    expect((await app.request('/api/start', { method: 'POST' })).status).toBe(401);
+    const owner = await mintAccountToken('retired-start');
+    const started = await app.request('/api/artifacts', { method: 'POST', headers: { authorization: `Bearer ${owner.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ markup: '<h1>Real document</h1>', visibility: 'public' }) });
     expect(started.status).toBe(201);
     const { id } = await started.json() as { id: string };
     expect((await app.request(`/a/${id}`)).status, 'the document itself is served').toBe(200);

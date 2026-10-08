@@ -17,11 +17,10 @@ import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { DELETE as deleteRoute, GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { mintAccountToken } from './harness';
 import { resetRateLimit } from '@/lib/accounts';
 import { MAX_STALE_EDITS } from '@/lib/artifacts';
 
-const SECRET = 'test-secret';
 const harness = useAppHarness();
 const snapshots=new Map<string,ArtifactRow>();
 beforeEach(()=>snapshots.clear());
@@ -29,11 +28,7 @@ async function remember(id:string){const row=await getArtifactById(id);if(row)sn
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-async function mint(): Promise<{ id: string; token: string }> {
-  const res = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
-  expect(res.status).toBe(201);
-  return res.json();
-}
+async function mint() { return mintAccountToken('edits'); }
 
 const MARKUP = '<section className="wrap"><p>alpha text</p><p>beta text</p></section>';
 const elementWith = (source: string, text: string) => {

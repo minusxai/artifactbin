@@ -1,6 +1,7 @@
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken,createUser,claimToken} from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
@@ -9,7 +10,7 @@ import {parseProgramDefinition,resolveProgramArtifact} from '@/lib/runner/progra
 useAppHarness();
 const definition={version:1,command:['python','/home/runner/task.py'],env:{REPORT:'daily'}};
 it('publishes, reads, exports and replaces validated native program definitions',async()=>{
- const owner=await createUser({email:'mxmx_test_program_owner@example.com'}),token=await mintToken('program');await claimToken(owner.id,token.token);
+ const owner=await createUser({email:'mxmx_test_program_owner@example.com'}),token=await mintToken('program',owner.id);await claimToken(owner.id,token.token);
  const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{program:definition,title:'Daily report',visibility:'unlisted'}}));expect(response.status,await response.clone().text()).toBe(201);const made=await response.json();
  expect(made.format).toBe('program');const ctx={params:Promise.resolve({id:made.id})};
  const content=await (await read(request(`/api/artifacts/${made.id}`,{token:token.token}),ctx)).json();expect(content.program).toEqual(definition);

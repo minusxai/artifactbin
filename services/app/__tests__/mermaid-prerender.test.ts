@@ -17,7 +17,7 @@ import { GET as mermaidAsset } from '@/app/assets/mermaid/[file]/route';
 import { artifactPageAnswer } from '@/lib/serving';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { services, setServices } from '@/lib/platform';
 import { verifyExportKey } from '@/lib/serving';
 import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';

@@ -12,7 +12,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { getArtifactById } from '@/lib/artifacts';
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createGuestOwner } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
@@ -53,25 +53,19 @@ async function createImage(token: string) {
 
 async function userToken(email: string) {
   const user = await createUser({ email });
-  const t = await mintToken('t');
+  const t = await mintToken('t', user.id);
   await claimToken(user.id, t.token);
   return t.token;
 }
 
 describe('born visibility per format', () => {
-  it('guest users retain public defaults and can explicitly choose private', async () => {
+  it('legacy guest credentials cannot create documents or assets', async () => {
     const guest = await createGuestOwner();
     const credential = await mintToken('guest-cli', guest.userId);
-    for (const body of [{ markup: '<h1>Guest</h1>' }, { dataset: ROWS }, { viz: RECIPE }]) {
-      const created = await create(credential.token, body);
-      expect(created.status).toBe(201);
-      expect(created.body.visibility).toBe('public');
-      expect((await getArtifactById(created.body.id))?.user_id).toBe(guest.userId);
+    for (const body of [{ markup: '<h1>Guest</h1>' }, { dataset: ROWS }, { viz: RECIPE }, { markup: '<h1>Private</h1>', visibility: 'private' }]) {
+      expect((await create(credential.token, body)).status).toBe(401);
     }
-    expect((await createImage(credential.token)).body.visibility).toBe('public');
-    const privateDoc = await create(credential.token, { markup: '<h1>Private</h1>', visibility: 'private' });
-    expect(privateDoc.status).toBe(201);
-    expect(privateDoc.body.visibility).toBe('private');
+    expect((await createImage(credential.token)).status).toBe(401);
   });
   it('a user-owned dataset is born unlisted', async () => {
     const token = await userToken('dv-ds@example.com');
@@ -106,15 +100,10 @@ describe('born visibility per format', () => {
     expect(body.visibility).toBe('private');
   });
 
-  it('anonymous creates stay born public, documents and assets alike', async () => {
-    const t = await mintToken('anon');
-    // The document half came from visibility.test.ts, which asserted the pair
-    // (anonymous public / owned private) for markup only.
-    const doc = await create(t.token, { title: 'a', markup: '<h1>a</h1>' });
-    expect(doc.body.visibility).toBe('public');
-    const ds = await create(t.token, { title: 'sales', dataset: ROWS });
-    expect(ds.body.visibility).toBe('public');
-    const img = await createImage(t.token);
-    expect(img.body.visibility).toBe('public');
+  it('unowned legacy credentials cannot create documents or assets', async () => {
+    const t = await mintToken('legacy', null);
+    expect((await create(t.token, { markup: '<h1>a</h1>' })).status).toBe(401);
+    expect((await create(t.token, { dataset: ROWS })).status).toBe(401);
+    expect((await createImage(t.token)).status).toBe(401);
   });
 });

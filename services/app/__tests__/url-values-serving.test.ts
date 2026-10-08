@@ -26,7 +26,7 @@ import { setServices } from '@/lib/platform';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { mintExportKey } from '@/lib/serving';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -34,7 +34,7 @@ useAppHarness();
 const BASE = 'http://localhost:3000';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const create = async (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: body }));
+  createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));
 
 const ROWS = [{ region: 'EU', revenue: 800 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 40 }];
 

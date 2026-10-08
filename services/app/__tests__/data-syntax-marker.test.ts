@@ -6,7 +6,7 @@
  */
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {editorScope,getArtifactById} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {prepareClientDocumentReplacement,prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';
@@ -16,7 +16,7 @@ import type {DocumentGraph} from '@/lib/story/graph/document-graph';
 const harness=useAppHarness();
 
 async function created(markup:string){
- const token=await mintToken('mxmx_test_data_syntax'),actor={tokenId:token.id,userId:null};
+ const token=await mintToken('mxmx_test_data_syntax'),actor={tokenId:token.id,userId:token.userId};
  const res=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup}}));
  expect(res.status).toBe(201);
  return {actor,id:((await res.json()) as {id:string}).id};

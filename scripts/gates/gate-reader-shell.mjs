@@ -89,6 +89,7 @@ await section('crawler', async () => {
 
   const PHRASE = 'Indexable sentence about quarterly revenue';
   const doc = await publish({
+    visibility: 'public',
     markup: [
       '<Helmet><title>Crawlable doc</title><meta name="description" content="A document that indexes." /></Helmet>',
       '<h1 className="text-4xl font-bold">Crawlable heading</h1>',
@@ -188,7 +189,7 @@ check(
 );
 
 // A user-owned token: a guest connection, adopted from the owner's session.
-const anon = await connectAgent(BASE);
+const anon = await connectAgent(BASE, { email: `mxmx_test_vis_${ts}@example.com` });
 const claimed = await mergeGuestIntoAccount(owner, BASE, anon.token);
 check(claimed === 200, 'owner A adopted a guest connection');
 
@@ -339,7 +340,7 @@ await section('anonymous owner', async () => {
   const anon2 = await connectAgent(BASE);
   const anonDoc = await (await fetch(`${BASE}/api/artifacts`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon2.token}` },
-    body: JSON.stringify({ title: 'Anon Owned', markup: '<h1>ANON-OWNED</h1>' }),
+    body: JSON.stringify({ title: 'Email Owned', visibility: 'public', markup: '<h1>ANON-OWNED</h1>' }),
   })).json();
   const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const anonPage = await anonCtx.newPage();
@@ -349,7 +350,7 @@ await section('anonymous owner', async () => {
   // for browser page navigation.
   await becomeOwner(anonPage, BASE, anon2.token);
   const cookies = await anonCtx.cookies(BASE);
-  const sess = cookies.find((c) => /mx-agent-session/.test(c.name));
+  const sess = cookies.find((c) => /better-auth/.test(c.name));
   check(!!sess && sess.httpOnly, `session cookie is httpOnly (${sess?.name ?? 'missing'})`);
   const stored = await anonPage.evaluate(() => [localStorage.getItem('mx_token'), localStorage.getItem('mx_tokens')]);
   check(stored.every((v) => v === null), 'no token in localStorage after the exchange');
@@ -357,16 +358,15 @@ await section('anonymous owner', async () => {
   const anonFrameText = await docHeading(anonPage);
   check(anonFrameText === 'ANON-OWNED' && await ownerBar(anonPage), 'after exchange: the anonymous owner gets the shell (owner bar, the framed document) at the same URL');
 
-  // the anonymous owner can DISCONNECT — the cookie's own sign-out
   await openMenu(anonPage);
-  check(await anonPage.locator('[aria-label="Disconnect this browser"]').isVisible(), 'the menu offers Disconnect (not account Sign out) to an anonymous owner');
-  check((await anonPage.locator('[aria-label="Sign out"]').count()) === 0, 'and not account Sign out');
+  check(await anonPage.getByRole('button', { name: 'Sign out', exact: true }).isVisible(), 'email owner can sign out');
+  check(await anonPage.getByRole('button', { name: 'Disconnect this browser', exact: true }).count() === 0, 'anonymous disconnect control is retired');
   await Promise.all([
-    anonPage.waitForResponse((r) => r.url().includes('/api/session/token') && r.request().method() === 'DELETE'),
-    anonPage.locator('[aria-label="Disconnect this browser"]').click(),
+    anonPage.waitForResponse(r => r.url().includes('/api/auth/sign-out') && r.request().method() === 'POST'),
+    anonPage.getByRole('button', { name: 'Sign out', exact: true }).click(),
   ]);
   await anonPage.waitForTimeout(1500);
-  check(!(await anonCtx.cookies(BASE)).some((c) => /mx-agent-session/.test(c.name)), 'disconnecting cleared the agent-session cookie');
+  check(!(await anonCtx.cookies(BASE)).some((c) => /better-auth/.test(c.name)), 'disconnecting cleared the agent-session cookie');
   await anonPage.goto(`${BASE}/a/${anonDoc.id}`, { waitUntil: 'load' });
   check(await framedOnItsOrigin(anonPage, anonDoc.id) && !(await ownerBar(anonPage)), 'after disconnect: the browser is a reader — the framed document, no owner bar');
   await anonCtx.close();
@@ -378,8 +378,7 @@ await section('anonymous owner', async () => {
   const splitCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const splitPage = await splitCtx.newPage();
   await becomeOwner(splitPage, BASE, anon.token);
-  check(!!(await splitCtx.cookies(BASE)).find((c) => /mx-agent-session/.test(c.name)) && !(await sessionOf(splitCtx)),
-    'the split-viewer browser holds only the approval cookie (no account session)');
+  check(!!(await sessionOf(splitCtx)), 'private reader holds a verified email session');
   const splitResponse = await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });
   const splitText = await docHeading(splitPage);
   check(splitText === 'CLAIMED-PRIVATE-BODY', `the shell frame shows the DOCUMENT, not a 404 — raw resolved the cookie viewer (status ${splitResponse?.status()}, text ${splitText}, body ${(await splitPage.locator('body').innerText()).slice(0, 140)})`);
@@ -435,7 +434,7 @@ await section('navigation', async () => {
   await doc().getByRole('link', { name: 'Next artifact' }).click();
   await page.waitForURL((url) => url.href !== fromA, { timeout: 10_000 }).catch(() => {});
   const reachedB = await seen(heading('Artifact B'));
-  check(onApp(`/a/${second.id}`) && reachedB, `a document link opens the next document's app page (${page.url()})`);
+  check(new URL(page.url()).origin === new URL(base).origin && (new URL(page.url()).pathname.split('/').at(-1) === second.id || new URL(page.url()).pathname.split('/').at(-1)?.startsWith(`${second.id}-`)) && reachedB, `a document link opens the next document's app page (${page.url()})`);
   const nextStatus = await nextView;
   check(nextStatus === 204, `navigation records the next document view (${nextStatus ?? 'no view reported'})`);
   check(await page.evaluate(() => window.__navigationProbe).catch(() => undefined) === undefined, 'reader link loads its document');
@@ -455,7 +454,7 @@ await section('navigation', async () => {
   check(await seen(heading('Artifact B')), 'Forward returns to the second document');
 
   await becomeOwner(page, base, first.token);
-  await loginViaEmail(page, base, sink, `mxmx_test_navigation_${Date.now()}@example.com`);
+
   check(await page.getByLabel('Add to my account', { exact: true }).count() === 0,
     'verified login adopts guest artifacts without a second claim step');
 

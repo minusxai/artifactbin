@@ -1,3 +1,4 @@
+import {canAuthenticateUser} from '../../app/lib/accounts/user-kinds';
 /** OSS team composition reuses the shared login and identity; the app owns authorization. */
 import {join} from 'node:path';
 import {createTokenReader} from '@artifactbin/utils';
@@ -32,7 +33,7 @@ export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string)
    const human=await createHumanAuth({secret,baseURL:origin,schema:authSchema,secure:origin.startsWith('https:'),events,...loginProvidersOf(env),
     ...(raw.kind==='pglite'?{pglite:raw.instance}:{pool:raw.pool as import('pg').Pool}),
     mail:mailerForRuntime({apiKey:readEnv(env,'EMAIL__RESEND_API_KEY'),from:readEnv(env,'EMAIL__FROM')??'artifactbin <login@example.com>',publicBaseUrl:origin,devOutboxPath:readEnv(env,'EMAIL__DEV_OUTBOX_PATH')})});
-   reader=createTokenReader({db:queryable,ttlMs:5000,...(appSchema?{schema:appSchema}:{})});
+   reader=createTokenReader({db:queryable,ttlMs:5000,admitBearer:token=>canAuthenticateUser(token.userId),...(appSchema?{schema:appSchema}:{})});
    // createAppHost supplies the real upstream after initialization; no HTTP hop or signed-header bypass.
    identity={upstream:async()=>{throw new Error('Team host is not initialized.');},env,tokens:reader,sessions:sessionStoreOf(human),cookieSecret:secret,
     secure:origin.startsWith('https:'),identityDb:queryable,appSchema,events};

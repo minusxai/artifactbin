@@ -24,9 +24,9 @@ import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs
 import { GET as serveRaw, HEAD as headRaw } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { pdfFilename } from '@/lib/story/assets/pdf-store';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
@@ -36,7 +36,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 // in a beforeAll would be a 401 by the time a test used it.
 const create = async (body: Record<string, unknown>, token?: string): Promise<string> => {
   const bearer = token ?? (await mintToken('t')).token;
-  const res = await bearerCreate(request('/api/artifacts', { method: 'POST', token: bearer, json: body }));
+  const res = await bearerCreate(request('/api/artifacts', { method: 'POST', token: bearer, json: { visibility: 'public', ...body } }));
   expect(res.status).toBe(201);
   return (await res.json()).id as string;
 };
@@ -91,7 +91,7 @@ describe('the read ACL', () => {
     // The serving routes decide who is reading with sessionActor — a session or
     // the agent cookie, never a bearer header (lib/viewer), so the owner reads
     // their own file the way their browser would.
-    const asOwner = await serveRaw(request(`/a/${id}/raw`, { cookie: await agentCookie([owner.id]) }), params(id));
+    const asOwner = await serveRaw(request(`/a/${id}/raw`, { actor: { credential: 'session', userId: user.id, email: user.email!, emailVerified: true } }), params(id));
     expect(asOwner.status).toBe(200);
     expect(Buffer.compare(await bytesOf(asOwner), samplePdf(1))).toBe(0);
   });

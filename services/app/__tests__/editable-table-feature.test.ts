@@ -3,7 +3,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as mutateDoc } from '@/app/a/[id]/mutate/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from './harness';
 useAppHarness();
 const create = async (token:string, body:Record<string,unknown>) => {

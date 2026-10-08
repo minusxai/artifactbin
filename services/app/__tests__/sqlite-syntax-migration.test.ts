@@ -10,7 +10,7 @@ import { POST as createRoute } from '@/app/api/artifacts/route';
 import { commitNormalizedMarkup, getArtifactById, publishMarkupForArtifact } from '@/lib/artifacts';
 import { convertStoredDocument } from '@/lib/migrate/sqlite/stored';
 import { runSqliteSyntaxMigrationBatch } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 

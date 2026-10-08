@@ -1,4 +1,5 @@
-import { changeMembership,claimToken,createUser,mintToken } from '@/lib/accounts';
+import { changeMembership, claimToken, createUser } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { updateSharingFor } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
@@ -15,7 +16,7 @@ useAppHarness();
 const imageParams=(id:string,datasetId:string,imageId:string)=>({params:Promise.resolve({id,datasetId,imageId})});
 it('uploads through a real pages actor, replays safely, and rechecks the current dataset read grant',async()=>{
   const owner=await createUser({email:'mxmx_test_image_owner@example.test'}),reporter=await createUser({email:'mxmx_test_image_reporter@example.test'});
-  const token=await mintToken('feedback-images-owner');await claimToken(owner.id,token.token);
+  const token=await mintToken('feedback-images-owner', owner.id);await claimToken(owner.id,token.token);
   const ownerActor={userId:owner.id,tokenId:token.id};
   const make=async(body:object)=>{const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return response.json();};
   const dataset=await make({dataset:[{message:'initial',image_ref:''}],visibility:'private',access:'readwrite'});
@@ -35,7 +36,7 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const visible=await read(pageActor);expect(visible.status).toBe(200);expect(visible.headers.get('x-content-type-options')).toBe('nosniff');expect(visible.headers.get('cache-control')).toBe('private, no-store');
   const ownerSession={credential:'session' as const,userId:owner.id,email:owner.email!,emailVerified:true};
   expect((await read(ownerSession)).status).toBe(200);
-  const reporterToken=await mintToken('dataset-file-reporter');await claimToken(reporter.id,reporterToken.token);
+  const reporterToken=await mintToken('dataset-file-reporter',reporter.id);await claimToken(reporter.id,reporterToken.token);
   const filePost=(filename='note.txt',body:BodyInit='hello',key='generic-upload-123',editId=document.edit_id)=>uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(filename),'X-Edit-Id':editId,'Idempotency-Key':key},body}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
   expect((await uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',body:'hello'}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})})).status).toBe(403);
   const simultaneous=await Promise.all([filePost(),filePost()]);

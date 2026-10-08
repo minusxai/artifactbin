@@ -27,7 +27,7 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { GET as listArtifacts, POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/assets/asset-url';
 import { getDb } from '@/lib/platform';
@@ -74,7 +74,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 describe('imageUrl — an image artifact straight from a URL', () => {
   it('creates the artifact from the fetched bytes; /raw serves them; provenance rides meta', async () => {
     const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { imageUrl: `${web}/logo.png`, title: 'logo' } }));
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', imageUrl: `${web}/logo.png`, title: 'logo' } }));
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.format).toBe('image');
@@ -92,7 +92,7 @@ describe('imageUrl — an image artifact straight from a URL', () => {
 
   it('answers a dead URL with a 400 that names it', async () => {
     const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { imageUrl: `${web}/gone.png` } }));
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', imageUrl: `${web}/gone.png` } }));
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('image_fetch_failed');
@@ -101,7 +101,7 @@ describe('imageUrl — an image artifact straight from a URL', () => {
 
   it('stays ONE content input: imageUrl beside markup is the usual 400', async () => {
     const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { imageUrl: `${web}/logo.png`, markup: '<p>x</p>' } }));
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', imageUrl: `${web}/logo.png`, markup: '<p>x</p>' } }));
     expect(res.status).toBe(400);
   });
 });
@@ -116,7 +116,7 @@ describe('the agent door — an external <img src> is served as written and neve
     const t = await mintToken('t');
     hits.length = 0;
     const markup = `<div className="p-8" id="root"><h1 id="heading">Doc</h1><img id="logo" src="${web}/logo.png" alt="logo" /></div>`;
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup } }));
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup } }));
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.markup_changed).toBe(false);
@@ -137,7 +137,7 @@ describe('the agent door — an external <img src> is served as written and neve
   it('publishes a URL on a host that does not resolve, with no warning and nothing stored', async () => {
     const t = await mintToken('t');
     const url = 'https://nowhere.invalid/x.png';
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public',
       markup: `<div><img src="${url}" alt="missing" /></div>`,
     } }));
     expect(res.status).toBe(201);
@@ -152,7 +152,7 @@ describe('the agent door — an external <img src> is served as written and neve
     const t = await mintToken('t');
     hits.length = 0;
     const many = Array.from({ length: 20 }, (_, i) => `<img src="${web}/logo.png?n=${i}" alt="" />`).join('');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<div>${many}</div>` } }));
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: `<div>${many}</div>` } }));
     expect(res.status).toBe(201);
     expect(hits).toEqual([]);
     expect(await storedAssets()).toBe(0);
@@ -160,7 +160,7 @@ describe('the agent door — an external <img src> is served as written and neve
 
   it('PUT serves the URL as written too — the shared pipeline, not just create', async () => {
     const t = await mintToken('t');
-    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>v1</p>' } }))).json();
+    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<p>v1</p>' } }))).json();
     hits.length = 0;
     const put = await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: t.token, json: {
       markup: `<div><img src="${web}/photo.jpg" alt="" /></div>`,
@@ -174,14 +174,14 @@ describe('the agent door — an external <img src> is served as written and neve
 
   it('the EDITS door asks for no authoring context and imports nothing for a pasted web image', async () => {
     const t = await mintToken('t');
-    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
+    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
     const row=(await getArtifactById(made.id))!;
     if(row.document?.kind!=='graph')throw new Error('Missing authoring graph');
     hits.length = 0;
     let asked=0;
     const update=await prepareClientDocumentPublication({...row,document:row.document},{source:row.source!.replace('</div>',`<img id="logo" src="${web}/logo.png" alt="" /></div>`)},async source=>{
       asked++;
-      return (await prepareDocumentAuthoringContext({tokenId:t.id,userId:null},made.id,{source})).json();
+      return (await prepareDocumentAuthoringContext({tokenId:t.id,userId:t.userId},made.id,{source})).json();
     });
     const res=await editsRoute(request(`/api/artifacts/${made.id}/edits`,{method:'POST',token:t.token,json:{edit_id:row.edit_id,document_update:update}}),params({id:made.id}));
     expect(res.status).toBe(200);
@@ -195,7 +195,7 @@ describe('the agent door — an external <img src> is served as written and neve
 
   it('the EDITS door through the prepared-resources helper stores nothing either', async () => {
     const t = await mintToken('t');
-    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
+    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
     const row=(await getArtifactById(made.id))!;
     hits.length = 0;
     const body=await documentPublicationWithResources(row,{source:row.source!.replace('</div>',`<img id="logo" src="${web}/logo.png" alt="" /></div>`)});
@@ -211,7 +211,7 @@ describe('an @font-face url in the document stylesheet', () => {
     const t = await mintToken('t');
     hits.length = 0;
     const css = `@font-face{font-family:Mine;src:url(${web}/face.woff2) format('woff2')}`;
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public',
       markup: `<Helmet><style>{\`${css}\`}</style></Helmet><p className="font-[Mine]">words</p>`,
     } }));
     expect(res.status).toBe(201);
@@ -229,7 +229,7 @@ describe('an @font-face url in the document stylesheet', () => {
 describe('csvUrl — a dataset from any public CSV', () => {
   it('creates a typed dataset from the fetched text', async () => {
     const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { csvUrl: `${web}/rows.csv`, title: 'sales' } }));
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', csvUrl: `${web}/rows.csv`, title: 'sales' } }));
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.format).toBe('dataset');
@@ -242,14 +242,14 @@ describe('csvUrl — a dataset from any public CSV', () => {
 
   it('accepts a CSV served as octet-stream — the TEXT decides, not the header', async () => {
     const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { csvUrl: `${web}/rows-as-octet-stream.csv` } }));
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', csvUrl: `${web}/rows-as-octet-stream.csv` } }));
     expect(res.status).toBe(201);
     expect((await res.json()).rowCount).toBe(2);
   });
 
   it('refuses a dead URL with a 400 naming it', async () => {
     const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { csvUrl: `${web}/gone.png` } }));
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', csvUrl: `${web}/gone.png` } }));
     expect(res.status).toBe(400);
     expect(String(JSON.stringify(await res.json()))).toContain('/gone.png');
   });

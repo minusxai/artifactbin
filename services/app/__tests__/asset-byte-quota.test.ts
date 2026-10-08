@@ -15,7 +15,7 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { createUser } from '@/lib/accounts';
 import { assetBytesForToken, assetByteQuotaExceeded, setAssetByteQuotaForTests } from '@/lib/serving';
@@ -51,18 +51,18 @@ describe('asset byte quota', () => {
   });
 
   it('sums the bytes a token has imported', async () => {
-    const { id } = await mintToken('t');
+    const { id, userId } = await mintToken('t');
     expect(await assetBytesForToken(id)).toBe(0);
-    await seedWebAsset(id, 'https://a.example/1.png', 1_000_000);
-    await seedWebAsset(id, 'https://a.example/2.png', 2_500_000);
+    await seedWebAsset(id, 'https://a.example/1.png', 1_000_000, userId);
+    await seedWebAsset(id, 'https://a.example/2.png', 2_500_000, userId);
     expect(await assetBytesForToken(id)).toBe(3_500_000);
   });
 
   it('a token over the cap is refused its NEXT import', async () => {
-    const { id } = await mintToken('t');
+    const { id, userId } = await mintToken('t');
     setAssetByteQuotaForTests(3_000_000);
     expect(await assetByteQuotaExceeded(id)).toBe(false);
-    await seedWebAsset(id, 'https://a.example/big.png', 3_000_000);
+    await seedWebAsset(id, 'https://a.example/big.png', 3_000_000, userId);
     expect(await assetByteQuotaExceeded(id)).toBe(true);
   });
 
@@ -70,7 +70,7 @@ describe('asset byte quota', () => {
     const a = await mintToken('a');
     const b = await mintToken('b');
     setAssetByteQuotaForTests(1_000_000);
-    await seedWebAsset(a.id, 'https://a.example/paid.png', 2_000_000);
+    await seedWebAsset(a.id, 'https://a.example/paid.png', 2_000_000, a.userId);
     expect(await assetByteQuotaExceeded(a.id)).toBe(true);
     expect(await assetByteQuotaExceeded(b.id)).toBe(false);
   });
@@ -101,7 +101,7 @@ describe('who the cap belongs to', () => {
   it('an anonymous token is keyed on itself, and is unaffected by an account over its cap', async () => {
     const user = await createUser({ email: 'mxmx_test_quota2@example.com' });
     const owned = await mintToken('owned', user.id);
-    const anon = await mintToken('anon');
+    const anon = await mintToken('anon', null);
     setAssetByteQuotaForTests(1_000_000);
     await seedWebAsset(owned.id, 'https://a.example/theirs.png', 2_000_000, user.id);
     expect(await assetByteQuotaExceeded(owned.id)).toBe(true);
@@ -124,7 +124,7 @@ describe('the image doors ask the byte quota', () => {
 
   it('refuses a JSON image body from a token over its cap', async () => {
     const t = await mintToken('t');
-    await seedWebAsset(t.id, 'https://a.example/already.png', 4_000_000);
+    await seedWebAsset(t.id, 'https://a.example/already.png', 4_000_000, t.userId);
     setAssetByteQuotaForTests(1_000_000);
     const res = await bearerCreate(request('/api/artifacts', {
       method: 'POST', token: t.token, json: { image: `data:image/png;base64,${PNG.toString('base64')}` },
@@ -135,7 +135,7 @@ describe('the image doors ask the byte quota', () => {
 
   it('refuses a raw-body upload from a token over its cap', async () => {
     const t = await mintToken('t');
-    await seedWebAsset(t.id, 'https://a.example/already2.png', 4_000_000);
+    await seedWebAsset(t.id, 'https://a.example/already2.png', 4_000_000, t.userId);
     setAssetByteQuotaForTests(1_000_000);
     const res = await bearerCreate(new Request('http://localhost:3000/api/artifacts', {
       method: 'POST',

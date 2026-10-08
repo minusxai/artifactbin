@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { mountRoutes } from '../api';
 import { ROUTES } from '../routes.generated';
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -48,7 +48,7 @@ describe('handlers through Hono', () => {
     expect(await (await app.request('/llms.txt')).text()).toContain('Reference: afbin help');
     expect((await app.request('/a/nope00/raw')).status).toBe(404);
     const t = await mintToken('t');
-    const created = await app.request('/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ markup: '<div><p>via hono</p></div>' }) });
+    const created = await app.request('/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ markup: '<div><p>via hono</p></div>', visibility: 'public' }) });
     expect(created.status).toBe(201);
     const { id } = await created.json();
     const read = await app.request(`/api/artifacts/${id}`, { headers: { authorization: `Bearer ${t.token}` } });

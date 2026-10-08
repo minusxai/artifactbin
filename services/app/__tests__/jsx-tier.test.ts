@@ -12,7 +12,7 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { publishJsx } from '@/lib/story/document/jsx-tier';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 useAppHarness();
 
@@ -29,7 +29,7 @@ describe('jsx tier publish', () => {
     const t = await mintToken('plan-template');
     const res = await createArtifactRoute(request('/api/artifacts', {
       method: 'POST', token: t.token,
-      json: { title: 'Scheduling UI plan', markup: JSX_DOC, template: 'plan' },
+      json: { visibility: 'public', title: 'Scheduling UI plan', markup: JSX_DOC, template: 'plan' },
     }));
     expect(res.status).toBe(201);
     const body = await res.json();
@@ -41,7 +41,7 @@ describe('jsx tier publish', () => {
   it('stores source + compiled CSS, with theme/colorMode in meta', async () => {
     const t = await mintToken('t');
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'Q3', markup: JSX_DOC, theme: 'terminal', template: 'editorial', colorMode: 'dark' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'Q3', markup: JSX_DOC, theme: 'terminal', template: 'editorial', colorMode: 'dark' } }),
     );
     expect(res.status).toBe(201);
     const body = await res.json();
@@ -101,7 +101,7 @@ describe('jsx tier publish', () => {
     ];
     for (const [markup, msg] of cases) {
       const res = await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'x', markup } }),
       );
       expect(res.status, markup).toBe(400);
       const body = await res.json();
@@ -128,7 +128,7 @@ describe('jsx tier publish', () => {
     ];
     for (const [markup, kept] of cases) {
       const res = await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'x', markup } }),
       );
       const body = await res.json();
       expect(res.status, `${markup} ${JSON.stringify(body)}`).toBe(201);
@@ -138,7 +138,7 @@ describe('jsx tier publish', () => {
 
     // An unreachable host publishes as written with nothing to report: publish never fetches it.
     const unreachable = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup: '<div data-design="tw"><img src="https://evil.test/p.png" /></div>' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'x', markup: '<div data-design="tw"><img src="https://evil.test/p.png" /></div>' } }),
     );
     expect(unreachable.status).toBe(201);
     const unreachableBody = await unreachable.json();
@@ -150,7 +150,7 @@ describe('jsx tier publish', () => {
   it('allows the self-contained sources: ref: and inline data:image', async () => {
     const t = await mintToken('t');
     const img = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'i', image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'i', image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' } }),
     );
     const { id } = await img.json();
     const cases = [
@@ -161,7 +161,7 @@ describe('jsx tier publish', () => {
     ];
     for (const markup of cases) {
       const res = await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'x', markup } }),
       );
       expect(res.status, markup).toBe(201);
     }
@@ -171,7 +171,7 @@ describe('jsx tier publish', () => {
     const t = await mintToken('t');
     for (const bad of [{ theme: 'neon' }, { template: 'poster' }, { colorMode: 'sepia' }]) {
       const res = await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup: JSX_DOC, ...bad } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'x', markup: JSX_DOC, ...bad } }),
       );
       expect(res.status).toBe(400);
     }
@@ -180,7 +180,7 @@ describe('jsx tier publish', () => {
   it('is exactly-one-of with the other tiers', async () => {
     const t = await mintToken('t');
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup: JSX_DOC, markdown: '# hi' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'x', markup: JSX_DOC, markdown: '# hi' } }),
     );
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('markup_only');
@@ -190,12 +190,12 @@ describe('jsx tier publish', () => {
     const t = await mintToken('t');
     const created = await (
       await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'v1', markup: JSX_DOC, theme: 'modernist' } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'v1', markup: JSX_DOC, theme: 'modernist' } }),
       )
     ).json();
 
     const res = await putArtifact(
-      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: t.token, json: { title: 'v2', markup: JSX_DOC.replace('Quarterly Revenue', 'Annual Revenue'), theme: 'pop' } }),
+      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: t.token, json: { visibility: 'public', title: 'v2', markup: JSX_DOC.replace('Quarterly Revenue', 'Annual Revenue'), theme: 'pop' } }),
       params({ id: created.id }),
     );
     expect(res.status).toBe(200);
@@ -213,7 +213,7 @@ describe('jsx tier serving', () => {
     const t = await mintToken('t');
     const created = await (
       await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'v', markup: JSX_DOC } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'v', markup: JSX_DOC } }),
       )
     ).json();
     const res = await serveArtifact(request(`/a/${created.id}/raw`), params({ id: created.id }));

@@ -20,7 +20,7 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -39,9 +39,9 @@ async function create(token: string, body: Record<string, unknown>, expected = 2
 
 /** An anonymous token, and a user-owned token belonging to a fresh account. */
 async function fixtures() {
-  const anon = await mintToken('anon');
+  const anon = await mintToken('other-account');
   const owner = await createUser({ email: 'owner@example.com' });
-  const owned = await mintToken('owned');
+  const owned = await mintToken('owned', owner.id);
   const claimed = await claimToken(owner.id, owned.token);
   expect(claimed).not.toBeNull();
   return { anonToken: anon.token, ownedToken: owned.token, owner };
@@ -65,8 +65,8 @@ describe('defaults and validation', () => {
     const { anonToken, ownedToken } = await fixtures();
     const openDoc = await create(ownedToken, { title: 'o', markup: '<h1>o</h1>', visibility: 'public' });
     expect(openDoc.visibility).toBe('public');
-    const refused = await create(anonToken, { title: 'a', markup: '<h1>a</h1>', visibility: 'private' }, 400);
-    expect(refused.error).toBe('private_requires_account');
+    const privateDoc = await create(anonToken, { title: 'a', markup: '<h1>a</h1>', visibility: 'private' });
+    expect(privateDoc.visibility).toBe('private');
     const garbage = await create(anonToken, { title: 'a', markup: '<h1>a</h1>', visibility: 'hidden' }, 400);
     expect(garbage.error).toBe('invalid_visibility');
   });
@@ -118,7 +118,7 @@ describe('defaults and validation', () => {
     const { anonToken } = await fixtures();
     const doc = await create(anonToken, { title: 'a', markup: '<h1>a</h1>' });
     const wire = await (await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: anonToken }), params({ id: doc.id }))).json();
-    expect(wire.visibility).toBe('public');
+    expect(wire.visibility).toBe('private');
   });
 });
 
@@ -177,7 +177,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
 
   it('public docs serve with no session at all', async () => {
     const { anonToken } = await fixtures();
-    const doc = await create(anonToken, { title: 'open', markup: '<h1>open</h1>' });
+    const doc = await create(anonToken, { title: 'open', markup: '<h1>open</h1>', visibility: 'public' });
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(200);
     expect((await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }))).status).toBe(200);
   });

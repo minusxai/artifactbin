@@ -14,7 +14,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { readCompiledDataflow, storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadata';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 
@@ -38,9 +38,9 @@ const POLICY = {
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function person(email: string) {
-  const token = await mintToken(email);
   const user = await createUser({ email });
-  await claimToken(user.id, token.token);
+  const token = await mintToken(email, user.id);
+    await claimToken(user.id, token.token);
   return { token: token.token, tokenId: token.id, userId: user.id, email };
 }
 type Person = Awaited<ReturnType<typeof person>>;

@@ -7,7 +7,7 @@ import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { GET as editSheet, POST as preview } from '@/app/a/[id]/draft-preview/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { documentPublicationBody } from './prepared-document';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 /** A CPU-bound compile on the request thread, as a heavy document's draft compile is: nothing else runs while it does. */
@@ -36,8 +36,8 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 describe('the editor draft preview door', () => {
   it('resolves a newly uploaded image before the draft has been saved', async () => {
-    const { token } = await mintToken('draft-preview-image');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_image_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    const { token } = await mintToken('draft-preview-image', user.id);
     await claimToken(user.id, token);
     const image = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: {
       image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -58,8 +58,8 @@ describe('the editor draft preview door', () => {
     expect((await getArtifactById(id))?.source).not.toContain(imageId);
   });
   it('keeps the legacy inline-sheet endpoint private while drafts use standalone sheets', async () => {
-    const { token } = await mintToken('draft-preview-sheet');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_sheet_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    const { token } = await mintToken('draft-preview-sheet', user.id);
     await claimToken(user.id, token);
     const source = '<div><p class="text-lg">Before</p></div>';
     const made = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: { title: 'Draft', markup: source, visibility: 'private' } }));
@@ -78,8 +78,8 @@ describe('the editor draft preview door', () => {
     expect((await editSheet(request(`/a/${id}/draft-preview`, { token: stranger.token }), params(id))).status).toBe(404);
   });
   it('renders a query document through its matching server island build', async () => {
-    const { token } = await mintToken('draft-preview-query');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_query_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    const { token } = await mintToken('draft-preview-query', user.id);
     await claimToken(user.id, token);
     const dataset = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: {
       title: 'Rows', dataset: [{ label: 'first', value: 42 }],
@@ -99,8 +99,8 @@ describe('the editor draft preview door', () => {
     expect(document.querySelector('p')?.textContent).toBe('After');
   });
   it("renders bound text at the editor's current values, as the running store holds them", async () => {
-    const { token } = await mintToken('draft-preview-values');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_values_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    const { token } = await mintToken('draft-preview-values', user.id);
     await claimToken(user.id, token);
     const source = '<Helmet><Value name="fruit" type="string" default="apple" /></Helmet><div><p id="chosen">Chosen fruit: {$fruit}</p><Select label="Fruit" value="$fruit" options={["apple","banana"]} /></div>';
     const made = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: { title: 'Draft', markup: source, visibility: 'private' } }));
@@ -117,8 +117,8 @@ describe('the editor draft preview door', () => {
     expect(await at('?$fruit=banana')).toBe('Chosen fruit: banana');
   });
   it('compiles an admitted unsaved draft without changing the published source', async () => {
-    const { token } = await mintToken('draft-preview');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    const { token } = await mintToken('draft-preview', user.id);
     await claimToken(user.id, token);
     const made = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: {
       title: 'Draft', markup: '<div id="root"><p id="copy">Published</p></div>', visibility: 'private',
@@ -153,8 +153,8 @@ describe('draft compiles under a burst of keystrokes', () => {
   beforeEach(() => { compiles.heavy = true; });
   afterEach(() => { compiles.heavy = false; });
   it('keeps pages and the owner save answering while one session sends 100 drafts in 5 s', async () => {
-    const { token } = await mintToken('draft-preview-load');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_load_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    const { token } = await mintToken('draft-preview-load', user.id);
     await claimToken(user.id, token);
     const made = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: {
       title: 'Heavy', markup: '<div id="root"><p id="copy">Published</p></div>', visibility: 'unlisted',

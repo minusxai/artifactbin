@@ -39,7 +39,7 @@ const ALLOWED_SENTENCE = 'never mint or print tokens';
 
 let seq = 0;
 const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
-  const started = await (await startRoute(request('/api/start', { method: 'POST' }))).json() as { prompt: string };
+
 
   // A fresh account per call: the harness wipes between TESTS, not between
   // calls inside one.
@@ -47,6 +47,7 @@ const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
   const user = await createUser({ email });
   const owned = await createArtifact('', user.id, { format: 'markup', source: '<h1>Owned</h1>', content: '<h1>Owned</h1>', meta: {} } as never);
   const actor = { credential: 'session' as const, userId: user.id, email, emailVerified: true };
+  const started = await (await startRoute(request('/api/start', { method: 'POST', actor }))).json() as { prompt: string };
   const handed = await (await agentPromptRoute(
     request(`/api/my/artifacts/${owned.id}/agent-prompt`, { method: 'POST', actor }),
     { params: Promise.resolve({ id: owned.id }) },
@@ -99,7 +100,7 @@ describe('every agent-facing starter says the same thing', () => {
   it('direct HTTP discovery requires email and teaches the real scoped bearer and graph contract',()=>{
     const guide=llmsText(BASE);
     expect(guide).toContain('Direct HTTP clients require email authentication');
-    expect(guide).toContain('guest browser approval is CLI-only');
+    expect(guide).toContain('CLI and HTTP authentication require email');
     expect(guide).toContain('/api/authentication/token');
     expect(guide).toContain('Only verified email account sessions qualify');
     expect(guide).toContain('Authorization: Bearer <access_token>');
@@ -127,7 +128,7 @@ describe('every agent-facing starter says the same thing', () => {
       expect(text).not.toContain('Automatic browser approval also applies');
       expect(text).not.toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
     }
-    expect(discovery).toContain('guest browser approval is CLI-only');
+    expect(discovery).toContain('CLI and HTTP authentication require email');
     expect(discovery).toContain('Direct HTTP clients require email authentication');
   });
 

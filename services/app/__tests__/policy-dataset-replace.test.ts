@@ -12,7 +12,7 @@ import { artifactState } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { publishDataset } from '@/lib/story/data/data-tiers';
 import type { StoredContent } from '@/lib/story/document/input';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { request, useAppHarness } from './harness';
 useAppHarness();
 
@@ -30,7 +30,7 @@ async function fixture() {
   const created = await create(request('/api/artifacts', { method: 'POST', token: owner.token, json: { dataset: [{ n: 1 }], access: 'readwrite' } }));
   expect(created.status, await created.clone().text()).toBe(201);
   const ds = (await created.json()).id as string;
-  expect(await setDatasetPolicy({ tokenId: owner.id, userId: null }, ds, POLICY, 0)).toMatchObject({ revision: 1 });
+  expect(await setDatasetPolicy({ tokenId:owner.id,userId:owner.userId }, ds, POLICY, 0)).toMatchObject({ revision: 1 });
   // Every replace names the base it was made from: that is what keeps a stale push from discarding rows.
   const base = { expectedVersion: 1, expectedState: artifactState((await getArtifactById(ds))!) };
   const put = (token: string, dataset: object[], from = base) =>

@@ -10,7 +10,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { offlineBundle, offlineExtrasRef } from '@/lib/offline/bundle.server';
 import { parseArtifactFile, sourceDigest } from '@/lib/offline/file-format';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -19,7 +19,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function owner(name: string) {
   const user = await createUser({ email: `mxmx_test_dl_${name}@example.com` });
-  const token = await mintToken(`mxmx_test_dl_${name}`);
+  const token = await mintToken(`mxmx_test_dl_${name}`, user.id);
   await claimToken(user.id, token.token);
   return token.token;
 }

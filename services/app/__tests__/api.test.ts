@@ -1,3 +1,4 @@
+import { createUser } from '@/lib/accounts';
 import {artifactQuery} from '@/lib/artifacts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -23,14 +24,16 @@ const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function mint(name?: string): Promise<{ id: string; token: string }> {
-  const res = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name }, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
+  const email = `mxmx_test_api_${crypto.randomUUID()}@example.com`;
+  await createUser({ email });
+  const res = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name, email }, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
   expect(res.status).toBe(201);
   return res.json();
 }
 
 async function create(token: string, html = '<h1>hi</h1>', title = 'hello') {
   const res = await createArtifactRoute(
-    request('/api/artifacts', { method: 'POST', token: token, json: { title, markup: html } }),
+    request('/api/artifacts', { method: 'POST', token: token, json: { title, markup: html, visibility: 'public' } }),
   );
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string; url: string; version: number }>;
@@ -210,6 +213,6 @@ describe('CLI and HTTP discovery',()=>{
   expect(text).toContain('/api/authentication/token');
   expect(text).toContain('/api/browser-sessions');
   expect(text).toContain('function buildPlainTextUpdate');
-  expect(text).toContain('guest browser approval is CLI-only');
+  expect(text).toContain('CLI and HTTP authentication require email');
  });
 });

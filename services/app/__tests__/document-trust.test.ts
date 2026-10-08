@@ -12,7 +12,8 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { DELETE as revokeRoute, GET as trustRoute, POST as grantRoute } from '@/app/api/trust/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { claimToken, createUser, mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { cspExtensionsFor, cspRequestFor, TRUST_SESSION_COOKIE } from '@/lib/trust/document-trust';
 import { EMPTY_CSP_EXTENSIONS } from '@/lib/story/document/csp-extensions';
@@ -29,10 +30,9 @@ const asks = (connect: string, script?: string) =>
 const set = (connect: string[], script: string[] = []) => ({ ...EMPTY_CSP_EXTENSIONS, connect, script });
 
 async function account(name: string) {
-  const token = await mintToken(name);
   const email = `mxmx_test_${name}@example.com`;
   const user = await createUser({ email, name });
-  await claimToken(user.id, token.token);
+  const token = await mintToken(name, user.id);
   return { token: token.token, tokenId: token.id, userId: user.id, email, actor: { credential: 'session', userId: user.id, email, emailVerified: true } as Actor };
 }
 

@@ -19,7 +19,7 @@ import { getArtifactById, refDataForRow } from '@/lib/artifacts';
 import { objectStore } from '@/lib/object-store';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -34,7 +34,7 @@ useAppHarness();
  */
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAASUlEQVRYhe2WAQkAQAwCF8dMpruoH2PPOFgAET03KV/drCuIgtChmqHYMtbxE8GIDtUMxZaxDqH4oKFDNUOxZcghBGOdjhwe1weeF8xbShDdKgAAAABJRU5ErkJggg==';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const create = (token: string, body: unknown) => createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+const create = (token: string, body: Record<string, unknown>) => createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
 
 /**
  * A WIDE image, small enough for the suite's 5 KB import cap

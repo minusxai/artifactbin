@@ -15,15 +15,15 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * body→source first-index offset is invisible in pure prose.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as actOnAnnotationRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { DELETE as deleteArtifactRoute, GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as myDeleteAnnotationRoute, POST as myActOnAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { mintToken } from '@/lib/accounts';
-import { claimToken, createUser, setUsername } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { setUsername } from '@/lib/accounts';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { avatarUrl } from '@/lib/accounts';
 
@@ -43,12 +43,12 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string; edit_id: string; version: number };
 };
 
-/** A doc + its owner's bearer token + the same token as a browser cookie. */
+/** A private document with its owner's email bearer and verified browser session. */
 async function publish() {
   const t = await mintToken('agent');
   const doc = await create(t.token, { markup: DOC });
-  const cookie = await agentCookie([t.id]);
-  return { t, doc, cookie };
+  const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
+  return { t, doc, actor };
 }
 
 interface AnnotationWire {
@@ -60,8 +60,8 @@ interface AnnotationWire {
   thread: Array<{ body: string; author: { kind: string; label: string | null; transport: string; user_id: string | null; image: string | null } }>;
 }
 
-const annotate = (id: string, cookie: string, body: Record<string, unknown>, origin?: string) =>
-  myCreateAnnotationRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', cookie: cookie, json: body, origin: origin }), params({ id }));
+const annotate = (id: string, actor: import('@artifactbin/contracts').Actor, body: Record<string, unknown>, origin?: string) =>
+  myCreateAnnotationRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor: actor, json: body, origin: origin }), params({ id }));
 
 /** The current head pointer — a create may have bumped it (the anchor-key stamping edit). */
 const headEditId = async (token: string, id: string) => {
@@ -71,22 +71,22 @@ const headEditId = async (token: string, id: string) => {
 
 describe('creating (browser door, owner only)', () => {
   it('persists optional review context through create and fresh list; old comments remain context-free', async () => {
-    const { doc, cookie } = await publish();
+    const { doc, actor } = await publish();
     const view_state = { v: 1, components: { checkout: { screen: 'payment', error: false } } };
-    const res = await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'Review this state', view_state });
+    const res = await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'Review this state', view_state });
     expect(res.status).toBe(201);
     expect((await res.json()).view_state).toEqual(view_state);
-    const listed = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { cookie }), params({ id: doc.id }));
+    const listed = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor }), params({ id: doc.id }));
     expect((await listed.json()).annotations[0].view_state).toEqual(view_state);
-    const plain = await annotate(doc.id, cookie, { path: '0', edit_id: doc.edit_id, body: 'Ordinary text' });
+    const plain = await annotate(doc.id, actor, { path: '0', edit_id: doc.edit_id, body: 'Ordinary text' });
     expect((await plain.json()).view_state).toBeUndefined();
-    const bad = await annotate(doc.id, cookie, { path: '0', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 2, components: {} } });
+    const bad = await annotate(doc.id, actor, { path: '0', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 2, components: {} } });
     expect(bad.status).toBe(400);
   });
 
   it('the owner annotates a node by BODY path; the stored anchor honours the Helmet offset', async () => {
-    const { doc, cookie } = await publish();
-    const res = await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'this number looks wrong' });
+    const { doc, actor } = await publish();
+    const res = await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'this number looks wrong' });
     expect(res.status, await res.clone().text()).toBe(201);
     const a = (await res.json()) as AnnotationWire;
     expect(a.status).toBe('open');
@@ -102,14 +102,14 @@ describe('creating (browser door, owner only)', () => {
     // without requiring a destructive data migration.
     const db = await harness.db();
     await artifactQuery(db,"UPDATE annotations SET author_kind = 'owner' WHERE id = $1", [a.id]);
-    const legacy = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { cookie: cookie }), params({ id: doc.id }));
+    const legacy = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor: actor }), params({ id: doc.id }));
     const legacyWire = (await legacy.json()) as { annotations: AnnotationWire[] };
     expect(legacyWire.annotations[0].thread[0].author.kind).toBe('human');
   });
 
   it('a stale base the log cannot carry answers 409 with head', async () => {
-    const { doc, cookie } = await publish();
-    const res = await annotate(doc.id, cookie, { path: '1', edit_id: 'not-a-real-edit-id', body: 'x' });
+    const { doc, actor } = await publish();
+    const res = await annotate(doc.id, actor, { path: '1', edit_id: 'not-a-real-edit-id', body: 'x' });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; edit_id: string };
     expect(body.error).toBe('stale');
@@ -117,49 +117,45 @@ describe('creating (browser door, owner only)', () => {
   });
 
   it('a path that names nothing is a 400; a non-markup artifact is a 400', async () => {
-    const { t, doc, cookie } = await publish();
-    const bad = await annotate(doc.id, cookie, { path: '9.9', edit_id: doc.edit_id, body: 'x' });
+    const { t, doc, actor } = await publish();
+    const bad = await annotate(doc.id, actor, { path: '9.9', edit_id: doc.edit_id, body: 'x' });
     expect(bad.status).toBe(400);
     const ds = await create(t.token, { dataset: [{ a: 1 }] });
-    const notMarkup = await annotate(ds.id, cookie, { path: '0', edit_id: ds.edit_id, body: 'x' });
+    const notMarkup = await annotate(ds.id, actor, { path: '0', edit_id: ds.edit_id, body: 'x' });
     expect(notMarkup.status).toBe(400);
   });
 
   it('does not mutate an invalid legacy document to create an anchor', async () => {
-    const { doc, cookie } = await publish();
+    const { doc, actor } = await publish();
     const db = await harness.db();
     // Simulate a pre-existing row that does not satisfy today's no-inline-style rule. The
     // body path still resolves; it is the real anchor EDIT that publish refuses.
     await artifactQuery(db,'UPDATE artifacts SET document=NULL,source= $2 WHERE id = $1', [doc.id, '<p style="color:red">pre-existing</p>']);
 
-    const res = await annotate(doc.id, cookie, { path: '0', edit_id: doc.edit_id, body: 'look here' });
+    const res = await annotate(doc.id, actor, { path: '0', edit_id: doc.edit_id, body: 'look here' });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; details?: Array<{ message: string }> };
     expect(body.error).toBe('bad_path');
     expect((await artifactQuery<{source:string}>(db,'SELECT document,source FROM artifacts WHERE id=$1',[doc.id])).rows[0].source).toBe('<p style="color:red">pre-existing</p>');
   });
 
-  it('a stranger\'s cookie is sent to sign in; a cross-site owner cookie is refused', async () => {
-    const { doc, cookie } = await publish();
+  it('a stranger is refused the private document; a cross-site owner session is refused', async () => {
+    const { doc, actor } = await publish();
     const stranger = await mintToken('other');
-    const strangerCookie = await agentCookie([stranger.id]);
-    // The document is READABLE to this stranger (it holds the link), so the
-    // honest answer is the door rather than the uniform 404: commenting is an
-    // act attributed to a person, and there is one two inches away
-    // (lib/capabilities). An id this credential could NOT read still answers
-    // 404 — the gate speaks only to someone the artifact is visible to.
-    const foreign = await annotate(doc.id, strangerCookie, { path: '1', edit_id: doc.edit_id, body: 'x' });
-    expect(foreign.status).toBe(401);
-    expect((await foreign.json()).error).toBe('sign_in_required');
-    const crossSite = await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'x' }, 'https://evil.example');
+    const strangerActor = { credential: 'session' as const, userId: stranger.userId!, email: stranger.email!, emailVerified: true };
+    // Ownership remains private; a verified stranger still gets the uniform 404.
+    const foreign = await annotate(doc.id, strangerActor, { path: '1', edit_id: doc.edit_id, body: 'x' });
+    expect(foreign.status).toBe(404);
+    expect((await foreign.json()).error).toBe('not_found');
+    const crossSite = await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'x' }, 'https://evil.example');
     expect(crossSite.status).toBe(403);
   });
 });
 
 describe('the wire — colocation on GET', () => {
   it('GET /api/artifacts/:id inlines open annotations; resolved ones drop out', async () => {
-    const { t, doc, cookie } = await publish();
-    const a = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'check this' })).json()) as AnnotationWire;
+    const { t, doc, actor } = await publish();
+    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'check this' })).json()) as AnnotationWire;
 
     const got = await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }));
     expect(got.status).toBe(200);
@@ -177,8 +173,8 @@ describe('the wire — colocation on GET', () => {
   });
 
   it('a PUT cannot clobber annotations — they survive (orphaned, snippet intact) and the echo carries the open count', async () => {
-    const { t, doc, cookie } = await publish();
-    await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'keep me' });
+    const { t, doc, actor } = await publish();
+    await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'keep me' });
 
     const put = await putArtifactRoute(
       await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>totally new</p>' } }),
@@ -196,13 +192,13 @@ describe('the wire — colocation on GET', () => {
   });
 
   it('the bearer list honours ?status=', async () => {
-    const { t, doc, cookie } = await publish();
-    const a = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'one' })).json()) as AnnotationWire;
+    const { t, doc, actor } = await publish();
+    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'one' })).json()) as AnnotationWire;
     await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: t.token, json: { resolve: true } }),
       params({ id: doc.id, annId: a.id }),
     );
-    const two = await annotate(doc.id, cookie, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'two' });
+    const two = await annotate(doc.id, actor, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'two' });
     expect(two.status, await two.clone().text()).toBe(201);
 
     const open = (await (await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
@@ -214,8 +210,8 @@ describe('the wire — colocation on GET', () => {
 
 describe('reply / resolve — the agent\'s one mutation', () => {
   it.each([['pi','Pi'],['opencode','OpenCode'],['custom-robot','custom-robot']])('accepts %s attribution without a connected session', async (agent, label) => {
-    const {t,doc,cookie}=await publish();
-    const a=(await (await annotate(doc.id,cookie,{path:'1',edit_id:doc.edit_id,body:'Review'})).json()) as AnnotationWire;
+    const {t,doc,actor}=await publish();
+    const a=(await (await annotate(doc.id,actor,{path:'1',edit_id:doc.edit_id,body:'Review'})).json()) as AnnotationWire;
     const response=await actOnAnnotationRoute(request(`/api/artifacts/${doc.id}/annotations/${a.id}`,{method:'POST',token:t.token,json:{reply:'Checked'},headers:{'Artifactbin-Agent':agent}}),params({id:doc.id,annId:a.id}));
     expect(response.status).toBe(200);
     const result=await response.json() as AnnotationWire;
@@ -223,8 +219,8 @@ describe('reply / resolve — the agent\'s one mutation', () => {
   });
 
   it('an HTTP agent declares itself once; identity is remembered while transport is snapshotted per reply', async () => {
-    const { t, doc, cookie } = await publish();
-    const a = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'is this right?' })).json()) as AnnotationWire;
+    const { t, doc, actor } = await publish();
+    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'is this right?' })).json()) as AnnotationWire;
 
     const replied = await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: t.token, json: { reply: 'checked — recomputing' }, headers: { 'User-Agent': 'curl/8.7.1', 'Artifactbin-Agent': 'codex' } }),
@@ -246,35 +242,34 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     expect(r2.thread[2].author).toMatchObject({ kind: 'agent', label: 'Codex', transport: 'http' });
 
     const reopened = await myActOnAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', cookie: cookie, json: { reopen: true } }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', actor: actor, json: { reopen: true } }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(reopened.status).toBe(200);
     expect(await reopened.json()).toMatchObject({ status: 'open', resolved_at: null });
   });
 
-  it('a claimed account\'s comments carry its USERNAME as the label; an anonymous owner\'s carry none', async () => {
-    const { t, doc, cookie } = await publish();
-    const anon = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
-    expect(anon.thread[0].author).toMatchObject({ kind: 'human', label: null, transport: 'browser' });
+  it('a claimed account\'s comments carry its USERNAME as the label; a generated account username is replaced by its chosen label', async () => {
+    const { t, doc, actor } = await publish();
+    const anon = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
+    const generatedUsername = (await (await harness.db()).query<{username:string}>('SELECT username FROM users WHERE id=$1',[t.userId])).rows[0].username;
+    expect(anon.thread[0].author).toMatchObject({ kind: 'human', label: generatedUsername, transport: 'browser' });
 
-    const user = await createUser({ email: 'viv@example.com' });
+    const user = { id: t.userId! };
     expect('ok' in (await setUsername(user.id, 'viv_tester'))).toBe(true);
-    await claimToken(user.id, t.token);
-    const named = (await (await annotate(doc.id, cookie, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'from viv' })).json()) as AnnotationWire;
+    const named = (await (await annotate(doc.id, actor, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'from viv' })).json()) as AnnotationWire;
     expect(named.thread[0].author).toMatchObject({ kind: 'human', label: 'viv_tester', transport: 'browser' });
   });
 
-  it('a person\'s comments carry their account id and picture, read fresh with the comments; agents and account-less people carry neither', async () => {
-    const { t, doc, cookie } = await publish();
-    const anon = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
-    expect(anon.thread[0].author).toMatchObject({ kind: 'human', user_id: null, image: null });
+  it('a person\'s comments carry their account id and picture, read fresh with the comments; agents carry neither', async () => {
+    const { t, doc, actor } = await publish();
+    const anon = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
+    expect(anon.thread[0].author).toMatchObject({ kind: 'human', user_id: t.userId, image: null });
 
-    const user = await createUser({ email: 'mxmx_test_face@example.com' });
+    const user = { id: t.userId! };
     expect('ok' in (await setUsername(user.id, 'face_tester'))).toBe(true);
-    await claimToken(user.id, t.token);
     // No picture yet: the id (the colour key) and no address.
-    const plain = (await (await annotate(doc.id, cookie, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'no face yet' })).json()) as AnnotationWire;
+    const plain = (await (await annotate(doc.id, actor, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'no face yet' })).json()) as AnnotationWire;
     expect(plain.thread[0].author).toMatchObject({ kind: 'human', label: 'face_tester', user_id: user.id, image: null });
 
     const db = await harness.db();
@@ -284,10 +279,10 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     expect(image).toBeTruthy();
 
     // The create echo, a human reply and an agent reply all read the picture on the write path too.
-    const withFace = (await (await annotate(doc.id, cookie, { path: '1', edit_id: await headEditId(t.token, doc.id), body: 'with a face' })).json()) as AnnotationWire;
+    const withFace = (await (await annotate(doc.id, actor, { path: '1', edit_id: await headEditId(t.token, doc.id), body: 'with a face' })).json()) as AnnotationWire;
     expect(withFace.thread[0].author).toMatchObject({ kind: 'human', user_id: user.id, image });
     const humanReply = (await (await myActOnAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${withFace.id}`, { method: 'POST', cookie: cookie, json: { reply: 'me again' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${withFace.id}`, { method: 'POST', actor: actor, json: { reply: 'me again' } }),
       params({ id: doc.id, annId: withFace.id }),
     )).json()) as AnnotationWire;
     expect(humanReply.thread[1].author).toMatchObject({ kind: 'human', user_id: user.id, image });
@@ -300,12 +295,12 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     // Every read that builds the wire: the owner's list, the bearer page and the GET's inline field.
     const query = vi.spyOn(db, 'query');
     try {
-      const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { cookie: cookie }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
+      const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor: actor }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
       const page = (await (await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
       const inline = (await (await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
       for (const annotations of [my.annotations, page.annotations, inline.annotations]) {
         const byBody = new Map(annotations.flatMap((a) => a.thread).map((c) => [c.body, c.author]));
-        expect(byBody.get('from nobody')).toMatchObject({ user_id: null, image: null });
+        expect(byBody.get('from nobody')).toMatchObject({ user_id: user.id, image });
         // Written before the picture existed, drawn with it now: the address is read, never snapshotted.
         expect(byBody.get('no face yet')).toMatchObject({ user_id: user.id, image });
         expect(byBody.get('with a face')).toMatchObject({ user_id: user.id, image });
@@ -323,23 +318,23 @@ describe('reply / resolve — the agent\'s one mutation', () => {
   });
 
   it('the owner replies through the /api/my twin, attributed owner', async () => {
-    const { doc, cookie } = await publish();
-    const a = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
+    const { doc, actor } = await publish();
+    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
     const res = await myActOnAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', cookie: cookie, json: { reply: 'never mind' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', actor: actor, json: { reply: 'never mind' } }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(res.status).toBe(200);
     const r = (await res.json()) as AnnotationWire;
     expect(r.thread[1].author).toMatchObject({ kind: 'human', transport: 'browser' });
 
-    const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { cookie: cookie }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
+    const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor: actor }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
     expect(my.annotations[0].thread).toHaveLength(2);
   });
 
   it('unknown annotation id, foreign token, and an empty action are refused (404/404/400)', async () => {
-    const { t, doc, cookie } = await publish();
-    const a = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
+    const { t, doc, actor } = await publish();
+    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
 
     const unknown = await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/ann_nope`, { method: 'POST', token: t.token, json: { resolve: true } }),
@@ -352,10 +347,9 @@ describe('reply / resolve — the agent\'s one mutation', () => {
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: stranger.token, json: { resolve: true } }),
       params({ id: doc.id, annId: a.id }),
     );
-    // A readable document answers the sign-in door; an unreadable one is still
-    // the uniform 404 (lib/capabilities capabilityGuard).
-    expect(foreign.status).toBe(401);
-    expect((await foreign.json()).error).toBe('sign_in_required');
+    // Account authentication never grants access to a private foreign document.
+    expect(foreign.status).toBe(404);
+    expect((await foreign.json()).error).toBe('not_found');
 
     const empty = await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: t.token, json: {} }),
@@ -367,23 +361,23 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 
 describe('lifecycle', () => {
   it('the owner deletes a thread outright — root and replies; a stranger gets the uniform 404', async () => {
-    const { t, doc, cookie } = await publish();
-    const a = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'erase me' })).json()) as AnnotationWire;
+    const { t, doc, actor } = await publish();
+    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'erase me' })).json()) as AnnotationWire;
     await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: t.token, json: { reply: 'noted' } }),
       params({ id: doc.id, annId: a.id }),
     );
 
     const stranger = await mintToken('other');
-    const strangerCookie = await agentCookie([stranger.id]);
+    const strangerActor = { credential: 'session' as const, userId: stranger.userId!, email: stranger.email!, emailVerified: true };
     const refused = await myDeleteAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'DELETE', cookie: strangerCookie }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'DELETE', actor: strangerActor }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(refused.status).toBe(404);
 
     const deleted = await myDeleteAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'DELETE', cookie: cookie }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'DELETE', actor: actor }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(deleted.status).toBe(200);
@@ -405,8 +399,8 @@ describe('lifecycle', () => {
   });
 
   it('a deleted artifact KEEPS its annotation rows, and keeps them forever', async () => {
-    const { t, doc, cookie } = await publish();
-    await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'x' });
+    const { t, doc, actor } = await publish();
+    await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'x' });
     const del = await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: t.token }), params({ id: doc.id }));
     expect(del.status).toBe(200);
     const db = await harness.db();

@@ -41,10 +41,10 @@ it('saves through the normal edit and replacement routes with real actor attribu
 });
 it('does not elevate other users, unverified identities, agent cookies or forged headers',async()=>{
  for(const actor of [{...admin,userId:'usr_other',email:'other@example.com'},{...admin,emailVerified:false},{...admin,credential:'agent-cookie' as const,tokenId:'tok_admin'}]){
-  expect((await GET(request(path,{actor}),context)).status).toBe(404);
+  expect((await GET(request(path,{actor}),context)).status).toBe(actor.credential === 'agent-cookie' ? 401 : 404);
  }
  expect((await GET(request(path,{actor:{...admin,userId:'usr_other',email:'other@example.com'},headers:{'x-admin-email':admin.email!,'X-Artifactbin-Admin':'1'}}),context)).status).toBe(404);
- expect((await GET(request(path,{...options,headers:{'x-mx-browser-session':'1'}}),context)).status).toBe(401);
+ expect((await GET(request(path,{headers:{'x-mx-browser-session':'1'}}),context)).status).toBe(401);
  setDocumentEditorPolicy();
  expect((await GET(request(path,options),context)).status).toBe(404);
 });

@@ -1,3 +1,4 @@
+import { setSession } from './harness';
 import {expect,it,afterEach} from 'vitest';
 import {useAppHarness} from './harness';
 import {RemoteRegistry} from '@/lib/remote/registry';
@@ -50,7 +51,7 @@ it('reserves names across relays, keeps stable proof and color on reconnect, and
  expect((await c.create('owner',{...registration,recoveryKey:'b'.repeat(64)})).name).toBe('claude');
 });
 it('queues only once, waits for ready, and marks interrupted delivery uncertain instead of replaying',async()=>{
- const token=await mintToken('queue');const user=await createUser({email:'mxmx_test_queue@example.com'});await claimToken(user.id,token.token);const owner=user.id;
+ const user = await createUser({email:'mxmx_test_queue@example.com'}); const token = await mintToken('queue', user.id);await claimToken(user.id,token.token);const owner=user.id;
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>queue</p>'}}));const artifactId=(await made.json()).id;
  const a=fresh();const s=await a.create(owner,registration);
  const comment={id:'comment',body:`[@claude](/chat?session=${s.id}) fix it`,author:{kind:'human' as const,label:'Owner'}};
@@ -68,7 +69,7 @@ it('queues only once, waits for ready, and marks interrupted delivery uncertain 
  expect((await b.exchange(owner,s.id,exchange(s.runnerKey))).inputs).toEqual([]);
 });
 import {request,agentCookie} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {createUser,claimToken} from '@/lib/accounts';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as comment} from '@/app/api/my/artifacts/[id]/annotations/route';
@@ -77,7 +78,8 @@ import {remoteAgents} from '@/lib/remote/agents';
 import {remoteSessions} from '@/lib/remote/registry';
 afterEach(()=>remoteSessions.clear());
 it('commits mention delivery with the comment, authenticates receipts, and refuses resolving over a later human comment',async()=>{
- const token=await mintToken('review');const user=await createUser({email:'mxmx_test_receipt@example.com'});await claimToken(user.id,token.token);
+ const user = await createUser({email:'mxmx_test_receipt@example.com'}); const token = await mintToken('review', user.id);await claimToken(user.id,token.token);
+ setSession({user:{id:token.userId!,email:token.email!}});
  const cookie=await agentCookie([token.id]);
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Review me</p>'}}));expect(made.status).toBe(201);const doc=await made.json();
  const s=await remoteAgents.create(user.id,registration);
@@ -113,7 +115,7 @@ it('manual terminal input invalidates idle readiness until the agent explicitly 
 });
 
 it('a blocked request releases the agent to handle another thread while preserving the question',async()=>{
- const token=await mintToken('blocked');const user=await createUser({email:'mxmx_test_blocked@example.com'});await claimToken(user.id,token.token);
+ const user = await createUser({email:'mxmx_test_blocked@example.com'}); const token = await mintToken('blocked', user.id);await claimToken(user.id,token.token);
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>blocked review</p>'}}));const artifactId=(await made.json()).id;
  const a=fresh(),s=await a.create(user.id,registration),db=await getDb();
  const add=(thread:string)=>db.transaction(tx=>a.enqueue(tx,user.id,artifactId,thread,{id:thread,body:`[@claude](/chat?session=${s.id}) check`,author:{kind:'human',label:'Owner'}}));
@@ -165,7 +167,7 @@ it.each(['\x1b[1;1R\n','\x1b[1;1R\r','\x1b[1;','hello\r','\x1b[A','\x03','\x1b[2
  expect((await a.read('owner',s.id)).activity).toBe('unknown');
 });
 it('delivers a startup comment after readiness despite a web terminal cursor report',async()=>{
- const token=await mintToken('startup');const user=await createUser({email:'mxmx_test_startup@example.com'});await claimToken(user.id,token.token);
+ const user = await createUser({email:'mxmx_test_startup@example.com'}); const token = await mintToken('startup', user.id);await claimToken(user.id,token.token);
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>startup</p>'}}));const artifactId=(await made.json()).id;
  const a=fresh(),s=await a.create(user.id,registration),db=await getDb();
  await db.transaction(tx=>a.enqueue(tx,user.id,artifactId,'thread',{id:'startup',body:`[@claude](/chat?session=${s.id}) check`,author:{kind:'human',label:'Owner'}}));
@@ -178,7 +180,7 @@ it('delivers a startup comment after readiness despite a web terminal cursor rep
 });
 
 it('accepts a known failure before acknowledgment and allows the next queued request',async()=>{
- const token=await mintToken('failure');const user=await createUser({email:'mxmx_test_failure@example.com'});await claimToken(user.id,token.token);
+ const user = await createUser({email:'mxmx_test_failure@example.com'}); const token = await mintToken('failure', user.id);await claimToken(user.id,token.token);
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>failure review</p>'}}));const artifactId=(await made.json()).id;
  const a=fresh(),s=await a.create(user.id,registration),db=await getDb();
  const add=(thread:string)=>db.transaction(tx=>a.enqueue(tx,user.id,artifactId,thread,{id:thread,body:`[@claude](/chat?session=${s.id}) check`,author:{kind:'human',label:'Owner'}}));

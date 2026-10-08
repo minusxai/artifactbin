@@ -167,8 +167,7 @@ signing in. Email login does not transfer artifacts owned by a guest browser.
 
 For an artifact created in the browser, run `afbin auth <artifact-url>` (plus `--server <origin>`
 for another server). A connection that can already edit continues immediately. Otherwise the
-owning browser approves connecting the CLI to its identity; guests can choose **Continue as guest**
-without logging in. Browser and CLI then share existing and future artifacts. Approving a different
+owning browser logs in with email and approves connecting the CLI to its account. Browser and CLI then share existing and future artifacts. Approving a different
 identity replaces the saved CLI connection for that server; denial leaves it unchanged.
 
 `ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can supply a connection; saved credentials are

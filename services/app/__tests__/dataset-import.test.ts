@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { POST } from '@/app/api/my/datasets/import/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { MAX_ROWS_LIMIT } from '@/lib/platform/config';
 import { request, useAppHarness } from './harness';
 

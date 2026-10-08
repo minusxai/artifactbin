@@ -14,7 +14,7 @@ import { documentEditBody } from './prepared-document';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 import { archivedVersionForActor, servedRow } from '@/lib/serving';
 import { PREVIOUS_ENGINE } from '@/lib/story/data/data-syntax';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -40,7 +40,7 @@ describe('?version=N of a version written for the previous engine', () => {
   it('serves the converted document, and leaves the stored version as it was', async () => {
     const { owner, id } = await history(true);
     expect((await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).status).toBe(200);
-    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { token: owner.token }), params({ id }))).json());
+    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { actor: { credential: 'session', userId: owner.userId!, email: owner.email!, emailVerified: true } }), params({ id }))).json());
     expect(page).toContain('select 7 * 1.0 / 2 as h');
     const db = await harness.db();
     expect((await db.query<{ marked: boolean }>("SELECT meta ? 'dataSyntax' AS marked FROM artifact_versions WHERE artifact_id=$1 AND version=1", [id])).rows).toEqual([{ marked: false }]);
@@ -49,7 +49,7 @@ describe('?version=N of a version written for the previous engine', () => {
   it('never converts a version already in the current syntax', async () => {
     const { owner, id } = await history(false);
     expect((await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).status).toBe(200);
-    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { token: owner.token }), params({ id }))).json());
+    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { actor: { credential: 'session', userId: owner.userId!, email: owner.email!, emailVerified: true } }), params({ id }))).json());
     expect(page).toContain('select 7 / 2 as h');
     expect(page).not.toContain('* 1.0');
   });
@@ -79,7 +79,7 @@ describe('?version=N of a version the converter cannot carry over', () => {
     expect(html).toContain(PREVIOUS_ENGINE);
     expect(html).not.toContain('42424');
     const head = (await getArtifactById(id))!;
-    const at = await archivedVersionForActor({ tokenId: owner.id, userId: null }, head, 1);
+    const at = await archivedVersionForActor({ tokenId:owner.id,userId:owner.userId }, head, 1);
     if (at === 'not_found') throw new Error('version 1 should be readable');
     expect(at.previousEngine).toBe(true);
     const ran = await dataflowForRow(await servedRow(head, at));

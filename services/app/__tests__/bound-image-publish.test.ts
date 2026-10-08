@@ -13,7 +13,7 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/assets/asset-url';
 import { mintExportKey } from '@/lib/serving';
@@ -46,7 +46,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 
 const publish = async (markup: string) => {
   const t = await mintToken('t');
-  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup } }));
+  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup, visibility: 'public' } }));
   return { res, body: await res.json() as Record<string, unknown> };
 };
 

@@ -3,7 +3,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * Folders are artifacts: the doors, over the real routes in-process.
  */
 import { describe, expect, it } from 'vitest';
-import { agentCookie, request, useAppHarness } from './harness';
+import { request, useAppHarness } from './harness';
 import { POST as createRoute, GET as listRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute, DELETE as deleteRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
@@ -13,7 +13,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { buildShelf } from '@/lib/workspace';
 
@@ -22,15 +22,15 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 
 async function owner(name = 'owner') {
-  const t = await mintToken(name);
   const u = await createUser({ email: `${name}@example.com` });
-  await claimToken(u.id, t.token);
-  return { token: t.token, tokenId: t.id, userId: u.id, cookie: await agentCookie([t.id]) };
+  const t = await mintToken(name, u.id);
+    await claimToken(u.id, t.token);
+  return { token: t.token, tokenId: t.id, userId: u.id, actor: { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true } };
 }
 const create = async (token: string, body: Record<string, unknown>) => j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));
 const readBack = async (token: string, id: string) => j(await getRoute(request(`/api/artifacts/${id}`, { token }), params(id)));
-const move = async (cookie: string, id: string, parent_id: string | null) =>
-  j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { parent_id }, cookie, origin: 'same' }), params(id)));
+const move = async (actor: import('@artifactbin/contracts').Actor, id: string, parent_id: string | null) =>
+  j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { parent_id }, actor, origin: 'same' }), params(id)));
 
 describe('creating a folder', () => {
   it('is an artifact of format folder, at root, with NO content of any kind', async () => {
@@ -88,7 +88,7 @@ describe('filing under a folder', () => {
     const o = await owner('a');
     const stranger = await owner('b');
     const doc = (await create(o.token, { markup: '<p>x</p>' })).body;
-    const r = await move(stranger.cookie, doc.id, 'zzzzzz');
+    const r = await move(stranger.actor, doc.id, 'zzzzzz');
     expect(r.status).toBe(404);
   });
 
@@ -114,12 +114,12 @@ describe('moving', () => {
     const c = (await create(o.token, { markup: '<p>c</p>', parent_id: b.id })).body;
     const x = (await create(o.token, { format: 'folder', title: 'X' })).body;
     // document → root
-    expect((await move(o.cookie, c.id, null)).status).toBe(200);
+    expect((await move(o.actor, c.id, null)).status).toBe(200);
     expect((await getArtifactById(c.id))!.ancestor_ids).toEqual([]);
     // document → b again, then move folder A under X: A and B rewrite, c follows
-    expect((await move(o.cookie, c.id, b.id)).status).toBe(200);
+    expect((await move(o.actor, c.id, b.id)).status).toBe(200);
     const before = (await getArtifactById(c.id))!;
-    expect((await move(o.cookie, a.id, x.id)).status).toBe(200);
+    expect((await move(o.actor, a.id, x.id)).status).toBe(200);
     expect((await getArtifactById(a.id))!.ancestor_ids).toEqual([x.id]);
     expect((await getArtifactById(b.id))!.ancestor_ids).toEqual([x.id, a.id]);
     const after = (await getArtifactById(c.id))!;
@@ -128,7 +128,7 @@ describe('moving', () => {
     expect(after.edit_id).toBe(before.edit_id);
     // cycles
     for (const bad of [a.id, b.id]) {
-      const r = await move(o.cookie, a.id, bad);
+      const r = await move(o.actor, a.id, bad);
       expect(r.status, bad).toBe(400);
       expect(r.body.error).toBe('invalid_parent');
     }
@@ -201,7 +201,7 @@ describe('a folder is not a document', () => {
     const o = await owner();
     for (const visibility of ['public', 'private'] as const) {
       const f = (await create(o.token, { format: 'folder', title: 'F', visibility })).body;
-      expect((await rawRoute(request(`/a/${f.id}/raw`, { cookie: o.cookie }), params(f.id))).status, visibility).toBe(404);
+      expect((await rawRoute(request(`/a/${f.id}/raw`, { actor: o.actor }), params(f.id))).status, visibility).toBe(404);
       expect((await rawRoute(request(`/a/${f.id}/raw`), params(f.id))).status, visibility).toBe(404);
     }
   });
@@ -271,14 +271,14 @@ describe("a folder's PUT is a metadata edit", () => {
   };
   const putBearer = async (token: string, id: string, body: Record<string, unknown>) =>
     j(await putRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', json: body, token }), params(id)));
-  const putSession = async (cookie: string, id: string, body: Record<string, unknown>) =>
-    j(await putMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PUT', json: body, cookie, origin: 'same' }), params(id)));
+  const putSession = async (actor: import('@artifactbin/contracts').Actor, id: string, body: Record<string, unknown>) =>
+    j(await putMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PUT', json: body, actor, origin: 'same' }), params(id)));
 
   it('renames through PUT with no version, no archived copy and no edit-log row — at either door', async () => {
     const o = await owner();
     for (const [door, run] of [
       ['bearer', (id: string) => putBearer(o.token, id, { title: 'Renamed' })],
-      ['session', (id: string) => putSession(o.cookie, id, { title: 'Renamed' })],
+      ['session', (id: string) => putSession(o.actor, id, { title: 'Renamed' })],
     ] as const) {
       const f = (await create(o.token, { format: 'folder', title: 'Reports' })).body;
       const before = (await getArtifactById(f.id))!;
@@ -286,6 +286,8 @@ describe("a folder's PUT is a metadata edit", () => {
       const r = await run(f.id);
       expect(r.status, `${door}: ${JSON.stringify(r.body)}`).toBe(200);
       const after = (await getArtifactById(f.id))!;
+      expect(after.actor_token_id, door).toBe(door === 'session' ? null : o.tokenId);
+      expect(after.actor_user_id, door).toBe(o.userId);
       expect(after.title, door).toBe('Renamed');
       expect(after.version, door).toBe(before.version);
       expect(await ledgers(f.id), door).toEqual(beforeLedgers);
@@ -354,14 +356,14 @@ describe("a folder's PUT is a metadata edit", () => {
    * or an agent's JSON carries, because a trim that happens at only one door is
    * exactly how the two paths drift while both look right.
    */
-  it('is the same act as PATCH: the same trimmed title, and a row byte-identical apart from title and updated_at', async () => {
+  it('is the same act as PATCH: the same trimmed title, and a row unchanged apart from title, timestamp and credential audit', async () => {
     const o = await owner();
     const rest = (row: Record<string, unknown>) => {
-      const { title, updated_at, ...keep } = row;
+      const { title, updated_at, actor_token_id, ...keep } = row;
       return keep;
     };
     const doors = [
-      ['PATCH', async (id: string) => j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { title: '  Quarterly  ' }, cookie: o.cookie, origin: 'same' }), params(id)))],
+      ['PATCH', async (id: string) => j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { title: '  Quarterly  ' }, actor: o.actor, origin: 'same' }), params(id)))],
       ['PUT', async (id: string) => putBearer(o.token, id, { title: '  Quarterly  ' })],
     ] as const;
     for (const [door, run] of doors) {
@@ -370,13 +372,15 @@ describe("a folder's PUT is a metadata edit", () => {
       const r = await run(f.id);
       expect(r.status, `${door}: ${JSON.stringify(r.body)}`).toBe(200);
       const after = (await getArtifactById(f.id))!;
+      expect(after.actor_token_id, door).toBe(door === 'PATCH' ? null : o.tokenId);
+      expect(after.actor_user_id, door).toBe(o.userId);
       expect(after.title, door).toBe('Quarterly');
       expect(rest(after as unknown as Record<string, unknown>), door).toEqual(rest(before as unknown as Record<string, unknown>));
     }
     // …and the PATCH door is not folder-only: a DOCUMENT renames through it too.
     // (From folder-page.test.ts, which asserted the folder half a second time.)
     const doc = (await create(o.token, { markup: '<h1>x</h1>', title: 'Doc' })).body;
-    const renamed = await j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { title: 'Doc renamed' }, cookie: o.cookie, origin: 'same' }), params(doc.id)));
+    const renamed = await j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { title: 'Doc renamed' }, actor: o.actor, origin: 'same' }), params(doc.id)));
     expect(renamed.status, JSON.stringify(renamed.body)).toBe(200);
     expect((await getArtifactById(doc.id))!.title).toBe('Doc renamed');
   });

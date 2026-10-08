@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { MAX_ROWS_LIMIT } from '@/lib/platform';

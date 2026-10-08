@@ -116,13 +116,13 @@ try {
 await postgres;
 b = await launchChromium();
 // ── two connections: a guest, and one the owner account adopts ─────────────────
-const [guestConnection, adoptedConnection] = await Promise.all([connectAgent(B), connectAgent(B)]);
+const [guestConnection, adoptedConnection] = await Promise.all([connectAgent(B), connectAgent(B, { email: OWNER_EMAIL })]);
 const tok = guestConnection.token;
 const ownerTok = adoptedConnection.token;
 const H = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
 const OH = { Authorization: `Bearer ${ownerTok}`, 'Content-Type': 'application/json' };
-const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, body: JSON.stringify(body) });
-const ownerPost = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: OH, body: JSON.stringify(body) });
+const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, body: JSON.stringify(path === '/api/artifacts' ? { visibility: 'unlisted', ...body } : body) });
+const ownerPost = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: OH, body: JSON.stringify(path === '/api/artifacts' ? { visibility: 'unlisted', ...body } : body) });
 
 // ── fixtures, published at once ─────────────────────────────────────────────────
 /** The page's own script: an effect over the `sales` and `region` signals, rendering into a node the markup does not bind. */
@@ -321,7 +321,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
     const csp = (await docResp.catch(() => null))?.headers()['content-security-policy'] ?? '';
     check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the framed document is served under the strict navigable document CSP');
-    check(p.url() === `${B}/a/${doc.id}`, `URL unchanged, no redirect (${new URL(p.url()).pathname})`);
+    check(new URL(p.url()).origin === new URL(B).origin && new URL(p.url()).pathname.split('/').at(-1)?.startsWith(`${doc.id}-`), `the dataflow document opens at its canonical account URL (${new URL(p.url()).pathname})`);
     const frame = await documentFrame(p);
     // PAINT FIRST: the page script's effect renders the rows the page already holds, then follows every change.
     await frame.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});

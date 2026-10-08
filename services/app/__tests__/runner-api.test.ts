@@ -7,7 +7,8 @@ import {POST as cancelRun} from '@/app/api/runs/[id]/cancel/route';
 import {afterEach,expect,it} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
 import {useAppHarness,request} from './harness';
-import {mintToken,claimToken,createUser} from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {invokeArtifact,runRequest,setLambdaProgramResolver,runnerOperation,startLambdaSchedules,artifactSchedule,deleteSchedule} from '@/lib/runner';
 import {getArtifactById} from '@/lib/artifacts';
@@ -15,11 +16,11 @@ import {setServices} from '@/lib/platform/services';
 import {createRunner} from '../../runner/src/local';
 const harness=useAppHarness();const close:Array<()=>Promise<unknown>>=[];afterEach(async()=>{setLambdaProgramResolver(undefined);setServices({runner:undefined});for(const fn of close.splice(0).reverse())await fn();});
 it('pins the server-selected artifact program, protects owner reads and composes API and cron',async()=>{
- const db=await harness.db();const owner=await createUser({email:'mxmx_test_runner_api@example.com'}),token=await mintToken('runner');await claimToken(owner.id,token.token);
+ const db=await harness.db();const owner=await createUser({email:'mxmx_test_runner_api@example.com'}),token=await mintToken('runner',owner.id);await claimToken(owner.id,token.token);
  const published=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Lambda adapter fixture</p>'}}));const doc=await published.json();
  const runner=await createRunner({db,dockerImage:process.env.RUNNER_TEST_IMAGE,capabilities:async()=>null});setServices({runner});close.push(()=>runner.close());
  const stop=await startLambdaSchedules(db);close.push(stop);
- const req=(path:string,input?:unknown,userId=owner.id)=>attachActor(new Request('http://localhost'+path,{method:input===undefined?'GET':'POST',headers:{'content-type':'application/json'},...(input===undefined?{}:{body:JSON.stringify(input)})}),{credential:'session',userId});
+ const req=(path:string,input?:unknown,userId=owner.id)=>attachActor(new Request('http://localhost'+path,{method:input===undefined?'GET':'POST',headers:{'content-type':'application/json'},...(input===undefined?{}:{body:JSON.stringify(input)})}),{credential:'session',userId,email:userId===owner.id?owner.email!:'mxmx_test_other_runner@example.com',emailVerified:true});
  expect((await invokeArtifact(req('/run',{requestId:'one'}),doc.id)).status).toBe(400);
  setLambdaProgramResolver(async id=>id===doc.id?{version:'pinned-1',program:{source:'export default i=>i',language:'typescript'}}:null);
  const response=await invokeArtifact(req('/run',{requestId:'one',input:12,userId:'forged',program:{source:'bad'}}),doc.id);expect(response.status).toBe(202);const {runId}=await response.json();
@@ -30,7 +31,7 @@ it('pins the server-selected artifact program, protects owner reads and composes
  expect((await invokeArtifact(req('/run',{requestId:'foreign'},'other-user'),doc.id)).status).toBe(404);
  const schedule=await artifactSchedule(req('/schedule',{cron:'*/5 * * * *',timezone:'UTC'}),doc.id);expect(schedule.status).toBe(201);const {id}=await schedule.json();
  expect((await deleteSchedule(req('/schedule',{},'other-user'),id)).status).toBe(404);expect((await deleteSchedule(req('/schedule',{}),id)).status).toBe(200);
- const cross=attachActor(new Request('http://localhost/api/runner/operations',{method:'POST',headers:{origin:'https://evil.example','sec-fetch-site':'cross-site'}}),{userId:owner.id,credential:'session'});
+ const cross=attachActor(new Request('http://localhost/api/runner/operations',{method:'POST',headers:{origin:'https://evil.example','sec-fetch-site':'cross-site'}}),{userId:owner.id,credential:'session',email:owner.email!,emailVerified:true});
  expect((await runnerOperation(cross,'update_artifact',{id:doc.id,markup:'bad'})).status).toBe(403);
 });
 
@@ -41,7 +42,7 @@ it('executes the documented HTTP handler lifecycle through authenticated routes'
  expect(Buffer.byteLength(guide)).toBeLessThanOrEqual(8192);
  expect(code,'HTTP clients must discover and execute the existing runs contract').toBeTruthy();
  expect(authoring).toContain('[server handlers and runs](lambdas.md)');
- const owner=await createUser({email:'mxmx_test_http_run_doc@example.com'}),token=await mintToken('http-run-doc');await claimToken(owner.id,token.token);
+ const owner=await createUser({email:'mxmx_test_http_run_doc@example.com'}),token=await mintToken('http-run-doc',owner.id);await claimToken(owner.id,token.token);
  const published=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Run doc fixture</p>'}}));
  const doc=await published.json(),starts:RunStart[]=[];
  setLambdaProgramResolver(async()=>({version:'published-version',program:{source:'export default i=>i',language:'typescript'}}));
@@ -54,7 +55,7 @@ it('executes the documented HTTP handler lifecycle through authenticated routes'
   const parsed=new URL(url),path=parsed.pathname;seen.push(path);
   expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer '+token.token);
   const req=attachActor(request(path+parsed.search,{method:init?.method??'GET',token:token.token,
-   ...(init?.body?{json:JSON.parse(String(init.body))}:{})}),{credential:'bearer',userId:owner.id,tokenId:token.id});
+   ...(init?.body?{json:JSON.parse(String(init.body))}:{})}),{credential:'bearer',userId:owner.id,tokenId:token.id,email:owner.email!,emailVerified:true});
   const params={params:Promise.resolve({id:path.includes('/artifacts/')?doc.id:'run-doc'})};
   if(path.endsWith('/cancel'))return cancelRun(req,params);
   if(path.endsWith('/events'))return readEvents(req,params);

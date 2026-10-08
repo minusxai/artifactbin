@@ -5,14 +5,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as editArtifact } from '@/app/api/artifacts/[id]/edits/route';
-import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { mintAccountToken } from './harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
 
 
-const SECRET = 'test-secret';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 let token: string;
@@ -21,7 +20,7 @@ const CANONICAL = '<div className="p-8" id="root"><h1 className="text-4xl font-b
 const NEEDS_REWRITE = '<div className="p-8"><p className="lead"><div>Block inside a paragraph</div></p></div>';
 
 beforeEach(async () => {
-  const minted = await (await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 'echo' }, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }))).json();
+  const minted = await mintAccountToken('echo');
   token = minted.token;
 });
 

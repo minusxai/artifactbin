@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { markupCsp } from '@/lib/story/styles/markup-csp';
@@ -15,7 +15,7 @@ const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const publish = async (markup: string): Promise<string> => {
   const token = await mintToken('raw-document');
-  const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token.token, json: { markup } }));
+  const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token.token, json: { markup, visibility: 'public' } }));
   expect(response.status).toBe(201);
   return ((await response.json()) as { id: string }).id;
 };

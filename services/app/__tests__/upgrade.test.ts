@@ -22,7 +22,7 @@ import { artifactPage } from '@/test/helpers/pages';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as readRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { mintAccountToken } from '@/__tests__/harness';
 import { resetRateLimit } from '@/lib/accounts';
 import { getDb, resetDb } from '@/lib/platform';
 import { SCHEMA_STATEMENTS } from '@/lib/platform';
@@ -31,15 +31,13 @@ import { request } from '@/__tests__/harness';
 // harness-exempt: reset builds fresh PGlite databases to test schema replay and upgrade behavior
 // harness-exempt: wipe clears the deliberately hand-built schema between upgrade scenarios
 
-const SECRET = 'test-secret';
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 interface Wire { id: string; edit_id: string; markup: string | null; version: number }
 
 const mint = async (): Promise<string> => {
-  const res = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
-  return ((await res.json()) as { token: string }).token;
+  return (await mintAccountToken('mxmx_test_fixture')).token;
 };
 
 beforeEach(async () => {
@@ -167,7 +165,7 @@ describe('the additive DDL is replay-safe', () => {
 
     const token = await mint();
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'after replay', markup: '<section><p>alpha text</p></section>' } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'after replay', markup: '<section><p>alpha text</p></section>' } }),
     );
     expect(res.status).toBe(201);
     const doc = (await res.json()) as Wire;
@@ -183,7 +181,7 @@ describe('an artifact whose edit log has been pruned', () => {
   /** Trim the log the way pruning does, leaving a row with no entries at all. */
   async function withPrunedLog(token: string): Promise<Wire> {
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'pruned', markup: '<section><p>alpha text</p><p>beta text</p></section>' } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'pruned', markup: '<section><p>alpha text</p><p>beta text</p></section>' } }),
     );
     expect(res.status).toBe(201);
     const doc = (await res.json()) as Wire;

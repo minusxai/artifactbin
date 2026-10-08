@@ -15,7 +15,7 @@ import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import teaching from '../../cli/src/generated/teaching.json';
 import { createAppServer } from '@/server/app';
-import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { mintAccountToken } from '@/__tests__/harness';
 import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
 
 
@@ -23,17 +23,16 @@ import { setServices } from '@/lib/platform';
 import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/serving';
 import { mintExportKey } from '@/lib/serving';
 
-const SECRET = 'test-secret';
 const EXPORT_BYTES = EXPORT_PNG;
 useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function create(markup: string, title = 'shot me') {
-  const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: {}, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
-  const { token } = await mintRes.json();
+  const mintRes = await mintAccountToken('mxmx_test_fixture');
+  const { token } = mintRes;
   const res = await createArtifactRoute(
-    request('/api/artifacts', { method: 'POST', token: token, json: { title, markup } }),
+    request('/api/artifacts', { method: 'POST', token: token, json: { title, markup, visibility: 'public' } }),
   );
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string; url: string; version: number }>;
@@ -167,10 +166,10 @@ describe('markup (story-engine) rows', () => {
   it(
     'exports by rendering the live page, and serves its source at ./raw',
     async () => {
-      const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: {}, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
-      const { token } = await mintRes.json();
+      const mintRes = await mintAccountToken('mxmx_test_fixture');
+      const { token } = mintRes;
       const created = await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: token, json: { markup: '<h1 className="text-3xl font-bold">shot me</h1>' } }),
+        request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', markup: '<h1 className="text-3xl font-bold">shot me</h1>' } }),
       );
       expect(created.status).toBe(201);
       const { id } = (await created.json()) as { id: string };
@@ -301,8 +300,8 @@ describe('GET /a/<folder>/export', () => {
 
   /** A public folder holding one public child, created through the real doors. */
   async function folderWithChild() {
-    const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: {}, headers: { 'x-shared-secret': SECRET } }));
-    const { token } = await mintRes.json();
+    const mintRes = await mintAccountToken('mxmx_test_fixture');
+    const { token } = mintRes;
     const folderRes = await createArtifactRoute(
       request('/api/artifacts', { method: 'POST', token, json: { format: 'folder', title: 'Field Notes', visibility: 'public' } }),
     );

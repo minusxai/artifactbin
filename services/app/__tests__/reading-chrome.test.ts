@@ -9,15 +9,15 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
-import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, markup: string, template: 'editorial' | 'scrolly' = 'editorial') => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { markup, template } }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { markup, template, visibility: 'public' } }));
   expect(res.status, await res.clone().text()).toBe(201);
   return ((await res.json()) as { id: string }).id;
 };
@@ -27,12 +27,12 @@ const SECTIONED = '<article data-design="tw" className="mx-auto max-w-2xl">'
 
 describe('the served document', () => {
   it('carries no reader chrome of the app\'s: the app page frames it and draws its own bar', async () => {
-    const t = await mintToken('owner');
     const user = await createUser({ email: 'breadcrumb@example.com' });
+    const t = await mintToken('owner', user.id);
     await setUsername(user.id, 'breadcrumbowner');
     await claimToken(user.id, t.token);
     const id = await create(t.token, '<h1>Quarterly review</h1>');
-    const html = await (await rawRoute(request(`/a/${id}/raw`, { cookie: await agentCookie([t.id]) }), params({ id }))).text();
+    const html = await (await rawRoute(request(`/a/${id}/raw`, { actor: { userId: user.id, email: user.email, emailVerified: true, credential: 'session' } }), params({ id }))).text();
     expect(html).toContain('Quarterly review');
     expect(html).not.toMatch(/data-mx-reader-chrome|mx-reader-byline|data-mx-spa-idle/);
   });

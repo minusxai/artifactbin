@@ -11,6 +11,7 @@ import path from 'node:path';
 import { developmentPagesHosts, developmentViteOptions } from './services/app/lib/runtime/dev-vite';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
+import { canAuthenticateUser } from './services/app/lib/accounts/user-kinds';
 import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/auth';
 
 async function main(): Promise<void> {
@@ -197,7 +198,7 @@ async function main(): Promise<void> {
      * by default). A revoke is immediate in the app's own reads and ≤ TTL here.
      */
     const appSchema = readEnv(env, 'APP__SCHEMA');
-    reader = createTokenReader({ db: queryable, ttlMs: 5000, ...(appSchema ? { schema: appSchema } : {}) });
+    reader = createTokenReader({ db: queryable, ttlMs: 5000, admitBearer: token => canAuthenticateUser(token.userId), ...(appSchema ? { schema: appSchema } : {}) });
   }
 
   /*

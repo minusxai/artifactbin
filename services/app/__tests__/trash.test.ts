@@ -10,7 +10,8 @@ import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute, DELETE as deleteRoute } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById, type TokenActor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import { mintToken, resolveToken } from '@/lib/accounts';
+import { resolveToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { listTrashFor, restoreArtifactFor } from '@/lib/workspace';
 import { createAppServer } from '@/server/app';
@@ -19,9 +20,9 @@ useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 async function owner() {
-  const t = await mintToken('o');
   const u = await createUser({ email: 'o@example.com' });
-  await claimToken(u.id, t.token);
+  const t = await mintToken('o', u.id);
+    await claimToken(u.id, t.token);
   const actor = (await resolveToken(t.token)) as unknown as TokenActor;
   return { token: t.token, actor };
 }

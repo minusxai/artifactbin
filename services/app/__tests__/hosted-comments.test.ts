@@ -1,6 +1,8 @@
+import { setSession } from './harness';
 import {it,expect,afterEach} from 'vitest';
 import {useAppHarness,request,agentCookie} from './harness';
-import {createUser,claimToken,mintToken} from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {remoteAgents} from '@/lib/remote/agents';
 import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
@@ -15,7 +17,8 @@ useAppHarness();
 afterEach(()=>{setHostedRemoteAgent(undefined);clearExternalHostedComments();});
 const secret='fixture-only-hosted-comment-secret-000000000';
 async function fixture(){
- const token=await mintToken('external-comments'),user=await createUser({email:'mxmx_test_external-comments@example.com'});await claimToken(user.id,token.token);
+ const user=await createUser({email:'mxmx_test_external-comments@example.com'}),token=await mintToken('external-comments',user.id);await claimToken(user.id,token.token);
+ setSession({user:{id:token.userId!,email:token.email!}});
  const cookie=await agentCookie([token.id]);
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Remote comments</p>'}}));expect(made.status).toBe(201);const doc=await made.json();
  const id=hostedAgentSessionId(user.id),session={id,name:'artifactbin',harness:'native',cwd:'Agent',machine:'Remote',cols:100,rows:30,online:true,exitCode:null,controller:'web' as const,createdAt:new Date().toISOString(),managed:true,activity:'listening' as const};

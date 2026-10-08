@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { findBrokenEmbeds } from '@/lib/story/data/refs';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

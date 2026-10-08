@@ -25,6 +25,7 @@ import { ANONYMOUS, type Actor } from '@artifactbin/contracts';
 import { getDb } from '../platform/db';
 import { resolveTokenById, sha256 } from './tokens';
 import type { RequestActor } from './viewer';
+import { canAuthenticateUser } from './user-kinds';
 
 /** The cookie the documents' doors read the reader from (`Domain=.<pages host>`, HttpOnly). */
 export const PAGES_COOKIE = 'afbin_pages';
@@ -43,13 +44,13 @@ const randomSecret = (bytes: number): string => crypto.randomBytes(bytes).toStri
 const codes = async () => createCodeStore(await getDb());
 
 /**
- * The browser credentials a pages session may carry: an account session or an agent cookie — never a bearer.
+ * A pages session carries an email account session or a trusted scripted browser's account token.
  * One browser reads as a bearer: a browser SESSION's scripted browser (`BROWSER_SESSION_HEADER` on a request
  * the trusted session transport attached its actor to, lib/accounts/viewer `isBrowserSessionRequest`). It is
  * a browser holding a token, so its pages session is exactly that: an agent cookie for that token.
  */
 function snapshotOf(actor: RequestActor, browserSession: boolean): ActorSnapshot | null {
-  const credential = actor.credential === 'session' || actor.credential === 'agent-cookie' ? actor.credential
+  const credential = actor.credential === 'session' ? actor.credential
     : actor.credential === 'bearer' && browserSession && actor.tokenId ? 'agent-cookie' : null;
   if (!credential) return null;
   if (!actor.viewer?.userId && !actor.tokenId) return null;
@@ -78,7 +79,7 @@ export type PagesCarried = Readonly<Record<string, unknown>>;
 export async function issuePagesTicket(actor: RequestActor, carried: PagesCarried = {}, now = Date.now(), options: { browserSession?: boolean } = {}): Promise<string | null> {
   const nobody = !actor.viewer?.userId && !actor.tokenId;
   const snapshot = snapshotOf(actor, options.browserSession === true) ?? (nobody && Object.keys(carried).length ? NOBODY : null);
-  if (!snapshot) return null;
+  if (!snapshot || (snapshot.credential !== 'none' && !await canAuthenticateUser(snapshot.userId))) return null;
   const ticket = randomSecret(24);
   await (await codes()).issue({ kind: TICKET_KIND, secret: ticket, payload: { ...snapshot, carried: { ...carried } }, ttlMs: PAGES_TICKET_TTL_MS, now });
   return ticket;
@@ -120,6 +121,7 @@ export async function pagesSessionOf(cookie: string | null | undefined, now = Da
   const carried = typeof row.carried === 'string' ? JSON.parse(row.carried) as unknown : row.carried;
   const held: PagesCarried = carried && typeof carried === 'object' && !Array.isArray(carried) ? carried as PagesCarried : {};
   if (row.credential === 'none') return { actor: ANONYMOUS, carried: held };
+  if (!await canAuthenticateUser(row.user_id)) return null;
   if (row.token_id) {
     const token = await resolveTokenById(row.token_id);
     if (!token || (token.userId ?? null) !== (row.user_id ?? token.userId ?? null)) return null;

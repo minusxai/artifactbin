@@ -23,7 +23,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
 import { mintExportKey } from '@/lib/serving';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
@@ -52,7 +52,7 @@ async function outcome(p: Promise<unknown>): Promise<'render' | 'redirect' | 'no
 async function fixtures() {
   const owner = await ensureUsername(await createUser({ email: 'hole@example.com' }));
   await setUsername(owner.id, 'holeowner');
-  const t = await mintToken('hole');
+  const t = await mintToken('hole', owner.id);
   await claimToken(owner.id, t.token);
   return { owner, token: t.token };
 }
@@ -150,7 +150,7 @@ describe('the resolver is not an existence oracle', () => {
   it('answers the same for "someone else\'s private id" as for "no such id"', async () => {
     // A private document owned by a DIFFERENT account.
     const other = await createUser({ email: 'other@example.com' });
-    const otherToken = await mintToken('other');
+    const otherToken = await mintToken('other', other.id);
     await claimToken(other.id, otherToken.token);
     const secret = await create(otherToken.token, { title: 'Theirs', markup: '<h1>x</h1>' });
 

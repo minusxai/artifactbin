@@ -11,6 +11,7 @@ import { getDb, Queryable } from '../platform/db';
 import { emit } from '../platform/events';
 import { generateTokenId } from '../platform/ids';
 import type { Harness } from '@/lib/platform';
+import { canAuthenticateUser } from './user-kinds';
 
 const TOKEN_PREFIX = 'mx_';
 
@@ -155,7 +156,7 @@ export async function resolveToken(presented: string): Promise<ResolvedToken | n
     [sha256(presented)],
   );
   const row = r.rows[0];
-  return row ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
+  return row && await canAuthenticateUser(row.user_id, db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
 }
 
 /** Remember a declared/observed agent harness for attribution on later stateless calls. */

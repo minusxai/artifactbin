@@ -29,7 +29,7 @@ import { trackEvent } from '@/lib/platform';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
 import { mintExportKey } from '@/lib/serving';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, listArtifactsByUser } from '@/lib/accounts';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
@@ -137,7 +137,7 @@ describe('write events', () => {
     expect((await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>v2</h1>' } }), params({ id: doc.id }))).status).toBe(200);
     await expectEvent(doc.id, 'edit');
 
-    const head=(await getArtifactById(doc.id))!;const archived=await getVersionFor({tokenId:t.id,userId:null},doc.id,1);
+    const head=(await getArtifactById(doc.id))!;const archived=await getVersionFor({tokenId:t.id,userId:t.userId},doc.id,1);
     expect((await revertRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:documentEditBody(head,{source:archived!.source!,whole:true})}),params({id:doc.id}))).status).toBe(200);
     expect((await eventRows(doc.id)).filter(row=>row.event==='edit')).toHaveLength(2);
 
@@ -190,8 +190,8 @@ describe('read events', () => {
     rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params({ id }));
 
   it('an explicit raw read logs one view; fetching page data or metadata logs none', async () => {
-    const t = await mintToken('anon');
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const t = await mintToken('public-reader-owner');
+    const doc = await create(t.token, { markup: '<p>x</p>', visibility: 'public' });
     await settle(); // let the create event land so counts below are stable
 
     await artifactPageMetadata(doc.id);
@@ -215,7 +215,7 @@ describe('read events', () => {
 
   it('a denied viewer logs nothing; the owner’s pretty-URL render logs a view with their id', async () => {
     const owner = await createUser({ email: 'owner@example.com' });
-    const t = await mintToken('owned');
+    const t = await mintToken('owned', owner.id);
     await claimToken(owner.id, t.token);
     const doc = await create(t.token, { markup: '<p>x</p>', visibility: 'private', title: 'secret' });
 
@@ -236,8 +236,8 @@ describe('read events', () => {
   });
 
   it('the export route logs export; the SSE connect logs sse_connect once', async () => {
-    const t = await mintToken('anon');
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const t = await mintToken('public-reader-owner');
+    const doc = await create(t.token, { markup: '<p>x</p>', visibility: 'public' });
 
     await exportRoute(request(`/a/${doc.id}/export`), params({ id: doc.id }));
     await expectEvent(doc.id, 'export');

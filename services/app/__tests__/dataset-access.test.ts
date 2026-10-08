@@ -15,9 +15,9 @@ import { GET as sharingGet, PUT as sharingPut } from '@/app/api/my/artifacts/[id
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
@@ -74,9 +74,8 @@ describe('access on the bearer API', () => {
 describe('access on the browser surfaces', () => {
   it('PATCH /api/my/artifacts/<id> { access } flips it with no version bump; a document answers access_datasets_only', async () => {
     const t = await mintToken('t');
-    const cookie = await agentCookie([t.id]);
     const id = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const res = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id }));
+    const res = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id }));
     expect(res.status).toBe(200);
     expect((await res.json()) as object).toMatchObject({ id, access: 'readwrite' });
     const row = (await getArtifactById(id))!;
@@ -84,15 +83,14 @@ describe('access on the browser surfaces', () => {
     expect(row.version).toBe(1);
 
     const doc = ((await (await create(t.token, { markup: '<p>hi</p>' })).json()) as { id: string }).id;
-    const nope = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: doc }));
+    const nope = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id: doc }));
     expect(nope.status).toBe(400);
   });
 
   it('the sharing surface carries access and the documents that write here, for an account owner', async () => {
-    const t = await mintToken('t');
     const user = await createUser({ email: 'owner@x.com' });
+    const t = await mintToken('t', user.id);
     await claimToken(user.id, t.token);
-    const cookie = await agentCookie([t.id]);
     const ds = ((await (await create(t.token, { dataset: ROWS, access: 'readwrite' })).json()) as { id: string }).id;
     const doc = await create(t.token, {
       title: 'Lunch poll',
@@ -100,13 +98,13 @@ describe('access on the browser surfaces', () => {
     });
     expect(doc.status).toBe(201);
 
-    const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { cookie: cookie }), params({ id: ds }));
+    const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true } }), params({ id: ds }));
     expect(got.status).toBe(200);
     const state = (await got.json()) as { visibility: string; access: string; writtenBy: Array<{ id: string; title: string | null; mutations: string[] }> };
     expect(state.access).toBe('readwrite');
     expect(state.writtenBy).toEqual([{ id: ((await doc.json()) as { id: string }).id, title: 'Lunch poll', mutations: ['vote'] }]);
 
-    const put = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'read' } }), params({ id: ds }));
+    const put = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'read' } }), params({ id: ds }));
     expect(put.status).toBe(200);
     expect(((await put.json()) as { access: string }).access).toBe('read');
     expect((await getArtifactById(ds))!.access).toBe('read');
@@ -118,15 +116,14 @@ describe('access on the browser surfaces', () => {
     // dropped the write and the caller got 200 for a change that never
     // happened, where create/PUT/PATCH answer 400. One rule, one answer.
     const t = await mintToken('t');
-    const cookie = await agentCookie([t.id]);
     const doc = ((await (await create(t.token, { markup: '<p>not a dataset</p>' })).json()) as { id: string }).id;
 
     const viaSharing = await sharingPut(
-      request(`/api/my/artifacts/${doc}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'readwrite' } }),
+      request(`/api/my/artifacts/${doc}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }),
       params({ id: doc }),
     );
     const viaPatch = await sessionPatchRoute(
-      await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }),
+      await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }),
       params({ id: doc }),
     );
     expect([viaSharing.status, viaPatch.status]).toEqual([400, 400]);
@@ -136,33 +133,30 @@ describe('access on the browser surfaces', () => {
 
   it('opens a dataset for writes through every browser door without a preview flag', async () => {
     const t = await mintToken('t');
-    const cookie = await agentCookie([t.id]);
     const ds = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const sharing = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'readwrite' } }), params({ id: ds }));
+    const sharing = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id: ds }));
     expect(sharing.status).toBe(200);
     expect((await sharing.json()) as object).toMatchObject({ access: 'readwrite' });
-    await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'read' } }), params({ id: ds }));
-    const patch = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${ds}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: ds }));
+    await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'read' } }), params({ id: ds }));
+    const patch = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${ds}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id: ds }));
     expect(patch.status).toBe(200);
     expect((await patch.json()) as object).toMatchObject({ access: 'readwrite' });
   });
 
-  it('an ANONYMOUS owner manages sharing too — writes anchor on the token, not an account; only private needs one', async () => {
+  it('an email account owner manages sharing and private visibility; strangers are denied', async () => {
     const t = await mintToken('t');
-    const cookie = await agentCookie([t.id]);
-    const ds = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { cookie: cookie }), params({ id: ds }));
+    const ds = ((await (await create(t.token, { dataset: ROWS, visibility: 'public' })).json()) as { id: string }).id;
+    const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true } }), params({ id: ds }));
     expect(got.status).toBe(200);
     expect((await got.json()) as object).toMatchObject({ visibility: 'public', access: 'read', shares: [] });
-    const rw = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'readwrite', visibility: 'unlisted' } }), params({ id: ds }));
+    const rw = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite', visibility: 'unlisted' } }), params({ id: ds }));
     expect(rw.status).toBe(200);
     expect((await getArtifactById(ds))!).toMatchObject({ access: 'readwrite', visibility: 'unlisted' });
-    const priv = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { visibility: 'private' } }), params({ id: ds }));
-    expect(priv.status).toBe(400);
-    expect(((await priv.json()) as { error: string }).error).toBe('private_requires_account');
-    // A stranger's cookie is the uniform 404.
+    const priv = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { visibility: 'private' } }), params({ id: ds }));
+    expect(priv.status).toBe(200);
+    expect((await getArtifactById(ds))!).toMatchObject({ visibility: 'private' });
+    // A stranger's verified email session is the uniform 404.
     const other = await mintToken('o');
-    const strangers = await agentCookie([other.id]);
-    expect((await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { cookie: strangers }), params({ id: ds }))).status).toBe(404);
+    expect((await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: other.userId!, email: other.email!, emailVerified: true } }), params({ id: ds }))).status).toBe(404);
   });
 });

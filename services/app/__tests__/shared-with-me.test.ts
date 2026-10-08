@@ -20,7 +20,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername, listSharedWithEmail, setUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
@@ -33,7 +33,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 async function ownerFixture() {
   const owner = await ensureUsername(await createUser({ email: 'share-owner@example.com' }));
   await setUsername(owner.id, 'shareowner');
-  const t = await mintToken('share');
+  const t = await mintToken('share', owner.id);
   await claimToken(owner.id, t.token);
   return { owner, token: t.token };
 }

@@ -3,7 +3,7 @@ import {artifactQuery} from '@/lib/artifacts';
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
 import {storedCompiledDataflow} from '@/lib/story/data/parsed-artifact-metadata';

@@ -12,13 +12,13 @@ Then: afbin pull <artifact url> --output report.jsx; edit the file; afbin push r
 Reference: afbin help or afbin help <topic>. Restart your agent to load the installed skill.
 Local: afbin preview report.jsx needs no cloud or credentials. Downloads: .jsx.html. Prepare a pinned npm cache before disconnecting; npm is not a sandbox.
 
-Server commands sign in through browser approval, including guests. Automation: --yes --json returns the approval URL; open it to continue. HTTP requires email; guest browser approval is CLI-only.
+Server commands sign in through email account browser approval. Automation: --yes --json returns the approval URL; open it to continue. CLI and HTTP authentication require email.
 
 Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; use either or its bare id. Add @<version> for history.
 
 ## Direct HTTP API
 
-An HTTP client does not need Node or the CLI. Direct HTTP clients require email authentication; guest browser approval is CLI-only. All JSON requests use Content-Type: application/json. Use this server's Origin for session-authenticated requests.
+An HTTP client does not need Node or the CLI. Direct HTTP clients require email authentication. CLI browser approval also requires email. All JSON requests use Content-Type: application/json. Use this server's Origin for session-authenticated requests.
 
 1. POST [[ base ]]/api/auth/email-otp/send-verification-otp with {"email":"you@example.com","type":"sign-in"} and Origin: [[ base ]]. Ask the user for the emailed code.
 2. POST [[ base ]]/api/auth/sign-in/email-otp with {"email":"you@example.com","otp":"<user's code>"} and the same Origin. Keep the returned session cookies in a private cookie jar.

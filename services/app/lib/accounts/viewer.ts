@@ -4,6 +4,7 @@
  * without dragging account authentication into every test and client bundle that touches
  * artifact SQL. This is the only non-route file that imports @/auth.
  */
+import { pagesRequestOf } from '../serving/pages-origin';
 import { currentRequest } from '../platform/request-context';
 import { actorOf } from '@artifactbin/utils';
 import { mergeGuestUsers } from './guest-owner';
@@ -11,7 +12,7 @@ import { BROWSER_SESSION_HEADER, type Credential } from '@artifactbin/contracts'
 import { DuplicateProfileEmail, syncProfile } from './profiles';
 import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRow, type RoleActor, type TokenActor, type Viewer } from '../artifacts/access';
 import { type ArtifactRole } from '../artifacts/share-roles';
-import { liveAgentSession } from './agent-session';
+import { canAuthenticateUser } from './user-kinds';
 import { resolveToken, resolveTokenById, touchToken } from './tokens';
 
 /**
@@ -91,6 +92,15 @@ export function isBrowserSessionRequest(request: Request): boolean {
 async function proxyActor(request: Request | undefined): Promise<RequestActor | null> {
   const attached = attachedActor(request);
   if (attached) {
+    if (attached.credential === 'agent-cookie') {
+      // Only the pages host creates token-backed browser cookies. Its WeakMap
+      // mark cannot be supplied by a client; retain the cookie CSRF guard.
+      const carrying = request ?? currentRequest();
+      const token = attached.tokenId ? await resolveTokenById(attached.tokenId) : null;
+      if (!carrying || !pagesRequestOf(carrying) || !token || token.userId !== attached.viewer?.userId
+        || !await canAuthenticateUser(token.userId)) return NO_ACTOR;
+    }
+    if (attached.credential === 'bearer' && !await canAuthenticateUser(attached.viewer?.userId)) return NO_ACTOR;
     if ((request ?? currentRequest())?.headers.get(BROWSER_SESSION_HEADER) === '1') {
       const token = attached.tokenId ? await resolveTokenById(attached.tokenId) : null;
       if (!token || token.userId !== (attached.viewer?.userId ?? null)) return NO_ACTOR;
@@ -106,23 +116,8 @@ async function proxyActor(request: Request | undefined): Promise<RequestActor | 
 }
 
 
-/**
- * Who is asking, for a request that carries BROWSER credentials.
- *
- * Two envelopes, one answer. A account authentication session is an ACCOUNT (userId, and
- * account-wide reach). The agent-session cookie is a browser holding token ids
- * — an anonymous owner, whose reach is exactly what its token created. An
- * account wins when both are present: it is the wider, named identity, and it
- * is what the user sees themselves as while signed in.
- *
- * The token is re-resolved here on EVERY request (resolveTokenById keeps the
- * revoked check), so revoking a token ends the browser's session on the next
- * call rather than at cookie expiry.
- *
- * This is the ONE ownership seam: the page (ArtifactDocument), the API routes
- * and the reader/owner proxy all ask it, so they cannot drift apart on who
- * owns a document.
- */
+/** Browser authority comes only from an account session. Legacy held token
+ * IDs survive exclusively as ownership proofs after verified email login. */
 export async function sessionActor(request?: Request, opts: { headerOnly?: boolean } = {}): Promise<RequestActor> {
   const fromProxy = await proxyActor(request);
   if (fromProxy) {
@@ -135,23 +130,9 @@ export async function sessionActor(request?: Request, opts: { headerOnly?: boole
   const viewer = await sessionViewer(request);
   if (viewer) return { viewer, tokenId: null, credential: 'session' };
 
-  // Fail CLOSED, like sessionViewer above: `cookies()` throws synchronously
-  // outside a request scope (direct handler calls in tests, build-time
-  // rendering), and a credential lookup that cannot run is no credential —
-  // never a crash.
-  // The request in hand, or the one the server is holding for this call
-  // (lib/request-context). Off-request there is no cookie and no credential.
-  const carrying = request ?? currentRequest();
-  const session = carrying ? await liveAgentSession(carrying) : null;
-  if (!session) return NO_ACTOR;
-
-  // The LAST id is the primary — the token a write acts as. Earlier ids are
-  // still held (they are what a sign-up may claim), but they do not authorize.
-  const primary = session.tokenIds[session.tokenIds.length - 1];
-  const token = await resolveTokenById(primary);
-  if (!token) return NO_ACTOR;
-  await touchToken(token.id);
-  return { viewer: token.userId ? { userId: token.userId, email: null } : null, tokenId: token.id, credential: 'agent-cookie' };
+  // Held ownership cookies may be adopted AFTER verified email login. They
+  // never authenticate a browser on their own.
+  return NO_ACTOR;
 }
 
 /**
@@ -211,26 +192,10 @@ export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | '
   return artifactRole(row, roleActor(actor));
 }
 
-/**
- * How a browser is authenticated, for the top bar's session control. Three
- * outcomes, because there are three ways to hold (or not hold) a credential:
- *
- *  - 'account' — a account authentication session. Offers "Sign out".
- *  - 'anon'    — no account, but the agent-session cookie resolves to a live
- *                token (lib/agent-session). Offers "Disconnect this browser".
- *  - 'none'    — neither. Offers "Log in".
- *
- * A CLAIMED token held only in the cookie is 'anon', not 'account': there is
- * no account authentication session to sign out of, and the thing to clear is the cookie.
- * Fails to 'none' if resolution throws off-request (same as sessionActor).
- */
-export async function browserSessionKind(request?: Request, admitted?: RequestActor): Promise<'account' | 'anon' | 'none'> {
-  // A page already resolved this exact request for admission. This optional
-  // snapshot is display-only; live authorization always resolves afresh.
-  if (admitted) return admitted.credential === 'session' ? 'account' : admitted.tokenId ? 'anon' : 'none';
-  if (await sessionViewer()) return 'account';
-  const actor = await sessionActor(request);
-  return actor.tokenId ? 'anon' : 'none';
+/** Browser controls reflect email sessions only; legacy ownership proofs are not login. */
+export async function browserSessionKind(_request?: Request, admitted?: RequestActor): Promise<'account' | 'none'> {
+  if (admitted) return admitted.credential === 'session' ? 'account' : 'none';
+  return await sessionViewer() ? 'account' : 'none';
 }
 
 /**

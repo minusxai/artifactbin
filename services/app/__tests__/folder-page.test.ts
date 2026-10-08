@@ -16,7 +16,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * refuses content on a row that has none.
  */
 import { describe, expect, it } from 'vitest';
-import { agentCookie, request, useAppHarness } from './harness';
+import { request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
@@ -24,7 +24,7 @@ import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
 
 useAppHarness();
@@ -32,10 +32,10 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 
 async function owner(name: string) {
-  const t = await mintToken(name);
   const u = await createUser({ email: `${name}@example.com` });
-  await claimToken(u.id, t.token);
-  return { token: t.token, tokenId: t.id, userId: u.id, email: `${name}@example.com`, cookie: await agentCookie([t.id]) };
+  const t = await mintToken(name, u.id);
+    await claimToken(u.id, t.token);
+  return { token: t.token, tokenId: t.id, userId: u.id, email: `${name}@example.com`, actor: { userId: u.id, email: u.email, emailVerified: true, credential: 'session' as const } };
 }
 const create = async (token: string, body: Record<string, unknown>) => {
   const r = await j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));
@@ -43,7 +43,7 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return r.body as Record<string, any>;
 };
 /** The page endpoint, as one viewer. */
-const pageAs = async (id: string, cookie?: string) => j(await pageRoute(request(`/api/page/artifact/${id}`, cookie ? { cookie } : {}), params(id)));
+const pageAs = async (id: string, actor?: { userId: string; email: string; emailVerified: boolean; credential: 'session' }) => j(await pageRoute(request(`/api/page/artifact/${id}`, actor ? { actor } : {}), params(id)));
 
 async function world() {
   const o = await owner('folderowner');
@@ -68,7 +68,7 @@ describe('a folder has no content', () => {
     const f = await create(o.token, { format: 'folder', title: 'Reports' });
     for (const [door, run] of [
       ['bearer', async () => putRoute(await observedRequest(`/api/artifacts/${f.id}`, { method: 'PUT', json: { dataset: [{value:1}] }, token: o.token }), params(f.id))],
-      ['session', async () => putMineRoute(await observedRequest(`/api/my/artifacts/${f.id}`, { method: 'PUT', json: { dataset: [{value:1}] }, cookie: o.cookie, origin: 'same' }), params(f.id))],
+      ['session', async () => putMineRoute(await observedRequest(`/api/my/artifacts/${f.id}`, { method: 'PUT', json: { dataset: [{value:1}] }, actor: o.actor, origin: 'same' }), params(f.id))],
     ] as const) {
       const r = await j(await run());
       expect(r.status, `${door}: ${JSON.stringify(r.body)}`).toBe(400);
@@ -125,7 +125,7 @@ describe('a folder has no content', () => {
 describe('the folder page bootstrap', () => {
   it('answers the OWNER the whole shelf, with the numbers and a card for every linkable child', async () => {
     const { o, f, pub, priv, quiet, sub } = await world();
-    const r = await pageAs(f.id, o.cookie);
+    const r = await pageAs(f.id, o.actor);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const folder = r.body.folder;
     expect(folder, 'the page carries a folder block').toBeTruthy();
@@ -175,7 +175,7 @@ describe('the folder page bootstrap', () => {
     const { o, f, priv } = await world();
     const editor = await owner('foldereditor');
     await updateSharing(o.userId, f.id, { shares: [{ email: editor.email, role: 'editor' }] });
-    const r = await pageAs(f.id, editor.cookie);
+    const r = await pageAs(f.id, editor.actor);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.role).toBe('editor');
     expect(r.body.folder.rows.map((x: any) => x.id)).toContain(priv.id);
@@ -188,7 +188,7 @@ describe('the folder page bootstrap', () => {
     const secret = await create(o.token, { format: 'folder', title: 'Secret', visibility: 'private' });
     const open = await create(o.token, { format: 'folder', title: 'Open', visibility: 'public', parent_id: secret.id });
     const leaf = await create(o.token, { format: 'folder', title: 'Leaf', visibility: 'public', parent_id: open.id });
-    const mine = await pageAs(leaf.id, o.cookie);
+    const mine = await pageAs(leaf.id, o.actor);
     expect(mine.body.folder.trail.map((c: any) => c.id)).toEqual([secret.id, open.id]);
     const theirs = await pageAs(leaf.id);
     // The private ancestor is simply not there. A crumb saying "a folder you
@@ -202,13 +202,13 @@ describe('the folder page bootstrap', () => {
     const f = await create(o.token, { format: 'folder', title: 'Reports', visibility: 'private' });
     expect((await pageAs(f.id)).status).toBe(404);
     const stranger = await owner('outsider');
-    expect((await pageAs(f.id, stranger.cookie)).status).toBe(404);
+    expect((await pageAs(f.id, stranger.actor)).status).toBe(404);
   });
 
   it('counts an EMPTY folder honestly and still answers a page', async () => {
     const o = await owner('emptyfolder');
     const f = await create(o.token, { format: 'folder', title: 'Nothing' });
-    const r = await pageAs(f.id, o.cookie);
+    const r = await pageAs(f.id, o.actor);
     expect(r.status).toBe(200);
     expect(r.body.folder.rows).toEqual([]);
     expect(r.body.folder.count).toEqual({ documents: 0, folders: 0 });

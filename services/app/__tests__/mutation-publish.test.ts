@@ -17,7 +17,7 @@ import { POST as previewRoute } from '@/app/api/preview/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

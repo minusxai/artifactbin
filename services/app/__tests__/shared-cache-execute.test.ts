@@ -3,7 +3,7 @@ const upstream=vi.hoisted(()=>({query:vi.fn()}));
 vi.mock('@/lib/datasets/postgres',()=>({queryPostgres:upstream.query}));
 import {useAppHarness,request} from './harness';
 import {getDb} from '@/lib/platform';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {createArtifact,runDocumentDataflow,datasetResolverForActor,refLoaderForActor} from '@/lib/artifacts';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import {executeCatalog} from '@/lib/datasets/execute';
@@ -14,10 +14,10 @@ useAppHarness();
 beforeEach(()=>{upstream.query.mockReset().mockResolvedValue({rows:[{n:1}],columns:[{name:'n',type:'number'}]});});
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
 async function setup(){
- const token=await mintToken('cache-execute'),actor={tokenId:token.id,userId:null};
+ const token=await mintToken('cache-execute'),actor={tokenId:token.id,userId:token.userId};
  const secret=await createDatasetSecret(actor,'fixture-pass',target);
  const catalog:DatasetCatalog={kind:'postgres',connection:{...target,passwordSecretId:secret.id},refreshSeconds:60,defaultSchema:'public',tables:[{schema:'public',name:'rows',source:{schema:'public',table:'rows'},columns:[{name:'n',type:'number'}]}]};
- const row=await createArtifact(token.id,null,{format:'dataset',source:null,meta:{catalog},visibility:'public'});
+ const row=await createArtifact(token.id, token.userId,{format:'dataset',source:null,meta:{catalog},visibility:'public'});
  return {row,catalog,token,actor,secret};
 }
 it('executeCatalog persists shared results and separates dataset ids, params and windows',async()=>{

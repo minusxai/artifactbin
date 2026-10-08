@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/platform';
-import { createUser, claimToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import { it, expect, vi } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
@@ -15,18 +15,18 @@ import {
 } from '@/lib/artifacts';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
-import { mintToken } from '@/lib/accounts';
-import { agentCookie, request, useAppHarness } from './harness';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { request, useAppHarness } from './harness';
 useAppHarness();
 async function fixture() {
   const owner = await mintToken('policy-owner');
-  const actor = { tokenId: owner.id, userId: null };
+  const actor = { tokenId:owner.id,userId:owner.userId };
   const publish = async (body: object) => {
     const r = await create(
       request('/api/artifacts', {
         method: 'POST',
         token: owner.token,
-        json: body,
+        json: { visibility: 'public', ...body },
       }),
     );
     expect(r.status, await r.clone().text()).toBe(201);
@@ -79,7 +79,7 @@ it('fences administration by edit access and revision, and removing a policy rev
   const stranger = await mintToken('stranger');
   expect(
     await setDatasetPolicy(
-      { tokenId: stranger.id, userId: null },
+      { tokenId:stranger.id,userId:stranger.userId },
       f.ds,
       f.policy,
       0,
@@ -178,13 +178,10 @@ async function sharedFixture(
   role: 'viewer' | 'commenter' | 'editor' = 'viewer',
 ) {
   const f = await fixture();
-  const owner = await createUser({ email: 'mxmx_test_data_owner@example.com' });
-  await claimToken(owner.id, f.owner.token);
-  const actor = { tokenId: f.owner.id, userId: owner.id };
+  const actor = f.actor;
   const user = await createUser({ email: 'mxmx_test_data_reader@example.com' }),
-    token = await mintToken('reader');
-  await claimToken(user.id, token.token);
-  const cookie = await agentCookie([token.id]);
+    token = await mintToken('reader', user.id);
+  const session = { userId: user.id, email: user.email, emailVerified: true, credential: 'session' as const };
   await updateSharingFor(actor, f.ds, {
     visibility: 'private',
     shares: [{ email: user.email, role }],
@@ -193,12 +190,12 @@ async function sharedFixture(
     mutate(
       request(`/a/${f.doc}/mutate`, {
         method: 'POST',
-        cookie,
+        actor: session,
         json: { mutation: 'add', args: { n: 3 } },
       }),
       { params: Promise.resolve({ id: f.doc }) },
     );
-  return { ...f, actor, user, token, cookie, write };
+  return { ...f, actor, user, token, session, write };
 }
 it.each(['viewer', 'commenter', 'editor'] as const)(
   'lets a shared %s use the same policy without a separate grant',
@@ -209,7 +206,7 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
     const ownerResponse = await mutate(
       request(`/a/${f.doc}/mutate`, {
         method: 'POST',
-        cookie: await agentCookie([f.owner.id]),
+        actor: { userId: f.owner.userId!, email: f.owner.email!, emailVerified: true, credential: 'session' },
         json: { mutation: 'remove' },
       }),
       { params: Promise.resolve({ id: f.doc }) },
@@ -265,7 +262,7 @@ it('lets editors open the visual policy editor', async () => {
   const f = await sharedFixture('editor');
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   const response = await readPolicy(
-    request(`/api/my/artifacts/${f.ds}/policy`, { cookie: f.cookie }),
+    request(`/api/my/artifacts/${f.ds}/policy`, { actor: f.session }),
     { params: Promise.resolve({ id: f.ds }) },
   );
   expect(response.status).toBe(200);
@@ -281,7 +278,7 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
   async (role) => {
     const f = await sharedFixture(role);
     const save = (policy: unknown, revision: number) => writePolicy(
-      request(`/api/my/artifacts/${f.ds}/policy`, {method:'PUT', cookie:f.cookie,
+      request(`/api/my/artifacts/${f.ds}/policy`, {method:'PUT', actor:f.session,
         json:{policy,expectedPolicyRevision:revision}}),
       {params:Promise.resolve({id:f.ds})},
     );

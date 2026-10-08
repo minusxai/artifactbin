@@ -9,7 +9,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { existingPaste } from '@/lib/serving';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 

@@ -14,7 +14,8 @@ import { JSDOM } from 'jsdom';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { mintToken, claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
 import { drainPreparedPageWarmups, enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
@@ -72,7 +73,7 @@ const STYLED = `<Helmet><style>{\`@font-face { font-family: "IBM Plex Sans"; src
 
 async function world(markup = STYLED) {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_prepared@example.com' }));
-  const t = await mintToken('prepared'); await claimToken(owner.id, t.token);
+  const t = await mintToken('prepared', owner.id); await claimToken(owner.id, t.token);
   const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { title: null, markup, visibility: 'public' } }));
   if (made.status !== 201) throw new Error(await made.text());
   const { id } = await made.json() as { id: string };
@@ -323,7 +324,7 @@ describe('the compile beside the prepared page', () => {
 
   async function publish(markup: string): Promise<string> {
     const user = await ensureUsername(await createUser({ email: `mxmx_test_compile_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-    const t = await mintToken('compile');
+    const t = await mintToken('compile', user.id);
     await claimToken(user.id, t.token);
     const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'Compiled', markup } }));
     if (made.status !== 201) throw new Error(await made.text());
@@ -387,7 +388,7 @@ describe('the compiled-page failure contract', () => {
 
   async function owner() {
     const user = await ensureUsername(await createUser({ email: `mxmx_test_policy_${Math.random().toString(36).slice(2, 8)}@example.com` }));
-    const t = await mintToken('policy'); await claimToken(user.id, t.token);
+    const t = await mintToken('policy', user.id); await claimToken(user.id, t.token);
     return { user, token: t.token };
   }
   async function publish(token: string, body: Record<string, unknown>): Promise<string> {

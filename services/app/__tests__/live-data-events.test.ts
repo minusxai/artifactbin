@@ -17,7 +17,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
 import { liveChannelCount, resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { readEvents } from '@/__tests__/sse';
 
@@ -25,7 +25,7 @@ useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string };
 };
@@ -40,7 +40,7 @@ beforeEach(async () => {
 describe('GET /a/<id>/events hears the document\'s datasets', () => {
   it('refreshes membership and action permissions without changing the document version',async()=>{
     const owner=await createUser({email:'mxmx_test_member_stream@example.com'});
-    const t=await mintToken('member stream');await claimToken(owner.id,t.token);
+    const t=await mintToken('member stream', owner.id);await claimToken(owner.id,t.token);
     const doc=(await create(t.token,{visibility:'public',markup:'<p>Membership stream</p>'})).id;
     const res=await eventsRoute(request(`/a/${doc}/events`),params({id:doc}));
     const leaving=changeMembership({userId:owner.id,tokenId:t.id},doc,{action:'leave'});

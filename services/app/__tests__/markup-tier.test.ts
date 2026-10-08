@@ -12,7 +12,7 @@ import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
@@ -25,7 +25,7 @@ describe('markup — the one document tier', () => {
   it('POST {markup} publishes through the story engine as public format "markup"', async () => {
     const t = await mintToken('t');
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1 className="text-4xl font-bold tracking-tight">Hi</h1>', theme: 'terminal' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<h1 className="text-4xl font-bold tracking-tight">Hi</h1>', theme: 'terminal' } }),
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as { id: string; format: string };
@@ -55,7 +55,7 @@ describe('markup — the one document tier', () => {
   it('stores format "markup" in the DB — the wire vocabulary IS the stored vocabulary', async () => {
     const t = await mintToken('t');
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p className="max-w-prose">stored</p>' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<p className="max-w-prose">stored</p>' } }),
     );
     const { id } = (await res.json()) as { id: string };
     const db = await harness.db();
@@ -66,7 +66,7 @@ describe('markup — the one document tier', () => {
   it('rejects legacy markup vocabulary with the engine diagnostics (no silent legacy path)', async () => {
     const t = await mintToken('t');
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<NotAKitComponent x={1} />' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<NotAKitComponent x={1} />' } }),
     );
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe('invalid_jsx');

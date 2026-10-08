@@ -20,7 +20,7 @@ import { canReadArtifact, effectiveRole as roleFor, getArtifactById } from '@/li
 
 
 import { SHARE_ROLES, SHARE_ROLE_LABEL } from '@/lib/artifacts';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness, setSession } from '@/__tests__/harness';
 
@@ -41,13 +41,13 @@ beforeEach(async () => {
 
 async function world() {
   const owner = await createUser({ email: 'mxmx_test_owner@example.com' });
-  const to = await mintToken('owner'); await claimToken(owner.id, to.token);
+  const to = await mintToken('owner', owner.id); await claimToken(owner.id, to.token);
   const commenter = await createUser({ email: 'mxmx_test_commenter@example.com' });
-  const tc = await mintToken('commenter'); await claimToken(commenter.id, tc.token);
+  const tc = await mintToken('commenter', commenter.id); await claimToken(commenter.id, tc.token);
   const viewer = await createUser({ email: 'mxmx_test_viewer@example.com' });
-  const tv = await mintToken('viewer'); await claimToken(viewer.id, tv.token);
+  const tv = await mintToken('viewer', viewer.id); await claimToken(viewer.id, tv.token);
   const editor = await createUser({ email: 'mxmx_test_editor@example.com' });
-  const te = await mintToken('editor'); await claimToken(editor.id, te.token);
+  const te = await mintToken('editor', editor.id); await claimToken(editor.id, te.token);
   const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: '<div><p>hello</p></div>', visibility: 'private' }, to.token));
   const doc = await res.json();
   asSession(owner);

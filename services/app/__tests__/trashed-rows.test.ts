@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { ensureTable } from '@artifactbin/utils';
 import { EVENTS_TABLES } from '@artifactbin/events';
-import { agentCookie, request, useAppHarness } from './harness';
+import { request, useAppHarness } from './harness';
 import { POST as createRoute, GET as listRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -22,7 +22,7 @@ import { countOpenAnnotations } from '@/lib/annotations';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { getDb } from '@/lib/platform';
 import { dailyViewsByUser, viewSeriesByUser } from '@/lib/workspace';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 useAppHarness();
@@ -30,10 +30,10 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const q = encodeURIComponent(JSON.stringify({ values: {}, only: ['children'] }));
 
 async function trashedWorld() {
-  const t = await mintToken('o');
   const u = await ensureUsername(await createUser({ email: 'o@example.com' }));
-  await claimToken(u.id, t.token);
-  const cookie = await agentCookie([t.id]);
+  const t = await mintToken('o', u.id);
+    await claimToken(u.id, t.token);
+  const actor = { userId: u.id, email: u.email, emailVerified: true, credential: 'session' as const };
   const mk = async (body: Record<string, unknown>) => { const r = await createRoute(request('/api/artifacts', { method: 'POST', json: body, token: t.token })); expect(r.status).toBe(201); return (await r.json()) as { id: string }; };
   const folder = await mk({ format: 'folder', title: 'F', visibility: 'public' });
   const doc = await mk({ markup: '<h1>Doc</h1>', title: 'Doc', visibility: 'public', parent_id: folder.id });
@@ -44,7 +44,7 @@ async function trashedWorld() {
     await db.query(`INSERT INTO annotations (id, artifact_id, body, author_kind, deleted_at) VALUES ('ann_trashed0000000001', $1, 'gone', 'human', now())`, [doc.id]);
   });
   await db.query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [doc.id]);
-  return { token: t.token, cookie, folder, doc, handle: u.username as string, userId: u.id };
+  return { token: t.token, actor, folder, doc, handle: u.username as string, userId: u.id };
 }
 
 /** The log, with one sentence about the trashed document and one about the folder that outlived it. */
@@ -68,18 +68,18 @@ async function withLog(w: Awaited<ReturnType<typeof trashedWorld>>) {
 describe('a trashed row is nonexistent to', () => {
   const READERS: Array<[string, (w: Awaited<ReturnType<typeof trashedWorld>>) => Promise<Response>]> = [
     ['GET /api/artifacts/:id (owner token)', (w) => getRoute(request(`/api/artifacts/${w.doc.id}`, { token: w.token }), params(w.doc.id))],
-    ['GET /api/my/artifacts/:id (owner cookie)', (w) => mineRoute(request(`/api/my/artifacts/${w.doc.id}`, { cookie: w.cookie }), params(w.doc.id))],
+    ['GET /api/my/artifacts/:id (owner session)', (w) => mineRoute(request(`/api/my/artifacts/${w.doc.id}`, { actor: w.actor }), params(w.doc.id))],
     ['GET /a/:id/raw (anonymous, public doc)', (w) => rawRoute(request(`/a/${w.doc.id}/raw`), params(w.doc.id))],
-    ['GET /a/:id/raw (owner cookie)', (w) => rawRoute(request(`/a/${w.doc.id}/raw`, { cookie: w.cookie }), params(w.doc.id))],
-    ['GET /api/page/artifact/:id (owner cookie)', (w) => pageRoute(request(`/api/page/artifact/${w.doc.id}`, { cookie: w.cookie }), params(w.doc.id))],
+    ['GET /a/:id/raw (owner session)', (w) => rawRoute(request(`/a/${w.doc.id}/raw`, { actor: w.actor }), params(w.doc.id))],
+    ['GET /api/page/artifact/:id (owner session)', (w) => pageRoute(request(`/api/page/artifact/${w.doc.id}`, { actor: w.actor }), params(w.doc.id))],
     ['GET /a/:id/query (anonymous)', (w) => queryRoute(request(`/a/${w.doc.id}/query?q=${q}`), params(w.doc.id))],
     ['GET /a/:id/export (owner token)', (w) => exportRoute(request(`/a/${w.doc.id}/export`, { token: w.token }), params(w.doc.id))],
     ['GET /a/:id/events/frame (anonymous)', (w) => frameRoute(request(`/a/${w.doc.id}/events/frame`), params(w.doc.id))],
-    ['GET /api/my/artifacts/:id/versions (owner cookie)', (w) => versionsRoute(request(`/api/my/artifacts/${w.doc.id}/versions`, { cookie: w.cookie }), params(w.doc.id))],
-    ['GET /api/my/artifacts/:id/sharing (owner cookie)', (w) => sharingRoute(request(`/api/my/artifacts/${w.doc.id}/sharing`, { cookie: w.cookie }), params(w.doc.id))],
+    ['GET /api/my/artifacts/:id/versions (owner session)', (w) => versionsRoute(request(`/api/my/artifacts/${w.doc.id}/versions`, { actor: w.actor }), params(w.doc.id))],
+    ['GET /api/my/artifacts/:id/sharing (owner session)', (w) => sharingRoute(request(`/api/my/artifacts/${w.doc.id}/sharing`, { actor: w.actor }), params(w.doc.id))],
     // The like door reads the row through the same seam before it answers, so
     // a trashed document has no likes to ask about — including for its owner.
-    ['GET /api/my/artifacts/:id/like (owner cookie)', (w) => likeRoute(request(`/api/my/artifacts/${w.doc.id}/like`, { cookie: w.cookie }), params(w.doc.id))],
+    ['GET /api/my/artifacts/:id/like (owner session)', (w) => likeRoute(request(`/api/my/artifacts/${w.doc.id}/like`, { actor: w.actor }), params(w.doc.id))],
     ['GET /api/my/artifacts/:id/like (anonymous, public doc)', (w) => likeRoute(request(`/api/my/artifacts/${w.doc.id}/like`), params(w.doc.id))],
   ];
   for (const [name, call] of READERS) {

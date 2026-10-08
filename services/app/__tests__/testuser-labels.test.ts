@@ -12,7 +12,7 @@ import { POST as newTestUser } from '@/app/api/testusers/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { POST as query } from '@/app/a/[id]/query/route';
 import { observedRequest } from '@/__tests__/conditional-request';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { viewersWritePolicy } from '@artifactbin/utils';
 import { getArtifactById } from '@/lib/artifacts';
@@ -31,7 +31,7 @@ const DATASET = `<Dataset kind="stored">
 </Dataset>`;
 
 it('labels a test user for the account viewing the sandbox copy', async () => {
-  const t = await mintToken('owner'); const me = await createUser({ email: 'mxmx_test_me@example.com' }); await claimToken(me.id, t.token);
+  const me = await createUser({ email: 'mxmx_test_me@example.com' }); const t = await mintToken('owner', me.id); await claimToken(me.id, t.token);
   const publish = async (body: object) => { const r = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: body })); expect(r.status, await r.clone().text()).toBe(201); return (await r.json()).id as string; };
   const ds = await publish({ dataset: DATASET, access: 'readwrite', visibility: 'unlisted' });
   const head = await getArtifactById(ds);

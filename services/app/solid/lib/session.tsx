@@ -12,7 +12,7 @@ import { PAGE_DATA_CHANGED, PROFILE_CHANGED, REFRESH_EVENT } from '@/web/page-da
 
 export interface SessionState {
   user: { id: string; email: string | null; username: string | null; image: string | null } | null;
-  kind: 'account' | 'anon' | 'none';
+  kind: 'account' | 'none';
   onboarded: boolean;
 }
 

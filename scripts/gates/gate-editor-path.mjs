@@ -136,7 +136,7 @@ try {
       'a reader with no credential sees no edit chrome');
     await readerPage.goto(`${base}/a/${human.id}#edit`);
     await readerPage.waitForTimeout(2500);
-    check(readerPage.url().includes(`/a/${human.id}`) && readerPage.url().endsWith('#edit'),
+    check(new URL(readerPage.url()).origin === new URL(base).origin && (new URL(readerPage.url()).pathname.split('/').at(-1) === human.id || new URL(readerPage.url()).pathname.split('/').at(-1)?.startsWith(`${human.id}-`)) && new URL(readerPage.url()).hash === '#edit',
       `Edit stays on the same url, as a mode (${readerPage.url()})`);
     await reader.close();
 

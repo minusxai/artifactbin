@@ -9,7 +9,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { dataflowForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -22,13 +22,13 @@ describe('deleted-ref serving', () => {
     const t = await mintToken('t');
     const ds = await (
       await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { dataset: [{ region: 'EU', revenue: 837 }] } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', dataset: [{ region: 'EU', revenue: 837 }] } }),
       )
     ).json();
 
     const doc = await (
       await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" title="Revenue" /></div>` } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" title="Revenue" /></div>` } }),
       )
     ).json();
     expect(doc.format).toBe('markup');

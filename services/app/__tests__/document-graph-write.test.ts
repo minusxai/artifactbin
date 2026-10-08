@@ -6,7 +6,7 @@ import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request,setSession,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/platform';
-import {mintToken,createUser,claimToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {createDocumentGraph} from '@/lib/story/graph/document-graph';
@@ -14,7 +14,7 @@ import {prepareGraphOperation} from '@/lib/story/graph/document-graph-admission'
 import {commitGraphOperation} from '@/lib/story/graph/document-graph-write';
 useAppHarness();
 async function setup(){
- const token=await mintToken('mxmx_test_graph_write'),actor={tokenId:token.id,userId:null};
+ const token=await mintToken('mxmx_test_graph_write'),actor={tokenId:token.id,userId:token.userId};
  const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);
  const {id}=await response.json(),row=(await getArtifactById(id))!,document=createDocumentGraph(row.source!,row.version),db=await getDb();
  await db.query('UPDATE artifacts SET document=$2::jsonb,source=NULL WHERE id=$1',[id,JSON.stringify(document)]);
@@ -115,7 +115,7 @@ it.each(['omitted inserted touches','wrong inserted parts'])('refuses a partial 
  expect(read.status).toBe(200);const actual=await read.json();expect(actual.version).toBe(row.version);expect(actual.markup).not.toContain('Caption');
  expect((await db.query('SELECT edit_id,document_state FROM artifact_edits WHERE artifact_id=$1',[row.id])).rows).toEqual(history);
  expect((await db.query('SELECT version FROM artifact_versions WHERE artifact_id=$1',[row.id])).rows).toEqual(versions);
- const owner=await createUser({email:'mxmx_test_graph_read@example.com'});await claimToken(owner.id,token.token);
+ const owner={id:token.userId!,email:token.email!};
  setSession(()=>({user:{id:owner.id,email:owner.email}}));
  const shared=await shareRoute(request(`/api/my/artifacts/${row.id}/sharing`,{method:'PUT',origin:'same',json:{visibility:'unlisted'}}),{params:Promise.resolve({id:row.id})});
  expect(shared.status).toBe(200);

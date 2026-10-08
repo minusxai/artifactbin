@@ -4,8 +4,8 @@ import {patchMetadata} from '@/__tests__/conditional-request';
 import {observedRequest} from '@/__tests__/conditional-request';
 /** Integrated acceptance for identity, atomic batches and relation-only comments. */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request, agentCookie } from './harness';
-import { mintToken } from '@/lib/accounts';
+import { useAppHarness, request } from './harness';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { POST as createRoute } from '@/app/api/artifacts/route';
@@ -56,7 +56,7 @@ async function history(id:string) {
 describe('node project through real routes',()=>{
   it('refuses malformed markup at direct storage instead of bypassing identity validation',async()=>{
     const t=await mintToken('invalid-direct-create');
-    await expect(createArtifact(t.id,null,{format:'markup',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');
+    await expect(createArtifact(t.id, t.userId,{format:'markup',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');
     const db=await getDb();
     expect((await artifactQuery(db,'SELECT id FROM artifacts WHERE token_id=$1',[t.id])).rows).toHaveLength(0);
   });
@@ -94,11 +94,11 @@ describe('node project through real routes',()=>{
     const head=await s.read();expect(head.edit_id).toBe(base.edit_id);expect(head.markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
   });
   it('creating and deleting a comment does not edit or clean identity from source',async()=>{
-    const s=await setup('<p id="para">Hi</p>');const base=await s.read();const before=await history(s.doc.id);const cookie=await agentCookie([s.t.id]);
-    const made=await commentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',cookie,json:{node_id:'para',body:'Check'}}),params(s.doc.id));
+    const s=await setup('<p id="para">Hi</p>');const base=await s.read();const before=await history(s.doc.id);const actor={ credential: 'session' as const, userId: s.t.userId!, email: s.t.email!, emailVerified: true };
+    const made=await commentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor,json:{node_id:'para',body:'Check'}}),params(s.doc.id));
     expect(made.status,await made.clone().text()).toBe(201);const ann=await made.json();
     const commented=await s.read();expect(commented.edit_id).toBe(base.edit_id);expect(commented.markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
-    const deleted=await deleteCommentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations/${ann.id}`,{method:'DELETE',cookie}),{params:Promise.resolve({id:s.doc.id,annId:ann.id})});
+    const deleted=await deleteCommentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations/${ann.id}`,{method:'DELETE',actor}),{params:Promise.resolve({id:s.doc.id,annId:ann.id})});
     expect(deleted.status).toBeLessThan(300);expect((await s.read()).markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
   });
   it('rejects mixed edit forms by presence without touching history',async()=>{
@@ -121,7 +121,7 @@ describe('node project through real routes',()=>{
   });
   it('stamps direct storage creation rather than relying on an HTTP wire',async()=>{
     const t=await mintToken('direct-create');
-    const row=await createArtifact(t.id,null,{format:'markup',source:'<main><p>Direct</p></main>',meta:{}});
+    const row=await createArtifact(t.id, t.userId,{format:'markup',source:'<main><p>Direct</p></main>',meta:{}});
     const ids=bodyIds(row.source!);expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
   });
   it('normalizes and reserves identities when reverting a pre-identity archive',async()=>{

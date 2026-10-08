@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { loginHref } from '@/lib/http/login-href';
 import { replaceDocument } from '../lib/document-navigation';
 import { createSignal, onMount, Show, type JSX } from 'solid-js';
 
@@ -9,6 +10,7 @@ export function StartPage(): JSX.Element {
   onMount(() => {
     const handoff = new URLSearchParams(window.location.search).get('agent') === '1';
     void fetch(handoff ? '/api/start' : '/api/start?mode=blank', { method: 'POST' }).then(async response => {
+      if (response.status === 401) { replaceDocument(loginHref(window.location)); return; }
       if (!response.ok) throw new Error('Creation failed');
       const body = await response.json() as { id?: string };
       if (!body.id) throw new Error('Missing artifact');

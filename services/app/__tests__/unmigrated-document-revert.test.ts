@@ -7,7 +7,7 @@
  * head is the converted head, so an author never edits the previous syntax.
  */
 import { describe, expect, it } from 'vitest';
-import { agentCookie, request, useAppHarness } from './harness';
+import { request, useAppHarness } from './harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as readRoute } from '@/app/api/artifacts/[id]/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
@@ -17,7 +17,7 @@ import { GET as myVersionRoute } from '@/app/api/my/artifacts/[id]/versions/[ver
 import { documentEditBody } from './prepared-document';
 import { getArtifactById } from '@/lib/artifacts';
 import { graphSource, type DocumentGraph } from '@/lib/story/graph/document-graph';
-import { mintToken } from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -35,17 +35,17 @@ async function history(version1: string | null) {
   const db = await harness.db();
   if (version1) await db.query("UPDATE artifact_versions SET source=$2,document=NULL,meta='{}'::jsonb WHERE artifact_id=$1 AND version=1", [id, version1]);
   else await db.query("UPDATE artifact_versions SET meta=meta-'dataSyntax' WHERE artifact_id=$1 AND version=1", [id]);
-  return { owner, id, cookie: await agentCookie([owner.id]) };
+  return { owner, id, actor: { credential: 'session' as const, userId: owner.userId!, email: owner.email!, emailVerified: true } };
 }
 
 const json = async (response: Response) => { expect(response.status, await response.clone().text()).toBe(200); return (await response.json()) as Record<string, any>; };
 
 describe('an archived version written for the previous engine, read to restore', () => {
   it('reads back converted and marked at the token and browser version doors, leaving history as stored', async () => {
-    const { owner, id, cookie } = await history(null);
+    const { owner, id, actor } = await history(null);
     for (const body of [
       await json(await versionRoute(request(`/api/artifacts/${id}/versions/1`, { token: owner.token }), params({ id, version: '1' }))),
-      await json(await myVersionRoute(request(`/api/my/artifacts/${id}/versions/1`, { cookie }), params({ id, version: '1' }))),
+      await json(await myVersionRoute(request(`/api/my/artifacts/${id}/versions/1`, { actor }), params({ id, version: '1' }))),
     ]) {
       expect(body.markup).toContain('select 7 * 1.0 / 2 as h');
       expect(body.meta.dataSyntax).toBe(2);
@@ -67,10 +67,10 @@ describe('an archived version written for the previous engine, read to restore',
   });
 
   it('says a version that needs a person cannot be restored as it stands', async () => {
-    const { owner, id, cookie } = await history(MANUAL);
+    const { owner, id, actor } = await history(MANUAL);
     for (const body of [
       await json(await versionRoute(request(`/api/artifacts/${id}/versions/1`, { token: owner.token }), params({ id, version: '1' }))),
-      await json(await myVersionRoute(request(`/api/my/artifacts/${id}/versions/1`, { cookie }), params({ id, version: '1' }))),
+      await json(await myVersionRoute(request(`/api/my/artifacts/${id}/versions/1`, { actor }), params({ id, version: '1' }))),
     ]) {
       expect(body.markup).toBe(MANUAL);
       expect(body.previous_engine).toMatch(/^Version 1 was written for the previous query engine .*cannot be restored as it stands/);
@@ -85,7 +85,7 @@ describe('an unmarked head, read back to edit', () => {
     expect(created.status, await created.clone().text()).toBe(201);
     const id = (await created.json()).id as string;
     await (await harness.db()).query("UPDATE artifacts SET meta=meta-'dataSyntax' WHERE id=$1", [id]);
-    return { owner, id, cookie: await agentCookie([owner.id]) };
+    return { owner, id, actor: { credential: 'session' as const, userId: owner.userId!, email: owner.email!, emailVerified: true } };
   }
 
   it('is the converted head for its editor — markup, graph, edit id and version all of it', async () => {
@@ -99,8 +99,8 @@ describe('an unmarked head, read back to edit', () => {
   });
 
   it('is the converted head at the browser editor door too', async () => {
-    const { id, cookie } = await unmarkedHead();
-    const body = await json(await mineRoute(request(`/api/my/artifacts/${id}`, { cookie }), params({ id })));
+    const { id, actor } = await unmarkedHead();
+    const body = await json(await mineRoute(request(`/api/my/artifacts/${id}`, { actor }), params({ id })));
     expect(body.markup).toContain('select 7 * 1.0 / 2 as h');
     expect((await getArtifactById(id))!.meta.dataSyntax).toBe(2);
   });

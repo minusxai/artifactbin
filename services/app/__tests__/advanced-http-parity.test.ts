@@ -2,7 +2,7 @@ import {documentEditBody,restoreDocument} from './prepared-document';
 import {getArtifactById} from '@/lib/artifacts';
 import {describe,expect,it} from 'vitest';
 import {useAppHarness} from './harness';
-import {mintToken} from '@/lib/accounts';
+import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {operationHttp} from './operation-http';
 useAppHarness();
 describe('advanced HTTP parity',()=>{
@@ -13,7 +13,7 @@ describe('advanced HTTP parity',()=>{
     expect(ds.data.columns).toEqual([{ name: 'm', type: 'string' }, { name: 'v', type: 'number' }]);
 
     const story = await operationHttp(t.token, 'create_artifact', {
-      title: 'story',
+      title: 'story', visibility: 'public',
       markup: `<Helmet><Import name="rows_data" src="ref:${ds.data.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
     });
     expect(story.isError).toBe(false);

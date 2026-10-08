@@ -21,7 +21,7 @@ import {
   sameRedirectTarget,
 } from '../identity/oauth';
 import type { DevicePairing } from '../identity/device-pairing';
-import type { AuthApp } from '../parts';
+import type { AuthApp, SessionStore } from '../parts';
 
 type App = AuthApp;
 
@@ -54,6 +54,7 @@ function page(title: string, body: string, status = 200, redirectUri = ''): Resp
 }
 
 interface OAuthRoutesOptions {
+  sessions: SessionStore;
   oauth: OAuthStore;
   pairing: DevicePairing;
   upstream: Upstream;
@@ -61,21 +62,12 @@ interface OAuthRoutesOptions {
   publicBaseUrl?: string;
 }
 
-/**
- * An anonymous grant (no bound account) receives a long-lived, claimable
- * bearer, so a single token carries the agent's work until someone signs in
- * and claims it, rather than fragmenting across short-lived rotations.
- */
-const ANON_DEVICE_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60;
-
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number }> {
-  const anonymous = !grant.userId;
-  const expiresIn = anonymous ? ANON_DEVICE_TOKEN_TTL_SECONDS : ACCESS_TOKEN_TTL_SECONDS;
-  // The app refuses audience/scope on a non-session mint, so an anonymous
-  // credential is a general bearer — exactly what an anonymous approval means.
-  const payload = anonymous
-    ? { expiresInHours: expiresIn / 3600 }
-    : { expiresInHours: expiresIn / 3600, audience: grant.resource, scope: grant.scope };
+  if (!grant.userId) throw new Error('Email account required');
+  const identity = await o.sessions.identity?.(grant.userId);
+  if (!identity?.email || !identity.emailVerified || identity.userId !== grant.userId) throw new Error('Verified email account required');
+  const expiresIn = ACCESS_TOKEN_TTL_SECONDS;
+  const payload = { expiresInHours: expiresIn / 3600, audience: grant.resource, scope: grant.scope };
   // The INTERNAL mint: the app's only credential-issuing route, refused at
   // the edge (parts `internalBoundary`) and reached only here, on the upstream
   // seam, after a human approved this connection in the browser.
@@ -84,7 +76,7 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  const res = await o.upstream(mint, anonymous ? ANONYMOUS : { credential: 'session', userId: grant.userId as string });
+  const res = await o.upstream(mint, { credential: 'session', ...identity });
   if (!res.ok) throw new Error(`oauth exchange: the app refused the mint (${res.status})`);
   const body = await res.json().catch(() => null) as { id?: string; token?: string } | null;
   if (!body?.id || !body.token) throw new Error('oauth exchange: the app minted no token');
@@ -100,17 +92,16 @@ async function artifactPermission(o: OAuthRoutesOptions, request: Request, actor
   return response.ok ? await response.json() : {};
 }
 
-/** Browser approval selects an owner; the app alone creates/claims guest identities. */
+/** Browser approval selects an email account; legacy adoption remains app-owned. */
 async function browserOwner(o: OAuthRoutesOptions, request: Request, actor: Actor): Promise<{ actor: Actor; cookie?: string }> {
   const response = await o.upstream(new Request(new URL(INTERNAL_ARTIFACT_APPROVAL_PATH, request.url), {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'connect' }),
   }), actor);
   if (!response.ok) throw new Error('Could not establish browser ownership');
-  const body = await response.json() as { userId?: string; tokenId?: string; guest?: boolean };
-  if (actor.credential === 'session' && actor.userId) return { actor };
-  if (!body.userId || !body.tokenId) throw new Error('Missing guest user');
-  const cookie = response.headers.get('set-cookie');
-  return { actor: { credential: 'agent-cookie', userId: body.userId, tokenId: body.tokenId, heldTokenIds: [body.tokenId] }, ...(cookie ? { cookie } : {}) };
+  if (actor.credential !== 'session' || !actor.userId) throw new Error('Email account required');
+  const body = await response.json() as { userId?: string };
+  if (body.userId !== actor.userId) throw new Error('Account ownership mismatch');
+  return { actor };
 }
 
 export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
@@ -157,11 +148,11 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
       const login = `<form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${escapeHtml(callback)}"><button type="submit">Log in and continue</button></form>`;
       if (!permission.canApprove) return page('Use the owning browser', `<h1>Open this approval in the browser that created the artifact</h1><p>The artifact link does not grant edit access. Use its owning browser, or log in to the owning account.</p>${login}`, 403);
-      return page('Approve artifact access', `<h1>Connect your agent</h1><p><strong>${escapeHtml(permission.title ?? 'Untitled')}</strong> · ${escapeHtml(pending.target.artifactId)}</p><p>Approve only if your agent displays <strong>${escapeHtml(userCode)}</strong>. This connects the CLI to this browser’s identity, including its existing and future artifacts. It replaces any saved CLI connection to this server.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><button type="submit" name="decision" value="approve">${actor.credential === 'session' ? 'Approve access' : 'Continue as guest'}</button><button type="submit" name="decision" value="deny">Deny</button></form>${actor.credential === 'session' ? '' : login}`);
+      return page('Approve artifact access', `<h1>Connect your agent</h1><p><strong>${escapeHtml(permission.title ?? 'Untitled')}</strong> · ${escapeHtml(pending.target.artifactId)}</p><p>Approve only if your agent displays <strong>${escapeHtml(userCode)}</strong>. This connects the CLI to this browser’s identity, including its existing and future artifacts. It replaces any saved CLI connection to this server.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><button type="submit" name="decision" value="approve">Approve access</button><button type="submit" name="decision" value="deny">Deny</button></form>`);
     }
     if (actor.credential !== 'session' || !actor.userId) {
       const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
-      return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${escapeHtml(userCode)}</strong>. Log in to connect this agent to your account, or continue anonymously — an anonymous connection publishes without an account, and you can claim what it creates later by signing in.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><input type="hidden" name="decision" value="anonymous"><button type="submit">Continue anonymously</button></form><form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${escapeHtml(callback)}"><button type="submit">Log in to connect</button></form>`);
+      return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${escapeHtml(userCode)}</strong>. Log in with your email account to connect this agent.</p><form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${escapeHtml(callback)}"><button type="submit">Log in to connect</button></form>`);
     }
     return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${escapeHtml(userCode)}</strong>. This gives the CLI access to your artifacts as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><button type="submit">Approve connection</button><button type="submit" name="decision" value="deny">Deny connection</button></form>`);
   });
@@ -172,6 +163,8 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const decision = form.get('decision');
     const pending = await o.pairing.inspect(userCode, base(c.req.raw));
     if (!pending) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+    const actor = c.get('actor') ?? ANONYMOUS;
+    if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'email_auth_required' }, 401);
     if (pending.target) {
       const owner = c.get('actor') ?? ANONYMOUS;
       if (!(await artifactPermission(o, c.req.raw, owner, pending.target.artifactId)).canApprove) return page('Approval refused', '<h1>Use the browser that owns this artifact</h1>', 403);
@@ -181,30 +174,16 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       }
       if (decision !== 'approve') return c.json({ error: 'invalid_decision' }, 400);
       const connection = await browserOwner(o, c.req.raw, owner);
-      const approved = connection.actor.userId
-        ? await o.pairing.approve(userCode, base(c.req.raw), connection.actor.userId, connection.actor)
-        : await o.pairing.approveAnonymously(userCode, base(c.req.raw), connection.actor);
+      const approved = await o.pairing.approve(userCode, base(c.req.raw), actor.userId, connection.actor);
       const response = approved ? page('Connection approved', '<h1>Access approved</h1><p>Return to your agent. It can now continue with your artifacts.</p>') : page('Connection expired', '<h1>Connection expired</h1>', 400);
       if (approved && connection.cookie) response.headers.append('set-cookie', connection.cookie);
       return response;
     }
-    // Anonymous connection: no account, so no session is required — but it is
-    // still origin-bound above, and gated on the EXPLICIT choice, never
-    // inferred from a missing session (which would silently downgrade a real
-    // approval whose session had lapsed).
-    if (decision === 'anonymous') {
-      const connection = await browserOwner(o, c.req.raw, c.get('actor') ?? ANONYMOUS);
-      if (!await o.pairing.approve(userCode, base(c.req.raw), connection.actor.userId!, connection.actor)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
-      const response = page('Connection approved', '<h1>Connected anonymously</h1><p>Return to your agent. This browser and CLI now share your guest artifacts.</p>');
-      if (connection.cookie) response.headers.append('set-cookie', connection.cookie);
-      return response;
-    }
-    const actor = c.get('actor') ?? ANONYMOUS;
-    if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
     if (decision === 'deny') {
       if (!await o.pairing.deny(userCode, base(c.req.raw))) return page('Connection expired','<h1>Connection expired</h1>',400);
       return page('Connection denied','<h1>Connection denied</h1><p>No access was granted.</p>');
     }
+    if (decision !== null && decision !== 'approve') return c.json({ error: 'invalid_decision' }, 400);
     const connection = await browserOwner(o, c.req.raw, actor);
     if (!await o.pairing.approve(userCode, base(c.req.raw), actor.userId, connection.actor)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
     return page('Connection approved', '<h1>Connection approved</h1><p>Return to your terminal. You can close this page.</p>');

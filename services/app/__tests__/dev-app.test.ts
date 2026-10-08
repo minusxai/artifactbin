@@ -39,14 +39,11 @@ describe('server.ts --app-only', () => {
   let base: string;
   let child: import('node:child_process').ChildProcess;
   let output = '';
+  let token: string;
+  const scratch = mkdtempSync(path.join(os.tmpdir(), 'dev-app-state-'));
 
   /** Publish the document each local-service assertion consumes, so shuffled tests remain independent. */
   async function publishDocument(): Promise<string> {
-    // `--app-only` is the app WITHOUT the proxy, so the internal mint is the
-    // only door in this shape — exactly the call the proxy would make.
-    const minted = await fetchChecked(`${base}/api/internal/tokens`, { method: 'POST' });
-    expect(minted.status).toBe(201);
-    const { token } = await minted.json() as { token: string };
     const markup = '<Helmet><Value name="tiny" type="table" value={[{"a":1},{"a":2}]} />'
       + '<Query name="q">{`select sum(a) total from tiny`}</Query></Helmet>'
       + '<Number data="$q" col="total" />';
@@ -62,11 +59,11 @@ describe('server.ts --app-only', () => {
   beforeAll(async () => {
     const port = await freePort();
     base = `http://127.0.0.1:${port}`;
-    const objects = mkdtempSync(path.join(os.tmpdir(), 'dev-app-objects-'));
+    const objects = path.join(scratch, 'objects');
     /*
      * The child is its own composition root: no URL names sql or browser
      * (that is the contract dev:app makes on the entry's behalf), the
-     * database is throwaway memory, the object store a scratch dir. Names
+     * database is a throwaway directory, the object store a scratch dir. Names
      * the vitest worker or the machine's `.env` may carry that would point
      * THIS boot somewhere else are deleted, not overridden — an inherited
      * dead URL is exactly the failure dev:app exists to prevent.
@@ -78,29 +75,85 @@ describe('server.ts --app-only', () => {
       NODE_ENV: 'development',
       APP__PORT: String(port),
       APP__PUBLIC_BASE_URL: base,
-      DATABASE_URL: 'pglite://memory',
+      DATABASE_URL: `pglite://${path.join(scratch, 'db')}`,
       OBJECT_STORE__LOCAL_DIR: objects,
+      EMAIL__DEV_OUTBOX_PATH: path.join(scratch, 'mail.jsonl'),
       ARTIFACTS__ALLOW_PUBLIC: '1',
       EMAIL__RESEND_API_KEY: 'test-resend-key',
     });
 
-    child = spawn(TSX, [SERVER_TS, '--app-only'], { cwd: APP_ROOT, stdio: ['ignore', 'pipe', 'pipe'], env });
-    child.stdout!.on('data', (d: Buffer) => { output += d; });
-    child.stderr!.on('data', (d: Buffer) => { output += d; });
-    const deadline = Date.now() + 90_000;
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) throw new Error(`server exited (${child.exitCode}) before answering /health:\n${output}`);
-      try {
-        const res = await fetch(`${base}/health`);
-        if (res.ok) return;
-      } catch { /* not up yet */ }
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    throw new Error(`server never answered /health:\n${output}`);
+    const launch = (appOnly: boolean): void => {
+      output = '';
+      child = spawn(TSX, [SERVER_TS, ...(appOnly ? ['--app-only'] : [])], { cwd: APP_ROOT, stdio: ['ignore', 'pipe', 'pipe'], env });
+      child.stdout!.on('data', (d: Buffer) => { output += d; });
+      child.stderr!.on('data', (d: Buffer) => { output += d; });
+    };
+    const ready = async (): Promise<void> => {
+      const deadline = Date.now() + 90_000;
+      while (Date.now() < deadline) {
+        if (child.exitCode !== null) throw new Error(`server exited (${child.exitCode}) before answering /health:\n${output}`);
+        try {
+          if ((await fetch(`${base}/health`)).ok) return;
+        } catch { /* not up yet */ }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      throw new Error(`server never answered /health:\n${output}`);
+    };
+
+    // App-only has no login routes. Obtain its account bearer through the real
+    // composition, then release that process's PGLite handle before reopening
+    // the same isolated database in app-only mode.
+    launch(false);
+    await ready();
+    const email = 'mxmx_test_dev_app@example.test';
+    const sent = await fetchChecked(`${base}/api/auth/email-otp/send-verification-otp`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+      body: JSON.stringify({ email, type: 'sign-in' }),
+    });
+    expect(sent.status).toBe(200);
+    const outbox = env.EMAIL__DEV_OUTBOX_PATH!;
+    expect(statSync(outbox).mode & 0o777).toBe(0o600);
+    const messages = readFileSync(outbox, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as { kind: string; to: string; otp?: string; expiresAt?: string });
+    const otp = messages.findLast(message => message.kind === 'otp' && message.to === email && Date.parse(message.expiresAt ?? '') > Date.now())?.otp;
+    expect(otp).toMatch(/^\d{6}$/);
+    const login = await fetchChecked(`${base}/api/auth/sign-in/email-otp`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: base }, body: JSON.stringify({ email, otp }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    expect(cookie).toBeTruthy();
+    const pairResponse = await fetchChecked(`${base}/oauth/device`, { method: 'POST' });
+    const pair = await pairResponse.json() as { device_code: string; user_code: string };
+    expect(pair.device_code).toBeTruthy();
+    const approved = await fetchChecked(`${base}/oauth/device/approve`, {
+      method: 'POST', headers: { cookie, origin: base }, body: new URLSearchParams({ user_code: pair.user_code }),
+    });
+    expect(approved.status).toBe(200);
+    const exchanged = await fetchChecked(`${base}/oauth/device/token`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_code: pair.device_code }),
+    });
+    expect(exchanged.status).toBe(200);
+    token = (await exchanged.json() as { access_token: string }).access_token;
+    expect(token).toBeTruthy();
+    await stopChild();
+    launch(true);
+    await ready();
   }, 120_000);
 
-  afterAll(() => {
-    child?.kill('SIGTERM');
+  async function stopChild(): Promise<void> {
+    if (!child || child.exitCode !== null || child.signalCode !== null) return;
+    const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
+    child.kill('SIGTERM');
+    await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 5_000))]);
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+      await exited;
+    }
+  }
+
+  afterAll(async () => {
+    await stopChild();
+    rmSync(scratch, { recursive: true, force: true });
   });
 
   it('boots the app alone: the log names the app-only boot and the proxy\'s routes are gone', async () => {
@@ -112,7 +165,13 @@ describe('server.ts --app-only', () => {
     expect((await fetchChecked(`${base}/oauth/authorize`)).status).toBe(404);
   });
 
-  it('owns the anonymous mint and the token publishes', async () => {
+  it('refuses logged-out minting and starting while its email-account bearer publishes', async () => {
+    const minted = await fetch(`${base}/api/internal/tokens`, { method: 'POST' });
+    expect(minted.status).toBe(401);
+    expect(await minted.json()).toMatchObject({ error: 'email_auth_required' });
+    const started = await fetch(`${base}/api/start`, { method: 'POST' });
+    expect(started.status).toBe(401);
+    expect(started.headers.getSetCookie()).toEqual([]);
     expect(await publishDocument()).toBeTruthy();
   });
 

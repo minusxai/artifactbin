@@ -20,7 +20,7 @@ import { describe, expect, it } from 'vitest';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { mintAccountToken } from '@/__tests__/harness';
 
 
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -43,9 +43,9 @@ const LEGACY =
  * with it, which is what `reconstructBaseSource` reads.
  */
 async function legacyRow(): Promise<{ id: string; token: string; editId: string }> {
-  const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { 'x-shared-secret': 'test-secret' } }));
-  const { token } = await mintRes.json();
-  const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title: 'legacy', markup: LEGACY } }));
+  const mintRes = await mintAccountToken('mxmx_test_fixture');
+  const { token } = mintRes;
+  const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'legacy', markup: LEGACY } }));
   expect(created.status).toBe(201);
   const doc = await created.json();
 
@@ -110,8 +110,8 @@ describe('a document stored before the nesting rule existed', () => {
      * Not only a migration. The rule has to hold on every write for as long as
      * agents write markup — otherwise the next document is the last one's bug.
      */
-    const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { 'x-shared-secret': 'test-secret' } }));
-    const { token } = await mintRes.json();
+    const mintRes = await mintAccountToken('mxmx_test_fixture');
+    const { token } = mintRes;
     const clean = '<div className="wrap" id="root"><h1 id="heading">T</h1><p id="body">Only words here.</p></div>';
     const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title: 'clean', markup: clean } }));
     const doc = await created.json();

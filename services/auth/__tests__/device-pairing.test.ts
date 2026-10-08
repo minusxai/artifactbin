@@ -41,54 +41,18 @@ it('reports browser denial to the initiating CLI without granting credentials',a
  expect(await store.approve(pair.userCode,'https://example.com','usr_one')).toBe(false);
 });
 
-describe('anonymous browser approval', () => {
-  it('carries an artifact target and the approving browser through one-time consumption', async () => {
+describe('email account approval', () => {
+  it('carries an artifact target and verified account through one-time consumption', async () => {
     const target = { artifactId: 'ABC123' };
-    const owner = { credential: 'agent-cookie' as const, tokenId: 'tok_guest', heldTokenIds: ['tok_guest'] };
+    const owner = { credential: 'session' as const, userId: 'usr_account', email: 'mxmx_test_pair@example.com', emailVerified: true };
     const pair = await store.begin('https://example.com', target);
-    expect(await store.inspect(pair.userCode, 'https://example.com')).toMatchObject({ target });
-    expect(await store.approveAnonymously(pair.userCode, 'https://example.com', owner)).toBe(true);
-    expect(await store.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: null, target, approvedBy: owner });
+    expect(await store.approve(pair.userCode, 'https://example.com', owner.userId, owner)).toBe(true);
+    expect(await store.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: owner.userId, target, approvedBy: owner });
     expect(await store.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'invalid' });
   });
-  it('approves without an account and the CLI consumes an approval bearing no user', async () => {
+  it('rejects persisted anonymous approvals from before the migration', async () => {
     const pair = await store.begin('https://example.com');
-    // Origin-bound like the account path: a foreign origin cannot approve.
-    expect(await store.approveAnonymously(pair.userCode, 'https://evil.com')).toBe(false);
-    expect(await store.approveAnonymously(pair.userCode, 'https://example.com')).toBe(true);
-    // An anonymous-approved pairing is settled: it no longer renders as
-    // approvable, cannot be claimed by a real account, and cannot be denied.
-    expect(await store.inspect(pair.userCode, 'https://example.com')).toBeNull();
-    expect(await store.approve(pair.userCode, 'https://example.com', 'usr_one')).toBe(false);
-    expect(await store.deny(pair.userCode, 'https://example.com')).toBe(false);
-    // Consumed once, and it carries no user identity.
-    const outcomes = await Promise.all([
-      store.consume(pair.deviceCode, 'https://example.com'),
-      store.consume(pair.deviceCode, 'https://example.com'),
-    ]);
-    expect(outcomes).toContainEqual({ status: 'approved', userId: null });
-    expect(outcomes).toContainEqual({ status: 'invalid' });
-  });
-
-  it('single-use across mixed paths: a user approval and an anonymous approval never both take', async () => {
-    const userFirst = await store.begin('https://example.com');
-    expect(await store.approve(userFirst.userCode, 'https://example.com', 'usr_one')).toBe(true);
-    // A user-approved pairing cannot be downgraded to anonymous.
-    expect(await store.approveAnonymously(userFirst.userCode, 'https://example.com')).toBe(false);
-    expect(await store.consume(userFirst.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: 'usr_one' });
-
-    const anonFirst = await store.begin('https://example.com');
-    expect(await store.approveAnonymously(anonFirst.userCode, 'https://example.com')).toBe(true);
-    // A second anonymous approval, and a user approval on top, both refused.
-    expect(await store.approveAnonymously(anonFirst.userCode, 'https://example.com')).toBe(false);
-    expect(await store.approve(anonFirst.userCode, 'https://example.com', 'usr_two')).toBe(false);
-    expect(await store.consume(anonFirst.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: null });
-  });
-
-  it('an expired pairing cannot be approved anonymously', async () => {
-    const pair = await store.begin('https://example.com');
-    await pg.query("UPDATE auth.credentials SET expires_at = now() - interval '1 second'");
-    expect(await store.approveAnonymously(pair.userCode, 'https://example.com')).toBe(false);
+    await pg.query(`UPDATE auth.credentials SET payload = payload || '{"anon":true}'::jsonb`);
     expect(await store.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'invalid' });
   });
 });
@@ -114,10 +78,4 @@ describe('an approval that lands in the middle of a poll', () => {
     expect(await racing.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: 'usr_race' });
   });
 
-  it('answers pending, and the next poll claims the anonymous approval', async () => {
-    const pair = await store.begin('https://example.com');
-    const racing = approvingBetween(() => store.approveAnonymously(pair.userCode, 'https://example.com'));
-    expect(await racing.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'pending' });
-    expect(await racing.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: null });
-  });
 });
