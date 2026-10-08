@@ -363,7 +363,9 @@ it.each(['pi', 'opencode'])('offers and starts hosted %s with the selected harne
   fireEvent.click(sidebar().getByRole('button',{name:'Provision cloud agent'}));
   fireEvent.click(await screen.findByRole('button',{name:harness==='pi'?'Pi':'OpenCode'}));fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
   await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/runs',expect.objectContaining({body:expect.stringContaining('"command":["'+harness+'"]')})));
-  expect(await screen.findByText(/Sign in from this terminal/)).not.toHaveTextContent('in a shell');
+  const loginHelp=await screen.findByText(/Sign in from this terminal/);
+  expect(loginHelp).not.toHaveTextContent('in a shell');
+  if(harness==='opencode')expect(loginHelp).toHaveTextContent('To refresh an existing OpenCode login, run opencode auth login in a Shell agent, then restart OpenCode.');
 });
 
 
