@@ -200,17 +200,18 @@ it('does not retry generic, corrupt, auth, lifecycle, or repeated candidate inst
 it('keeps candidate EOF retries inside the original install deadline and never retries a timeout',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-install-eof-deadline-'));
  const script=join(directory,'npm.cjs'),tarball=join(directory,'candidate.tgz'),countFile=join(directory,'attempts'),marker=join(directory,'late-marker');
+ const deadlineMs=1200;
  try{
   writeFileSync(tarball,gzipSync('valid candidate gzip'));
-  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)},marker=${JSON.stringify(marker)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));if(process.env.FAILURE_MODE==='initial-timeout'||attempt>1){setTimeout(()=>fs.writeFileSync(marker,'late'),220);setInterval(()=>{},1000)}else setTimeout(()=>{process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251},35);`);
+  writeFileSync(script,`const fs=require('node:fs');const file=${JSON.stringify(countFile)},marker=${JSON.stringify(marker)};const attempt=Number(fs.existsSync(file)?fs.readFileSync(file,'utf8'):0)+1;fs.writeFileSync(file,String(attempt));if(process.env.FAILURE_MODE==='initial-timeout'||attempt>1){setTimeout(()=>fs.writeFileSync(marker,'late'),Number(process.env.LATE_MARKER_MS||220));setInterval(()=>{},1000)}else setTimeout(()=>{process.stderr.write('npm warn tar TAR_ENTRY_ERROR ENOENT lstat dist/runtime/dist/web/assets\\nnpm error code Z_BUF_ERROR\\nnpm error zlib: unexpected end of file');process.exitCode=251},600);`);
   const started=performance.now();
-  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env},seeded:true,onOutput:()=>{},timeoutMs:140})).rejects.toThrow(/exceeded 0\.1s|exceeded 0\.14s|retry.*exceeded/i);
+  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,LATE_MARKER_MS:String(deadlineMs/2+50)},seeded:true,onOutput:()=>{},timeoutMs:deadlineMs})).rejects.toThrow(new RegExp(`exceeded ${deadlineMs/1000}s|retry.*exceeded`,'i'));
   expect(readFileSync(countFile,'utf8')).toBe('2');
-  expect(performance.now()-started).toBeLessThan(500);
-  await new Promise(resolve=>setTimeout(resolve,250));
+  expect(performance.now()-started).toBeLessThan(deadlineMs+400);
+  await new Promise(resolve=>setTimeout(resolve,deadlineMs+100));
   expect(existsSync(marker)).toBe(false);
   rmSync(countFile,{force:true});
-  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,FAILURE_MODE:'initial-timeout'},seeded:true,onOutput:()=>{},timeoutMs:100})).rejects.toThrow(/exceeded/);
+  await expect(installNpmConsumer({npm:script,tarball,cwd:directory,env:{...process.env,FAILURE_MODE:'initial-timeout'},seeded:true,onOutput:()=>{},timeoutMs:300})).rejects.toThrow(/exceeded/);
   expect(readFileSync(countFile,'utf8')).toBe('1');
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
