@@ -999,8 +999,29 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
       await expect(editor.getByLabel('Annotation comment', { exact: true })).toHaveText(`Screenshot from ${engineName} at DPR ${dpr}`);
     });
     await step('the comment saves and its screenshot persists through a reload', async () => {
-      await page.getByLabel('Save annotation', { exact: true }).click();
-      await expect(page.getByRole('dialog', { name: 'Annotation composer' })).toHaveCount(0);
+      const writes = [];
+      const started = Date.now();
+      const recordWrite = response => {
+        const request = response.request();
+        const path = new URL(response.url()).pathname;
+        if (request.method() !== 'POST' || !/\/(?:comment-images|annotations)$/.test(path)) return;
+        const entry = { path, status: response.status(), elapsedMs: Date.now() - started };
+        writes.push(entry);
+        if (!response.ok()) void response.json().then(body => {
+          entry.error = typeof body.error === 'string' ? body.error : body.error?.code;
+        }).catch(() => {});
+      };
+      page.on('response', recordWrite);
+      try {
+        await page.getByLabel('Save annotation', { exact: true }).click();
+        await expect(page.getByRole('dialog', { name: 'Annotation composer' })).toHaveCount(0);
+      } catch (error) {
+        console.error(name, { phase: 'save screenshot comment', writes,
+          alerts: await page.getByRole('alert').allTextContents(),
+          saveDisabled: await page.getByLabel('Save annotation', { exact: true }).isDisabled(),
+        });
+        throw error;
+      } finally { page.off('response', recordWrite); }
       await page.reload();
       await openArtifactControls(page); await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
       await expect(doc.locator('#capturebox')).toHaveCSS('background-color', 'rgb(220, 30, 30)');
