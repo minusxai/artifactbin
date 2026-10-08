@@ -43,6 +43,8 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
   let terminal: Terminal | null = null;
   let fit: FitAddon | null = null;
   let current: RemoteSessionInfo | null = null;
+  let latest: RemoteSessionInfo | null = null;
+  let stopRequested = false;
   let queue = Promise.resolve();
   const [info, setInfo] = createSignal<RemoteSessionInfo | null>(null);
   const [error, setError] = createSignal('');
@@ -52,8 +54,15 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
   const [mobile, setMobile] = createSignal(false);
   const [acting, setActing] = createSignal(false);
   const [resizing, setResizing] = createSignal(false);
+  // A pending Stop is one effective session state, including while older polls arrive.
+  const publishSession = (session: RemoteSessionInfo) => {
+    latest = session;
+    if (session.exitCode != null || session.activity === 'stopped') stopRequested = false;
+    current = stopRequested ? { ...session, activity: 'stopping' } : session;
+    setInfo(current); props.onSession(current);
+  };
   const send = (body: unknown) => {
-    const task = queue.then(() => request(`/${props.id}`, body)).then(() => { setError(''); });
+    const task = queue.then(() => { if (canType()) return request(`/${props.id}`, body); }).then(() => { setError(''); });
     queue = task.catch((reason) => { setError(`Could not confirm the action was delivered. Check the terminal before trying again. ${reason.message}`); });
     return task;
   };
@@ -74,7 +83,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
           if (stopped) return;
         }
         generation = view.generation;
-        current = view.session; setInfo(view.session); props.onSession(view.session);
+        publishSession(view.session);
         if (view.snapshot !== undefined) {
           t.resize(view.session.cols, view.session.rows); t.reset();
           if (view.snapshot) await new Promise<void>((resolve) => t.write(view.snapshot!, resolve));
@@ -89,14 +98,14 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
         setConnection('');
       } catch (reason) {
         if (!stopped) {
-          failures++; props.onSession(null);
+          failures++; props.onSession(stopRequested ? current : null);
           if (reason instanceof RemoteRequestError && reason.status === 404) cursor = -1;
           setConnection(connectionMessage(reason));
         }
       }
       if (!stopped) timer = setTimeout(() => void poll(), failures ? Math.min(10000, 500 * 2 ** Math.min(failures - 1, 5)) : 250);
     };
-    const data = t.onData((value) => { if (current?.online) void send({ type: 'input', data: value }).catch(() => {}); });
+    const data = t.onData((value) => { if (canType()) void send({ type: 'input', data: value }).catch(() => {}); });
     let touchY: number | undefined;
     const touchStart = (event: TouchEvent) => { touchY = event.touches.length === 1 ? event.touches[0].clientY : undefined; };
     const touchMove = (event: TouchEvent) => {
@@ -135,7 +144,7 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
     });
   };
   const online = () => info()?.online ?? false;
-  const canType = () => online() && !connection();
+  const canType = () => online() && !connection() && !['stopping', 'stopped'].includes(info()?.activity ?? '') && info()?.exitCode == null;
   const waiting = () => {
     const session = info();
     if (!session || session.online || session.exitCode != null) return '';
@@ -151,15 +160,20 @@ function SessionTerminal(props: { id: string; onClose: () => void; onSession: (s
   const canStop = () => !!info()?.managed && !ended() && (info()?.runId ? info()?.activity !== 'stopped' : online());
   const actionLabel = () => ended() ? 'Remove session' : info()?.managed ? (canStop() ? 'Stop agent' : 'Remove agent') : 'Disconnect remote session';
   const removeOrStop = () => {
-    setActing(true);
+    if (acting()) return;
     const stopping = canStop();
+    setActing(true);
+    if (stopping && latest) { stopRequested = true; publishSession(latest); }
     void request(`/${props.id}`, stopping ? { type: 'stop' } : undefined, stopping ? 'POST' : 'DELETE')
-      .then(() => { if (!stopping) props.onClose(); else setInfo((previous) => previous ? { ...previous, activity: 'stopping' } : previous); })
-      .catch((reason) => setError(reason.message)).finally(() => setActing(false));
+      .then(() => { if (!stopping) props.onClose(); })
+      .catch((reason) => {
+        if (stopping && latest) { stopRequested = false; publishSession(latest); }
+        setError(reason.message);
+      }).finally(() => setActing(false));
   };
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
-    if (!draft().trim() || sending()) return;
+    if (!canType() || !draft().trim() || sending()) return;
     setSending(true);
     void send({ type: 'input', data: draft().replace(/[\r\n]/g, ' ') + '\r' })
       .then(() => setDraft('')).catch(() => {}).finally(() => setSending(false));
