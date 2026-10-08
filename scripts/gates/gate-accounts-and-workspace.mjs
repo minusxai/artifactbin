@@ -402,7 +402,7 @@ async function claimLeg() {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers ?? {}) },
     })).json();
-    // An anonymous visitor makes two documents.
+    // An email account creates two private documents.
     const email = `mxmx_test_claim_${stamp}@example.com`;
     const anon = await connectAgent(BASE, { email });
     const doc = async (title) => api('/api/artifacts', {
@@ -411,20 +411,22 @@ async function claimLeg() {
     }, anon.token);
     const kept = await doc('Quarterly Review');
     const left = await doc('Scratch Notes');
-    must(!!kept.id && !!left.id, 'an anonymous visitor published two documents');
+    must(!!kept.id && !!left.id, 'an email account published two documents');
 
-    // The browser holds the guest's httpOnly session cookie, and the shell it unlocks belongs to the owner.
+    // The approving browser holds its separate email account session.
     await p.goto(BASE, { waitUntil: 'load' });
     await becomeOwner(p, BASE, anon.token);
 
     // Re-authenticate the same email account after ending this browser session.
-    await p.request.post(`${BASE}/api/auth/sign-out`, { headers: { origin: BASE } });
+    await p.getByRole('button', { name: 'Open menu', exact: true }).click();
+    await p.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await p.waitForURL(url => url.pathname === '/login');
     await loginViaEmail(p, BASE, sink, email);
     // The page chrome names the account by HANDLE, not by address, so being signed in is asked of the session endpoint.
     check(await isSignedInAs(p, email), 'logging in with an emailed code signs you in');
 
-    // Guest ownership transfers during verified login, without a second claim UI.
-    check(await p.locator('[aria-label="Unclaimed drafts"]').count() === 0, 'guest drafts are adopted automatically on verified login');
+    // Re-authentication keeps the same account ownership without a claim UI.
+    check(await p.locator('[aria-label="Unclaimed drafts"]').count() === 0, 'email accounts need no draft-claim interface');
     // And there is NOWHERE to paste a credential: the account page lists CLI
     // connections to revoke, and nothing anywhere asks a person for a token.
     await p.goto(`${BASE}/account`, { waitUntil: 'load' });

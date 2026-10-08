@@ -89,6 +89,7 @@ await section('crawler', async () => {
 
   const PHRASE = 'Indexable sentence about quarterly revenue';
   const doc = await publish({
+    visibility: 'public',
     markup: [
       '<Helmet><title>Crawlable doc</title><meta name="description" content="A document that indexes." /></Helmet>',
       '<h1 className="text-4xl font-bold">Crawlable heading</h1>',
@@ -433,7 +434,7 @@ await section('navigation', async () => {
   await doc().getByRole('link', { name: 'Next artifact' }).click();
   await page.waitForURL((url) => url.href !== fromA, { timeout: 10_000 }).catch(() => {});
   const reachedB = await seen(heading('Artifact B'));
-  check(onApp(`/a/${second.id}`) && reachedB, `a document link opens the next document's app page (${page.url()})`);
+  check(new URL(page.url()).origin === new URL(base).origin && (new URL(page.url()).pathname.split('/').at(-1) === second.id || new URL(page.url()).pathname.split('/').at(-1)?.startsWith(`${second.id}-`)) && reachedB, `a document link opens the next document's app page (${page.url()})`);
   const nextStatus = await nextView;
   check(nextStatus === 204, `navigation records the next document view (${nextStatus ?? 'no view reported'})`);
   check(await page.evaluate(() => window.__navigationProbe).catch(() => undefined) === undefined, 'reader link loads its document');

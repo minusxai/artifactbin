@@ -121,8 +121,8 @@ const tok = guestConnection.token;
 const ownerTok = adoptedConnection.token;
 const H = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
 const OH = { Authorization: `Bearer ${ownerTok}`, 'Content-Type': 'application/json' };
-const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, body: JSON.stringify(body) });
-const ownerPost = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: OH, body: JSON.stringify(body) });
+const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, body: JSON.stringify({ visibility: 'unlisted', ...body }) });
+const ownerPost = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: OH, body: JSON.stringify({ visibility: 'unlisted', ...body }) });
 
 // ── fixtures, published at once ─────────────────────────────────────────────────
 /** The page's own script: an effect over the `sales` and `region` signals, rendering into a node the markup does not bind. */

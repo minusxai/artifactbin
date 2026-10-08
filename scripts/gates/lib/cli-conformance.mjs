@@ -116,11 +116,7 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
           accountCookie = approvingAccount.cookie;
         } else {
           const owner = await ctx.newPage();
-          await ctx.addCookies(browserCookie.split('; ').map(pair => {
-            const separator = pair.indexOf('=');
-            return { name: pair.slice(0, separator), value: pair.slice(separator + 1), url: BASE, httpOnly: true, sameSite: 'Lax' };
-          }));
-          await owner.request.post(`${BASE}/api/auth/sign-out`, { headers: { origin: BASE } });
+          // This fresh browser signs in with the same email as the approving account.
           await loginViaEmail(owner, BASE, sink, accountEmail);
           accountCookie = (await ctx.cookies(BASE)).map(({ name, value }) => `${name}=${value}`).join('; ');
         }
