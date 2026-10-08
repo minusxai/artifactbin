@@ -122,7 +122,9 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   // exactly as an exported ARTIFACTBIN_URL does: codex's `afbin pull <local url>` was still refused as
   // wrong_server on the first fixed build because only the connection loader read it.
   const exportedOrigin=await exportedServer(home,context.env);
-  const declaredServer=typeof flags.server==='string'?flags.server:exportedOrigin??DEFAULT_SERVER;
+  const managedContext=remoteContext(context.env);
+  const managedOrigin=managedContext?exportedOrigin:undefined;
+  const declaredServer=typeof flags.server==='string'?flags.server:managedOrigin??exportedOrigin??DEFAULT_SERVER;
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
    if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout(`${String(flags.service)} is ready for offline use.\n`);return 0;}
@@ -162,7 +164,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(command==='mv'){await (await findLocalWorkspace(workspace.root)?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
-  const chosenHost=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??exportedOrigin;
+  const chosenHost=()=>typeof flags.server==='string'?flags.server:managedOrigin??workspace.tracking?.server??account?.manifest?.server??exportedOrigin;
   const serverOrigin=()=>chosenHost();
   /**
    * WHO THE SELECTED SERVER IS — resolved at most once per command, and only where it
@@ -173,6 +175,12 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    */
   let identityPromise:Promise<ServerIdentity>|undefined;
   const identity=()=>identityPromise??=serverIdentity(serverOrigin()??declaredServer,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})});
+  // Keep the remote credential and proof on the deployment that issued them.
+  if(managedOrigin&&typeof flags.server==='string'){
+   const [selected,managed]=await Promise.all([identity(),serverIdentity(managedOrigin,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})})]);
+   if(!sameServer(selected,managed.canonical))throw new CliError('wrong_server',`This managed session is connected to ${managedOrigin}; the command selected ${flags.server}.`,`Use --server ${managedOrigin}, or omit --server to use the managed connection.`);
+  }
+  if(managedOrigin&&account?.manifest?.server&&!sameServer(await identity(),account.manifest.server))throw new CliError('wrong_server',`This account workspace is tracked against ${account.manifest.server}, outside the managed session connected to ${managedOrigin}.`,`Use the account workspace with its server, or select an account workspace on ${managedOrigin}.`);
   // A pasted URL is the only ARGUMENT whose origin has to be understood before that boundary:
   // it may be another address of this same server, and it is used for its artifact id alone.
   const urlArgument=()=>[...positionals,...(typeof flags.in==='string'?[flags.in]:[])].some(ref=>/^https?:\/\//.test(ref));
@@ -191,7 +199,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    if('installations' in updated)for(const hint of restartHints(updated.installations))stderr(hint+'\n');
    return 0;
   }
-  if(workspace.tracking&&typeof flags.server==='string'&&!['auth','update'].includes(command)){
+  if(workspace.tracking&&typeof flags.server==='string'&&!managedOrigin&&!['auth','update'].includes(command)){
    // Two names of ONE deployment are not two servers. Ask only when the strings differ.
    const compatible=flags.server===workspace.tracking.server||sameServer(await identity(),workspace.tracking.server);
    if(!compatible)throw new CliError('wrong_server',`This directory is tracked against ${workspace.tracking.server}; the command selected ${flags.server}.`,`Use another directory, or pass --server ${workspace.tracking.server}.`);
@@ -316,8 +324,10 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   // A directory is tracked against ONE server and account. Sending another server this directory's account
   // got a bare 409 ("Use the credentials for this workspace account") that cost codex twenty steps of reading
   // login JavaScript. Name both origins and the way out before any request.
-  if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
-  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'?{onRelease}:{}),account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  const sameManagedOrigin=!!managedOrigin&&sameServer(resolved,managedOrigin);
+  if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server)&&!sameManagedOrigin)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
+  const workspaceAccount=sameManagedOrigin&&!sameServer(resolved,workspace.tracking?.server??'')?undefined:workspace.tracking?.account;
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'?{onRelease}:{}),account:workspaceAccount,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(command==='workspace'){emit(await rebindWorkspace(workspace,client,{dryRun:!!flags['dry-run']}));return 0;}
   if(command==='schedule'){emit(await scheduleCommand(workspace,client,positionals,flags));return 0;}
   if(command==='runs'){
