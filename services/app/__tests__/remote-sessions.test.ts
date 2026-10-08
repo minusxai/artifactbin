@@ -84,12 +84,10 @@ describe("remote session relay", () => {
     ).toBe(403);
   });
   it("allows the authenticated owning account to acknowledge completed manual work", async () => {
-    const ownerToken = await mintToken("owner-ready");
     const owner = await createUser({ email: "mxmx_test_owner_ready_route@example.com" });
-    await claimToken(owner.id, ownerToken.token);
-    const otherToken = await mintToken("other-ready");
+    const ownerToken = await mintToken("owner-ready", owner.id);
     const other = await createUser({ email: "mxmx_test_other_ready_route@example.com" });
-    await claimToken(other.id, otherToken.token);
+    const otherToken = await mintToken("other-ready", other.id);
     const made = await remoteAgents.create(owner.id, {
       ...registration, name: "dashboard", managed: true, recoveryKey: "a".repeat(64),
     });

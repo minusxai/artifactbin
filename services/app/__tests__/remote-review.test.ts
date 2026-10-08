@@ -115,7 +115,7 @@ it('manual terminal input invalidates idle readiness until the agent explicitly 
 });
 
 it('lets only the session owner resume queued artifact work after manual input and delivers it once',async()=>{
- const token=await mintToken('owner-ready');const user=await createUser({email:'mxmx_test_owner_ready@example.com'});await claimToken(user.id,token.token);const owner=user.id;
+ const user=await createUser({email:'mxmx_test_owner_ready@example.com'});const token=await mintToken('owner-ready',user.id);const owner=user.id;
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>owner readiness</p>'}}));const artifactId=(await made.json()).id;
  const a=fresh(),s=await a.create(owner,registration),db=await getDb();
  await a.ready(owner,s.id,s.runnerKey);
