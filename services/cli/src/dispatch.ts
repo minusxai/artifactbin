@@ -124,6 +124,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const exportedOrigin=await exportedServer(home,context.env);
   const managedContext=remoteContext(context.env);
   const managedOrigin=managedContext?exportedOrigin:undefined;
+  let managedIdentityPromise:Promise<ServerIdentity>|undefined;
+  const managedIdentity=()=>managedOrigin?managedIdentityPromise??=serverIdentity(managedOrigin,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})}):undefined;
   const declaredServer=typeof flags.server==='string'?flags.server:managedOrigin??exportedOrigin??DEFAULT_SERVER;
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
@@ -158,12 +160,22 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd,home);
+  const foreignManagedWorkspace=async()=>!!(managedOrigin&&workspace.tracking&&!sameServer(await managedIdentity()!,workspace.tracking.server));
+  const refuseForeignManagedWorkspace=async()=>{
+   if(!await foreignManagedWorkspace())return;
+   throw new CliError('wrong_server',`This directory is tracked against ${workspace.tracking!.server}; the managed session is connected to ${managedOrigin}.`,`Use a workspace tracked against ${managedOrigin}; pull to stdout remains available for read-only inspection.`);
+  };
+  // These local operations change paths or identities that belong to a tracked workspace.
+  // Check the binding before they can rewrite local state under a foreign managed session.
+  if(command==='add'||command==='mv')await refuseForeignManagedWorkspace();
   if(command==='import'){emit(await importLocalHtml(workspace,positionals[0]!,typeof flags.output==='string'?flags.output:undefined));return 0;}
   const portable=!!await findLocalWorkspace(workspace.root);
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
   if(command==='mv'){await (await findLocalWorkspace(workspace.root)?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
+  const changesWorkspaceBinding=command==='push'||command==='workspace'||command==='fork'||command==='delete'&&flags.type!=='comment'||command==='pull'&&flags.output!=='-';
+  if(changesWorkspaceBinding&&!account?.manifest)await refuseForeignManagedWorkspace();
   const chosenHost=()=>typeof flags.server==='string'?flags.server:managedOrigin??workspace.tracking?.server??account?.manifest?.server??exportedOrigin;
   const serverOrigin=()=>chosenHost();
   /**
@@ -177,7 +189,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const identity=()=>identityPromise??=serverIdentity(serverOrigin()??declaredServer,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})});
   // Keep the remote credential and proof on the deployment that issued them.
   if(managedOrigin&&typeof flags.server==='string'){
-   const [selected,managed]=await Promise.all([identity(),serverIdentity(managedOrigin,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})})]);
+   const [selected,managed]=await Promise.all([identity(),managedIdentity()!]);
    if(!sameServer(selected,managed.canonical))throw new CliError('wrong_server',`This managed session is connected to ${managedOrigin}; the command selected ${flags.server}.`,`Use --server ${managedOrigin}, or omit --server to use the managed connection.`);
   }
   if(managedOrigin&&account?.manifest?.server&&!sameServer(await identity(),account.manifest.server))throw new CliError('wrong_server',`This account workspace is tracked against ${account.manifest.server}, outside the managed session connected to ${managedOrigin}.`,`Use the account workspace with its server, or select an account workspace on ${managedOrigin}.`);
