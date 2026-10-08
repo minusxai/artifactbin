@@ -120,13 +120,13 @@ it('projects durable hosted lifecycle instead of leaving ended runs starting in 
  }finally{registry.clear();}
 });
 
-it('connects a hosted harness to its reserved identity and queues comments until login readiness',async()=>{
+it.each(['claude','codex','pi','opencode'])('connects hosted %s to its reserved identity and queues comments until login readiness',async command=>{
  const db=await harness.db(),{runner,starts}=fixture();setServices({runner});
- const response=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'generation-one',name:'shared-agent',command:['claude']}}),'create',{enabled:true,runner,db});
+ const response=await managedRunRoute(request('/api/runs',{method:'POST',actor:{userId:'alice',credential:'session'},json:{requestId:'generation-one',name:'shared-agent',command:[command]}}),'create',{enabled:true,runner,db});
  const {session}=await response.json();
  expect(starts[0]?.env).toMatchObject({ARTIFACTBIN__HOSTED_SESSION:session.id,ARTIFACTBIN__HOSTED_GENERATION:'generation-one'});
  const registry=new RemoteRegistry(),agents=new RemoteAgents(registry);
- const registration={name:'shared-agent',harness:'claude',cwd:'/home/runner',machine:'Hosted',cols:100,rows:30,managed:true,recoveryKey:'a'.repeat(64),hostedSessionId:session.id,hostedGeneration:'generation-one'};
+ const registration={name:'shared-agent',harness:command,cwd:'/home/runner',machine:'Hosted',cols:100,rows:30,managed:true,recoveryKey:'a'.repeat(64),hostedSessionId:session.id,hostedGeneration:'generation-one'};
  try{
   await expect(agents.create('bob',registration)).rejects.toThrow(/not found/i);
   await expect(agents.create('alice',{...registration,hostedGeneration:'stale'})).rejects.toThrow(/generation/i);

@@ -1,3 +1,4 @@
+import {HOSTED_TERMINAL_SIZE} from '../../contracts/src/remote';
 import {deliverRemoteInput} from './remote-input';
 import { randomBytes } from "node:crypto";
 import headless from "@xterm/headless";
@@ -36,8 +37,8 @@ export async function runRemote(options: RunOptions): Promise<number> {
   const interactive = options.interactive ?? true;
   if (interactive && !process.stdin.isTTY)
     throw new Error("afbin remote requires an interactive terminal.");
-  let cols = Math.max(2, Math.min(300, process.stdout.columns || 80));
-  let rows = Math.max(2, Math.min(120, process.stdout.rows || 24));
+  let cols = options.hostedSessionId ? HOSTED_TERMINAL_SIZE.cols : Math.max(2, Math.min(300, process.stdout.columns || 80));
+  let rows = options.hostedSessionId ? HOSTED_TERMINAL_SIZE.rows : Math.max(2, Math.min(120, process.stdout.rows || 24));
   const cwd = options.cwd ?? process.cwd();
   const recoveryKey = randomBytes(32).toString("hex");
   const register = (signal?: AbortSignal) => client.request<{ id: string; runnerKey: string }>(

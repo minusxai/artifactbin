@@ -1,4 +1,7 @@
 import type {RunStart} from './runner';
+/** Hosted native processes use one fixed PTY geometry, independent of viewer width. */
+export const HOSTED_TERMINAL_SIZE={cols:100,rows:30} as const;
+export const HOSTED_HARNESSES=['claude','codex','pi','opencode'] as const;
 /** V0 remote-terminal protocol. PTY bytes stay on the user's machine until explicitly shared. */
 export interface RemoteSessionInfo {
   /** App-owned managed Run mapping; never an authorization grant. */

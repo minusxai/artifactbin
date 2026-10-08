@@ -1,7 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import type {RunnerService,RunnerCapabilities} from '@artifactbin/contracts';
-import type {RemoteSessionInfo} from '../../../contracts/src/remote';
+import {HOSTED_HARNESSES,HOSTED_TERMINAL_SIZE,type RemoteSessionInfo} from '../../../contracts/src/remote';
 import {sessionActor,isCookieCredential} from '../accounts/viewer';
 import {json,readJson,isCrossSiteRequest} from '../http';
 import {RUNNER_SERVICE_URL} from '../platform/config';
@@ -40,8 +40,8 @@ export async function admitManagedRun(owner:string,input:z.infer<typeof spec>,db
    const result=await db.transaction(async tx=>{
     // Reserve the owner/name before admission. Locking this metadata row serializes
     // app replicas; only the configured external runner is called inside the lock.
-    const connectedHarness=input.command.length===1&&['claude','codex'].includes(input.command[0]!);
-    const initial:RemoteSessionInfo={id,name:input.name,harness:input.command[0]!,cwd:'/home/runner',machine:'Hosted',cols:100,rows:30,online:false,exitCode:null,controller:'web',createdAt:new Date().toISOString(),managed:true,activity:'starting',...(connectedHarness?{hostedGeneration:input.requestId,hostedConfig:{command:input.command,compute:input.compute,...(input.sshPublicKey?{sshPublicKey:input.sshPublicKey}:{})}}:{}),managedConfigHash:configHash};
+    const connectedHarness=input.command.length===1&&(HOSTED_HARNESSES as readonly string[]).includes(input.command[0]!);
+    const initial:RemoteSessionInfo={id,name:input.name,harness:input.command[0]!,cwd:'/home/runner',machine:'Hosted',...HOSTED_TERMINAL_SIZE,online:false,exitCode:null,controller:'web',createdAt:new Date().toISOString(),managed:true,activity:'starting',...(connectedHarness?{hostedGeneration:input.requestId,hostedConfig:{command:input.command,compute:input.compute,...(input.sshPublicKey?{sshPublicKey:input.sshPublicKey}:{})}}:{}),managedConfigHash:configHash};
     await tx.query('INSERT INTO remote_agents(id,owner,name,proof_hash,info) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING',[id,owner,input.name,createHash('sha256').update(randomUUID()).digest('hex'),JSON.stringify(initial)]);
     const existing=(await tx.query<{owner:string;active:boolean;info:RemoteSessionInfo}>('SELECT owner,active,info FROM remote_agents WHERE id=$1 FOR UPDATE',[id])).rows[0];
     if(!existing||existing.owner!==owner)throw Error('session_conflict');

@@ -170,3 +170,13 @@ for(const ephemeral of [false,true])test(`generated managed helper restores ${ep
   assert.equal(ready,true,output);assert.ok(!output.includes(proof));assert.ok(!(await readFile(join(dir,'helper.txt'),'utf8')).includes(proof));assert.equal(exited,true);
  }finally{if(pid)try{process.kill(pid,'SIGTERM');}catch{}server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(dir,{recursive:true,force:true});}
 });
+test('hosted PTY uses the advertised fixed dimensions from registration through actual terminal execution',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'af-hosted-size-'));let output='',registered:Record<string,unknown>|undefined;
+ const client={connection:{server:'http://localhost:5401'},request:async(_path:string,_method:string,body:Record<string,unknown>)=>{
+  if(_path==='/remote/sessions'){registered=body;return {id:'hosted-size',runnerKey:'test-proof'};}
+  output+=String(body.output??'');return {controller:'web',inputs:[],stop:output.includes('30 100')};
+ }} as unknown as HttpClient;
+ try{await runRemote({client,command:'/bin/sh',args:['-c','stty size; sleep 2'],cwd:dir,interactive:false,managed:true,hostedSessionId:'hosted-size',hostedGeneration:'test-generation'});
+ assert.equal(registered?.cols,100);assert.equal(registered?.rows,30);assert.match(output,/30 100/);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
