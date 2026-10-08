@@ -2,6 +2,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {emailAuthenticate} from '../../cli/src/email-auth';
+import {browserAuthenticate} from '../../cli/src/browser-auth';
 import {loadConnection,saveConnection} from '../../cli/src/config';
 import {runCli} from '../../cli/src/dispatch';
 import { PGlite } from '@electric-sql/pglite';
@@ -69,6 +70,37 @@ beforeAll(async () => {
 afterAll(async () => { await pg.close(); });
 beforeEach(async () => { await resetTestDb(); session = null; identities.clear(); });
 const asUser = (userId = 'usr_1', email = 'u@example.com') => { session = { userId, email }; identities.set(userId, { userId, email, emailVerified: true }); return { cookie: 'sess=1' }; };
+
+it('collects a phone-approved first artifact before a second task without another login',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-phone-handoff-'));
+ const options=await optionsOf();
+ const host=assemble(authParts({...options,upstream:async(request,actor)=>{
+  if(new URL(request.url).pathname===INTERNAL_ARTIFACT_APPROVAL_PATH){
+   const body=await request.clone().json() as {artifactId?:string};
+   if(body.artifactId)return Response.json({canApprove:actor.credential==='session',canEdit:actor.credential==='bearer'&&actor.userId==='usr_1'});
+  }
+  return options.upstream(request,actor);
+ }}));
+ let approvalUrl='',pairings=0,opened=0;
+ const request:typeof fetch=async(input,init)=>{
+  const req=new Request(input,init);
+  const response=await host.fetch(req);
+  if(new URL(req.url).pathname==='/api/agent-approvals'){
+   const body=await response.clone().json() as {device_code?:string};
+   if(body.device_code)pairings++;
+  }
+  return response;
+ };
+ try {
+  await expect(browserAuthenticate(BASE,{home,env:{},interactive:false,artifactId:'ABC123',fetch:request,notify:()=>{},open:async url=>{approvalUrl=url;throw new Error('headless task');}})).rejects.toMatchObject({code:'browser_unavailable'});
+  const user_code=new URL(approvalUrl).searchParams.get('user_code')!;
+  const approval=await host.request('/oauth/device/approve',{method:'POST',headers:{...asUser(),origin:BASE},body:new URLSearchParams({user_code,decision:'approve'})});
+  expect(approval.status).toBe(200);session=null;
+  const connection=await browserAuthenticate(BASE,{home,env:{},interactive:false,artifactId:'DEF456',fetch:request,notify:()=>{},open:async()=>{opened++;throw new Error('unnecessary second approval');}});
+  expect(pairings).toBe(1);expect(opened).toBe(0);
+  expect(await loadConnection(BASE,home,{})).toEqual(connection);
+ } finally {await rm(home,{recursive:true,force:true});}
+});
 
 async function register(redirectUri = REGISTERED_REDIRECT): Promise<string> {
   const response = await app.request('/oauth/register', {
