@@ -26,7 +26,7 @@ export async function uploadDatasetFile(context: ImageUploadContext | undefined,
     throw new Error(typeof failure?.detail === 'string' ? failure.detail : typeof failure?.error === 'string' ? failure.error : `Upload failed (${response.status}). Retry the same file.`);
   }
   const result = body as DatasetUploadResult | null;
-  if (!result || !/^dfile:[a-z0-9]+$/.test(result.ref) || typeof result.url !== 'string' || typeof result.name !== 'string' || typeof result.contentType !== 'string' || !Number.isFinite(result.size) || result.size < 0) {
+  if (!result || !/^dfile:[a-z0-9]+$/.test(result.ref) || typeof result.url !== 'string' || !result.url || typeof result.name !== 'string' || !result.name || typeof result.contentType !== 'string' || !result.contentType || !Number.isSafeInteger(result.size) || result.size < 0) {
     throw new Error('The upload response was incomplete. Retry the same file to recover its reference.');
   }
   return result;

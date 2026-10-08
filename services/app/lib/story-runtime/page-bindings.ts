@@ -166,6 +166,7 @@ export function bindPage(store: DataflowStore | null): PageBindings {
         const match=typeof ref==='string'?/^(dimg|dfile):([a-z0-9]+)$/.exec(ref):null;
         if(!found||!match)return '';
         const docId=typeof document==='undefined'?'':document.body.getAttribute('data-mx-live-id')??'';
+        if(!docId)return '';
         return `${globalThis.location?.origin??''}/a/${encodeURIComponent(docId)}/datasets/${encodeURIComponent(found.ref.replace(/^ref:/,''))}/${match[1]==='dimg'?'images':'files'}/${encodeURIComponent(match[2]!)}`;
       },
       uploadImage(importName,file) {
@@ -175,11 +176,7 @@ export function bindPage(store: DataflowStore | null): PageBindings {
         return uploadDatasetImage(store.image,found.ref.replace(/^ref:/,''),document.body.getAttribute('data-mx-live-edit')??'',file);
       },
       imageUrl(importName,ref) {
-        const found=store.flow.imports.find(item=>item.name===bareName(importName));
-        const match=typeof ref==='string'?/^dimg:([a-z0-9]+)$/.exec(ref):null;
-        if(!found||!match)return '';
-        const docId=typeof document==='undefined'?'':document.body.getAttribute('data-mx-live-id')??'';
-        return `${globalThis.location?.origin??''}/a/${encodeURIComponent(docId)}/datasets/${encodeURIComponent(found.ref.replace(/^ref:/,''))}/images/${encodeURIComponent(match[1]!)}`;
+        return typeof ref==='string'&&/^dimg:[a-z0-9]+$/.test(ref)?bindings.fileUrl(importName,ref):'';
       },
       read(name) {
         const value = values.get(name);

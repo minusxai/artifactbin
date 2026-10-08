@@ -53,6 +53,11 @@ describe('the page bindings', () => {
     expect(bindings.fileUrl('d', receipt.ref)).toContain('/datasets/DS1/files/abc234def456');
     expect(bindings.fileUrl('d', 'dimg:abc234def456')).toContain('/datasets/DS1/images/abc234def456');
     expect(bindings.fileUrl('missing',receipt.ref)).toBe('');
+    expect(bindings.fileUrl('d','ref:other')).toBe('');
+    expect(bindings.imageUrl('d',receipt.ref)).toBe('');
+    expect(bindings.imageUrl('d','dimg:abc234def456')).toBe(bindings.fileUrl('d','dimg:abc234def456'));
+    document.body.removeAttribute('data-mx-live-id');
+    expect(bindings.fileUrl('d',receipt.ref)).toBe('');
     await expect(bindings.upload('missing',file)).rejects.toThrow(/no declared dataset import/);
   });
 
