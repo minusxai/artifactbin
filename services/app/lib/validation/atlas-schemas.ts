@@ -163,7 +163,6 @@ const PivotConfig = Type.Object({
   showRowTotals: Nullable(Type.Boolean({ description: 'show row totals column' })),
   showColumnTotals: Nullable(Type.Boolean({ description: 'show column totals row' })),
   showHeatmap: Nullable(Type.Boolean({ description: 'show heatmap conditional formatting' })),
-  compact: Nullable(Type.Boolean({ description: 'DEPRECATED compact heatmap mode (GitHub-contribution-graph look) — kept rendering for legacy pivots; prefer the dedicated heatmap viz type (vega-lite rect mark) instead' })),
   heatmapScale: Nullable(Type.String({ description: "heatmap color scale: 'red-yellow-green' (default), 'green' (single-hue like GitHub), 'blue' (single-hue blue)" })),
   rowFormulas: Nullable(Type.Array(PivotFormula, { description: 'formulas combining top-level row dimension values' })),
   columnFormulas: Nullable(Type.Array(PivotFormula, { description: 'formulas combining top-level column dimension values' })),

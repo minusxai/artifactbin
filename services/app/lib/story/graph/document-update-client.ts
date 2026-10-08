@@ -17,7 +17,7 @@ import {validateMarkupStructure} from '../document/local-validation';
 import {stampNodeIds,nodeIndex,hasAmbiguousLegacyAliases} from '../document/node-ids';
 import {canonicalizeMarkup} from '../document/canonical-source';
 import {repairJsxSource} from '../../jsx/repair';
-import {extractClassCandidates,hasDesignSystemMarker} from '../../data/story/story-css';
+import {extractClassCandidates} from '../../data/story/story-css';
 export interface ClientDocumentSnapshot {document:DocumentGraph;version:number;meta:Record<string,unknown>;title?:string|null;description?:string|null}
 export interface ClientDocumentChange {source?:string;operations?:readonly DocumentOperation[];metadata?:DocumentUpdate['metadata'];whole?:boolean;annotationOps?:DocumentUpdate['annotationOps']}
 /** The whole preparation, pure and synchronous: the update, and the source whose authoring context it needs.
@@ -55,7 +55,7 @@ export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientD
   const old=oldIds.get(nodeId)?.node.attributes.find(a=>a.name==='href')?.value;
   return old?.static&&old.json===href.json?[]:[{nodeId,userId:href.json.slice('/people/'.length)}];
  });
- const css=JSON.stringify(extractClassCandidates(before))!==JSON.stringify(extractClassCandidates(identity.source))||hasDesignSystemMarker(before)!==hasDesignSystemMarker(identity.source)||['theme','template','colorMode'].some(key=>Object.hasOwn(metadata,key)&&metadata[key as keyof typeof metadata]!==base.meta[key]);
+ const css=JSON.stringify(extractClassCandidates(before))!==JSON.stringify(extractClassCandidates(identity.source))||['theme','template','colorMode'].some(key=>Object.hasOwn(metadata,key)&&metadata[key as keyof typeof metadata]!==base.meta[key]);
  const update:DocumentUpdate={schema:1,...(mentions.length?{mentions}:{}),...(annotationOps.length?{annotationOps}:{}),...(identity.aliases.length?{aliases:identity.aliases}:{}),patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),
   effects:{css,references:JSON.stringify(graphReferences(base.document))!==JSON.stringify(graphReferences(candidate))},
   ...(Object.keys(metadata).length?{metadata,expectedMetadata:Object.fromEntries(Object.keys(metadata).map(key=>[key,(key==='title'?base.title:key==='description'?base.description:base.meta[key])??null]))}:{}),...(whole?{whole:true,replacement:candidate}:{})};

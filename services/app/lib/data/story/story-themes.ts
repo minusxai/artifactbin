@@ -62,7 +62,7 @@ export interface StoryTheme {
    */
   defaultMode: 'light' | 'dark';
   /**
-   * The LIGHT palette — the full shadcn token contract: exactly the vars TW_INPUT_JSX maps,
+   * The LIGHT palette — the full shadcn token contract: exactly the vars TW_INPUT_STORY maps,
    * plus --radius (radius is personality, shared by both modes).
    */
   cssVars: Record<string, string>;

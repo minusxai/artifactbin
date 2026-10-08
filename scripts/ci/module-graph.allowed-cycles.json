@@ -59,7 +59,6 @@
         "lib/annotations -> lib/remote",
         "lib/annotations -> lib/serving",
         "lib/annotations -> lib/story",
-        "lib/annotations -> lib/story-ui",
         "lib/artifact-backend -> lib/annotations",
         "lib/artifact-backend -> lib/http",
         "lib/artifact-backend -> lib/story",

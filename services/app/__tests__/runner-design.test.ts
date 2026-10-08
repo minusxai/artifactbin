@@ -23,7 +23,7 @@ async function setup() {
     request("/api/artifacts", {
       method: "POST",
       token: token.token,
-      json: { markup: "<p>Review café</p>" },
+      json: { markup: '<p id="review">Review café</p>' },
     }),
   );
   expect(response.status).toBe(201);
@@ -42,7 +42,7 @@ async function setup() {
     { tokenId: token.id, userId: user.id },
     doc.id,
     {
-      bodyPath: "0",
+      nodeId: "review",
       baseEditId: doc.edit_id,
       body: `[@pi](/chat?session=${session.id}) review`,
     },
@@ -389,7 +389,7 @@ it("seeds Pi with the saved transcript on the next comment and isolates history 
     { tokenId: fixture.actor.tokenId, userId: fixture.actor.userId },
     fixture.artifactId,
     {
-      bodyPath: "0",
+      nodeId: "review",
       body: `[@pi](/chat?session=${fixture.session.id}) next comment`,
     },
     { kind: "human", label: "Owner", transport: "browser" },

@@ -226,7 +226,7 @@ export class RemoteAgents {
   if(!allowed.includes(row.phase))throw new RemoteError('Acknowledge this request before completing it',409);
   if(resolve){
    if(receipt.phase!=='completed')throw new RemoteError('Only completed work can resolve a thread',409);
-   const later=(await tx.query("SELECT id FROM annotations WHERE artifact_id=$1 AND (id=$2 OR root_id=$2) AND author_kind IN ('human','owner') AND deleted_at IS NULL AND seq>(SELECT seq FROM annotations WHERE id=$3) LIMIT 1",[artifactId,threadId,row.comment_id])).rows.length;
+   const later=(await tx.query("SELECT id FROM annotations WHERE artifact_id=$1 AND (id=$2 OR root_id=$2) AND author_kind='human' AND deleted_at IS NULL AND seq>(SELECT seq FROM annotations WHERE id=$3) LIMIT 1",[artifactId,threadId,row.comment_id])).rows.length;
    const pending=(await tx.query("SELECT id FROM remote_work WHERE thread_id=$1 AND id<>$2 AND phase NOT IN ('completed','failed','unavailable','superseded') LIMIT 1",[threadId,row.id])).rows.length;
    if(later||pending)throw new RemoteError('A newer comment or pending request still needs attention',409);
   }

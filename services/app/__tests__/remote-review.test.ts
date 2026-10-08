@@ -81,9 +81,9 @@ it('commits mention delivery with the comment, authenticates receipts, and refus
  const user = await createUser({email:'mxmx_test_receipt@example.com'}); const token = await mintToken('review', user.id);await claimToken(user.id,token.token);
  setSession({user:{id:token.userId!,email:token.email!}});
  const cookie=await agentCookie([token.id]);
- const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Review me</p>'}}));expect(made.status).toBe(201);const doc=await made.json();
+ const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="review">Review me</p>'}}));expect(made.status).toBe(201);const doc=await made.json();
  const s=await remoteAgents.create(user.id,registration);
- const root=await comment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',cookie,json:{path:'0',edit_id:doc.edit_id,body:`[@claude](/chat?session=${s.id}) fix this`}}),{params:Promise.resolve({id:doc.id})});expect(root.status).toBe(201);const thread=await root.json();
+ const root=await comment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',cookie,json:{node_id:'review',edit_id:doc.edit_id,body:`[@claude](/chat?session=${s.id}) fix this`}}),{params:Promise.resolve({id:doc.id})});expect(root.status).toBe(201);const thread=await root.json();
  expect(thread.remote_work).toHaveLength(1);const work=thread.remote_work[0];
  await remoteAgents.ready(user.id,s.id,s.runnerKey);await remoteAgents.exchange(user.id,s.id,exchange(s.runnerKey));
  const answer=async(phase:string,proof:string,resolve=false)=>{const req=request(`/api/artifacts/${doc.id}/annotations/${thread.id}`,{method:'POST',token:token.token,json:{reply:'Review response',request_id:work.id,phase,resolve}});req.headers.set('X-Artifactbin-Remote-Session',s.id);req.headers.set('X-Artifactbin-Remote-Proof',proof);return reply(req,{params:Promise.resolve({id:doc.id,annId:thread.id})});};

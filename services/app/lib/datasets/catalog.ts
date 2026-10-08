@@ -18,7 +18,7 @@ import {catalogInputShape} from './input';
 import {catalogFromMetadata} from './catalog-metadata';
 const shape=catalogInputShape;
 
-/** Transitional legacy normalization stays at this boundary until catalog migration is complete. */
+/** The dataset's catalog, or null for a row without one. */
 export function catalogOf(row:{meta:unknown}):DatasetCatalog|null {
  return catalogFromMetadata(row.meta);
 }

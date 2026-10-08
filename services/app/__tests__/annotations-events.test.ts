@@ -23,8 +23,8 @@ beforeEach(listen);
 //   BODY path:                     0 = intro,     1 = findings
 const DOC =
   '<Helmet><title>Report</title></Helmet>'
-  + '<p>An introduction paragraph.</p>'
-  + '<div>Revenue grew 40% in Q3.</div>';
+  + '<p id="intro">An introduction paragraph.</p>'
+  + '<div id="findings">Revenue grew 40% in Q3.</div>';
 
 const doc = { format: 'markup' as const, content: '', source: DOC, meta: {}, title: 'Report', description: null };
 const author: AnnotationAuthor = { kind: 'human', label: null, transport: 'browser' };
@@ -56,7 +56,7 @@ async function publishLegacy() {
 }
 
 const open = async (actor: TokenActor, artifactId: string, baseEditId: string, body: string) => {
-  const wire = await createAnnotationFor(actor, artifactId, { bodyPath: '1', baseEditId, body }, author);
+  const wire = await createAnnotationFor(actor, artifactId, { nodeId: 'findings', baseEditId, body }, author);
   expect(wire, 'the fixture must actually annotate').toMatchObject({ id: expect.any(String) });
   return wire as { id: string };
 };
@@ -79,8 +79,8 @@ describe('a thread opened', () => {
   });
   it('a refused create (a stranger, a path that is not there) says nothing', async () => {
     const { row, actor } = await publish('mxmx_test_ann_refused@example.com');
-    expect(await createAnnotationFor({ tokenId: 'tok_stranger', userId: 'usr_stranger' }, row.id, { bodyPath: '1', baseEditId: row.edit_id, body: 'nope' }, author)).toBeNull();
-    expect(await createAnnotationFor(actor, row.id, { bodyPath: '99', baseEditId: row.edit_id, body: 'nope' }, author)).toMatchObject({ refused: 'bad_path' });
+    expect(await createAnnotationFor({ tokenId: 'tok_stranger', userId: 'usr_stranger' }, row.id, { nodeId: 'findings', baseEditId: row.edit_id, body: 'nope' }, author)).toBeNull();
+    expect(await createAnnotationFor(actor, row.id, { nodeId: 'nowhere', baseEditId: row.edit_id, body: 'nope' }, author)).toMatchObject({ refused: 'bad_path' });
     expect((await said('annotated'))).toEqual([]);
   });
 });

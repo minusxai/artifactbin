@@ -4,8 +4,8 @@ import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**
  * The BROWSER's annotation door — where a person's selection becomes a thread
  * (the bearer twin creates from a node id or a quote instead).
- * POST { path, edit_id, body }: `path` is the BODY path the frame reported
- * for the selected node, `edit_id` the head the page believed in (staleness
+ * POST { node_id, edit_id, body }: `node_id` is the stored JSX ID the frame
+ * reported for the selected node, `edit_id` the head the page believed in (staleness
  * is resolved server-side; an uncarryable base answers 409 with head so the
  * live page retries with fresh coordinates). GET lists like the bearer twin.
  *
@@ -41,14 +41,11 @@ type CreateBodyResult = { input: CreateAnnotationInput } | { error: 'invalid_ann
 function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
   const invalid = { error: 'invalid_annotation_body' } as const;
   const hasNode = typeof body.node_id === 'string' && body.node_id.length > 0;
-  const hasLegacy = typeof body.path === 'string' && /^\d+(\.\d+)*$/.test(body.path)
-    && typeof body.edit_id === 'string' && body.edit_id.length > 0;
-  if (!hasNode && !hasLegacy) return invalid;
+  if (!hasNode) return invalid;
   if (typeof body.body !== 'string' || body.body.trim().length === 0) return invalid;
   if (body.quote !== undefined && typeof body.quote !== 'string') return invalid;
   const input: CreateAnnotationInput = { body: body.body };
-  if (hasNode) input.nodeId = body.node_id as string;
-  else { input.bodyPath = body.path as string; input.baseEditId = body.edit_id as string; }
+  input.nodeId = body.node_id as string;
   if (body.edit_id !== undefined) { if (typeof body.edit_id !== 'string' || !body.edit_id) return invalid; input.baseEditId=body.edit_id; }
   if (body.attachment_id !== undefined) { if(typeof body.attachment_id!=='string'||!/^cim_[a-z0-9]+$/.test(body.attachment_id)||!input.baseEditId)return invalid; input.attachmentId=body.attachment_id; }
   if (typeof body.quote === 'string') input.quote = body.quote;

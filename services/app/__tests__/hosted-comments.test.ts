@@ -20,7 +20,7 @@ async function fixture(){
  const user=await createUser({email:'mxmx_test_external-comments@example.com'}),token=await mintToken('external-comments',user.id);await claimToken(user.id,token.token);
  setSession({user:{id:token.userId!,email:token.email!}});
  const cookie=await agentCookie([token.id]);
- const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Remote comments</p>'}}));expect(made.status).toBe(201);const doc=await made.json();
+ const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="remote">Remote comments</p>'}}));expect(made.status).toBe(201);const doc=await made.json();
  const id=hostedAgentSessionId(user.id),session={id,name:'artifactbin',harness:'native',cwd:'Agent',machine:'Remote',cols:100,rows:30,online:true,exitCode:null,controller:'web' as const,createdAt:new Date().toISOString(),managed:true,activity:'listening' as const};
  // This HTTP service stores acceptance independently; it never reads the app DB.
  const accepted=new Map<string,HostedAgentComment>(),attempts:string[]=[];let loseResponse=true;
@@ -38,7 +38,7 @@ async function fixture(){
  const agent=hostedAgentClient(service.url,hostedAgentTransport(service.url,secret),hostedAgentDeliveryTransport(service.url,secret));
  const tick=externalHostedComments(agent,secret,{publicBaseUrl:'https://app.fixture'});setHostedRemoteAgent(agent);
  await remoteAgents.list(user.id);
- const root=await comment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',cookie,json:{path:'0',edit_id:doc.edit_id,quote:'Remote comments',body:`[@artifactbin](/chat?session=${id}) fix this`}}),{params:Promise.resolve({id:doc.id})});expect(root.status).toBe(201);const thread=await root.json();
+ const root=await comment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',cookie,json:{node_id:'remote',edit_id:doc.edit_id,quote:'Remote comments',body:`[@artifactbin](/chat?session=${id}) fix this`}}),{params:Promise.resolve({id:doc.id})});expect(root.status).toBe(201);const thread=await root.json();
  const work=thread.remote_work[0];
  const call=(operation:string,input:unknown={},overrides:Record<string,unknown>={},owner=user.id,key=hostedAgentCallbackKey(secret))=>callback(request('/api/remote/hosted/operations',{method:'POST',headers:{[ACTOR_HEADER]:signActor({userId:'proxy-browser',credential:'session'},secret),'x-artifactbin-hosted-callback':signActor({userId:owner,credential:'session'},key)},json:{requestId:work.id,sessionId:id,operation,input,...overrides}}));
  return {user,doc,thread,work,tick,call,accepted,attempts,service};
