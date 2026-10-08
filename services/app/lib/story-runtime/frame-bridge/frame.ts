@@ -12,7 +12,7 @@
  *  · the controller's three app-origin requests (lib/story-runtime/island-controller `appFetch`): this document
  *    holds no app session and its CSP admits neither path, so the page makes them;
  *  · keys the page's editor listens for on ITS window, which a key pressed here never reaches: Mod-Z/Y as
- *    `mx:history`, Enter and focus leaving a text host as `mx:edit-flush`, ⌘⌥M as `mx:comment-key`;
+ *    `mx:history`, Enter and focus leaving a text host as `mx:edit-flush`, ⌘⌥M as `mx:comment-key`, ⌘K in text as `mx:link-key`;
  *  · this document's scroll, so geometry the page draws over it can follow;
  *  · the page's bars over this frame's top edge (`inset`: edit mode's toolbar is drawn OVER the frame, which never
  *    moves): reserved above the document and scrolled by in one task here (createTopInset), so nothing moves on screen.
@@ -29,7 +29,7 @@ import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract'
 import { createTrustedOverlayHost } from '@/lib/story-runtime/trusted-overlay-host';
 import { applyReaderChoice } from '@/lib/story-runtime/reader-actions';
 import {
-  STORY_ADOPT_HOOK, STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_HISTORY_MESSAGE, STORY_READER_MODE_MESSAGE,
+  STORY_ADOPT_HOOK, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_HISTORY_MESSAGE, STORY_READER_MODE_MESSAGE,
   type FrameBridgeParentPayload,
 } from '@/lib/story-runtime/contract';
 import type { FrameBridgeSession, FrameBridgeStartOptions } from './door';
@@ -91,6 +91,8 @@ export function createTopInset(win: Window): { set(px: number): void } {
 
 const isUndoKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && !event.altKey && ['z', 'y'].includes(event.key.toLowerCase());
 const isCommentKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && event.altKey && (event.key.toLowerCase() === 'm' || event.code === 'KeyM');
+/** ⌘K / Ctrl-K, as every document editor binds "insert link". */
+export const isLinkKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key.toLowerCase() === 'k' || event.code === 'KeyK');
 
 export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions): FrameBridgeSession {
   const doc = win.document;
@@ -171,6 +173,13 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       return;
     }
     if (isCommentKey(event)) { event.preventDefault(); emit({ type: STORY_COMMENT_KEY_MESSAGE }); return; }
+    if (isLinkKey(event)) {
+      const target = (event.composedPath()[0] ?? event.target) as Element | null;
+      if (!target?.closest?.('.ProseMirror')) return;
+      event.preventDefault();
+      emit({ type: STORY_LINK_KEY_MESSAGE });
+      return;
+    }
     // After the editor has handled the key: the paragraph it broke is what goes out.
     if (event.key === 'Enter') win.setTimeout(() => emit({ type: STORY_EDIT_FLUSH_MESSAGE, reason: 'enter' }), 0);
   };

@@ -80,6 +80,8 @@ interface StoryFormatToolbarProps {
   historyControls?: JSX.Element;
   insertionControls?: JSX.Element;
   onApplyLink: (path: string, href: string | null) => void;
+  /** Open the page's link card at the caret instead of this toolbar's own address box. */
+  onEditLink?: () => void;
   onSelect: (path: string | null) => void;
   onDelete: () => void;
   /** Leave a comment on the selected node. Present only for someone who may. */
@@ -298,7 +300,7 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
                     <button type="submit" aria-label="Apply link" class="cursor-pointer rounded-[3px] px-1 font-mono text-[10px] text-accent hover:bg-raised">ok</button>
                   </form>
                 }>
-                  <Chip label="Insert link" onClick={() => setLinkDraft('')}><Link2 size={14} /></Chip>
+                  <Chip label="Insert link" onClick={() => (props.onEditLink && selection().editor === 'prose' ? props.onEditLink() : setLinkDraft(''))}><Link2 size={14} /></Chip>
                   <Show when={props.artifactId}>
                     <Show when={!mentionsUnavailable()} fallback={
                       <span tabIndex={0} data-feature-unavailable="" class="inline-flex [&>:disabled]:pointer-events-none">

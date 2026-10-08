@@ -33,6 +33,7 @@ import {
   STORY_TYPING_MESSAGE,
   STORY_APPLY_FORMAT_MESSAGE,
   STORY_APPLY_LINK_MESSAGE,
+  STORY_FOCUS_TEXT_MESSAGE,
   STORY_SELECT_MESSAGE,
   STORY_SPOTLIGHT_MESSAGE,
   STORY_COMMIT_MESSAGE,
@@ -486,6 +487,9 @@ export function createFrameEditSession({
           break;
         case STORY_APPLY_LINK_MESSAGE:
           format.applyLink(message.path, message.href);
+          break;
+        case STORY_FOCUS_TEXT_MESSAGE:
+          view?.focus();
           break;
         case STORY_COMMIT_MESSAGE:
           if (message.restore) {

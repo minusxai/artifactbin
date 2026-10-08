@@ -45,7 +45,7 @@ import Workflow from 'lucide-solid/icons/workflow';
 import X from 'lucide-solid/icons/x';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import { documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story/reader/edit-bar';
 import { storyUpdateParts, storyUpdatePartsShared } from '@/lib/story/document/update-parts';
@@ -74,6 +74,7 @@ import { createArtifactVersions } from './create-versions';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed, writeEditPanelCollapsed } from './create-edit-panel';
 import EditPanel, { SELECTION_HINT, type EditPanelTab } from './EditPanel';
 import StoryFormatToolbar from './StoryFormatToolbar';
+import { LinkCard } from './LinkCard';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
 import SourceEditorPane from './SourceEditorPane';
 import ReferenceFilesPanel from './ReferenceFilesPanel';
@@ -296,6 +297,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     // A framed document's Enter / focus-out and ⌘⌥M, forwarded: the same as the window listeners below.
     onFlush: () => showInDocument.flush(),
     onCommentKey: () => { const current = edit?.selection(); if (current) props.onComment?.(current); },
+    onLinkKey: () => openLink(),
     onImageDrop: (file, where) => imageDoors?.dropped(file, where),
     onImageReplaceRequest: (path) => imageDoors?.pick(path),
     // App and Code share one draft session; only a historical version pauses it.
@@ -330,9 +332,15 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   onMount(() => props.onEditorMount?.());
   createEffect(() => { if (inPlace.ready() || mode() !== 'design' || preview()) props.onEditorReady?.(); });
 
-  // ⌘⌥M: comment on what the editor has selected.
+  // ⌘⌥M: comment on what the editor has selected. ⌘K: link the text the caret is in (a framed document forwards both).
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k'
+        && (event.target as Element | null)?.closest?.('.ProseMirror')) {
+        event.preventDefault();
+        openLink();
+        return;
+      }
       if (!props.onComment || event.key.toLowerCase() !== 'm' || !event.altKey || !(event.metaKey || event.ctrlKey)) return;
       const current = inPlace.selection();
       if (!current) return;
@@ -422,6 +430,18 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
 
   // ── embeds ──
   const selection = inPlace.selection;
+
+  // ── links: the card under the caret (lib LinkCard) ──
+  const [linkEditing, setLinkEditing] = createSignal(false);
+  const proseCaret = () => { const s = selection(); return !!s && s.editor === 'prose' && s.mode !== 'block'; };
+  function openLink() { if (proseCaret()) setLinkEditing(true); }
+  createEffect(() => { if (!proseCaret()) setLinkEditing(false); });
+  const linkCardAt = () => {
+    const s = selection(), at = s?.textRect, frame = documentRect({ runtimeRef });
+    if (!at || !frame || mode() !== 'design' || preview() || contentView() !== null) return null;
+    if (!linkEditing() && !(proseCaret() && s?.link)) return null;
+    return { x: frame.x + at.x, y: frame.y + at.y, width: at.width, height: at.height };
+  };
   const embedPath = createMemo(() => { const s = selection(); return s?.kind === 'embed' ? bodyPathToSourcePath(source(), s.path) : null; });
   const chart = createMemo(() => { const p = embedPath(); return p && selection()?.tag === 'Question' ? readQuestionChart(source(), p) : null; });
   const numberEmbed = createMemo(() => { const p = embedPath(); return p && selection()?.tag === 'Number' ? readNumberEmbed(source(), p) : null; });
@@ -649,7 +669,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   // typing is a new selection, and rebuilding the toolbar for each one cost a keystroke its frame.
   const formatShown = createMemo(() => !!selection() && mode() === 'design' && !preview() && contentView() === null);
   const formatControls = () => <Show when={formatShown()}>
-    <StoryFormatToolbar layout="panel" artifactId={art.id} selection={selection()} onApply={inPlace.applyFormat} onApplyLink={inPlace.applyLink} onApplyInline={inPlace.applyInline}
+    <StoryFormatToolbar layout="panel" artifactId={art.id} selection={selection()} onApply={inPlace.applyFormat} onApplyLink={inPlace.applyLink} onEditLink={openLink} onApplyInline={inPlace.applyInline}
       onAutoHeight={() => { const s = selection(); if (s) commitStructural(editBlock(editorSource.current(), { kind: 'auto-height', path: s.path })); }}
       onSelect={inPlace.select} onDelete={deleteSelected} onComment={props.onComment} image={imageControls()} backend={formatBackend} />
   </Show>;
@@ -717,6 +737,12 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   return (
     <div class="contents" data-app-appearance={surfaceMode()}>
       <Show when={props.titleHost}>{(host) => <Portal mount={host()}>{titleEditor()}</Portal>}</Show>
+      <Show when={linkCardAt()}>{(at) => (
+        <LinkCard at={at()} href={selection()?.link ?? null} editing={linkEditing()} onEdit={() => setLinkEditing(true)}
+          onApply={(href) => { const s = selection(); setLinkEditing(false); if (s) inPlace.applyLink(s.path, href); }}
+          onCancel={() => { setLinkEditing(false); inPlace.focusText(); }}
+          onDismiss={() => setLinkEditing(false)} />
+      )}</Show>
       <input ref={replaceInput} type="file" accept={IMAGE_ACCEPT} aria-label="Replacement image file" class="hidden" onChange={(e) => {
         const f = e.currentTarget.files?.[0];
         const target = replacePick;

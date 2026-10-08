@@ -40,7 +40,7 @@ vi.mock('@/lib/story-runtime/island-controller', () => ({
 import { openFrameDoor, FRAME_BRIDGE_MESSAGE, frameAppOrigin, APP_ORIGIN_ATTR } from '../door';
 import { startFrameBridge } from '../frame';
 import { createFrameBridgeParent, relayedRequest, urlValuesOf } from '../parent';
-import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
 
 const APP = 'https://app.test';
 const PAGES = 'https://6869.pages.test';
@@ -222,7 +222,7 @@ describe('the frame bridge', () => {
     expect(appFetch).toHaveBeenCalledTimes(2);
   });
 
-  it('forwards undo, Enter, focus leaving and the comment shortcut while editing — and nothing while reading', async () => {
+  it('forwards undo, Enter, focus leaving, the comment shortcut and ⌘K in text while editing — and nothing while reading', async () => {
     const { frame, frameWin } = framedPair();
     const { bridge, onReady } = parentFor(frame);
     const events: Array<{ type: string; nonce?: string; direction?: string; reason?: string }> = [];
@@ -241,14 +241,18 @@ describe('the frame bridge', () => {
     expect(undo.defaultPrevented).toBe(true);
     key({ key: 'Z', ctrlKey: true, shiftKey: true });
     key({ key: 'm', metaKey: true, altKey: true });
+    // ⌘K is the link shortcut only in the editor's text; elsewhere it stays the page's own key.
+    expect(key({ key: 'k', metaKey: true }).defaultPrevented).toBe(false);
+    frameWin.document.querySelector('p')!.classList.add('ProseMirror');
+    expect(key({ key: 'k', ctrlKey: true }).defaultPrevented).toBe(true);
     key({ key: 'Enter' });
     // A synthetic key (the author's script) forwards nothing.
     frameWin.document.querySelector('p')!.dispatchEvent(new frameWin.KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true }));
     dispatchTrusted(frameWin.document.querySelector('p')!, (new frameWin.FocusEvent('focusout', { bubbles: true })));
-    await settle(() => events.length >= 5);
+    await settle(() => events.length >= 6);
     await tick(); await tick();
     expect(events.map(({ type, direction, reason }) => [type, direction ?? reason ?? null])).toEqual([
-      [STORY_HISTORY_MESSAGE, 'undo'], [STORY_HISTORY_MESSAGE, 'redo'], [STORY_COMMENT_KEY_MESSAGE, null],
+      [STORY_HISTORY_MESSAGE, 'undo'], [STORY_HISTORY_MESSAGE, 'redo'], [STORY_COMMENT_KEY_MESSAGE, null], [STORY_LINK_KEY_MESSAGE, null],
       [STORY_EDIT_FLUSH_MESSAGE, 'focusout'], [STORY_EDIT_FLUSH_MESSAGE, 'enter'],
     ]);
     expect(events.every((event) => event.nonce === 'n'.repeat(32))).toBe(true);

@@ -7,7 +7,7 @@ import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { DOMSerializer } from 'prosemirror-model';
 import { EditorState, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
-import { splitListItem, sinkListItem, liftListItem } from 'prosemirror-schema-list';
+import { splitListItem, liftListItem } from 'prosemirror-schema-list';
 import { baseKeymap, chainCommands, splitBlockAs } from 'prosemirror-commands';
 import { keymap } from 'prosemirror-keymap';
 import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
@@ -16,6 +16,8 @@ import { captureBookmark, resolveBookmark, type EditorSelectionChange } from './
 import { clipboardAst, type ClipboardKind } from './clipboard';
 import { inlineShortcut, BLOCK_SHORTCUT, ordinaryParagraph, blockShortcut, splitTask, leaveCode } from './block-shortcuts';
 import { editorDocument, editorSchema, normalizeIdentities, pasteFragment, sourceNodes, toggleInline } from './model';
+import { indentBlocks, outdentAtStart } from './indent';
+import { autolink, linkEndingAt, markdownLink, pastedLink, TYPED_MARKDOWN_LINK, TYPED_URL } from './links';
 
 export interface FlowEditorProps {
   nodes: JsxNode[];
@@ -87,6 +89,14 @@ const exitEmptyListItem: Command = (state, dispatch) => {
   if (!empty || $from.parent.content.size || $from.parent.attrs.synthetic || $from.depth < 2) return false;
   if ($from.node(-1).type !== editorSchema.nodes.list_item) return false;
   return liftListItem(editorSchema.nodes.list_item)(state, dispatch);
+};
+
+/** Enter first links an address typed just before it, then breaks the line as `command` does. */
+const linkFirst = (command: Command): Command => (state, dispatch, view) => {
+  const linked = !view?.composing && dispatch && view && autolink(state);
+  if (!linked) return command(state, dispatch, view);
+  view.dispatch(linked.setMeta('mx-command', true));
+  return command(view.state, dispatch, view);
 };
 
 /** Layout containers remain intact on Enter; only an empty quotation may lift out.
@@ -204,7 +214,8 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
           },
           ...baseKeymap,
           'Mod-Enter': leaveCode,
-          Enter: chainCommands(
+          Backspace: chainCommands(outdentAtStart, baseKeymap.Backspace!),
+          Enter: linkFirst(chainCommands(
             (state, dispatch, view) => {
               if (view?.composing) return false;
               const tr = blockShortcut(state, true);
@@ -222,9 +233,9 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
             exitEmptyListItem,
             splitProse,
             baseKeymap.Enter,
-          ),
-          Tab: sinkListItem(editorSchema.nodes.list_item),
-          'Shift-Tab': liftListItem(editorSchema.nodes.list_item),
+          )),
+          Tab: indentBlocks(1),
+          'Shift-Tab': indentBlocks(-1),
         }),
       ],
     }),
@@ -352,18 +363,37 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
     handleTextInput(view, from, to, text, typing) {
       if (from !== to || state.composing || view.composing || props().canEdit?.() === false) return false;
       const $from = view.state.doc.resolve(from);
-      if (!ordinaryParagraph($from)) return false;
+      // Typing just after a link continues the sentence: the link does not grow (every document editor's rule).
+      const endingLink = linkEndingAt($from);
+      if (endingLink) {
+        const defaultTyping = typing;
+        typing = () => defaultTyping().removeMark(from, from + text.length, endingLink);
+      }
+      // A finished address, or a closed `[text](url)`, becomes a link: in any prose, lists and cells included.
+      const typed = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc') + text;
+      if (text === ')' ? TYPED_MARKDOWN_LINK.test(typed) : /^[ \u00a0]$/.test(text) && TYPED_URL.test(typed.slice(0, -1))) {
+        view.dispatch(typing());
+        const convert = text === ')' ? markdownLink(view.state) : autolink(view.state, view.state.selection.from - 1);
+        if (convert) view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());
+        return true;
+      }
+      const plainTyping = () => {
+        if (!endingLink) return false;
+        view.dispatch(typing());
+        return true;
+      };
+      if (!ordinaryParagraph($from)) return plainTyping();
       if (text === '*') {
         const inserted = typing();
         const convert = inlineShortcut(view.state.apply(inserted));
-        if (!convert) return false;
+        if (!convert) return plainTyping();
         view.dispatch(inserted);
         view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());
         // Identity normalization adds mark steps; clear typing marks after it.
         view.dispatch(view.state.tr.setStoredMarks([]));
         return true;
       }
-      if (!/^[ \u00a0]$/.test(text) || !BLOCK_SHORTCUT.test($from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc') + text)) return false;
+      if (!/^[ \u00a0]$/.test(text) || !BLOCK_SHORTCUT.test($from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc') + text)) return plainTyping();
       view.dispatch(typing());
       const convert = blockShortcut(view.state);
       if (convert) view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());
@@ -392,6 +422,11 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
       }
       const markup = data.getData('text/html');
       const plain = data.getData('text/plain');
+      const linked = pastedLink(view.state, plain);
+      if (linked) {
+        view.dispatch(linked.setMeta('uiEvent', 'paste').scrollIntoView());
+        return true;
+      }
       if (!markup && plain && !/[\r\n]/.test(plain)) {
         // One line of plain text is literal text, exactly as typing it: parsed as a paragraph, its edge spaces
         // would collapse like source whitespace (" world" after "hello" became "helloworld").

@@ -12,9 +12,11 @@
  */
 import type { JsxNode } from '@/lib/jsx';
 import type { EditorView } from 'prosemirror-view';
+import { TextSelection, type EditorState } from 'prosemirror-state';
 import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-v2/node-chrome';
 import { createBlockSelection } from '@/lib/editor-v2/block-selection';
 import { inlineStates } from '@/lib/editor-v2/model';
+import { linkAt } from '@/lib/editor-v2/links';
 import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
@@ -23,11 +25,41 @@ import {
   STORY_BLOCK_EDIT_MESSAGE,
   STORY_SELECTION_MESSAGE,
   type StoryEditParentMessage,
+  type StoryEditRect,
   type StoryEditSelection,
 } from '../contract';
 import { describedKind, describeSelection } from './describe-selection';
 import { captureSelection } from './selection-range';
 import { canResize, editChromeKind, gripTarget, isComponentPart } from './edit-chrome';
+
+/**
+ * The view's state with the selection the DOM holds NOW. A `selectionchange` listener can run before ProseMirror's
+ * own has read the new selection, and a description from the old one names the caret's previous place.
+ */
+function liveState(view: EditorView, win: Window): EditorState {
+  const native = win.getSelection();
+  if (!native?.anchorNode || !native.focusNode || !view.dom.contains(native.anchorNode) || !view.dom.contains(native.focusNode)) return view.state;
+  try {
+    const anchor = view.posAtDOM(native.anchorNode, native.anchorOffset), head = view.posAtDOM(native.focusNode, native.focusOffset);
+    const { selection } = view.state;
+    if (selection.anchor === anchor && selection.head === head) return view.state;
+    return view.state.apply(view.state.tr.setSelection(TextSelection.create(view.state.doc, anchor, head)));
+  } catch {
+    return view.state;
+  }
+}
+
+/** The caret or selected words, from the first character's top-left to the last's bottom. Null where layout is unknown. */
+function textRect(view: EditorView, state: EditorState): StoryEditRect | undefined {
+  try {
+    const { from, to } = state.selection;
+    const start = view.coordsAtPos(from), end = view.coordsAtPos(to, -1);
+    const x = Math.min(start.left, end.left);
+    return { x, y: start.top, width: Math.max(1, end.right - x), height: Math.max(1, end.bottom - start.top) };
+  } catch {
+    return undefined;
+  }
+}
 
 /** Marks the selected node so the reader can see what the toolbar is pointed at. Value: 'block' when block-selected, else 'text' (typing). */
 export const EDIT_SELECTED_ATTR = 'data-mx-selected';
@@ -205,7 +237,11 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     if (!selection) return null;
     for (const view of views.all)
       if (view.dom.contains(el)) {
-        selection.inline = inlineStates(view.state);
+        const state = liveState(view, win);
+        selection.inline = inlineStates(state);
+        const link = linkAt(state);
+        if (link) selection.link = link.href;
+        selection.textRect = textRect(view, state);
         break;
       }
     const captured = captureSelection(win, el);
