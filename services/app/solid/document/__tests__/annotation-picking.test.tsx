@@ -214,7 +214,7 @@ describe('picking a block from the rail', () => {
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     const body = JSON.parse(String(creates()[0]!.init!.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({ path: '2.1', node_id: 'node-2-1', body: 'picked note' });
+    expect(body).toMatchObject({ node_id: 'node-2-1', body: 'picked note' });
     expect(body).not.toHaveProperty('quote');
   });
 
@@ -351,7 +351,7 @@ describe('drawing an area from the rail', () => {
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     const body = JSON.parse(String(creates()[0]!.init!.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({ path: '2', node_id: 'node-2', body: 'this whole region', range: AREA });
+    expect(body).toMatchObject({ node_id: 'node-2', body: 'this whole region', range: AREA });
     expect(body).not.toHaveProperty('quote');
   });
 

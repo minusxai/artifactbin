@@ -18,10 +18,9 @@ import type { CommentTarget } from '@/lib/story/annotations';
  * are resolved against the current source. Missing targets are orphaned for
  * that read; restoring the target can re-anchor the thread.
  *
- * COORDINATE NOTE (the Helmet-offset lesson): the wire and the frame speak
- * BODY paths; the source counts from the top. Capture translates body → source
- * (`bodyPathToSourcePath`); listing translates the found node's source path
- * back (`sourcePathToBodyPath`). Nothing in between converts.
+ * COORDINATE NOTE (the Helmet-offset lesson): the frame speaks BODY paths; the
+ * source counts from the top. Listing translates the found node's source path
+ * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
 import { annotationScope, effectiveRole, type ArtifactRow, type Scope, type TokenActor } from '@/lib/artifacts/access';
 import { canGovern } from '@/lib/artifacts/share-roles';
@@ -32,9 +31,8 @@ import { actorSubject } from '@/lib/platform/events';
 import { generateInternalId } from '@/lib/platform/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type AnnotationRange, isAreaRange, isTargetRange } from '@/lib/story/annotations/annotation-range';
-import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
+import { sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
 import { channelForAnnotations } from '@/lib/story/realtime/live';
-import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
 /**
  * The attribute that ties a node to its threads. It stores an opaque key, never
@@ -130,10 +128,8 @@ export interface AnnotationWire {
 export interface CreateAnnotationInput {
   viewState?: CommentViewState;
   attachmentId?: string;
-  /** Stable source identity; preferred by all new callers. */
+  /** Stable source identity. */
   nodeId?: string;
-  /** BODY path the frame reported for the selected node. */
-  bodyPath?: string;
   /** The head the page believed in when the owner clicked. */
   baseEditId?: string;
   body: string;
@@ -170,8 +166,7 @@ interface AnnotationRowDb {
   artifact_id: string;
   root_id: string | null;
   body: string;
-  /** `owner` is accepted only for rows written before the human/agent contract. */
-  author_kind: 'owner' | AnnotationAuthor['kind'];
+  author_kind: AnnotationAuthor['kind'];
   author_label: string | null;
   /** Who wrote it, when they had an account — the only thing that can say "your own". */
   author_user_id: string | null;
@@ -341,7 +336,6 @@ export async function createAnnotationFor(
     if (!parsed.ok) return { refused: 'bad_path' };
     let node: JsxNode | undefined;
     if (input.nodeId) node = anchorIndex(source).get(input.nodeId)?.node;
-    else if (input.bodyPath) node = resolveJsxNodeAtPath(parsed.nodes, bodyPathToSourcePath(source, input.bodyPath)) ?? undefined;
     else if (quote) {
       const matches = [...anchorIndex(source).values()].filter(entry => canonicalTextOf(entry.node).includes(quote));
       // Choose the smallest containing element, avoiding ambiguity from its ancestors.

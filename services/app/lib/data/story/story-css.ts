@@ -1,34 +1,14 @@
 /**
  * Story design-system CSS — shared (client-safe) contract.
  *
- * Stories that opt into the built-in design system carry `data-design="tw"` on their root
- * wrapper and style themselves with Tailwind utility classes instead of an authored
- * stylesheet. At save time the server compiles exactly the utilities the story uses into a
- * per-story CSS blob (see story-css.server.ts), persisted on the content as `compiledCss` —
- * a SERVER-MANAGED field: it is not part of the authored StoryContent schema, and is
- * recomputed on every save. At render time the document builder emits it into the document
- * <head> as `<style data-mx-tw>` (lib/story/styles/document-styles.ts).
- *
- * Legacy stories (no marker) get `compiledCss: null` — the marker gate exists so Tailwind's
- * preflight reset can never leak into a story that styles itself with its own <style> blocks.
+ * Stories style themselves with Tailwind utility classes. At save time the server compiles
+ * exactly the utilities the story uses into a per-story CSS blob (see story-css.server.ts),
+ * persisted on the content as `compiledCss` — a SERVER-MANAGED field: it is not part of the
+ * authored StoryContent schema, and is recomputed on every save. At render time the document
+ * builder emits it into the document <head> as `<style data-mx-tw>`
+ * (lib/story/styles/document-styles.ts).
  */
-import type { StoryContent } from '@/lib/validation/atlas-schemas';
-
-/** StoryContent plus the server-managed compiled stylesheet. */
-export type CompiledCssStoryContent = StoryContent & {
-  compiledCss?: string | null;
-  /** Compile-environment version stamp (storyCssCompileVersion) — read path recompiles on mismatch. */
-  cssCompileVersion?: string;
-};
-
-const MARKER_RE = /\bdata-design\s*=\s*(?:"tw"|'tw')/;
-
-/** True when the story HTML opts into the design system (root marker present). */
-export function hasDesignSystemMarker(html: string | null | undefined): boolean {
-  return !!html && MARKER_RE.test(html);
-}
-
-// Both spellings: `class` (stored legacy HTML) and `className` (JSX source of format:'jsx' stories).
+// Both spellings: `class` and `className` (JSX source).
 const CLASS_ATTR_RE = /\bclass(?:Name)?\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 /** Stored attribute values are entity-escaped (escAttr) — decode before tokenizing. &amp; last. */

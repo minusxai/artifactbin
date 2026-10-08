@@ -42,7 +42,7 @@ import { POST } from '@/app/api/my/artifacts/[id]/members/route';
  */
 const harness = useAppHarness();
 
-const SOURCE = '<div><p>hello</p></div>';
+const SOURCE = '<div id="root"><p>hello</p></div>';
 
 /** An account plus one of its claimed tokens — the ordinary signed-in owner. */
 async function account(email: string) {
@@ -333,7 +333,7 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const made = await createAnnotationFor(
       { tokenId: stranger.token.id, userId: stranger.user.id },
       row.id,
-      { bodyPath: '0', baseEditId: row.edit_id, body: 'a stranger with the link says something' },
+      { nodeId: 'root', baseEditId: row.edit_id, body: 'a stranger with the link says something' },
       { kind: 'human', label: 'stranger', transport: 'browser' },
     );
     expect(made, JSON.stringify(made)).toMatchObject({ status: 'open' });
@@ -350,7 +350,7 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const made = await createAnnotationFor(
       { tokenId: stranger.token.id, userId: stranger.user.id },
       row.id,
-      { bodyPath: '0', baseEditId: row.edit_id, body: 'nope' },
+      { nodeId: 'root', baseEditId: row.edit_id, body: 'nope' },
       { kind: 'human', label: 'stranger', transport: 'browser' },
     );
     expect(made, 'the uniform miss').toBeNull();
@@ -414,7 +414,7 @@ describe('the commenter role, through the routes', () => {
     const tv = await mintToken('viewer', viewer.id); await claimToken(viewer.id, tv.token);
     const editor = await createUser({ email: 'mxmx_test_editor@example.com' });
     const te = await mintToken('editor', editor.id); await claimToken(editor.id, te.token);
-    const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: '<div><p>hello</p></div>', visibility: 'private' }, to.token));
+    const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: '<div id="root"><p>hello</p></div>', visibility: 'private' }, to.token));
     const doc = await res.json();
     asSession(owner);
     const put = await putSharingRoute(jreq(`/api/my/artifacts/${doc.id}/sharing`, 'PUT', { shares: [
@@ -443,7 +443,7 @@ describe('the commenter role, through the routes', () => {
 
     it('may open a thread, reply, and resolve — and so may an editor; a viewer may not', async () => {
       const w = await world();
-      const input = { bodyPath: '0', baseEditId: w.row.edit_id, body: 'is this right?' };
+      const input = { nodeId: 'root', baseEditId: w.row.edit_id, body: 'is this right?' };
       const opened = await createAnnotationFor({ tokenId: w.tc.id, userId: w.commenter.id }, w.doc.id, input, human);
       expect(opened && 'id' in opened, JSON.stringify(opened)).toBe(true);
       const id = (opened as { id: string }).id;
@@ -582,8 +582,8 @@ describe('editors through every door', () => {
   const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
   const noSession = () => { sessionUser.id = ''; sessionUser.email = ''; };
 
-  const PROSE = '<div><p>hello</p></div>';
-  const PROSE2 = '<div><p>hello again</p></div>';
+  const PROSE = '<div id="root"><p>hello</p></div>';
+  const PROSE2 = '<div id="root"><p>hello again</p></div>';
   const ROWS = [{ choice: 'ramen' }];
   const MUTATING = (ds: string) =>
     '<Helmet><Value name="choice" type="string" default="ramen" />'
@@ -905,7 +905,7 @@ describe('editors through every door', () => {
 
       // The editor comments on the document's only paragraph.
       asSession({ id: w.bob.id, email: w.bob.email });
-      const made = await annotate(id, { path: '0', edit_id: (await head(id)).edit_id, body: 'is this the right number?' });
+      const made = await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'is this the right number?' });
       expect(made.status, await made.clone().text()).toBe(201);
       const ann = (await made.json()) as { id: string; thread: Array<{ author: { label: string | null } }> };
       // The author snapshot is the EDITOR, not the document's owner.
@@ -922,11 +922,11 @@ describe('editors through every door', () => {
       asSession({ id: w.owner.id, email: w.owner.email });
       expect((await share(id, [{ email: 'bob@x.com', role: 'editor' }, { email: 'carol@x.com', role: 'viewer' }])).status).toBe(200);
       asSession({ id: w.carol.id, email: w.carol.email });
-      expect((await annotate(id, { path: '0', edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(404);
+      expect((await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(404);
 
       // A stranger with no share at all.
       noSession();
-      expect((await annotate(id, { path: '0', edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(401);
+      expect((await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(401);
     });
 
     it('the owner erases any thread; an editor erases only their own', async () => {
@@ -935,10 +935,10 @@ describe('editors through every door', () => {
       const id = w.doc.id;
 
       asSession({ id: w.owner.id, email: w.owner.email });
-      const byOwner = (await (await annotate(id, { path: '0', edit_id: (await head(id)).edit_id, body: 'owner note' })).json()) as { id: string };
+      const byOwner = (await (await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'owner note' })).json()) as { id: string };
 
       asSession({ id: w.bob.id, email: w.bob.email });
-      const byEditor = (await (await annotate(id, { path: '0', edit_id: (await head(id)).edit_id, body: 'editor note' })).json()) as { id: string };
+      const byEditor = (await (await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'editor note' })).json()) as { id: string };
 
       // The editor may not erase the owner's words…
       const refused = await deleteAnnotationRoute(

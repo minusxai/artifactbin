@@ -62,7 +62,7 @@ function revealUtility(name: string, hidden: string): string {
 
 /**
  * The kit as Tailwind INPUT CSS (see module doc). Pure string — client-safe;
- * the server compile (story-css.server.ts) interpolates it into TW_INPUT_JSX
+ * the server compile (story-css.server.ts) interpolates it into TW_INPUT_STORY
  * and folds it into the compile-version hash.
  *
  * `@theme` keyframes emit only for documents using the utility. `caret-blink`

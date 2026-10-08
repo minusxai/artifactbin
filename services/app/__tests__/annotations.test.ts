@@ -34,8 +34,8 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 //   BODY path:                     0 = intro,     1 = findings
 const DOC =
   '<Helmet><title>Report</title></Helmet>'
-  + '<p>An introduction paragraph.</p>'
-  + '<div>Revenue grew 40% in Q3.</div>';
+  + '<p id="intro">An introduction paragraph.</p>'
+  + '<div id="findings">Revenue grew 40% in Q3.</div>';
 
 const create = async (token: string, body: Record<string, unknown>) => {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
@@ -73,20 +73,20 @@ describe('creating (browser door, owner only)', () => {
   it('persists optional review context through create and fresh list; old comments remain context-free', async () => {
     const { doc, actor } = await publish();
     const view_state = { v: 1, components: { checkout: { screen: 'payment', error: false } } };
-    const res = await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'Review this state', view_state });
+    const res = await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'Review this state', view_state });
     expect(res.status).toBe(201);
     expect((await res.json()).view_state).toEqual(view_state);
     const listed = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor }), params({ id: doc.id }));
     expect((await listed.json()).annotations[0].view_state).toEqual(view_state);
-    const plain = await annotate(doc.id, actor, { path: '0', edit_id: doc.edit_id, body: 'Ordinary text' });
+    const plain = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'Ordinary text' });
     expect((await plain.json()).view_state).toBeUndefined();
-    const bad = await annotate(doc.id, actor, { path: '0', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 2, components: {} } });
+    const bad = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 2, components: {} } });
     expect(bad.status).toBe(400);
   });
 
   it('the owner annotates a node by BODY path; the stored anchor honours the Helmet offset', async () => {
     const { doc, actor } = await publish();
-    const res = await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'this number looks wrong' });
+    const res = await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'this number looks wrong' });
     expect(res.status, await res.clone().text()).toBe(201);
     const a = (await res.json()) as AnnotationWire;
     expect(a.status).toBe('open');
@@ -97,19 +97,11 @@ describe('creating (browser door, owner only)', () => {
     expect(a.thread[0]).toMatchObject({ body: 'this number looks wrong', author: { kind: 'human', transport: 'browser' } });
     // The span indexes the SOURCE (Helmet included): it must cover the <div>, which sits after the Helmet + intro.
     expect(a.anchor!.spanStart).toBeGreaterThan(DOC.indexOf('<div>') - 1);
-
-    // Rows from the pre-human contract said `owner`; readers normalize them
-    // without requiring a destructive data migration.
-    const db = await harness.db();
-    await artifactQuery(db,"UPDATE annotations SET author_kind = 'owner' WHERE id = $1", [a.id]);
-    const legacy = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor: actor }), params({ id: doc.id }));
-    const legacyWire = (await legacy.json()) as { annotations: AnnotationWire[] };
-    expect(legacyWire.annotations[0].thread[0].author.kind).toBe('human');
   });
 
   it('a stale base the log cannot carry answers 409 with head', async () => {
     const { doc, actor } = await publish();
-    const res = await annotate(doc.id, actor, { path: '1', edit_id: 'not-a-real-edit-id', body: 'x' });
+    const res = await annotate(doc.id, actor, { node_id: 'findings', edit_id: 'not-a-real-edit-id', body: 'x' });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; edit_id: string };
     expect(body.error).toBe('stale');
@@ -118,10 +110,10 @@ describe('creating (browser door, owner only)', () => {
 
   it('a path that names nothing is a 400; a non-markup artifact is a 400', async () => {
     const { t, doc, actor } = await publish();
-    const bad = await annotate(doc.id, actor, { path: '9.9', edit_id: doc.edit_id, body: 'x' });
+    const bad = await annotate(doc.id, actor, { node_id: 'nowhere', edit_id: doc.edit_id, body: 'x' });
     expect(bad.status).toBe(400);
     const ds = await create(t.token, { dataset: [{ a: 1 }] });
-    const notMarkup = await annotate(ds.id, actor, { path: '0', edit_id: ds.edit_id, body: 'x' });
+    const notMarkup = await annotate(ds.id, actor, { node_id: 'intro', edit_id: ds.edit_id, body: 'x' });
     expect(notMarkup.status).toBe(400);
   });
 
@@ -132,7 +124,7 @@ describe('creating (browser door, owner only)', () => {
     // body path still resolves; it is the real anchor EDIT that publish refuses.
     await artifactQuery(db,'UPDATE artifacts SET document=NULL,source= $2 WHERE id = $1', [doc.id, '<p style="color:red">pre-existing</p>']);
 
-    const res = await annotate(doc.id, actor, { path: '0', edit_id: doc.edit_id, body: 'look here' });
+    const res = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'look here' });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; details?: Array<{ message: string }> };
     expect(body.error).toBe('bad_path');
@@ -144,10 +136,10 @@ describe('creating (browser door, owner only)', () => {
     const stranger = await mintToken('other');
     const strangerActor = { credential: 'session' as const, userId: stranger.userId!, email: stranger.email!, emailVerified: true };
     // Ownership remains private; a verified stranger still gets the uniform 404.
-    const foreign = await annotate(doc.id, strangerActor, { path: '1', edit_id: doc.edit_id, body: 'x' });
+    const foreign = await annotate(doc.id, strangerActor, { node_id: 'findings', edit_id: doc.edit_id, body: 'x' });
     expect(foreign.status).toBe(404);
     expect((await foreign.json()).error).toBe('not_found');
-    const crossSite = await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'x' }, 'https://evil.example');
+    const crossSite = await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'x' }, 'https://evil.example');
     expect(crossSite.status).toBe(403);
   });
 });
@@ -155,7 +147,7 @@ describe('creating (browser door, owner only)', () => {
 describe('the wire — colocation on GET', () => {
   it('GET /api/artifacts/:id inlines open annotations; resolved ones drop out', async () => {
     const { t, doc, actor } = await publish();
-    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'check this' })).json()) as AnnotationWire;
+    const a = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'check this' })).json()) as AnnotationWire;
 
     const got = await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }));
     expect(got.status).toBe(200);
@@ -174,7 +166,7 @@ describe('the wire — colocation on GET', () => {
 
   it('a PUT cannot clobber annotations — they survive (orphaned, snippet intact) and the echo carries the open count', async () => {
     const { t, doc, actor } = await publish();
-    await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'keep me' });
+    await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'keep me' });
 
     const put = await putArtifactRoute(
       await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>totally new</p>' } }),
@@ -193,12 +185,12 @@ describe('the wire — colocation on GET', () => {
 
   it('the bearer list honours ?status=', async () => {
     const { t, doc, actor } = await publish();
-    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'one' })).json()) as AnnotationWire;
+    const a = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'one' })).json()) as AnnotationWire;
     await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: t.token, json: { resolve: true } }),
       params({ id: doc.id, annId: a.id }),
     );
-    const two = await annotate(doc.id, actor, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'two' });
+    const two = await annotate(doc.id, actor, { node_id: 'intro', edit_id: await headEditId(t.token, doc.id), body: 'two' });
     expect(two.status, await two.clone().text()).toBe(201);
 
     const open = (await (await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
@@ -211,7 +203,7 @@ describe('the wire — colocation on GET', () => {
 describe('reply / resolve — the agent\'s one mutation', () => {
   it.each([['pi','Pi'],['opencode','OpenCode'],['custom-robot','custom-robot']])('accepts %s attribution without a connected session', async (agent, label) => {
     const {t,doc,actor}=await publish();
-    const a=(await (await annotate(doc.id,actor,{path:'1',edit_id:doc.edit_id,body:'Review'})).json()) as AnnotationWire;
+    const a=(await (await annotate(doc.id,actor,{node_id: 'findings',edit_id:doc.edit_id,body:'Review'})).json()) as AnnotationWire;
     const response=await actOnAnnotationRoute(request(`/api/artifacts/${doc.id}/annotations/${a.id}`,{method:'POST',token:t.token,json:{reply:'Checked'},headers:{'Artifactbin-Agent':agent}}),params({id:doc.id,annId:a.id}));
     expect(response.status).toBe(200);
     const result=await response.json() as AnnotationWire;
@@ -220,7 +212,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 
   it('an HTTP agent declares itself once; identity is remembered while transport is snapshotted per reply', async () => {
     const { t, doc, actor } = await publish();
-    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'is this right?' })).json()) as AnnotationWire;
+    const a = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'is this right?' })).json()) as AnnotationWire;
 
     const replied = await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: t.token, json: { reply: 'checked — recomputing' }, headers: { 'User-Agent': 'curl/8.7.1', 'Artifactbin-Agent': 'codex' } }),
@@ -251,25 +243,25 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 
   it('a claimed account\'s comments carry its USERNAME as the label; a generated account username is replaced by its chosen label', async () => {
     const { t, doc, actor } = await publish();
-    const anon = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
+    const anon = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
     const generatedUsername = (await (await harness.db()).query<{username:string}>('SELECT username FROM users WHERE id=$1',[t.userId])).rows[0].username;
     expect(anon.thread[0].author).toMatchObject({ kind: 'human', label: generatedUsername, transport: 'browser' });
 
     const user = { id: t.userId! };
     expect('ok' in (await setUsername(user.id, 'viv_tester'))).toBe(true);
-    const named = (await (await annotate(doc.id, actor, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'from viv' })).json()) as AnnotationWire;
+    const named = (await (await annotate(doc.id, actor, { node_id: 'intro', edit_id: await headEditId(t.token, doc.id), body: 'from viv' })).json()) as AnnotationWire;
     expect(named.thread[0].author).toMatchObject({ kind: 'human', label: 'viv_tester', transport: 'browser' });
   });
 
   it('a person\'s comments carry their account id and picture, read fresh with the comments; agents carry neither', async () => {
     const { t, doc, actor } = await publish();
-    const anon = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
+    const anon = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
     expect(anon.thread[0].author).toMatchObject({ kind: 'human', user_id: t.userId, image: null });
 
     const user = { id: t.userId! };
     expect('ok' in (await setUsername(user.id, 'face_tester'))).toBe(true);
     // No picture yet: the id (the colour key) and no address.
-    const plain = (await (await annotate(doc.id, actor, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'no face yet' })).json()) as AnnotationWire;
+    const plain = (await (await annotate(doc.id, actor, { node_id: 'intro', edit_id: await headEditId(t.token, doc.id), body: 'no face yet' })).json()) as AnnotationWire;
     expect(plain.thread[0].author).toMatchObject({ kind: 'human', label: 'face_tester', user_id: user.id, image: null });
 
     const db = await harness.db();
@@ -279,7 +271,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     expect(image).toBeTruthy();
 
     // The create echo, a human reply and an agent reply all read the picture on the write path too.
-    const withFace = (await (await annotate(doc.id, actor, { path: '1', edit_id: await headEditId(t.token, doc.id), body: 'with a face' })).json()) as AnnotationWire;
+    const withFace = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: await headEditId(t.token, doc.id), body: 'with a face' })).json()) as AnnotationWire;
     expect(withFace.thread[0].author).toMatchObject({ kind: 'human', user_id: user.id, image });
     const humanReply = (await (await myActOnAnnotationRoute(
       request(`/api/my/artifacts/${doc.id}/annotations/${withFace.id}`, { method: 'POST', actor: actor, json: { reply: 'me again' } }),
@@ -319,7 +311,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 
   it('the owner replies through the /api/my twin, attributed owner', async () => {
     const { doc, actor } = await publish();
-    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
+    const a = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
     const res = await myActOnAnnotationRoute(
       request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', actor: actor, json: { reply: 'never mind' } }),
       params({ id: doc.id, annId: a.id }),
@@ -334,7 +326,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 
   it('unknown annotation id, foreign token, and an empty action are refused (404/404/400)', async () => {
     const { t, doc, actor } = await publish();
-    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
+    const a = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
 
     const unknown = await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/ann_nope`, { method: 'POST', token: t.token, json: { resolve: true } }),
@@ -362,7 +354,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 describe('lifecycle', () => {
   it('the owner deletes a thread outright — root and replies; a stranger gets the uniform 404', async () => {
     const { t, doc, actor } = await publish();
-    const a = (await (await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'erase me' })).json()) as AnnotationWire;
+    const a = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'erase me' })).json()) as AnnotationWire;
     await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: t.token, json: { reply: 'noted' } }),
       params({ id: doc.id, annId: a.id }),
@@ -400,7 +392,7 @@ describe('lifecycle', () => {
 
   it('a deleted artifact KEEPS its annotation rows, and keeps them forever', async () => {
     const { t, doc, actor } = await publish();
-    await annotate(doc.id, actor, { path: '1', edit_id: doc.edit_id, body: 'x' });
+    await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'x' });
     const del = await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: t.token }), params({ id: doc.id }));
     expect(del.status).toBe(200);
     const db = await harness.db();

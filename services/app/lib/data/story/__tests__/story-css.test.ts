@@ -1,13 +1,10 @@
 /**
  * Story design-system CSS — contract tests.
  *
- * A story that opts in via `data-design="tw"` on its root wrapper gets exactly the Tailwind
- * utilities it uses compiled to a per-story stylesheet; a legacy story (no marker) gets null,
- * so Tailwind (and its preflight reset) can never alter how existing stories render.
- * `compiledCss` is server-managed: the client never supplies it (see `withCompiledStoryCss`).
+ * A story gets exactly the Tailwind utilities it uses compiled to a per-story stylesheet.
  */
-import { hasDesignSystemMarker, extractClassCandidates } from '../story-css';
-import { compileStoryCss, withCompiledStoryCss } from '../story-css.server';
+import { extractClassCandidates } from '../story-css';
+import { compileStoryCss } from '../story-css.server';
 import { STORY_THEMES } from '../story-themes';
 
 const TW_STORY =
@@ -16,24 +13,6 @@ const TW_STORY =
   '<div class="grid grid-cols-3 gap-4">' +
   '<span class="mt-2.5 rounded-full bg-red-100 px-2.5 text-[13px] dark:bg-red-950">pill</span>' +
   '</div></div>';
-
-const LEGACY_STORY =
-  '<style>.story-sc .card { border: 1px solid #eee; }</style>' +
-  '<div class="story-sc"><div class="card kpi-grid">legacy</div></div>';
-
-describe('hasDesignSystemMarker', () => {
-  it('detects the root marker (double or single quotes)', () => {
-    expect(hasDesignSystemMarker(TW_STORY)).toBe(true);
-    expect(hasDesignSystemMarker("<div data-design='tw'>x</div>")).toBe(true);
-  });
-  it('is false for legacy stories, other values, and empty input', () => {
-    expect(hasDesignSystemMarker(LEGACY_STORY)).toBe(false);
-    expect(hasDesignSystemMarker('<div data-design="v3">x</div>')).toBe(false);
-    expect(hasDesignSystemMarker('')).toBe(false);
-    expect(hasDesignSystemMarker(null)).toBe(false);
-    expect(hasDesignSystemMarker(undefined)).toBe(false);
-  });
-});
 
 describe('extractClassCandidates', () => {
   it('collects every class token, deduped and sorted (deterministic)', () => {
@@ -61,8 +40,7 @@ describe('extractClassCandidates', () => {
 });
 
 describe('compileStoryCss', () => {
-  it('returns null for legacy stories and empty input (no marker, no stylesheet)', async () => {
-    expect(await compileStoryCss(LEGACY_STORY)).toBeNull();
+  it('returns null for empty input', async () => {
     expect(await compileStoryCss('')).toBeNull();
     expect(await compileStoryCss(null)).toBeNull();
     expect(await compileStoryCss(undefined)).toBeNull();
@@ -117,19 +95,6 @@ describe('compileStoryCss', () => {
     expect(css).toMatch(/\.bg-red-100\s*\{/);
     // Nested at-rules (media/container/supports) survive inside the flattened output.
     expect(css).toContain('@property');
-  });
-});
-
-describe('withCompiledStoryCss', () => {
-  it('attaches compiledCss for marked stories and discards any client-sent value', async () => {
-    const out = await withCompiledStoryCss({ story: TW_STORY, compiledCss: 'CLIENT GARBAGE' });
-    expect(out.compiledCss).toBeTruthy();
-    expect(out.compiledCss).not.toBe('CLIENT GARBAGE');
-    expect(out.story).toBe(TW_STORY);
-  });
-  it('sets compiledCss to null for legacy stories (even if the client sent one)', async () => {
-    const out = await withCompiledStoryCss({ story: LEGACY_STORY, compiledCss: 'CLIENT GARBAGE' });
-    expect(out.compiledCss).toBeNull();
   });
 });
 
@@ -200,12 +165,12 @@ describe('jsx-format stories — className candidates + always-compile', () => {
     expect(c).toContain('text-muted-foreground');
   });
 
-  // With the app-CSS mirror carrying only fonts, embed chrome inside LEGACY marked stories
+  // With the app-CSS mirror carrying only fonts, embed chrome inside a story
   // has exactly one style source — the compiled sheet. The recipe union (kit +
-  // EXTRA_CLASS_SOURCES classes) therefore applies to marked legacy stories too, compiled
+  // EXTRA_CLASS_SOURCES classes) therefore applies to every story, compiled
   // against the token layer so token-backed utilities (bg-muted, animate-spin ring colors)
   // resolve.
-  it('marked LEGACY stories get the recipe union + token layer (embeds keep their chrome)', async () => {
+  it('a story gets the recipe union + token layer (embeds keep their chrome)', async () => {
     const css = await compileStoryCss('<div data-design="tw" class="p-4">legacy with embeds</div>');
     // Asserted on a kit-sourced union class rather than one of the embed
     // chrome utilities, so the case does not move when embed chrome is reskinned.
@@ -214,30 +179,19 @@ describe('jsx-format stories — className candidates + always-compile', () => {
   });
 
   // The stock shadcn --chart-1..5 would silently recolor embedded charts in
-  // unthemed/legacy stories (VegaChart reads those tokens wherever they resolve).
+  // unthemed stories (VegaChart reads those tokens wherever they resolve).
   // The NEUTRAL story bodies carry the app palette; [data-theme] blocks still override.
   it('story neutral bodies keep the APP chart palette (no silent embed recolor)', async () => {
     const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
     expect(css).toContain('--chart-1: #16a085');
-    expect(css).not.toMatch(/:root[^}]*--chart-1: oklch/);
+    expect(css.slice(0, css.indexOf('[data-theme='))).not.toMatch(/:root[^}]*--chart-1: oklch/);
   });
 
-  it('compileStoryCss compiles with force even without the data-design marker', async () => {
-    const css = await compileStoryCss('<div className="grid grid-cols-3 bg-red-100">x</div>', { force: true });
+  it('compileStoryCss compiles a story without the data-design marker', async () => {
+    const css = await compileStoryCss('<div className="grid grid-cols-3 bg-red-100">x</div>');
     expect(css).toBeTruthy();
     expect(css).toContain('.grid-cols-3');
     expect(css).toContain('.bg-red-100');
-  });
-
-  it('withCompiledStoryCss ALWAYS compiles a format:"jsx" story (no marker needed)', async () => {
-    const out = await withCompiledStoryCss({ story: '<div className="p-4 bg-red-100">x</div>', format: 'jsx' as const });
-    expect(out.compiledCss).toBeTruthy();
-    expect(out.compiledCss).toContain('.bg-red-100');
-  });
-
-  it('withCompiledStoryCss keeps the marker gate for legacy stories (no format)', async () => {
-    const out = await withCompiledStoryCss({ story: '<div class="p-4 bg-red-100">legacy</div>' });
-    expect(out.compiledCss).toBeNull();
   });
 });
 
@@ -245,16 +199,16 @@ describe('jsx-format stories — className candidates + always-compile', () => {
 // bg-card resolve via @theme inline) UNIONED with the registry recipe classes — the shadcn
 // component sources use classes (rounded-xl, border, shadow-sm, …) that never appear in the
 // story's own markup, so without the base sheet a <Card> renders unstyled.
-describe('shadcn token preamble + recipe base sheet (format:jsx)', () => {
+describe('shadcn token preamble + recipe base sheet', () => {
   it('compiles token utilities used in story markup (bg-card, text-muted-foreground)', async () => {
-    const css = (await compileStoryCss('<div className="bg-card text-muted-foreground">x</div>', { force: true }))!;
+    const css = (await compileStoryCss('<div className="bg-card text-muted-foreground">x</div>'))!;
     expect(css).toContain('.bg-card');
     expect(css).toContain('var(--card'); // @theme inline: utilities reference the raw token var
     expect(css).toContain('.text-muted-foreground');
   });
 
   it('includes neutral :root/.dark token defaults so themeless stories look right', async () => {
-    const css = (await compileStoryCss('<div className="bg-card">x</div>', { force: true }))!;
+    const css = (await compileStoryCss('<div className="bg-card">x</div>'))!;
     expect(css).toMatch(/:root\s*\{[^}]*--card:/);
     expect(css).toMatch(/\.dark\s*\{[^}]*--card:/);
     expect(css).toMatch(/--radius:/);
@@ -262,7 +216,7 @@ describe('shadcn token preamble + recipe base sheet (format:jsx)', () => {
 
   it('unions the shadcn recipe classes so component chrome is styled without appearing in markup', async () => {
     // A jsx story using <Card> only — "rounded-xl"/"shadow-sm" come from the Card recipe, not the story.
-    const css = (await compileStoryCss('<Card className="p-0">x</Card>', { force: true }))!;
+    const css = (await compileStoryCss('<Card className="p-0">x</Card>'))!;
     expect(css).toContain('.rounded-xl');
     expect(css).toContain('.shadow-sm');
   });
@@ -279,9 +233,9 @@ describe('shadcn token preamble + recipe base sheet (format:jsx)', () => {
 // A blinking caret is the one animation a document CANNOT author for itself: the markup tier
 // rejects <style>, and Tailwind's stock `animate-pulse` only fades to 50% opacity, which reads
 // as a soft glow rather than a terminal cursor. So the compile itself ships the keyframes.
-describe('compileStoryCss — the caret blink (format:jsx)', () => {
+describe('compileStoryCss — the caret blink', () => {
   it('compiles animate-caret-blink WITH its keyframes, blinking fully off and fully on', async () => {
-    const css = (await compileStoryCss('<span className="animate-caret-blink">x</span>', { force: true }))!;
+    const css = (await compileStoryCss('<span className="animate-caret-blink">x</span>'))!;
     expect(css).toContain('.animate-caret-blink');
     // A utility whose keyframes never made it into the sheet is a static block on the page.
     const keyframes = /@keyframes\s+caret-blink\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
@@ -296,10 +250,10 @@ describe('compileStoryCss — the caret blink (format:jsx)', () => {
 
 // No candidate filter: CSS is unconstrained, so a jsx story compiles every candidate it uses —
 // positioning utilities and external-url arbitrary values included — exactly as Tailwind emits them.
-describe('compileStoryCss — every candidate compiles (format:jsx)', () => {
+describe('compileStoryCss — every candidate compiles', () => {
   it('keeps fixed/sticky candidates (including variants)', async () => {
     const css = (await compileStoryCss(
-      '<div className="fixed md:sticky p-4">x</div>', { force: true },
+      '<div className="fixed md:sticky p-4">x</div>'
     ))!;
     expect(css).toMatch(/position:\s*fixed/);
     expect(css).toMatch(/position:\s*sticky/);
@@ -308,8 +262,7 @@ describe('compileStoryCss — every candidate compiles (format:jsx)', () => {
 
   it('keeps external-url and data: arbitrary-value candidates', async () => {
     const css = (await compileStoryCss(
-      `<div className="bg-[url(https://cdn.example/x.png)] bg-[url(data:image/svg+xml;base64,PHN2Zy8+)] p-2">x</div>`,
-      { force: true },
+      `<div className="bg-[url(https://cdn.example/x.png)] bg-[url(data:image/svg+xml;base64,PHN2Zy8+)] p-2">x</div>`
     ))!;
     expect(css).toContain('https://cdn.example/x.png');
     expect(css).toContain('data:image/svg+xml');
@@ -326,9 +279,9 @@ describe('compileStoryCss — every candidate compiles (format:jsx)', () => {
 // `[data-theme="<name>"]` variable blocks, so switching a story's theme is an attribute
 // change only — instant preview, no recompile. Appended AFTER the compiled sheet so the
 // attribute-scoped blocks beat the `:root`/`.dark` neutral defaults on document order.
-describe('compileStoryCss — theme token blocks (format:jsx)', () => {
+describe('compileStoryCss — theme token blocks', () => {
   it('ships all six [data-theme] blocks, each with its own --primary', async () => {
-    const css = (await compileStoryCss('<p className="p-2">x</p>', { force: true }))!;
+    const css = (await compileStoryCss('<p className="p-2">x</p>'))!;
     for (const t of STORY_THEMES) {
       expect(css).toContain(`[data-theme="${t.name}"]`);
     }
@@ -341,12 +294,7 @@ describe('compileStoryCss — theme token blocks (format:jsx)', () => {
   });
 
   it('theme blocks come AFTER the neutral :root defaults (document order beats equal specificity)', async () => {
-    const css = (await compileStoryCss('<p className="p-2">x</p>', { force: true }))!;
+    const css = (await compileStoryCss('<p className="p-2">x</p>'))!;
     expect(css.indexOf('[data-theme="modernist"]')).toBeGreaterThan(css.indexOf(':root'));
-  });
-
-  it('legacy (non-jsx) compiles carry NO theme blocks (byte-stable legacy pipeline)', async () => {
-    const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
-    expect(css).not.toContain('[data-theme=');
   });
 });

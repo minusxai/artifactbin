@@ -15,7 +15,7 @@ import { STORY_WYSIWYG_CLASSES } from './typography';
 import { storyMotionKitCss } from './motion';
 import { storyThemeCss } from './story-themes';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
-import { hasDesignSystemMarker, extractClassCandidates, type CompiledCssStoryContent } from './story-css';
+import { extractClassCandidates } from './story-css';
 
 // The stylesheet each story is compiled against. `dark:` keys off the `.dark` class
 // `buildStoryDocument` stamps on the document <html> (Tailwind's default is
@@ -67,8 +67,8 @@ async function tailwindCompiler(input: string) {
  *    contract, so `bg-card` / `text-muted-foreground` / `rounded-lg` compile and resolve
  *    through `--card` etc. — which themes override per `[data-theme]`.
  *  - a stock-neutral `:root`/`.dark` default block so themeless stories look right.
- * Every compiled story (jsx AND legacy marked) uses TW_INPUT_JSX: the compiled sheet is the
- * embeds' only style source, so the token layer + recipe union apply across the board.
+ * Every compiled story uses TW_INPUT_STORY: the compiled sheet is the embeds' only style
+ * source, so the token layer + recipe union apply across the board.
  */
 /**
  * The `@theme inline` mapping that registers shadcn token utilities (`bg-background`,
@@ -182,17 +182,8 @@ export const STORY_RECIPE_UNION: readonly string[] = [
   ...new Set([...STORY_UI_RECIPE_CLASSES, ...STORY_WYSIWYG_CLASSES]),
 ];
 
-const jsxCompileInput = (important: boolean) => `${important ? TW_INPUT.replace('@import "tailwindcss";', '@import "tailwindcss" important;') : TW_INPUT}
-${SHADCN_THEME_MAPPING}
-${storyMotionKitCss()}
-:root ${withAppCharts(SHADCN_NEUTRAL_LIGHT_BODY)}
-.dark ${withAppCharts(SHADCN_NEUTRAL_DARK_BODY)}
-`;
-
-/** Legacy marked stories and chrome keep the frozen, non-important cascade. */
-const TW_INPUT_JSX = jsxCompileInput(false);
 /**
- * jsx-tier documents compile utilities `!important`: with authored `<style>`
+ * Utilities compile `!important`: with authored `<style>`
  * blocks allowed (the no-inline-style policy), the instructable cascade
  * contract is "Tailwind classes always beat your CSS" — a custom class can
  * never silently defeat a toolbar click or an authored utility. Theme token
@@ -200,7 +191,12 @@ const TW_INPUT_JSX = jsxCompileInput(false);
  * switching keeps working; the fluid shim stays ahead by carrying its own
  * `!important` and being injected after this sheet.
  */
-const TW_INPUT_JSX_IMPORTANT = jsxCompileInput(true);
+const TW_INPUT_STORY = `${TW_INPUT.replace('@import "tailwindcss";', '@import "tailwindcss" important;')}
+${SHADCN_THEME_MAPPING}
+${storyMotionKitCss()}
+:root ${withAppCharts(SHADCN_NEUTRAL_LIGHT_BODY)}
+.dark ${withAppCharts(SHADCN_NEUTRAL_DARK_BODY)}
+`;
 
 /**
  * Flatten `@layer` out of compiled CSS: drop layer-statement lines (`@layer a, b;`) and unwrap
@@ -268,9 +264,7 @@ export function buildSalvaging(
 }
 
 /**
- * Compile the story's Tailwind CSS. Returns null (no stylesheet) unless the story carries
- * the design-system marker or the caller passes `opts.force` (what `format:'jsx'` stories
- * do) — unmarked legacy stories must render byte-identical to before.
+ * Compile the story's Tailwind CSS (null for an empty story). Always the full compile.
  *
  * A FRESH compiler per call: Tailwind's `build()` is accumulative (watch-mode semantics), so a
  * shared instance would leak utilities from one story's build into the next.
@@ -285,12 +279,13 @@ export function buildSalvaging(
 const compileMemo = new Map<string, Promise<string | null>>();
 const COMPILE_MEMO_CAP = 50;
 
-export async function compileStoryCss(story: string | null | undefined, opts?: { force?: boolean }): Promise<string | null> {
-  if (!story || (!opts?.force && !hasDesignSystemMarker(story))) return null;
-  const memoKey = `${opts?.force ? 'jsx' : 'legacy'}|${storyCssCompileVersion()}|${story}`;
+// `_force` is accepted and ignored: the bundled CLI still passes `{ force: true }`.
+export async function compileStoryCss(story: string | null | undefined, _force?: { force?: boolean }): Promise<string | null> {
+  if (!story) return null;
+  const memoKey = `${storyCssCompileVersion()}|${story}`;
   const memoized = compileMemo.get(memoKey);
   if (memoized) return memoized;
-  const result = compileStoryCssUncached(story, opts);
+  const result = compileStoryCssUncached(story);
   if (compileMemo.size >= COMPILE_MEMO_CAP) {
     const oldest = compileMemo.keys().next().value;
     if (oldest !== undefined) compileMemo.delete(oldest);
@@ -301,13 +296,11 @@ export async function compileStoryCss(story: string | null | undefined, opts?: {
   return result;
 }
 
-async function compileStoryCssUncached(story: string, opts?: { force?: boolean }): Promise<string | null> {
-  // EVERY compiled story (jsx AND marked legacy) gets the shadcn token layer + the registry
-  // recipe classes unioned in: component chrome classes never appear in story markup, and the
-  // compiled sheet is the embeds' ONLY style source. The token layer is
-  // additive (host-scoped), so legacy authored css is unaffected.
-  const jsx = !!opts?.force;
-  const compiler = await tailwindCompiler(jsx ? TW_INPUT_JSX_IMPORTANT : TW_INPUT_JSX);
+async function compileStoryCssUncached(story: string): Promise<string | null> {
+  // EVERY compiled story gets the shadcn token layer + the registry recipe classes unioned in:
+  // component chrome classes never appear in story markup, and the compiled sheet is the
+  // embeds' ONLY style source.
+  const compiler = await tailwindCompiler(TW_INPUT_STORY);
   let candidates = [...new Set([...extractClassCandidates(story), ...STORY_RECIPE_UNION])].sort();
   const { css, dropped } = buildSalvaging(c => compiler.build(c), candidates);
   if (dropped.length > 0) {
@@ -318,7 +311,7 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
   // Appended AFTER the compiled sheet: the attribute-scoped blocks beat the `:root`/`.dark`
   // neutral defaults on document order, while authored <style> blocks still come later in the
   // iframe and win over everything here.
-  return flattenCssLayers(css) + (jsx ? `\n${storyThemeCss()}` : '');
+  return `${flattenCssLayers(css)}\n${storyThemeCss()}`;
 }
 
 /**
@@ -328,19 +321,13 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
  * read path (`currentStoryCss`, below) recompiles it. Self-maintaining: no manual version bumps.
  */
 export function storyCssCompileVersion(): string {
-  const src = `${STORY_RECIPE_UNION.join(' ')}|${storyThemeCss()}|${TW_INPUT_JSX_IMPORTANT}`;
+  const src = `${STORY_RECIPE_UNION.join(' ')}|${storyThemeCss()}|${TW_INPUT_STORY}`;
   // djb2 — stability matters, cryptographic strength doesn't.
   let h = 5381;
   for (let i = 0; i < src.length; i++) h = ((h << 5) + h + src.charCodeAt(i)) | 0;
   return `v${(h >>> 0).toString(36)}`;
 }
 
-/**
- * Recompute `compiledCss` for a story content object (any client-sent value is discarded), and
- * stamp the compile-environment version so the read path can detect staleness.
- * `format:'jsx'` stories ALWAYS compile — new stories are design-system by definition, no
- * `data-design="tw"` marker needed; legacy stories keep the marker gate.
- */
 /**
  * The CURRENT sheet for a stored row: its frozen `compiledCss` when it was
  * compiled under this deployment's environment, else a fresh compile of the
@@ -360,14 +347,4 @@ export async function currentStoryCss(
   }
   if (source == null) return meta.compiledCss ?? null;
   return compileStoryCss(source, { force: true });
-}
-
-export async function withCompiledStoryCss<T extends { story?: string | null; format?: string | null }>(
-  content: T,
-): Promise<T & CompiledCssStoryContent> {
-  return {
-    ...content,
-    compiledCss: await compileStoryCss(content.story, { force: content.format === 'jsx' }),
-    cssCompileVersion: storyCssCompileVersion(),
-  } as T & CompiledCssStoryContent;
 }

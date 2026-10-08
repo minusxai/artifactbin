@@ -371,7 +371,7 @@ const ANNOTATIONS: Table = {
     { name: 'root_id', type: 'TEXT' }, // NULL = annotation root; else the root's id (a reply)
     { name: 'body', type: 'TEXT', notNull: true },
     // Attribution — derived from the credential at the door, never caller-supplied.
-    { name: 'author_kind', type: 'TEXT', notNull: true }, // 'human' | 'agent' (legacy rows may say 'owner')
+    { name: 'author_kind', type: 'TEXT', notNull: true }, // 'human' | 'agent'
     { name: 'author_token_id', type: 'TEXT' },
     { name: 'author_user_id', type: 'TEXT' },
     { name: 'author_label', type: 'TEXT' }, // display snapshot; survives token revocation

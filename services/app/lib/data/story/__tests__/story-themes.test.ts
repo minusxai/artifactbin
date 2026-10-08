@@ -4,7 +4,7 @@
  * One registry (`STORY_THEMES`), four consumers: the CSS emitter, the picker UI, preview
  * generation, and the font-asset mapping. These tests pin:
  *  - completeness: one entry per schema enum name, with label/description/fonts,
- *  - the DUAL-palette token contract: every var TW_INPUT_JSX maps (+ --radius) present in the
+ *  - the DUAL-palette token contract: every var TW_INPUT_STORY maps (+ --radius) present in the
  *    light palette, every color var (no --radius) in the dark palette, and nothing else,
  *  - the emitter: a light `[data-theme="<name>"]` block AND a `.dark`-compounded override per
  *    theme (dark after light, same specificity — mode is a class flip, never a recompile),
@@ -20,7 +20,7 @@ import {
 import { skillTree } from '@/lib/skills';
 import { renderDoc } from '@/test/helpers/skill-docs';
 
-/** Exactly the CSS variables TW_INPUT_JSX maps utilities onto, plus --radius. */
+/** Exactly the CSS variables TW_INPUT_STORY maps utilities onto, plus --radius. */
 const REQUIRED_VARS = [
   '--background', '--foreground',
   '--card', '--card-foreground',

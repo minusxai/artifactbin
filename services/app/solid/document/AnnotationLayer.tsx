@@ -516,7 +516,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       try {
         // The exact words ride along when there are any; a caret comment carries neither key.
         wire = await backend.createAnnotation({
-          path: subject.path, node_id: subject.nodeId, body,
+          node_id: subject.nodeId, body,
           ...(attachmentId ? { attachment_id: attachmentId, edit_id: shot!.editId } : {}),
           ...(subject.quote ? { quote: subject.quote } : {}),
           ...(subject.range ? { range: subject.range } : {}),
