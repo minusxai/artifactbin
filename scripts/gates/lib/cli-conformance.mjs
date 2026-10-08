@@ -25,6 +25,23 @@ import { connectAgent, signInAccount } from './cli-connection.mjs';
 import { checkGuestHttpIssuance, checkDirectHttp } from './http-conformance.mjs';
 import { loginViaEmail } from '../../lib/mail-login.mjs';
 
+/** The owner and access-control probe use the same credential source, but different accounts. */
+export function createConformanceCredentialProvider({ base, env = process.env, credentialSource, sink, localOutbox, configuredAcquire, localSignIn = signInAccount }) {
+  return async email => {
+    if (!credentialSource) return localSignIn(base, { sink, email });
+    const acquire = configuredAcquire ?? (await tsImport('../../lib/credential.ts', import.meta.url)).acquireCredential;
+    return acquire(credentialSource, { base, env, email, localOutbox });
+  };
+}
+
+/** A disposable non-owner login on the configured inbox domain, never the owner's identity. */
+export function conformanceNonOwnerEmail(ownerEmail, stamp) {
+  const at = ownerEmail.lastIndexOf('@');
+  if (at < 1 || at === ownerEmail.length - 1) throw new Error('Conformance account email must include a domain');
+  const run = String(stamp).replace(/[^a-zA-Z0-9-]/g, '-') || 'run';
+  return `mxmx_test_nonowner_${run}@${ownerEmail.slice(at + 1)}`;
+}
+
 /**
  * @param {object} host
  * @param {string} host.base       the host's origin
@@ -51,11 +68,10 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
   const accountEmail = process.env.EVAL_LOGIN_EMAIL ?? `mxmx_test_conformance_${stamp}@example.com`;
   // Deployment acceptance reads its configured inbox; local gates read their protected outbox.
   const credentialSource = process.env.CONFORMANCE__CREDENTIAL_SOURCE;
-  const approvingAccount = credentialSource
-    ? await (await tsImport('../../lib/credential.ts', import.meta.url)).acquireCredential(credentialSource, {
-      base: BASE, env: process.env, email: accountEmail, localOutbox: process.env.EMAIL__DEV_OUTBOX_PATH,
-    })
-    : await signInAccount(BASE, { sink, email: accountEmail });
+  const credentialFor = createConformanceCredentialProvider({
+    base: BASE, env: process.env, credentialSource, sink, localOutbox: process.env.EMAIL__DEV_OUTBOX_PATH,
+  });
+  const approvingAccount = await credentialFor(accountEmail);
   let browserCookie = approvingAccount.cookie;
   async function invoke(args, { cwd = workspace, expected = 0, approve = false } = {}) {
     const child = spawn(cli.endsWith('.mjs') ? process.execPath : cli,
@@ -146,7 +162,10 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
         assert.match((await read.json()).markup, /<Import name="sales_data" src="ref:/);
       });
       await scenario('owner/non-owner/anonymous private access; leak negative control', async () => {
-        const other = (await connectAgent(BASE)).token;
+        const nonOwnerEmail = conformanceNonOwnerEmail(accountEmail, stamp);
+        assert.notEqual(nonOwnerEmail, accountEmail, 'private access probe must use a different account');
+        const nonOwnerAccount = await credentialFor(nonOwnerEmail);
+        const other = (await connectAgent(BASE, { cookie: nonOwnerAccount.cookie })).token;
         const hidden = status => assert.equal(status, 404, 'private read must remain hidden');
         assert.equal((await api(`/api/artifacts/${id}`, null)).status, 401, 'API requires authentication');
         hidden((await api(`/a/${id}`, null)).status);
