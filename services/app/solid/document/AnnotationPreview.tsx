@@ -13,7 +13,7 @@ import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations/st
 import type { StoryEditRect } from '@/lib/story-runtime/contract';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
-import { REMOTE_COLOR_CSS, remoteColor } from '../../../contracts/src/remote';
+import { agentNameColor } from '../lib/agent-identity';
 import { Avatar } from '../components/Avatar';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '../components/brand-icons';
 import { Tooltip } from '../components/Tooltip';
@@ -64,7 +64,7 @@ function AgentMark(props: { label: string; compact?: boolean; decorative?: boole
       case 'chatgpt': return <ChatGPTIcon size={props.compact ? 12 : 16} />;
       case 'claude code': return <ClaudeCodeIcon size={props.compact ? 12 : 16} />;
       case 'claude': return <ClaudeAIIcon size={props.compact ? 12 : 16} />;
-      default: return <span aria-hidden="true" class={`${props.compact ? 'text-[10px]' : 'text-[12px]'} leading-none text-accent`}>✦</span>;
+      default: return <span aria-hidden="true" class={`${props.compact ? 'text-[10px]' : 'text-[12px]'} leading-none`} style={{color:agentNameColor(props.label)}}>✦</span>;
     }
   };
   return <span aria-label={props.decorative ? undefined : `${props.label} agent`} aria-hidden={props.decorative || undefined}
@@ -83,14 +83,14 @@ export function AuthorIdentity(props: { author: Author }): JSX.Element {
     </Show>
     <Show when={props.author.sessionId} fallback={
       <Show when={props.author.kind === 'human' && props.author.label && !offline} fallback={
-        <span class={`truncate text-[11px] font-semibold ${props.author.kind === 'agent' ? 'text-accent' : 'text-fg'}`}>{label()}</span>
+        <span style={props.author.kind === 'agent' ? {color:agentNameColor(label())} : undefined} class={`truncate text-[11px] font-semibold ${props.author.kind === 'agent' ? 'text-accent' : 'text-fg'}`}>{label()}</span>
       }>
         <a href={`/@${encodeURIComponent(props.author.label!)}`} aria-label={`View @${props.author.label} profile`}
           class="pointer-events-auto truncate text-[11px] font-semibold text-fg underline-offset-2 hover:text-accent hover:underline">{label()}</a>
       </Show>
     }>{(sessionId) => (
       <a href={`/chat?session=${sessionId()}`} target="_blank" rel="noopener noreferrer" class="truncate text-[11px] font-semibold"
-        style={{ color: REMOTE_COLOR_CSS[props.author.color ?? remoteColor(sessionId())] }}>@{label()}</a>
+        style={{ color: agentNameColor(label()) }}>@{label()}</a>
     )}</Show>
     <Show when={props.author.kind === 'agent' && props.author.transport !== 'unknown'}>
       <span aria-label={`Transport ${props.author.transport.toUpperCase()}`} class="shrink-0 font-mono text-[9px] uppercase tracking-[0.08em] text-faint">· {props.author.transport}</span>
@@ -201,7 +201,7 @@ export function AnnotationPreview(props: {
     class={`${working() ? 'motion-safe:animate-pulse' : ''} group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${props.hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
     style={{
       position: 'fixed',
-      outline: work() ? `2px solid ${REMOTE_COLOR_CSS[work()!.color]}` : undefined,
+      outline: work() ? `2px solid ${agentNameColor(work()!.name)}` : undefined,
       top: `${props.top}px`,
       right: `${(props.rightInset ?? 0) + VIEW_COMMENT_INSET}px`,
       width: `${props.hovered ? 288 : compactWidth()}px`,

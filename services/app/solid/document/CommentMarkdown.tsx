@@ -5,12 +5,11 @@ import Code from 'lucide-solid/icons/code';
 import Italic from 'lucide-solid/icons/italic';
 import Link2 from 'lucide-solid/icons/link-2';
 import List from 'lucide-solid/icons/list';
-import { parseMarkdownLite, type MdInline, type MdMarker, type MdNode } from '@/lib/annotations/markdown-lite';
+import { parseMarkdownLite, plainText, type MdInline, type MdMarker, type MdNode } from '@/lib/annotations/markdown-lite';
 import { commentDocument, mountCommentEditor, type MentionQuery } from './comment-editor';
 import { isPersonMentionHref } from '@/lib/annotations/person-mentions';
 import { isSessionMentionHref } from '@/lib/annotations/session-mentions';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { REMOTE_COLOR_CSS, remoteColor } from '../../../contracts/src/remote';
 import { Tooltip } from '../components/Tooltip';
 import { remoteMention } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
@@ -32,8 +31,8 @@ function inline(nodes: MdInline[]): JSX.Element {
         if (isPersonMentionHref(node.href)) return <PersonMention href={node.href} class="text-accent">{inline(node.children)}</PersonMention>;
         if (isSessionMentionHref(node.href)) return (
           <Tooltip content="Open agent session"><a href={node.href} target="_blank" rel="noopener noreferrer"
-            style={{ color: REMOTE_COLOR_CSS[remoteColor(node.href.split('=')[1] ?? '')] }} data-agent-mention=""
-            class="inline-flex max-w-full items-center rounded-md border border-accent/20 bg-accent-soft px-1.5 py-0.5 align-baseline text-[0.9em] font-medium text-accent no-underline hover:bg-accent/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+            style={{ '--mention-color': agentNameColor(plainText([{kind:'paragraph',children:node.children}]).replace(/^@/, '')) }} data-agent-mention=""
+            class="comment-agent-mention max-w-full no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
             {inline(node.children)}
           </a></Tooltip>
         );

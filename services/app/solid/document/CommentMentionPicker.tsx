@@ -13,7 +13,8 @@ import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend, MemberPerson } from '@/lib/artifact-backend/types';
 import { personMention } from '@/lib/annotations/person-mentions';
 import { remoteMention } from '@/lib/annotations/remote-reply';
-import { REMOTE_COLOR_CSS, remoteColor, type RemoteSessionInfo } from '../../../contracts/src/remote';
+import { type RemoteSessionInfo } from '../../../contracts/src/remote';
+import { agentNameColor } from '../lib/agent-identity';
 import { Tooltip } from '../components/Tooltip';
 import { copyText } from '../lib/copy-text';
 
@@ -107,7 +108,7 @@ export function CommentMentionPicker(props: {
         <button type="button" aria-label={`Mention ${session.name} (${session.harness})`}
           class={`flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors ${index() + people().length === active() ? 'bg-accent-soft' : 'hover:bg-bg'}`}
           onMouseEnter={() => setActive(index() + people().length)} onMouseDown={keep} onClick={() => choose(session)}>
-          <span aria-hidden="true" style={{ color: REMOTE_COLOR_CSS[session.color ?? remoteColor(session.id)] }} class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft font-semibold text-accent">@</span>
+          <span aria-hidden="true" style={{ color: agentNameColor(session.name) }} class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft font-semibold text-accent">@</span>
           <span class="min-w-0 flex-1">
             <span class="block truncate font-medium text-fg">{session.name}</span>
             <span class="block truncate text-xs text-muted">{agentLabel(session.harness)} · {session.machine}</span>
