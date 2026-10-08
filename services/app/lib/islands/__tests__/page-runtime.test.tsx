@@ -41,6 +41,21 @@ function setup() {
 }
 
 describe('the page bindings', () => {
+  it('uploads a generic attachment through the declared dataset and keeps legacy image URLs readable', async () => {
+    const receipt = { ref:'dfile:abc234def456', url:'/a/abc123/datasets/DS1/files/abc234def456', name:'note.txt', contentType:'text/plain', size:5 };
+    const fetch = vi.fn(async (_url:string, _init?:RequestInit) => Response.json(receipt));
+    const transport:QueryTransport = {run:async()=>({tables:{},errors:{}}), page:async()=>({rows:[],columns:[]}), image:['/a/abc123/query',fetch,'include']};
+    store=createDataflowStore({flow,results:{tables:{},errors:{}}},{transport}); bindings=bindPage(store);
+    document.body.setAttribute('data-mx-live-id','abc123'); document.body.setAttribute('data-mx-live-edit','edit1234');
+    const file = new File(['hello'], 'note.txt', {type:'text/plain'});
+    await expect(bindings.upload('d',file)).resolves.toEqual(receipt);
+    expect(fetch).toHaveBeenCalledWith('/a/abc123/datasets/DS1/files', expect.objectContaining({body:file,headers:expect.objectContaining({'X-Filename':'note.txt','X-Edit-Id':'edit1234'})}));
+    expect(bindings.fileUrl('d', receipt.ref)).toContain('/datasets/DS1/files/abc234def456');
+    expect(bindings.fileUrl('d', 'dimg:abc234def456')).toContain('/datasets/DS1/images/abc234def456');
+    expect(bindings.fileUrl('missing',receipt.ref)).toBe('');
+    await expect(bindings.upload('missing',file)).rejects.toThrow(/no declared dataset import/);
+  });
+
   it('uploads only through a declared import name and returns a dataset-scoped preview URL',async()=>{
     const upload=vi.fn(async(_url:string,_init?:RequestInit)=>Response.json({ref:'dimg:abc234def456',url:'/a/abc123/datasets/DS1/images/abc234def456'}));
     const transport:QueryTransport={run:async()=>({tables:{},errors:{}}),page:async()=>({rows:[],columns:[]}),image:['/a/abc123/query',upload,'include']};
