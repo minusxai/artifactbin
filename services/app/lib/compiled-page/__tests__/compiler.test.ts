@@ -57,7 +57,7 @@ describe('compilePage', () => {
     expect(page.module!.specifiers).toContain('@mx/kit/upload');
     expect(page.readsViewerMarkup).toBe(true);
     expect(page.unported).toEqual([]);
-    expect(dom(page.html).querySelector('[data-slot="file-upload"]')).toBeTruthy();
+    expect(dom(page.html).querySelector('[role="status"]')?.textContent).toBe('Preparing uploads…');
   });
 
   it('compiles an 11 MB static run inside an island within a bounded time', async () => {
