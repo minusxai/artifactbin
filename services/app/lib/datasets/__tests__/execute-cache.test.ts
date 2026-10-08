@@ -3,7 +3,7 @@ import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import type { DatasetCatalog } from '../types';
 const fixture = vi.hoisted(() => ({ query: vi.fn() }));
-vi.mock('../postgres', () => ({ queryPostgres: fixture.query }));
+vi.mock('../postgres', async (original) => ({ ...(await original<typeof import('../postgres')>()), queryPostgres: fixture.query }));
 vi.mock('../secrets', () => ({ resolveDatasetConnection: async () => ({ host: 'db.example.com',port:5432,database:'app',username:'reader',ssl:true,password: 'fixture' }) }));
 vi.mock('../catalog', () => ({ storedTables: vi.fn() }));
 vi.mock('@/lib/sql/engine', () => ({ runQueries: vi.fn(), runManyQueries: vi.fn(), isQueryFailure: () => false }));
