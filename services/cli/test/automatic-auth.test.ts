@@ -11,6 +11,46 @@ const origin='https://example.com';
 const pairing=()=>Response.json({device_code:'d'.repeat(43),user_code:'ABCD',verification_uri_complete:origin+'/oauth/device?user_code=ABCD',expires_in:10,interval:5});
 const credentials=()=>Response.json({access_token:'new_access',refresh_token:'new_refresh',client_id:'client',expires_in:3600});
 
+for(const nextArtifact of [undefined,'DEF456'] as const)test(`a different command collects the first artifact approval (${nextArtifact??'login'})`,async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-shared-approval-'));let starts=0,collections=0;
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;
+  if(path==='/api/agent-approvals/token'){collections++;return credentials();}
+  assert.equal(path,'/api/agent-approvals','collect the existing grant through its original endpoint');
+  const artifactId=JSON.parse(String(init?.body)).artifactId;
+  if(artifactId==='DEF456'){
+   assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer new_access');
+   return Response.json({authorized:true});
+  }
+  starts++;return pairing();
+ };
+ try {
+  await assert.rejects(browserAuthenticate(origin,{home,env:{},interactive:false,artifactId:'ABC123',fetch:request,notify:()=>{},open:async()=>{throw new Error('no browser');}}),error=>(error as {code:string}).code==='browser_unavailable');
+  const connection=await browserAuthenticate(origin,{home,env:{},interactive:false,artifactId:nextArtifact,fetch:request,notify:()=>{},open:async()=>assert.fail('already approved on the phone')});
+  assert.equal(connection.token,'new_access');assert.equal(starts,1);assert.equal(collections,1);
+ } finally {await rm(home,{recursive:true,force:true});}
+});
+
+test('collecting another artifact approval still checks access to the requested artifact',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-shared-access-'));let collected=false,checks=0;
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;
+  if(path==='/api/agent-approvals/token'){collected=true;return credentials();}
+  assert.equal(path,'/api/agent-approvals');
+  if(JSON.parse(String(init?.body)).artifactId==='DEF456'){
+   assert.equal(collected,true,'collect the first approval before checking the second artifact');
+   assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer new_access');checks++;
+  }
+  return pairing();
+ };
+ const options={home,env:{},interactive:false,fetch:request,notify:()=>{},open:async()=>{throw new Error('no browser');}};
+ try {
+  await assert.rejects(browserAuthenticate(origin,{...options,artifactId:'ABC123'}),error=>(error as {code:string}).code==='browser_unavailable');
+  await assert.rejects(browserAuthenticate(origin,{...options,artifactId:'DEF456'}),error=>(error as {code:string}).code==='browser_unavailable');
+  assert.equal(checks,1);
+ } finally {await rm(home,{recursive:true,force:true});}
+});
+
 for (const state of ['fresh', 'connected', 'already-authorized', 'revoked'] as const) test(`artifact handoff: ${state}`, async () => {
  const home=await mkdtemp(join(tmpdir(),'afbin-artifact-approval-'));let opened=0;const calls:string[]=[];
  try {

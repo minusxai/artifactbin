@@ -92,6 +92,15 @@ test("persists refresh credentials privately but explicit tokens never inherit t
   } finally { await rm(home,{recursive:true,force:true}); }
 });
 
+test('an exported saved access token retains its own refresh credentials', async () => {
+ const home=await mkdtemp(join(tmpdir(),'afbin-exported-refresh-'));
+ try {
+  const connection={server:'https://example.com',token:'mx_access',refreshToken:'mxr_refresh',clientId:'afbin_cli',expiresAt:1900000000000};
+  await saveConnection(connection,home,{});
+  assert.deepEqual(await loadConnection(connection.server,home,{ARTIFACTBIN_URL:connection.server,ARTIFACTBIN_TOKEN:connection.token}),connection);
+ } finally {await rm(home,{recursive:true,force:true});}
+});
+
 test("keeps one credential per origin, so switching servers never re-prompts or overwrites", async () => {
   const home = await mkdtemp(join(tmpdir(), "afbin-origins-"));
   try {

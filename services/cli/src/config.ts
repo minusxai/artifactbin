@@ -113,7 +113,13 @@ export async function loadConnection(
   const selected = normalizeServer(selectedHost);
   if (env.ARTIFACTBIN_TOKEN) {
     const explicitServer = normalizeHost(env.ARTIFACTBIN_URL ?? DEFAULT_SERVER);
-    return explicitServer === selected ? { server: selected, token: env.ARTIFACTBIN_TOKEN, ...(remoteContext(env)&&env.ARTIFACTBIN__REMOTE_REFRESH_TOKEN&&env.ARTIFACTBIN__REMOTE_CLIENT_ID?{refreshToken:env.ARTIFACTBIN__REMOTE_REFRESH_TOKEN,clientId:env.ARTIFACTBIN__REMOTE_CLIENT_ID}: {}) } : null;
+    if(explicitServer!==selected)return null;
+    if(remoteContext(env)&&env.ARTIFACTBIN__REMOTE_REFRESH_TOKEN&&env.ARTIFACTBIN__REMOTE_CLIENT_ID)
+      return {server:selected,token:env.ARTIFACTBIN_TOKEN,refreshToken:env.ARTIFACTBIN__REMOTE_REFRESH_TOKEN,clientId:env.ARTIFACTBIN__REMOTE_CLIENT_ID};
+    // Exporting this saved credential must not discard its refresh grant. An unrelated
+    // explicit token still selects its own identity and never borrows another grant.
+    const saved=await loadConnection(selected,home,{...env,ARTIFACTBIN_TOKEN:undefined});
+    return saved?.token===env.ARTIFACTBIN_TOKEN?saved:{server:selected,token:env.ARTIFACTBIN_TOKEN};
   }
   const saved = await readEnvFile(credentialPath(selected, home, env));
   if (saved.ARTIFACTBIN_URL !== selected) return null;

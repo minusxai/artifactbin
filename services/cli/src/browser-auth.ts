@@ -13,7 +13,7 @@ import { atomicWrite, digest, privateDirectory, readOptional } from './files';
 import { loadConnection, normalizeServer, saveConnection, type Connection } from './config';
 import {withLock} from './state';
 
-interface Pending { connectionKey?: string; server: string; deviceCode: string; userCode: string; verificationUrl: string; expiresAt: number; interval: number }
+interface Pending { artifactId?: string; connectionKey?: string; server: string; deviceCode: string; userCode: string; verificationUrl: string; expiresAt: number; interval: number }
 interface DeviceResponse { authorized?: boolean; device_code: string; user_code: string; verification_uri_complete: string; expires_in: number; interval: number }
 /** An unattended agent gives up polling for approval after this bound, failing fast with an actionable error instead of holding the full device-code window. */
 const AGENT_APPROVAL_WAIT_MS = 45_000;
@@ -73,9 +73,12 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   const home = options.home ?? homedir();
   const clock = options.now ?? Date.now;
   const request = options.fetch ?? fetch;
-  const file = join(configDir(home,options.env), `pairing-${digest(server).slice(0,16)}${options.artifactId ? `-${options.artifactId}` : ''}.json`);
+  // Browser consent connects a server identity, not one page. A later command must
+  // collect that consent before asking for another, even if it names a different page.
+  const sharedFile = join(configDir(home,options.env), `pairing-${digest(server).slice(0,16)}.json`);
+  let file=sharedFile;
   let connection = options.connection;
-  const endpoint = options.artifactId ? ARTIFACT_APPROVAL_PATH : '/oauth/device';
+  let endpoint = options.artifactId ? ARTIFACT_APPROVAL_PATH : '/oauth/device';
   const post = async (path: string, body?: unknown) => {
     const response = await request(`${server}${path}`, {method:'POST', redirect:'error', signal:AbortSignal.timeout(15000),
       headers:{'Content-Type':'application/json', ...(connection ? {Authorization:`Bearer ${connection.token}`} : {})}, ...(body ? {body:JSON.stringify(body)} : {})}).catch(error => { throw transportFailure(server, error); });
@@ -84,10 +87,19 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     return {response,data};
   };
   let pending: Pending | undefined;
-  const raw = options.resume === false ? null : await readOptional(file);
+  let raw = options.resume === false || options.fresh ? null : await readOptional(file);
+  // Collect approvals left by older CLIs when retrying their original artifact.
+  if(!raw&&options.resume!==false&&!options.fresh&&options.artifactId){
+    const legacy=sharedFile.replace(/\.json$/,`-${options.artifactId}.json`);
+    raw=await readOptional(legacy);if(raw)file=legacy;
+  }
   if (raw) {
     const value = JSON.parse(raw.toString()) as Pending;
-    if (validPending(value, server, [server, ...(options.aliases ?? [])]) && value.expiresAt > clock() && value.connectionKey === (connection ? digest(connection.token) : undefined)) pending = value;
+    if(file!==sharedFile)value.artifactId=options.artifactId;
+    if (validPending(value, server, [server, ...(options.aliases ?? [])]) && value.expiresAt > clock() && value.connectionKey === (connection ? digest(connection.token) : undefined)) {
+      pending = value;
+      endpoint=value.artifactId?ARTIFACT_APPROVAL_PATH:'/oauth/device';
+    }
   }
   /** A kept pairing may have been approved on another device while no command was waiting. */
   const resumed = !!pending;
@@ -95,6 +107,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   // the SAME server. Nothing else, and never an origin the pairing response itself named.
   const approvalOrigins = [server, ...(options.aliases ?? []).map(alias => {try{return normalizeServer(alias);}catch{return '';}}).filter(Boolean)];
   if (!pending) {
+    file=sharedFile;
     let result;
     if (options.artifactId && connection) {
       const client = new HttpClient({connection,home,env:options.env,fetch:options.fetch});
@@ -113,7 +126,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     } else result = await post(endpoint, options.artifactId ? {artifactId:options.artifactId} : undefined);
     const {response,data} = result;
     if (!response.ok) throw new CliError('auth_failed',`Could not start browser authentication (HTTP ${response.status}).`);
-    pending = {server, ...(connection ? {connectionKey:digest(connection.token)} : {}), deviceCode:data.device_code,userCode:data.user_code,verificationUrl:data.verification_uri_complete,
+    pending = {server, ...(options.artifactId?{artifactId:options.artifactId}:{}), ...(connection ? {connectionKey:digest(connection.token)} : {}), deviceCode:data.device_code,userCode:data.user_code,verificationUrl:data.verification_uri_complete,
       expiresAt:clock()+Math.min(900, data.expires_in)*1000,interval:Math.max(5,data.interval)*1000};
     if (!validPending(pending,server,approvalOrigins)) {
       let advertised='';try{advertised=new URL(String(data.verification_uri_complete)).origin;}catch{/* malformed */}
@@ -133,6 +146,10 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
       const approvedConnection: Connection = {server,token:data.access_token,refreshToken:data.refresh_token,clientId:data.client_id,expiresAt:clock()+data.expires_in*1000};
       await saveConnection(approvedConnection,home,{ARTIFACTBIN_HOME:configDir(home,options.env)});
       await unlink(file);
+      // Consent for a different page proves identity, never access to this page.
+      // Its normal authenticated handler either confirms access or starts consent.
+      if(options.artifactId&&paired.artifactId!==options.artifactId)
+        return deviceAuthenticate(server,{...options,fresh:false,connection:approvedConnection});
       return approvedConnection;
     }
     if (data.error !== 'authorization_pending') {
@@ -170,6 +187,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
 }
 function validPending(value: Pending, server: string, approvalOrigins: readonly string[] = [server]): boolean {
   if (!value || value.server !== server || typeof value.deviceCode !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.deviceCode)
+    || value.artifactId!==undefined&&(typeof value.artifactId!=='string'||!/^[A-Za-z0-9]{6,12}$/.test(value.artifactId))
     || typeof value.userCode !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(value.userCode)
     || !Number.isFinite(value.expiresAt) || !Number.isFinite(value.interval) || value.interval < 5000 || value.interval > 300000) return false;
   try { const url = new URL(value.verificationUrl); return approvalOrigins.includes(url.origin) && url.pathname === '/oauth/device' && !url.username && !url.password && !url.hash; }

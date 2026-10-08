@@ -1,7 +1,7 @@
 #!/bin/sh
 # afbin transition bootstrap. The 0.3.x self-updater installs this file over the old executable.
 # On its first real run it installs @afbin/cli through npm, hands the command over, and removes itself.
-AFBIN_VERSION=0.5.0
+AFBIN_VERSION=0.5.1
 AFBIN_PROTOCOL=3
 set -u
 
