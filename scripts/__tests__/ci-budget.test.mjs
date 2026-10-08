@@ -7,6 +7,15 @@ import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
 import {measureCiElapsed} from '../lib/ci-elapsed.mjs';
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
+
+const cliMatrix=(event,job=workflow().jobs.cli)=>{
+ const matrix=job.strategy.matrix,expand=value=>{
+  const [pull,full]=[...String(value).matchAll(/'(\[[^']*\])'/g)].map(match=>JSON.parse(match[1]));
+  return event==='pull_request'?pull:full;
+ };
+ return {...matrix,os:expand(matrix.os),node:expand(matrix.node)};
+};
+
 it('reports four-minute per-job diagnostics while the complete chain owns the hard limit',()=>{
  const jobs=workflow().jobs,step=jobs.test.steps.find(step=>step.env?.BUDGET_S);
  expect(step.env.BUDGET_S).toBe('240');expect(step.env).not.toHaveProperty('SLOW_BUDGET_S');
@@ -57,8 +66,8 @@ it('pins browser tooling to its actual aliased manifest and installs OS dependen
  expect(proof.run).not.toContain('--with-deps');
 });
 
-it('keeps ten cold native consumers and six complete platform/runtime journeys',()=>{
- const matrix=workflow().jobs.cli.strategy.matrix;
+it('keeps ten cold native consumers and six complete platform/runtime journeys on main',()=>{
+ const matrix=cliMatrix('push');
  const expanded=matrix.os.flatMap(os=>matrix.node.flatMap(node=>matrix.phase.map(phase=>({os,node,phase}))));
  const selected=expanded.filter(row=>!(matrix.exclude??[]).some(excluded=>Object.entries(excluded).every(([key,value])=>row[key]===value)));
  expect(selected.filter(row=>row.phase==='native')).toHaveLength(10);
@@ -68,6 +77,15 @@ it('keeps ten cold native consumers and six complete platform/runtime journeys',
   expect(experience.filter(row=>row.node==='22.22.3').map(row=>row.os).sort()).toEqual([...matrix.os].sort());
   expect(experience.filter(row=>row.node==='24.21.0')).toEqual([{os:'ubuntu-24.04',node:'24.21.0',phase}]);
  }
+});
+it('trims the pull-request CLI matrix to Linux x64, one macOS and Windows on the repository Node',()=>{
+ const matrix=cliMatrix('pull_request'),selected=matrix.os.flatMap(os=>matrix.node.flatMap(node=>matrix.phase.map(phase=>({os,node,phase})))).filter(row=>!(matrix.exclude??[]).some(excluded=>Object.entries(excluded).every(([key,value])=>row[key]===value)));
+ expect(matrix.os).toEqual(['ubuntu-24.04','macos-14','windows-2022']);expect(matrix.node).toEqual(['22.22.3']);
+ expect(selected).toHaveLength(12);
+ const full=cliMatrix('push'),all=full.os.flatMap(os=>full.node.flatMap(node=>full.phase.map(phase=>({os,node,phase})))).filter(row=>!(full.exclude??[]).some(excluded=>Object.entries(excluded).every(([key,value])=>row[key]===value)));
+ expect(all).toHaveLength(28);
+ for(const row of selected)expect(all).toContainEqual(row);
+ for(const event of ['schedule','workflow_dispatch'])expect(cliMatrix(event).os).toEqual(full.os);
 });
 it('keeps a cold standard-user query without repeating native offline acceptance',()=>{
  const script=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');

@@ -5,6 +5,7 @@ import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { baseCommit, chooseBaseRun, triggerPaths } from '../ci/page-speed-base.mjs';
+import { isRelevant, touchesLab } from '../ci/page-speed-scope.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ciPath = path.join(root, '.github', 'workflows', 'ci.yml');
@@ -167,8 +168,8 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     const matrix=ci.jobs.cli;
     expect(matrix.needs).toEqual(['plan']);
     expect(matrix.steps.some(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'))).toBe(true);
-    expect(matrix.strategy.matrix.node).toEqual(['22.22.3','24.21.0']);
-    expect(matrix.strategy.matrix.os).toContain('windows-2022');
+    expect(String(matrix.strategy.matrix.node)).toContain('["22.22.3","24.21.0"]');
+    expect(String(matrix.strategy.matrix.os)).toContain('"windows-2022"');
     const nodeSetups = matrix.steps.filter(step => step.uses?.startsWith('actions/setup-node@'));
     expect(nodeSetups).toHaveLength(2);
     expect(nodeSetups[0].if).toBe("matrix.phase != 'native'");
@@ -241,7 +242,7 @@ describe('CodeQL avoids redundant post-merge work without narrowing analysis',()
 describe('page speed: the base is main\'s own measurement of the same bytes', () => {
   const speed = workflow('page-speed.yml');
   it('measures only the head beside the report, never a second build of main', () => {
-    expect(Object.keys(speed.jobs).sort()).toEqual(['measure', 'report']);
+    expect(Object.keys(speed.jobs).sort()).toEqual(['measure', 'report', 'scope']);
     expect(speed.jobs.measure.strategy).toBeUndefined();
     const upload = speed.jobs.measure.steps.find((step) => step.uses?.startsWith('actions/upload-artifact'));
     expect(upload.with).toMatchObject({ name: 'page-speed-head', path: 'page-speed/head.json' });
@@ -250,19 +251,30 @@ describe('page speed: the base is main\'s own measurement of the same bytes', ()
     const find = report.steps.find((step) => step.run === 'node scripts/ci/page-speed-base.mjs');
     expect(find.id).toBe('base');
     const fromMain = report.steps.find((step) => step.with?.['run-id'] === '${{ steps.base.outputs.run-id }}');
-    expect(fromMain.if).toBe("steps.base.outputs.found == 'true'");
+    expect(fromMain.if).toBe("needs.scope.outputs.relevant == 'true' && steps.base.outputs.found == 'true'");
     expect(fromMain.with.name).toBe('page-speed-head');
     // The fallback measures the base only on a miss; the report and the size targets always run.
     const measure = report.steps.find((step) => step.name === 'Measure base');
-    expect(measure.if).toBe("steps.base.outputs.found != 'true'");
+    expect(measure.if).toBe("needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'");
     expect(measure.run).toContain('page-speed/base.json');
-    for (const name of ['Report', 'Size targets']) expect(report.steps.find((step) => step.name === name).if, name).toBeUndefined();
+    for (const name of ['Report', 'Size targets']) expect(report.steps.find((step) => step.name === name).if, name).toBe("needs.scope.outputs.relevant == 'true'");
     expect(report.steps.find((step) => step.name === 'Size targets').run).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict');
   });
-  it('reads the same trigger paths the workflow declares, for both events', () => {
+  it('reads the push trigger paths the workflow declares; pull requests are filtered in the scope job', () => {
     const paths = triggerPaths(readFileSync(path.join(root, '.github/workflows/page-speed.yml'), 'utf8'));
     expect(paths).toEqual(speed.on.push.paths);
-    expect(paths).toEqual(speed.on.pull_request.paths);
+    expect(speed.on.pull_request?.paths).toBeUndefined();
+  });
+  it('scopes a pull request by the push trigger paths and treats anything unreadable as relevant', () => {
+    const paths = ['services/app/**', 'package-lock.json', '.github/workflows/page-speed.yml'];
+    const pr = { EVENT: 'pull_request', PR_BASE: 'b', PR_HEAD: 'h' };
+    expect(isRelevant(pr, paths, () => ['docs/a.md', 'services/cli/src/x.ts'])).toBe(false);
+    expect(isRelevant(pr, paths, () => ['docs/a.md', 'services/app/lib/x.ts'])).toBe(true);
+    expect(isRelevant(pr, paths, () => ['package-lock.json'])).toBe(true);
+    expect(isRelevant(pr, paths, () => ['services/application/x.ts'])).toBe(false);
+    expect(isRelevant(pr, paths, () => { throw new Error('no history'); })).toBe(true);
+    expect(isRelevant({ EVENT: 'workflow_dispatch' }, paths, () => [])).toBe(true);
+    expect(touchesLab([], paths)).toBe(false);
   });
   it('takes the newest run with the same bytes and a live artifact, else none', async () => {
     const runs = [{ id: 3, head_sha: 'c' }, { id: 2, head_sha: 'b' }, { id: 1, head_sha: 'a' }];

@@ -1088,8 +1088,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-2022 ]
-        node: [22.22.3, 24.21.0]
+        # A pull request runs the cells that catch distinct failures: Linux x64, one macOS and Windows on
+        # the repository's Node. Main, the nightly and dispatch keep the full five-OS, two-Node matrix
+        # (the excludes below simply match nothing on a pull request). scripts/__tests__/ci-budget.test.mjs
+        # parses both literals, so keep each a plain JSON array.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04","macos-14","windows-2022"]' || '["ubuntu-24.04","ubuntu-24.04-arm","macos-14","macos-15-intel","windows-2022"]') }}
+        node: ${{ fromJSON(github.event_name == 'pull_request' && '["22.22.3"]' || '["22.22.3","24.21.0"]') }}
         phase: [native, runtime, preview, local]
         # Native ABI and offline execution cover both Node versions on every OS.
         # Each journey still covers every OS and one Node 24 cross-check. Its independent

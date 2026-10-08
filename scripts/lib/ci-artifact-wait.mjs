@@ -13,7 +13,7 @@ const artifactTimeout=()=>Error('Current-attempt artifact timed out');
 export const MAX_ARTIFACT_ARCHIVE_BYTES=128*1024*1024;
 /** Three transport attempts share the caller's original readiness deadline.
  * Transient GitHub HTTP failures are read-only API failures, not schema or auth failures. */
-export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:pause=sleep,request=execFileSync,command='gh',requestTimeout=30000,retryDelay=1000,retryArtifactNotFound=false,encoding='utf8',maxBuffer=1024*1024}){
+export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:pause=sleep,request=execFileSync,command='gh',requestTimeout=30000,retryDelay=1000,encoding='utf8',maxBuffer=1024*1024}){
  for(let attempt=0;attempt<3;attempt++){
   const remaining=deadline-now();
   if(remaining<=0)throw artifactTimeout();
@@ -22,10 +22,7 @@ export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:p
    if(now()>=deadline)throw artifactTimeout();
    return result;
   }catch(error){
-   // A listed upload may precede ZIP visibility. Restrict this exception to the
-   // exact archive endpoint; metadata/auth errors still fail immediately.
-   const archiveNotFound=retryArtifactNotFound&&args.length===2&&args[0]==='api'&&/^\/repos\/[\w.-]+\/[\w.-]+\/actions\/artifacts\/\d+\/zip$/.test(args[1])&&/\bHTTP 404\b/.test(String(error.stderr??''));
-   const transientHttp=error.status===1&&(/\bHTTP (?:429|500|502|503|504)\b/.test(String(error.stderr??''))||archiveNotFound);
+   const transientHttp=error.status===1&&/\bHTTP (?:429|500|502|503|504)\b/.test(String(error.stderr??''));
    if(!['ETIMEDOUT','ECONNRESET','EAI_AGAIN'].includes(error.code)&&!transientHttp)throw error;
    if(now()>=deadline)throw artifactTimeout();
    if(attempt===2)throw error;
@@ -53,9 +50,24 @@ export function verifyArtifactArchive(bytes,digest){
  const actual='sha256:'+createHash('sha256').update(bytes).digest('hex');
  if(!/^sha256:[a-f0-9]{64}$/.test(digest??'')||actual!==digest)throw Error('Current-run artifact archive checksum mismatch');
 }
-export async function downloadCurrentArtifactArchive(artifact,{repo,deadline,request=requestCurrentArtifact}={}){
+/** The listing shows an artifact before its blob is downloadable: a 404 (or a 5xx that outlived
+ * requestCurrentArtifact's own retries) on the zip of an artifact the listing already reported is
+ * retried with backoff for up to `window` ms, never past the caller's deadline. */
+export const ARTIFACT_DOWNLOAD_RETRY_MS=60000;
+export async function downloadCurrentArtifactArchive(artifact,{repo,deadline,request=requestCurrentArtifact,now=Date.now,sleep:pause=sleep,window=ARTIFACT_DOWNLOAD_RETRY_MS,backoff=2000}={}){
  if(Number.isFinite(artifact.size_in_bytes)&&artifact.size_in_bytes>MAX_ARTIFACT_ARCHIVE_BYTES)throw Error(`Current-run artifact archive exceeds ${MAX_ARTIFACT_ARCHIVE_BYTES} byte download limit`);
- const bytes=await request(['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{deadline,encoding:null,maxBuffer:MAX_ARTIFACT_ARCHIVE_BYTES,retryArtifactNotFound:true,retryDelay:5000});
+ const retryUntil=Math.min(deadline??Infinity,now()+window);
+ let bytes,delay=backoff;
+ for(;;){
+  try{
+   bytes=await request(['api',`/repos/${repo}/actions/artifacts/${artifact.id}/zip`],{deadline,encoding:null,maxBuffer:MAX_ARTIFACT_ARCHIVE_BYTES});
+   break;
+  }catch(error){
+   const notReady=/\bHTTP (?:404|5\d\d)\b/.test(`${error.stderr??''} ${error.message??''}`);
+   if(!notReady||now()+delay>=retryUntil)throw error;
+   await pause(delay);delay=Math.min(delay*2,15000);
+  }
+ }
  verifyArtifactArchive(bytes,artifact.digest);
  return bytes;
 }
@@ -83,7 +95,7 @@ export function validateCandidateProvenance({bundle,metadata,version,bytes,run,s
  return inspectBundle(bundle,version,bytes,{run,sha});
 }
 export async function downloadAndExtractCurrentArtifactFile(artifact,{repo,deadline,request=requestCurrentArtifact,memberName,outputPath,execute=execFileSync,write=writeFileSync,now=Date.now}={}){
- const bytes=await downloadCurrentArtifactArchive(artifact,{repo,deadline,request});
+ const bytes=await downloadCurrentArtifactArchive(artifact,{repo,deadline,request,now});
  const directory=mkdtempSync(join(tmpdir(),'afbin-verified-artifact-'));
  try{
   const archivePath=join(directory,'artifact.zip');writeFileSync(archivePath,bytes);
@@ -95,7 +107,7 @@ export async function downloadAndExtractCurrentArtifactFile(artifact,{repo,deadl
 export async function downloadAndExtractCurrentArtifactFiles(artifact,{repo,deadline,request=requestCurrentArtifact,members,execute=execFileSync,write=writeFileSync,now=Date.now}={}){
  if(!Array.isArray(members)||members.length===0||members.some(member=>! /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(member.memberName??'')||typeof member.outputPath!=='string'||(member.optional!==undefined&&typeof member.optional!=='boolean')||(member.maxBytes!==undefined&&(!Number.isSafeInteger(member.maxBytes)||member.maxBytes<1||member.maxBytes>MAX_ARTIFACT_ARCHIVE_BYTES))))throw Error('Current-run artifact member set refused');
  if(new Set(members.map(member=>member.memberName)).size!==members.length)throw Error('Current-run artifact member set contains duplicates');
- const bytes=await downloadCurrentArtifactArchive(artifact,{repo,deadline,request});
+ const bytes=await downloadCurrentArtifactArchive(artifact,{repo,deadline,request,now});
  const directory=mkdtempSync(join(tmpdir(),'afbin-verified-artifact-'));
  try{
   const archivePath=join(directory,'artifact.zip');writeFileSync(archivePath,bytes);
@@ -158,5 +170,10 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   writeFileSync(output,bytes);
   console.log(`Downloaded same-run, same-attempt ${artifactName} artifact ${artifact.id}`);
   }
- }catch(error){console.error(error.message);process.exitCode=1;}
+ }catch(error){
+  console.error(error.message);
+  // A partial rerun (`gh run rerun --failed`) starts a new attempt in which the pack job, already green, does not run again: no candidate or seed is produced for this attempt, and artifacts of earlier attempts are never accepted.
+  if(/artifact timed out/.test(error.message)&&Number(process.env.GITHUB_RUN_ATTEMPT)>1)console.error('This is a rerun attempt. A partial rerun (gh run rerun --failed) cannot supply the packed candidate; recover with a full `gh run rerun <run-id>` (see docs/operations.md).');
+  process.exitCode=1;
+ }
 }

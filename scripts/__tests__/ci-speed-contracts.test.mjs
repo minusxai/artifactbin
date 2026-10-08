@@ -180,7 +180,7 @@ it('caps the ZIP subprocess buffer at 128 MiB and verifies downloaded bytes',asy
  let observed;
  const bytes=await downloadCurrentArtifactArchive({id:7,size_in_bytes:88463544,digest:'sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'},{repo:'minusxai/artifactbin',deadline:123,request:async(args,options)=>{observed={args,options};return Buffer.from('abc');}});
  expect(observed.args).toEqual(['api','/repos/minusxai/artifactbin/actions/artifacts/7/zip']);
- expect(observed.options).toEqual({deadline:123,encoding:null,maxBuffer:MAX_ARTIFACT_ARCHIVE_BYTES,retryArtifactNotFound:true,retryDelay:5000});
+ expect(observed.options).toEqual({deadline:123,encoding:null,maxBuffer:MAX_ARTIFACT_ARCHIVE_BYTES});
  expect(MAX_ARTIFACT_ARCHIVE_BYTES).toBe(128*1024*1024);expect(bytes.toString()).toBe('abc');
  await expect(downloadCurrentArtifactArchive({id:8,size_in_bytes:MAX_ARTIFACT_ARCHIVE_BYTES+1,digest:'sha256:unused'},{repo:'minusxai/artifactbin',deadline:123,request:async()=>{throw Error('oversized artifact reached ZIP endpoint');}})).rejects.toThrow(/download limit/);
 });
@@ -396,6 +396,25 @@ it('does not accept a candidate after requests consume the artifact deadline',as
  await expect(waitForCurrentArtifact({startedAt:'2026-10-06T00:00:00Z',timeout:100,now:()=>time,jobs:async()=>{time=100;return{jobs:[]};},artifacts:async()=>({artifacts:[{name:'afbin-npm-release',created_at:'2026-10-06T00:01:00Z'}]})})).rejects.toThrow(/artifact timed out/);
 });
 
+it('retries a 404 or 5xx on the zip of an artifact the listing already reported, within a bounded window',async()=>{
+ const {downloadCurrentArtifactArchive}=await import('../lib/ci-artifact-wait.mjs');
+ const artifact={id:7,digest:'sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'};
+ let time=0,calls=0;const delays=[];
+ const notFound=()=>Object.assign(Error('gh failed'),{status:1,stderr:Buffer.from('gh: Not Found (HTTP 404)')});
+ const options={repo:'o/r',deadline:1e9,now:()=>time,sleep:async delay=>{delays.push(delay);time+=delay;},request:async()=>{if(++calls<=2)throw notFound();return Buffer.from('abc');}};
+ expect((await downloadCurrentArtifactArchive(artifact,options)).toString()).toBe('abc');
+ expect(calls).toBe(3);expect(delays).toEqual([2000,4000]);
+ calls=0;time=0;delays.length=0;
+ await expect(downloadCurrentArtifactArchive(artifact,{...options,request:async()=>{calls++;throw Object.assign(new Error('gh failed'),{status:1,stderr:'gh: Bad Gateway (HTTP 502)'});}})).rejects.toThrow('gh failed');
+ expect(time).toBeLessThanOrEqual(60000);expect(calls).toBeGreaterThan(3);
+ calls=0;await expect(downloadCurrentArtifactArchive(artifact,{...options,request:async()=>{calls++;throw Object.assign(new Error('gh failed'),{status:1,stderr:'HTTP 403 forbidden'});}})).rejects.toThrow('gh failed');expect(calls).toBe(1);
+ calls=0;time=0;await expect(downloadCurrentArtifactArchive(artifact,{...options,deadline:3000,request:async()=>{calls++;throw notFound();}})).rejects.toThrow('gh failed');expect(time).toBeLessThan(3000);
+});
+it('explains on a rerun attempt that only a full rerun recovers a packed candidate',()=>{
+ const source=readFileSync(new URL('../lib/ci-artifact-wait.mjs',import.meta.url),'utf8');
+ expect(source).toContain('GITHUB_RUN_ATTEMPT');expect(source).toContain('gh run rerun <run-id>');
+});
+
 it('leaves malformed API responses and non-transport process failures authoritative',async()=>{
  const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');let calls=0;
  const options={deadline:Date.now()+1000,request:()=>{calls++;return '{not-json';}};
@@ -420,30 +439,4 @@ it('bounds transient gh HTTP failures by the original deadline and three request
  const options={deadline:200,now:()=>time,retryDelay:5,requestTimeout:30,request:(_command,_args,options)=>{calls++;time+=options.timeout;throw Object.assign(Error('gh HTTP 503'),{status:1,stderr:Buffer.from('gh: Service Unavailable (HTTP 503)')});},sleep:async delay=>{time+=delay;}};
  await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow('gh HTTP 503');expect(calls).toBe(3);expect(time).toBe(100);
  calls=0;time=198;await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow(/artifact timed out/);expect(calls).toBe(1);expect(time).toBe(200);
-});
-
-
-it('retries visibility delay only for the selected artifact archive without changing its identity',async()=>{
- const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
- let calls=0,time=0;const seen=[];
- const args=['api','/repos/minusxai/artifactbin/actions/artifacts/7/zip'];
- const bytes=await requestCurrentArtifact(args,{deadline:12000,now:()=>time,retryArtifactNotFound:true,retryDelay:5000,
-  request:(_command,received)=>{seen.push(received);if(++calls===1)throw Object.assign(Error('gh HTTP 404'),{status:1,stderr:Buffer.from('gh: Not Found (HTTP 404)')});return Buffer.from('abc');},sleep:async delay=>{time+=delay;}});
- expect(bytes.toString()).toBe('abc');expect(calls).toBe(2);expect(time).toBe(5000);expect(seen).toEqual([args,args]);
-});
-it('selected artifact visibility retries keep the original deadline and bounded request count',async()=>{
- const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
- let calls=0,time=0;
- const options={deadline:12000,now:()=>time,retryArtifactNotFound:true,retryDelay:5000,request:()=>{calls++;throw Object.assign(Error('gh HTTP 404'),{status:1,stderr:Buffer.from('HTTP 404')});},sleep:async delay=>{time+=delay;}};
- const args=['api','/repos/minusxai/artifactbin/actions/artifacts/7/zip'];
- await expect(requestCurrentArtifact(args,options)).rejects.toThrow('gh HTTP 404');expect(calls).toBe(3);expect(time).toBe(10000);
- calls=0;time=11999;await expect(requestCurrentArtifact(args,options)).rejects.toThrow(/artifact timed out/);expect(calls).toBe(1);expect(time).toBe(12000);
-});
-it('artifact visibility policy never retries missing metadata endpoints or authorization errors',async()=>{
- const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
- for(const [path,status,selected] of [['/repos/minusxai/artifactbin/actions/runs/7',404,true],['/repos/minusxai/artifactbin/actions/artifacts/7/zip',404,false],['/repos/minusxai/artifactbin/actions/artifacts/7/zip',401,true],['/repos/minusxai/artifactbin/actions/artifacts/7/zip',403,true]]){
-  let calls=0;
-  await expect(requestCurrentArtifact(['api',path],{deadline:Date.now()+1000,retryArtifactNotFound:selected,request:()=>{calls++;throw Object.assign(Error('gh HTTP '+status),{status:1,stderr:Buffer.from('HTTP '+status)});}})).rejects.toThrow('gh HTTP '+status);
-  expect(calls).toBe(1);
- }
 });
