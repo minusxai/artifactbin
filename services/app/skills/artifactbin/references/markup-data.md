@@ -28,7 +28,6 @@ writes. The view binds names: `data="$query"`, `value="$value"`, `run="$mutation
 
 [Write forms](markup-data-example.md). [Attachments](markup-upload.md).
 SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing](markup-editing.md).
-Uploads: [guide](markup-upload.md).
 
 ## Declarations (Helmet only)
 

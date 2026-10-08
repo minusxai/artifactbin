@@ -24,7 +24,8 @@ shows previews for images, download links for other files, errors, and retry
 and remove actions. Disable the form's Save action while `$uploading` is true;
 the upload itself does not run a mutation.
 
-The Helmet script can use the same transport directly:
+The low-level `page.upload` and `page.fileUrl` APIs use the same transport.
+The Helmet script can import them directly:
 
 ```js
 import { upload, fileUrl } from 'page';
@@ -36,8 +37,7 @@ const previewOrDownload = fileUrl('attachments', result.ref);
 The upload writes bytes to object storage and records its object key and
 metadata in the dataset's attachment store. The returned `ref` identifies that
 record; a Value or dataset row only points to it. Store the ref, not the URL, as
-the identity. Removing a ref from a Value or row removes that link only; it
-does not delete the object or its attachment record. The dataset continues to
+the identity. Removing a ref does not delete the uploaded object or its attachment record. The dataset continues to
 own and count the stored object against its quota. Reads through `fileUrl` are
 checked against the current document and dataset access each time.
 
