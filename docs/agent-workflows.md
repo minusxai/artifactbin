@@ -112,8 +112,6 @@ exit status is the gates', and the container is removed afterwards, also when th
   cache, and are copied into each container; the `afbin-gate:*` image is built once per Playwright
   version. Both persist; nothing else does. Remove stale ones with
   `docker volume ls -q --filter label=afbin.gate-container=1 | xargs docker volume rm`.
-- **Not in a container:** a gate whose manifest row says `needsPostgres` (`data-journey`) starts Postgres
-  through the host's Docker, which the container cannot reach; the runner refuses it and PR CI runs it.
 - The worktree must be under `$HOME`, which Colima shares. The gates run as root in the container:
   the Colima VM restricts unprivileged user namespaces, and root there is what lets bubblewrap build
   the session sandbox without changing a VM-wide setting.

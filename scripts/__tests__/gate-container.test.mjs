@@ -8,7 +8,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import {
-  BUILD_OUTPUTS, BUILD_VOLUME, CONTAINER_REFUSALS, DEFAULT_CPUS, DEFAULT_MEMORY, INSIDE,
+  BUILD_OUTPUTS, BUILD_VOLUME, DEFAULT_CPUS, DEFAULT_MEMORY, INSIDE,
   buildCacheKey, checkGates, containerName, depsVolume, dockerfile, dockerRunArgs, imageTag, parseArgs,
 } from '../lib/gate-container.mjs';
 import { gateNamesOnDisk } from '../gates.manifest.mjs';
@@ -48,11 +48,6 @@ describe('checkGates', () => {
     expect(() => checkGates(['editor-path', 'inplace-edit'], known)).not.toThrow();
     expect(() => checkGates(['editor-path', 'nope', 'nada'], known)).toThrow(/unknown gate\(s\): nope, nada/);
     expect(() => checkGates(['container'], known)).toThrow(/unknown gate/);
-  });
-
-  it('refuses a gate that needs the host’s Docker, with the reason, and only gates that exist', () => {
-    expect(() => checkGates(['data-journey'], known)).toThrow(/data-journey cannot run in a gate container: it starts its own Postgres/);
-    for (const name of Object.keys(CONTAINER_REFUSALS)) expect(known).toContain(name);
   });
 });
 

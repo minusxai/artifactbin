@@ -21,8 +21,6 @@
  * @property {boolean} needsMail      reads a login code from the mail sink
  * @property {string} [serialGroup]   gates in the same group never run concurrently, even across servers
  * @property {string[]} [browsers]    engines required by the default gate invocation; defaults to Chromium
- * @property {true} [needsPostgres]   starts a disposable PostgreSQL through the host's Docker: CI pulls the image
- *                                    for its shard, and a gate container refuses it
  * @property {number} seconds         measured CI duration under two-server load — the shard weight
  * @property {number} timeoutMs       the runner kills the gate past this (integer > 0)
  */
@@ -59,12 +57,13 @@ export const GATE_SPECS = Object.freeze([
   // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
   // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
   { name: 'mermaid-prerender', needsMail: false, seconds: 52, timeoutMs: 130_000 },
-  // One walk over dataflow, local-sql-state, dataset-policies, data-ux and postgres-datasets (proposal row 10).
-  // Starts a disposable PostgreSQL through the host's Docker, so a gate container refuses it. Measured 11s on
-  // a host run (one server, `node scripts/gates.mjs --servers=1 --only=data-journey`); re-read it from CI.
-  { name: 'data-journey', needsMail: true, needsPostgres: true, seconds: 21, timeoutMs: 60_000 },
-  // editable-table, roadmap-views and row-images over one account (proposal row 13). Measured 18s in a gate container.
-  { name: 'datasets-in-documents', needsMail: true, seconds: 33, timeoutMs: 60_000 },
+  // One walk over dataflow, local-sql-state, dataset-policies and data-ux (proposal row 10). Its PostgreSQL leg is
+  // services/app/lib/datasets/__tests__/postgres-routes.test.ts now, so no gate starts Docker (was 21s with it).
+  // Was 21s with it; 22s in one gate container of this change (four CPUs, two servers, eight gates at once).
+  { name: 'data-journey', needsMail: true, seconds: 20, timeoutMs: 60_000 },
+  // editable-table, roadmap-views and row-images over one account (proposal row 13). Measured 18s in a gate container;
+  // 27s in the eight-gate container run that dropped its forged write and second permission flip (was 33s).
+  { name: 'datasets-in-documents', needsMail: true, seconds: 30, timeoutMs: 60_000 },
   // full-kit, the compiled handover from hydration, libraries and fonts (proposal row 14). Needs esm.sh.
   // Measured 28s in a gate container.
   { name: 'kit-and-fonts', needsMail: false, seconds: 40, timeoutMs: 90_000 },
@@ -75,18 +74,21 @@ export const GATE_SPECS = Object.freeze([
   { name: 'viz-editor', needsMail: true, serialGroup: 'clipboard', seconds: 57, timeoutMs: 150_000 },
   // One journey: the former annotations and comment-targets gates (two lanes in one browser, the fold leg alone).
   { name: 'comments', needsMail: false, seconds: 19, timeoutMs: 60_000 },
-  // One journey: the former collab-edit and link-access gates — four signed-in people and a logged-out visitor.
-  { name: 'collab-roles', needsMail: true, seconds: 21, timeoutMs: 60_000 },
+  // One scenario: the link role's delivery to a signed-in stranger and a logged-out visitor (the named-people walk
+  // left for vitest and jsdom). 5s in the eight-gate container run, from 14s in the container measure above (was 21s).
+  { name: 'collab-roles', needsMail: true, seconds: 8, timeoutMs: 60_000 },
   // One journey: the former export-slice and social-preview gates, plus the one PNG/JPEG/card/?chrome=0 set.
   { name: 'exports', needsMail: false, seconds: 41, timeoutMs: 110_000 },
   // Journey gates (scripts/gates/gate-<name>.mjs headers list what each absorbed). `seconds` measured in one
   // `node scripts/gate-container.mjs reader-shell own-origin-script reading-geometry media` run (4 CPUs, two
   // servers, CI's shape: 66s wall-clock); timeoutMs = max(60s, 3 × seconds), rounded up to ten seconds.
-  { name: 'reader-shell', needsMail: true, seconds: 22, timeoutMs: 60_000 },
+  // reader-shell and media were re-measured in one eight-gate container run of the gate diet (7s and 34s, from 22s
+  // and 53s here); the seconds below keep a margin for that run's lighter load. Re-read both from CI.
+  { name: 'reader-shell', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
   { name: 'own-origin-script', needsMail: true, seconds: 17, timeoutMs: 60_000 },
   { name: 'reading-geometry', needsMail: false, seconds: 74, timeoutMs: 190_000 },
-  { name: 'media', needsMail: true, serialGroup: 'clipboard', seconds: 53, timeoutMs: 110_000 },
+  { name: 'media', needsMail: false, serialGroup: 'clipboard', seconds: 36, timeoutMs: 110_000 },
 ]);
 
 /**
@@ -129,11 +131,6 @@ export function specFor(name) {
   const spec = GATE_SPECS.find((candidate) => candidate.name === name);
   if (!spec) throw new Error(`Gate manifest has no row for: ${name}`);
   return spec;
-}
-
-/** Does any of these gates start its own PostgreSQL (CI pulls the image only for a shard that holds one)? */
-export function needsPostgres(names) {
-  return names.some((name) => specFor(name).needsPostgres === true);
 }
 
 /** Browser installation plan for exactly the gates this runner will execute. */

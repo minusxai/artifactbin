@@ -27,7 +27,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, needsPostgres, shardWeight } from './gates.manifest.mjs';
+import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
 import { runGateProcess } from './gates.process.mjs';
 import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
@@ -89,10 +89,6 @@ if (selected.length === 0) {
 // Provisioning uses the same discovery and shard selection as execution, without booting hosts.
 if (args.includes('--browsers')) {
   console.log(browsersFor(selected.map(gate => gate.name)).join(' '));
-  process.exit(0);
-}
-if (args.includes('--needs-postgres')) {
-  console.log(needsPostgres(selected.map((gate) => gate.name)));
   process.exit(0);
 }
 

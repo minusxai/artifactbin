@@ -6,17 +6,15 @@
  * document on its own origin (`<hex id>.lvh.me`), and each must get exactly what it is owed — the document, the
  * owner's chrome, a canonical address, a 404, or the login door.
  *
- *   1. CRAWLER: a session-less fetch gets the app page with the document's title and unfurl tags, the same bytes
- *      for any user-agent; a browser mounts the document in its frame, and with JavaScript OFF the frame the
- *      server drew still reads.
+ *   1. CRAWLER: a browser mounts the document in its frame, and with JavaScript OFF the frame the server drew
+ *      still reads.
  *   2. HOME: a logged-out visit to the app's home lands on /login, with and without JavaScript.
  *   3. READER: a session-less reader and a signed-in non-owner get the framed document at its canonical address,
  *      with no owner bar; its runtime reaches its scoped query door from the frame.
  *   4. OWNER: a PRIVATE document renders in the frame for its owner (the pages cookie carried into the frame),
  *      /a/<id> heals to /@username/<id>-<slug>, and the sharing modal flips it public and back.
  *   5. ANONYMOUS OWNER: a minted token is exchanged for an httpOnly agent session, nothing in localStorage;
- *      Disconnect clears the cookie; a browser holding only a CLAIMED token's cookie reads the account's private
- *      document; a browser with no credential gets the uniform 404.
+ *      signing out clears the cookie.
  *   6. LINKS: a link inside the document takes the tab to the next document's app page, history works, the shelf
  *      and profile lists open documents in this tab, and a verified login adopts guest documents.
  *
@@ -31,7 +29,13 @@
  *   - export PNGs (secure-arch 127; visibility 139–140, the owner's export of a private markup document) → the
  *     exports journey gate, which holds one PNG set for the whole suite;
  *   - duplicates of one fact: "owned doc is born private" and "the owner sees the private document in the frame"
- *     are asserted once (visibility's labels), as is "the session adopted the guest connection".
+ *     are asserted once (visibility's labels), as is "the session adopted the guest connection";
+ *   - WHO IS SERVED WHAT over HTTP (the per-persona matrix: nobody, a crawler, a signed-in stranger and the owner's
+ *     session against a public and a private document; the head tags, the crawler's byte-identical page, born-private
+ *     documents and folders, /raw, /llms.txt) → services/app/__tests__/reader-shell-matrix.test.ts; `edit_id` as a
+ *     read key → server/__tests__/app.test.ts; the profile's private document and folder → pretty-urls.test.ts; the
+ *     auto-assigned username → usernames.test.ts; the claimed token's split viewer (an account session minted by the
+ *     approval cookie, exactly the owner leg's credential) and its no-credential 404 → the matrix's owner and nobody rows.
  *
  *   node scripts/gates/gate-reader-shell.mjs [base]
  */
@@ -97,39 +101,6 @@ await section('crawler', async () => {
     ].join('\n'),
   });
   check.note(`crawlable doc: ${BASE}/a/${doc.id}`);
-
-  // The MARKUP, not the framework payload: the <script> tags carry per-request state that differs between any two
-  // fetches. Scanned, not regexped, and NOT a sanitizer: this drops script elements from two responses so the rest
-  // can be compared (a regexp of this shape reads as HTML filtering to any auditor).
-  const dropScripts = (h) => {
-    const lower = h.toLowerCase();
-    let out = '';
-    let at = 0;
-    for (;;) {
-      const open = lower.indexOf('<script', at);
-      if (open === -1) return out + h.slice(at);
-      out += h.slice(at, open);
-      const close = lower.indexOf('</script', open);
-      if (close === -1) return out;
-      const after = h.indexOf('>', close);
-      if (after === -1) return out;
-      at = after + 1;
-    }
-  };
-  const strip = (h) => dropScripts(h).replace(/\s+/g, ' ').trim();
-
-  // What a crawler fetches: no JS, no browser, no session. The app page is a shell around the framed document and
-  // carries none of its markup (docs/serving-and-security.md); the document's own origin serves the text.
-  const pageHtml = await (await fetch(`${BASE}/a/${doc.id}`)).text();
-  check(/<title>[^<]*Crawlable doc/.test(pageHtml), 'the page title is the document title');
-  check(pageHtml.includes(`/a/${doc.id}/export`), 'og:image points at the export card');
-  check(/property="og:title"|name="og:title"/.test(pageHtml), 'og:title is present');
-
-  // Same markup for everyone: a "crawler" user-agent gets byte-identical html.
-  const asBot = await (await fetch(`${BASE}/a/${doc.id}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-  })).text();
-  check(strip(asBot) === strip(pageHtml), 'a crawler UA gets the same page — nothing is cloaked');
 
   // The document really is what the frame shows, in a browser as well as in the bytes.
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -256,11 +227,6 @@ await section('reader', async () => {
   check((await owner.locator('a[aria-label="Star artifactbin on GitHub"]:visible').textContent()).includes('Star'),
     'desktop toolbar keeps its visible Star label');
 
-  // /raw is internal
-  const llm = await (await fetch(`${BASE}/llms.txt`)).text();
-  check(llm.includes('afbin') && !llm.includes('/raw'), 'agent discovery teaches the CLI without internal raw links');
-  const rawResp = await readerCtx.request.get(`${BASE}/a/${doc.id}/raw`);
-  check(rawResp.status() === 200, '/raw still answers (internal address for the iframe/embeds)');
 });
 
 // ── 4. the owner's private document, its pretty URL, its sharing (was gate-visibility) ──
@@ -268,7 +234,6 @@ await section('owner', async () => {
   const page = owner;
   const stranger = reader;
   const username = (await page.evaluate(async () => (await (await fetch('/api/my/profile')).json()).username));
-  check(/^mxmx_test_vis_[a-z0-9]+_[a-z0-9]{4}$/.test(username), `auto-assigned username looks right (${username})`);
 
   const doc = await api('/api/artifacts', { title: 'Cookie Proof', markup: '<h1 id="pf">IFRAME-COOKIE-OK</h1>' });
   check(doc.visibility === 'private', 'owned doc is born private');
@@ -312,30 +277,9 @@ await section('owner', async () => {
   const nowPublic = await stranger.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   check(nowPublic.status() === 200, 'after "anyone with link", a logged-out browser can read it');
   await Promise.all([sharingPut(), page.locator('[aria-label="Make private"]').click()]);
-
-  // The reader-visible head pointer must not open the page.
-  const story = await api('/api/artifacts', { title: 'Private Story', markup: '<section><h1>private export</h1></section>' });
-  check(story.visibility === 'private', 'the markup doc is private');
-  const wire = await page.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), story.id);
-  const withEditId = await stranger.request.get(`${BASE}/a/${story.id}?key=${wire.edit_id}`);
-  check(withEditId.status() === 404, 'edit_id does NOT work as a read key');
-
-  // A folder's own VISIBILITY: born private, and a profile lists the public ones only.
-  const shelf = await api('/api/artifacts', { format: 'folder', title: 'Shelf', visibility: 'public' });
-  await api('/api/artifacts', { title: 'Public Child', markup: '<h1>public child</h1>', visibility: 'public', parent_id: shelf.id });
-  const vault = await api('/api/artifacts', { format: 'folder', title: 'Vault' });
-  check(vault.visibility === 'private', 'an owned folder is born private');
-  // The profile ROOT is public surface (an all-private profile renders EMPTY, never 404 — an existence oracle otherwise).
-  const strangerList = await stranger.goto(`${BASE}/@${username}`, { waitUntil: 'load' });
-  await stranger.getByLabel('Open folder Shelf', { exact: true }).waitFor({ state: 'visible' });
-  check(strangerList.status() === 200 && !(await stranger.textContent('body')).includes('Cookie Proof'),
-    'a stranger sees no private document on the profile');
-  check(await stranger.locator('[aria-label="Open folder Shelf"]').isVisible()
-    && (await stranger.locator('[aria-label="Open folder Vault"]').count()) === 0,
-  'a stranger’s profile lists public folders and withholds private ones');
 });
 
-// ── 5. the anonymous owner: token → httpOnly session, Disconnect, the split viewer (was gate-secure-arch §6) ──
+// ── 5. the anonymous owner: token → httpOnly session, sign out (was gate-secure-arch §6) ──
 await section('anonymous owner', async () => {
   const anon2 = await connectAgent(BASE);
   const anonDoc = await (await fetch(`${BASE}/api/artifacts`, {
@@ -370,24 +314,6 @@ await section('anonymous owner', async () => {
   await anonPage.goto(`${BASE}/a/${anonDoc.id}`, { waitUntil: 'load' });
   check(await framedOnItsOrigin(anonPage, anonDoc.id) && !(await ownerBar(anonPage)), 'after disconnect: the browser is a reader — the framed document, no owner bar');
   await anonCtx.close();
-
-  // The SPLIT-VIEWER case: a browser holding a CLAIMED token in its agent cookie and no account session reads the
-  // account's PRIVATE document. `owner` already claimed `anon.token`, so what it publishes belongs to the account.
-  const claimedPriv = await api('/api/artifacts', { title: 'Claimed Private', markup: '<h1>CLAIMED-PRIVATE-BODY</h1>' });
-  check(claimedPriv.visibility === 'private', 'a claimed token publishes a private doc owned by the account');
-  const splitCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
-  const splitPage = await splitCtx.newPage();
-  await becomeOwner(splitPage, BASE, anon.token);
-  check(!!(await sessionOf(splitCtx)), 'private reader holds a verified email session');
-  const splitResponse = await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });
-  const splitText = await docHeading(splitPage);
-  check(splitText === 'CLAIMED-PRIVATE-BODY', `the shell frame shows the DOCUMENT, not a 404 — raw resolved the cookie viewer (status ${splitResponse?.status()}, text ${splitText}, body ${(await splitPage.locator('body').innerText()).slice(0, 140)})`);
-  // And a browser with neither credential still gets the uniform 404.
-  const nobodyCtx = await browser.newContext();
-  const nobody = await nobodyCtx.newPage();
-  check((await nobody.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' })).status() === 404, 'a browser with no credential is a uniform 404 on the same private doc');
-  await nobodyCtx.close();
-  await splitCtx.close();
 });
 
 // ── 6. links in the document, history, the shelf and the profile (was gate-seamless-navigation) ──

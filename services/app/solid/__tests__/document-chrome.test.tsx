@@ -281,6 +281,21 @@ it('opens the bar\'s panels in the navigation layer while the consent bar holds 
   expect((within(panelRoot()).getByRole('navigation', { name: 'Menu' }).getRootNode() as ShadowRoot).host).toBe(roots[navigation]);
 });
 
+// A named EDITOR (the collab-roles gate's step 7, moved here): edit in the controls panel and the whole sharing dialog —
+// access controls and social preview — but none of the owner's own actions.
+it('an editor sees edit in the controls panel and a sharing dialog with access controls and social preview', async () => {
+  mockRole = 'editor';
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  const panel = within(controls());
+  expect(panel.getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
+  expect(panel.queryByLabelText('Owner actions')).toBeNull();
+  fireEvent.click(within(panel.getAllByLabelText('Document actions')[0]!).getByRole('button', { name: 'Share' }));
+  expect(await trusted().findByRole('button', { name: 'Edit social preview' })).toBeInTheDocument();
+  expect(await trusted().findByRole('button', { name: 'Make public' })).toBeInTheDocument();
+  expect(trusted().getByRole('textbox', { name: 'Invite email' })).toBeInTheDocument();
+});
+
 it('an owner reaches the social preview from the sharing dialog the rail opens', async () => {
   mockRole = 'owner';
   mount();

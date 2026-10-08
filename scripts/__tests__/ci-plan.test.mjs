@@ -845,7 +845,7 @@ describe('CI job shape', () => {
     expect(jobs.cli.steps.find((step) => step.run === 'node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase != 'native'");
   });
 
-  it('fans the gate set over seven runners and pulls Postgres only for its assigned shard', () => {
+  it('fans the gate set over seven runners, none of which pulls Postgres', () => {
     const { jobs } = ci();
     expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: CI_GATE_SHARDS }, (_, index) => index + 1));
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
@@ -855,7 +855,6 @@ describe('CI job shape', () => {
     expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
     const selection = jobs.gates.steps.find(step => step.id === 'gate-browsers');
     expect(selection.run).toContain(`--browsers --shard=\${{ matrix.shard }}/${CI_GATE_SHARDS}`);
-    expect(selection.run).toContain(`--needs-postgres --shard=\${{ matrix.shard }}/${CI_GATE_SHARDS}`);
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
@@ -877,10 +876,9 @@ describe('CI job shape', () => {
       // The independent warmer writes ordinary builds; release-only caches use their own shape.
       expect(warmKeys).toContain(restore.with.key.replace('${{ needs.plan.outputs.cli }}','false'));
     }
-    // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
-    const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
-    expect(pulls).toHaveLength(1);
-    expect(pulls[0].if).toBe("steps.gate-browsers.outputs.postgres == 'true'");
+    // No gate starts its own PostgreSQL (its leg is services/app/lib/datasets/__tests__/postgres-routes.test.ts),
+    // so no gate shard pulls the image.
+    expect(jobs.gates.steps.filter((step) => /docker pull postgres/.test(step.run ?? ''))).toEqual([]);
 
     const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts/gates')));
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
@@ -897,7 +895,6 @@ describe('CI job shape', () => {
       expect(Math.max(seconds / servers, serial), `shard ${index}: ${shard.join(',')}`).toBeLessThanOrEqual(75);
     }
 
-    expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
     const sessions = jobs.gates.steps.find((step) => step.name === 'Prepare isolated browser session workers');
     expect(sessions.run).toContain('sudo apt-get install -y bubblewrap ||');
   });

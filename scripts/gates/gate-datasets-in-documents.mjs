@@ -299,23 +299,19 @@ try {
     await aPage.close(); await bPage.close();
 
     /*
-     * WHO MAY WRITE — the same editors, under every permission the sharing seam can put them in.
-     * `mutation-permissions.test.ts` covers the state machine; what needs a browser is that a permission CHANGE
-     * reaches cells already on screen, without a reload and without discarding what the person was typing.
+     * WHO MAY WRITE — the same editors, as one grant goes and comes. services/app/__tests__/mutation-permissions.test.ts
+     * owns the state machine: an anonymous write's 403 ("denies anonymous writes…"), a dataset editor's write and a
+     * viewer's refusal ("uses dataset roles independently…"), a read-only dataset ("…access: read → 403"). What needs a
+     * browser is that a permission CHANGE reaches cells already on screen, without a reload and without discarding
+     * what the person was typing — one promotion and one demotion show it; a second flip back to editor and then to a
+     * read-only dataset rode the same live capability refresh and were dropped.
      */
     const guestPage = await browser.newPage();
     await guestPage.goto(shared.url);
     const guest = await artifactDocument(guestPage);
-    await step('an anonymous reader gets disabled cells, and a forged mutation is refused', async () => {
+    await step('an anonymous reader gets disabled cells', async () => {
       await guest.getByLabel('Item 1', { exact: true }).waitFor();
       assert.equal(await guest.getByLabel('Item 1', { exact: true }).isDisabled(), true);
-      const forged = await guestPage.request.post(`${shared.url}/mutate`, { data: {
-        mutation: 'set_item',
-        args: {},
-        value: 'forged',
-        row: { id: 1, item: 'Task 1', owner: 'TBD', hours: 2, depends_on: '[]', tags: '[]', status: 'backlog', sprint: '' },
-      } });
-      assert.equal(forged.status(), 403);
     });
     const sharedOwner = await browser.newPage();
     await becomeOwner(sharedOwner, base, shared.token);
@@ -344,13 +340,9 @@ try {
       await share({ shares: [{ email: accountEmail, role: 'viewer' }] });
       await friendDoc.locator('[aria-label="Item 2"]:disabled').waitFor();
       assert.equal(await friendDoc.getByLabel('Item 2', { exact: true }).inputValue(), 'Unsaved draft');
-      await share({ shares: [{ email: accountEmail, role: 'editor' }] });
-      await friendDoc.locator('[aria-label="Item 2"]:enabled').waitFor();
-      await share({ access: 'read' });
-      await friendDoc.locator('[aria-label="Item 2"]:disabled').waitFor();
     });
     // Read-only is not inert: the table still filters.
-    await step('and a read-only reader can still filter', async () => {
+    await step('and a reader who may not write can still filter', async () => {
       await friendDoc.getByLabel('Filter status', { exact: true }).click();
       await documentLocator(friend).getByRole('option', { name: 'backlog', exact: true }).click();
       await friendDoc.getByLabel('Item 1', { exact: true }).waitFor();

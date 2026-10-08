@@ -26,6 +26,7 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { PUT as putSharing } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
@@ -286,6 +287,23 @@ describe('the JSON answer', () => {
     const doc = await privateDoc();
     hits.length = 0;
     expect((await asJson(doc.id, `${web}/json2.png`)).status).toBe(404);
+    expect(hits).toEqual([]);
+  });
+
+  // The media gate's private-document leg, moved here: an INVITED VIEWER reaches the same door with their own
+  // credential, and the copy the owner's view already made costs the source host nothing.
+  it('admits an INVITED VIEWER of a private document, from the copy already held', async () => {
+    const doc = await privateDoc();
+    const owner = { credential: 'session' as const, userId: doc.user.id, email: doc.user.email!, emailVerified: true };
+    const viewer = await createUser({ email: `mxmx_test_viewer_${Math.random().toString(36).slice(2, 8)}@example.com` });
+    const shared = await putSharing(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', origin: 'same', actor: owner, json: { shares: [{ email: viewer.email, role: 'viewer' }] } }), params(doc.id));
+    expect(shared.status).toBe(200);
+    const url = `${web}/json-viewer.png`;
+    expect((await asJson(doc.id, url, { actor: owner })).status).toBe(200);
+    hits.length = 0;
+    const res = await asJson(doc.id, url, { actor: { credential: 'session', userId: viewer.id, email: viewer.email!, emailVerified: true } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).url).toBe(assetUrlFor(url));
     expect(hits).toEqual([]);
   });
 

@@ -395,14 +395,18 @@ try {
     /*
      * EDIT FROM THE COMPILED PAGE: the same story accepts the editor, the edit publishes, and a reload is
      * compiled again. The anonymous and owner takeover verdicts and the static-hydration sweep of the same
-     * gate live in gate-kit-and-fonts.
+     * gate live in gate-kit-and-fonts. Only the boot it starts from overlaps kit-and-fonts' leg 3; the handover
+     * to editing does not (kit-and-fonts never enters edit mode), and moving it there failed: four legs at once
+     * left the typed text uncommitted (a gate-container run of this branch), so it stays here, alone.
      */
     {
       const path = `/a/${compiledDoc.id}`;
       const header = await compiledServed(path);
       must(header === 'compiled', `edit: the new document reaches its compiled page (${READER_HEADER}: ${header})`);
       const { page, doc: frame, errors } = await openCompiled(accountCtx, path);
-      check(await modeWhenRead(page) === 'read', 'edit: the owner\'s frame booted the compiled story');
+      // Waited for, not asserted: that the owner's frame boots the compiled story in read mode with no gesture is
+      // gate-kit-and-fonts' leg 3 ("owner: the islands booted in the frame without a gesture"), on the same probe.
+      await modeWhenRead(page);
       const head = await accountPage.evaluate(async (id) => (await fetch(`/api/my/artifacts/${id}`)).json(), compiledDoc.id);
       // The rail's Edit is the app bar's own button now (solid/document/DocumentChrome).
       await page.click('header[aria-label="Page bar"] [aria-label="Edit"]');

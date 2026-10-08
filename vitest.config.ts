@@ -145,6 +145,7 @@ export default defineConfig({
             ISLAND_TESTS,
             'services/app/lib/datasets/__tests__/postgres.test.ts',
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
+            'services/app/lib/datasets/__tests__/postgres-routes.test.ts',
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
             'services/browser/__tests__/session-pages.test.ts',
@@ -171,6 +172,8 @@ export default defineConfig({
           include: [
             'services/app/lib/datasets/__tests__/postgres.test.ts',
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
+            // The data-journey gate's PostgreSQL leg through the real routes: same `skipIf` on the image.
+            'services/app/lib/datasets/__tests__/postgres-routes.test.ts',
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
             // Launches real Chromium: integration only, like contract.test.ts.

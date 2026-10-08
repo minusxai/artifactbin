@@ -9,13 +9,20 @@
  *   start    the guest start page makes a document and copies a tokenless paste; HTTP creation hands out no
  *            credential; the browser approves the CLI for its guest; the page fills in live when the agent
  *            writes (formerly gate-simpler-start).
- *   door     the OAuth consent screen in a real browser — no guest grant, a signed-out visitor sent to log in,
- *            the form's redirect not blocked by `form-action` — the email-code door itself (no password, no
- *            code in the response, change email, one mail per request, a wrong code refused), the account-bound
- *            grant; then the CLI approved from the signed-in browser, revoked, signed out and back in
- *            (formerly gate-oauth-browser and gate-app-flows AUTH: the one login door, walked once).
- *   claim    a verified login adopts the guest's documents and keeps its CLI connection, offers nowhere to
- *            paste a token, keeps none in storage, and adopts no unrelated guest (formerly gate-claim-flow).
+ *   door     the OAuth consent screen in a real browser — no guest grant, a signed-out visitor sent to log in
+ *            and back, the form's redirect not blocked by `form-action` — and, signed in, the account-bound
+ *            consent reaching the client and the CLI approved from the browser (formerly gate-oauth-browser and
+ *            gate-app-flows AUTH). The email-code door's own facts (no code in the response, one mail per
+ *            request, a wrong code refused, sign out, the same account on the way back in) are
+ *            services/auth/__tests__/login-routes.test.ts's ("the email-code door"); its form's change-email,
+ *            retry and refusal copy are solid/__tests__/small-pages.test.tsx's and login-continuation.test.tsx's;
+ *            the code exchange and refresh are oauth.test.ts's; revoking a connection is account-page.test.tsx's
+ *            ("requires confirmation before revoking") and token-routes.test.ts's ("stops authorizing on the very
+ *            next request").
+ *   (claim)  what a verified login owns (formerly gate-claim-flow) is services/app/__tests__/account-claim.test.ts;
+ *            no pasted-token field is solid/__tests__/account-page.test.tsx's; no claim banner for an email
+ *            account is solid/components/__tests__/claim-banner.test.tsx's; the httpOnly cookie and the empty
+ *            localStorage are this gate's start leg and gate-reader-shell's anonymous-owner leg.
  *   fork     a logged-out reader's Fork survives /login and lands on their own copy, credited by the source's
  *            current tier; `?intent=fork` is no lever for a stranger; `?intent=comment` opens the rail
  *            (formerly gate-fork).
@@ -44,10 +51,10 @@ import { forkDestination } from './lib/fork-destination.mjs';
 import { lane } from './lib/lane.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
-import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { cliConformance } from './lib/cli-conformance.mjs';
-import { becomeOwner, mergeGuestIntoAccount } from '../lib/start-doc.mjs';
+import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs, passTheWelcomePage } from '../lib/mail-login.mjs';
 
 const BASE = new URL(process.argv[2] ?? 'http://localhost:3030').origin;
@@ -246,80 +253,10 @@ async function doorLeg() {
       check(callbacks.length === 0, 'nothing was minted for a signed-out visitor');
       check(cspViolations.length === 0, `no CSP violation blocks the submission${cspViolations.length ? ` (${cspViolations[0]})` : ''}`);
 
-      // ── the email-code door, walked by hand: the one login this leg makes ──
+      // ── signed in (the email-code door's own facts are login-routes.test.ts's) ──
       const email = `mxmx_test_oauth_${stamp}@example.com`;
-      // Parallel gates share one outbox, so the inbox is not ours alone; the unique address is the ownership boundary.
-      const mine = () => sink.inbox.filter((m) => m.to === email);
-
-      await page.goto(`${BASE}/login`, { waitUntil: 'load' });
-      await page.getByLabel('Email', { exact: true }).waitFor({ state: 'visible' });
-      check(await page.locator('[aria-label="Email"]').isVisible(), 'the login page asks for an email');
-      check((await page.locator('[aria-label="Password"]').count()) === 0, 'there is no password field anywhere');
-
-      await page.fill('[aria-label="Email"]', email);
-      const codeResponse = page.waitForResponse((r) => r.url().includes('/api/auth/email-otp/send-verification-otp'));
-      await page.click('[aria-label="Log in with email"]');
-      const requested = await codeResponse;
-      const requestedBody = await requested.text();
-      check(requested.status() === 200, `the OTP door answered 200 (${requested.status()})`);
-      // The code exists only in the mail the real send path wrote: no endpoint in
-      // the app reveals a live one, not even to an admin.
-      check(!/\d{6}/.test(requestedBody), `the response body carries NO code (${requestedBody})`);
-      await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
-
-      // The typo escape hatch, and the send-once rule that goes with it.
-      await page.click('[aria-label="Change email"]');
-      await page.waitForSelector('[aria-label="Email"]');
-      check(await page.inputValue('[aria-label="Email"]') === email, 'change email returns to a prefilled, editable field');
-      await page.click('[aria-label="Log in with email"]');
-      await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
-
-      const code0 = sink.lastCode(email);
-      must(/^\d{6}$/.test(code0 ?? ''), 'a 6-digit code arrived by email');
-      check(mine().length === 2, `one email per request, including the re-send after change-email (${mine().length})`);
-
-      // A browser transport failure and a temporary server response must leave
-      // the same real code available for retry before the real wrong/right-code path.
-      const verifyOtpUrl = `${BASE}/api/auth/sign-in/email-otp`;
-      await page.route(verifyOtpUrl, route => route.abort('failed'), { times: 1 });
-      await page.fill('[aria-label="Login code"]', code0);
-      await page.click('[aria-label="Verify code"]');
-      await page.getByText('Couldn’t reach the server. Your code is still here; try again.', { exact: true }).waitFor({ state: 'visible' });
-      check(await page.inputValue('[aria-label="Login code"]') === code0, 'a network interruption keeps the real code in the login field');
-      await page.getByRole('button', { name: 'Verify code', exact: true }).waitFor({ state: 'visible' });
-      check(await page.getByRole('button', { name: 'Verify code', exact: true }).isEnabled(), 'verification is enabled again after a network interruption');
-      check(!(await isSignedInAs(page, email)), 'a network interruption does not authenticate the account');
-      await page.unroute(verifyOtpUrl);
-
-      await page.route(verifyOtpUrl, route => route.fulfill({
-        status: 503,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'temporarily_unavailable' }),
-      }), { times: 1 });
-      await page.click('[aria-label="Verify code"]');
-      await page.getByText('The server is temporarily unavailable. Your code is still here; try again.', { exact: true }).waitFor({ state: 'visible' });
-      check(await page.inputValue('[aria-label="Login code"]') === code0, 'HTTP 503 keeps the real code in the login field');
-      check(await page.getByRole('button', { name: 'Verify code', exact: true }).isEnabled(), 'verification is enabled again after HTTP 503');
-      check(!(await isSignedInAs(page, email)), 'HTTP 503 does not authenticate the account');
-      await page.unroute(verifyOtpUrl);
-
-      // A wrong code must not log anyone in.
-      await page.fill('[aria-label="Login code"]', code0 === '000000' ? '111111' : '000000');
-      await page.click('[aria-label="Verify code"]');
-      await page.waitForTimeout(1500);
-      check(page.url().includes('/login'), 'a wrong code keeps you on the login page');
-
-      await page.fill('[aria-label="Login code"]', code0);
-      await page.click('[aria-label="Verify code"]');
-      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 15_000 }).catch(() => {});
-      check(!new URL(page.url()).pathname.startsWith('/login'), 'logged in with the code');
-      const cookies = await page.context().cookies();
-      check(cookies.some((c) => /better-auth.*session_token|authjs.session-token/.test(c.name)), 'a session cookie was set');
-      // One flow for both: a verified code for an unknown address creates the account.
-      check(await isSignedInAs(page, email), 'a first login with a code creates the account and signs you in');
-      check((await page.locator('[aria-label="Password"]').count()) === 0, 'no password is asked for anywhere');
-      // A brand-new account meets the welcome page once, as a person does (lib/mail-login).
-      await passTheWelcomePage(page, email);
+      await loginViaEmail(page, BASE, sink, email);
+      must(await isSignedInAs(page, email), 'signed in with an emailed code');
 
       // ── the account-bound OAuth grant ──
       const before = callbacks.length;
@@ -337,16 +274,6 @@ async function doorLeg() {
       const cb2 = callbacks[callbacks.length - 1];
       check(callbacks.length > before && !!cb2?.searchParams.get('code'), 'the signed-in form reaches the client callback');
       check(cspViolations.length === 0, 'still no CSP violation on the account-bound form');
-      const code2 = cb2?.searchParams.get('code');
-      if (code2) {
-        const tok2 = await (await fetch(`${BASE}/oauth/token`, {
-          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ grant_type: 'authorization_code', code: code2, redirect_uri: REDIRECT, client_id: clientId, code_verifier: v2 }),
-        })).json();
-        check(/^mx_/.test(tok2.access_token ?? ''), 'the account-bound grant exchanges for a token');
-        const artifacts = await fetch(`${BASE}/api/artifacts`, { headers: { Authorization: `Bearer ${tok2.access_token}` } });
-        check(artifacts.status === 200 && Array.isArray((await artifacts.json()).artifacts), 'the account grant reads the real HTTP API');
-      }
 
       // ── CONNECTING THE CLI from the signed-in browser ──
       // The only way a credential exists, so this is how an agent's work lands in an account: the signed-in browser
@@ -367,103 +294,11 @@ async function doorLeg() {
       // The Solid dashboard loads its account listing after navigation; load + a fixed delay
       // did not imply that listing had arrived under concurrent CI load.
       must(await page.getByText('Connected artifact', { exact: true }).waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false), 'what the connection publishes appears on the dashboard');
-      await page.goto(`${BASE}/account`, { waitUntil: 'load' });
-      const revoke = page.locator('[aria-label^="Revoke token"]').first();
-      // Account hydration fetches connections after navigation. An 800ms sleep plus
-      // count() sampled that asynchronous state too early under distribution CI load.
-      // Wait for the actual affordance, then retain the real revocation assertion.
-      must(await revoke.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false), 'the connections panel offers revoke');
-      await revoke.click();
-      const revoked = page.waitForResponse(response => response.request().method() === 'DELETE' && new URL(response.url()).pathname.startsWith('/api/my/tokens/'));
-      await page.getByLabel('Confirm revoke', { exact: true }).click();
-      must((await revoked).ok(), 'the connection revocation succeeds');
-      check((await fetch(`${BASE}/api/artifacts`, { headers: { Authorization: `Bearer ${accountToken}` } })).status === 401, 'a revoked connection stops working');
-      await openMenu(page);
-      await page.click('[aria-label="Sign out"]'); await page.waitForTimeout(3000);
-      await page.waitForURL(`${BASE}/login`);
-      check(!(await isSignedInAs(page, email)) && await page.getByRole('textbox', { name: 'Email', exact: true }).isVisible(), 'sign out clears the session and returns to login');
-      // Logging back in to the SAME address must reuse the account, not make a second.
-      await loginViaEmail(page, BASE, sink, email);
-      check(await isSignedInAs(page, email), 'log back in with a fresh code works');
     });
   } finally {
     await ctx.close();
     listener.close();
   }
-}
-
-// ── claim: a verified login adopts what the guest made ───────────────────────
-async function claimLeg() {
-  const { must, run } = lane(check, 'claim');
-  const ctx = await context();
-  await run(async () => {
-    const p = await ctx.newPage();
-    const api = async (path, init = {}, token) => (await fetch(`${BASE}${path}`, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers ?? {}) },
-    })).json();
-    // An email account creates two private documents.
-    const email = `mxmx_test_claim_${stamp}@example.com`;
-    const anon = await connectAgent(BASE, { email });
-    const doc = async (title) => api('/api/artifacts', {
-      method: 'POST',
-      body: JSON.stringify({ title, markup: `<div data-design="tw" className="p-8"><h1 className="text-3xl font-bold">${title}</h1></div>` }),
-    }, anon.token);
-    const kept = await doc('Quarterly Review');
-    const left = await doc('Scratch Notes');
-    must(!!kept.id && !!left.id, 'an email account published two documents');
-
-    // The approving browser holds its separate email account session.
-    await p.goto(BASE, { waitUntil: 'load' });
-    await becomeOwner(p, BASE, anon.token);
-
-    // Re-authenticate the same email account after ending this browser session.
-    await p.getByRole('button', { name: 'Open menu', exact: true }).click();
-    await p.getByRole('button', { name: 'Sign out', exact: true }).click();
-    await p.waitForURL(url => url.pathname === '/login');
-    await loginViaEmail(p, BASE, sink, email);
-    // The page chrome names the account by HANDLE, not by address, so being signed in is asked of the session endpoint.
-    check(await isSignedInAs(p, email), 'logging in with an emailed code signs you in');
-
-    // Re-authentication keeps the same account ownership without a claim UI.
-    check(await p.locator('[aria-label="Unclaimed drafts"]').count() === 0, 'email accounts need no draft-claim interface');
-    // And there is NOWHERE to paste a credential: the account page lists CLI
-    // connections to revoke, and nothing anywhere asks a person for a token.
-    await p.goto(`${BASE}/account`, { waitUntil: 'load' });
-    await p.waitForTimeout(1000);
-    check((await p.locator('[aria-label="Token to claim"]').count()) === 0, 'the account page asks for no pasted token');
-    check(!/mx_\.\.\./.test(await p.locator('body').innerText()), 'and offers no token field at all');
-
-    // Credentials remain in HttpOnly cookies, never browser-readable storage.
-    const stored = await p.evaluate(() => [localStorage.getItem('mx_tokens'), localStorage.getItem('mx_token')]);
-    check(stored.every((v) => v === null), 'the browser keeps no token in localStorage');
-    const cookies = await p.context().cookies(BASE);
-    check(cookies.some((c) => /better-auth/.test(c.name) && c.httpOnly), 'it holds an httpOnly session cookie instead');
-
-    const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-    const mine = await (await fetch(`${BASE}/api/my/artifacts`, { headers: { cookie: cookieHeader } })).json();
-    const titles = (mine.artifacts ?? []).map((a) => a.title).sort();
-    check(titles.includes('Quarterly Review') && titles.includes('Scratch Notes'), `both documents now belong to the account (${titles.join(', ')})`);
-
-    // The token still edits, and the offer does not come back.
-    const stillEdits = await api(`/api/artifacts/${kept.id}`, { method: 'PUT', body: JSON.stringify({ markup: '<h1>Updated after login</h1>' }) }, anon.token);
-    check(stillEdits.id === kept.id, 'the connected CLI still edits after guest ownership transfers');
-    await p.goto(BASE, { waitUntil: 'load' });
-    await p.waitForTimeout(2500);
-    check((await p.locator('[aria-label="Unclaimed drafts"]').count()) === 0, 'and the banner does not nag again once the drafts are claimed');
-
-    // An unrelated guest is neither adopted nor claimable by an account.
-    const stranger = await connectAgent(BASE);
-    const unrelated = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Not Yours', markup: '<h1>Not Yours</h1>', visibility: 'private' }) }, stranger.token);
-    const cannotRead = await fetch(`${BASE}/api/my/artifacts/${unrelated.id}`, { headers: { cookie: cookieHeader } });
-    check(cannotRead.status === 404, 'login did not adopt an unrelated guest identity');
-    const cannotClaim = await fetch(`${BASE}/api/tokens/claim`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', cookie: cookieHeader },
-      body: JSON.stringify({ token: stranger.token }),
-    });
-    check(cannotClaim.status === 404, 'the legacy claim endpoint cannot take another guest user token');
-  });
-  await ctx.close();
 }
 
 // ── the workspace owner fork and folders share ───────────────────────────────
@@ -978,11 +813,10 @@ const started = Date.now();
 await Promise.all([
   startLeg(),
   doorLeg(),
-  claimLeg(),
   workspaceOwner().then((owner) => owner && Promise.all([forkLeg(owner), foldersLeg(owner), hostedRestartLeg(owner)])),
   cliLeg(),
 ]);
-check.note(`six legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+check.note(`five legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 await browser.close();
 sink.close();
 check.done();
