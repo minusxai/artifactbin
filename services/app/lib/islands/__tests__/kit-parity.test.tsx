@@ -38,6 +38,16 @@ describe('kit parity helper', () => {
     expect(applyCurrentLayoutContracts(captured)).toBe(captured);
   });
 
+  it('adapts bounded DataGrid cells without changing text or authored tables', () => {
+    const row = '<tr><th class="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-bold">Long heading</th><td class="relative whitespace-nowrap px-3 py-1.5 align-middle"><span class="relative">Complete long text</span></td></tr>';
+    const captured = `<table data-mx-kit-table="">${row}</table><table>${row}</table>`;
+    const adapted = applyCurrentLayoutContracts(captured);
+    expect(adapted).toContain('class="relative min-w-0 overflow-hidden whitespace-nowrap');
+    expect(adapted).toContain('<span class="relative block min-w-0 max-w-full truncate">Complete long text</span>');
+    expect(adapted).toContain(`<table>${row}</table>`);
+    expect(applyCurrentLayoutContracts(adapted)).toBe(adapted);
+  });
+
   it('applies the DataTable wrapper min-width contract idempotently', () => {
     const captured = '<section><div aria-label="DataTable embed" style="width:100%"></div><span class="[a&]:hover:bg-primary/90">New</span></section>\n';
     const adapted = applyCurrentLayoutContracts(captured);
