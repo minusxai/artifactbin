@@ -35,3 +35,19 @@ New edges: `app/server → pkg/cli` (team-host and chromium). The CLI no longer 
 - `docs/editing.md:34` still names `solid/editor/FlowEditor.tsx`. That file is in the docs implementer's area, so I left it.
 - The worktree's ports collided at 5000. The brief's 5200 block is taken by `reader-evidence`, so this worktree uses 5300–5399.
 - The first CI run after merge will see a cold npm seed cache, because the cache key path changed.
+
+## Default export freshness and table authoring
+
+The seeded export contract was RED: `z.object(export_artifact.input).parse({ id, refresh: true })` returned only `{ id }`, dropping the refresh request before an agent could ask for a fresh image. The export operation now accepts `refresh: boolean`, documents it, and forwards true as the renderer's `refresh=1` value. Existing image caching is unchanged for ordinary calls.
+
+The new route/operation test starts with a cached static document, applies a current-head edit that preserves the table/footer node IDs, and forces an export. It verifies the operation triggers a new capture, the capture URL selects the current head, and the raw route renders the updated footer. It then verifies a normal request reuses that image and another forced request renders again. The fixture has no data queries, so no SQL-cache behavior was changed.
+
+Added short guidance for validating table totals against the named query's result column and row grain. The pinned `afbin help markup-data-authoring` copy assertion covers those instructions.
+
+Checks: RED observed on the seeded test before implementation. GREEN on `npm run validate`; 6 Vitest files with 86 tests and 1 CLI file with 37 assertions/tests; local `npm run afbin -- help markup-data-authoring` on port 5401. `git diff --check` passed. No browser capture gate or production rendering was run; CI owns those checks.
+
+Commit: `Fix fresh artifact export operation`.
+
+===CONCISE===
+
+Export operation refresh is explicit and honored; static current-head capture and ordinary cache reuse are covered. Table-total guidance is pinned in CLI help. FAST checks pass.

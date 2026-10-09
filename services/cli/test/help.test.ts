@@ -612,6 +612,13 @@ test('image export help distinguishes local inputs from fresh published renderin
  assert.match(help,/local file paths.*refused/);
 });
 
+test('data authoring help tells agents to verify the result column and grain behind a table total',()=>{
+ const help=helpDocument('markup-data-authoring');
+ assert.match(help,/afbin query <id> --name <query>/);
+ assert.match(help,/agg="sum"/);
+ assert.match(help,/row grain/);
+});
+
 test('copyable dataset publish examples preserve current app grant defaults',()=>{
  const publish=commands.find(command=>command.name==='push')!;
  const datasets=publish.examples.map(example=>parseCommand(example.split(' ').slice(1))).filter(command=>command.flags.type==='dataset');
