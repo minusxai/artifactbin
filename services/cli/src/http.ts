@@ -1,10 +1,11 @@
+import {refreshCredentials,CredentialRefreshError,CredentialRefreshUnavailableError} from '@artifactbin/utils/node/credentials';
 import {accountMismatch} from './account-diagnostic';
-import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,isLocalDevelopmentHost,normalizeOrigin} from '@artifactbin/contracts';
+import {CLI_PROTOCOL_VERSION,isLocalDevelopmentHost,normalizeOrigin} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
 import {CliError} from './errors.js';
 import {CLI_VERSION} from './version';
 import {validVersion} from './version-order';
-import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,observeCredentialAccount,type Connection} from './config.js';
+import {configDir,remoteContext,normalizeServer,observeCredentialAccount,type Connection} from './config.js';
 interface HttpOptions {onRelease?:(release:{version:string;protocol:number})=>Promise<void>;connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;aliases?:readonly string[];authenticate?:()=>Promise<Connection>}
 /**
  * THE SECOND READ-ONLY PREFLIGHT. A dry run may send nothing that writes, which is why the
@@ -129,18 +130,9 @@ export class HttpClient {
   throw new CliError('auth_required','Run afbin auth to sign in again.',undefined,{http_status:401});
  }
  private async refresh():Promise<void>{
-  // The lock dependency is loaded only for credential mutation, never local help or validation.
-  const {HOME_SCOPE,withLock}=await import('./state');
   const home=this.options.home??homedir();
-  await withLock(home,HOME_SCOPE,async()=>{
-   const saved=await loadConnection(this.connection.server,home,{ARTIFACTBIN_HOME:configDir(home,this.options.env)});
-   if(saved&&saved.token!==this.connection.token&&saved.refreshToken&&saved.clientId===this.connection.clientId){this.connection=saved;return;}
-   const response=await(this.options.fetch??fetch)(`${this.connection.server}/oauth/token`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:this.connection.clientId,refresh_token:this.connection.refreshToken,resource:`${this.connection.server}${API_RESOURCE_PATH}`})});
-   const data=await response.json().catch(()=>null);
-   if(!response.ok||typeof data?.access_token!=='string'||typeof data?.refresh_token!=='string'||!Number.isFinite(data?.expires_in)||data.expires_in<=0)throw new CliError('auth_required','auth_required: credentials could not be refreshed.','Run afbin auth again.');
-   this.connection={...this.connection,token:data.access_token,refreshToken:data.refresh_token,expiresAt:Date.now()+data.expires_in*1000};
-   await saveConnection(this.connection,home,{ARTIFACTBIN_HOME:configDir(home,this.options.env)});
-  },{},this.options.env);
+  try{this.connection=await refreshCredentials(this.connection,configDir(home,this.options.env),{fetch:this.options.fetch});}
+  catch(error){if(error instanceof CredentialRefreshUnavailableError)throw new CliError('refresh_unavailable',error.message,'Retry the request later; the saved refresh grant is unchanged.',error.status?{http_status:error.status}:undefined);if(error instanceof CredentialRefreshError)throw new CliError('auth_required',error.message,'Run afbin auth again.');throw error;}
  }
 }
 

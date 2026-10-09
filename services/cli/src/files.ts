@@ -1,8 +1,9 @@
 import {atomicWrite} from '@artifactbin/utils/node/atomic-file';
 export {atomicWrite};
-import {protectWindowsDirectory} from './platform';
+import {privateDirectory} from '@artifactbin/utils/node/private-directory';
+export {privateDirectory};
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, lstat, mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { configDir } from './config';
 
@@ -12,15 +13,6 @@ export const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoExce
 export async function readOptional(path: string): Promise<Buffer | null> {
   try { return await readFile(path); }
   catch (error) { if (isMissing(error)) return null; throw error; }
-}
-
-/** Only mutating operations call this; reads never initialize local state. */
-export async function privateDirectory(path: string): Promise<void> {
-  await mkdir(path, {recursive: true, mode: 0o700});
-  const info = await lstat(path);
-  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error(`Expected a private directory: ${path}`);
-  if(process.platform==='win32')await protectWindowsDirectory(path);
-  else await chmod(path, 0o700);
 }
 
 /**

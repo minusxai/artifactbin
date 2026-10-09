@@ -16,7 +16,10 @@
     "./account-resource": "./src/account-resource.ts",
     "./escape": "./src/escape.ts",
     "./sha256": "./src/sha256.ts",
-    "./runtime-id": "./src/runtime-id.ts"
+    "./runtime-id": "./src/runtime-id.ts",
+    "./node/credentials": "./src/credentials.ts",
+    "./node/state-lock": "./src/state-lock.ts",
+    "./node/private-directory": "./src/private-directory.ts"
   },
   "files": [
     "src"

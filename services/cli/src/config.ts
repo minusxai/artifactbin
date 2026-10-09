@@ -1,11 +1,13 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {validVersion} from './version-order';
 import { readFile } from "node:fs/promises";
-import { atomicWrite, digest, privateDirectory } from "./files";
+import { atomicWrite, privateDirectory } from "./files";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { DEFAULT_SERVER as CONTRACT_DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
+import { DEFAULT_SERVER as CONTRACT_DEFAULT_SERVER } from "@artifactbin/contracts";
+
+import {credentialPaths,credentialOrigin,readCredentials,saveCredentials,observeCredentialAccount as observeAccount,observedCredentialAccount as observedAccount} from '@artifactbin/utils/node/credentials';
 
 /** Where afbin talks when nothing selects a server (spelled once, in contracts). */
 export const DEFAULT_SERVER = CONTRACT_DEFAULT_SERVER;
@@ -42,11 +44,8 @@ export function claudeConfigEnvironment(directory:string,explicit:boolean,env:No
  return restored;
 }
 /** Credentials are kept per origin, so switching servers never re-prompts or overwrites another origin's token. */
-function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
-  return join(hostDirectory(server, home, env), "credentials.env");
-}
-export function hostDirectory(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
-  return join(configDir(home, env), 'hosts', digest(normalizeServer(server)).slice(0, 16));
+export function hostDirectory(server:string,home=homedir(),env:NodeJS.ProcessEnv=process.env):string {
+ return credentialPaths(server,configDir(home,env)).directory;
 }
 function normalizeHost(value: string): string {
   return normalizeServer(value);
@@ -74,25 +73,7 @@ export async function setClientDefault(key: string, value: string, home = homedi
   return config;
 }
 
-const CREDENTIAL_KEYS = /^\s*(?:export\s+)?(ARTIFACTBIN_URL|ARTIFACTBIN_TOKEN|ARTIFACTBIN_REFRESH_TOKEN|ARTIFACTBIN_CLIENT_ID|ARTIFACTBIN_EXPIRES_AT)\s*=\s*(.*?)\s*$/;
-async function readEnvFile(path: string): Promise<Record<string, string>> {
-  const saved: Record<string, string> = {};
-  try {
-    for (const line of (await readFile(path, "utf8")).split(/\r?\n/)) {
-      const match = line.match(CREDENTIAL_KEYS);
-      if (match) saved[match[1]] = match[2].replace(/^(['"])(.*)\1$/, "$2");
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  return saved;
-}
-/** The one origin rule (`@artifactbin/contracts`), as a refusal: the server list and this client read the same one. */
-export function normalizeServer(value: string): string {
-  const origin = normalizeOrigin(value);
-  if (!origin) throw new Error("Use an HTTPS server origin, or HTTP on a local development host (localhost, 127.0.0.1, [::1], *.localhost, *.lvh.me, *.test).");
-  return origin;
-}
+export const normalizeServer=credentialOrigin;
 /** Client defaults never read server settings or implicitly follow a login. */
 export async function exportedServer(home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<string | undefined> {
   const selected = env.ARTIFACTBIN_URL ?? (await readClientDefaults(home, env)).host;
@@ -121,16 +102,7 @@ export async function loadConnection(
     const saved=await loadConnection(selected,home,{...env,ARTIFACTBIN_TOKEN:undefined});
     return saved?.token===env.ARTIFACTBIN_TOKEN?saved:{server:selected,token:env.ARTIFACTBIN_TOKEN};
   }
-  const saved = await readEnvFile(credentialPath(selected, home, env));
-  if (saved.ARTIFACTBIN_URL !== selected) return null;
-  const token = saved.ARTIFACTBIN_TOKEN;
-  if (!token) return null;
-  const refreshed = saved.ARTIFACTBIN_REFRESH_TOKEN && saved.ARTIFACTBIN_CLIENT_ID;
-  const expiresAt = Number(saved.ARTIFACTBIN_EXPIRES_AT);
-  return { server: selected, token, ...(refreshed ? {
-    refreshToken: saved.ARTIFACTBIN_REFRESH_TOKEN, clientId: saved.ARTIFACTBIN_CLIENT_ID,
-    ...(Number.isSafeInteger(expiresAt) && expiresAt > 0 ? {expiresAt} : {}),
-  } : {}) };
+  return readCredentials(selected,configDir(home,env));
 }
 /**
  * CREDENTIALS READ THROUGH THE ALIAS MAPPING, never rewritten.
@@ -159,25 +131,7 @@ export async function saveConnection(
   home = homedir(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const server = normalizeServer(connection.server);
-  if (!/^[A-Za-z0-9_-]+$/.test(connection.token))
-    throw new Error("Invalid token format");
-  for (const value of [connection.refreshToken, connection.clientId]) {
-    if (value !== undefined && !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("Invalid refresh credential format");
-  }
-  if (connection.expiresAt !== undefined && (!Number.isSafeInteger(connection.expiresAt) || connection.expiresAt <= 0)) throw new Error("Invalid credential expiry");
-  const dir = hostDirectory(server, home, env);
-  await privateDirectory(dir);
-  const profilePath = join(dir, 'profile.json');
-  let profile: {url: string; alias?: string} = {url: server};
-  try { profile = {...JSON.parse(await readFile(profilePath, 'utf8')), url: server}; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  if ((profile as {credentialAccount?:{credential:string}}).credentialAccount?.credential!==digest(connection.token)) delete (profile as {credentialAccount?:unknown}).credentialAccount;
-  await atomicWrite(profilePath, JSON.stringify(profile, null, 2) + '\n');
-  const path = credentialPath(server, home, env);
-  const values = { ARTIFACTBIN_URL: server, ARTIFACTBIN_TOKEN: connection.token,
-    ARTIFACTBIN_REFRESH_TOKEN: connection.refreshToken, ARTIFACTBIN_CLIENT_ID: connection.clientId, ARTIFACTBIN_EXPIRES_AT: connection.expiresAt };
-  await atomicWrite(path, Object.entries(values).filter(([,value]) => value !== undefined).map(([key,value]) => `${key}=${value}\n`).join(''));
+  return saveCredentials(connection,configDir(home,env));
 }
 
 /** Automatic installation is opt-out; retain the old notice switch for existing installations. */
@@ -220,15 +174,10 @@ export function workspaceStateEnv(root: string): NodeJS.ProcessEnv {
 
 /** Advisory identity, valid only for the credential that was actually verified. */
 export async function observeCredentialAccount(connection:Connection,account:string,home=homedir(),env:NodeJS.ProcessEnv=process.env):Promise<void>{
- const dir=hostDirectory(connection.server,home,env);await privateDirectory(dir);
- const path=join(dir,'profile.json');let profile:Record<string,unknown>={url:connection.server};
- try{profile=JSON.parse(await readFile(path,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
- await atomicWrite(path,JSON.stringify({...profile,credentialAccount:{account,credential:digest(connection.token),observedAt:new Date().toISOString()}},null,2)+'\n');
+ return observeAccount(connection,account,configDir(home,env));
 }
 export async function observedCredentialAccount(connection:Connection,home=homedir(),env:NodeJS.ProcessEnv=process.env):Promise<{account:string;observedAt:string}|null>{
- try{const value=JSON.parse(await readFile(join(hostDirectory(connection.server,home,env),'profile.json'),'utf8')).credentialAccount;
- return value?.credential===digest(connection.token)&&typeof value.account==='string'&&typeof value.observedAt==='string'?{account:value.account,observedAt:value.observedAt}:null;
- }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}
+ return observedAccount(connection,configDir(home,env));
 }
 
 /** Restore only this managed Artifactbin scope before importing command dispatch. */

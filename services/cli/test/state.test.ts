@@ -134,3 +134,11 @@ describe('loading the store concurrently', () => {
    }finally{await rm(root,{recursive:true,force:true});}
   });
 });
+
+test('independent async contexts serialize while a nested owner reenters',fixture(async home=>{
+ let release!:()=>void;let entered!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});const ready=new Promise<void>(resolve=>{entered=resolve;});let competing=false;
+ const first=withLock(home,HOME_SCOPE,async()=>{assert.equal(await withLock(home,HOME_SCOPE,async()=> 'nested'),'nested');entered();await held;});
+ await ready;const second=withLock(home,HOME_SCOPE,async()=>{competing=true;});
+ await new Promise(resolve=>setTimeout(resolve,30));const prematurelyEntered=competing;release();await Promise.all([first,second]);
+ assert.equal(prematurelyEntered,false,'an independent call must wait for the owner');assert.equal(competing,true);
+}));
