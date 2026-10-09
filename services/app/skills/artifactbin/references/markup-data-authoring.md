@@ -82,3 +82,14 @@ the supplied groups, or explicitly label the derived statistic (for example,
 "average of monthly medians").<!--bundle:skip--> If a function is unavailable, changing the
 function also requires rechecking the interpretation and labels.<!--/bundle:skip--> Never silently
 substitute `avg` for `median`.
+
+## Check table totals
+
+Before publishing a table footer or budget total, run the named query with
+`afbin query <id> --name <query>` and inspect its rows and errors. Bind `<Number>`
+to the query's actual result column; its default is the first row, while
+`agg="sum"` adds that column across rows. Confirm the chosen aggregate matches
+the row grain and the total agrees with the displayed table. After changing a
+published table, visually check its current image with
+`afbin export <published-url> --refresh --output out.png`; an export without
+`--refresh` may return the existing image while the new one is regenerated.

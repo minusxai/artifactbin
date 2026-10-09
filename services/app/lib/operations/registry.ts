@@ -510,7 +510,7 @@ const exportArtifactOp: Operation = {
   name: 'export_artifact',
   title: 'Export an artifact as an image',
   http: { method: 'GET', path: '/api/artifacts/{id}/export' },
-  description: 'Render a document you can read as a PNG and return the image — use ONLY if you can actually view images (otherwise read the markup back with get_artifact). For a deck, ask for ONE slide at a time (slide, 1-based): the whole-deck shot stacks every slide too small to read. The same render is served at <base>/a/<id>/export for anyone who can view the document.',
+  description: 'Render a document you can read as a PNG and return the image — use ONLY if you can actually view images (otherwise read the markup back with get_artifact). Set refresh:true to capture the current published page rather than reuse its stored image. For a deck, ask for ONE slide at a time (slide, 1-based): the whole-deck shot stacks every slide too small to read. The same render is served at <base>/a/<id>/export for anyone who can view the document.',
   input: {
     id: z.string(),
     slide: z.number().int().positive().optional().describe('one deck slide, 1-based; omit for the whole document'),
@@ -519,6 +519,7 @@ const exportArtifactOp: Operation = {
     crop: z.string().optional().describe('Card crop selection.'),
     image: z.string().optional().describe('Card image selection.'),
     search: z.string().optional().describe('Capture search selection.'),
+    refresh: z.boolean().optional().describe('Render a fresh image instead of using the stored export.'),
   },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9', slide: 2 } },
@@ -540,6 +541,7 @@ const exportArtifactOp: Operation = {
     const res = await exportImageResponse(artifact, {
       ...(input.slide !== undefined ? { slide: String(input.slide) } : {}),
       ...(typeof input.format === 'string' ? { format: input.format } : {}),
+      ...(input.refresh === true ? { refresh: '1' } : typeof input.refresh === 'string' ? { refresh: input.refresh } : {}),
       ...Object.fromEntries(['mode','crop','image','search'].filter(key=>typeof input[key]==='string').map(key=>[key,input[key] as string])),
     }, ctx.base);
     const mime = res.headers.get('Content-Type') ?? '';

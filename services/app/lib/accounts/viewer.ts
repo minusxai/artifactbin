@@ -1,3 +1,4 @@
+import {hostedRequestRefusal} from '@/lib/accounts/request-authority';
 /**
  * The auth() → Viewer bridge, in its own module ON PURPOSE: the serving
  * routes need "who is looking" but lib/artifacts must stay importable
@@ -110,6 +111,8 @@ async function proxyActor(request: Request | undefined): Promise<RequestActor | 
       await syncProfile({ userId: attached.viewer.userId, email: attached.viewer.email ?? undefined });
       if (attached.viewer.emailVerified) await mergeGuestUsers(attached.viewer.userId, attached.heldTokenIds ?? []);
     }
+    const carrying=request??currentRequest();
+    if(carrying&&await hostedRequestRefusal(attached.viewer?.userId,attached.tokenId,carrying,carrying.headers.get(BROWSER_SESSION_HEADER)==='1'||attached.credential==='agent-cookie'))return NO_ACTOR;
     return attached;
   }
   return null;
@@ -154,6 +157,7 @@ export async function requestOrSessionActor(request: Request): Promise<RequestAc
   const offered = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   const token = offered ? await resolveToken(offered) : null;
   if (token) {
+    if(await hostedRequestRefusal(token.userId,token.id,request))return NO_ACTOR;
     await touchToken(token.id);
     await syncProfileForToken(request, {userId: token.userId, tokenId: token.id});
     const {tokenId, ...viewer} = tokenActorForRequest(request, {userId: token.userId, tokenId: token.id});

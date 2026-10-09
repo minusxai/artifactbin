@@ -2,7 +2,7 @@ import {services} from '../platform/services';
 import {managedTerminalView,managedTerminalInput,stopManagedTerminal} from './managed-terminal';
 import {managedRunRosterStatus} from './managed-status';
 import {externalHostedProofHash} from './hosted-comments';
-import {hostedRemoteAgent} from './hosted-interface';
+import {hostedStatusSnapshot,refreshHostedStatus,hostedRemoteAgent} from './hosted-interface';
 import {isTerminalFeedback} from './terminal-input';
 import { getArtifactById } from '../artifacts/store';
 import { canReadArtifact } from '../artifacts/access';
@@ -15,7 +15,7 @@ import {REMOTE_WORK_LIMIT,REMOTE_WORK_BYTES,remoteColor} from '../../../contract
 import type {RemoteSessionInfo,RemoteExchange,RemoteWork,RemoteWorkPhase} from '../../../contracts/src/remote';
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 interface AgentRow {id:string;owner:string;active:boolean;proof_hash:string;info:RemoteSessionInfo & {removed?:boolean}}
-interface WorkRow {agent_info?:RemoteSessionInfo;connected?:boolean;active?:boolean;id:string;session_id:string;artifact_id:string;thread_id:string;comment_id:string;phase:RemoteWorkPhase;data:{name:string;color:RemoteWork['color'];reason?:RemoteWork['reason'];payload:Record<string,unknown>};updated_at:string}
+interface WorkRow {owner:string;agent_info?:RemoteSessionInfo;connected?:boolean;active?:boolean;id:string;session_id:string;artifact_id:string;thread_id:string;comment_id:string;phase:RemoteWorkPhase;data:{name:string;color:RemoteWork['color'];reason?:RemoteWork['reason'];payload:Record<string,unknown>};updated_at:string}
 export interface ReviewReceipt {id:string;sessionId:string;proof:string;phase:'acknowledged'|'completed'|'blocked'|'failed'}
 /** Durable names and work receipts; terminal bytes and interactive input remain in the relay. */
 export class RemoteAgents {
@@ -212,9 +212,13 @@ export class RemoteAgents {
    await tx.query('INSERT INTO remote_work (id,owner,session_id,artifact_id,thread_id,comment_id,phase,data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (session_id,comment_id) DO NOTHING',[randomUUID(),owner,id,artifactId,threadId,comment.id,r?.active&&!reason?'queued':'unavailable',JSON.stringify({...data,...(reason?{reason}:{})})]);
   }
  }
+ async refreshWorkStatus(artifactId:string){
+  const db=await getDb();const owners=(await db.query<{owner:string}>("SELECT DISTINCT owner FROM remote_work WHERE artifact_id=$1",[artifactId])).rows;
+  await Promise.all(owners.map(({owner})=>refreshHostedStatus(owner)));
+ }
  async work(tx:Queryable,artifactId:string,threadId:string):Promise<RemoteWork[]>{
   const rows=(await tx.query<WorkRow>("SELECT w.*,a.info AS agent_info,a.active,(a.seen_at>now()-interval '30 seconds') AS connected FROM remote_work w LEFT JOIN remote_agents a ON a.id=w.session_id AND a.owner=w.owner WHERE artifact_id=$1 AND thread_id=$2 ORDER BY seq",[artifactId,threadId])).rows;
-  return rows.map(r=>({id:r.id,sessionId:r.session_id,artifactId:r.artifact_id,threadId:r.thread_id,commentId:r.comment_id,name:r.data.name,color:r.data.color,phase:r.phase,updatedAt:r.updated_at,...(r.data.reason?{reason:r.data.reason}:{}),activity:r.agent_info?.activity,connection:r.active?(r.connected?'online':'offline'):'stopped'}));
+  return rows.map(r=>({id:r.id,sessionId:r.session_id,artifactId:r.artifact_id,threadId:r.thread_id,commentId:r.comment_id,name:r.data.name,color:r.data.color,phase:r.phase,updatedAt:r.updated_at,...(r.data.reason?{reason:r.data.reason}:{}),activity:hostedStatusSnapshot(r.owner,r.session_id)?.activity??r.agent_info?.activity,connection:hostedStatusSnapshot(r.owner,r.session_id)!==undefined?(hostedStatusSnapshot(r.owner,r.session_id)?.online?'online':'offline'):r.active?(r.connected?'online':'offline'):'stopped'}));
  }
  async receipt(tx:Queryable,owner:string|null|undefined,artifactId:string,threadId:string,receipt:ReviewReceipt,resolve:boolean){
   if(!owner)throw new RemoteError('Account required',403);
@@ -227,7 +231,7 @@ export class RemoteAgents {
   if(resolve){
    if(receipt.phase!=='completed')throw new RemoteError('Only completed work can resolve a thread',409);
    const later=(await tx.query("SELECT id FROM annotations WHERE artifact_id=$1 AND (id=$2 OR root_id=$2) AND author_kind='human' AND deleted_at IS NULL AND seq>(SELECT seq FROM annotations WHERE id=$3) LIMIT 1",[artifactId,threadId,row.comment_id])).rows.length;
-   const pending=(await tx.query("SELECT id FROM remote_work WHERE thread_id=$1 AND id<>$2 AND phase NOT IN ('completed','failed','unavailable','superseded') LIMIT 1",[threadId,row.id])).rows.length;
+   const pending=(await tx.query("SELECT id FROM remote_work WHERE thread_id=$1 AND id<>$2 AND phase NOT IN ('completed','cancelled','failed','unavailable','superseded') LIMIT 1",[threadId,row.id])).rows.length;
    if(later||pending)throw new RemoteError('A newer comment or pending request still needs attention',409);
   }
   await tx.query('UPDATE remote_work SET phase=$2,updated_at=now() WHERE id=$1',[row.id,receipt.phase]);

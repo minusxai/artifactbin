@@ -35,3 +35,53 @@ New edges: `app/server → pkg/cli` (team-host and chromium). The CLI no longer 
 - `docs/editing.md:34` still names `solid/editor/FlowEditor.tsx`. That file is in the docs implementer's area, so I left it.
 - The worktree's ports collided at 5000. The brief's 5200 block is taken by `reader-evidence`, so this worktree uses 5300–5399.
 - The first CI run after merge will see a cold npm seed cache, because the cache key path changed.
+
+## Default export freshness and table authoring
+
+The seeded export contract was RED: `z.object(export_artifact.input).parse({ id, refresh: true })` returned only `{ id }`, dropping the refresh request before an agent could ask for a fresh image. The export operation now accepts `refresh: boolean`, documents it, and forwards true as the renderer's `refresh=1` value. Existing image caching is unchanged for ordinary calls.
+
+The new route/operation test starts with a cached static document, applies a current-head edit that preserves the table/footer node IDs, and forces an export. It verifies the operation triggers a new capture, the capture URL selects the current head, and the raw route renders the updated footer. It then verifies a normal request reuses that image and another forced request renders again. The fixture has no data queries, so no SQL-cache behavior was changed.
+
+Added short guidance for validating table totals against the named query's result column and row grain. The pinned `afbin help markup-data-authoring` copy assertion covers those instructions.
+
+Checks: RED observed on the seeded test before implementation. GREEN on `npm run validate`; 6 Vitest files with 86 tests and 1 CLI file with 37 assertions/tests; local `npm run afbin -- help markup-data-authoring` on port 5401. `git diff --check` passed. No browser capture gate or production rendering was run; CI owns those checks.
+
+Commit: `Fix fresh artifact export operation`.
+
+===CONCISE===
+
+Export operation refresh is explicit and honored; static current-head capture and ordinary cache reuse are covered. Table-total guidance is pinned in CLI help. FAST checks pass.
+
+## Follow-up: reported stale `/export?refresh=1` image
+
+The operation-level fake-PNG regression is insufficient to explain a stale raster. I ran a bounded one-off local route probe: it called `GET /a/<id>/export?format=png&refresh=1` after editing the published document, inspected the resulting capture URL, fetched that raw route through the real handler, rendered its returned HTML in local headless Chromium, and checked the returned PNG bytes. The fresh capture contained the edited `$12` footer and differed from the cached `$10` image.
+
+Source inspection found no stale path in this local route: refresh forces a new export-cache image id; the raw markup response is `no-store`; the capture URL selects the current head; the local browser opens a fresh Playwright page per render; the export redirect and image response are also `no-store`. The probe used a test BrowserService adapter that fetched the raw handler and passed its HTML to Chromium, so it did not reproduce the deployed browser-service network path. A subsequent local-dev end-to-end check below used the real composition and CLI.
+
+The Chromium probe was removed from the FAST Vitest suite because browser integration belongs to CI; the deterministic raw/cache regression remains. Fresh checks after removing it: not rerun (the prior 3/3 probe run included the removed Chromium case; the committed baseline's validation result remains from the earlier task).
+
+### Full local-dev composition, 2026-10-09
+
+Used `APP__PORT=5401 npm run dev`, authenticated a disposable `mxmx_test` local account through `afbin auth` and `npm run dev:otp`, and created/pushed the `$10` table fixture with `afbin push`. A real CLI export of the artifact URL produced the initial `$10` PNG. After editing and pushing v2 with `$12`, an ordinary export of the URL returned the old `$10` PNG (SHA-256 `f9f22e90b49513548c17ab624148e39e39244ab5d64515c4dcbbad83a791f798`), while `afbin export 4Ihagf --refresh` and `afbin export <full artifact URL> --refresh` both returned the `$12` PNG (SHA-256 `60b0fbf99c3e1e7f333ece4763384ffef8caca605e7ac39f99d08e5ac3a9bb38`). The four PNGs are in `tmp/export-refresh-live/` and were inspected. This used the actual app, browser-service HTTP navigation, export route, signed asset redirect, and CLI response path. The local artifact was soft-deleted after the check; the dev server was stopped.
+
+The original production report was specifically about a URL containing `refresh=1`; that forced-refresh symptom did not reproduce in this worktree, even though the ordinary unrefreshed image was stale immediately after the edit. I found no source difference explaining why the deployed forced refresh returned old pixels. Treat the original production cause as unresolved; local evidence establishes only that the full local forced-refresh path returns the current image.
+
+## Public default-request authority and annotation lifecycle companion
+
+Commits: `4a006bee` (22 files) and `bf4ba122` (ordinary completion isolation follow-up). This section records only this implementer's checks; earlier report sections belong to other workstreams.
+
+The owning account module now reads live owner-bound token metadata, including a server-minted `request_authority` marker. Marked credentials require the hosted authorization hook and fail closed if it is missing, unavailable, malformed, or returns an ordinary classification. Unmarked human/native credentials retain ordinary admission without depending on hosted service availability. Deployment extensions can mark their own existing grant namespace via `markRequestAuthority(prefix,q)`; public code never parses private grant names. Browser/agent-cookie actor identity retains its original token ID; direct HTTP and browser requests pass distinct authority sentinels. Actual operation admission occurs before durable mutation receipts. Definitive403 refusal includes `admission_refused:true`, while deferred202 replies claim neither annotation rows nor mutation receipts. Successful scoped operations report returned resources to the private grant owner.
+
+Cancellation revokes new admissions. Previously admitted effects may finish and committed writes remain; the test deliberately admits a write before cancellation then refuses a duplicate/new admission. No rollback or cross-service atomic lock is claimed. Conversation history is retained. `cancelled` is a terminal shared work phase and displays `Cancelled`. Blocked/cancelled/obsolete callback retries cannot resurrect superseded work or duplicate clarification prose. A real human follow-up handler supersedes a blocked request before a lost-response retry.
+
+Default annotation connection/activity use a readonly status snapshot refreshed outside annotation assembly transactions; projection inside `work(tx)` has no external IO and never calls ensure. Snapshot failure/expiry does not claim online. Annotation reads carry generation/sequence guards so an older initial/poll response cannot replace a newer live or local snapshot.
+
+Observed RED: actual-owned-thread authority tests3 failures/1 pass (old writes accepted200); HTTP/browser escape2 failures/4 passes; missing-hook1 failure/6 passes; stale initial annotation response1 failure/28 passes; cancelled presentation1 failure/38 passes; blocked retry1 failure/7 passes. The first stale-response fixture mistakenly resolved the resolved-history read and passed; it was corrected to isolate the initial open-list response before the meaningful failure was observed.
+
+Fresh FAST: `npm run validate` passed (module graph57 modules and TypeScript); selected10 files144 tests passed: hosted-request-scope, hosted-comments, annotations UI, remote-reply, schema-ownership, schema-sql-fresh, hosted-agent-client, remote-review, document-operations, annotations-events. Subsequent ordinary-completion isolation check passed12 tests in hosted-request-scope plus fresh validate. No bare test, gate, full build, CI push, production mutation, or CLI version bump was performed by this implementer. Root owns the separate CLI admission-refusal consumer and final release/CI.
+
+Running app: own dev5001, local disposable email login via protected `npm run dev:otp`, published artifact `OuLTHK`, and normal `afbin sessions script` visually rendered shell/document. Screenshot `local-ui-render.png` and receipt `local-ui-proof.json` retained. Comment-save attempts in a bearer/agent-cookie browser did not expose a composer; no successful human UI write is claimed. The dev OSS entry point does not install the optional default hosted composition, so unused signed fixture5027 was stopped and exact prior `.env` restored. Browser session closed normally; dev server session16104 remains available for root. Full default/native readiness browser acceptance is left to the composed CI artifact and production confirmation owned by root.
+
+===CONCISE===
+
+Scoped default authority fails closed before admission; ordinary tokens stay independent. Cancellation and blocked delivery are terminal; stale annotation responses cannot replace newer snapshots. Actual-owned-handler and compatibility regressions pass; readonly default snapshot avoids ensure inside annotation transactions. Commits4a006bee+bf4ba122. Local shell/document render passed; human comment-save/default-composed UI not claimed. Dev5001 retained; browser and unusedfixture cleaned.

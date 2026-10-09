@@ -64,6 +64,8 @@ interface MintOptions {
   expiresInMs?: number | null;
   /** Exact OAuth resource restriction. Omitted for ordinary/manual tokens. */
   audience?: string | null;
+  /** Server-owned default request grant; cannot be supplied by token APIs. */
+  requestAuthority?: boolean;
   /** Space-delimited OAuth scope, present only with an audience. */
   scope?: string | null;
 }
@@ -97,7 +99,7 @@ export async function mintToken(
   const id = generateTokenId();
   const token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
   const expiresAt = expiresInMs === null ? null : new Date(Date.now() + expiresInMs).toISOString();
-  await runner.query('INSERT INTO tokens (id, name, token_hash, user_id, expires_at, audience, scope) VALUES ($1, $2, $3, $4, $5, $6, $7)', [
+  await runner.query('INSERT INTO tokens (id, name, token_hash, user_id, expires_at, audience, scope, request_authority) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [
     id,
     name ?? null,
     sha256(token),
@@ -105,6 +107,7 @@ export async function mintToken(
     expiresAt,
     options.audience ?? null,
     options.scope ?? null,
+    options.requestAuthority === true,
   ]);
   /*
    * THE ONE CHOKEPOINT. Every mint in the product — anonymous, operator,
@@ -262,4 +265,17 @@ export async function listTokensByUser(userId: string): Promise<TokenRow[]> {
     'SELECT id, name, user_id, created_at, deleted_at, expires_at, last_used_at FROM tokens WHERE user_id = $1 AND deleted_at IS NULL ORDER BY last_used_at DESC NULLS LAST, created_at DESC',
     [userId],
   )).rows;
+}
+
+/** Trusted hosted authorization metadata, never token plaintext or caller-supplied names. */
+export async function hostedCredentialDescriptor(owner:string,id:string):Promise<{name:string|null;expiresAt:string|null;scoped:boolean}|null>{
+ const db=await getDb();const row=(await db.query<{name:string|null;expires_at:string|null;request_authority:boolean}>(`SELECT name,expires_at,request_authority FROM tokens WHERE id=$1 AND user_id=$2 AND ${LIVE_TOKEN_SQL}`,[id,owner])).rows[0];
+ return row?{name:row.name,expiresAt:row.expires_at,scoped:row.request_authority}:null;
+}
+
+/** Deployment extensions may upgrade their own server-minted grant namespace.
+ * The account service owns the SQL; callers provide provenance, not requests. */
+export async function markRequestAuthority(prefix:string,q:Queryable):Promise<void>{
+ if(!prefix||prefix.length>256)throw Error('request_authority_prefix_invalid');
+ await q.query('UPDATE tokens SET request_authority=true WHERE left(name,length($1))=$1 AND request_authority=false',[prefix]);
 }

@@ -1,15 +1,16 @@
 import { setSession } from './harness';
-import {it,expect,afterEach} from 'vitest';
+import {it,expect,afterEach,vi} from 'vitest';
 import {useAppHarness,request,agentCookie} from './harness';
 import { createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {remoteAgents} from '@/lib/remote/agents';
-import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
+import {refreshHostedStatus,setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
 import {readCommentContext} from '@/lib/remote/comment-context';
 import {externalHostedComments,clearExternalHostedComments} from '@/lib/remote/hosted-comments';
 import {POST as callback} from '@/app/api/remote/hosted/operations/route';
 import {POST as publish} from '@/app/api/artifacts/route';
+import {POST as followup} from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import {POST as comment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {serve,hostedAgentClient,hostedAgentSessionId,hostedAgentCallbackKey,hostedAgentDeliveryKey,hostedAgentDeliveryTransport,hostedAgentTransport,signActor,verifyActor} from '@artifactbin/utils';
 import {ACTOR_HEADER,type HostedAgentComment} from '@artifactbin/contracts';
@@ -41,7 +42,7 @@ async function fixture(){
  const root=await comment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',cookie,json:{node_id:'remote',edit_id:doc.edit_id,quote:'Remote comments',body:`[@artifactbin](/chat?session=${id}) fix this`}}),{params:Promise.resolve({id:doc.id})});expect(root.status).toBe(201);const thread=await root.json();
  const work=thread.remote_work[0];
  const call=(operation:string,input:unknown={},overrides:Record<string,unknown>={},owner=user.id,key=hostedAgentCallbackKey(secret))=>callback(request('/api/remote/hosted/operations',{method:'POST',headers:{[ACTOR_HEADER]:signActor({userId:'proxy-browser',credential:'session'},secret),'x-artifactbin-hosted-callback':signActor({userId:owner,credential:'session'},key)},json:{requestId:work.id,sessionId:id,operation,input,...overrides}}));
- return {user,doc,thread,work,tick,call,accepted,attempts,service};
+ return {user,doc,thread,work,tick,call,accepted,attempts,service,cookie};
 }
 it('persists independent-service delivery, retries ambiguous acceptance with the same ID, and completes actual comment receipts',async()=>{
  const f=await fixture();try{
@@ -138,5 +139,29 @@ it('a failed earlier request does not prevent a later completed request resolvin
   const next=(await remoteAgents.work(db,f.doc.id,f.thread.id)).at(-1)!;
   const completed=await f.call('reply',{body:'Done',phase:'completed',resolve:true},{requestId:next.id});
   expect(completed.status).toBe(200);
+ }finally{await f.service.close();}
+});
+
+it('ignores a lost-response blocked delivery retry after a human follow-up supersedes that request',async()=>{
+ const f=await fixture();try{
+  await f.tick();expect((await f.call('reply',{body:'Working',phase:'acknowledged'})).status).toBe(200);
+  expect((await f.call('reply',{body:'Which footer?',phase:'blocked'})).status).toBe(200);
+  expect((await f.call('reply',{body:'Reconstructed clarification',phase:'blocked'})).status).toBe(200);
+  const db=await getDb();const next=await followup(request(`/api/my/artifacts/${f.doc.id}/annotations/${f.thread.id}`,{method:'POST',cookie:f.cookie,json:{reply:`[@artifactbin](/chat?session=${f.work.sessionId}) Use the footer`}}),{params:Promise.resolve({id:f.doc.id,annId:f.thread.id})});expect(next.status).toBe(200);
+  const retry=await f.call('reply',{body:'Which footer?',phase:'blocked'});expect(retry.status).toBe(200);expect(await retry.json()).toMatchObject({alreadyDelivered:true});
+  expect((await remoteAgents.work(db,f.doc.id,f.thread.id))[0].phase).toBe('superseded');
+  const replies=(await db.query<{body:string}>("SELECT body FROM annotations WHERE root_id=$1 AND author_kind='agent' ORDER BY seq",[f.thread.id])).rows;
+  expect(replies.map(row=>row.body)).toEqual(['Working','Which footer?']);
+ }finally{await f.service.close();}
+});
+
+it('projects readonly default status over stale heartbeat without waking it or performing IO in annotation transactions',async()=>{
+ const f=await fixture();try{
+  const db=await getDb();await db.query("UPDATE remote_agents SET seen_at=now()-interval '5 minutes' WHERE owner=$1",[f.user.id]);
+  const ensure=vi.fn(async()=>{throw Error('must not wake');});const status=vi.fn(async()=>({id:f.work.sessionId,online:true,activity:'working'}));
+  setHostedRemoteAgent({owns:()=>true,ensure,status} as unknown as import('@artifactbin/contracts').HostedRemoteAgent);
+  await refreshHostedStatus(f.user.id);expect(status).toHaveBeenCalledTimes(1);
+  const projected=await db.transaction(tx=>remoteAgents.work(tx,f.doc.id,f.thread.id));expect(projected[0]).toMatchObject({connection:'online',activity:'working'});
+  expect(status).toHaveBeenCalledTimes(1);expect(ensure).not.toHaveBeenCalled();
  }finally{await f.service.close();}
 });

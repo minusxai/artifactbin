@@ -11,10 +11,11 @@ export function replyMentionPrefix(thread:ReadonlyArray<{body:string;author:{kin
 export function hasReplyText(body:string):boolean{let text=body;for(const match of sessionMentions(body))text=text.replace(match[0],'');return !!text.trim();}
 
 export function remoteWorkLabel(work:RemoteWork):string{
+ if(work.phase==='cancelled')return 'Cancelled';
  if(work.reason==='interrupted')return 'Interrupted · check prior changes, then mention again';
  if(work.reason==='queue_full')return 'Queue full · mention again after pending work finishes';
  if(work.reason==='unauthorized')return 'Unavailable · mention one of your agents';
- const phase=({superseded:'Follow-up received',dispatching:'Sending to agent',queued:'Queued',delivered:'Sent · awaiting acknowledgment…',acknowledged:'Working',completed:'Answered',failed:'Execution failed · retry by mentioning again',blocked:'Needs your input',uncertain:'Delivery uncertain · check terminal',unavailable:'Agent unavailable'})[work.phase];
+ const phase=({cancelled:'Cancelled',superseded:'Follow-up received',dispatching:'Sending to agent',queued:'Queued',delivered:'Sent · awaiting acknowledgment…',acknowledged:'Working',completed:'Answered',failed:'Execution failed · retry by mentioning again',blocked:'Needs your input',uncertain:'Delivery uncertain · check terminal',unavailable:'Agent unavailable'})[work.phase];
  if(work.connection==='stopped')return phase+' · stopped';
  if(work.activity==='queued'&&(work.phase==='queued'||work.phase==='dispatching'))return 'Waiting for capacity';
  if(work.connection==='offline')return phase+' · offline';

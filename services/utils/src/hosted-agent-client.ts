@@ -47,6 +47,7 @@ export function hostedAgentClient(base: string, forward: Upstream, commentForwar
   }
   const agent: HostedRemoteAgent = {
     owns: (owner, id) => id === hostedAgentSessionId(owner),
+    async status(owner) {const session=await json<Awaited<ReturnType<NonNullable<HostedRemoteAgent['status']>>>>(owner,'/status',{});if(session)owned(owner,session.id);return session;},
     async ensure(owner) {
       const session = await json<Awaited<ReturnType<HostedRemoteAgent['ensure']>>>(owner, '/ensure', {});
       owned(owner, session.id);
@@ -66,6 +67,8 @@ export function hostedAgentClient(base: string, forward: Upstream, commentForwar
       const response=await request(owner, '/comment', comment, commentForward);
       if(!response.ok)throw Error('hosted_comment_delivery_failed');
     },
+    authorizeOperation: (owner,tokenId,name,input,credential) => json(owner,'/authorize-operation',{tokenId,name,input,credential}),
+    async operationCompleted(owner,tokenId,name,input,result,credential){await json(owner,'/operation-completed',{tokenId,name,input,result,credential});},
     operation: (owner, requestId, operation, args) => request(owner, '/operation', { requestId, operation, args }),
   };
   return agent;

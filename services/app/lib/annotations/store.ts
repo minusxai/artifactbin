@@ -445,6 +445,7 @@ export async function listAnnotationPageFor(actor: TokenActor, artifactId: strin
       AND ($2::text='all' OR status=$2) AND ($3::bigint IS NULL OR seq>$3)
       AND ($5::text IS NULL OR author_user_id=$5 OR author_token_id=$5)
       ORDER BY seq LIMIT $4`, [artifactId, opts.status, opts.after ?? null, opts.limit + 1,opts.author??null]);
+  await remoteAgents.refreshWorkStatus(artifactId);
   const selected = roots.rows.slice(0, opts.limit);
   return {annotations: await wireFor(db, row, selected),
     ...(roots.rows.length > opts.limit ? {next: String(selected.at(-1)!.seq)} : {})};
@@ -478,6 +479,7 @@ export async function annotationsWireForRow(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id IS NULL ${filter} AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [row.id],
   );
+  await remoteAgents.refreshWorkStatus(row.id);
   return wireFor(db, row, roots.rows);
 }
 

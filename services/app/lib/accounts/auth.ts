@@ -1,5 +1,6 @@
+import {hostedRequestRefusal} from '@/lib/accounts/request-authority';
 import cliRelease from '../../public/chat/release.json';
-import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
+import {BROWSER_SESSION_HEADER,CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 /**
  * The bearer/cookie route wrapper, and the two in-memory web-ingest allowances
  * it owns.
@@ -143,6 +144,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
       if (actor && refusesCrossSite(request, browser)) return json({ error: 'forbidden' }, 403);
     }
     if (!actor) return unauthorized(request);
+    const scoped=await hostedRequestRefusal(actor.userId,actor.id,request,credential!=='bearer'||request.headers.get(BROWSER_SESSION_HEADER)==='1');if(scoped)return scoped;
     const npmRequired=cliNpmRequired(request);
     if(npmRequired)return npmRequired;
     // Old clients inspect this header before JSON errors: keep required protocol in the body
