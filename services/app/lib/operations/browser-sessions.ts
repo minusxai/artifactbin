@@ -93,7 +93,7 @@ export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
       noteTestUserSession(resolved.id, sessionId, actor);
     }
 
-    const request = { ...safeInput, actor, ...(pageActor ? { pageActor } : {}) } as BrowserSessionRequest;
+    const request = { ...safeInput, ...(ctx.requestScope!==undefined?{requestScope:ctx.requestScope}:{}), actor, ...(pageActor ? { pageActor } : {}) } as BrowserSessionRequest;
     const result = await sessionService.request(request);
     // The session never started, so nothing will ever close it: stop naming it
     // now rather than leaving a register entry a later erase would act on.

@@ -49,6 +49,8 @@ export interface OpReply {
 
 /** What every `run` gets: who is calling, from where, and how to attribute them. */
 export interface OpContext {
+  /** App-attested authority binding; never operation input or caller headers. */
+  requestScope?:string;
   mutationReceipt?:MutationReceipt;
   actor: TokenActor;
   /** The caller's own origin — every `url` in a reply is built from it. */

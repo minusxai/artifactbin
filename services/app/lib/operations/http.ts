@@ -85,7 +85,7 @@ export async function runOperation(
   const scope=await hostedAuthorization(actor.userId,actor.tokenId,name,input);
   const refusal=hostedRefusal(scope);if(refusal)return refusal;
   const complete=async(response:Response)=>{if(scope.kind==='allowed')await hostedOperationCompleted(actor.userId,actor.tokenId,name,input,response);return response;};
-  const ctx: OpContext = { actor, base: baseUrl(request), request, author };
+  const ctx: OpContext = { ...(scope.kind==='allowed'&&scope.requestScope!==undefined?{requestScope:scope.requestScope}:{}),actor, base: baseUrl(request), request, author };
   const key=request.headers.get('Idempotency-Key');
   const authorize=AUTHORIZED[name];
   if(authorize&&key){

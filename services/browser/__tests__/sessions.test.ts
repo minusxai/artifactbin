@@ -186,3 +186,18 @@ it('fences scripts and receipt replay by creation scope while retaining owner cl
     expect(run).toHaveBeenCalledTimes(2);
   } finally {await sessions.close();}
 });
+
+it('rejects malformed scopes without allocating workers and preserves same-scope resume',async()=>{
+ const run=vi.fn(async()=>({pages:[],attachments:[]})),factory=vi.fn(async()=>({run,close:async()=>{}}));const sessions=createBrowserSessions(factory);
+ const actor={credential:'bearer' as const,userId:'scoped-owner',tokenId:'old'};
+ const request={actor,op:'script' as const,session_id:'bound',execution_id:'first',create:true,code:'one'};
+ try{
+  for(const requestScope of ['', ' ', 'x'.repeat(257),null,42])expect((await sessions.request({...request,requestScope} as never)).error?.code).toBe('INVALID_REQUEST');
+  expect(factory).not.toHaveBeenCalled();
+  await sessions.request({...request,requestScope:'A'});await vi.waitFor(()=>expect(run).toHaveBeenCalledTimes(1));
+  expect((await sessions.request({...request,requestScope:'B',viewer:'guest',actor:{...actor,userId:'stranger'}})).error?.code).toBe('SESSION_NOT_FOUND');
+  expect((await sessions.request({...request,requestScope:'B',viewer:'guest'})).error?.code).toBe('SESSION_SCOPE_CONFLICT');
+  await sessions.request({...request,requestScope:'A',actor:{...actor,tokenId:'rotated'},create:false,execution_id:'next',code:'two'});await vi.waitFor(()=>expect(run).toHaveBeenCalledTimes(2));
+  expect(factory).toHaveBeenCalledTimes(1);
+ }finally{await sessions.close();}
+});
