@@ -46,6 +46,20 @@ queues or rerun unchanged code to hide a slow run. Report cold and warm timings 
   branch's CLI against that server, state in `~/.artifactbin-dev/<port>` (home and released `afbin`
   untouched); `npm run eval -- --tasks <name>` shows an agent using them. Both take `APP__PORT=<n>`.
   Never test or iterate on production — it is confirmed after a deploy, not explored.
+- **Local evals use the real product contract.** Supply the target server origin and exact candidate
+  CLI package/skill assets independently through the eval harness. Keep task briefs and functional
+  scorers identical between local and deployed targets; the agent must not need a local-only prompt,
+  auth bypass, production deployment or published/latest CLI fallback. Test installed and fresh-install
+  CLI paths against the supplied candidate; HTTP discovery, guides, auth and API stay on the supplied
+  target. Isolate harness homes, credentials and data. Record actual server/source revision, candidate
+  package and skill hashes, harness/model/settings; invalidate stale assets on every relevant input.
+  CLI/shared-package/skill edits must be visible in the next local run without publishing a release.
+  Exception for this workflow: building/packing the complete candidate CLI and its required runtime
+  assets locally is eval preparation, not a CI check. Use the normal package assembly, once per
+  relevant source snapshot with an input-hash receipt; never a reduced-capability substitute or
+  published-package fallback. This exception does not permit local full suites or merge gates.
+  Local OTP delivery belongs to the harness; the agent still follows the normal authentication flow.
+  Baseline and candidate comparisons use the same scenarios/settings and retain failures and missing metrics.
 - **50 test files TOTAL across Vitest + CLI.** Above 50, `npm test` runs neither suite and exits 2:
   **DEFERRED TO CI, NOT PASSED**. No affected tests also means unverified (exit 2); discovery errors
   fail visibly. Never count/preview tests, raise the cap, use `--all`, bypass the wrapper, or split
