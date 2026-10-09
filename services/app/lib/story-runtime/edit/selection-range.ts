@@ -9,8 +9,8 @@ import { COMMENT_TARGET_ATTR } from '@/lib/story-ui/comment-target';
  *
  * Three verbs, one coordinate system:
  *   `anchorFor`     — the BLOCK that contains the selection (the `<p>`, not the
- *                     `<strong>` inside it; the first covered block when the
- *                     selection crosses several).
+ *                     `<strong>` inside it; the nearest shared source owner
+ *                     when the first block cannot address every selected run).
  *   `describeRange` — the quote plus one part per text run, each addressed
  *                     relative to that anchor and indexed into its node's
  *                     CANONICAL text (`lib/story/annotations/annotation-range`).
@@ -88,12 +88,45 @@ function runsIn(range: Range): TextRun[] {
  * at offset 0 of the next block, and that block holds none of the selection.
  */
 export function anchorFor(range: Range): Element | null {
-  for (const run of runsIn(range)) {
-    if (!run.node.data.slice(run.start, run.end).trim()) continue;
-    const block = blockAt(run.node);
-    if (block) return block;
+  const runs = runsIn(range).filter(run => run.node.data.slice(run.start, run.end).trim());
+  if (!runs.length) return blockAt(range.startContainer);
+
+  // A rendered repeat/table item has its own durable target. A range spanning
+  // two such targets cannot be anchored to either one or to their owner without
+  // changing what the comment identifies.
+  const targets = runs.map(run => run.node.parentElement?.closest(`[${COMMENT_TARGET_ATTR}]`) ?? null);
+  if (targets.some(target => target !== targets[0])) return null;
+  const targetRoot = targets[0];
+  const first = blockAt(runs[0].node);
+  const addressableFrom = (anchor: Element) => runs.every(run => {
+    const parent = run.node.parentElement;
+    return !!parent && relFor(anchor, parent) !== null;
+  });
+
+  // Keep the precise first-block address for ordinary selections and siblings
+  // whenever it already describes every selected run.
+  if (first && addressableFrom(first)) return first;
+
+  const rows = [...new Set(runs
+    .map(run => run.node.parentElement?.closest('tr') ?? null)
+    .filter((row): row is HTMLTableRowElement => row !== null))];
+  if (rows.length > 1) {
+    const table = rows[0]?.closest('table');
+    const addressable = table?.hasAttribute(AST_PATH_ATTR) || table?.hasAttribute(COMMENT_TARGET_ATTR);
+    if (table && addressable && rows.every(row => table.contains(row))
+      && (!targetRoot || targetRoot === table || targetRoot.contains(table))
+      && addressableFrom(table)) return table;
   }
-  return blockAt(range.startContainer);
+
+  // For blocks under different wrappers, use their nearest shared stamped
+  // source owner. The runtime target check above keeps this search inside one
+  // keyed For/DataTable instance when one is present.
+  for (let candidate = runs[0].node.parentElement; candidate; candidate = candidate.parentElement) {
+    if (!candidate.hasAttribute(AST_PATH_ATTR) && !candidate.hasAttribute(COMMENT_TARGET_ATTR)) continue;
+    if (targetRoot && candidate !== targetRoot && !targetRoot.contains(candidate)) continue;
+    if (runs.every(run => candidate.contains(run.node)) && addressableFrom(candidate)) return candidate;
+  }
+  return null;
 }
 
 /** Where one canonical character sits in the DOM. */
@@ -213,7 +246,7 @@ function resolveAddress(anchor: Element, address: RelAddress): Element | null {
  * same block read on, and a new block adds ONE space — the quote reads the way
  * the person selected it.
  */
-export function describeRange(range: Range, anchor: Element): { quote: string; range: AnnotationTextRange } {
+export function describeRange(range: Range, anchor: Element): { quote: string; range: AnnotationTextRange } | null {
   const parts: AnnotationRangePart[] = [];
   let quote = '';
   let previousBlock: Element | null = null;
@@ -228,12 +261,18 @@ export function describeRange(range: Range, anchor: Element): { quote: string; r
     i = j;
     if (!parent) continue;
     const rel = relFor(anchor, parent);
-    if (rel === null) continue;
+    if (rel === null) {
+      if (group.some(run => run.node.data.slice(run.start, run.end).trim())) return null;
+      continue;
+    }
     const canon = canonicalOf(parent);
     const start = indexOfBoundary(canon, group[0].node, group[0].start);
     const end = indexOfBoundary(canon, group[group.length - 1].node, group[group.length - 1].end);
     const text = canon.text.slice(start, end);
-    if (!text.trim()) continue;
+    if (!text.trim()) {
+      if (group.some(run => run.node.data.slice(run.start, run.end).trim())) return null;
+      continue;
+    }
     parts.push({ rel, start, end, text });
     const block = blockAt(parent) ?? parent;
     if (previousBlock && block !== previousBlock) quote += ' ';
@@ -288,5 +327,5 @@ export function captureSelection(win: Window, element: Element): { quote: string
   // what the caller is describing, and addressing it from here would lie.
   if (element !== range.startContainer && !element.contains(range.startContainer)) return null;
   const described = describeRange(range, element);
-  return described.range.parts.length > 0 ? described : null;
+  return described?.range.parts.length ? described : null;
 }

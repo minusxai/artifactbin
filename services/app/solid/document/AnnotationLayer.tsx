@@ -146,6 +146,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     }).catch(() => {});
   };
   const [recentResolved, setRecentResolved] = createSignal<Record<string, { row: AnnotationWire; remaining: number }>>({});
+  // A resolution this viewer just acknowledged is history, not an unseen remote event. Keep every
+  // acknowledged revision so a delayed index read cannot resurrect its countdown; a later revision
+  // from another viewer still gets the usual countdown.
+  const locallyResolvedRevisions = new Map<string, Set<number | undefined>>();
+  const wasLocallyResolved = (row: AnnotationWire) => locallyResolvedRevisions.get(row.id)?.has(row.revision) ?? false;
   let previousOpen = new Set<string>();
   const [resolvedList, setResolvedList] = createSignal<AnnotationWire[] | null>(null);
   /*
@@ -305,6 +310,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         setRecentResolved((current) => {
           const next: typeof current = {};
           for (const row of list) {
+            if (wasLocallyResolved(row)) continue;
             const old = current[row.id];
             if (removed.includes(row.id) || old) next[row.id] = { row, remaining: old && old.row.revision === row.revision ? old.remaining : 10000 };
           }
@@ -466,6 +472,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     setBusy(true);
     try {
       const wire = await backend.actOnAnnotation(annId, body);
+      if (body.resolve && wire.status === 'resolved') {
+        const revisions = locallyResolvedRevisions.get(annId) ?? new Set<number | undefined>();
+        revisions.add(wire.revision);
+        locallyResolvedRevisions.set(annId, revisions);
+      }
       batch(() => {
         setAnnotations((prev) => {
           if (wire.status === 'resolved') return prev.filter((row) => row.id !== annId);
@@ -476,7 +487,16 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           if (wire.status === 'open') return prev.filter((row) => row.id !== annId);
           return prev.some((row) => row.id === annId) ? prev.map((row) => (row.id === annId ? wire : row)) : [...prev, wire];
         });
-        if (wire.status === 'resolved') setOpenId((current) => (current === annId ? null : current));
+        if (wire.status === 'resolved') {
+          setRecentResolved((current) => {
+            const retained = current[annId];
+            if (!retained || retained.row.revision !== wire.revision) return current;
+            const next = { ...current };
+            delete next[annId];
+            return next;
+          });
+          setOpenId((current) => (current === annId ? null : current));
+        }
         else if (body.reopen) {
           // It was the open thread while it was resolved history; it stays the open thread.
           setOpenId(annId);
