@@ -1,4 +1,5 @@
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility } from './access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type Visibility } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -8,7 +9,7 @@ import type { ProseOperation } from '../document';
 import type { DocumentOperation } from '@artifactbin/contracts';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '../accounts/relation-state';
-import { documentMentions } from '../annotations/saved-mentions';
+import { documentMentions } from './membership/document-mentions';
 import { grantsOf, grantsPermitRead } from '../datasets/policy/grants';
 import { claimArtifactId } from './identities';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';

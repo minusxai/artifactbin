@@ -8,7 +8,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
-import { mintExportKey } from '@/lib/serving';
+import { mintExportKey } from '@/lib/platform';
 
 const harness = useAppHarness();
 const secret = 'vitest-actor-secret-0000000000000000';

@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput,TableResult} from '@artifactbin/contracts';
-import {evaluateNotificationQuery,normalizeNotificationResult,type NotificationQueryDependencies} from '@/lib/notifications';
+import { evaluateNotificationQuery, normalizeNotificationResult, type NotificationQueryDependencies } from '@/lib/artifacts';
 import {notificationContextSnapshot,notificationRuleSourceIds} from '@/lib/notifications';
 import {readerDataflow,type CompiledDataflow} from '@/lib/dataflow/compiled-dataflow';
 const rule={name:'first',on:'save',engine:'sqlite' as const,sql:'select $recipient as "to", $_now || $_tz as message',params:['recipient','_now','_tz'],reads:{imports:[],queries:[],values:[],builtins:['_now' as const,'_tz' as const]},columns:[{name:'to',type:'user' as const},{name:'message',type:'string' as const}],start:0,end:1};

@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import type {DocumentGraph,DocumentResourcePreparation,RunnerJson} from '@artifactbin/contracts';
-import type {TokenActor} from '../artifacts';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {getEditableArtifactFor} from '../artifacts/store';
 import {OPERATIONS} from './registry';
 import {runOperation} from './http';

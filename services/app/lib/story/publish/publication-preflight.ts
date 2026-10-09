@@ -5,7 +5,7 @@ import {respondToEdit} from '@/lib/artifacts/wire';
 import {createArtifactFromBody,replaceArtifactWithBody} from './requests';
 import { applyEditFor, getArtifactFor, getOwnedArtifactFor } from '@/lib/artifacts/store';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
-import { type TokenActor } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {json,baseUrl} from '@/lib/http/http';
 export async function preflightPublication(request:Request,actor:TokenActor,body:Record<string,unknown>):Promise<Response>{
  const input=body.input;

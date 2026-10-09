@@ -15,7 +15,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintExportKey } from '@/lib/serving';
+import { mintExportKey } from '@/lib/platform';
 import { appPagePolicy, createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 

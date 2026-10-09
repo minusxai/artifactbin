@@ -12,7 +12,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { artifactPageAnswer } from '@/lib/serving';
 import { pagesSite } from '@/lib/http/pages-origin';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { mintExportKey } from '@/lib/serving';
+import { mintExportKey } from '@/lib/platform';
 import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 

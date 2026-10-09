@@ -1,4 +1,5 @@
-import { canReadArtifact, dataflowForRow, getArtifactById, holdImport, nameablePeople, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, getArtifactById, holdImport, nameablePeople, type ArtifactRow } from '@/lib/artifacts';
+import type { RoleActor } from '@/lib/accounts/actors';
 import { ID_RE } from '@/lib/platform';
 import { json, readJson } from '@/lib/http';
 import { sessionActor } from '@/lib/accounts';

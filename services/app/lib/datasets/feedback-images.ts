@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/platform/db';
 import { generateInternalId, ID_RE } from '@/lib/platform';
-import { getArtifactById, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+import { getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import type { RoleActor } from '@/lib/accounts/actors';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { dataflowForRow } from '@/lib/artifacts/dataflow';
 import { catalogOf } from '@/lib/datasets/catalog';

@@ -3,7 +3,7 @@ import { markdownContent, markdownSource } from '@/lib/markdown/content';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {recordEvent} from '../notifications/events';
 import {commentMentions} from './saved-mentions';
-import {MembershipError} from '../accounts/membership';
+import {MembershipError} from '@/lib/artifacts/membership/membership';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from '../remote/agents';
@@ -23,7 +23,8 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { annotationScope, effectiveRole, type ArtifactRow, type Scope, type TokenActor } from '@/lib/artifacts/access';
+import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { canGovern } from '@/lib/artifacts/share-roles';
 import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/document/anchors';
 import { avatarUrl } from '@/lib/accounts/avatars';

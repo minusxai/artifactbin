@@ -16,8 +16,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/document/asset-url';
-import { mintExportKey } from '@/lib/serving';
-import { getDb } from '@/lib/platform';
+import { getDb, mintExportKey } from '@/lib/platform';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
 useAppHarness();

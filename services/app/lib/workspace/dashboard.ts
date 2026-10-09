@@ -9,7 +9,7 @@ import { forkCountByUser, likeSummaryByUser, VIEW_SERIES_DAYS, viewSeriesByUser 
 import { count } from '@/lib/accounts/relations';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/access';
 import { getDb } from '@/lib/platform/db';
-import type { SharedArtifactSummary } from '@/lib/accounts';
+import type { SharedArtifactSummary } from './';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 import { workspaceDocumentsFor, workspaceStatsFor } from './inventory';
 

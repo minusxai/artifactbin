@@ -1,7 +1,7 @@
 import {describe,it,expect,vi} from 'vitest';
 import * as assetDelivery from '@/lib/export/assets';
 import {useAppHarness} from './harness';
-import {getDb} from '@/lib/platform';
+import {getDb,mintExportKey} from '@/lib/platform';
 import {objectStore,createS3Store, cachedReads} from '@/lib/object-store';
 import {exportAssetResponse,exportAssetUrl} from '@/lib/export/assets';
 import {GET as exportImage} from '@/app/a/[id]/export/route';
@@ -9,7 +9,6 @@ import {createArtifact} from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {setServices} from '@/lib/platform';
 import {resetExportRenderer} from '@/lib/export';
-import {mintExportKey} from '@/lib/serving';
 
 useAppHarness();
 const id='11111111-1111-4111-8111-111111111111';

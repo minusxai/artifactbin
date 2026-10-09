@@ -12,7 +12,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { mintExportKey } from '@/lib/serving';
+import { mintExportKey } from '@/lib/platform';
 import { useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();

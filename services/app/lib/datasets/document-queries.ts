@@ -2,7 +2,7 @@
 import { executeCatalog } from '@/lib/datasets/execute';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import type { RoleActor } from '@/lib/artifacts';
+import type { RoleActor } from '@/lib/accounts/actors';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import { importRef, selectQueries, type ImportTables } from '@/lib/dataflow/compiled-flow';
 import { runDataflow, runDataflowMany, type RunDataflowOptions } from '../sql/run-dataflow';

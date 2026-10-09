@@ -1,7 +1,8 @@
 /** Private staged raster attachments. Only annotation creation consumes a stage. */
 import sharp from 'sharp';
 import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentImageWire} from '../../../contracts/src/comment-image';
-import { annotationScope, type TokenActor } from '../artifacts/access';
+import { annotationScope } from '../artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {getDb,type Queryable} from '../platform/db';
 import {objectStore} from '../object-store/index';
 import {generateInternalId} from '../platform/ids';

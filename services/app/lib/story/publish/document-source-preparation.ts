@@ -2,7 +2,8 @@
  * compiler. It observes an authorized head but never commits or certifies it:
  * /edits independently checks ownership and graph dependencies at commit. */
 import {MAX_DOCUMENT_BYTES,type DocumentUpdate} from '@artifactbin/contracts';
-import {editorScope,writerFor,type ArtifactRow,type TokenActor} from '@/lib/artifacts/access';
+import { editorScope, writerFor, type ArtifactRow } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import type {PreparedMarkupWrite} from '@/lib/artifacts/store';
 import {createDocumentGraph} from '@/lib/document/document-graph';
 import {stampNodeIds} from '@/lib/document/node-ids';

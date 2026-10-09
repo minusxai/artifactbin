@@ -26,12 +26,11 @@ import { POST as revertRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
-import { trackEvent } from '@/lib/platform';
-import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
-import { mintExportKey } from '@/lib/serving';
+import { trackEvent, mintExportKey } from '@/lib/platform';
+import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, listArtifactsByUser } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
 const BASE = 'http://localhost:3000';

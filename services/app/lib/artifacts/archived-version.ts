@@ -28,7 +28,8 @@
  * one at every call site.
  */
 import { getVersionFor, listVersionsFor, versionForCapture } from '@/lib/artifacts/store';
-import { type ArtifactRow, type TokenActor } from '@/lib/artifacts/access';
+import { type ArtifactRow } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { servableDocument } from '@/lib/artifacts/servable';
 import { actorForArtifacts, requestOrSessionActor } from '@/lib/accounts/viewer';
 

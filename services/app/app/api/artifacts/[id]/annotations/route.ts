@@ -20,7 +20,7 @@ import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 import { json, readJson } from '@/lib/http';
-import type { TokenActor } from '@/lib/artifacts';
+import type { TokenActor } from '@/lib/accounts/actors';
 
 const STATUSES = new Set(['open', 'resolved', 'all']);
 

@@ -1,16 +1,17 @@
-import {lockMembershipUsers} from './membership-lock';
+import {lockMembershipUsers} from '@/lib/accounts/membership-lock';
 import {artifactQuery} from '@/lib/artifacts/document';
-import {JOIN_RELATIONS,setRelationState} from './relation-state';
-import {recordEvent} from '../notifications/events';
-import {DatasetError} from '../datasets/errors';
-import { readThrough } from '../datasets/policy/grants';
+import {JOIN_RELATIONS,setRelationState} from '@/lib/accounts/relation-state';
+import {recordEvent} from '@/lib/notifications/events';
+import {DatasetError} from '@/lib/datasets/errors';
+import { readThrough } from '@/lib/datasets/policy/grants';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
 import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
-import { getDb } from '../platform/db';
-import { effectiveRole, type ArtifactRow, type RoleActor } from '../artifacts/access';
-import { getArtifactById } from '../artifacts/store';
-import { canAnnotate, canEdit, canRead } from '../artifacts/share-roles';
-import { can } from '../artifacts/capabilities';
+import { getDb } from '@/lib/platform/db';
+import { effectiveRole, type ArtifactRow } from '../access';
+import type { RoleActor } from '@/lib/accounts/actors';
+import { getArtifactById } from '../store';
+import { canAnnotate, canEdit, canRead } from '../share-roles';
+import { can } from '../capabilities';
 
 export class MembershipError extends DatasetError {
   constructor(message: string, status = 403) { super(message,status); }

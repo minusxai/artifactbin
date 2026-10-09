@@ -74,7 +74,7 @@ async function main() {
   }
   // After the environment is set: lib/config reads it on first import.
   const [{ getDb }, { mintExportKey }, { backfillCompiledPages }] = await Promise.all([
-    import('@/lib/platform/db'), import('@/lib/serving/export-read-key'), import('@/lib/compiled-page/backfill.server'),
+    import('@/lib/platform/db'), import('@/lib/platform/export-read-key'), import('@/lib/compiled-page/backfill.server'),
   ]);
   const database = await getDb();
   try {

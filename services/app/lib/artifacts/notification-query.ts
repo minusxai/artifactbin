@@ -1,15 +1,15 @@
 /** Notification shaping over the same server query execution used by document reads. */
 import {NOTIFICATION_QUERY_LIMITS,type MutationNotificationJobInput,type MutationNotificationPlan,type NotificationSource,type TableResult} from '@artifactbin/contracts';
-import {NotificationExecutionError} from './errors';
-import {notificationQueryContext,notificationRuleSourceIds} from './context';
-import {notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal} from './authority';
-import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '../datasets/document-queries';
+import {NotificationExecutionError} from '@/lib/notifications/errors';
+import {notificationQueryContext,notificationRuleSourceIds} from '@/lib/notifications/context';
+import {notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal} from './notification-authority';
+import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '@/lib/datasets/document-queries';
 import {selectQueries} from '@/lib/dataflow';
 import {platformValues} from '@/lib/dataflow';
 import {DataflowResultError} from '@/lib/dataflow/evaluate';
-import {getDb} from '../platform/db';
-import { tableForRef, acceptedMembers } from '../artifacts/dataflow';
-import { type RoleActor } from '../artifacts/access';
+import {getDb} from '@/lib/platform/db';
+import { tableForRef, acceptedMembers } from './dataflow';
+import type { RoleActor } from '@/lib/accounts/actors';
 import type {Row} from '@/lib/dataflow';
 export interface NotificationQueryDependencies {
  load(input:MutationNotificationJobInput):Promise<{

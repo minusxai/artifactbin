@@ -2,7 +2,7 @@ import {documentMutationReply,adaptMutationOperationReply} from './mutation-oper
 import {parseDocumentUpdate} from '@artifactbin/contracts';
 import {GRAPH_POLICY,graphIntegrity,graphNodes,graphSource} from '../document/document-graph';
 import {readableArtifact} from './read-access';
-import {MembershipError} from '../accounts/membership';
+import {MembershipError} from './membership/membership';
 import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
 import {RemoteError} from '../remote/registry';
 import type {ReviewReceipt} from '../remote/agents';
@@ -23,7 +23,8 @@ import {catalogOf} from '@/lib/datasets/catalog';
  * shared behaviour is the module, so both paths validate the same fields and
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
-import { DATASET_ACCESS, canReadArtifact, canWriteDataset, type ArtifactRow, type DatasetAccess, type TokenActor, type Visibility } from './access';
+import { DATASET_ACCESS, canReadArtifact, canWriteDataset, type ArtifactRow, type DatasetAccess, type Visibility } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { SHARE_ROLES, type ShareEntry, type ShareRole } from './share-roles';
 import { getArtifactById, getArtifactFor, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { declarationsForRow, runDocumentMutation } from './dataflow';

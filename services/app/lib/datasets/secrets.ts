@@ -3,7 +3,7 @@ import {AUTH_SECRET} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import type {Queryable} from '@artifactbin/contracts';
 import { getArtifactFor } from '@/lib/artifacts/store';
-import { type TokenActor, type RoleActor } from '@/lib/artifacts/access';
+import type { TokenActor, RoleActor } from '@/lib/accounts/actors';
 import type {DatasetConnection,PostgresConfig} from './types';
 import {DatasetError} from './errors';
 

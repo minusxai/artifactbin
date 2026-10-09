@@ -19,10 +19,10 @@ import { POST as followRoute } from '@/app/api/users/[id]/follow/route';
 import { getArtifactById, viewerIdentityFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import { request, useAppHarness } from './harness';
-import { createTestUser } from '@/lib/accounts';
+import { createTestUser, claimToken, createUser, getUserByUsername } from '@/lib/accounts';
 import { userOptions } from '@/lib/datasets/user-fields';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, getUserByUsername, listPublicArtifactsByUser } from '@/lib/accounts';
+import { listPublicArtifactsByUser } from '@/lib/workspace';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

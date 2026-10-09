@@ -6,7 +6,7 @@ import {GET as assets} from '@/app/a/[id]/assets/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {dataflowForRow,findDependentsFor,getArtifactById} from '@/lib/artifacts';
 import {artifactState} from '@/lib/artifacts';
-import {mintExportKey} from '@/lib/serving';
+import { mintExportKey } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {useAppHarness,request} from './harness';

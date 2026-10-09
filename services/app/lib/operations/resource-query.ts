@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {readableArtifact} from '../artifacts/read-access';
 import {artifactState} from '../artifacts/state';
 import { dataflowForRow, declarationsForRow } from '../artifacts/dataflow';
-import { type TokenActor } from '../artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {catalogOf} from '../datasets/catalog';
 import {executeCatalog} from '../datasets/execute';
 import {DatasetError} from '../datasets/errors';

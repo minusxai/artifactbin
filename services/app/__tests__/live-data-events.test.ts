@@ -1,5 +1,5 @@
 import {createUser,claimToken} from '@/lib/accounts';
-import {changeMembership} from '@/lib/accounts';
+import { changeMembership } from '@/lib/artifacts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * A document's live stream hears its DATASETS, not only itself. Every write to

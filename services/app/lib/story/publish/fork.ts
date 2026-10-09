@@ -1,4 +1,5 @@
-import { type ArtifactRow, type TokenActor, type Visibility } from '@/lib/artifacts/access';
+import { type ArtifactRow, type Visibility } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { afterCreated, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, type ArtifactInput } from '@/lib/artifacts/store';
 import { compiledForRow, refLoaderForActor, rowToResolvedRef } from '@/lib/artifacts/dataflow';
 import { artifactQuery } from '@/lib/artifacts/document';
