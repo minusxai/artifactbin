@@ -24,9 +24,10 @@
  *            account is solid/components/__tests__/claim-banner.test.tsx's; the httpOnly cookie and the empty
  *            localStorage are this gate's start leg and gate-reader-shell's anonymous-owner leg.
  *   fork     a logged-out reader's Fork survives /login and lands on their own copy, credited by the source's
- *            current tier; `?intent=fork` is no lever for a stranger; `?intent=comment` opens the rail
- *            (formerly gate-fork).
- *   folders  a folder's listing is in the first HTML byte, a child an agent publishes joins the open page live,
+ *            current tier; `?intent=comment` opens the rail (formerly gate-fork). `?intent=fork` being no lever
+ *            for a stranger (the ordinary app page, one frame) is accounts-and-workspace.test.ts's.
+ *   folders  a folder's page draws its shelf (its first HTML byte is accounts-and-workspace.test.ts's), a child an
+ *            agent publishes joins the open page live,
  *            an editor gets the verbs, a stranger never sees the private child, move/rename/card/trash/restore
  *            (formerly gate-folders).
  *   cli      the CLI's acceptance against this host: device login, guest merge into the account, dataset
@@ -134,12 +135,7 @@ async function startLeg() {
       // ── the agent's leg: connect the way afbin does, then write ──
       // OSS has the same artifact API for browser and HTTP clients; creation never
       // grants a credential. Device approval still owns CLI authentication.
-      const bareStart = await fetch(`${BASE}/api/start`, { method: 'POST' });
-      const bareDocument = await bareStart.json();
-      check(bareStart.status === 401 && !bareDocument.id, 'signed-out HTTP creation requires email authentication');
-      check(!('token' in bareDocument) && !('expiresAt' in bareDocument) && !/mx_/.test(JSON.stringify(bareDocument)),
-        'HTTP creation hands out no credential or expiry');
-      check(!bareStart.headers.has('set-cookie'), 'signed-out creation issues no ownership credential');
+      // Signed-out HTTP creation's 401 with no artifact and no cookie is start-flow.test.ts's ("refuses a signed-out starter").
       // The start door is the thing under test, so this leg cannot use the shared
       // start helper — it walks the same two steps by hand.
       const agent = await connectAgent(BASE);
@@ -350,12 +346,8 @@ async function forkLeg(owner) {
     });
     must(doc.visibility === 'public', 'a PUBLIC document — the case a stranger can reach at all');
 
-    // ── 2. the parameter is not a lever on a shared link ──
-    const strangerHtml = await (await fetch(`${BASE}/a/${doc.id}?intent=fork`)).text();
-    // The app page carries none of the document now: it names it in its head and draws its frame (lib/serving/document-frame).
-    check(strangerHtml.includes('<title>Fork gate') && strangerHtml.includes('data-mx-document-frame'),
-      'an anonymous ?intent=fork still receives the document page (its title, its frame)');
-    check((strangerHtml.match(/<iframe\b/g) ?? []).length === 1 && !strangerHtml.includes('<iframe title="artifact"'), 'the shared SPA supplies the authenticated fork action, around the one document frame and no other iframe');
+    // ── 2. the parameter is not a lever on a shared link: the stranger's app page (its title, its one frame) is
+    //    services/app/__tests__/accounts-and-workspace.test.ts's ──
 
     // ── 3. the logged-out reader taps Fork on the app's bar ──
     await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
@@ -435,8 +427,7 @@ async function forkLeg(owner) {
       body: JSON.stringify({ visibility: 'unlisted' }),
     })).status, doc.id);
     check(narrowed === 200, 'the owner narrowed the source to unlisted');
-    const strangerCopy = await (await fetch(`${BASE}/a/${copyId}`)).text();
-    check(!strangerCopy.includes(doc.id), "a stranger reading the copy no longer sees the unlisted source's address");
+    // A stranger's copy no longer naming the unlisted source is fork.test.ts's ("says nothing about an UNLISTED source").
     await forker.reload();
     await openArtifactControls(forker);
     check((await forker.locator('[data-mx-forked-from]').innerText()).includes('forked from a document that is not public'),
@@ -481,28 +472,16 @@ async function foldersLeg(owner) {
     // ── the folder, and one child of each kind ──
     const folder = await owner.api('/api/artifacts', { format: 'folder', title: 'Field Notes', visibility: 'public' });
     must(folder.format === 'folder' && folder.visibility === 'public', 'a public folder, created with no content');
-    check(!folder.markup, 'and the create echo hands back no markup nobody sent');
     const seen = await owner.api('/api/artifacts', {
       title: 'Opening Note', visibility: 'public', parent_id: folder.id,
       markup: '<div class="p-8"><h1>Opening Note</h1><p>the first note.</p></div>',
     });
-    check(seen.parent_id === folder.id, 'a public document is filed under it at publish');
     await owner.api('/api/artifacts', { title: 'Quiet Note', parent_id: folder.id, markup: '<div class="p-8"><h1>Quiet Note</h1></div>' });
     // "raw is the uniform 404 for a folder" is an HTTP fact: folder-page.test.ts "has no document to serve: raw AND
     // the live frame are the uniform 404" asserts it on the routes.
 
-    // ── 1. the listing is in the FIRST HTML BYTE ──
-    // `page.goto` waits, so a listing that arrives a second late still finds every locator. This reads the BYTES
-    // the server sent, with the owner's own cookies, before a single script has run.
-    // Playwright's shared keep-alive socket can close after the login/setup gap.
-    // Its maxRetries retries ECONNRESET only, never HTTP errors: this read-only
-    // SSR assertion still requires 200 and both authorized children in the bytes.
-    const firstBytes = await owner.ctx.request.get(`${BASE}/a/${folder.id}`, { maxRetries: 1 });
-    check(firstBytes.status() === 200, 'the owner’s folder address answers 200');
-    const html = await firstBytes.text();
-    check(html.includes('Opening Note') && html.includes('Quiet Note'), 'both children are in the FIRST HTML byte, before any script runs');
-    check(html.includes('Field Notes'), 'and so is the folder’s own name');
-
+    // ── 1. the listing in the FIRST HTML BYTE (owner: whole shelf; stranger: public children), the create echo
+    //    carrying no markup and the child filed at publish: services/app/__tests__/accounts-and-workspace.test.ts ──
     await o.goto(`${BASE}/a/${folder.id}`, { waitUntil: 'load' });
     check(await servedTopLevel(o), 'a folder is never framed — it has no document');
     await step('the owner’s page draws both children', async () => {

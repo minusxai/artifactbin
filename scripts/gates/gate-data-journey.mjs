@@ -18,6 +18,14 @@
  * solid/components/__tests__/dataset-catalog-view.test.tsx — so this gate needs no Docker and runs in a gate
  * container like any other.
  *
+ * What else left, and where it lives now (row 36): a bad column refused at publish as invalid_sql naming the query
+ * and the column, and a policy-governed dataset refusing its owner's direct SQL → services/app/__tests__/
+ * data-journey.test.ts; `data="ref:"` retired with its <Import> + <Query> replacement named → broken-embeds.test.ts;
+ * a read-only dataset refusing a document's stored write → mutate-routes.test.ts ("a dataset flipped to read-only
+ * refuses with dataset_read_only"); a forged delete no policy grants → dataset-policies.test.ts; the framed
+ * document's strict own-origin CSP → pages-origin-host.test.ts; the served document's results for a linked selection
+ * → url-values-serving.test.ts; the dataset create response's ref form and usage → dataset-usage-hint.test.ts.
+ *
  *   usage: node scripts/gates/gate-data-journey.mjs [base]
  */
 import { readFileSync } from 'node:fs';
@@ -26,7 +34,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { readEditChartObservation } from './lib/edit-chart-observation.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
-import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
+import { launchChromium } from './lib/browser.mjs';
 import { DOCUMENT_FRAME, documentFrame, documentLocator, inlineStory, INLINE_STORY } from './lib/page-facts.mjs';
 import { openMenu } from './lib/reveal-chrome.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -54,10 +62,6 @@ const liveDocument = async (page) => {
   await doc.locator('html[data-mx-ready] [data-mx-inline-story]').first().waitFor({ timeout: 30_000, state: 'visible' });
   return doc;
 };
-/** The document's own origin, where its standalone page is served (lib/http/pages-origin). */
-const documentOrigin = (id) => { const app = new URL(B); return `${app.protocol}//${Buffer.from(id, 'utf8').toString('hex')}.${PAGES_HOST}${app.port ? `:${app.port}` : ''}`; };
-/** Armed BEFORE a navigation: the framed document's own navigation response (after the pages-session redirect). */
-const documentResponse = (page) => page.waitForResponse((r) => { try { return r.frame() !== page.mainFrame() && r.request().isNavigationRequest() && r.status() === 200; } catch { return false; } }, { timeout: 30_000 });
 /** Armed BEFORE a navigation: resolves once that page has loaded its SQLite engine's wasm (false after 20 s). */
 const engineLoads = (page) => page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), { timeout: 20000 }).then(() => true, () => false);
 
@@ -150,26 +154,20 @@ const [ds, big, bookings, lsDataset, made, ingested, editData, policyDataset, ch
   api('/api/artifacts', { markup: '<p>edit placeholder</p>' }).then(j),
 ]);
 check(!!ds.id, 'the dataset published');
-const [doc, bad, retired, tdoc, booking, lsDoc, aclDoc, policyDoc] = await Promise.all([
+const [doc, tdoc, booking, lsDoc, policyDoc] = await Promise.all([
   api('/api/artifacts', { markup: doc1(ds.id) }).then(j),
-  api('/api/artifacts', { markup: doc1(ds.id).replace('sum(revenue)', 'sum(revenu)') }).then(async (r) => ({ status: r.status, body: await j(r) })),
-  api('/api/artifacts', { markup: `<Question data="ref:${ds.id}" />` }).then(async (r) => ({ status: r.status, body: await j(r) })),
   api('/api/artifacts', { markup: `<Helmet><Import name="all_data" src="ref:${big.id}" /><Query name="all">{\`select a.id * 200 + b.id as id, a.region, (a.revenue + b.revenue) % 10007 as revenue from all_data.rows a cross join all_data.rows b order by 1\`}</Query></Helmet>
 <div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Big table</h1>
 <DataTable data="$all" height="360px" columns={[{"col":"id","title":"ID"},{"col":"region","title":"Region"},{"col":"revenue","title":"Revenue","fmt":"$,.0f","bar":true}]} /></div>` }).then(j),
   api('/api/artifacts', { markup: readFileSync(new URL('../../services/app/lib/story/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8').replace('ref:BookRows1', `ref:${bookings.id}`), visibility: 'public' }).then(j),
   ownerPost('/api/artifacts', { markup: LOCAL_SOURCE, visibility: 'unlisted' }).then(j),
-  ownerPost('/api/artifacts', { markup: `<Helmet><Import name="stored_write_data" src="ref:${lsDataset.id}" /><Mutation name="stored_write">{\`insert into stored_write_data.rows (id, label) values (2, 'forbidden')\`}</Mutation></Helmet><Button run="$stored_write">Write</Button>`, visibility: 'unlisted' }).then(j),
   api('/api/artifacts', { markup: `<Helmet><Value name="branch" default="new branch"/><Import name="tree_data" src="ref:${policyDataset.id}" /><Query name="tree">{\`select * from tree_data.rows\`}</Query><Import name="append_data" src="ref:${policyDataset.id}" /><Mutation name="append">{\`insert into append_data.rows values ($branch)\`}</Mutation><Import name="delete_data" src="ref:${policyDataset.id}" /><Mutation name="delete">{\`delete from delete_data.rows\`}</Mutation></Helmet><h1>Shared policy tree</h1><Button run="$append">Append branch</Button><Button run="$delete">Delete tree</Button><DataTable data="$tree"/>` }).then(async (r) => { assert.equal(r.status, 201, await r.clone().text()); return r.json(); }),
 ]);
 check(!!doc.id, `the dataflow document published (${doc.url ?? doc.error})`);
-check(bad.status === 400 && bad.body.error === 'invalid_sql' && /<Query> \\"sales\\" reads revenu — no such column/.test(JSON.stringify(bad.body.details)),
-  'a bad column is refused at publish, the compiler naming the query and the column');
-check(retired.status === 400 && /<Import name="data" src="ref:[^"]+" \/><Query name="rows">/.test(retired.body.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Import> + <Query> replacement');
 check(!!tdoc.id, 'the DataTable document published');
 check(!!booking.id, `the booking document published (${booking.url ?? JSON.stringify(booking.details ?? booking.error)})`);
-check(!!lsDataset.id && !!lsDoc.id && !!aclDoc.id, `fixtures published (${lsDataset.id}, ${lsDoc.id})`);
-if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish failed: ${JSON.stringify({ lsDataset, lsDoc, aclDoc })}`);
+check(!!lsDataset.id && !!lsDoc.id, `fixtures published (${lsDataset.id}, ${lsDoc.id})`);
+if (!lsDataset.id || !lsDoc.id) throw new Error(`fixture publish failed: ${JSON.stringify({ lsDataset, lsDoc })}`);
 
   // ── two people: the owner (who adopts the second connection) and a second account ──
   const ownerCtx = await b.newContext({ viewport: { width: 1440, height: 1100 } });
@@ -253,7 +251,6 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
 
   const merged = await mergeGuestIntoAccount(ownerHome, B, ownerTok);
   check(merged === 200, 'owner adopted the guest connection');
-  check(merged === 200, 'the owner adopted a guest connection');
 
   // ── DATAFLOW: the page, the private reader, the link that carries a selection ──
   const dataflow = lane('dataflow', async () => {
@@ -271,10 +268,8 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
       if (r.method() === 'GET' && /[?&]q=/.test(r.url())) directCalls.push(r.url());
     });
     const docEngine = engineLoads(p);
-    const docResp = documentResponse(p);
     await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
-    const csp = (await docResp.catch(() => null))?.headers()['content-security-policy'] ?? '';
-    check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the framed document is served under the strict navigable document CSP');
+    // The framed document's strict own-origin policy (no sandbox) is pages-origin-host.test.ts's ("serves its standalone page under the document policy").
     check(new URL(p.url()).origin === new URL(B).origin && new URL(p.url()).pathname.split('/').at(-1)?.startsWith(`${doc.id}-`), `the dataflow document opens at its canonical account URL (${new URL(p.url()).pathname})`);
     const frame = await documentFrame(p);
     // PAINT FIRST: the page script's effect renders the rows the page already holds, then follows every change.
@@ -398,8 +393,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     check((await uf.textContent('[aria-label="Live number"]')) === '$10', 'and the numbers are the SELECTED ones, not the defaults corrected a moment later');
     const upRuns = upQueries.filter((q) => q.body?.hold === undefined);
     check(upRuns.length === 0, `the document's first rows came with the page, for the selection: no run request (${upRuns.length} run request(s))`);
-    // Key order is the store's: a compiled page's guest snapshot comes back from JSONB, which puts `errors` first.
-    check(/"results":\{(?:"errors":\{\},)?"tables":\{"/.test(await (await fetch(`${documentOrigin(udoc.id)}/?$region=west`, { headers: { accept: 'text/html' } })).text()), 'and the served document carries those results for the linked selection');
+    // The served document carrying the linked selection's results is url-values-serving.test.ts's ("seeds the island with the URL values and the selected first results").
     check(!upErrors.some((e) => /hydrat/i.test(e)), 'no hydration error: the SSR control and the hydrated store agree by construction');
     // (b) the address follows the reader
     await uf.selectOption('select[aria-label="Region"]', 'east');
@@ -453,8 +447,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     const afterDataset = await j(await fetch(`${B}/api/artifacts/${lsDataset.id}`, { headers: OH }));
     check(afterDoc.version === lsDoc.version, `local edits did not bump the source version (${afterDoc.version})`);
     check(afterDataset.access === 'read' && afterDataset.rowCount === 1, 'local edits did not change stored dataset rows or permissions');
-    const forbidden = await ownerPost(`/a/${aclDoc.id}/mutate`, { mutation: 'stored_write', args: {} });
-    check(forbidden.status === 403, `persistent dataset mutation remains ACL-protected (${forbidden.status})`);
+    // A read-only dataset refusing a document's stored write (403 dataset_read_only) is mutate-routes.test.ts's.
     // The anonymous fetch of the private document and its data route (the uniform 404) moved to vitest:
     // visibility.test.ts:127–134 and api.test.ts:46–49,190–196 (proposal §2).
 
@@ -515,12 +508,8 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
       await second.reload();
       await secondDoc.getByText('new branch', { exact: true }).waitFor();
     });
-    await step('denied deletion/direct SQL: a forged delete mutation and direct SQL are refused', async () => {
-      const forged = await guest.request.post(`${B}/a/${policyDoc.id}/mutate`, { data: { mutation: 'delete' } });
-      assert(forged.status() >= 400);
-      const raw = await fetch(`${B}/api/artifacts/${policyDataset.id}/mutate`, { method: 'POST', headers: H, body: JSON.stringify({ sql: `delete from public.rows` }) });
-      assert(raw.status >= 400, 'editor without a matching policy cannot bypass it');
-    });
+    // A forged delete the policy does not grant (dataset-policies.test.ts "applies one data policy to everyone with view
+    // access") and the owner's direct SQL no grant names (data-journey.test.ts) are refused on the routes.
     await step('live revocation: unchecking insert disables the guest\'s button without a reload', async () => {
       await editor.getByLabel('Allow insert', { exact: true }).uncheck();
       await editor.getByRole('button', { name: 'Save access policies', exact: true }).click();
@@ -546,14 +535,7 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     // A browser's credential is the httpOnly session cookie, not a localStorage token.
     await becomeOwner(p, B, tok);
     check(!!made.id, `the dataset lands with a usable reference (${made.ref})`);
-    // The create response must TELL the agent how to consume the dataset (the handshake; storage cases are
-    // data-ingest-routes.test.ts's).
-    check(made.ref === `ref:${made.id}`, `the create response carries the ref form (${made.ref})`);
-    check((made.usage ?? '').includes(`<Import name="data" src="ref:${made.id}" /><Query name="rows">`)
-      && /from\s+data\."rows"/i.test(made.usage ?? '')
-      && /data="\$rows"/.test(made.usage ?? ''),
-    'and an Import with a query over its rows + embed bound as data="$rows"');
-    check(/vega-lite/.test(made.usage ?? ''), 'with a viz spec bound to the real columns');
+    // The create response's ref form and usage handshake are dataset-usage-hint.test.ts's; storage cases data-ingest-routes.test.ts's.
 
     // The dataset PAGE: rows, not just headers.
     await p.goto(`${B}/a/${made.id}`, { waitUntil: 'load' });
