@@ -25,7 +25,7 @@ import { storyUpdateParts } from '../../document/update-parts';
 import { assetLookupFrom } from '../../document/asset-url';
 import { webAssetsForSource } from '../assets/web-assets';
 import { servableDocument } from '@/lib/artifacts/servable';
-import { firstHeadingTitle } from '../document/title';
+import { firstHeadingTitle } from '../../document/title';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;

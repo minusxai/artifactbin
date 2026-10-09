@@ -170,9 +170,10 @@ describe('Lexical Markdown region', () => {
     const bold = texts.find(text => text.textContent === 'word')!;
     const range = document.createRange(); range.setStart(bold, 0); range.setEnd(bold, 4);
     const comment = describeRange(range, root);
-    expect(comment.range.parts).toEqual([{ rel: '', text: 'word', start: 19, end: 23 }]);
+    expect(comment).not.toBeNull();
+    expect(comment!.range.parts).toEqual([{ rel: '', text: 'word', start: 19, end: 23 }]);
     const reader = document.createElement('div'); reader.innerHTML = markdownContent('First word, second **word**.').html;
-    const highlight = resolveParts(reader, comment.range.parts);
+    const highlight = resolveParts(reader, comment!.range.parts);
     expect(highlight[0].toString()).toBe('word');
     expect(highlight[0].startContainer.parentElement?.tagName).toBe('STRONG');
     view.flush(); expect(changes).toEqual([]);

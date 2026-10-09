@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx } from '@/lib/jsx';
-import { validateMarkupStructure } from '@/lib/story/document/local-validation';
+import { validateMarkupStructure } from '@/lib/document/local-validation';
 import { markdownContent, markdownSource } from '../content';
 import { generate } from '@/lib/compiled-page/compiler';
 import { discoverOutline } from '@/lib/story-runtime/outline';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
-import { displayTitle } from '@/lib/story/document/title';
+import { displayTitle } from '@/lib/document/title';
 
 describe('Markdown source contract', () => {
   it('accepts literal Markdown in JSX and preserves it across serialization', () => {
