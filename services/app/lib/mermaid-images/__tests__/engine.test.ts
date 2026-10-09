@@ -13,7 +13,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MERMAID_KIT_RENDER_VERSION, MERMAID_RENDER_ENGINE, mermaidPrerenderable } from '../engine';
 
-const RENDER_MODULE_SHA256 = 'b14f7d536dddb3a7bcccdf68253b884cc8c621bfcb876c577678ecd61f3551e8';
+const RENDER_MODULE_SHA256 = '917b7cd6ebad0ef3cbceab4d486cae35d6769e5a7e6cd688c68bed0977f9f363';
 
 describe('the Mermaid render engine identity', () => {
   it('names the installed Mermaid', () => {
