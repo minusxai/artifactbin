@@ -34,7 +34,10 @@ describe('Markdown source contract', () => {
   it('escapes code as text and accepts nested lists, quotes, and safe links', () => {
     const result = markdownContent('> A [link](https://example.com)\n\n1. First\n   - Nested\n\n```html\n<script>x</script>\n```');
     expect(result.errors).toEqual([]);
-    expect(result.html).toContain('&lt;script&gt;x&lt;/script&gt;');
+    expect(result.html).toContain('<code class="language-html" data-language="html">');
+    expect(result.html).toContain('class="mx-code-token-tag">script</span>');
+    expect(result.html).not.toContain('<script>');
+    expect(result.text).toContain('<script>x</script>');
     expect(result.html).toContain('<ol');
     expect(result.html).toContain('<blockquote>');
   });
