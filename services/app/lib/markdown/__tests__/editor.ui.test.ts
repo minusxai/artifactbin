@@ -17,6 +17,25 @@ function mount(source: string) {
   return { root, changes, view };
 }
 describe('Lexical Markdown region', () => {
+  it('keeps fenced code source through editor saves and highlights the saved Markdown again', () => {
+    const { root, changes, view } = mount('```js\nconst answer = "<script>";\n```');
+    const code = root.querySelector('code');
+    expect(code?.textContent).toBe('const answer = "<script>";');
+    expect(root.innerHTML).not.toContain('mx-code-token');
+    view.editor.update(() => {
+      const text = $getRoot().getAllTextNodes().find(node => node.getTextContent().includes('const answer'));
+      if (!$isTextNode(text)) throw new Error('code text');
+      text.selectEnd().insertText(' // edited');
+    }, { discrete: true });
+    view.flush();
+    const saved = changes.at(-1)!;
+    expect(saved).toContain('const answer = "<script>"; // edited');
+    expect(saved).not.toContain('mx-code-token');
+    const rendered = markdownContent(saved);
+    expect(rendered.text).toContain('const answer = "<script>"; // edited');
+    expect(rendered.html).toContain('mx-code-token-keyword');
+    expect(rendered.html).not.toContain('<script>');
+  });
   it('edits and formats selected text, persists Markdown, and reopens it', () => {
     const { root, changes, view } = mount('## Overview\n\nHello world');
     expect(root.querySelector('h2')?.textContent).toBe('Overview');

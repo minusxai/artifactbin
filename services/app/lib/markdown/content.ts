@@ -4,6 +4,7 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import type { RootContent, PhrasingContent, Root } from 'mdast';
 import { escapeHtml } from '@artifactbin/utils/escape';
+import { renderCodeBlock } from './code-block';
 
 export interface MarkdownContent {
   html: string;
@@ -65,7 +66,7 @@ export function markdownContent(source: string): MarkdownContent {
       case 'emphasis': return tag('em');
       case 'delete': return tag('s');
       case 'inlineCode': return { html: `<code>${escapeHtml(node.value)}</code>`, text: node.value };
-      case 'code': return { html: `<pre><code>${escapeHtml(node.value)}</code></pre>`, text: node.value };
+      case 'code': return { html: renderCodeBlock(node.value, node.lang), text: node.value };
       case 'blockquote': return tag('blockquote');
       case 'list': return tag(node.ordered ? 'ol' : 'ul', (node.ordered && node.start && node.start !== 1 ? ` start="${node.start}"` : '') + (node.children.some(item => item.checked != null) ? ' class="mx-md-check-list"' : ''));
       case 'thematicBreak': return { html: '<hr>', text: '' };
@@ -80,7 +81,7 @@ export function markdownContent(source: string): MarkdownContent {
         return { html: '', text: '' };
     }
   };
-  const blocks = parseMarkdown(source).children.map(node => render(node));
+  const blocks = parser.parse(source).children.map(node => render(node));
   result.html = blocks.map(block => block.html).join('');
   result.text = blocks.map(block => block.text).join('');
   return result;

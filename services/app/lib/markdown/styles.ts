@@ -19,6 +19,21 @@ export const MARKDOWN_CSS = `
 :where(.mx-markdown blockquote) { border-inline-start: 3px solid var(--border, currentColor); padding-inline-start: 1em; color: var(--muted-foreground, inherit); }
 :where(.mx-markdown code, .mx-markdown .mx-md-inline-code) { font-family: var(--font-mono, monospace); font-size: .9em; }
 :where(.mx-markdown pre, .mx-markdown .mx-md-code) { display: block; white-space: pre-wrap; padding: 1em; border-radius: .35em; background: var(--muted, transparent); }
+:where(.mx-markdown pre code[class^="language-"]) { color: var(--foreground, #24292f); }
+:where(.mx-markdown .mx-code-token-keyword) { color: var(--mx-code-keyword, #8250df); font-weight: 600; }
+:where(.mx-markdown .mx-code-token-string) { color: var(--mx-code-string, #116329); }
+:where(.mx-markdown .mx-code-token-comment) { color: var(--mx-code-comment, #6e7781); font-style: italic; }
+:where(.mx-markdown .mx-code-token-number, .mx-markdown .mx-code-token-literal) { color: var(--mx-code-number, #0550ae); }
+:where(.mx-markdown .mx-code-token-regexp) { color: var(--mx-code-regexp, #953800); }
+:where(.mx-markdown .mx-code-token-type) { color: var(--mx-code-type, #953800); }
+:where(.mx-markdown .mx-code-token-definition, .mx-markdown .mx-code-token-function) { color: var(--mx-code-definition, #8250df); }
+:where(.mx-markdown .mx-code-token-property, .mx-markdown .mx-code-token-tag) { color: var(--mx-code-property, #0550ae); }
+:where(.mx-markdown .mx-code-token-heading, .mx-markdown .mx-code-token-link) { color: var(--mx-code-link, #0969da); text-decoration: underline; }
+:where(.mx-markdown .mx-code-token-emphasis) { font-style: italic; }
+:where(.mx-markdown .mx-code-token-strong) { font-weight: 700; }
+:where(.mx-markdown .mx-code-token-meta) { color: var(--mx-code-meta, #8250df); }
+:where(.mx-markdown .mx-code-token-operator, .mx-markdown .mx-code-token-punctuation) { color: var(--mx-code-punctuation, #57606a); }
+:where(.dark .mx-markdown, .mx-markdown.dark, [data-theme="dark"] .mx-markdown, .mx-markdown[data-theme="dark"]) { --mx-code-keyword: #d2a8ff; --mx-code-string: #a5d6ff; --mx-code-comment: #8b949e; --mx-code-number: #79c0ff; --mx-code-regexp: #ffa657; --mx-code-type: #ffa657; --mx-code-definition: #d2a8ff; --mx-code-property: #79c0ff; --mx-code-link: #58a6ff; --mx-code-meta: #d2a8ff; --mx-code-punctuation: #8b949e; }
 :where(.mx-markdown strong, .mx-markdown .mx-md-bold) { font-weight: bold; }
 :where(.mx-markdown em, .mx-markdown .mx-md-italic) { font-style: italic; }
 :where(.mx-markdown s, .mx-markdown .mx-md-strike) { text-decoration: line-through; }
