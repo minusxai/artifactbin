@@ -440,7 +440,9 @@ try {
   await stored(s => /\n +[-*] \[ \] Next task/.test(s), 'Tab persists nested Markdown checklist items');
   await page.keyboard.press('Shift+Tab');
   await waitInDoc(() => !document.querySelector('#features li li'));
-  await doc().getByRole('cell', { name: '42', exact: true }).dblclick();
+  await doc().getByRole('cell', { name: '42', exact: true }).getByText('42', { exact: true }).dblclick();
+  await waitInDoc(() => getSelection()?.toString() === '42');
+  await inDoc(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.keyboard.type('43');
   await stored(s => s.includes('| Total | 43 |'), 'Markdown table cell edits persist');
   await page.getByRole('button', { name: 'Add row below', exact: true }).click();
