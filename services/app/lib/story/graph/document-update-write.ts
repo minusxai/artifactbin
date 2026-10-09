@@ -22,7 +22,7 @@ import {TABLES} from '../../platform/schema';
 const HEAD_COLUMNS=TABLES.find(table=>table.name==='artifacts')!.columns.map(column=>column.name).filter(name=>name!=='document');
 const headWithoutDocument=(alias:string)=>`jsonb_build_object(${HEAD_COLUMNS.map(name=>`'${name}',${alias}.${name}`).join(',')})`;
 /** `withheld`: the row came back without its document or source (see `withholdDocument`), on any head. */
-export type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean};
+export type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean;invalidGraph?:boolean};
 export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
  /**
   * The caller answers with patches, never the document (the browser editor's save, lib/artifacts respondToEdit): the
@@ -34,7 +34,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const initial=[id,scope.val,newEditId(),actor?.userId??null,actor?.tokenId||null];
  // `d.document` is the locked head's document read ONCE: every `l.document->…` in the patch and its guards decompressed
  // the whole stored document again (a table-heavy document is megabytes: most of the commit).
- const sql=update.replacement?documentReplacementSql(update.replacement,update.patch.baseVersion,initial):graphPatchSql('d.document','l.version',update.patch,initial);
+ const sql=update.replacement?{...documentReplacementSql(update.replacement,update.patch.baseVersion,initial),integrity:(_next:string)=>'TRUE'}:graphPatchSql('d.document','l.version',update.patch,initial);
  const param=(value:unknown)=>{sql.params.push(value);return `$${sql.params.length}`;};
  const settings=update.settings??{},sharing=param(update.expectedSharingRevision??null),oldParent=param(update.expectedParentIds??null);
  const visibility=param(settings.visibility??null),linkRole=param(settings.linkRole??null),parent=param(settings.parentId??null),hasParent=param(settings.parentId!==undefined);
@@ -58,6 +58,10 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const resources=documentResourceSql(update.datasetBindings,param,!!options.dryRun);
  const ownerOnly=`(${hasParent}::boolean AND NOT EXISTS(SELECT 1 FROM locked WHERE ${owner.where(ownerValue)}))`;
  const invalidParent=`(${hasParent}::boolean AND ${parent}::text IS NOT NULL AND NOT EXISTS(SELECT 1 FROM destination))`;
+ // A patch that is current but would store a graph the reader cannot decode is told apart from a stale one: the
+ // candidate is rebuilt only on the refusal path, and only when every dependency guard held.
+ const invalidGraph=(written:string)=>update.replacement?'FALSE':`(CASE WHEN EXISTS(SELECT 1 FROM ${written}) THEN FALSE ELSE EXISTS(SELECT 1 FROM locked l CROSS JOIN LATERAL (SELECT l.document||'{}'::jsonb AS document OFFSET 0) d
+  CROSS JOIN LATERAL (SELECT ${sql.expression} AS next_document OFFSET 0) nx WHERE ${sql.guard} AND NOT (${sql.integrity('nx.next_document')})) END)`;
  const editEvents=await documentEditEventSql(id,actor,param,hasParent);
  // `previous` (the old row, read by the history log and the id/notification steps) carries the whole old document only
  // when this commit replaces the document; otherwise only the nodes this patch changes or touches and the byte count.
@@ -80,7 +84,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
   FROM locked l CROSS JOIN LATERAL (SELECT l.document||'{}'::jsonb AS document OFFSET 0) d
    CROSS JOIN LATERAL (SELECT ${sql.expression} AS next_document OFFSET 0) nx
    CROSS JOIN LATERAL (SELECT (${whole}::boolean OR l.document_archived_at IS NULL OR l.document_archived_at<=now()-interval '120 seconds') AS archiving) a
-  WHERE ${mention.guard} AND ${resources.guard} AND ${annotationSqlGuard(annotationOps)} AND (l.format='markup' OR(${replacement}::jsonb IS NOT NULL AND l.format<>'folder' AND l.dataset_policy IS NULL)) AND (${replacement}::jsonb IS NOT NULL OR d.document->>'policy'=${policy}) AND ${sql.guard} AND (NOT ${whole}::boolean OR l.version=${wholeVersion}::int)
+  WHERE ${mention.guard} AND ${resources.guard} AND ${annotationSqlGuard(annotationOps)} AND (l.format='markup' OR(${replacement}::jsonb IS NOT NULL AND l.format<>'folder' AND l.dataset_policy IS NULL)) AND (${replacement}::jsonb IS NOT NULL OR d.document->>'policy'=${policy}) AND ${sql.guard} ${update.replacement?'':`AND ${sql.integrity('nx.next_document')}`} AND (NOT ${whole}::boolean OR l.version=${wholeVersion}::int)
    AND (${visibility}::text IS DISTINCT FROM 'private' OR l.user_id IS NOT NULL)
    AND (${sharing}::int IS NULL OR l.sharing_revision=${sharing}::int)
    AND (NOT ${hasParent}::boolean OR (l.ancestor_ids=${oldParent}::text[] AND (${parent}::text IS NULL OR EXISTS(SELECT 1 FROM destination))
@@ -143,8 +147,8 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  ), ${mention.after} ${resources.after} ${editEvents} response AS (
   SELECT true AS applied,CASE WHEN u.withheld THEN ${headWithoutDocument('u')} ELSE to_jsonb(u)-'previous'-'withheld'-'after_ids' END AS artifact,u.withheld,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
   UNION ALL SELECT false,to_jsonb(l),false,l.id FROM locked l WHERE NOT EXISTS(SELECT 1 FROM updated)
- ) SELECT applied,withheld,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
- const preview=`SELECT true AS applied,to_jsonb(t)-'next_document'-'archiving'-'slim_document'-'after_ids' AS artifact,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent FROM transformed t UNION ALL SELECT false,to_jsonb(l),${mention.refusal},${ownerOnly},${invalidParent} FROM locked l WHERE NOT EXISTS(SELECT 1 FROM transformed)`;
+ ) SELECT applied,withheld,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,${invalidGraph('updated')} AS invalid_graph,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
+ const preview=`SELECT true AS applied,to_jsonb(t)-'next_document'-'archiving'-'slim_document'-'after_ids' AS artifact,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,FALSE AS invalid_graph FROM transformed t UNION ALL SELECT false,to_jsonb(l),${mention.refusal},${ownerOnly},${invalidParent},${invalidGraph('transformed')} FROM locked l WHERE NOT EXISTS(SELECT 1 FROM transformed)`;
  const query=prefix+(options.dryRun?preview:commit);
  // Dry-run omits commit-only parameters as well as every write CTE. Compact
  // placeholders so PostgreSQL never receives an untyped, unused parameter.
@@ -154,8 +158,8 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
   if(position<0){position=bindings.length;bindings.push(original);}
   return `$${position+1}`;
  });
- const result=await db.query<{applied:boolean;withheld?:boolean;artifact:ArtifactRow;refusal:string|null;owner_only:boolean;invalid_parent:boolean}>(statement,bindings.map(index=>sql.params[index]));
+ const result=await db.query<{applied:boolean;withheld?:boolean;artifact:ArtifactRow;refusal:string|null;owner_only:boolean;invalid_parent:boolean;invalid_graph:boolean}>(statement,bindings.map(index=>sql.params[index]));
  const row=result.rows[0];if(!row)return null;
  const artifact=await hydrateArtifactDocument(row.artifact);
- return row.applied?{applied:true,row:artifact,...(row.withheld?{withheld:true as const}:{})}:{applied:false,head:artifact,...(row.refusal?{refusal:row.refusal}:{}),...(row.owner_only?{ownerOnly:true}:{}),...(row.invalid_parent?{invalidParent:true}:{})};
+ return row.applied?{applied:true,row:artifact,...(row.withheld?{withheld:true as const}:{})}:{applied:false,head:artifact,...(row.refusal?{refusal:row.refusal}:{}),...(row.owner_only?{ownerOnly:true}:{}),...(row.invalid_parent?{invalidParent:true}:{}),...(row.invalid_graph?{invalidGraph:true}:{})};
 }

@@ -19,7 +19,7 @@ async function commitGraphMutation(db:Queryable,actor:TokenActor|null,scope:Scop
  const editId=newEditId();
  const effective=options.initialize?'$6::jsonb':'l.document';
  const initial=[plan.id,scope.val,editId,actor?.userId??null,actor?.tokenId||null,...(options.initialize?[JSON.stringify(options.initialize.document)]:[])];
- const sql:(ReturnType<typeof graphPatchSql>&{context?:string;history?:{start:string;removed:string;inserted:string;end:string}})|null=prose?graphProseSql(effective,'l.version',prose.baseEditId,prose.op,initial):graphPatchSql(effective,'l.version',plan.patch!,initial);
+ const sql:(Omit<ReturnType<typeof graphPatchSql>,'integrity'>&{context?:string;history?:{start:string;removed:string;inserted:string;end:string}})|null=prose?graphProseSql(effective,'l.version',prose.baseEditId,prose.op,initial):graphPatchSql(effective,'l.version',plan.patch!,initial);
  if(!sql)return null;
  const context=sql.context??'NULL::jsonb';
  const param=(value:unknown)=>{sql.params.push(value);return `$${sql.params.length}`;};

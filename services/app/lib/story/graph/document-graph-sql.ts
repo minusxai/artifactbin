@@ -6,7 +6,7 @@ import type {GraphPatch} from './document-graph-patch';
 import {documentPatchStepSql} from './document-patch';
 import {MAX_CONTENT_BYTES} from '../document/input';
 
-export function graphPatchSql(document:string,version:string,patch:GraphPatch,initial:unknown[]):{expression:string;guard:string;params:unknown[]} {
+export function graphPatchSql(document:string,version:string,patch:GraphPatch,initial:unknown[]):{expression:string;guard:string;integrity:(next:string)=>string;params:unknown[]} {
   const params=[...initial];
   const param=(value:unknown)=>{params.push(value);return `$${params.length}`;};
   const reads=param(JSON.stringify(patch.reads)),inserted=param(JSON.stringify(patch.inserted)),removed=param(patch.removed),updated=param(JSON.stringify(patch.updated)),touched=param(patch.touched),delta=param(patch.byteDelta),base=param(patch.baseVersion),limit=param(MAX_CONTENT_BYTES),policy=param(GRAPH_POLICY);
@@ -47,7 +47,17 @@ export function graphPatchSql(document:string,version:string,patch:GraphPatch,in
     AND NOT (${nodes} ?| ARRAY(SELECT jsonb_object_keys(${inserted}::jsonb)))
     AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${reads}::jsonb) r(key text,facet text,version int)
       WHERE ${node('r.key')} IS NULL OR (${document}#>>ARRAY['nodes',r.key,r.facet])::int IS DISTINCT FROM r.version)`;
-  return {expression,guard,params};
+  // The patch is client-prepared, so the document it produces is checked before it is stored: over the nodes the
+  // patch writes only (never the whole graph). Each must exist as an object, have one more part than children, name
+  // children that exist in the new map and point back at it; and the byte delta must equal the touched nodes' change.
+  // `CASE` keeps a malformed value a refusal, never a cast error.
+  const integrity=(next:string)=>`NOT EXISTS(SELECT 1 FROM unnest(${touched}::text[]) k CROSS JOIN LATERAL (SELECT ${next}#>ARRAY['nodes',k] AS v) n
+      WHERE CASE WHEN jsonb_typeof(n.v) IS DISTINCT FROM 'object' OR jsonb_typeof(n.v->'children') IS DISTINCT FROM 'array' OR jsonb_typeof(n.v->'parts') IS DISTINCT FROM 'array' OR jsonb_typeof(n.v->'bytes') IS DISTINCT FROM 'number' THEN TRUE
+        ELSE jsonb_array_length(n.v->'parts')<>jsonb_array_length(n.v->'children')+1
+          OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(n.v->'children') c WHERE jsonb_typeof(${next}#>ARRAY['nodes',c]) IS DISTINCT FROM 'object' OR ${next}#>>ARRAY['nodes',c,'parent'] IS DISTINCT FROM k) END)
+    AND (SELECT COALESCE(sum((${next}#>>ARRAY['nodes',k,'bytes'])::numeric),0) FROM unnest(${touched}::text[]) k)
+      -(SELECT COALESCE(sum((${document}#>>ARRAY['nodes',k,'bytes'])::numeric),0) FROM unnest(${touched}::text[]||${removed}::text[]) k)=${delta}::numeric`;
+  return {expression,guard,integrity,params};
 }
 
 /** Serialize server-generated fragments in tree order. jsonb_each extracts the
