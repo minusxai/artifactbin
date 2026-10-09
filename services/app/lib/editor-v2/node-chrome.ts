@@ -2,7 +2,7 @@
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import type { BlockEdit } from './block-edit';
 import { createDragPreview } from './drag-preview';
-import { SELECTION_PRESENTATION } from '../story-runtime/selection-presentation';
+import { SELECTION_PRESENTATION } from './selection-presentation';
 interface GridGeometry {
   cols: number;
   rowHeight: number;

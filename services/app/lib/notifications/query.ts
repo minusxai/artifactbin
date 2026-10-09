@@ -6,7 +6,7 @@ import {notificationArtifactAuthority,notificationExecutionFence,notificationExe
 import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '../sql/document-queries';
 import {selectQueries} from '@/lib/dataflow';
 import {platformValues} from '@/lib/dataflow';
-import {DataflowResultError} from '../sql/dataflow-core';
+import {DataflowResultError} from '@/lib/dataflow/evaluate';
 import {getDb} from '../platform/db';
 import { tableForRef, acceptedMembers } from '../artifacts/dataflow';
 import { type RoleActor } from '../artifacts/access';

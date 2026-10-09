@@ -2,7 +2,7 @@
  * A LOCAL DOCUMENT'S DATAFLOW: compiled and run in this process, over the
  * workspace's own copies of what it imports — the same compiler and the same
  * SQLite engine the server uses (app lib/dataflow/compile-dataflow,
- * lib/sql/dataflow-core). A query that runs inside a connected database has
+ * lib/dataflow/evaluate). A query that runs inside a connected database has
  * no local copy to run over, and says so.
  */
 import './sqlite-wasm';
@@ -12,7 +12,7 @@ import type {DatasetColumn} from '../../app/lib/dataflow/dataset-shape';
 import type {Dataflow,DataflowState} from '../../app/lib/dataflow/dataflow';
 import type {CompiledDataflow} from '../../app/lib/dataflow/compiled-dataflow';
 import {compileWithLoader} from '../../app/lib/dataflow/compile-dataflow';
-import {evaluateDataflow,type ImportTables,type RunDataflowOptions} from '../../app/lib/sql/dataflow-core';
+import {evaluateDataflow,type ImportTables,type RunDataflowOptions} from '../../app/lib/dataflow/evaluate';
 import {CliError} from './errors';
 
 /** A dataset's rows as the workspace holds them, or undefined when it has no local copy. */
