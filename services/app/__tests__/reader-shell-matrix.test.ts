@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, framedDocument, mintAccountToken } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
-import { pagesOriginFor, pagesSite } from '@/lib/serving';
+import { pagesOriginFor, pagesSite } from '@/lib/http/pages-origin';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { createAppServer } from '@/server/app';
 

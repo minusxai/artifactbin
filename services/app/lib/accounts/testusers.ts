@@ -21,7 +21,7 @@ import {expireCommentImagesFor,sweepCommentImages} from '../annotations/comment-
  */
 import type { TestUser } from '@artifactbin/contracts';
 import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts';
-import { getDb, type Db } from '../platform/db';
+import { getDb } from '../platform/db';
 import { generateInternalId } from '../platform/ids';
 import { objectStore } from '../object-store/index';
 import { mintToken } from './tokens';
@@ -29,8 +29,6 @@ import { TABLES } from '../platform/schema';
 import { userKindOf } from './user-kinds';
 import { closeTestUserSessions, testUserSessionCount } from './testuser-sessions';
 
-/** What an erase and the boot backfill run against: the open adapter, which at boot is not yet the cached one. */
-type Database = Pick<Db, 'query' | 'transaction'>;
 
 /** `users.name` for a minted row: what pages show, and what a person recognises in the database. */
 export const TESTUSER_LABEL = 'Test user';
@@ -192,12 +190,12 @@ const ERASE_BY_USER = TABLES.flatMap((table) =>
  *
  * Idempotent: erasing an id that is gone deletes nothing and answers false.
  */
-export async function eraseTestUser(testUserId: string, database?: Database): Promise<TestUserErased> {
+export async function eraseTestUser(testUserId: string): Promise<TestUserErased> {
   // Read the register BEFORE the sessions are closed: closing is what empties
   // it, and the caller's answer is what this person WAS holding.
   const sessions = testUserSessionCount(testUserId);
   await closeTestUserSessions(testUserId);
-  const db = database ?? (await getDb());
+  const db = await getDb();
   let picture: string | null = null;
   const erased = await db.transaction(async (tx) => {
     await lockMutationNotificationAuthority(tx,'write');
@@ -256,22 +254,4 @@ export async function sweepTestUsers(now: number = Date.now()): Promise<number> 
   } catch {
     return 0;
   }
-}
-
-/**
- * BOOT BACKFILL, idempotent, in the schema-apply path.
- *
- * One statement and one erase. The rows P12 left behind — the guest second
- * people its sessions minted, recognisable by the name it gave them — become test users with no parent and are ERASED by
- * the same routine as a deliberate delete, because they are exactly what a test
- * user is: a throwaway person, with artifacts nobody will claim.
- *
- * Takes the database it runs on: at boot the cached adapter promise is not
- * resolved yet, so asking for it here would wait for this call to return.
- */
-export async function backfillUserKinds(db: Database): Promise<void> {
-  const left = await db.query<{ id: string }>(
-    "UPDATE users SET kind = 'testuser' WHERE kind = 'guest' AND name = $1 RETURNING id", [TESTUSER_LABEL],
-  );
-  for (const row of left.rows) await eraseTestUser(row.id, db);
 }

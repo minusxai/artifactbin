@@ -23,7 +23,3 @@ export async function dismissPendingRelations(tx:Queryable,userId:string,blocked
  await tx.query("UPDATE relations SET status='dismissed',deleted_at=now(),revision=revision+1 WHERE subject_kind='user' AND status='pending' AND ((subject_id=$1 AND initiated_by=$2)OR(subject_id=$2 AND initiated_by=$1))",[userId,blockedId]);
 }
 
-/** Only historical self-initiated accepted requests prove artifact-specific consent. */
-export async function backfillExplicitJoins(tx:Queryable):Promise<void>{
- await tx.query("UPDATE relations SET explicit_join=true WHERE subject_kind='user' AND verb='join' AND object_kind='artifact' AND status='accepted' AND deleted_at IS NULL AND direction='request' AND initiated_by=subject_id AND explicit_join=false");
-}

@@ -8,7 +8,7 @@
  * behalf (`parent_id`, `expectedVersion`), a query parameter (`?slide=`) or an
  * operation name (`list_versions`) spends the agent's turns teaching it a door
  * it cannot open. The repo already answers in CLI vocabulary where it counts
- * (`--cursor` in lib/operations/registry, `--name` in lib/resource-query); these
+ * (`--cursor` in lib/operations/registry, `--name` in lib/operations/resource-query); these
  * are the reachable refusals that still did not.
  *
  * Each case below goes through the REAL handler an afbin command reaches, and

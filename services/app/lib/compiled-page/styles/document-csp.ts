@@ -1,5 +1,5 @@
 /**
- * THE POLICY OF A DOCUMENT ON ITS OWN ORIGIN (`<hex(id)>.<pages host>`, lib/serving/pages-origin).
+ * THE POLICY OF A DOCUMENT ON ITS OWN ORIGIN (`<hex(id)>.<pages host>`, lib/http/pages-origin).
  *
  * The response header of the standalone page the app frames when APP__PAGES_HOST is set. Its origin
  * is the document's alone, so the opaque-origin `sandbox` the in-app `/raw` copy relies on

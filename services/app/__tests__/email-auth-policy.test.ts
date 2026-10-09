@@ -7,7 +7,7 @@ import { POST as exchange } from '@/app/api/session/token/route';
 import { issuePagesTicket, exchangePagesTicket, pagesSessionOf } from '@/lib/accounts/pages-sessions';
 import { getDb } from '@/lib/platform/db';
 import { sha256 } from '@/lib/accounts/tokens';
-import { markPagesRequest, pagesSiteFor } from '@/lib/serving/pages-origin';
+import { markPagesRequest, pagesSiteFor } from '@/lib/http/pages-origin';
 import { agentCookie, request, useAppHarness, createGuestOwner } from './harness';
 
 useAppHarness();

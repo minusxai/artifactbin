@@ -2,7 +2,7 @@ import {notificationJobOperations} from './notification-jobs';
 import {notificationJobStore} from '../notifications/runtime';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
-import {queryResourceForRequest} from '@/lib/http/resource-query';
+import {queryResourceForRequest} from './resource-query';
 import type {MutationReceipt} from '@/lib/artifacts';
 import {readArtifactSnapshot} from '@/lib/artifacts/read-access';
 import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/datasets/policy/http';

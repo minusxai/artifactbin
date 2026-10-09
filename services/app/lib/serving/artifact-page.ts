@@ -11,7 +11,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * ONE answer for both doors: the JSON route (client navigation,
  * app/api/page/artifact/[id]) and the app page (server/app), which also draws
  * the document's frame — the document itself is only ever rendered on its own
- * origin (lib/serving/pages-origin, app/a/[id]/raw), never inside the app page.
+ * origin (lib/http/pages-origin, app/a/[id]/raw), never inside the app page.
  *
  * A DOCUMENT is served from its prepared page (lib/story/prepared/prepared-page.server):
  * the reader payload carries no source, no document graph and no raw
@@ -47,7 +47,7 @@ import { isStartPlaceholder } from './start-placeholder';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from './og-card';
 import { issuePagesTicket } from '@/lib/accounts/pages-sessions';
-import { pagesOriginFor, pagesSessionUrl, type PagesSite } from './pages-origin';
+import { pagesOriginFor, pagesSessionUrl, type PagesSite } from '../http/pages-origin';
 import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';
 

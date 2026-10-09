@@ -1,4 +1,6 @@
+import {readFileSync} from 'node:fs';
 import {isIP} from 'node:net';
+import path from 'node:path';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { DEFAULT_UPLOAD_MAX_BYTES, normalizeOrigin } from '@artifactbin/contracts';
@@ -258,7 +260,7 @@ export function parseAliasOrigins(value: string | undefined): readonly string[] 
 export let ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**
- * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/serving/pages-origin) — the only way a document is rendered.
+ * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/http/pages-origin) — the only way a document is rendered.
  * The hostname documents are served under, one label per document: `<hex(id)>.<pages host>`, and the
  * app page frames that origin. It MUST be a subdomain of the app's registrable domain (same site) —
  * the frame's `afbin_pages` cookie is SameSite=Lax — and the scheme and port are the public URL's
@@ -367,6 +369,18 @@ export const RUNNER_SERVICE_URL = env('RUNNER','SERVICE_URL');
 export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
 /** Optional managed agent service. Unset means no hosted/default agent is installed. */
 export const HOSTED_AGENT_SERVICE_URL = env('HOSTED_AGENT','SERVICE_URL');
+
+/**
+ * The afbin release this server tells clients to run: `version` in public/chat/release.json, the pointer
+ * `npm run release:cli` bumps and `afbin update` fetches. Read from disk (cwd is services/app, as for the
+ * public/ mount in server/app) once, on first use, so a bundle that imports this module without serving the
+ * app (the CLI toolkit) never needs the file.
+ */
+let cliRelease: string | undefined;
+export function cliReleaseVersion(): string {
+  cliRelease ??= (JSON.parse(readFileSync(path.resolve('public/chat/release.json'), 'utf8')) as { version: string }).version;
+  return cliRelease;
+}
 
 /**
  * THE TEST OVERRIDE for configuration: replaces the settings below, and `env()` reads, without touching the

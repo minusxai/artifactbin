@@ -55,7 +55,7 @@ import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
-import { PAGES_SESSION_META, PAGES_SESSION_PATH, pagesApexOrigin, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/serving/pages-origin';
+import { PAGES_SESSION_META, PAGES_SESSION_PATH, pagesApexOrigin, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
 import { linkedStylesheets } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
@@ -213,7 +213,7 @@ function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; con
 export const APP_CSP = appCsp();
 /** The policy every app page carries on a deployment whose documents are served under `site` (production adds no more). */
 export const appPagePolicy = (site: PagesSite): string => appCsp({ frames: pagesFrameSources(site), connect: [pagesApexOrigin(site)] });
-/** The pages origins an app page may frame (lib/serving/pages-origin): the apex and every document label. */
+/** The pages origins an app page may frame (lib/http/pages-origin): the apex and every document label. */
 export function pagesFrameSources(site: PagesSite): string[] {
   const port = site.port ? `:${site.port}` : '';
   return [`${site.scheme}//${site.host}${port}`, `${site.scheme}//*.${site.host}${port}`];

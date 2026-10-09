@@ -3,9 +3,9 @@ import {hostedRequestRefusal} from '@/lib/accounts/request-authority';
  * The auth() → Viewer bridge, in its own module ON PURPOSE: the serving
  * routes need "who is looking" but lib/artifacts must stay importable
  * without dragging account authentication into every test and client bundle that touches
- * artifact SQL. This is the only non-route file that imports @/auth.
+ * artifact SQL. The session it falls back to is `./session` (re-exported as `@/auth`).
  */
-import { pagesRequestOf } from '../serving/pages-origin';
+import { pagesRequestOf } from '../http/pages-origin';
 import { currentRequest } from '../platform/request-context';
 import { actorOf } from '@artifactbin/utils';
 import { mergeGuestUsers } from './guest-owner';
@@ -15,17 +15,17 @@ import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRow, type Rol
 import { type ArtifactRole } from '../artifacts/share-roles';
 import { canAuthenticateUser } from './user-kinds';
 import { resolveToken, resolveTokenById, touchToken } from './tokens';
+import { auth } from './session';
 
 /**
  * The account behind the request, if any. Behind the proxy that is the signed
  * actor header; without one (a direct handler call in a test) it is whatever
- * the test mocked `@/auth` to say. Fail-safe: never a crash.
+ * the test harness's `overrideSession` says. Fail-safe: never a crash.
  */
 async function sessionViewer(request?: Request): Promise<Viewer> {
   try {
     const fromProxy = await proxyActor(request);
     if (fromProxy) return fromProxy.credential === 'session' ? fromProxy.viewer : null;
-    const { auth } = await import('@/auth');
     const session = await auth();
     return session?.user?.id ? { userId: session.user.id, email: session.user.email ?? null } : null;
   } catch {

@@ -9,7 +9,7 @@
  */
 import { json } from '@/lib/http';
 import { framedDocumentSrc } from '@/lib/serving/artifact-page';
-import { pagesSite } from '@/lib/serving/pages-origin';
+import { pagesSite } from '@/lib/http/pages-origin';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;

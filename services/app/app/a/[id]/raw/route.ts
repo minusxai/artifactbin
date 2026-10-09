@@ -37,7 +37,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/document/head';
 import { appendCspExtensions, assetsPath, buildDocumentCsp, markupCsp, mutatePath, queryPath } from '@/lib/compiled-page/styles';
-import { pagesRequestOf } from '@/lib/serving/pages-origin';
+import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { readUrlValues } from '@/lib/dataflow';
 import { displayTitle } from '@/lib/document/head';
 import { CARD_RENDER_GENERATION } from '@/lib/serving';
