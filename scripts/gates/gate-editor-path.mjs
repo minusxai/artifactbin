@@ -1,6 +1,6 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 /**
- * THE HUMAN PATH AROUND THE EDITOR — split out of gate-editor-v2.mjs (its section 4) so no gate
+ * THE HUMAN PATH AROUND THE EDITOR — split out of gate-editor-engine.mjs (its section 4) so no gate
  * shard waits on one two-minute script. gate-editor-engine drives the engine; this drives the way in,
  * ending with the compiled reader's handover to editing (was gate-hydration's edit leg): the served
  * story stays mounted in its frame, becomes editable, publishes, and a reload is compiled again.

@@ -3,7 +3,7 @@
  *
  * A real `mountCompiledEditRegions` over a compiled-shaped DOM, a captured `channel.post`, and
  * nothing mocked inside the session: each case drives the document the way a user or the page does
- * and pins the message the parent receives. The browser gates (inplace-edit, editor-v2) cover layout;
+ * and pins the message the parent receives. The browser gates (inplace-edit, editor-engine) cover layout;
  * these pin the protocol.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';

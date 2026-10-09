@@ -3,7 +3,7 @@ import { nodeIndex } from './node-ids';
 import { canonicalText, parseAnnotationRange } from './annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { DocumentAnnotationOperation as AnnotationOperation } from '@artifactbin/contracts';
-/** One edit's annotation operation (the wire's `DocumentAnnotationOperation`), named here; lib/editor-v2 imports it downward. */
+/** One edit's annotation operation (the wire's `DocumentAnnotationOperation`), named here; lib/editor-engine imports it downward. */
 export type { AnnotationOperation };
 interface AnnotationRelation {
   anchor: string;

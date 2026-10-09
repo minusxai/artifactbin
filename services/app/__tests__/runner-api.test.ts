@@ -13,7 +13,7 @@ import {POST as publish} from '@/app/api/artifacts/route';
 import {invokeArtifact,runRequest,setLambdaProgramResolver,runnerOperation,startLambdaSchedules,artifactSchedule,deleteSchedule} from '@/lib/runner';
 import {getArtifactById} from '@/lib/artifacts';
 import {setServices} from '@/lib/platform/services';
-import {createRunner} from '../../runner/src/local';
+import {createRunner} from '@artifactbin/runner/local';
 const harness=useAppHarness();const close:Array<()=>Promise<unknown>>=[];afterEach(async()=>{setLambdaProgramResolver(undefined);setServices({runner:undefined});for(const fn of close.splice(0).reverse())await fn();});
 it('pins the server-selected artifact program, protects owner reads and composes API and cron',async()=>{
  const db=await harness.db();const owner=await createUser({email:'mxmx_test_runner_api@example.com'}),token=await mintToken('runner',owner.id);await claimToken(owner.id,token.token);

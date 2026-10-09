@@ -1,6 +1,6 @@
 import type { CommentViewState } from '../../../contracts/src/comment-view-state';
-import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmark';
-import type { BlockEdit } from '@/lib/editor-v2/block-edit';
+import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-engine/bookmark';
+import type { BlockEdit } from '@/lib/editor-engine/block-edit';
 /**
  * The framework-free contract between the document builder (server), the compiler, and the browser
  * islands. BOTH sides import it, so it carries ONLY types and ids: a value

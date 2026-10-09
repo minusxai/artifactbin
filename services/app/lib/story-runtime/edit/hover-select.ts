@@ -13,10 +13,10 @@
 import type { JsxNode } from '@/lib/jsx';
 import type { EditorView } from 'prosemirror-view';
 import { TextSelection, type EditorState } from 'prosemirror-state';
-import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-v2/node-chrome';
-import { createBlockSelection } from '@/lib/editor-v2/block-selection';
-import { inlineStates } from '@/lib/editor-v2/model';
-import { linkAt } from '@/lib/editor-v2/links';
+import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-engine/node-chrome';
+import { createBlockSelection } from '@/lib/editor-engine/block-selection';
+import { inlineStates } from '@/lib/editor-engine/model';
+import { linkAt } from '@/lib/editor-engine/links';
 import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';

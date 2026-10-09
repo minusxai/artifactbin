@@ -48,7 +48,7 @@ export const GATE_SPECS = Object.freeze([
   // run 36838282615 that held a runner to itself and set the run's critical path. editor-path also
   // carries hydration's compiled-page edit leg; editor-exits carries mobile's editor sections. Measured in
   // one gate container (`--servers 1`, 4 CPUs): 28s/43s/41s; editor-engine's and editor-path's timeouts stay 3x
-  // their 45s/47s CI times (the container ran editor-v2's script 17s faster than CI did).
+  // their 45s/47s CI times (the container ran editor-engine's script 17s faster than CI did).
   { name: 'editor-engine', needsMail: false, serialGroup: 'clipboard', seconds: 36, timeoutMs: 140_000 },
   { name: 'editor-path', needsMail: true, seconds: 53, timeoutMs: 150_000 },
   { name: 'editor-exits', needsMail: false, seconds: 46, timeoutMs: 130_000 },

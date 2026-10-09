@@ -10,8 +10,8 @@ import {POST as operation} from '@/app/api/runner/operations/route';
 import {invokeArtifact,artifactSchedule,startLambdaSchedules,setLambdaProgramResolver} from '@/lib/runner';
 import {getArtifactById} from '@/lib/artifacts';
 import {setServices} from '@/lib/platform/services';
-import {createRunner} from '../../runner/src/local';
-import {hostCapabilities,runnerIdentity} from '../../runner/src/capabilities';
+import {createRunner} from '@artifactbin/runner/local';
+import {hostCapabilities,runnerIdentity} from '@artifactbin/runner/capabilities';
 const harness=useAppHarness();const close:Array<()=>Promise<unknown>>=[];
 afterEach(async()=>{setLambdaProgramResolver(undefined);setServices({runner:undefined});for(const fn of close.splice(0).reverse())await fn();});
 it('runs published JSX with real Solid bindings, authenticated data calls, mutations and notifications',async()=>{

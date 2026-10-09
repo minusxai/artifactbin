@@ -16,12 +16,12 @@
  */
 import type { JsxNode } from '@/lib/jsx';
 import { createMarkdownRegions } from './markdown-regions';
-import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-v2/bookmark';
-import { flushFlowView } from '@/lib/editor-v2/flow-view';
+import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-engine/bookmark';
+import { flushFlowView } from '@/lib/editor-engine/flow-view';
 import { syncDocumentOutline } from '../outline-view';
-import { toggleInline, pasteFragment } from '@/lib/editor-v2/model';
-import { clipboardAst } from '@/lib/editor-v2/clipboard';
-import { SELECTION_PRESENTATION } from '@/lib/editor-v2/selection-presentation';
+import { toggleInline, pasteFragment } from '@/lib/editor-engine/model';
+import { clipboardAst } from '@/lib/editor-engine/clipboard';
+import { SELECTION_PRESENTATION } from '@/lib/editor-engine/selection-presentation';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel } from '../pristine';
 import {
