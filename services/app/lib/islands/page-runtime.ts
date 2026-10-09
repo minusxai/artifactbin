@@ -18,15 +18,16 @@
  * Solid is the island build's one instance (lib/islands/vendor, lib/author-script/contract AUTHOR_VENDOR_EXPORTS): the script, this
  * runtime and the kit share one reactive graph.
  */
-import { batch, createSignal as solidCreateSignal, getOwner, untrack, type JSX, type SignalOptions } from 'solid-js';
+import { batch, createSignal as solidCreateSignal, untrack, type JSX, type SignalOptions } from 'solid-js';
 import { createComponent, render } from 'solid-js/web';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/dataflow/dataflow';
 import { PAGE_GLOBAL } from '@/lib/author-script/contract';
 import { bindPage, type PageBindings, type MutationFn } from '@/lib/story-runtime/page-bindings';
-import { MountScope, commentSignal, commentStateKey, registerCommentSignal } from './comment-state';
-import { registerCommentState, setCommentStateTransaction } from '@/lib/story-runtime/comment-state';
+import { MountScope, commentSignal, commentStateKey } from './comment-state';
+import { registerCommentState } from '@/lib/story-runtime/comment-state';
+import { setCommentStateTransaction } from '@/lib/story-runtime/comment-state-io';
 import { COMMENT_VALUES_KEY } from '../../../contracts/src/comment-view-state';
 export { bindPage, type PageBindings, type MutationFn, type QueryAccessor, type ValueSetter } from '@/lib/story-runtime/page-bindings';
 const bareName = (ref: string): string => (typeof ref === 'string' && ref.startsWith('$') ? ref.slice(1) : String(ref));
@@ -183,11 +184,7 @@ export function scriptCreateSignal(registrations: Set<() => void>) {
   return (value: unknown, options?: SignalOptions<unknown> & { name?: unknown }) => {
     const name = typeof options?.name === 'string' && options.name ? options.name : null;
     if (!name) return solidCreateSignal(value, options);
-    const key = commentStateKey(name) ?? name;
-    if (getOwner()) return commentSignal(key, value, options);
-    const { signal, remove } = registerCommentSignal(key, value, options);
-    registrations.add(remove);
-    return signal;
+    return commentSignal(commentStateKey(name) ?? name, value, options, registrations);
   };
 }
 

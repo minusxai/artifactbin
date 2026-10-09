@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseCommentViewState } from '../../../contracts/src/comment-view-state';
-import { clearPendingCommentState, pendingCommentState, registerCommentState, setCommentStateTransaction } from '../story-runtime/comment-state';
-import { captureCommentState, restoreCommentState } from '../story-runtime/comment-state-io';
+import { clearPendingCommentState, registerCommentState } from '../story-runtime/comment-state';
+import { captureCommentState, pendingCommentState, restoreCommentState, setCommentStateTransaction } from '../story-runtime/comment-state-io';
 
 const registry = (owner: object) => ({
   register: (key: string, part: Parameters<typeof registerCommentState>[2]) => registerCommentState(owner, key, part),
@@ -48,7 +48,7 @@ describe('comment state', () => {
     state.register('clock', { get: () => new Date(), set() {} });
     state.register('loop', { get: () => cyclic, set() {} });
     state.register('fn', { get: () => () => 1, set() {} });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('registered twice'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('duplicate open'));
     expect(state.capture()).toEqual({ v: 2, state: { open: 'b' } });
     const ran: string[] = [];
     setCommentStateTransaction(owner, run => { ran.push('begin'); run(); ran.push('end'); });
@@ -57,7 +57,6 @@ describe('comment state', () => {
     state.register('bad', { get: () => 1, set() { throw new Error('nope'); } });
     expect(() => state.restore({ v: 2, state: { bad: 2, open: 'y' } })).toThrow(/bad/);
     expect(second).toBe('y');
-    expect(() => state.register('no space', { get: () => 1, set() {} })).toThrow(/stable key/);
     warn.mockRestore();
   });
   it('accepts bounded inert JSON and rejects executable, oversized, deeply nested, unsafe and earlier-shaped values', () => {

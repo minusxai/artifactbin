@@ -1,6 +1,18 @@
 /** Capture and restore over the comment state slot (./comment-state): the frame editor's and page runtime's half, kept out of kit chunks. */
 import type { CommentViewState, ReviewJson } from '../../../contracts/src/comment-view-state';
-import { commentStateSlot, copy } from './comment-state';
+import { commentStateSlot } from './comment-state';
+
+/** A part owns what it is handed: no object is shared between the pending snapshot and live state. */
+const copy = <T extends ReviewJson>(value: T): T => (value !== null && typeof value === 'object' ? JSON.parse(JSON.stringify(value)) as T : value);
+
+/** The value the last restore holds for a key, registered or not. */
+export const pendingCommentState = (owner: object, key: string): ReviewJson | undefined => {
+  const { pending } = commentStateSlot(owner);
+  return Object.hasOwn(pending, key) ? copy(pending[key]!) : undefined;
+};
+
+/** Runs a restore's sets together; the page runtime installs Solid's batch. */
+export function setCommentStateTransaction(owner: object, transaction: (run: () => void) => void): void { commentStateSlot(owner).transaction = transaction; }
 
 /** Plain JSON data only: no functions, class instances, cycles or non-finite numbers. Size and depth limits are the contract's. */
 const plain = (value: unknown, depth = 0): value is ReviewJson => {

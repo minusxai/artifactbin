@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { STORY_SELECTION_MESSAGE, type StoryAnnotationsMessage } from '@/lib/story-runtime/contract';
 import { disposeAnnotateSession, env, installAnnotateSession, layouts, rectOf, state } from '@/test/helpers/annotate-session';
-import { pendingCommentState, registerCommentState } from '@/lib/story-runtime/comment-state';
+import { registerCommentState } from '@/lib/story-runtime/comment-state';
+import { pendingCommentState } from '@/lib/story-runtime/comment-state-io';
 
 beforeEach(installAnnotateSession);
 afterEach(disposeAnnotateSession);

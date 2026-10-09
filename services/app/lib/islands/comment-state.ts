@@ -6,7 +6,7 @@
  */
 import { createContext, createSignal, getOwner, onCleanup, untrack, useContext, type Signal, type SignalOptions } from 'solid-js';
 import type { ReviewJson } from '@artifactbin/contracts';
-import { pendingCommentState, registerCommentState } from '@/lib/story-runtime/comment-state';
+import { registerCommentState } from '@/lib/story-runtime/comment-state';
 
 /** The source node a script component mounts at (page-runtime mountComponents provides it). */
 export const MountScope = createContext<string | null>(null);
@@ -18,18 +18,19 @@ export function commentStateKey(name: string, id?: string | null): string | null
   return scope ? `${scope}:${name}` : null;
 }
 
-/** A Solid signal registered as comment state under `key`, with its unregister (a pending restore seeds the first value). */
-export function registerCommentSignal<T>(key: string, value: T, options?: SignalOptions<T>): { signal: Signal<T>; remove: () => void } {
-  const saved = pendingCommentState(document, key);
-  const [get, set] = createSignal<T>(saved === undefined ? value : (saved as T), options);
+/**
+ * A Solid signal registered as comment state under `key`: plain when it has no key or renders on the server. A pending
+ * restore sets it as it registers. Unregistered with its owner; without one (a module-level signal), `removals` keeps
+ * the remover for the module's stop.
+ */
+export function commentSignal<T>(key: string | null, value: T, options?: SignalOptions<T>, removals?: Set<() => void>): Signal<T> {
+  const [get, set] = createSignal<T>(value, options);
+  if (!key || typeof document === 'undefined') return [get, set];
   const remove = registerCommentState(document, key, { get: () => untrack(get), set: (next: ReviewJson) => { set(() => next as T); } });
-  return { signal: [get, set], remove };
+  if (getOwner()) onCleanup(remove); else removals?.add(remove);
+  return [get, set];
 }
 
-/** A kit element's commentable signal: plain when it has no key or renders on the server; unregistered with its owner. */
-export function commentSignal<T>(key: string | null, value: T, options?: SignalOptions<T>): Signal<T> {
-  if (!key || typeof document === 'undefined') return createSignal(value, options);
-  const { signal, remove } = registerCommentSignal(key, value, options);
-  if (getOwner()) onCleanup(remove);
-  return signal;
-}
+/** A kit element's uncontrolled view state: comment state under its node id unless a bound prop controls it. */
+export const kitSignal = <T,>(name: string, props: { id?: string }, controlled: unknown, value: T): Signal<T> =>
+  commentSignal(controlled === undefined ? commentStateKey(name, props.id) : null, value);
