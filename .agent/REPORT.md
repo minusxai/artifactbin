@@ -51,3 +51,11 @@ Commit: `Fix fresh artifact export operation`.
 ===CONCISE===
 
 Export operation refresh is explicit and honored; static current-head capture and ordinary cache reuse are covered. Table-total guidance is pinned in CLI help. FAST checks pass.
+
+## Follow-up: reported stale `/export?refresh=1` image
+
+The operation-level fake-PNG regression is insufficient to explain a stale raster. I ran a bounded one-off local route probe: it called `GET /a/<id>/export?format=png&refresh=1` after editing the published document, inspected the resulting capture URL, fetched that raw route through the real handler, rendered its returned HTML in local headless Chromium, and checked the returned PNG bytes. The fresh capture contained the edited `$12` footer and differed from the cached `$10` image.
+
+Source inspection found no stale path in this local route: refresh forces a new export-cache image id; the raw markup response is `no-store`; the capture URL selects the current head; the local browser opens a fresh Playwright page per render; the export redirect and image response are also `no-store`. The probe used a test BrowserService adapter that fetched the raw handler and passed its HTML to Chromium, so it did not reproduce the deployed browser-service network path. It is evidence the application route/cache/source path works locally, not evidence the reported production symptom is fixed. Root cause remains unresolved pending a repro against the actual local composition or review of the exact production response path.
+
+The Chromium probe was removed from the FAST Vitest suite because browser integration belongs to CI; the deterministic raw/cache regression remains. Fresh checks after removing it: not rerun (the prior 3/3 probe run included the removed Chromium case; the committed baseline's validation result remains from the earlier task).
