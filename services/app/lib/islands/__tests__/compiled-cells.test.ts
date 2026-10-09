@@ -129,14 +129,14 @@ const cellOf = (host: ParentNode, table: string, column: string, row = 1) =>
   }) as HTMLTableCellElement | undefined;
 
 /**
- * A DOM subtree as the parity gate compares it: tags, attribute sets (values exact, `data-hk` dropped,
+ * A DOM subtree as the parity gate compares it: tags, attribute sets (values exact, hydration and source identity metadata dropped,
  * `style` as the declarations it parses to — hydrated server markup keeps its own spelling), direct text.
  */
 interface Shape { tag: string; attrs: string[]; text: string; kids: Shape[] }
 const cssOf = (value: string): string => { const probe = document.createElement('span'); probe.setAttribute('style', value); return probe.style.cssText; };
 const shapeOf = (el: Element): Shape => ({
   tag: el.tagName.toLowerCase(),
-  attrs: [...el.attributes].filter((a) => a.name !== 'data-hk').map((a) => `${a.name}=${a.name === 'style' ? cssOf(a.value) : a.value}`).sort(),
+  attrs: [...el.attributes].filter((a) => a.name !== 'data-hk' && a.name !== 'data-mx-source-node-id').map((a) => `${a.name}=${a.name === 'style' ? cssOf(a.value) : a.value}`).sort(),
   text: [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(''),
   kids: [...el.children].map(shapeOf),
 });

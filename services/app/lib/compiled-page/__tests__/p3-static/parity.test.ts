@@ -45,6 +45,8 @@ const visibleHtml = (html: string): string => {
   root.querySelectorAll('pre').forEach(node => { if (node.firstChild?.nodeType === 3) node.firstChild.textContent = node.firstChild.textContent?.replace(/^\n+/, '') ?? ''; });
   root.querySelectorAll('[data-hk]').forEach(node => node.removeAttribute('data-hk'));
   root.querySelectorAll('[data-mx-live]').forEach(node => node.removeAttribute('data-mx-live'));
+  // Source identity is capture metadata; compiler tests verify it separately from visible HTML.
+  root.querySelectorAll('[data-mx-source-node-id]').forEach(node => node.removeAttribute('data-mx-source-node-id'));
   // The delegated dialog close marker is internal; it does not change visible reader output.
   root.querySelectorAll('[data-mx-dialog-close]').forEach(node => node.removeAttribute('data-mx-dialog-close'));
   for (const node of root.querySelectorAll<HTMLElement>('[id],[aria-controls],[aria-labelledby],[aria-describedby]')) {

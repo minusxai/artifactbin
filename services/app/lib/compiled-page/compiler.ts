@@ -689,7 +689,13 @@ export function generate(input: GenerateInput): Generated {
     if (ctx.preview) props = ctx.preview.rewrite(props);
     // A static wrapper with live descendants is already served. Its id may be minted
     // anew by an edit; leaving it to the DOM keeps the browser module reusable.
-    if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) delete props.id;
+    if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) {
+      delete props.id;
+      // The served skeleton owns this wrapper's stable identity. The browser module must not
+      // capture it, or a prose-only version change changes the reusable island module hash.
+      // Omitting it here also leaves the server-rendered witness in place during hydration.
+      delete props[SOURCE_NODE_ID_ATTR];
+    }
     const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
     const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
     const reactive = ctx.preview ? [] : node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));

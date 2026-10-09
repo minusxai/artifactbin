@@ -470,7 +470,6 @@ describe('codegen safety', () => {
 const columnParity = (html: string, source: string, drop: string[] = []): string[] => {
   const column = dom(html).querySelector('.mx-doc')!;
   const react = new JSDOM(`<div>${reactRender(source)}</div>`).window.document.body.firstElementChild!;
-  for (const root of [column, react]) for (const el of root.querySelectorAll('[data-mx-source-node-id]')) el.removeAttribute('data-mx-source-node-id');
   for (const root of [column, react]) for (const id of drop) root.querySelector(`#${id}`)?.remove();
   return diffShapes(shapeOf(react), shapeOf(column));
 };
