@@ -481,6 +481,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
 const withoutCode=(code:string,message:string):string=>message.startsWith(`${code}: `)?message.slice(code.length+2):message;
 /** How many failing files a refusal names before it stops; the rest are one counted line. */
 const MAX_REFUSAL_FILES=3;
+/** Enough context to explain related declarations, while keeping refusal output bounded. */
+const MAX_REFUSAL_DIAGNOSTICS_PER_FILE=3;
 /**
  * THE DIAGNOSIS THE REFUSAL ALREADY CARRIES, as human lines.
  *
@@ -508,8 +510,12 @@ function refusalDetails(message:string,details:unknown):string[]{
   const failed=files.filter((file):file is {path:string;diagnostics:Array<{message?:unknown;severity?:unknown;line?:unknown;column?:unknown}>}=>
    !!file&&typeof file==='object'&&(file as {valid?:unknown}).valid===false&&typeof (file as {path?:unknown}).path==='string'&&Array.isArray((file as {diagnostics?:unknown}).diagnostics));
   for(const file of failed.slice(0,MAX_REFUSAL_FILES)){
-   const first=file.diagnostics.find(diagnostic=>!!diagnostic&&typeof diagnostic.message==='string'&&diagnostic.severity!=='notice');
-   if(first){const at=typeof first.line==='number'?`:${first.line}${typeof first.column==='number'?`:${first.column}`:''}`:'';lines.push(`${file.path}${at}: ${first.message as string}`);}
+   const diagnostics=[...new Set(file.diagnostics.filter(diagnostic=>!!diagnostic&&typeof diagnostic.message==='string'&&diagnostic.severity!=='notice').map(diagnostic=>{
+    const at=typeof diagnostic.line==='number'?`:${diagnostic.line}${typeof diagnostic.column==='number'?`:${diagnostic.column}`:''}`:'';
+    return `${file.path}${at}: ${diagnostic.message as string}`;
+   }))];
+   lines.push(...diagnostics.slice(0,MAX_REFUSAL_DIAGNOSTICS_PER_FILE));
+   if(diagnostics.length>MAX_REFUSAL_DIAGNOSTICS_PER_FILE)lines.push(`${file.path}: … and ${diagnostics.length-MAX_REFUSAL_DIAGNOSTICS_PER_FILE} more diagnostics; run afbin validate for the rest.`);
   }
   if(failed.length>MAX_REFUSAL_FILES)lines.push(`… and ${failed.length-MAX_REFUSAL_FILES} more files; run afbin validate for the rest.`);
  }

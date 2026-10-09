@@ -20,6 +20,7 @@ import {datasetFileRows,datasetFileBytes,isDatasetFile} from './dataset-file';
 import {reconcileDocument} from './reconcile';
 import {stampNodeIds,graphSource,canonicalizeMarkup,parseJsx,serializeJsx,type JsxNode,collectRefUses,REFERENCE_POSITIONS,validateMarkupStructure} from '../../app/lib/cli-toolkit';
 import {push} from './sync';
+import {validateFiles} from './validation';
 import {loadWorkspace,saveTracking,type Workspace,type Snapshot} from './workspace';
 import {stateFor} from './state-access';
 import {withLock} from './state';
@@ -112,7 +113,10 @@ async function dependencies(workspace:Workspace,paths:string[],identities:Record
   let all=new Set<string>(),strong=all;
   if(extension==='.jsx'){
    const body=parseDocument(bytes.toString()).body,checked=validateMarkupStructure(body);
-   if(checked.errors.length)throw new CliError('validation_failed',`Local validation failed for ${path}.`,'Correct the source before publishing.',{errors:checked.errors});
+   if(checked.errors.length){
+    const validation=await validateFiles(workspace,[resolve(workspace.root,path)],false,{repairSyntax:false});
+    throw new CliError('validation_failed',`Local validation failed for ${path}.`,'Correct the source before publishing.',validation);
+   }
    const refs=markupReferences(body);all=refs.all;strong=refs.required;
   }else if(isDatasetFile(path))all=strong=rowReferences(datasetFileRows(path,bytes));
   else if(['.yaml','.yml'].includes(extension)){

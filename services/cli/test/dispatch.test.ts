@@ -495,3 +495,64 @@ test('a refused push prints script details with line and column, and a merge_con
   assert.ok(conflict.text.includes('Conflicting fields: title, source')||conflict.text.includes('merge_conflict'),conflict.text);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+
+test('registered JSX dependency validation shows both actionable file diagnostics on the first dry-run push',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-dependency-diagnostics-'));
+ const home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const source='---\ntitle: Invalid report\n---\n<Import name="sales" src="ref:abc123" />\n<Query name="totals">{`select 1 as total`}</Query>\n<p id="intro">Report</p>\n';
+ const file=join(cwd,'report.jsx');await writeFile(file,source);
+ const fetcher:typeof fetch=async()=>assert.fail('local registration and invalid dry-run must not authenticate or publish');
+ try{
+  const added:string[]=[];
+  const addCode=await runCli(['add','report.jsx','--json'],{cwd,home,env:{},interactive:false,color:false,fetch:fetcher,stdout:s=>added.push(s),stderr:s=>added.push(s)});
+  assert.equal(addCode,0,added.join(''));
+  const registered=await readFile(file,'utf8');
+  const err:string[]=[];
+  const code=await runCli(['push','report.jsx','--dry-run'],{cwd,home,env:{},interactive:false,color:false,fetch:fetcher,stdout:()=>{},stderr:s=>err.push(s)});
+  const text=err.join('');assert.equal(code,2,text);
+  const importLine=registered.split('\n').findIndex(line=>line.startsWith('<Import'))+1;
+  const queryLine=registered.split('\n').findIndex(line=>line.startsWith('<Query'))+1;
+  assert.ok(text.includes(`report.jsx:${importLine}:1: Unknown component <Import>`),text);
+  assert.match(text,new RegExp(`report\\.jsx:${queryLine}:1:.*Query.*Helmet`),text);
+  assert.equal(text.split('Unknown component <Import>').length-1,1,'each diagnostic appears once');
+  const output:string[]=[];
+  const jsonCode=await runCli(['push','report.jsx','--dry-run','--json'],{cwd,home,env:{},interactive:false,color:false,fetch:fetcher,stdout:s=>output.push(s),stderr:()=>{}});
+  assert.equal(jsonCode,2);
+  const validation=JSON.parse(output.join('')).error.details;assert.equal(validation.valid,false);
+  assert.equal(validation.files[0].diagnostics.length,2);assert.equal(validation.files[0].diagnostics[0].line,importLine);
+  assert.equal(await readFile(file,'utf8'),registered,'a refused push preserves the tracked source');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test('a refused registered push bounds diagnostic output and retains every error in JSON',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-bounded-diagnostics-'));
+ const home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const file=join(cwd,'report.jsx');await writeFile(file,'---\ntitle: Invalid components\n---\n'+['UnknownOne','UnknownTwo','UnknownThree','UnknownFour','UnknownFive'].map(tag=>`<${tag} />`).join('\n')+'\n');
+ const context={cwd,home,env:{},interactive:false,color:false,fetch:async()=>assert.fail('local diagnostic checks must never reach the network')};
+ try{
+  assert.equal(await runCli(['add','report.jsx','--json'],{...context,stdout:()=>{},stderr:()=>{}}),0);
+  const source=await readFile(file,'utf8'),err:string[]=[];
+  assert.equal(await runCli(['push','report.jsx','--dry-run'],{...context,stdout:()=>{},stderr:s=>err.push(s)}),2);
+  const text=err.join('');assert.equal((text.match(/report\.jsx:\d+:\d+:/g)??[]).length,3);
+  assert.match(text,/2 more diagnostics/);assert.ok(text.trimEnd().endsWith('Correct the source before publishing.'));
+  const out:string[]=[];assert.equal(await runCli(['push','report.jsx','--dry-run','--json'],{...context,stdout:s=>out.push(s),stderr:()=>{}}),2);
+  assert.equal(JSON.parse(out.join('')).error.details.files[0].diagnostics.length,5);assert.equal(await readFile(file,'utf8'),source);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('dependency diagnostic collection preserves invalid source even when syntax repair is possible',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-no-repair-diagnostics-'));
+ const home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const file=join(cwd,'report.jsx');
+ const source='---\ntitle: Broken dependency\n---\n<Import name="outside" src="ref:abc123" />\n<Helmet><Import name="q_data" src="ref:abc123" /><Query name="q">{`select m, v from q_data.rows`}</Query></Helmet><article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"m","type":"nominal"}}}}}}} /></article>\n';
+ await writeFile(file,source);
+ const context={cwd,home,env:{},interactive:false,color:false,fetch:async()=>assert.fail('invalid dependency diagnostics stay offline'),stdout:()=>{},stderr:()=>{}};
+ try{
+  assert.equal(await runCli(['add','report.jsx','--json'],context),0);
+  const registered=await readFile(file,'utf8');
+  assert.equal(await runCli(['push','report.jsx','--dry-run'],context),2);
+  assert.equal(await readFile(file,'utf8'),registered,'a diagnostic-only refusal must not repair or overwrite source');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
