@@ -24,6 +24,13 @@ export interface HostedAgentCommentOperation {
   input: RunnerJson;
 }
 
+/** Token-bound default-request authorization. Ordinary human/native tokens retain their existing policy.
+ * The private owner resolves the token and live branch; caller headers never confer authority. */
+export type HostedOperationAuthorization =
+  | {kind:'ordinary'|'allowed'}
+  | {kind:'denied';code:string;message:string}
+  | {kind:'deferred';body:RunnerJson};
+
 /** Optional external managed-agent service. Session IDs identify, never authorize. */
 export interface HostedRemoteAgent {
   owns(owner: string, id: string): boolean;
@@ -32,5 +39,7 @@ export interface HostedRemoteAgent {
   input(owner: string, id: string, text: string): Promise<void>;
   stop(owner: string, id: string): Promise<void>;
   deliverComment?(owner: string, comment: HostedAgentComment): Promise<void>;
+  authorizeOperation?(owner:string,tokenId:string,name:string,input:RunnerJson):Promise<HostedOperationAuthorization>;
+  operationCompleted?(owner:string,tokenId:string,name:string,input:RunnerJson,result:RunnerJson):Promise<void>;
   operation(owner: string, requestId: string, operation: string, args: RunnerJson): Promise<Response>;
 }
