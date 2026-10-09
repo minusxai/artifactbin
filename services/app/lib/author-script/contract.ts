@@ -3,7 +3,7 @@
  * module (lib/islands/page-runtime) agree on. Constants only, with no imports, so the browser runtime and the island
  * build read it without reaching the build toolchain.
  *
- * lib/author-script is otherwise SERVER-ONLY: author-module.server and migrate-scripts load @babel/core,
+ * lib/author-script is otherwise SERVER-ONLY: author-module.server loads @babel/core,
  * babel-preset-solid and esbuild. It has no index barrel on purpose; import the file you need, and from browser code
  * only this one.
  */
