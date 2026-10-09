@@ -217,7 +217,7 @@ export const STORY_ROOT_ID = 'mx-story-root';
  * `id`; a request the page never answers times out in the frame's transport.
  */
 /**
- * A NEW VERSION OF THIS DOCUMENT, posted to the page's controller (lib/story-runtime/island-controller).
+ * A NEW VERSION OF THIS DOCUMENT, posted to the page's controller (lib/islands/island-controller).
  *
  * The app's editor sends an `EditDraft`: unsaved source the controller compiles on the
  * server (`/a/<id>/draft-preview`) and morphs into the running islands. The reader page sends a
@@ -244,7 +244,7 @@ export interface EditDraft {
   preview?: true;
   /**
    * Everything since the previous draft was typed into prose the editor already shows: its compile
-   * may only reconcile the editor, never redraw it (lib/story-runtime/island-controller).
+   * may only reconcile the editor, never redraw it (lib/islands/island-controller).
    */
   typing?: true;
   /** A new look (theme, colour mode): drawn by the compiler, never only reconciled into the editors. */
@@ -293,6 +293,17 @@ export interface StoryController {
   subscribe(listener: (event: unknown) => void): () => void;
   getViewportRect(): DOMRect;
   dispose(): void;
+}
+
+/** The page's handle on its adopted story root (lib/islands/island-controller), as the page shell and the frame bridge see it. */
+export interface IslandStoryController extends StoryController {
+  selectionReady(): void;
+  /**
+   * Settles once the page reads again IN PLACE after editing: the saved version drawn on the running islands
+   * and the islands back in read mode (lib/islands/boot). Resolves at once when editing never froze them;
+   * rejects when the version cannot be drawn here (the caller reloads, keeping the reader's place).
+   */
+  restored(): Promise<void>;
 }
 
 /**
@@ -782,7 +793,7 @@ export const STORY_ANNOTATIONS_EVENT = 'annotations';
 /* ────────────────────────────────────────────────────────────────────────────
  * KEYS A FRAMED DOCUMENT FORWARDS — the page's editor listens on its own window,
  * and a key pressed inside a framed document never reaches it. The frame half of
- * the bridge (lib/story-runtime/frame-bridge/frame) sends these instead, signed
+ * the bridge (lib/islands/frame-bridge) sends these instead, signed
  * like every other frame → parent message. Undo/redo travels as `mx:history`.
  * ──────────────────────────────────────────────────────────────────────────── */
 

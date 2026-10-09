@@ -1,6 +1,6 @@
 /**
  * An editor draft drawn into the adopted compiled root, through the island controller's draft path
- * (lib/story-runtime/island-controller: a document update while editing → the draft compile's reply → the
+ * (lib/islands/island-controller: a document update while editing → the draft compile's reply → the
  * morph engine draws it). The engine is the real one here; only the editor session and its mounter are
  * stand-ins (island-controller-draft.ui.test pins the controller's ordering with the engine stubbed).
  */
@@ -21,7 +21,7 @@ const editSession = vi.hoisted(() => ({
 vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () => editSession.session }));
 vi.mock('@/lib/story-runtime/edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
-import { createIslandController } from '@/lib/story-runtime/island-controller';
+import { createIslandController } from '@/lib/islands/island-controller';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import { disposeChangedDraftIslands, draftTreeKept, hydrateDraftIslands, morphDraftDom, sameDataflow } from '../morph/engine';
 import { ISLAND_DOCUMENT_KEY } from '../contract';

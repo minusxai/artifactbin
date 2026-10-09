@@ -78,7 +78,7 @@ export interface InPlaceEditOptions {
   onEditKey?: (key: 'Delete' | 'Backspace' | 'Escape', selection: StoryEditSelection | null) => void;
   onHistory?: (direction: 'undo' | 'redo') => void;
   /**
-   * A framed document forwards what the page's own window would have heard (lib/story-runtime/frame-bridge/frame):
+   * A framed document forwards what the page's own window would have heard (lib/islands/frame-bridge):
    * Enter, or focus leaving a text host — hand held typing to the document now.
    */
   onFlush?: () => void;

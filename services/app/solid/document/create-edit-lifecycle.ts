@@ -18,7 +18,7 @@
 import { createSignal, type Accessor } from 'solid-js';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import { STORY_EDIT_MODE_MESSAGE } from '@/lib/story-runtime/contract';
-import type { IslandStoryController } from '@/lib/story-runtime/island-controller';
+import type { IslandStoryController } from '@/lib/story-runtime/contract';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
 
 type EditPhase = 'reading' | 'entering' | 'editing' | 'leaving' | 'restoring';

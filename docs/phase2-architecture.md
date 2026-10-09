@@ -313,7 +313,7 @@ story only through the frame bridge.
 
 1. Adoption without re-render. The frame side finds the island document through `IslandDocument`
    (`lib/islands/handover.ts`): `root` (the story element), `store` (the `DataflowStore` the islands
-   run on), `mode`, `setMode('read' | 'edit')`, `dispose()`, `subscribe`. `lib/story-runtime/frame-bridge/frame.ts`
+   run on), `mode`, `setMode('read' | 'edit')`, `dispose()`, `subscribe`. `lib/islands/frame-bridge.ts`
    exposes it to the page, `solid/document/create-framed-story.ts` holds the framed document and
    `solid/pages/Document.tsx` renders chrome around it; the story is never hydrated or re-rendered by the app. The islands keep running and the app's reactions (like,
    follow, comments) keep reading the store.

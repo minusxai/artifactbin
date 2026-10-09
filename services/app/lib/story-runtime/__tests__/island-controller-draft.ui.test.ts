@@ -1,5 +1,5 @@
 /**
- * Editor drafts drawn into the adopted compiled root (lib/story-runtime/island-controller): one draft
+ * Editor drafts drawn into the adopted compiled root (lib/islands/island-controller): one draft
  * is applied at a time. Two applications interleaving across the island hydration await would hydrate
  * the one-tree root twice and remount the editor over a half-morphed DOM.
  */
@@ -53,12 +53,12 @@ const editSession = vi.hoisted(() => ({
 vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () => editSession.session }));
 vi.mock('@/lib/story-runtime/edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
-import { createIslandController, holdChartDrawings } from '../island-controller';
+import { createIslandController, holdChartDrawings } from '@/lib/islands/island-controller';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
 import { storyUpdateParts } from '@/lib/document/update-parts';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
 import { createEditDraftSender, DRAFT_IDLE_MS } from '@/solid/editor/edit-draft';
-import { TYPING_QUIET_MS } from '../island-controller';
+import { TYPING_QUIET_MS } from '@/lib/islands/island-controller';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));

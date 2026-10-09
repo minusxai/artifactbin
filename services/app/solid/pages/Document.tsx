@@ -29,7 +29,7 @@ import { DocumentPeople } from '../document/DocumentPeople';
 import { createFramedStory, framedDocumentFor, type FramedStory } from '../document/create-framed-story';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
-import { moveInto } from '@/lib/story-runtime/island-controller';
+import { moveInto } from '@/lib/islands/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
 import { EditEntryChrome } from '../editor/EditEntryChrome';

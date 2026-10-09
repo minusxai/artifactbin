@@ -6,12 +6,12 @@
  * so it finds the same element in the DOM when an overlay opens; a page with no trusted UI (a
  * compiled reader page before the app loads) answers null and the overlay renders in place.
  *
- * The page's NAVIGATION layer (`data-trusted-layer="navigation"`, lib/story-runtime/trusted-overlay-host) is the one
+ * The page's NAVIGATION layer (`data-trusted-layer="navigation"`, lib/islands/trusted-overlay-host) is the one
  * asked for, by name: other trusted roots can sit earlier in the page (the document's consent bar, in the slot above
  * its frame), and an overlay mounted in one of them would paint under the top-layer rail. A page without a
  * navigation layer gets its first trusted root.
  */
-/** The host attribute naming a layered trusted root's layer (set by lib/story-runtime/trusted-overlay-host). */
+/** The host attribute naming a layered trusted root's layer (set by lib/islands/trusted-overlay-host). */
 export const TRUSTED_LAYER_ATTR = 'data-trusted-layer';
 
 export function trustedPortalOf(doc: Document | undefined = typeof document === 'undefined' ? undefined : document): HTMLElement | null {

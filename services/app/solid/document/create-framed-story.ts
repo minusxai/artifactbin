@@ -16,7 +16,7 @@ import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-
 import type { JsxNode } from '@/lib/jsx/types';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
-import type { IslandStoryController } from '@/lib/story-runtime/island-controller';
+import type { IslandStoryController } from '@/lib/story-runtime/contract';
 
 /** The served frame a consent grant reloads (brief C's CspConsentBar) and the bridge attaches to. */
 export const DOCUMENT_FRAME_SELECTOR = 'iframe[data-mx-document-frame]';

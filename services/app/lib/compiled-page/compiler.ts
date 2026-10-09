@@ -26,7 +26,7 @@
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
 import { STORY_SVG_TAGS } from '@/lib/jsx/component-names';
-import { isScriptComponent, MOUNT_ATTR } from './script-mount';
+import { isScriptComponent, MOUNT_ATTR } from '@/lib/story-runtime/script-mount';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
 import { buildGlyphMap } from '@/lib/story-ui/icon-glyphs.server';
@@ -200,7 +200,7 @@ const isElement = (node: JsxNode): node is JsxElement => node.type === 'element'
  * A capitalized tag outside the registry is a component the document's SCRIPT exports (validated at publish against
  * the built module's exports): the compiler emits its mount node, with its props as data and its children as the
  * server-rendered fallback, and the page runtime renders the component into it (lib/islands/page-runtime). The
- * predicate and the attribute live in ./script-mount, which the editor reads too.
+ * predicate and the attribute live in lib/story-runtime/script-mount, which the editor reads too.
  */
 /** The mount's props (literal JSON), its bindings (prop → declared name) and the DOM attributes the node keeps. */
 function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: Record<string, string>; id?: string; cls?: string } {

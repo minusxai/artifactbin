@@ -124,7 +124,7 @@ const STANDALONE_LAZY = [
 
 /**
  * THE FRAME EDITOR (`@mx/frame-editor`, lib/islands/frame-editor): the editor's document half for a document framed
- * on its own origin (lib/story-runtime/frame-bridge). The page behaviour's door (`@mx/page`, lib/islands/page) asks
+ * on its own origin (lib/islands/frame-bridge, lib/story-runtime/frame-bridge). The page behaviour's door (`@mx/page`, lib/islands/page) asks
  * for it with `import('./frame-editor')` only when the app page attaches to edit or comment, so it is no reader's
  * closure. It is its OWN graph, not an entry of the shared one: an entry there would re-partition the shared
  * chunks under the rt+boot budget for a module no reader loads. Split, so the controller and the relay load on

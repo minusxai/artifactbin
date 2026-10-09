@@ -1,4 +1,4 @@
-/** Applying a reader's light/dark choice to a document (the framed document's bridge, lib/story-runtime/frame-bridge/frame). */
+/** Applying a reader's light/dark choice to a document (the framed document's bridge, lib/islands/frame-bridge). */
 import { STORY_MODE_HOOK } from './contract';
 import { applyColorMode, persistReaderMode } from './reader-mode';
 

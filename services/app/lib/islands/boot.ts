@@ -254,7 +254,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
       if (next === 'read') {
         /*
          * Back to reading IN PLACE (the page's controller has already drawn the saved version on this
-         * context, lib/story-runtime/island-controller `restoreRead`, and synced the page's records): the
+         * context, lib/islands/island-controller `restoreRead`, and synced the page's records): the
          * document's stream, `window.page` and the version's author script resume as boot started them.
          * The stream opens from the snapshot's marks, so a dataset written while editing re-runs at once.
          */
