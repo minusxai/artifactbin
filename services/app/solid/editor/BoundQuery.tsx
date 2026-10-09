@@ -7,7 +7,7 @@
 import { Show, type JSX } from 'solid-js';
 import type { TableChoice } from '@/lib/document/table-catalog';
 
-export interface BoundQueryProps {
+interface BoundQueryProps {
   /** The table the embed is bound to, as the catalog lists it — null when unbound or undeclared. */
   table: TableChoice | null;
   /** Open the named query in the notebook. Absent where there is no rail: SQL only, no opener. */

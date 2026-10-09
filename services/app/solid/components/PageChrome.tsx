@@ -54,7 +54,7 @@ function Star(props: { mobile: boolean }): JSX.Element {
  * carried intent or a pill can open one), hears the reader's colour choice (`mode`/`onMode`: the document
  * in its frame takes it too) and drops the star while it is being edited (`star: false`).
  */
-export interface PageChromeProps {
+interface PageChromeProps {
   title?: string | null;
   label?: string;
   actions?: JSX.Element;

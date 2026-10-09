@@ -2,11 +2,11 @@
 import type { EventEnvelope, EventPayload, EventsService, EventVerb, ObjectKind } from '@artifactbin/contracts';
 import { envelope, type EventObject, type EventSubject } from '@artifactbin/utils';
 
-export type AuthSubject = EventSubject;
+type AuthSubject = EventSubject;
 type AuthObject<K extends ObjectKind = ObjectKind> = EventObject<K>;
 
 /** Build the row without sending it — pure, utils' `envelope` with the auth as the source. */
-export function authEnvelope<K extends ObjectKind, V extends EventVerb<K>>(
+function authEnvelope<K extends ObjectKind, V extends EventVerb<K>>(
   subject: AuthSubject | null,
   verb: V,
   object: AuthObject<K>,

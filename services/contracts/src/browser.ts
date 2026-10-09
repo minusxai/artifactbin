@@ -22,7 +22,7 @@ export interface RenderCardCrop {
   width: number;
 }
 
-export type RenderCapture = 'full' | 'card' | 'preview' | { slide: number } | { card: RenderCardCrop };
+type RenderCapture = 'full' | 'card' | 'preview' | { slide: number } | { card: RenderCardCrop };
 
 /** One page load, as every operation that loads a page asks for it: where, how big, and what may load. */
 export interface PageRequest {

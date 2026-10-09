@@ -15,7 +15,7 @@ import type { RuntimeChannel } from '../pristine';
 import { STORY_TEXT_EDIT_MESSAGE } from '../contract';
 import type { EditViews } from './hover-select';
 
-export interface FormatLinkOptions {
+interface FormatLinkOptions {
   win: Window;
   root: HTMLElement;
   views: EditViews;
@@ -25,7 +25,7 @@ export interface FormatLinkOptions {
   republishRect: () => void;
 }
 
-export interface FormatLink {
+interface FormatLink {
   /** Set (or with an empty string, remove) the class and/or style of the block at `path`. */
   applyFormat(path: string, className?: string, style?: string): void;
   /** Wrap the live text selection inside the host at `path` in a link, or unwrap it (`href` null). */

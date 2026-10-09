@@ -57,7 +57,7 @@ const ownCharacters = (code: string): string => [...new Set(code.replace(/[\x00-
  * measurements, it tells whether the fonts held still while a drawing was
  * made (only then is it marked for the harvest, lib/mermaid-images/drawn).
  */
-export function mermaidPaletteKey(palette: MermaidPalette): string {
+function mermaidPaletteKey(palette: MermaidPalette): string {
   const fields = [palette.dark, palette.background, palette.foreground, palette.primary, palette.border, palette.card,
     palette.muted, palette.accent, palette.mutedForeground, palette.fontFamily, palette.fontMono, palette.fontSize];
   return sha256Hex(JSON.stringify(fields)).slice(0, 32);
@@ -130,7 +130,7 @@ function inUnicodeRange(range: string, point: number): boolean {
  * (lib/mermaid-images/fonts); a system face or a fallback glyph resolves per
  * machine, so such a drawing is never stored.
  */
-export function drawnInWebFonts(palette: MermaidPalette, code: string): boolean {
+function drawnInWebFonts(palette: MermaidPalette, code: string): boolean {
   const fonts = typeof document !== 'undefined' ? document.fonts as (FontFaceSet & Iterable<FontFace>) | undefined : undefined;
   if (!fonts || typeof fonts[Symbol.iterator] !== 'function') return false;
   const faces = [...fonts];
@@ -144,7 +144,7 @@ export function drawnInWebFonts(palette: MermaidPalette, code: string): boolean 
 
 const SVG_DATA = 'data:image/svg+xml;charset=utf-8,';
 /** The engine's drawing with the page's font files in it, or as it was when it cannot carry them. */
-export async function withPageFonts(image: MermaidImage, palette: MermaidPalette): Promise<MermaidImage> {
+async function withPageFonts(image: MermaidImage, palette: MermaidPalette): Promise<MermaidImage> {
   if (!image.src.startsWith(SVG_DATA)) return image;
   const svg = decodeURIComponent(image.src.slice(SVG_DATA.length));
   const embedded = await embedPageFonts(svg, { label: firstFamily(palette.fontFamily), edge: firstFamily(palette.fontMono) }, pageFontFaces());
@@ -152,12 +152,12 @@ export async function withPageFonts(image: MermaidImage, palette: MermaidPalette
 }
 
 /** Does this page ask for the engine by name (`?mermaid=engine`, lib/mermaid-images/store MERMAID_ENGINE_PARAM)? */
-export const engineAskedFor = (): boolean => typeof location !== 'undefined' && new URLSearchParams(location.search).get('mermaid') === 'engine';
+const engineAskedFor = (): boolean => typeof location !== 'undefined' && new URLSearchParams(location.search).get('mermaid') === 'engine';
 
 /** What this browser would draw with — the palette's key and the faces' measurements. */
 export interface Measured { palette: string; metrics: MermaidMetrics | null }
 export const measured = (palette: MermaidPalette, code: string): Measured => ({ palette: mermaidPaletteKey(palette), metrics: measureFaces(palette, code) });
-export const sameMeasure = (a: Measured, b: Measured) => a.palette === b.palette && (a.metrics && formatMermaidMetrics(a.metrics)) === (b.metrics && formatMermaidMetrics(b.metrics));
+const sameMeasure = (a: Measured, b: Measured) => a.palette === b.palette && (a.metrics && formatMermaidMetrics(a.metrics)) === (b.metrics && formatMermaidMetrics(b.metrics));
 
 /**
  * Wait (briefly) for the faces a palette draws with, so the engine lays a
@@ -168,7 +168,7 @@ export const sameMeasure = (a: Measured, b: Measured) => a.palette === b.palette
  * (a `unicode-range` subset loads only for the characters asked for), loads
  * them — or resolves at once when the stack has no such web font.
  */
-export function fontsFor(palette: MermaidPalette, code: string): Promise<void> {
+function fontsFor(palette: MermaidPalette, code: string): Promise<void> {
   const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
   if (!fonts?.load) return Promise.resolve();
   const text = METRICS_PROBE + ownCharacters(code);
@@ -183,7 +183,7 @@ export function fontsFor(palette: MermaidPalette, code: string): Promise<void> {
 export type Drawn = { code: string; image?: MermaidImage; error?: string; palette?: string; metrics?: string; portable?: boolean; faces?: string };
 
 /** A reader's drawing and its marks: what `drawForReader` returns (minus the code it was drawn for). */
-export type ReaderDrawing = Omit<Drawn, 'code' | 'error'> & { image: MermaidImage };
+type ReaderDrawing = Omit<Drawn, 'code' | 'error'> & { image: MermaidImage };
 
 /**
  * Draw `code` in `element`'s theme, as the compiled reader does: wait for the palette's faces, measure them

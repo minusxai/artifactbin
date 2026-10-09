@@ -19,7 +19,7 @@ export interface DeletePermission {
   backend_only?: false;
   filter: PolicyPredicate;
 }
-export interface PermissionEntry<P> {
+interface PermissionEntry<P> {
   role: string;
   permission: P;
   comment?: string | null;

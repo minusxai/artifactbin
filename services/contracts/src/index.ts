@@ -11,7 +11,6 @@ export * from './mx';
 export * from './events';
 export * from './relations';
 export * from './agent';
-export * from './deny';
 export * from './routes';
 export { DEFAULT_SERVER } from './default-server';
 export { SERVER_IDENTITY_PATH, isLocalDevelopmentHost, normalizeOrigin, parseServerIdentityDocument, type ServerIdentityDocument } from './server-identity';

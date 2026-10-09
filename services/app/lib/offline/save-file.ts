@@ -17,7 +17,7 @@ import {artifactFileName} from '@artifactbin/utils/artifact-reference';
 import type { ArtifactFile } from './file-format';
 import { renderArtifactFileHtml } from './file-html';
 
-export type SaveOutcome = 'written' | 'downloaded' | 'cancelled';
+type SaveOutcome = 'written' | 'downloaded' | 'cancelled';
 
 interface WritableFile { write(data: Blob | string): Promise<void>; close(): Promise<void> }
 export interface SaveHandle { name?: string; createWritable(): Promise<WritableFile> }

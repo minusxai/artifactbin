@@ -52,7 +52,7 @@ export function compilerBuild(): CompilerBuild {
  return buildCache;
 }
 
-export interface CompileDocumentInput {
+interface CompileDocumentInput {
  /** The same merged `data` `read()` already computes for `/document`: authoritative nodes, colorMode, refData. */
  data: Pick<StoryIslandData, 'nodes' | 'colorMode' | 'template' | 'chrome' | 'glyphs' | 'refData'>;
  flow: CompileInput['flow'];
@@ -94,7 +94,7 @@ export async function renderStoryHtml(compiled: CompiledPage, input: {values: Re
  return module.render({values: input.values, results: input.results, mermaidImages: {}, drawings: {}});
 }
 
-export interface AssembleDocumentInput {
+interface AssembleDocumentInput {
  compiled: CompiledPage;
  prepared: PreparedStoryRuntime;
  colorMode: 'light' | 'dark';

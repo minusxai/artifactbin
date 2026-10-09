@@ -46,8 +46,3 @@ const rule = (f, withRange) =>
 export function fontFaceCss(family, axes) {
   return faces(family, axes).map((f) => rule(f, true)).join('\n');
 }
-
-/** The latin faces only, without ranges: half the bytes, every weight kept. */
-export function fontFaceLatin(family, axes) {
-  return faces(family, axes).filter((f) => f.subset === 'latin').map((f) => rule(f, false)).join('\n');
-}

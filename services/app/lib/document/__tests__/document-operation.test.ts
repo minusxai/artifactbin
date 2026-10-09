@@ -1,5 +1,14 @@
 import {describe,expect,it} from 'vitest';
-import {applyDocumentOperations} from '../document-operation';
+import type {DocumentOperation} from '@artifactbin/contracts';
+import {applyOperationsToNodes,DocumentOperationError} from '../document-operation';
+import {parseJsx} from '../../jsx/parse';
+import {serializeJsx} from '../../jsx/serialize';
+/** Parse, apply, serialize: the source-level view of the node operations. */
+function applyDocumentOperations(source:string,operations:readonly DocumentOperation[]):string {
+ const parsed=parseJsx(source);
+ if(!parsed.ok)throw new DocumentOperationError(parsed.error,-1);
+ return serializeJsx(applyOperationsToNodes(parsed.nodes,operations));
+}
 import {publishJsx} from '../../story/document/jsx-tier';
 const source='<section id="root"><p id="a">Alpha</p><p id="b">Beta</p></section>';
 describe('document operation algebra',()=>{

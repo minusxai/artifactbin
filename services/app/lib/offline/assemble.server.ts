@@ -62,7 +62,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 /** The largest offline file the server will assemble. */
 export const OFFLINE_FILE_MAX_BYTES = 25 * 1024 * 1024;
 
-export interface AssembleArtifactFileInput {
+interface AssembleArtifactFileInput {
   id: string;
   /** The downloader, as the read paths resolve them. */
   actor: RoleActor;
@@ -91,7 +91,7 @@ export async function timed<T>(timings: PhaseTimings | undefined, phase: string,
 export const serverTiming = (timings: PhaseTimings): string =>
   [...timings].map(([phase, ms]) => `${phase};dur=${ms.toFixed(1)}`).join(', ');
 
-export interface AssembleRefusal {
+interface AssembleRefusal {
   refused: 'not_found' | 'forbidden' | 'too_large';
   message: string;
 }

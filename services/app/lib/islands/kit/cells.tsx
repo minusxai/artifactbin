@@ -158,7 +158,7 @@ const POPUP = 'rounded-md border border-border bg-popover text-popover-foregroun
  * The cell
  * ──────────────────────────────────────────────────────────────────────────── */
 
-export interface CellControlProps {
+interface CellControlProps {
   /** `Select`, `DatePicker`, or a native `input` / `textarea` / `select`. */
   tag: string;
   /** The `<Mutation>` its `run` names. */

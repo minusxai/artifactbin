@@ -57,7 +57,7 @@ export function createReaderPreloader(webDir: string): ReaderPreloader {
 const LISTING_ENTRIES = {
   folder: ['pages/Profile.tsx', 'pages/Artifact.tsx', 'pages/Folder.tsx'],
 } as const;
-export type ListingPage = keyof typeof LISTING_ENTRIES;
+type ListingPage = keyof typeof LISTING_ENTRIES;
 
 /** Which listing page the server's inlined answer (server/app `bootstrapFor`) draws, if any. */
 export function listingPage(data: { profile?: unknown; artifact?: unknown } | null): ListingPage | null {

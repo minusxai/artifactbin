@@ -11,7 +11,7 @@ import Lock from 'lucide-solid/icons/lock';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import InPlaceEditor, { type EditorArtifact, type InPlaceEditorProps } from './InPlaceEditor';
 
-export type ArtifactEditorProps = Omit<InPlaceEditorProps, 'art'> & {
+type ArtifactEditorProps = Omit<InPlaceEditorProps, 'art'> & {
   id: string;
   backend: ArtifactBackend;
   /** What the page already holds; absent, the editor waits for the load. */

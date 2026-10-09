@@ -5,13 +5,13 @@ import type {DocumentMetadata} from '../document';
 import type {LocalHistoryEntry} from '../local-history';
 
 interface PreviewEditorDocument {body:string;revision:string;metadata:DocumentMetadata}
-export interface PreviewEditorFiles {
+interface PreviewEditorFiles {
  read(file:string):Promise<PreviewEditorDocument>;
  version?(file:string,revision:string):Promise<number>;
  history?(file:string):Promise<LocalHistoryEntry[]>;
  write(file:string,revision:string,body:string,metadata:DocumentMetadata):Promise<PreviewEditorDocument>;
 }
-export interface PreviewEditor {
+interface PreviewEditor {
  load(file:string):Promise<LoadedArtifact>;
  versions(file:string):Promise<ArtifactVersionSummary[]>;
  version(file:string,n:number):Promise<ArtifactVersionSnapshot|null>;

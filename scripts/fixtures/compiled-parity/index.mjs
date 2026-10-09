@@ -51,13 +51,3 @@ export const COMPILED_PARITY_FIXTURES = [
   { key: 'data-deck', title: 'Parity data deck', template: 'deck', markup: DATA_DECK, painted: null },
   { key: 'data-table', title: 'Parity data table', template: null, markup: DATA_TABLE, painted: null },
 ];
-
-/** Publish every parity fixture through `publish(body) → { id }`; returns the fixtures with their ids. */
-export async function publishCompiledParityFixtures(publish, visibility = 'unlisted') {
-  const published = [];
-  for (const fixture of COMPILED_PARITY_FIXTURES) {
-    const made = await publish({ title: fixture.title, markup: fixture.markup, visibility, ...(fixture.template ? { template: fixture.template } : {}) });
-    published.push({ ...fixture, id: made.id });
-  }
-  return published;
-}

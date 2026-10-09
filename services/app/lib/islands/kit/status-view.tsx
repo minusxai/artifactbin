@@ -15,10 +15,10 @@ import { render } from 'solid-js/web';
 import type { WriteState, WriteStatus, WriteStatusFeed } from '../contract';
 
 /** The indicator's own element (the status element inside carries WRITE_STATUS_ATTR), for the SPA and tests to find its mount. */
-export const WRITE_STATUS_HOST_ATTR = 'data-mx-write-status-host';
+const WRITE_STATUS_HOST_ATTR = 'data-mx-write-status-host';
 
 /** The one word the indicator shows for the whole feed: a failure outranks a save in flight, which outranks a landed one. */
-export function overallWriteState(statuses: readonly WriteStatus[]): WriteState | null {
+function overallWriteState(statuses: readonly WriteStatus[]): WriteState | null {
   if (!statuses.length) return null;
   if (statuses.some((s) => s.state === 'failed')) return 'failed';
   if (statuses.some((s) => s.state === 'saving')) return 'saving';

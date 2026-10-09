@@ -3,7 +3,7 @@ import type { Queryable } from './db';
 import type { ColumnType, PersonCard, Scalar } from './sql';
 
 /** Direct Helmet child. SQL returns to/message; no reactive page subscription. */
-export interface MutationNotificationRule {
+interface MutationNotificationRule {
   name: string;
   on: string;
   sql: string;
@@ -58,7 +58,7 @@ export interface NotificationSource {
 }
 
 /** Opaque durable identity, never raw request keys or credentials. */
-export interface MutationNotificationOrigin {
+interface MutationNotificationOrigin {
   mutationRunId: string;
   documentId: string;
   documentEditId: string;
@@ -98,13 +98,13 @@ export interface MutationNotificationClaim {
 }
 
 /** Validated query output. Nulls skip; users deduplicate within this result row. */
-export interface ResolvedMutationNotification {
+interface ResolvedMutationNotification {
   recipientIds: string[];
   message: string;
 }
 
 /** Output from one rule, including every source used by data or predicates. */
-export interface MutationNotificationRulePlan {
+interface MutationNotificationRulePlan {
   ruleName: string;
   rows: ResolvedMutationNotification[];
   sources: NotificationSource[];
@@ -117,7 +117,7 @@ export interface MutationNotificationPlan {
   rules: MutationNotificationRulePlan[];
 }
 
-export type MutationNotificationJobStatus =
+type MutationNotificationJobStatus =
   | 'pending' | 'running' | 'retrying' | 'completed' | 'failed';
 
 /** Operational view excludes SQL, arguments, credentials and message content. */

@@ -136,7 +136,7 @@ export function screenMobile(sc) {
   sc.text('text', 322, 88, 'ACTION', 'start');
 }
 
-export const SUBJECTS = [['phone', 'An object', phone], ['building', 'A place', building], ['units', 'A quantity', units], ['screen', 'A screen', screen]];
+const SUBJECTS = [['phone', 'An object', phone], ['building', 'A place', building], ['units', 'A quantity', units], ['screen', 'A screen', screen]];
 const HATCH = { hatch: [45, 6], engrave: [0, 4] };
 
 export function render(spec, which, fn) {

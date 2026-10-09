@@ -3,8 +3,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Actor, Queryable } from '@artifactbin/contracts';
 
 /** A first phone login (mail app, copy code, switch back) outlasts five minutes. */
-export const PAIRING_TTL_SECONDS = 900;
-export interface ArtifactPairingTarget { artifactId: string }
+const PAIRING_TTL_SECONDS = 900;
+interface ArtifactPairingTarget { artifactId: string }
 interface PairingPayload { origin: string; target?: ArtifactPairingTarget; approvedBy?: Actor }
 type PairingResult = { status: 'pending' | 'invalid' | 'denied' } | { status: 'approved'; userId: string | null; target?: ArtifactPairingTarget; approvedBy?: Actor };
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');

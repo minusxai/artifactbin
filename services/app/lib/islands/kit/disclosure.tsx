@@ -140,7 +140,7 @@ export function TooltipTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement
     on:focus={() => { if (!pointerDown) ctx.openNow(); }} on:blur={() => ctx.close()} on:click={() => ctx.close()}>{props.children}</button>;
 }
 /** A disabled editing control needs a focusable span as its tooltip anchor. */
-export function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
+function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
   const ctx = useContext(TooltipContext)!; let span!: HTMLSpanElement; let movedOpen = false;
   onMount(() => createEffect(() => {
     for (const [name, value] of [['aria-describedby', ctx.open() ? ctx.contentId() : null], ['data-state', ctx.state()], ['data-radix-popper-side', ctx.placed()?.side], ['data-radix-popper-align', ctx.placed()?.align]] as const) {

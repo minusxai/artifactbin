@@ -10,7 +10,7 @@
 import { createUniqueId, Show, type JSX } from 'solid-js';
 import { Tooltip } from './Tooltip';
 
-export interface UnavailableProps { disabled?: true; 'aria-describedby'?: string }
+interface UnavailableProps { disabled?: true; 'aria-describedby'?: string }
 
 export function FeatureGate(props: {
   /** `backend.unavailable(feature)`: null/undefined when the feature works. */

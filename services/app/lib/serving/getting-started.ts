@@ -3,7 +3,7 @@ import { DEFAULT_SERVER } from '@artifactbin/contracts';
 const originOf=(base:string)=>base.replace(/\/$/,'');
 /** Shell quoting is platform-specific; keep even a supplied origin one argument. */
 const quoted=(value:string,windows=false):string=>`'${windows?value.replaceAll("'","''"):value.replaceAll("'",`'"'"'`)}'`;
-export const afbinServerFlag=(base:string,windows=false):string=>originOf(base)===DEFAULT_SERVER?'':` --server ${quoted(originOf(base),windows)}`;
+const afbinServerFlag=(base:string,windows=false):string=>originOf(base)===DEFAULT_SERVER?'':` --server ${quoted(originOf(base),windows)}`;
 /** Complete setup on the serving host; the installer owns Node, npm and skill selection. */
 export const afbinInstallCommand=(base:string):string=>`curl -fsSL ${quoted(`${originOf(base)}/chat/install.sh`)} | sh`;
 /** Inline PowerShell preserves current PATH and works under Restricted execution policy. */

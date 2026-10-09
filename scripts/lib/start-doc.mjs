@@ -21,7 +21,7 @@ import { loginViaEmail } from './mail-login.mjs';
  * PAGE's button — an agent creates with `POST /api/artifacts`. A gate stands
  * in for the page, so it sends what the page sends, written here once.
  */
-export const pageHeaders = (base) => ({ origin: new URL(base).origin, 'sec-fetch-site': 'same-origin' });
+const pageHeaders = (base) => ({ origin: new URL(base).origin, 'sec-fetch-site': 'same-origin' });
 
 /**
  * Create an artifact the way the page does, AS a fresh CLI connection, so the

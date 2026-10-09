@@ -128,7 +128,7 @@ const highlightNameFor = (id: string): string => ANNOTATION_HIGHLIGHT_PREFIX + i
  * its own, so the union of its children's stands in: a band drawn over the rows, or an area pinned to the list,
  * measures against the rows it shows.
  */
-export function boxOf(el: Element): DOMRect {
+function boxOf(el: Element): DOMRect {
   const own = el.getBoundingClientRect();
   if (own.width > 0 || own.height > 0 || !el.children.length) return own;
   let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;

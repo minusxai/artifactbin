@@ -51,16 +51,3 @@ export function heavyChartsMarkup(variant = 0, rows = 4000): string {
   </Grid>
 </div>`;
 }
-
-/** A document of `tables` data tables, each over its own generated query. */
-export function manyTablesMarkup(variant = 0, tables = 28, rows = 400): string {
-  const names = Array.from({ length: tables }, (_, i) => `t${i}`);
-  return `<Helmet>
-  <title>Many tables ${variant}</title>
-  ${names.map((n) => generated(n, rows)).join('\n  ')}
-</Helmet>
-<div data-design="tw" className="px-4 py-8" id="root">
-  <h1 className="text-3xl font-bold" id="head">${tables} tables ${variant}</h1>
-  ${names.map((n, i) => `<h2 className="mt-6 text-xl font-semibold" id="h${i}">Table ${i}</h2>\n  <DataTable data="$${n}" height="300px" id="d${i}" />`).join('\n  ')}
-</div>`;
-}

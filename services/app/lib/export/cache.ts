@@ -5,8 +5,8 @@ export interface ExportImage {
   id:string; artifact_id:string; object_key:string; mime:'image/png'|'image/jpeg';
   bytes:number; width:number; height:number;
 }
-export interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean }
-export interface ExportCacheOptions { freshMs?:number; leaseMs?:number; waitMs?:number; retryMs?:number; pollMs?:number[] }
+interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean }
+interface ExportCacheOptions { freshMs?:number; leaseMs?:number; waitMs?:number; retryMs?:number; pollMs?:number[] }
 export type ExportProducer=(id:string)=>Promise<Omit<ExportImage,'id'|'artifact_id'>>;
 
 class ExportCacheUnavailable extends Error {

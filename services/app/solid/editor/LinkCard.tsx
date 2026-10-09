@@ -11,7 +11,7 @@ import Pencil from 'lucide-solid/icons/pencil';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { Tooltip } from '@/solid/components/Tooltip';
 
-export interface LinkCardRect { x: number; y: number; width: number; height: number }
+interface LinkCardRect { x: number; y: number; width: number; height: number }
 
 const CARD_WIDTH = 320;
 

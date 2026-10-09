@@ -1,6 +1,6 @@
 import type {MutationNotificationEvaluator,MutationNotificationJobStore} from '@artifactbin/contracts';
 import {NotificationExecutionError} from './errors';
-export interface NotificationWorkerOptions {
+interface NotificationWorkerOptions {
  store:MutationNotificationJobStore;evaluator:MutationNotificationEvaluator;
  pollMs?:number;renewMs?:number;onError?:(code:string)=>void;
 }

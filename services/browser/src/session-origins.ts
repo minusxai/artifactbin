@@ -12,7 +12,7 @@
  * exactly as the browser would, minus the browser ever holding a credential.
  */
 
-export interface SessionOrigins {
+interface SessionOrigins {
   /** The app's origin, the pages apex or one document's origin; never a URL carrying userinfo. */
   allows(url: URL): boolean;
   /** The pages site (the apex or a document origin): where the pages cookie is sent. */

@@ -34,7 +34,7 @@ export function toHonoPath(dir) {
   }).join('/');
 }
 
-export function buildTable(root = join(APP_ROOT, 'app')) {
+function buildTable(root = join(APP_ROOT, 'app')) {
   return walk(root).sort().map((file, i) => {
     const src = readFileSync(file, 'utf8');
     const methods = METHODS.filter((m) => new RegExp(`export (async function|const|function) ${m}\\b`).test(src) || new RegExp(`export \\{[^}]*\\b${m}\\b[^}]*\\}`).test(src));

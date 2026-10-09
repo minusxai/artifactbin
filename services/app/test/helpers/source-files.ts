@@ -21,7 +21,7 @@ export const REPO_ROOT = path.resolve(APP_ROOT, '../..');
 /** Directories no source scan ever wants. A caller adds to this, never replaces it. */
 const ALWAYS_SKIPPED = ['node_modules', '.next', 'dist', '__tests__'];
 
-export interface WalkOptions {
+interface WalkOptions {
   /** Which files count as source. Default: `.ts` / `.tsx`. */
   extensions?: RegExp;
   /** Directory names to skip in addition to the always-skipped set. */

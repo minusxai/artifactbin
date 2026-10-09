@@ -321,7 +321,7 @@ function placeBlockInJsx(source: string, markup: string, anchor?: JsxInsertAncho
   return { source: serializeJsx(roots), path: String(roots.length - 1) };
 }
 
-/** The server's node-id shape (lib/story/document/node-ids): a letter, then three letters or digits. */
+/** The server's node-id shape (lib/document/node-ids): a letter, then three letters or digits. */
 const NODE_ID_RE = /^[A-Za-z][A-Za-z0-9]{3}$/;
 const ID_FIRST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const ID_REST = `${ID_FIRST}0123456789`;
@@ -349,11 +349,6 @@ export function freshNodeId(source: string, mint: () => string = randomNodeId): 
     if (NODE_ID_RE.test(candidate) && !taken.has(candidate)) return candidate;
   }
   return randomNodeId();
-}
-
-/** `placeImageInJsx`'s source alone — the insert without the editor's follow-up selection. */
-export function insertImageInJsx(source: string, imageId: string, anchor?: JsxInsertAnchor | null): string {
-  return placeImageInJsx(source, imageId, anchor).source;
 }
 
 /** Capture the element at a source path as an insert anchor: its path, and its authored id when it has one. */

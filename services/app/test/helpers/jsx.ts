@@ -24,7 +24,7 @@ import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import type { ParseResult } from '@/lib/jsx/types';
 
 /** The success branch: `{ ok: true; nodes: JsxNode[] }`. */
-export type ParsedJsx = Extract<ParseResult, { ok: true }>;
+type ParsedJsx = Extract<ParseResult, { ok: true }>;
 
 /**
  * Parses, or throws with the parser's OWN error and the offending source — the two things you

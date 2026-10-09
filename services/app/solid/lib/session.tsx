@@ -16,7 +16,7 @@ interface SessionState {
   onboarded: boolean;
 }
 
-export interface SessionContext {
+interface SessionContext {
   session: Accessor<SessionState | null>;
   reload: () => void;
   pages: PageDataStore | null;

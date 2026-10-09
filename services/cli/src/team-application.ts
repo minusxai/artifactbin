@@ -13,8 +13,8 @@ import type {Actor,Upstream} from '@artifactbin/contracts';
 import {chromiumExecutable} from './chromium';
 
 /** What team hosting needs of the app host (services/app/server/host `createAppHost`). */
-export interface TeamAppHost {fetch:(request:Request)=>Promise<Response>;close:()=>Promise<void>;request:(request:Request,actor:Actor)=>Promise<Response>}
-export type CreateTeamAppHost=(options:{webDir:string;publicDir:string;actorSecret:string|undefined;
+interface TeamAppHost {fetch:(request:Request)=>Promise<Response>;close:()=>Promise<void>;request:(request:Request,actor:Actor)=>Promise<Response>}
+type CreateTeamAppHost=(options:{webDir:string;publicDir:string;actorSecret:string|undefined;
  services:{sql:ReturnType<typeof createSql>;browser:ReturnType<typeof createBrowser>};shutdown:()=>Promise<void>;onTokenRevoked:(id?:string)=>void;
  initialize:(db:Db)=>Promise<void>;identity:(upstream:Upstream)=>{fetch:(request:Request)=>Promise<Response>}})=>Promise<TeamAppHost>;
 

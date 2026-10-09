@@ -28,7 +28,7 @@ const headWithoutDocument=(alias:string)=>`jsonb_build_object(${HEAD_COLUMNS.map
  * (lib/artifacts/wire committedOpenAnnotations). The predicate is lib/annotations countOpenAnnotations'.
  */
 export const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annotations a WHERE a.artifact_id=${artifactId} AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open')`;
-export type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean;invalidGraph?:boolean};
+type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean;invalidGraph?:boolean};
 export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
  /**
   * The caller answers with patches, never the document (the browser editor's save, lib/artifacts respondToEdit): the

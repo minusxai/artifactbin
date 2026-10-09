@@ -419,7 +419,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
  * server injects its own one Solid when it evaluates the file, as it does for every generated module.
  * Never imported by a browser; nothing in it is per document.
  */
-export const SSR_SPECIFIERS = Object.freeze(ISLAND_SPECIFIERS.filter((s) => s === '@mx/rt' || s === '@mx/row-class' || s.startsWith('@mx/kit/')));
+const SSR_SPECIFIERS = Object.freeze(ISLAND_SPECIFIERS.filter((s) => s === '@mx/rt' || s === '@mx/row-class' || s.startsWith('@mx/kit/')));
 const SSR_EXPORTS = Object.freeze(Object.fromEntries(SSR_SPECIFIERS.map((s) => [s, s === '@mx/rt' ? 'rt' : s === '@mx/row-class' ? 'row_class' : `kit_${s.slice('@mx/kit/'.length).replace(/-/g, '_')}`])));
 
 /** The server half's generated entry, as the metafile names it (never a file on disk). */
@@ -462,7 +462,7 @@ async function buildServerHalf() {
  * The two engines only the file's boot reaches — SQLite for held imports, Vega for charts — are entries
  * of their own (`lazy`), included only when the file needs them.
  */
-export const OFFLINE_LAZY = Object.freeze({
+const OFFLINE_LAZY = Object.freeze({
   sqlite: { specifier: '@mx/offline/sqlite', name: 'offline-sqlite', file: () => path.join(APP, 'lib/offline/compiled-sqlite.ts') },
   chart: { specifier: '@mx/offline/chart', name: 'offline-chart', file: () => islandModule('chart-controller') },
 });

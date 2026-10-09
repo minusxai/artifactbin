@@ -26,8 +26,8 @@ import { cspOriginMatches } from '@/lib/document/csp-extensions';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 
 /** The answer cap: what a script may pull through us in one call. */
-export const DOCUMENT_FETCH_MAX_BYTES = 5 * 1024 * 1024;
-export const DOCUMENT_FETCH_TIMEOUT_MS = 10_000;
+const DOCUMENT_FETCH_MAX_BYTES = 5 * 1024 * 1024;
+const DOCUMENT_FETCH_TIMEOUT_MS = 10_000;
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
 /** Does a connect set admit `target`? A declared https origin also admits its http twin where plain http is fetchable (development). */

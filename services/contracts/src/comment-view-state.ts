@@ -4,8 +4,8 @@
  * component or a kit element, the bare name at module level. Credentials and private drafts do not belong here. */
 export type ReviewJson = null | boolean | number | string | ReviewJson[] | { [key: string]: ReviewJson };
 export interface CommentViewState { v: 2; state: Record<string, ReviewJson> }
-export const COMMENT_VIEW_STATE_MAX_BYTES = 32768;
-export const COMMENT_VIEW_STATE_MAX_KEYS = 256;
+const COMMENT_VIEW_STATE_MAX_BYTES = 32768;
+const COMMENT_VIEW_STATE_MAX_KEYS = 256;
 /** The key the declared Values travel under, as one `{name: value}` object. */
 export const COMMENT_VALUES_KEY = '$';
 

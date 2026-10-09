@@ -39,12 +39,12 @@ export interface UserRow {
  * because the difference between them is the KIND and what that kind may do,
  * never the columns.
  */
-export interface GuestUserRow extends Omit<UserRow, 'email'> {
+interface GuestUserRow extends Omit<UserRow, 'email'> {
   email: null;
 }
 
 /** Whatever `getUserById` finds: any of the three kinds. */
-export type AnyUserRow = UserRow | GuestUserRow;
+type AnyUserRow = UserRow | GuestUserRow;
 
 /** The narrowing every caller that needs the address does, in one place. */
 export const isAccountRow = (user: AnyUserRow | null | undefined): user is UserRow =>
@@ -269,7 +269,7 @@ async function claimWhere(
  * per-item checkboxes in the banner are what defend that. What this stops is a
  * draft from last month nagging someone who has moved on.
  */
-export const CLAIM_OFFER_WINDOW_HOURS = 24;
+const CLAIM_OFFER_WINDOW_HOURS = 24;
 
 /** The most artifact titles worth naming in a banner; the count carries the rest. */
 const MAX_TITLES = 5;

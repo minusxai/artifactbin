@@ -14,7 +14,7 @@
 import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE, type StoryNavigateMessage } from '@/lib/story-runtime/contract';
 import { isAppPagePath } from '@/lib/http/app-pages';
 
-export interface FrameNavigationOptions {
+interface FrameNavigationOptions {
   win: Window;
   frame: HTMLIFrameElement;
   /** The framed document's origin: the only origin a navigation is heard from. */

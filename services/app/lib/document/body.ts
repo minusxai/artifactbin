@@ -30,7 +30,7 @@ import { splitHelmet, type HelmetContent } from '@/lib/document/helmet';
 import { fixHtmlNesting } from '@/lib/document/nesting';
 import { mapExternalCssUrls, mapExternalImageSources, type AssetLookup, type AssetMapOptions } from '@/lib/document/asset-url';
 
-export interface StoryBody {
+interface StoryBody {
   /** The `<Helmet>`'s content — with its stylesheet already asset-mapped. */
   content: HelmetContent;
   /** The body nodes — the Helmet is never among them. */

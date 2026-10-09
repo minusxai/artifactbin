@@ -128,7 +128,7 @@ export function valueDomains(nodes: JsxNode[], flow: CompiledDataflow, base: Dat
   return out;
 }
 
-export interface PrecomputeInput {
+interface PrecomputeInput {
   flow: CompiledDataflow;
   base: DataflowState;
   domains: Map<string, Scalar[] | null>;

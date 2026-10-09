@@ -46,7 +46,7 @@ function pagesHostError(value) {
 }
 
 /** The development pages host: `*.lvh.me` resolves to 127.0.0.1 in public DNS, with no hosts-file edit. */
-export const DEV_PAGES_HOST = 'lvh.me';
+const DEV_PAGES_HOST = 'lvh.me';
 
 /**
  * Documents on their own origins need the app on the SAME SITE as the pages host (the frame's cookie is

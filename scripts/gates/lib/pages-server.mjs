@@ -30,7 +30,7 @@ const freePort = () => new Promise((resolve, reject) => {
 });
 
 /** Does the server on this port serve pages at lvh.me? Its apex answers `invalid_next` to a bare exchange. */
-export async function servesPages(port) {
+async function servesPages(port) {
   try {
     const res = await fetch(`http://${PAGES_HOST}:${port}/pages-session?next=x`, { signal: AbortSignal.timeout(3000) });
     return res.status === 400 && (await res.json().catch(() => ({}))).error === 'invalid_next';

@@ -59,7 +59,7 @@ export interface CompileOptions {
 /** A Postgres query's shape, probed by `prepareCompile`, keyed by `postgresKey`. */
 type PostgresShape = { columns: DatasetColumn[]; params: string[] } | { error: string };
 
-export interface CompileContext {
+interface CompileContext {
   engine: SqliteEngine;
   /** The composition's functions a <Mutation> may call (`CompileOptions.extensions`); a <Query> never sees them. */
   extensions: SqlExtensions;

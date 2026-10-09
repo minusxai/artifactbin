@@ -100,7 +100,7 @@ export function documentIdOf(doc: Document): string | null {
   return null;
 }
 
-export function readPageData(doc: Document): IslandPageData {
+function readPageData(doc: Document): IslandPageData {
   const text = doc.getElementById(ISLAND_DATA_ID)?.textContent;
   if (!text) return EMPTY_PAGE;
   try {

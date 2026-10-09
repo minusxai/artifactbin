@@ -11,7 +11,7 @@ import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/docum
 import { STORY_DOCUMENT_MESSAGE, type EditDraft } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 
-export interface EditDraftState {
+interface EditDraftState {
   editId(): string;
   theme(): StoryDesignName | null;
   colorMode(): 'light' | 'dark';
@@ -23,7 +23,7 @@ const HELD_ASSETS = isWebUrl;
 /** Typing is sent once it pauses this long (or at once on blur, Enter or any other change). */
 export const DRAFT_IDLE_MS = 300;
 
-export interface EditDraftSender {
+interface EditDraftSender {
   /**
    * `preview`: a saved version shown with editing paused (version history), in the page's current design.
    * `typing`: text typed into prose the editor already shows: held until typing pauses, newest wins.

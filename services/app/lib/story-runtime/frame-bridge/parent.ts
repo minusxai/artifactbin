@@ -31,7 +31,7 @@ import {
   type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController, type StoryDocumentUpdate,
 } from '@/lib/story-runtime/contract';
 
-export interface FrameBridgeParentOptions {
+interface FrameBridgeParentOptions {
   win: Window;
   frame: HTMLIFrameElement;
   /** The framed document's origin: its pages origin, or `'null'` for the sandboxed `/raw` copy (development). */

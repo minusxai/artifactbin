@@ -5,7 +5,7 @@ import {compareVersions,validVersion} from './version-order';
 import {HOME_SCOPE,State,withLock} from './state';
 const AUTO_UPDATE_INTERVAL_MS=60*60*1000;
 const NPM_TIMEOUT_MS=120_000;
-export interface AutoUpdateOptions {
+interface AutoUpdateOptions {
  home:string;env?:NodeJS.ProcessEnv;entry?:string;platform?:string;npm?:NpmRunner;
  stderr:(value:string)=>void;now?:()=>number;currentVersion?:string;
 }

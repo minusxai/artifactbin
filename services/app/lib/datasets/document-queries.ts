@@ -9,7 +9,7 @@ import { runDataflow, runDataflowMany, type RunDataflowOptions } from '../sql/ru
 import type { Scalar } from '@/lib/dataflow';
 export type DocumentQuerySource = { tables: ImportTables[string]; catalog?: DatasetCatalog };
 export type DocumentQuerySourceMode = 'import' | 'catalog' | 'verify';
-export interface DocumentQueryOptions extends RunDataflowOptions {
+interface DocumentQueryOptions extends RunDataflowOptions {
   actor?: RoleActor;
   signal?: AbortSignal;
   refresh?: boolean;

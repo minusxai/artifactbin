@@ -35,7 +35,7 @@ export interface AppHostOptions extends AppServerOptions {
   */
  sqlExtensions?:string;
 }
-export interface AppHost {
+interface AppHost {
  fetch:(request:Request)=>Promise<Response>;
  close:()=>Promise<void>;
  request:(request:Request,actor:Actor)=>Promise<Response>;
@@ -70,7 +70,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  })()};
 }
 /** Explicit URL wins over a deployment factory. Missing authentication never falls back locally. */
-export function externalHostedAgent(url:string,secret:string|undefined):Awaited<ReturnType<NonNullable<AppHostOptions['hostedAgent']>>>{
+function externalHostedAgent(url:string,secret:string|undefined):Awaited<ReturnType<NonNullable<AppHostOptions['hostedAgent']>>>{
  if(!secret)throw Error('CONTRACT__ACTOR_SECRET required for remote hosted agent');
  const agent=hostedAgentClient(url,hostedAgentTransport(url,secret),hostedAgentDeliveryTransport(url,secret));
  return {agent,tick:externalHostedComments(agent,secret)};

@@ -118,7 +118,7 @@ export async function checkTableGeometry(BASE, browser, check) {
 }
 
 /** Grid cards must bound their child while the table owns horizontal overflow. */
-export async function checkVoltaCardTableWidth(BASE, browser, check) {
+async function checkVoltaCardTableWidth(BASE, browser, check) {
   const start = await startDocument(BASE);
   const headers = { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' };
   const columns = ['title', 'assignee', 'status', 'deadline', 'action'];

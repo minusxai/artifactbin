@@ -42,7 +42,7 @@ const LEGACY =
 /**
  * A row as the old code left it: published normally, then its stored source
  * put back to the non-canonical form. The edit log's genesis row is rewritten
- * with it, which is what `reconstructBaseSource` reads.
+ * with it.
  */
 async function legacyRow(): Promise<{ id: string; token: string; editId: string }> {
   const mintRes = await mintAccountToken('mxmx_test_fixture');

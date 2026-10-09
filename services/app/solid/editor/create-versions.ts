@@ -22,13 +22,13 @@ import { restoreBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-
 import type { ArtifactBackend, ArtifactVersionSnapshot, ArtifactVersionSummary } from '@/lib/artifact-backend/types';
 
 
-export interface ArtifactVersionsOptions {
+interface ArtifactVersionsOptions {
   backend: ArtifactBackend;
   /** The live version. History is re-read whenever it moves — see the module comment. */
   currentVersion: number;
 }
 
-export interface ArtifactVersions {
+interface ArtifactVersions {
   versions: Accessor<ArtifactVersionSummary[]>;
   /** A restore is in flight; callers disable their controls with this. */
   busy: Accessor<boolean>;

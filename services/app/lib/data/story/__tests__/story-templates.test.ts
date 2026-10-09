@@ -13,7 +13,7 @@ import { renderDoc } from '@/test/helpers/skill-docs';
 
 /** A genre's authoring guidance is its docs file — `skills/artifactbin/references/templates-<name>.md`, the one copy agents read. */
 const guidanceOf = (name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, 'https://example.test');
-import { STORY_TEMPLATES, STORY_TEMPLATE_NAMES, getStoryTemplate } from '../story-templates';
+import { STORY_TEMPLATES, STORY_TEMPLATE_NAMES } from '../story-templates';
 
 describe('STORY_TEMPLATES registry', () => {
   it('has exactly one entry per schema enum name, in enum order', () => {
@@ -76,12 +76,5 @@ describe('STORY_TEMPLATES registry', () => {
       expect(system).toContain('ordinary document flow');
       expect(system).not.toMatch(/sticky is set by the live reader|sticky figure is the template/);
     }
-  });
-
-  it('getStoryTemplate looks up by name and misses safely', () => {
-    expect(getStoryTemplate('deck')?.label.length).toBeGreaterThan(0);
-    expect(getStoryTemplate('bogus')).toBeUndefined();
-    expect(getStoryTemplate(null)).toBeUndefined();
-    expect(getStoryTemplate(undefined)).toBeUndefined();
   });
 });

@@ -23,7 +23,7 @@ export const DOCUMENT_ROOT_CSS = ':root { --mx-vh: 100vh; } body { margin: 0; }'
 export const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
   + '[data-mx-domain-footer] a{color:inherit;text-decoration:underline;text-underline-offset:2px}';
 
-export interface DocumentStylesInput {
+interface DocumentStylesInput {
   /** The version's compiled Tailwind (lib/data/story/story-css.server currentStoryCss), or none. */
   compiledCss: string | null;
   /** The document draws its own navigation (deck rail, outline, reading column); false for a capture. */
@@ -43,7 +43,7 @@ export interface DocumentStylesInput {
   authorCss: string | null;
 }
 
-export interface DocumentSheet { attr: string; css: string }
+interface DocumentSheet { attr: string; css: string }
 
 /** Every stylesheet after the root rule, as `{ attr, css }`, in the order the document carries them. */
 export function documentStyleSheets(input: DocumentStylesInput): DocumentSheet[] {

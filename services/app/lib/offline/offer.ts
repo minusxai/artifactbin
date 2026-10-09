@@ -2,7 +2,7 @@
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {PREVIEW_CONNECT_MAX_BYTES} from '@artifactbin/contracts';
 import {parseArtifactFile,type ArtifactFile} from './file-format';
-export interface FileOffer {html:string;filename:string}
+interface FileOffer {html:string;filename:string}
 export function readFileOffer(value:unknown):{offer:FileOffer;file:ArtifactFile} {
  if(!value||typeof value!=='object')throw Error('Choose an artifactbin HTML file.');
  const input=value as Partial<FileOffer>;

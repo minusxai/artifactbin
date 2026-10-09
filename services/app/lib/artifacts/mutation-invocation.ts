@@ -3,7 +3,7 @@ import type { ArtifactRow } from './access';
 import type { RoleActor } from '@/lib/accounts/actors';
 import type {Db} from '@/lib/platform';
 import type {MutationDocument} from '@/lib/artifacts/dataset-policy';
-export interface MutationContext {
+interface MutationContext {
  dataset:ArtifactRow;
  actor:RoleActor;
  document?:MutationDocument;

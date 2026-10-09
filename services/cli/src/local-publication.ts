@@ -29,7 +29,7 @@ import {snapshotDocument} from './local';
 import {ARTIFACT_ID_PATTERN,type DocumentGraph} from '@artifactbin/contracts';
 import type {HttpClient} from './http';
 import {publishLocalComments} from './local-comment-publication';
-export interface LocalPublicationResult {operations:Array<Record<string,unknown>>;dry_run?:boolean;local_only?:boolean;publication_copy?:string;local_source_preserved?:boolean}
+interface LocalPublicationResult {operations:Array<Record<string,unknown>>;dry_run?:boolean;local_only?:boolean;publication_copy?:string;local_source_preserved?:boolean}
 interface Options {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
 interface Input {localId?:string;bytes:string;hash:string;ids?:Record<string,string>}
 interface ImportedBaseline {artifactId:string;origin:string;base:{version:number;editId:string;source:string};source:string}

@@ -17,7 +17,7 @@ export async function setupSkills(options:SetupOptions){
  const selected=await selectSkills(options);
  return installSkills(selected,options);
 }
-export type SetupGlobal=GlobalInstallResult|{status:'skipped';reason:string};
+type SetupGlobal=GlobalInstallResult|{status:'skipped';reason:string};
 export const manualInstallHint=(version:string)=>`Run npm install -g @afbin/cli@${version} yourself, or npx --yes @afbin/cli@latest setup once.`;
 /**
  * From a package (npx, a global install), setup makes `afbin` npm's global command and retires an old

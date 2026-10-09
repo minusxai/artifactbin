@@ -97,7 +97,7 @@ export function restartHints(installations:readonly SkillInstallation[]):string[
   const name=restartHarnesses[harness];return name?[`Restart ${name} to load the installed skill at ${item.path}.`]:[];
  }));
 }
-export interface SkillPlan {harness:SkillHarness;path:string;status:'install'|'update'|'unchanged';source:string;installed?:string;version:string}
+interface SkillPlan {harness:SkillHarness;path:string;status:'install'|'update'|'unchanged';source:string;installed?:string;version:string}
 /** A backup says which harness it belongs to and which version of the skill it holds. */
 const backupName=(harness:string,replaced:string|undefined):string=>`${harness}-${(replaced&&validVersion(replaced)?replaced:'unmanaged').replace(/[^\w.+-]/g,'_')}`;
 /**

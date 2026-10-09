@@ -21,7 +21,7 @@ const MAX_DATASET_FILE_BYTES = 500_000_000;
 const KEY_RE = /^[\w.-]{8,120}$/;
 const refFor = (id: string) => `dimg:${id}`;
 type DatasetImageRow = { id:string; dataset_id:string; document_id:string; actor_id:string; operation_key:string; sha256:string; meta:Record<string,unknown> };
-export type DatasetImageUpload = { ref:string; url:string; replayed?:boolean };
+type DatasetImageUpload = { ref:string; url:string; replayed?:boolean };
 
 function actorKey(actor:RoleActor):string {
   const key=actor.userId??actor.tokenId;

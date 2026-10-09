@@ -26,7 +26,7 @@ type EditPhase = 'reading' | 'entering' | 'editing' | 'leaving' | 'restoring';
 /** How long a way out of edit mode waits for the editor's last save before leaving anyway. */
 const FLUSH_BOUND_MS = 3000;
 
-export interface EditLifecycleOptions {
+interface EditLifecycleOptions {
   editable: Accessor<boolean>;
   /** The install setting changed while editing: the served page is stale, so leaving navigates. */
   pwaChanged: Accessor<boolean>;
@@ -35,7 +35,7 @@ export interface EditLifecycleOptions {
   win?: Window;
 }
 
-export interface EditLifecycle {
+interface EditLifecycle {
   phase: Accessor<EditPhase>;
   /** The editor is on screen: entering, editing or flushing on the way out. */
   editing: Accessor<boolean>;
@@ -148,7 +148,7 @@ export function createEditLifecycle(options: EditLifecycleOptions): EditLifecycl
 }
 
 /** THE EDITOR'S DOOR (lib/artifact-page `?part=editor`): what only writing needs. */
-export interface EditorPart { editId: string; version: number; source: string; document?: DocumentGraph; compiledCss: string | null; authorCss: string | null }
+interface EditorPart { editId: string; version: number; source: string; document?: DocumentGraph; compiledCss: string | null; authorCss: string | null }
 
 /** Fetched on idle for a writer, or the moment edit mode opens; concurrent loads share one request, a failure retries. */
 export function createEditorPartLoader(id: string | null, editable: Accessor<boolean>) {

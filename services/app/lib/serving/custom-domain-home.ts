@@ -41,7 +41,7 @@ export interface ProfileListingData {
   files: ProfileFile[];
 }
 
-export interface DomainHomeInput {
+interface DomainHomeInput {
   hostname: string;
   /** The owner's handle and display name; either may be missing. */
   owner: { username: string | null; name: string | null };

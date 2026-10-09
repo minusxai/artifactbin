@@ -13,7 +13,7 @@ import { createEffect, createSignal, Index, onCleanup, Show, type JSX } from 'so
 import Ellipsis from 'lucide-solid/icons/ellipsis';
 import { Tooltip } from './Tooltip';
 
-export interface RowMenuItem {
+interface RowMenuItem {
   /** Reads as an aria-label, so it names the row: `Delete My doc`. */
   label: string;
   text: string;

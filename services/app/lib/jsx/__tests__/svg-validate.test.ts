@@ -6,7 +6,7 @@
  * active stays out: no <use>/<image> (external fetch), no <foreignObject>
  * (nested HTML context), no SMIL (<animate>), and paint attributes may only
  * reference LOCAL url(#…) targets — an external url() in fill/stroke/filter is
- * an exfiltration + capture-taint vector, same ban as banned-css.
+ * an exfiltration + capture-taint vector.
  */
 import { describe, it, expect } from 'vitest';
 import { validateJsxSource } from '@/lib/jsx';

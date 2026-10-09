@@ -10,7 +10,7 @@ import type { EventEnvelope, EventSink, EventSubscriber, EventsService, Queryabl
 import { ensureTable } from '@artifactbin/utils';
 import { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLES, IDENTIFIER } from './schema';
 
-export interface EventsWriterOptions {
+interface EventsWriterOptions {
   db: Queryable;
   /** The schema this service owns; created when absent. Default `events`. */
   schema?: string;
@@ -40,7 +40,7 @@ const COLUMNS = ['id', 'at', 'source', 'subject_kind', 'subject_id', 'verb', 'ob
  * the batch to each sink. It never rejects — a failed insert is one error
  * line, and a sink's rejection is another; the writer's caller sees neither.
  */
-export interface EventsWriter extends EventsService {
+interface EventsWriter extends EventsService {
   publish(events: EventEnvelope[]): Promise<void>;
   drain(): Promise<void>;
 }

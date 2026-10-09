@@ -358,7 +358,7 @@ function preflightReply(prepared:PreparedContent):Response {
  * against the NEW content. Warnings, never blocks: a data refresh
  * can't be stopped by a stale chart.
  */
-export async function refreshWarningsFor(actor: TokenActor, updated: ArtifactRow): Promise<Array<{ id: string; title: string | null; details: string[] }>> {
+async function refreshWarningsFor(actor: TokenActor, updated: ArtifactRow): Promise<Array<{ id: string; title: string | null; details: string[] }>> {
   if (updated.format !== 'dataset' && updated.format !== 'viz') return [];
   const dependents = await findDependentsFor(actor, updated.id);
   if (dependents.length === 0) return [];

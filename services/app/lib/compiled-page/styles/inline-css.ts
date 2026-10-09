@@ -147,7 +147,7 @@ export function isolateStoryCss(css: string): string {
  * THE INLINE READER'S CSS ASSEMBLY (lib/story-runtime/inline-composition) —
  * used by the server's render and the browser's hydration alike.
  */
-export interface InlineStoryCssParts { baseCss: string; compiledCss: string | null; authorCss: string | null }
+interface InlineStoryCssParts { baseCss: string; compiledCss: string | null; authorCss: string | null }
 
 /** Base, compiled and author CSS as ONE stylesheet: fonts and their references share a namespace. */
 const combined = (parts: InlineStoryCssParts): string => [parts.baseCss, parts.compiledCss, parts.authorCss].filter(Boolean).join('\n');

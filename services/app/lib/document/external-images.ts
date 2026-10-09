@@ -79,20 +79,12 @@ export function collectExternalAssetUrls(source: string): { images: string[]; fo
       if (WEB_URL.test(value) && !pdfs.includes(value)) pdfs.push(value);
     }
   });
+  /*
+   * Every web URL in an `@font-face` `src` in the document's own stylesheet. Scoped to `@font-face`
+   * because a font is the one case where the alternative — silently dropping it — published a document
+   * that looked like it worked and had lost its typeface.
+   */
   const style = splitHelmet(parsed.nodes).content.style;
   const fonts = style ? externalCssUrls(style) : [];
   return { images, fonts, pdfs, all: [...new Set([...images, ...fonts, ...pdfs])] };
 }
-
-/** Every web URL in an image position, deduplicated, in document order. */
-export const collectExternalImageUrls = (source: string): string[] => collectExternalAssetUrls(source).images;
-
-/**
- * Every web URL in an `@font-face` `src` in the document's own stylesheet.
- * Scoped to `@font-face` because that is the only external url() the door
- * admits at all (lib/data/story/banned-css): everything else in authored CSS is
- * still stripped, and a font is the one case where the alternative — silently
- * dropping it — published a document that looked like it worked and had lost
- * its typeface.
- */
-export const collectExternalFontUrls = (source: string): string[] => collectExternalAssetUrls(source).fonts;

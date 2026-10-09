@@ -246,7 +246,7 @@ export interface DataflowStore {
   expectAnswer(): (answer: RunAnswer) => void;
 }
 
-export interface CreateStoreOptions {
+interface CreateStoreOptions {
   /** Operation keys for a headless host; browsers default to a cryptographically random UUID. */
   operationId?: () => string;
   /** Debounce before a CONTINUOUS change re-runs (default 150 ms) — a slider must not fire per pixel. */

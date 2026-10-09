@@ -11,7 +11,12 @@
  * the served copy at ours).
  */
 import { describe, expect, it } from 'vitest';
-import { collectExternalAssetUrls, collectExternalFontUrls, collectExternalImageUrls } from '../external-images';
+import { collectExternalAssetUrls } from '../external-images';
+
+/** Every web URL in an image position, deduplicated, in document order. */
+const collectExternalImageUrls = (source: string): string[] => collectExternalAssetUrls(source).images;
+/** Every web URL in an `@font-face` `src` in the document's own stylesheet. */
+const collectExternalFontUrls = (source: string): string[] => collectExternalAssetUrls(source).fonts;
 
 describe('collectExternalImageUrls', () => {
   it('finds https URLs on img src, deduplicated, in order — never an iframe or video src', () => {

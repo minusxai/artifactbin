@@ -4,7 +4,7 @@ import {CliError} from './errors';
 import {randomUUID} from 'node:crypto';
 import {REMOTE_NAME} from '../../contracts/src/remote';
 
-export interface ClaudeConversationPlan {args:string[];sessionId?:string}
+interface ClaudeConversationPlan {args:string[];sessionId?:string}
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function validClaudeSessionId(value:unknown):value is string{return typeof value==='string'&&UUID.test(value);}
 const SAFE_VALUE_FLAGS=new Map([['--model',/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/],['-m',/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/],['--fallback-model',/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/],['--permission-mode',/^(?:default|acceptEdits|plan|dontAsk|bypassPermissions)$/],['--output-format',/^(?:text|json|stream-json)$/],['--effort',/^(?:low|medium|high|max)$/],['--max-turns',/^[1-9][0-9]{0,5}$/]]);

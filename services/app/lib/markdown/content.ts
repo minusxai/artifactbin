@@ -6,7 +6,7 @@ import type { RootContent, PhrasingContent, Root } from 'mdast';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { renderCodeBlock } from './code-block';
 
-export interface MarkdownContent {
+interface MarkdownContent {
   html: string;
   text: string;
   headings: Array<{ level: 1 | 2 | 3; title: string }>;

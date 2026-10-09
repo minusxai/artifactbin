@@ -59,7 +59,7 @@ export interface ArtifactPageAnswer {
 }
 
 /** What the app page (never the JSON door) hands the answer. */
-export interface ArtifactPageOptions {
+interface ArtifactPageOptions {
   /**
    * The row the caller already fetched AND admitted for this very request (server/app
    * documentPreparation): the answer neither fetches it again nor decides admission again — one row

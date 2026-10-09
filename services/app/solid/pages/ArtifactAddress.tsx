@@ -33,7 +33,7 @@ const StarterPage = lazy(() => import('./Starter').then((m) => ({ default: m.Sta
 const DatasetEditorPage = lazy(() => import('./DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 
 /** The data tiers: every format the app page draws as a value rather than a document. */
-export const DATA_FORMATS = ['image', 'pdf', 'file', 'viz', 'dataset'] as const;
+const DATA_FORMATS = ['image', 'pdf', 'file', 'viz', 'dataset'] as const;
 
 interface ArtifactAnswer {
   role: ArtifactRole; kind: string;

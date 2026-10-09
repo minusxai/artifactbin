@@ -46,7 +46,7 @@ const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 const COMPILER_FILE = join(ROOT, 'lib', 'compiled-page', 'compiler.ts');
 
 /** The plausible utility tokens of one source file's string literals (parsed, so code never reads as a literal). */
-export function extractFileClasses(file: string): string[] {
+function extractFileClasses(file: string): string[] {
   const tokens = new Set<string>();
   const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, false, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const add = (text: string) => {
@@ -76,7 +76,7 @@ function walk(dir: string): string[] {
 }
 
 /** Every class source: the kit's files, then the files named beside it. */
-export function recipeSourceFiles(dir: string, extraFiles: string[] = []): string[] {
+function recipeSourceFiles(dir: string, extraFiles: string[] = []): string[] {
   return [...walk(dir), ...extraFiles.filter((f) => existsSync(f))];
 }
 
