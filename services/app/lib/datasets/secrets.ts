@@ -2,7 +2,6 @@ import {createCipheriv,createDecipheriv,createHash,randomBytes} from 'node:crypt
 import {AUTH_SECRET} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import type {Queryable} from '@artifactbin/contracts';
-import { getArtifactFor } from '@/lib/artifacts/store';
 import type { TokenActor, RoleActor } from '@/lib/accounts/actors';
 import type {DatasetConnection,PostgresConfig} from './types';
 import {DatasetError} from './errors';
@@ -18,7 +17,6 @@ const owned=(actor:RoleActor)=>actor.userId?{sql:'(user_id=$3 OR token_id IN (SE
 
 export async function createDatasetSecret(actor:TokenActor,value:string,target:Target,datasetId?:string):Promise<{id:string}>{
  if(typeof value!=='string'||!value.length||value.length>4096)throw new DatasetError('Secret value is required');
- if(datasetId){const dataset=await getArtifactFor(actor,datasetId);if(!dataset||dataset.format!=='dataset')throw new DatasetError('Dataset not found',404);}
  const id='sec_'+randomBytes(12).toString('hex'),hash=targetHash(target),db=await getDb();
  await db.query('INSERT INTO dataset_secrets(id,token_id,user_id,dataset_id,target_hash,ciphertext) VALUES($1,$2,$3,$4,$5,$6)',[id,actor.tokenId,actor.userId,datasetId??null,hash,seal(value,id,hash)]);return {id};
 }

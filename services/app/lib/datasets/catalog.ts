@@ -1,11 +1,10 @@
 import type {ContentObjects} from '@/lib/object-store/prepared-objects';
-import type { ArtifactRow } from '@/lib/artifacts';
 import type { TokenActor } from '@/lib/accounts/actors';
 import type { StoredContent } from '@/lib/document/stored-content';
 import {json} from '@/lib/http/http';
 import {publishDataset} from '@/lib/datasets/data-tiers';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
-import type {DatasetCatalog,DatasetTable} from './types';
+import type {DatasetCatalog,DatasetHost,DatasetTable} from './types';
 import {DatasetError} from './errors';
 import {discoverPostgres} from './postgres';
 import {executeCatalog} from './execute';
@@ -45,7 +44,7 @@ function reshapeWithoutRows(table:{schema:string;name:string;columns?:Array<stri
  if(retyped.length)throw new DatasetError(`${where}: retyping stored column ${retyped.join(', ')} needs the table's rows restated; add rows={[...]} to reshape it`);
  return declared.filter(c=>!prior.columns.some(p=>p.name===c.name)).map(c=>'type' in c?c as DatasetColumn:{name:c.name,type:'string' as const});
 }
-export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:ArtifactRow,objects?:ContentObjects):Promise<StoredContent|Response> {
+export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Pick<DatasetHost,'id'|'meta'>,objects?:ContentObjects):Promise<StoredContent|Response> {
  try{
   const authored=typeof input==='string'?parseDatasetDefinition(input):input;
   if(authored&&typeof authored==='object'&&(authored as {connection?:unknown}).connection){

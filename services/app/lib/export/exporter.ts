@@ -8,7 +8,7 @@ import type {RenderRequest} from '@artifactbin/contracts';
 import {getDb} from '../platform/db';
 import {createExportCache,type ExportImage} from './cache';
 import {exportAssetUrl} from './assets';
-import { loadImage } from '../story/assets/image-store';
+import { loadImage } from '@/lib/object-store/image-store';
 import { createHash } from 'node:crypto';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
 import { services } from '@/lib/platform/services';

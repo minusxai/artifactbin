@@ -1,6 +1,6 @@
 /** HTTP translation for browser and bearer dataset uploads; policy lives in the service. */
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/accounts';
-import { DatasetError } from './errors';
+import { DatasetError } from '@/lib/datasets/errors';
 import { uploadDatasetFile, readDatasetFile } from './feedback-images';
 import { readFileUpload } from '@/lib/datasets/file-store';
 import { json } from '@/lib/http';

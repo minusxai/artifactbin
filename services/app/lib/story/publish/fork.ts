@@ -3,7 +3,7 @@ import type { TokenActor } from '@/lib/accounts/actors';
 import { afterCreated, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, type ArtifactInput } from '@/lib/artifacts/store';
 import { compiledForRow, refLoaderForActor, rowToResolvedRef } from '@/lib/artifacts/dataflow';
 import { artifactQuery } from '@/lib/artifacts/document';
-import { grantsOf, grantsPermitRead } from '@/lib/datasets/policy/grants';
+import { grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import { reserveArtifactIds } from '@/lib/artifacts/identities';
 import { collectRefUses } from '@/lib/dataflow/refs';
 import { catalogOf } from '@/lib/datasets/catalog';

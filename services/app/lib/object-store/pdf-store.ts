@@ -1,5 +1,5 @@
 /**
- * Where a PDF's BYTES live — the shape of lib/story/assets/image-store, with the one
+ * Where a PDF's BYTES live — the shape of lib/object-store/image-store, with the one
  * difference that matters: a PDF is READ AS A STREAM.
  *
  * An image is small, is read on every render of every document that shows it,

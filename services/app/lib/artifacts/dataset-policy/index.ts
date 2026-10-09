@@ -1,7 +1,7 @@
 import { grantMutationPolicy } from '@artifactbin/utils';
 import { grantsOf, grantContext, grantsPermitWrite, type GrantDocument } from './grants';
-import {validateDatasetPolicyForRow} from './validation';
-import { policySession, viewerMutationPolicy } from './viewer-policy';
+import {validateDatasetPolicyForRow} from '@/lib/datasets/policy/validation';
+import { policySession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
 import type {
   DatasetAccessPolicy as DatasetPolicy,
   DatasetMutationPolicy,

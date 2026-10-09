@@ -45,7 +45,7 @@ import { preparedPageFor } from '@/lib/story/prepared/prepared-page.server';
 import { objectStore } from '@/lib/object-store';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/dataflow';
-import { loadImage } from '@/lib/story/assets/image-store';
+import { loadImage } from '@/lib/object-store/image-store';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { displayTitle } from '@/lib/document/head';
 import { getUserById } from '@/lib/accounts/users';

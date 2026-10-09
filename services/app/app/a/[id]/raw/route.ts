@@ -28,7 +28,7 @@ import { ID_RE } from '@/lib/platform';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { ObjectUnavailable } from '@/lib/object-store';
 import { Readable } from 'node:stream';
-import { loadImage } from '@/lib/story/assets/image-store';
+import { loadImage } from '@/lib/object-store/image-store';
 import { serveStoredFile } from '@/lib/datasets/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store/pdf-store';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
@@ -154,7 +154,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       let img: Awaited<ReturnType<typeof loadImage>>;
       try {
         // `w=` is the width a `srcset` asked for — one of the widths publish
-        // stored, never a resize (lib/story/assets/image-store).
+        // stored, never a resize (lib/object-store/image-store).
         img = await loadImage(artifact, { width: new URL(request.url).searchParams.get('w') });
       } catch (error) {
         // The row promises bytes the store will not give: corruption or broken

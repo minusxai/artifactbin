@@ -1,38 +1,4 @@
 {
   "$comment": "Written by node scripts/ci/module-graph.mjs --write-allowed. Every edge inside a module cycle; the list only shrinks.",
-  "cycles": [
-    {
-      "modules": [
-        "lib/annotations",
-        "lib/artifacts",
-        "lib/datasets",
-        "lib/export",
-        "lib/operations",
-        "lib/remote",
-        "lib/story",
-        "lib/workspace"
-      ],
-      "edges": [
-        "lib/annotations -> lib/artifacts",
-        "lib/annotations -> lib/remote",
-        "lib/artifacts -> lib/datasets",
-        "lib/datasets -> lib/artifacts",
-        "lib/datasets -> lib/operations",
-        "lib/datasets -> lib/story",
-        "lib/export -> lib/artifacts",
-        "lib/export -> lib/story",
-        "lib/operations -> lib/annotations",
-        "lib/operations -> lib/artifacts",
-        "lib/operations -> lib/datasets",
-        "lib/operations -> lib/export",
-        "lib/operations -> lib/remote",
-        "lib/operations -> lib/story",
-        "lib/operations -> lib/workspace",
-        "lib/remote -> lib/artifacts",
-        "lib/story -> lib/artifacts",
-        "lib/story -> lib/datasets",
-        "lib/workspace -> lib/artifacts"
-      ]
-    }
-  ]
+  "cycles": []
 }

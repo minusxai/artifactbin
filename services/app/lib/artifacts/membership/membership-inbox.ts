@@ -7,7 +7,7 @@ import {MembershipError} from './membership';
 import { getArtifactById } from '../store';
 import { effectiveRole } from '../access';
 import type { RoleActor } from '@/lib/accounts/actors';
-import {readThrough} from '@/lib/datasets/policy/grants';
+import {readThrough} from '@/lib/artifacts/dataset-policy/grants';
 export async function membershipInbox(actor:RoleActor,offset=0,onlyId:string|null=null){
  if(!actor.userId)throw new MembershipError('Sign in to see notifications');
  const db=await getDb();

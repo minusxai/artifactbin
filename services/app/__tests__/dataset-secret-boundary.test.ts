@@ -14,6 +14,7 @@ import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import {POST as revertArtifact} from '@/app/api/artifacts/[id]/revert/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, claimToken } from '@/lib/accounts';
+import { DATASET_OPERATIONS } from '@/lib/operations/datasets';
 import { request, useAppHarness } from './harness';
 
 const harness = useAppHarness();
@@ -87,4 +88,22 @@ it('keeps the editable definition available to editors while public readers rece
   }
   const anonymous = await discover(request('/api/my/datasets/discover',{method:'POST',json:{datasetId:id,connection:dataset.connection}}));
   expect(anonymous.status).toBe(401);
+});
+
+it('binds a secret only to a dataset the caller can edit, through the route and the operation', async () => {
+  const {owner,dataset} = await fixture();
+  const published = await createArtifact(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{dataset,visibility:'public'}}));
+  expect(published.status).toBe(201); const {id} = await published.json();
+  const stranger = await actor('stranger'); const db = await harness.db();
+  const bound = async () => (await db.query<{n:number}>('SELECT count(*)::int AS n FROM dataset_secrets WHERE dataset_id=$1',[id])).rows[0]!.n;
+  const before = await bound();
+  const refused = await createSecret(request('/api/my/secrets',{method:'POST',token:stranger.token.token,json:{value:'stranger-password',connection:target,datasetId:id}}));
+  expect(refused.status).toBe(404);
+  const operation = DATASET_OPERATIONS.find(op=>op.name==='create_dataset_secret')!;
+  const viaOperation = await operation.run({actor:{userId:stranger.user.id,tokenId:stranger.token.id}} as never,{value:'stranger-password',connection:target,datasetId:id});
+  expect(viaOperation.status).toBe(404);
+  expect(await bound()).toBe(before);
+  const allowed = await createSecret(request('/api/my/secrets',{method:'POST',token:owner.token.token,json:{value:'owner-password',connection:target,datasetId:id}}));
+  expect(allowed.status).toBe(201);
+  expect(await bound()).toBe(before+1);
 });
