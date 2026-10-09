@@ -16,18 +16,20 @@ import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { GET as mermaidAsset } from '@/app/assets/mermaid/[file]/route';
 import { artifactPageAnswer } from '@/lib/serving';
 import { getArtifactById } from '@/lib/artifacts';
-import { getDb } from '@/lib/platform';
+import { getDb, verifyExportKey } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { services, setServices } from '@/lib/platform';
-import { verifyExportKey } from '@/lib/serving';
 import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
-import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/mermaid-images/harvester';
+import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/story/assets/mermaid-harvester';
 import { MERMAID_RENDER_ENGINE } from '@/lib/mermaid-images/engine';
 import { queueMermaidBackfill } from '@/lib/mermaid-images/store';
 import { documentEditBody } from './prepared-document';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { installStoryCommitHooks } from '@/lib/story/prepared/commit-hooks.server';
 
 useAppHarness();
+// As the server does: committed heads are prepared, and a harvest's changed rendering re-prepares the head.
+installStoryCommitHooks();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 const FLOW = 'flowchart LR\n  a[Request] --> b[Read]';
@@ -212,7 +214,11 @@ describe('a published Mermaid document', () => {
     const db = await getDb();
     expect(Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM prepared_pages WHERE artifact_id=$1', [id])).rows[0].n)).toBe(1);
 
+    // Mark the stored page: the harvest announces a changed rendering, and story's listener must drop it and prepare the head again.
+    await db.query(`UPDATE prepared_pages SET page = page || '{"preHarvest":true}'::jsonb WHERE artifact_id=$1`, [id]);
     expect(await runNextMermaidHarvest()).toBe(true);
+    await drainPreparedPageWarmups();
+    expect((await db.query<{ marked: boolean }>(`SELECT page ? 'preHarvest' AS marked FROM prepared_pages WHERE artifact_id=$1 AND slot='head'`, [id])).rows).toEqual([{ marked: false }]);
     const next = await artifactPageAnswer(reader(`/a/${id}`, '', { accept: 'text/html' }), id);
     const images = (next.body as { surface: { runtime: { data: { mermaidImages?: Record<string, { src: string; palette: string }> } } } }).surface.runtime.data.mermaidImages;
     const stored = images?.[mermaidImageKey(FLOW, 'light')];
@@ -360,7 +366,7 @@ describe('a published Mermaid document', () => {
     const { id } = await publish([FLOW]);
     expect(island(await raw(id, '?color=dark')).mermaidImages).toEqual({});
     expect(await raw(id, '?color=dark')).not.toMatch(/<html[^>]*class="[^"]*\bdark\b/);
-    const { mintExportKey } = await import('@/lib/serving/export-read-key');
+    const { mintExportKey } = await import('@/lib/platform/export-read-key');
     expect(await raw(id, `?chrome=0&key=${mintExportKey(id)}&color=dark`)).toMatch(/<html[^>]*class="[^"]*\bdark\b/);
   });
 });

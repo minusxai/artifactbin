@@ -6,6 +6,7 @@
  * dangerous URL schemes. Parsing alone does not enforce these constraints.
  */
 import { mermaidSourceError } from './mermaid-source';
+import { markdownContent, markdownSource } from '@/lib/markdown/content';
 import { validateDeckMap } from './deck-spec';
 import { parseRowRef } from './row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
@@ -121,6 +122,12 @@ function walk(
     if (inSvg) for (const stray of nonSvgTemplateElements(node.children)) errors.push({message:`<For> inside <svg> repeats SVG drawing tags only (${STORY_SVG_TAGS.join(' ')}); <${stray.tag}> would break out of the drawing`,tag:stray.tag,start:stray.start,end:stray.end});
   }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
+  if (node.tag === 'Markdown') {
+    const source = markdownSource(node);
+    const messages = source === null ? ['Markdown children must be a literal string, for example <Markdown>{`## Heading\\n\\nProse`}</Markdown>.'] : markdownContent(source).errors;
+    for (const message of messages) errors.push({ message, tag: node.tag, start: node.start, end: node.end });
+    if (inFor || inColumn || node.attributes.some(a => !a.value.static)) errors.push({ message: 'Markdown is a static editable prose region; keep it outside row templates and use literal props.', tag: node.tag, start: node.start, end: node.end });
+  }
   if(node.tag==='Grid') {
     const mode=node.attributes.find(a=>a.name==='mode')?.value;
     if(mode?.static && mode.json!=='flow' && mode.json!=='positioned') errors.push({message:'Grid mode must be flow or positioned',start:node.start,end:node.end});

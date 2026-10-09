@@ -5,7 +5,7 @@ import { createEffect, createMemo, createSignal, lazy, on, onCleanup, onMount, S
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
-import { displayTitle } from '@/lib/document/title';
+import { displayTitle } from '@/lib/document/display-title';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared/prepared-runtime';
@@ -29,7 +29,7 @@ import { DocumentPeople } from '../document/DocumentPeople';
 import { createFramedStory, framedDocumentFor, type FramedStory } from '../document/create-framed-story';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
-import { moveInto } from '@/lib/story-runtime/island-controller';
+import { moveInto } from '@/lib/islands/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
 import { EditEntryChrome } from '../editor/EditEntryChrome';
@@ -348,7 +348,7 @@ export function DocumentPage(): JSX.Element {
     const frame = live();
     const title = editorTitle();
     if (title !== null && (editing() || !frame || frame.version <= editorTitleBaseVersion())) {
-      return displayTitle({ title, source: editorSeed()?.markup, heading: page?.surface?.heading });
+      return displayTitle({ title });
     }
     return displayTitle(frame ?? page?.surface ?? {});
   };
@@ -405,7 +405,7 @@ export function DocumentPage(): JSX.Element {
         }} />
     </Show>
     <Show when={ready() && annotatable() && id}>
-      <AnnotationLayer id={id!} backend={backend ?? undefined} editId={editorPart()?.editId ?? page?.surface?.editId} runtimeRef={runtimeRef} sessionNonce={nonce()}
+      <AnnotationLayer id={id!} backend={backend ?? undefined} canDeleteAny={isOwner()} editId={editorPart()?.editId ?? page?.surface?.editId} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} showViewComments={annotatable()} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickOnOpen={!editing() || wide()} onAnnotationsChange={setAnnotationItems}

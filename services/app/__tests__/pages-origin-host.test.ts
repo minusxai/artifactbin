@@ -12,9 +12,8 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, pagesSessionActor, revokeToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { pagesOriginFor, pagesSiteFor } from '@/lib/serving/pages-origin';
+import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
 import { framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { ARTIFACT_SCOPE } from '@artifactbin/contracts';
@@ -22,6 +21,7 @@ import { buildDocumentCsp } from '@/lib/compiled-page/styles/document-csp';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { POST as grantRoute } from '@/app/api/trust/route';
 import { createAppServer } from '../server/app';
+import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
 useAppHarness();
 

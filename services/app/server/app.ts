@@ -17,7 +17,7 @@ import { loginRedirectTarget } from '@/lib/http';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {agentDiscovery,agentDiscoveryHead,withAgentDiscoveryTail} from '@/lib/serving';
+import {agentDiscovery,agentDiscoveryHead,withAgentDiscoveryTail} from '@/lib/compiled-page/agent-discovery';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
@@ -25,17 +25,15 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { verifyExportKey } from '@/lib/serving';
-import { ID_RE } from '@/lib/platform';
+import { canReadArtifact, getArtifactById, roleFor } from '@/lib/artifacts';
+import { ID_RE, verifyExportKey } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { SPA_PATHS } from '@/lib/http/app-pages';
-import { ownerUsername } from '@/lib/accounts';
+import { ownerUsername, sessionActor } from '@/lib/accounts';
 import { AGENT_COOKIE } from '@/lib/accounts/agent-session';
 import { canEdit } from '@/lib/artifacts';
-import { roleFor, sessionActor } from '@/lib/accounts';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/platform';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
@@ -48,26 +46,26 @@ import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { enableSnapshotRevalidations } from '@/lib/story/prepared';
+import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/story/prepared';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
-import { PAGES_SESSION_META, PAGES_SESSION_PATH, pagesApexOrigin, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/serving/pages-origin';
+import { PAGES_SESSION_META, PAGES_SESSION_PATH, pagesApexOrigin, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
 import { linkedStylesheets } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
 import { fontPreloadTags } from '@/lib/compiled-page/styles';
-import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { bindModule } from '@/lib/compiled-page/runtime-binding';
 import { archiveSharedBuild, retainedBuild, retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
+import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/story-runtime/contract';
 
 /**
  * The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's
@@ -213,7 +211,7 @@ function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; con
 export const APP_CSP = appCsp();
 /** The policy every app page carries on a deployment whose documents are served under `site` (production adds no more). */
 export const appPagePolicy = (site: PagesSite): string => appCsp({ frames: pagesFrameSources(site), connect: [pagesApexOrigin(site)] });
-/** The pages origins an app page may frame (lib/serving/pages-origin): the apex and every document label. */
+/** The pages origins an app page may frame (lib/http/pages-origin): the apex and every document label. */
 export function pagesFrameSources(site: PagesSite): string[] {
   const port = site.port ? `:${site.port}` : '';
   return [`${site.scheme}//${site.host}${port}`, `${site.scheme}//*.${site.host}${port}`];
@@ -309,8 +307,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
   });
-  // A serving process prepares each new head for its readers after the write commits (lib/story/prepared/prepared-page.server).
-  enablePreparedPageWarmups();
+  // A serving process answers committed writes (lib/artifacts/after-commit): each new head is prepared for its readers,
+  // and a dataset write invalidates the guest snapshots it feeds (lib/story/prepared/commit-hooks.server).
+  installStoryCommitHooks();
   // …and revalidates the guest snapshots a write made stale (lib/story/prepared/snapshots.server).
   enableSnapshotRevalidations();
   // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
@@ -399,7 +398,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
     // The agent pointer is injected here, on the request base, for EVERY shell
-    // — the static web/solid-app.html carries none, so there is one source (lib/agent-discovery).
+    // — the static web/solid-app.html carries none, so there is one source (lib/compiled-page/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const listing = listingPage(data);
     const fonted = withShellFonts(listing ? preloadListing(discovered, listing) : discovered);

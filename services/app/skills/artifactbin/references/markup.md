@@ -5,32 +5,24 @@ description: >-
 ---
 ## Start
 
-`markup` is **static JSX data**. Scripts add behaviour.
-
 <!--bundle:skip-->
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
 <!--/bundle:skip-->
-- **Static JSX only**: literal props (strings, numbers, booleans, arrays,
-  `{{…}}` objects), plus safe signal conditions; no arbitrary expressions,
-  spreads or inline handlers (`onClick=`). Attach handlers in a Helmet script
-  with `addEventListener`. In
-  JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
+- **Static JSX**: literal props (strings, numbers, booleans, arrays,
+  `{{…}}` objects) and safe signal conditions; no arbitrary expressions,
+  spreads or inline handlers (`onClick=`). Use `addEventListener` in a Helmet script.
+  Close every tag (`<br />`); use `{/* … */}` comments; omit
   `<html>`/`<head>`/`<body>`.
-- **Style with Tailwind classes via `className`**, starting from a
+- **Tailwind via `className`**: start with a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
 - [[ nativeTableAuthoringRule ]]
+- Use `<Markdown>` for long prose on any page type. Keep headings, paragraphs and lists together; split around charts, images or other embeds, not each paragraph. Use HTML for individually designed text. [Markdown](templates-doc.md).
 - Data (`<Import>`, `<Value>`, `<Query>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
   Editable dataset cells: [editing](markup-editing.md).
   <!--bundle:skip-->[maps](markup-maps.md) · <!--/bundle:skip-->[motion](markup-motion.md) · [svg](markup-svg.md).
 
-<!--bundle:skip-->
-## Contents
-
-Skeleton · Vocabulary · Helmet · Images · Layout.
-
-<!--/bundle:skip-->
 <!--bundle:skip-->
 ## Skeleton (editorial)
 
@@ -42,9 +34,9 @@ Start from the [complete root example](../SKILL.md#example), then [editorial](te
 Kit components ([[ components | length ]]):
 `[[ components | join(' ') ]]`
 
-Plus embeds `Question` `Number` and Helmet's `Import` `Value` `Query`
-`Mutation` `Notify` `Context`. Unknown names are rejected with the registry;
-unknown props are ignored. Bindings and Column contracts are checked at publish.
+Also: `Question` `Number`; Helmet: `Import` `Value` `Query` `Mutation` `Notify`
+`Context`. Unknown names fail; unknown props are ignored. Bindings and Column
+contracts are checked at publish.
 
 [Conditions and dialogs](markup-state.md).
 
@@ -57,9 +49,8 @@ return `400` with `allowed_html_tags`; these are refused without a list:
 
 ## `<Helmet>` — the document's own head
 
-At most ONE per document: a `<Helmet>` holds one each of `<title>`, `<style>`
-and `<script>`; any number of metas and data declarations (`<Import>`, etc.;
-[data](markup-data.md)). It may appear anywhere; it is hoisted.
+At most ONE per document: `<Helmet>` holds one each of `<title>`, `<style>` and `<script>`;
+unlimited metas and [data declarations](markup-data.md). It is hoisted from anywhere.
 
 `<Context src="ref:<documentId>" />` links a Doc ([context](templates-doc.md#context)).
 

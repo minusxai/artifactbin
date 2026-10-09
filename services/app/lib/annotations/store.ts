@@ -1,12 +1,14 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
+import { markdownContent, markdownSource } from '@/lib/markdown/content';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {recordEvent} from '../notifications/events';
 import {commentMentions} from './saved-mentions';
-import {MembershipError} from '../accounts/membership';
+import {MembershipError} from '@/lib/artifacts/membership/membership';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from '../remote/agents';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
+import type {AnnotationAuthor,AnnotationCommentWire} from '@artifactbin/contracts';
 import {completeMutationReceipt,type MutationReceipt} from '../artifacts/mutation-receipt';
 import type { CommentTarget } from '@/lib/story-ui/comment-target';
 /**
@@ -22,9 +24,10 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { annotationScope, effectiveRole, type ArtifactRow, type Scope, type TokenActor } from '@/lib/artifacts/access';
+import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { canGovern } from '@/lib/artifacts/share-roles';
-import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from './anchors';
+import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/document/anchors';
 import { avatarUrl } from '@/lib/accounts/avatars';
 import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
@@ -32,7 +35,7 @@ import { generateInternalId } from '@/lib/platform/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type AnnotationRange, isAreaRange, isTargetRange } from '@/lib/document/annotation-range';
 import { sourcePathToBodyPath } from '@/lib/document/edit-compose';
-import { channelForAnnotations } from '@/lib/story/realtime/live';
+import { annotationsChannel } from '@artifactbin/contracts';
 
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */
@@ -44,43 +47,6 @@ interface AnnotationAnchor {
   path: string;
   spanStart: number;
   spanEnd: number;
-}
-
-/** Who wrote a comment. Ownership is an ACL relationship, not an author kind. */
-export interface AnnotationAuthor {
-  kind: 'human' | 'agent';
-  sessionId?:string;
-  /** Connected program snapshot; independent of the user-chosen session name. */
-  harness?:string;
-  color?:RemoteColor;
-  /** Display snapshot (username, token name…); stored beside the row so reads never join. */
-  label: string | null;
-  /**
-   * How this individual comment arrived; stored per comment because one token
-   * can use several transports. Nothing writes `'mcp'` any more — it is a value
-   * stored rows still carry, and the rail renders its own chip for it.
-   */
-  transport: 'browser' | 'http' | 'mcp' | 'unknown';
-}
-
-/**
- * An author as a reader receives it: who wrote it, plus the face to draw. Both
- * are READ, never written — the id is the row's `author_user_id`, the picture
- * the account's current one — so a caller creating a comment never names them.
- * Null for an agent (drawn as its product mark) and for a person without an
- * account; public by construction (the handle is already a /@link, the avatar
- * route is public by id) and never the email or the token.
- */
-interface AnnotationWireAuthor extends AnnotationAuthor {
-  user_id: string | null;
-  image: string | null;
-}
-
-export interface AnnotationCommentWire {
-  id: string;
-  body: string;
-  author: AnnotationWireAuthor;
-  created_at: string;
 }
 
 export interface AnnotationWire {
@@ -187,7 +153,7 @@ const scopedRow = async (q: Queryable, scope: Scope, id: string): Promise<Artifa
 
 
 const notify = (q: Queryable, artifactId: string, annotationId: string) =>
-  q.query('SELECT pg_notify($1, $2)', [channelForAnnotations(artifactId), annotationId]);
+  q.query('SELECT pg_notify($1, $2)', [annotationsChannel(artifactId), annotationId]);
 
 /**
  * Every read that builds the wire goes through this relation instead of the
@@ -232,7 +198,7 @@ const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => {
  */
 function canonicalTextOf(node: JsxNode): string {
   const raw = (n: JsxNode): string =>
-    n.type === 'text' ? n.value : n.type === 'element' ? n.children.map(raw).join('') : '';
+    n.type === 'text' ? n.value : n.type === 'element' ? n.tag === 'Markdown' ? markdownContent(markdownSource(n) ?? '').text : n.children.map(raw).join('') : '';
   return canonicalText(raw(node));
 }
 
@@ -563,8 +529,8 @@ export async function actOnAnnotationFor(
 }
 
 /**
- * Delete a thread outright — root and replies. A browser door only: an agent
- * may answer feedback, never take it away.
+ * Delete one comment, or a whole thread when its root is named. A browser door
+ * only: an agent may answer feedback, never take it away.
  *
  * DELETING IS NARROWER THAN COMMENTING. Reaching the document is the editor
  * scope like every other annotation verb, but taking words away is then
@@ -587,20 +553,43 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
   const cleanup = await db.transaction(async (tx): Promise<{ anchorKey: string | null } | null> => {
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
-    const found = await tx.query<AnnotationRowDb>(
-      `SELECT anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
+    const target = await tx.query<{ id: string; root_id: string | null }>(
+      `SELECT id, root_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND ${LIVE_ANNOTATION_SQL}`,
       [annotationId, artifactId],
     );
-    if (found.rows.length === 0) return null;
+    if (!target.rows[0]) return null;
+    const rootId = target.rows[0].root_id ?? target.rows[0].id;
+    // Every mutation locks the root before a reply. This matches actOnAnnotationFor
+    // and serializes deleting a reply against deleting or updating its thread.
+    const root = await tx.query<AnnotationRowDb>(
+      `SELECT id, anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
+      [rootId, artifactId],
+    );
+    if (!root.rows[0]) return null;
+    const replyId = target.rows[0].root_id ? target.rows[0].id : undefined;
+    const found = replyId
+      ? await tx.query<AnnotationRowDb>(
+        `SELECT id, root_id, anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id = $3 AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
+        [replyId, artifactId, rootId],
+      )
+      : root;
+    if (!found.rows[0]) return null;
     // An editor may take back their own words and no one else's.
     if (!owner && (!actor.userId || found.rows[0].author_user_id !== actor.userId)) return null;
-    // The root AND its replies, in one statement and one stamp: a conversation
-    // is deleted as a whole, and a reply left live under a deleted root would
-    // be a thread with no first message.
-    await tx.query('UPDATE annotations SET deleted_at = now() WHERE (id = $1 OR root_id = $1) AND deleted_at IS NULL', [annotationId]);
-    await recordEvent(tx,actorSubject(actor),'annotation_deleted',{kind:'artifact',id:artifactId},{annotation_id:annotationId});
-    await notify(tx, artifactId, annotationId);
-    const anchorKey = found.rows[0].anchor_key;
+    if (replyId) {
+      await tx.query('UPDATE annotations SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL', [replyId]);
+      await tx.query('UPDATE annotations SET revision = revision + 1 WHERE id = $1 AND deleted_at IS NULL', [rootId]);
+    } else {
+      // Removing the root removes its replies too: a conversation cannot be
+      // left live without its first message.
+      await tx.query('UPDATE annotations SET deleted_at = now() WHERE (id = $1 OR root_id = $1) AND deleted_at IS NULL', [rootId]);
+    }
+    await recordEvent(tx, actorSubject(actor), 'annotation_deleted', { kind: 'artifact', id: artifactId }, {
+      annotation_id: rootId, ...(replyId ? { reply_id: replyId } : {}),
+    });
+    await notify(tx, artifactId, rootId);
+    if (replyId) return { anchorKey: null };
+    const anchorKey = root.rows[0].anchor_key;
     if (!anchorKey) return { anchorKey: null };
     const others = await tx.query(`SELECT 1 FROM annotations WHERE artifact_id = $1 AND anchor_key = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`, [artifactId, anchorKey]);
     return { anchorKey: others.rows.length === 0 ? anchorKey : null };

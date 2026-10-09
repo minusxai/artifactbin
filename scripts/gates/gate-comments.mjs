@@ -281,9 +281,36 @@ async function ownerLeg(browser, { id, token }) {
     // Closing the retained conversation leaves it in history; reopen it to delete.
     await page.getByLabel('Hide resolved conversation').click();
     await page.locator('[aria-label="Show resolved conversation"]').click();
-    await page.locator('[aria-label="Annotation actions"]').click();
-    await page.locator('[aria-label="Delete annotation"]').click();
+    const extraReply = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reply: 'Delete just this reply; keep the conversation.' }),
+    });
+    check(extraReply.ok, 'the resolved conversation accepts a separate reply for individual deletion');
+    await page.getByRole('button', { name: 'Comment actions 2', exact: true }).waitFor({ timeout: 8000 });
+    await page.getByRole('button', { name: 'Comment actions 2', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Delete comment', exact: true }).click();
     await page.getByLabel('Confirm delete comment', { exact: true }).click();
+    const remaining = await until(async () => {
+      const text = await page.getByLabel('Resolved annotation thread').textContent();
+      return text?.includes('Q3 sheet') && text.includes('Recomputed') && !text.includes('Delete just this reply');
+    }, value => value === true);
+    check(remaining === true, 'deleting one reply preserves the root and sibling comment in the open conversation');
+    const afterReplyDelete = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    check(afterReplyDelete.annotations?.length === 1 && afterReplyDelete.annotations[0].status === 'resolved'
+      && afterReplyDelete.annotations[0].thread.length === 2,
+      'individual deletion preserves the thread status and other comments in storage');
+    await page.reload({ waitUntil: 'load' });
+    await openArtifactControls(page);
+    if (!await page.getByLabel('Annotation sidebar').isVisible()) await page.getByLabel('Toggle comments').click();
+    await dismissControls(page);
+    if (!await page.getByLabel('Hide resolved conversation').isVisible()) await page.getByLabel('Show resolved conversation').click();
+    const restored = await page.getByLabel('Resolved annotation thread').textContent();
+    check(restored?.includes('Q3 sheet') && restored.includes('Recomputed') && !restored.includes('Delete just this reply'),
+      'refresh keeps the remaining conversation and hides the deleted reply');
+    await page.locator('[aria-label="Annotation actions"]').click();
+    await page.locator('[aria-label="Delete thread"]').click();
+    await page.getByLabel('Confirm delete thread', { exact: true }).click();
     const allGone = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 0, 8000);
     check(allGone === 0, 'delete erases the thread from the history');
     const wireAfter = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: { Authorization: `Bearer ${token}` } })).json();
@@ -442,6 +469,7 @@ const run = async () => {
 
 const TABLE_SELECTION_DOC = '<Helmet><title>Selected table rows</title></Helmet>'
   + '<div data-design="tw" className="p-10"><h1>Two selected rows</h1>'
+  + '<p id="other-item">Item 10 report</p><h3 id="selected-heading">11. Resolve from the hover preview</h3>'
   + '<table id="selected-table"><tbody>'
   + '<tr><td id="row24-start">24</td><td>Deploy npm race</td></tr>'
   + '<tr><td>25</td><td id="row25-end">Ask reporter to retry</td></tr>'
@@ -457,6 +485,23 @@ async function tableSelectionLeg(browser, { id, token }) {
     const frame = documentLocator(page);
     await frame.locator('#row25-end').waitFor();
     const raw = await documentFrame(page);
+    check(await frame.locator('#selected-heading').getAttribute('data-mx-source-node-id') === 'selected-heading',
+      'the compiled heading carries its authored source identity independently of its position');
+    const headingPath = await frame.locator('#selected-heading').getAttribute('data-mx-ast');
+    await raw.evaluate(() => {
+      const heading = document.querySelector('#selected-heading');
+      heading.setAttribute('data-mx-ast', document.querySelector('#other-item').getAttribute('data-mx-ast'));
+      const range = document.createRange(); range.selectNodeContents(heading);
+      const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      heading.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    });
+    await page.waitForTimeout(300);
+    check(!await frame.getByRole('button', { name: 'Comment on selected text', exact: true }).isVisible(),
+      'a stale positional path cannot offer a comment against a different source identity');
+    await raw.evaluate(path => {
+      document.querySelector('#selected-heading').setAttribute('data-mx-ast', path);
+      window.getSelection().removeAllRanges();
+    }, headingPath);
     await until(async () => {
       await raw.evaluate(() => {
         const range = document.createRange();
@@ -501,9 +546,22 @@ async function tableSelectionLeg(browser, { id, token }) {
     }, `mx-annotation-${annotation.id}`), words => words.length === 4, 10000);
     check(JSON.stringify(selectedWords) === JSON.stringify(['24', 'Deploy npm race', '25', 'Ask reporter to retry']),
       'reopening the comment after refresh highlights all selected cells');
-    await page.getByLabel('Resolve annotation', { exact: true }).click();
-    await page.getByLabel('Show resolved conversation', { exact: true }).waitFor();
     await page.getByLabel('Close comments', { exact: true }).click();
+    const ambientMarker = page.locator('[aria-label^="Open annotation conversation by"]');
+    await ambientMarker.hover();
+    const previewResolve = page.getByRole('button', { name: 'Resolve thread', exact: true });
+    await previewResolve.waitFor();
+    await previewResolve.focus();
+    await page.keyboard.press('Space');
+    await until(() => ambientMarker.count(), count => count === 0, 8000);
+    check(await page.getByLabel('Annotation sidebar').count() === 0,
+      'keyboard resolution from the hover preview keeps the comment sidebar closed');
+    const previewResolvedResponse = await fetch(`${BASE}/api/artifacts/${id}/annotations?status=resolved`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const previewResolved = await previewResolvedResponse.json();
+    check(previewResolved.annotations?.some(row => row.id === annotation.id && row.status === 'resolved'),
+      'the hover Resolve action persists the resolved thread');
     check(await page.locator('[aria-label^="Open annotation conversation by"]').count() === 0,
       'my successful resolution immediately dismisses its countdown marker');
     await page.reload({ waitUntil: 'load' });

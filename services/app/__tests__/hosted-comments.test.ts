@@ -7,7 +7,8 @@ import {getDb} from '@/lib/platform';
 import {remoteAgents} from '@/lib/remote/agents';
 import {refreshHostedStatus,setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
 import {readCommentContext} from '@/lib/remote/comment-context';
-import {externalHostedComments,clearExternalHostedComments} from '@/lib/remote/hosted-comments';
+import {externalHostedComments} from '@/lib/runner/hosted-comments';
+import {clearExternalHostedAgent} from '@/lib/remote/hosted-proof';
 import {POST as callback} from '@/app/api/remote/hosted/operations/route';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as followup} from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
@@ -15,7 +16,7 @@ import {POST as comment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {serve,hostedAgentClient,hostedAgentSessionId,hostedAgentCallbackKey,hostedAgentDeliveryKey,hostedAgentDeliveryTransport,hostedAgentTransport,signActor,verifyActor} from '@artifactbin/utils';
 import {ACTOR_HEADER,type HostedAgentComment} from '@artifactbin/contracts';
 useAppHarness();
-afterEach(()=>{setHostedRemoteAgent(undefined);clearExternalHostedComments();});
+afterEach(()=>{setHostedRemoteAgent(undefined);clearExternalHostedAgent();});
 const secret='fixture-only-hosted-comment-secret-000000000';
 async function fixture(){
  const user=await createUser({email:'mxmx_test_external-comments@example.com'}),token=await mintToken('external-comments',user.id);await claimToken(user.id,token.token);

@@ -1,5 +1,5 @@
-import {renderSocialPreviewImage} from '../../app/lib/story/assets/social-preview-image.server';
-import {socialPreviewCrop,socialPreviewImage} from '../../app/lib/document/social-preview';
+import {renderSocialPreviewImage} from '../../app/lib/cli-toolkit/host.server';
+import {socialPreviewCrop,socialPreviewImage} from '../../app/lib/cli-toolkit';
 import {previewRenderRequest} from './preview-render';
 import {createBrowser} from '@artifactbin/browser/local';
 import {chromiumExecutable} from './chromium';

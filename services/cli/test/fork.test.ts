@@ -1,4 +1,4 @@
-import {createDocumentGraph} from '../../app/lib/document/document-graph';
+import {createDocumentGraph} from '../../app/lib/cli-toolkit';
 /**
  * FORKING SOMEBODY ELSE'S ARTIFACT FROM THE CLI.
  *

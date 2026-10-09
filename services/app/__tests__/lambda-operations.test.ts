@@ -7,9 +7,9 @@ import {GET as anonymousQuery} from '@/app/a/[id]/query/route';
 import {POST as readerMutate} from '@/app/a/[id]/mutate/route';
 import {getArtifactById,dataflowForRow} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
-import {setDatasetPolicy} from '@/lib/datasets/policy';
+import {setDatasetPolicy} from '@/lib/artifacts/dataset-policy';
 import {lambdaOperation} from '@/lib/runner/operations';
-import {runnerIdentity} from '../../runner/src/capabilities';
+import {runnerIdentity} from '@artifactbin/runner/capabilities';
 import {defaultDatasetGrants,signActor,verifyActor} from '@artifactbin/utils';
 const harness=useAppHarness();
 it('proves default owner grants allow Lambda replay but deny anonymous declared writes',async()=>{

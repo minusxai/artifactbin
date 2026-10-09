@@ -28,7 +28,7 @@ import {
   type MdInline,
   type MdMarker,
 } from "@/lib/annotations/markdown-lite";
-import { isSessionMentionHref } from "@/lib/annotations/session-mentions";
+import { isSessionMentionHref } from "@/lib/remote/session-mentions";
 import { isPersonMentionHref } from "@/lib/document/person-mentions";
 import { agentNameColor } from "../lib/agent-identity";
 

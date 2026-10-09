@@ -13,6 +13,9 @@ const baseline = JSON.parse(readFileSync(new URL('./react-html.json', import.met
 // FileUpload was introduced after the React reader retired. Its reviewed Solid SSR contract
 // supplements the frozen React corpus; every historical component remains compared to that capture.
 const uploadBaseline = JSON.parse(readFileSync(new URL('./upload-html.json', import.meta.url), 'utf8')) as Record<string, string>;
+// Markdown also arrived after React retired. Its reviewed static HTML is appended at the new fixture
+// location; historical DOM still compares against the frozen capture, including the surrounding prose.
+const markdownBaseline = JSON.parse(readFileSync(new URL('./markdown-html.json', import.meta.url), 'utf8')) as Record<string, string>;
 function expectedHtml(key: string): string {
   if (key === 'file-upload') return uploadBaseline[key]!;
   const html = applyCurrentLayoutContracts(baseline[key]!);
@@ -21,6 +24,9 @@ function expectedHtml(key: string): string {
   const switchShell = root.querySelector('[role="switch"][aria-label="Compare"]')?.closest('.mx-control');
   if (!switchShell) throw new Error('kitchen-sink capture lost the Compare control anchor');
   switchShell.insertAdjacentHTML('afterend', '\n    ' + uploadBaseline['kitchen-sink-upload']!);
+  const proseEnd = root.querySelector('article > p:last-of-type');
+  if (!proseEnd) throw new Error('kitchen-sink capture lost its prose anchor');
+  proseEnd.insertAdjacentHTML('afterend', '\n    ' + markdownBaseline['kitchen-sink-markdown']!);
   // Adding a kit island changes the fixture's serialized literal table, not historical DOM.
   const literals = [...root.querySelectorAll('script')].find(node => node.textContent?.startsWith('{"moduleData"'));
   if (!literals) throw new Error('kitchen-sink capture lost its literal table');
@@ -39,6 +45,8 @@ const visibleHtml = (html: string): string => {
   root.querySelectorAll('pre').forEach(node => { if (node.firstChild?.nodeType === 3) node.firstChild.textContent = node.firstChild.textContent?.replace(/^\n+/, '') ?? ''; });
   root.querySelectorAll('[data-hk]').forEach(node => node.removeAttribute('data-hk'));
   root.querySelectorAll('[data-mx-live]').forEach(node => node.removeAttribute('data-mx-live'));
+  // Source identity is capture metadata; compiler tests verify it separately from visible HTML.
+  root.querySelectorAll('[data-mx-source-node-id]').forEach(node => node.removeAttribute('data-mx-source-node-id'));
   // The delegated dialog close marker is internal; it does not change visible reader output.
   root.querySelectorAll('[data-mx-dialog-close]').forEach(node => node.removeAttribute('data-mx-dialog-close'));
   for (const node of root.querySelectorAll<HTMLElement>('[id],[aria-controls],[aria-labelledby],[aria-describedby]')) {

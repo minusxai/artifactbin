@@ -66,7 +66,7 @@ await section('file', async () => {
   });
   if (plainRes.status !== 201) throw new Error(`plain control publish failed: ${plainRes.status}`);
   const plain = await plainRes.json();
-  /** A document's own origin, where its page and its policy are served (lib/serving/pages-origin): `<hex id>.lvh.me`. */
+  /** A document's own origin, where its page and its policy are served (lib/http/pages-origin): `<hex id>.lvh.me`. */
   const documentOrigin = (id) => `http://${Buffer.from(id, 'utf8').toString('hex')}.${PAGES_HOST}:${new URL(B).port}`;
   const plainCsp = (await fetch(`${documentOrigin(plain.id)}/`)).headers.get('content-security-policy');
 

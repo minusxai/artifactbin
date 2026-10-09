@@ -20,9 +20,9 @@ const refused = async (script: string) => {
 };
 
 describe('the page module generator', () => {
-  it('exports declared binders, proxy, reviewState and dataset file and legacy image helpers from runtime bindings', () => {
+  it('exports declared binders, proxy and dataset file and legacy image helpers from runtime bindings', () => {
     const source = pageModuleSource();
-    expect([...source.matchAll(/export const (\w+)/g)].map((m) => m[1])).toEqual(['signal', 'query', 'mutation', 'upload', 'fileUrl', 'uploadImage', 'imageUrl', 'proxy', 'reviewState']);
+    expect([...source.matchAll(/export const (\w+)/g)].map((m) => m[1])).toEqual(['signal', 'query', 'mutation', 'upload', 'fileUrl', 'uploadImage', 'imageUrl', 'proxy']);
     expect(source).toContain('b.proxy(url)');
     expect(source).toContain('b.upload(importName, file)');
     expect(source).toContain('b.fileUrl(importName, ref)');
@@ -101,7 +101,7 @@ describe('buildAuthorModule', () => {
   });
 
   it('refuses the retired per-name imports with the binder to use instead', async () => {
-    expect(await refused(`import { region } from 'page';`)).toMatch(/'page' exports signal, query, mutation, proxy, reviewState, upload, fileUrl, uploadImage, imageUrl, not region; bind the declared name with const \[region, setRegion\] = signal\('\$region'\)/);
+    expect(await refused(`import { region } from 'page';`)).toMatch(/'page' exports signal, query, mutation, proxy, upload, fileUrl, uploadImage, imageUrl, not region; bind the declared name with const \[region, setRegion\] = signal\('\$region'\)/);
     expect(await refused(`import page from 'page';`)).toMatch(/import from 'page' by name/);
   });
 
@@ -135,7 +135,13 @@ describe('buildAuthorModule', () => {
   });
 });
 
-it('publishes opt-in review state without requiring any Value declarations', async () => {
-  const result = await buildAuthorModule("import { reviewState } from 'page'; let screen = 'plans'; reviewState({id: 'navigation', get: () => screen, restore: value => {screen = value;}});", { values: [], queries: [], mutations: [] });
+it('routes the script\'s solid-js through the shim whose named createSignal is the runtime\'s comment state', async () => {
+  const result = await buildAuthorModule("import { createSignal, createEffect } from 'solid-js';\nconst [screen, setScreen] = createSignal('plans', { name: 'screen' });\nexport function Nav() { return <button onClick={() => setScreen('checkout')}>{screen()}</button>; }", { values: [], queries: [], mutations: [] });
   expect(result.ok).toBe(true);
+  const code = result.ok ? result.module.code : '';
+  expect(code).toMatch(/import \{ createEffect \} from "solid-js"/);
+  expect(code).not.toContain('__reExport');
+  expect(code).toContain(`globalThis[${JSON.stringify(PAGE_GLOBAL)}]`);
+  expect(code).toMatch(/typeof options\.name === "string" && b \? b\.createSignal\(value, options\) : plain\(value, options\)/);
+  expect(result.ok && result.module.exports).toEqual(['Nav']);
 });

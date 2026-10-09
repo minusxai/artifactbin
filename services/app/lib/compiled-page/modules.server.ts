@@ -14,8 +14,9 @@
  * (a 404), never a compile.
  */
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
-import { DOCUMENT_MODULE_PATH, DOCUMENT_MODULE_RE, type LinkHints, type ModuleRef, type ModuleStore } from './contract';
+import { DOCUMENT_MODULE_RE, type LinkHints, type ModuleRef, type ModuleStore } from './contract';
 import { contentSha, speculationRulesOf, SPECULATION_RULES_CONTENT_TYPE, type SpeculationRules } from './speculation';
+import { DOCUMENT_MODULE_PATH } from '@/lib/story-runtime/contract';
 
 /** The object-store prefix of per-document modules (`islands/<sha>`). */
 const MODULE_PREFIX = 'islands';

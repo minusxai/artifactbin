@@ -1,6 +1,6 @@
 import type { Actor } from '@artifactbin/contracts';
 import {expect,it,vi} from 'vitest';
-import { pagesSite } from '@/lib/serving/pages-origin';
+import { pagesSite } from '@/lib/http/pages-origin';
 import {getDb} from '@/lib/platform';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';

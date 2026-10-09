@@ -10,7 +10,7 @@ import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
 import { publicGuideText, llmsText } from '@/lib/serving/agent-references.server';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
 import { renderSkill } from '@/lib/skills/render';
-import { agentDiscovery } from '@/lib/serving';
+import { agentDiscovery } from '@/lib/compiled-page/agent-discovery';
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import {projectSkillLinks} from '@/lib/skills/serve';
@@ -33,7 +33,7 @@ const BOOTSTRAP = 'npx --yes @afbin/cli@latest setup';
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['token','mint','claim'];
-const httpDiscovery=(name:string)=>name==='skills/artifactbin/llms.txt'||name==='skills/artifactbin/SKILL.md'||name==='lib/agent-discovery meta';
+const httpDiscovery=(name:string)=>name==='skills/artifactbin/llms.txt'||name==='skills/artifactbin/SKILL.md'||name==='lib/compiled-page/agent-discovery meta';
 const linkedInstaller = (name: string) => name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt') ;
 
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
@@ -64,7 +64,7 @@ const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
     ['skills/artifactbin/SKILL.md', buildQuickSheet(BASE)],
     ['skills/artifactbin/llms.txt', llmsText(BASE)],
     ['GET /getting-started.md', gettingStartedMarkdown(BASE)],
-    ['lib/agent-discovery meta', agentDiscovery(BASE).instruction],
+    ['lib/compiled-page/agent-discovery meta', agentDiscovery(BASE).instruction],
     ['lib/agent-contract', agentContract(BASE)],
     ['the 401 hint', refused.help],
   ];

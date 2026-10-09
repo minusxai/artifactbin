@@ -1,40 +1,40 @@
 import {notificationJobOperations} from './notification-jobs';
-import {notificationJobStore} from '../notifications/runtime';
+import {notificationJobStore} from '@/lib/artifacts/notification-runtime';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
-import {queryResourceForRequest} from '@/lib/http/resource-query';
+import {queryResourceForRequest} from './resource-query';
 import type {MutationReceipt} from '@/lib/artifacts';
-import {readArtifactSnapshot} from '@/lib/artifacts/read-access';
-import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/datasets/policy/http';
+import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction} from '@/lib/annotations';
+import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/artifacts/dataset-policy/http';
 import {updateMetadataFromBody} from '@/lib/artifacts/metadata-wire';
 import {decodePage, encodeCursor} from '@/lib/http/pagination';
-import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
+import {DATASET_OPERATIONS} from '@/lib/operations/datasets';
 import {ACCOUNT_OPERATIONS} from './account';
 import {SESSION_OPERATIONS} from './sessions';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
 import { resolveTestUser } from '@/lib/accounts/testusers';
 import { capabilityGuard } from '@/lib/artifacts/capabilities';
-import { TESTUSER_ERRORS } from '@artifactbin/contracts';
+import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { applyEditFor, versionToWire, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor, revertArtifactFor, isVersionNotArchived } from '@/lib/artifacts/store';
-import { canReadArtifact, type TokenActor } from '@/lib/artifacts/access';
+import { canReadArtifact } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
-import { forkArtifact, forkDatasetPreview, forkRefusal, type ForkOverrides } from '@/lib/artifacts/fork';
-import { isParentRefusal, resolveParent } from '@/lib/workspace/folders';
+import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/story/publish';
+import { isParentRefusal, resolveParent } from '@/lib/artifacts/placement';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
 import { trackEvent } from '@/lib/platform/analytics';
 import { exportImageResponse } from '@/lib/export/exporter';
-import type { AnnotationAuthor } from '@/lib/annotations';
+import type { AnnotationAuthor } from '@artifactbin/contracts';
 import {
-  artifactSummaryToWire, artifactToWire, createArtifactFromBody, createdArtifactWire, parseParentField, parseVisibilityValue, replaceArtifactWithBody,
-  parseExpectedVersion, refreshAssetsFor, respondToAnnotationAction, respondToEdit, respondToMutate,
+  artifactSummaryToWire, createdArtifactWire, parseParentField, parseVisibilityValue,
+  parseExpectedVersion, respondToEdit, respondToMutate,
 } from '@/lib/artifacts/wire';
-import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE } from '@/lib/serving/agent-guidance';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
 export interface OpReply {
@@ -410,7 +410,7 @@ const revertArtifactOp: Operation = {
       return reply({ error: 'version_not_archived' }, 409);
     }
     if (!row) return reply({ error: 'not_found' }, 404);
-    return reply(await artifactToWire(row,ctx.base));
+    return reply(await artifactWireFor(row,ctx.base));
   },
 };
 
@@ -563,7 +563,7 @@ const exportArtifactOp: Operation = {
  * The reach is the read ACL rather than ownership (the whole point: adapting
  * someone else's public document), so the miss is the same uniform 404 every
  * other operation answers. The copy is re-published as the FORKER
- * (lib/artifacts forkArtifact), which is why a refusal here can name a ref
+ * (lib/story/publish forkArtifact), which is why a refusal here can name a ref
  * that was fine for the original owner and is not for you — it passes through
  * verbatim rather than copying a document that would be broken on arrival.
  */

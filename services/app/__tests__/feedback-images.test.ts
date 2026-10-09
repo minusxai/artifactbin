@@ -1,7 +1,7 @@
-import { changeMembership, claimToken, createUser } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { updateSharingFor } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { updateSharingFor, changeMembership } from '@/lib/artifacts';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as uploadImage } from '@/app/a/[id]/datasets/[datasetId]/images/route';
 import { GET as readImage } from '@/app/a/[id]/datasets/[datasetId]/images/[imageId]/route';

@@ -3,7 +3,7 @@
  *
  * The `jsx` body of a document file is stored as jsx TEXT, but every edit path works on the
  * parsed AST (the WYSIWYG write-back in lib/data/story/jsx-edit.ts, the block commands in
- * lib/editor-v2), so we need a faithful AST→text serializer. Round-trips with parseJsx:
+ * lib/editor-engine), so we need a faithful AST→text serializer. Round-trips with parseJsx:
  * `parseJsx(serializeJsx(parseJsx(src).nodes))` is stable (formatting may normalize, but
  * structure + text/SQL/CSS leaves are preserved).
  *

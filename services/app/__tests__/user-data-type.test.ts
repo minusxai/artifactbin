@@ -1,7 +1,6 @@
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import {documentPublicationWithResources} from './prepared-document';
 import {patchMetadata} from './conditional-request';
-import {changeMembership} from '@/lib/accounts';
 import {POST as documentMutation} from '@/app/a/[id]/mutate/route';
 import {describe, expect, it} from 'vitest';
 import {POST as createRoute} from '@/app/api/artifacts/route';
@@ -9,7 +8,8 @@ import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/platform';
-import {getArtifactById,dataflowForRow,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
+import {getArtifactById,dataflowForRow,applyEditFor,commitNormalizedMarkup,viewerIdentityFor,changeMembership} from '@/lib/artifacts';
+import {publishMarkupForArtifact} from '@/lib/story/publish';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken, createUser} from '@/lib/accounts';

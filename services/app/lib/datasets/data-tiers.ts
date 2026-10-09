@@ -18,7 +18,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 import { json } from '@/lib/http/http';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
 import { storeDatasetRows } from './dataset-store';
-import { storeImage, IMAGE_CONTENT_TYPES, type ImageMeta } from '@/lib/story/assets/image-store';
+import { storeImage, IMAGE_CONTENT_TYPES, type ImageMeta } from '@/lib/object-store/image-store';
 import { uploadedSha256 } from './file-store';
 import { sniffImageType } from '@/lib/web-ingest/sniff';
 import { optimiseImage } from '@/lib/images/optimise';
@@ -184,7 +184,7 @@ const IMAGE_DATA_URL_RE = /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml));base64,
  * Store already-decoded image bytes. The single home for both entry points: a
  * base64 `data:` URL (publishImage) and a raw-body upload (the route). Bytes go
  * to the object store; the row keeps `meta.objectKey` and the row stores no payload
- * (see lib/story/assets/image-store).
+ * (see lib/object-store/image-store).
  */
 export async function storeImageContent(buffer: Buffer, contentType: string, objects?: ContentObjects): Promise<StoredContent | Response> {
   if (!(IMAGE_CONTENT_TYPES as readonly string[]).includes(contentType)) {

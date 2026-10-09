@@ -1,7 +1,6 @@
 /** The artifacts module's interface: only what other modules import. */
-export { canReadArtifact, editorScope, effectiveRole, linkRoleOf } from './access';
-export type { ArtifactRow, RoleActor, Scope, TokenActor, Viewer, Visibility } from './access';
-export { restoreBrowserArtifact, writeBrowserArtifact } from './browser-artifact-write';
+export { canReadArtifact, editorScope, effectiveRole, isOwner, linkRoleOf, roleFor } from './access';
+export type { ArtifactRow, Scope, Visibility } from './access';
 export { can, capabilityGuard, capabilityRefusal } from './capabilities';
 export type { CapabilityActor } from './capabilities';
 export { CreationReplay } from './creation-ledger';
@@ -9,8 +8,10 @@ export { compiledForRow, dataflowForRow, datasetResolverForActor, datasetsForDoc
 export { setDocumentEditorPolicy } from './document-policy';
 export type { DocumentEditorPolicy } from './document-policy';
 export { artifactQuery } from './document';
-export { forkArtifact, forkDatasetPreview, forkRefusal } from './fork';
 export { claimArtifactId, reserveIds } from './identities';
+export { accountProfile, updateAccountProfile } from './membership/account-profile';
+export { membershipInbox, updateMembershipInbox } from './membership/membership-inbox';
+export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates } from './membership/membership';
 export { resolveImageReference } from './image-references';
 export { updateMetadataFromBody } from './metadata-wire';
 export { setMutationInvocation } from './mutation-invocation';
@@ -18,14 +19,17 @@ export type { MutationInvocation, MutationInvocationFactory } from './mutation-i
 export { adaptMutationOperationReply, completeDocumentMutationReceipt, documentMutationReply, mutationInitiator, normalizeMutationOperation } from './mutation-operation';
 export { durableMutation, pinMutationContext } from './mutation-receipt';
 export type { MutationReceipt } from './mutation-receipt';
-export { preflightPublication } from './publication-preflight';
+export { notificationArtifactAuthority, notificationAuthority, notificationExecutionFence, notificationExecutionSource, notificationSourceSchema, notificationSourcesReadable } from './notification-authority';
+export { evaluateNotificationQuery, normalizeNotificationResult } from './notification-query';
+export type { NotificationQueryDependencies } from './notification-query';
+export { notificationJobStore } from './notification-runtime';
 export { readableArtifact } from './read-access';
 export { ANONYMOUS_CEILING, ROLE_ORDER, SHARE_ROLES, SHARE_ROLE_LABEL, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, roleBehindLogin, shareRolesAtLeast } from './share-roles';
 export type { ArtifactRole, ShareRole } from './share-roles';
 export { getSharingFor, setAccessFor, updateSharing, updateSharingFor } from './sharing';
 export type { SharingPatch } from './sharing';
 export { artifactState } from './state';
-export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, commitNormalizedMarkup, committedHeadsSettled, createArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor, publishMarkupForArtifact, replaceArtifactFor, revertArtifactFor, setArtifactQuotaForTests, setMetadataFor, versionToWire } from './store';
+export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, commitNormalizedMarkup, committedHeadsSettled, createArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, setArtifactQuotaForTests, setMetadataFor, versionToWire } from './store';
 export type { ArtifactSummary, EditOutcome } from './store';
 export { recordArtifactView } from './view-admission';
-export { artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, refreshAssetsFor, replaceArtifactFromRequest, respondToAnnotationAction, respondToEdit } from './wire';
+export { artifactSummaryToWire, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, respondToEdit } from './wire';

@@ -23,7 +23,7 @@ const pageList = () => [...pages].filter(([,page]) => !page.isClosed()).map(([pa
 // on resolves in the frame; page.url(), goto, screenshot, keyboard and mouse stay the app page's.
 const DOCUMENT_FRAME = 'iframe[data-mx-document-frame]';
 const documentFrame = page => page.mainFrame().childFrames().find(frame => frame.name() === 'mx-document');
-// Loaded at the document's origin and booted (lib/story-runtime/frame-bridge/frame: no page data, or ready).
+// Loaded at the document's origin and booted (lib/islands/frame-bridge: no page data, or ready).
 const settled = () => {
   const html = document.documentElement;
   return /^https?:$/.test(location.protocol) && !!html && !html.hasAttribute('data-mx-session-redirect') && document.readyState !== 'loading'

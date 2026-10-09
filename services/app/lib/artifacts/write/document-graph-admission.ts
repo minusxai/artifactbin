@@ -11,11 +11,21 @@ import {prepareGraphPatch,type GraphPatch} from '../../document/document-graph-p
 import {graphValidationScope} from '../../document/document-graph-scope';
 import {applyOperationsToNodes,DocumentOperationError} from '../../document/document-operation';
 import {stampNodeIds} from '../../document/node-ids';
-import {publishJsx} from '@/lib/story/document/jsx-tier';
-import {type ContentInputCtx} from '@/lib/story/document/input';
+import type {StoredContent} from '../../document/stored-content';
+import type {ServerRefLoader} from '../../datasets/schema-loader';
+import type {SourceRepair} from '../../jsx/repair';
 import {MAX_CONTENT_BYTES} from '../../document/limits';
 import type {ReferenceValidationState,ResolvedRef} from '@/lib/dataflow/refs';
 
+/** What admission needs from the publish pipeline, supplied by the caller: the
+ * reference loader it witnesses, the identity normalization, and the publisher
+ * itself (story's publishJsx). Passed in rather than imported, so the write
+ * path never reaches up into story while the admission token stays minted here. */
+export interface GraphAdmissionContext {
+ loadRef?:ServerRefLoader;
+ normalizeMarkup?:(source:string)=>string|{source:string;repairs:SourceRepair[]};
+ publish:(fields:Record<string,unknown>,source:string,context:{loadRef:ServerRefLoader})=>Promise<StoredContent|Response>;
+}
 export interface GraphBaseline {id:string;version:number;document:DocumentGraph;meta:Record<string,unknown>;reservedIds?:string[]}
 export interface GraphAdmissionPlan {
  id:string;patch:GraphPatch;references:ReferenceValidationState[];
@@ -28,13 +38,13 @@ export function graphAdmissionPlan(token:GraphAdmission):GraphAdmissionPlan {
  const plan=admissions.get(token);if(!plan)throw new Error('Unvalidated document operation');return structuredClone(plan);
 }
 const invalid=(message:string)=>json({error:'invalid_jsx',details:[{message}]},400);
-export async function prepareGraphOperation(base:GraphBaseline,operations:readonly DocumentOperation[],context:ContentInputCtx,body:Record<string,unknown>={}):Promise<GraphAdmission|Response>{
+export async function prepareGraphOperation(base:GraphBaseline,operations:readonly DocumentOperation[],context:GraphAdmissionContext,body:Record<string,unknown>={}):Promise<GraphAdmission|Response>{
  let candidate:DocumentGraph;
  try{candidate=createDocumentGraph(applyOperationsToNodes(graphNodes(base.document),operations),base.version+1);}
  catch(error){if(error instanceof DocumentOperationError||error instanceof Error)return invalid(error.message);throw error;}
  return admitGraphCandidate(base,candidate,context,body,operations.some(operation=>operation.kind==='replaceDocument'));
 }
-export async function prepareGraphSource(base:GraphBaseline,source:string,context:ContentInputCtx,body:Record<string,unknown>={},whole=false):Promise<GraphAdmission|Response>{
+export async function prepareGraphSource(base:GraphBaseline,source:string,context:GraphAdmissionContext,body:Record<string,unknown>={},whole=false):Promise<GraphAdmission|Response>{
  let candidate:DocumentGraph;
  try{
   source=repairJsxSource(source)?.source??source;
@@ -44,7 +54,7 @@ export async function prepareGraphSource(base:GraphBaseline,source:string,contex
  catch(error){if(error instanceof Error)return invalid(error.message);throw error;}
  return admitGraphCandidate(base,candidate,context,body,whole);
 }
-async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,context:ContentInputCtx,body:Record<string,unknown>,whole:boolean):Promise<GraphAdmission|Response>{
+async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,context:GraphAdmissionContext,body:Record<string,unknown>,whole:boolean):Promise<GraphAdmission|Response>{
  const loader=context.loadRef;if(!loader)throw new Error('Document admission requires publication reference checks');
  let source=graphSource(candidate);
  if(source.includes('\0'))return json({error:'invalid_source_encoding',details:['Document source cannot contain a NUL character.']},400);
@@ -61,13 +71,13 @@ async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,co
  const scope=graphValidationScope(base.document,candidate);
  if(scope.errors.length)return invalid(scope.errors.join('; '));
  const references=new Map<string,ReferenceValidationState>(),loaded=new Map<string,Promise<ResolvedRef|null>>();
- const checkedContext:ContentInputCtx={...context,normalizeMarkup:undefined,loadRef:id=>{
+ const checkedContext={loadRef:(id:string)=>{
   let pending=loaded.get(id);
   if(!pending){pending=loader(id).then(ref=>{if(ref){if(!ref.validationState)throw new Error('Reference loader omitted its persistence witness');references.set(ref.id,ref.validationState);}return ref;});loaded.set(id,pending);}
   return pending;
  }};
  const fields={theme:base.meta.theme??null,template:base.meta.template??null,colorMode:base.meta.colorMode??null,...body};
- const published=await publishJsx(fields,scope.source,checkedContext);
+ const published=await context.publish(fields,scope.source,checkedContext);
  if(published instanceof Response)return published;
  // A changed normalization must be incorporated into the graph before it can be
  // certified. Never silently store bytes different from the validated bytes.

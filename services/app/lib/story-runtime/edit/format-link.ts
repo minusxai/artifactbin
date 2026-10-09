@@ -8,7 +8,7 @@
  * host's new HTML goes back through the text-edit channel.
  */
 import type { JsxElement } from '@/lib/jsx';
-import { setLink } from '@/lib/editor-v2/links';
+import { setLink } from '@/lib/editor-engine/links';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel } from '../pristine';
@@ -61,6 +61,7 @@ export function createFormatLink({ win, root, views, channel, post, republishRec
       }
     }
     if (className !== undefined) {
+      if (el.hasAttribute('data-mx-markdown')) className = `mx-markdown ${className}`;
       if (className.trim()) el.setAttribute('class', className);
       else el.removeAttribute('class');
     }

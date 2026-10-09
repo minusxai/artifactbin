@@ -9,6 +9,8 @@ Every artifact wears one design system. The page type is the shape of the conten
 
 A system has three layers, each works alone: the **tokens and faces** (name the system and kit components, token classes and charts already look right), the **hand** (one drawing mode and a few devices written against hand variables, so a borrowed device takes this ink) and the **page-type recipes** (the look on each of the seven page types). The runtime serves all three; the agent writes no CSS to get them.
 
+Docs use the same fonts and colors with a quiet reading column; see [the Doc guide](templates-doc.md). On any page type, use `<Markdown>` for long continuous prose; keep HTML for individually designed text.
+
 Pick ONE system from the table by the subject's world and the page type, read its file, and name it in the fence. Never read a second system for the same artifact; one system owns colour and type.
 
 ## How a page comes together

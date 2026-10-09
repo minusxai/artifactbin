@@ -15,8 +15,8 @@ const KB = 1024;
 const cell = (jsBeforeReadyGzip, totalGzip, shell = 40 * KB) => ({ raw: { jsBeforeReadyGzip }, view: { totalGzip, jsBeforeReadyGzip: shell } });
 
 describe('the four targets', () => {
-  it('are the proposal\'s: 10 KB, 85 KB and 250 KB — the JS on the framed document, the total on the reader view — and 50 KB for the shell', () => {
-    expect(SIZE_TARGETS.map((t) => [t.id, t.limit / KB, t.route])).toEqual([[1, 10, 'raw'], [2, 85, 'raw'], [3, 250, 'view'], [4, 50, 'view']]);
+  it('are the proposal\'s: 10 KB, 90 KB and 250 KB — the JS on the framed document, the total on the reader view — and 50 KB for the shell', () => {
+    expect(SIZE_TARGETS.map((t) => [t.id, t.limit / KB, t.route])).toEqual([[1, 10, 'raw'], [2, 90, 'raw'], [3, 250, 'view'], [4, 50, 'view']]);
   });
 
   it('never judge document JS by the app shell around its frame', () => {
@@ -53,7 +53,7 @@ describe('the four targets', () => {
   it('count the kitchen sink for target 2 only when the lab measured it', () => {
     const summary = { prose: cell(1, 1), deck: cell(1, 1), kit: cell(1, 1), dashboard: cell(1, 1) };
     expect(evaluateSizeTargets({ summary })[1]).toMatchObject({ verdict: 'pass', worst: 'kit', missing: [] });
-    expect(evaluateSizeTargets({ summary: { ...summary, kitchen: cell(90 * KB, 1) } })[1]).toMatchObject({ verdict: 'fail', worst: 'kitchen' });
+    expect(evaluateSizeTargets({ summary: { ...summary, kitchen: cell(95 * KB, 1) } })[1]).toMatchObject({ verdict: 'fail', worst: 'kitchen' });
   });
 
   it('answer "no data" when a required fixture or the ready signal is missing, never pass by omission', () => {

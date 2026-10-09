@@ -252,12 +252,22 @@ export function placeImageInJsx(
 ): { source: string; path: string | null } {
   const unchanged = { source, path: null };
   if (!/^[A-Za-z0-9]{6,12}$/.test(imageId)) return unchanged;
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return unchanged;
   const id = options.nodeId && NODE_ID_RE.test(options.nodeId) ? ` id="${options.nodeId}"` : '';
-  const imgParsed = parseJsx(`<img src="ref:${imageId}" alt="" className="my-6 block w-full rounded-md"${id} />`);
-  const img = imgParsed.ok ? imgParsed.nodes.find((n): n is JsxElement => n.type === 'element') : undefined;
-  if (!img) return unchanged;
+  return placeBlockInJsx(source, `<img src="ref:${imageId}" alt="" className="my-6 block w-full rounded-md"${id} />`, anchor);
+}
+
+/** Insert an empty, identified Markdown region using the same placement rules as other blocks. */
+export function placeMarkdownInJsx(source: string, nodeId: string, anchor?: JsxInsertAnchor | null): { source: string; path: string | null } {
+  if (!NODE_ID_RE.test(nodeId)) return { source, path: null };
+  return placeBlockInJsx(source, `<Markdown id="${nodeId}">{""}</Markdown>`, anchor);
+}
+
+function placeBlockInJsx(source: string, markup: string, anchor?: JsxInsertAnchor | null): { source: string; path: string | null } {
+  const unchanged = { source, path: null };
+  const parsed = parseJsx(source), inserted = parseJsx(markup);
+  if (!parsed.ok || !inserted.ok) return unchanged;
+  const block = inserted.nodes.find((node): node is JsxElement => node.type === 'element');
+  if (!block) return unchanged;
   const roots = parsed.nodes;
 
   let at = anchor ? locateAnchor(roots, anchor) : null;
@@ -282,34 +292,32 @@ export function placeImageInJsx(
         const index = node.children.findLastIndex((c) => c.type === 'element' && c.tag === 'CardContent');
         if (index !== -1) {
           const content = node.children[index] as JsxElement;
-          content.children.push(img);
+          content.children.push(block);
           content.selfClosing = false;
           return { source: serializeJsx(roots), path: [...parts, index, content.children.length - 1].join('.') };
         }
       }
-      node.children.push(img);
+      node.children.push(block);
       node.selfClosing = false;
       return { source: serializeJsx(roots), path: [...parts, node.children.length - 1].join('.') };
     }
     const siblings = parts.length > 1 ? elementAt(roots, parts.slice(0, -1))?.children : roots;
     if (siblings) {
       const index = parts[parts.length - 1] + (side === 'after' ? 1 : 0);
-      siblings.splice(index, 0, img);
+      siblings.splice(index, 0, block);
       return { source: serializeJsx(roots), path: [...parts.slice(0, -1), index].join('.') };
     }
   }
 
-  // A plain <img> with a ref: src is exactly what the publish path already
-  // accepts, and it re-validates the whole body on save — so the structural
-  // insert is all that is owed here.
-  const containerIndex = roots.findIndex((n) => n.type === 'element' && !n.isComponent);
+  // With no selection, append inside a layout container, never inside prose.
+  const containerIndex = roots.findIndex((n) => n.type === 'element' && !n.isComponent && (block.tag === 'img' || (CONTAINER_TAGS.has(n.tag) && !isEditableTextHost(n))));
   const container = containerIndex === -1 ? null : (roots[containerIndex] as JsxElement);
   if (container) {
-    container.children.push(img);
+    container.children.push(block);
     container.selfClosing = false;
     return { source: serializeJsx(roots), path: `${containerIndex}.${container.children.length - 1}` };
   }
-  roots.push(img);
+  roots.push(block);
   return { source: serializeJsx(roots), path: String(roots.length - 1) };
 }
 

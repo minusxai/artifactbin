@@ -110,11 +110,14 @@ describe('buildIslands', () => {
     const bytes = closure([manifest['@mx/rt'], manifest['@mx/boot']]).reduce((n, url) => n + files[url].br, 0);
     // Internal sub-budget. esbuild tree-shakes across the whole build but splits by file, so the Solid
     // helpers any kit family uses land in the shared chunk that rt's closure includes; they load on every
-    // interactive page anyway. The owner's target 2 (≤ 85 KB before ready on interactive pages) is the
+    // interactive page anyway. The owner's target 2 (≤ 90 KB before ready on interactive pages) is the
     // real check, in scripts/build/size-targets.mjs.
     // boot grew by the page runtime's loader (lib/islands/page-runtime: the vendor map and the module import).
     // The framed document's runtime now also relays its URL values and app-path links to the app page.
     expect(bytes).toBeLessThanOrEqual(29_500);
+    for (const url of closure([manifest['@mx/rt'], manifest['@mx/boot']])) {
+      expect(readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).not.toContain('mx:markdown-block');
+    }
   });
 
   it('keeps comment target and saved-view parsing, event contracts and runtime class merging out of rt+boot', () => {
@@ -127,6 +130,7 @@ describe('buildIslands', () => {
       expect(all.some((input) => input.endsWith(name)), `${name} is in the build at all`).toBe(true);
       expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
     }
+    expect(modules.some(input => input.endsWith('story-runtime/frame-bridge/door.ts')), 'rt+boot needs the app origin, not the editor attachment door').toBe(false);
     // The compiled reader merges classes at compile time: no reader runtime chunk carries a class merger.
     for (const pkg of ['tailwind-merge', 'class-variance-authority', 'clsx']) {
       expect(modules.some((input) => input.includes(`node_modules/${pkg}/`)), pkg).toBe(false);
@@ -140,7 +144,9 @@ describe('buildIslands', () => {
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/comment-view-state.ts'))).toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/routes.ts'))).toBe(false);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
-    expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
+    // 81 KB since kit view state (Tabs, Accordion, Collapsible, Dialog) registers as comment state: one shared
+    // chunk for lib/islands/comment-state + lib/story-runtime/comment-state, ~0.7 KB brotli, beside those families.
+    expect(staticBytes).toBeLessThanOrEqual(81 * 1024);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/upload/control.tsx')), 'optional upload interactions load after mounting').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/fit-drawing.ts')), 'legacy drawing compatibility is lazy').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/data-placeholder.tsx')), 'missing-data UI loads only when needed').toBe(false);
@@ -168,7 +174,7 @@ describe('buildIslands', () => {
     // Attaching (comments, selection actions) loads the controller and the relay; the editor itself is behind them.
     const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     const carried = (urls) => urls.flatMap((url) => outputInputs[url] ?? []);
-    expect(carried(closure([editor])).some((input) => input.endsWith('story-runtime/island-controller.ts'))).toBe(true);
+    expect(carried(closure([editor])).some((input) => input.endsWith('islands/island-controller.ts'))).toBe(true);
     expect(carried(closure([editor])).some((input) => input.includes('node_modules/prosemirror-view/'))).toBe(false);
     expect(carried(editorFiles).some((input) => input.includes('node_modules/prosemirror-view/'))).toBe(true);
   });

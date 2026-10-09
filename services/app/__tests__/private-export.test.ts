@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
 
-import { mintExportKey } from '@/lib/serving';
+import { mintExportKey } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';

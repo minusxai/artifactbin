@@ -1,9 +1,7 @@
 import {join} from 'node:path';
 import type {Scalar} from '@artifactbin/contracts';
 import {inferColumns} from '@artifactbin/utils/shape';
-import {declarationsOf} from '../../app/lib/document/helmet';
-import {validateQueryValues} from '../../app/lib/dataflow/query-values';
-import {selectQueries} from '../../app/lib/dataflow/compiled-flow';
+import {declarationsOf,validateQueryValues,selectQueries} from '../../app/lib/cli-toolkit';
 import {parseDocument} from './document';
 import {parseResourceFile,readResourceSource} from './resource-file';
 import {readOptional,digest} from './files';

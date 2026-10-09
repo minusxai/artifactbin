@@ -21,6 +21,7 @@ Setup: [[ base ]]/getting-started.md. Reuse the skill or extract [[ base ]]/skil
 - Files: `afbin add <files> --json` assigns IDs. `afbin preview report.jsx` registers files and runs until Ctrl+C; never `preview && push`. Push separately; it validates/publishes.
 - Every body element has a persistent `id`: retain it when moving; never reuse it.
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
+- Use `<Markdown>` for long prose; keep headings, paragraphs and lists together. Use HTML for individually designed text.
 - No CDN scripts; use `<Helmet>` CSS and `<script>` (Solid/npm) for behaviour; exports mount by name.
 - Preserve its identity: keep `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork: copy and remove those five fields.
 - Copy: plain/short; preserve facts/caveats. [Copy guidance](references/copy.md).

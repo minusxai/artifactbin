@@ -5,7 +5,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { START_PLACEHOLDER_MARKUP } from '@/lib/serving';
+import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { request, useAppHarness } from './harness';
 

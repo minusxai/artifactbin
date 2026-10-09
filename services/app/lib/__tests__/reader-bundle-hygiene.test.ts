@@ -193,7 +193,7 @@ const ROUTE_ENTRIES = ['solid/main.tsx', 'solid/pages/Document.tsx', 'solid/page
  * server already did. The prepared page carries the rewritten sheet, so the
  * reader never parses CSS.
  */
-const ROUTE_FORBIDDEN_PACKAGES = ['acorn', 'acorn-jsx', 'typebox', 'css-tree', 'source-map-js', ...FORBIDDEN];
+const ROUTE_FORBIDDEN_PACKAGES = ['acorn', 'acorn-jsx', 'unified', 'remark-parse', 'remark-gfm', 'lexical', 'typebox', 'css-tree', 'source-map-js', ...FORBIDDEN];
 const ROUTE_FORBIDDEN_FILES = ['solid/editor/InPlaceEditor.tsx', 'solid/document/SocialPreviewEditor.tsx', 'lib/jsx/parse.ts'];
 
 describe('reader route bundle hygiene', () => {

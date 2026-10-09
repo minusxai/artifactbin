@@ -27,6 +27,7 @@ it.each([
   const [url, init] = vi.mocked(fetch).mock.calls[0];
   expect(url).toBe('/api/my/artifacts');
   expect(JSON.parse(init!.body as string)).toMatchObject({ template, visibility: 'private', parent_id: 'folder1' });
+  if (template === 'doc') expect(JSON.parse(init!.body as string).markup).toContain('<Markdown id="body"');
   expect(screen.queryByRole('menu', { name: 'Create menu' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Create' }));
   fireEvent.click(screen.getByRole('menuitem', { name: 'Artifact' }));

@@ -17,19 +17,18 @@
  *   opaque origin, so author JS cannot read the human UI's localStorage even
  *   though it is same-host. Verified live: reading localStorage throws.
  */
-import {agentDiscovery} from '@/lib/serving';
+import {agentDiscovery} from '@/lib/compiled-page/agent-discovery';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
 import { refusingUnservable } from '@/lib/artifacts/servable';
 import { canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';
-import { trackEvent } from '@/lib/platform';
+import { trackEvent, verifyExportKey } from '@/lib/platform';
 import { requestOrSessionActor } from '@/lib/accounts';
-import { verifyExportKey } from '@/lib/serving';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { ObjectUnavailable } from '@/lib/object-store';
 import { Readable } from 'node:stream';
-import { loadImage } from '@/lib/story/assets/image-store';
+import { loadImage } from '@/lib/object-store/image-store';
 import { serveStoredFile } from '@/lib/datasets/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store/pdf-store';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
@@ -37,16 +36,16 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/document/head';
 import { appendCspExtensions, assetsPath, buildDocumentCsp, markupCsp, mutatePath, queryPath } from '@/lib/compiled-page/styles';
-import { pagesRequestOf } from '@/lib/serving/pages-origin';
+import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { readUrlValues } from '@/lib/dataflow';
 import { displayTitle } from '@/lib/document/head';
-import { CARD_RENDER_GENERATION } from '@/lib/serving';
+import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
 import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
 import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/contract';
-import type { StorySurface } from '@/lib/compiled-page/story-fragment';
+import type { StorySurface } from '@/lib/story-runtime/story-fragment';
 import { compiledPageFor, domainFooter } from '@/lib/story/prepared';
 import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/story/prepared/prepared-page.server';
 import { documentStyleSheets } from '@/lib/compiled-page/styles';
@@ -155,7 +154,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       let img: Awaited<ReturnType<typeof loadImage>>;
       try {
         // `w=` is the width a `srcset` asked for — one of the widths publish
-        // stored, never a resize (lib/story/assets/image-store).
+        // stored, never a resize (lib/object-store/image-store).
         img = await loadImage(artifact, { width: new URL(request.url).searchParams.get('w') });
       } catch (error) {
         // The row promises bytes the store will not give: corruption or broken

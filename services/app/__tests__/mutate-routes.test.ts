@@ -24,7 +24,7 @@ import { GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/arti
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { setDatasetRowCap } from '@/lib/story/datasets/dataset-mutate';
+import { setDatasetRowCap } from '@/lib/artifacts/write/dataset-mutate';
 
 
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';

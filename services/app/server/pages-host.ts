@@ -1,6 +1,6 @@
 /**
  * EVERY DOCUMENT ON ITS OWN ORIGIN — the one place the app reads a pages hostname, a pages Origin or
- * the `afbin_pages` cookie (APP__PAGES_HOST, lib/serving/pages-origin).
+ * the `afbin_pages` cookie (APP__PAGES_HOST, lib/http/pages-origin).
  *
  * Mounted ahead of every other host boundary when the setting is on; with it off nothing here exists
  * and every request is answered as before. Three kinds of request are decided here:
@@ -31,7 +31,7 @@ import { attachActor, readCookie } from '@artifactbin/utils';
 import { ANONYMOUS } from '@artifactbin/contracts';
 import { endPagesSession, exchangePagesTicket, PAGES_COOKIE, pagesSessionOf } from '@/lib/accounts/pages-sessions';
 import { runWithRequest } from '@/lib/platform';
-import { idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_SESSION_PATH, pagesOriginFor, type PagesSite } from '@/lib/serving/pages-origin';
+import { idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_SESSION_PATH, pagesOriginFor, type PagesSite } from '@/lib/http/pages-origin';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */

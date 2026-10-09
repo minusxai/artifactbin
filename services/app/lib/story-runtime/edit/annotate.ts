@@ -1,4 +1,5 @@
-import { reviewStateFor, withReviewState } from '../review-state';
+import { clearPendingCommentState } from '../comment-state';
+import { restoreSavedView, withCommentState } from './comment-state-capture';
 'use client';
 
 import { COMMENT_PRESENTATION } from '../comment-presentation';
@@ -515,7 +516,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   /** Report a selection: stamp the node so the owner sees what they picked, tell the page. */
   const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire; captureRect?: AnnotationRect } = {}) => {
     const described = el ? describeCommentSelection(el, nodes) : null;
-    const selection = described ? withReviewState(doc, described) : null;
+    const selection = described ? withCommentState(doc, described) : null;
     if (selection && extra.range && (selection.tag !== 'For' || isTargetRange(selection.range))) selection.range = isTargetRange(selection.range) && !isTargetRange(extra.range) ? {...selection.range, range:extra.range} : extra.range;
     if(selection && extra.captureRect)selection.captureRect=extra.captureRect;
     captureHandoff = Boolean(selection && extra.captureRect && pick === 'area');
@@ -773,10 +774,10 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
         viewStateError = null;
         const pin = message.pins.find(p => p.id === message.openId);
         if (pin?.viewState) {
-          try { reviewStateFor(doc).restore(pin.viewState); }
+          try { restoreSavedView(doc, pin.viewState); }
           catch { viewStateError = { id: message.openId, message: 'The saved view could not be restored. The app may have changed.' }; }
         }
-      } else if (!message.openId) viewStateError = null;
+      } else if (!message.openId) { viewStateError = null; clearPendingCommentState(doc); }
       setPick(message.mode === 'off' || message.canComment === false ? null : message.pick ?? null);
       if (message.mode === 'off') selectedPath = null;
       else if (message.selectedPath !== undefined) selectedPath = message.selectedPath;

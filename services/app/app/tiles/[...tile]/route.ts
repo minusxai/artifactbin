@@ -4,7 +4,7 @@
  * only ever hit where nginx isn't in front — which is exactly why it exists:
  * the point-map basemap URL is root-relative and must work on a laptop too.
  */
-import { tileUpstreamUrl } from '@/lib/serving';
+import { tileUpstreamUrl } from '@/lib/viz/tiles';
 
 export async function GET(_request: Request, ctx: { params: Promise<{ tile: string | string[] }> }) {
   const { tile } = await ctx.params;

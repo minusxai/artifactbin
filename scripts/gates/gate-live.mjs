@@ -192,7 +192,7 @@ async function votesLeg() {
 /*
  * THE OWNER'S FRAMED WRITE and browser sharing control. The opaque-origin relay (mx:mutate through the page) is
  * gone: a document on its own origin posts to its own door with the pages session cookie
- * (lib/serving/pages-origin), owner or not. The same page proves the Sharing tab can make a dataset writable.
+ * (lib/http/pages-origin), owner or not. The same page proves the Sharing tab can make a dataset writable.
  */
 async function shareLeg() {
   const { run } = lane(check, 'share');

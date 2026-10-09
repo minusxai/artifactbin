@@ -8,7 +8,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
-import { describeSelection, selectionKindAt, ancestorCrumbs } from '../describe-selection';
+import { describeCommentSelection, describeSelection, selectionKindAt, ancestorCrumbs } from '../describe-selection';
+import { COMMENT_OWNER_ATTR, COMMENT_TARGET_ATTR } from '@/lib/story-ui/comment-target';
 import { gripTarget } from '../edit-chrome';
 
 const SRC = '<div id="runtime-source-root" className="p-8 max-w-2xl"><h1 className="text-3xl">Title</h1>'
@@ -47,6 +48,13 @@ describe('selectionKindAt', () => {
 });
 
 describe('describeSelection', () => {
+  it('refuses a stale rendered identity even when its positional path exists in the new source', () => {
+    const parsed = parseJsx('<div id="root"><p id="bug-10-report">Item 10 report</p><h3 id="bug-11-heading">11. Resolve from the hover preview</h3></div>');
+    if (!parsed.ok) throw new Error('fixture does not parse');
+    document.body.innerHTML = '<div data-mx-ast="0"><h3 data-mx-ast="0.0" data-mx-source-node-id="bug-11-heading">11. Resolve from the hover preview</h3></div>';
+    expect(describeSelection(document.querySelector('h3')!, parsed.nodes)).toBeNull();
+  });
+
   it('carries everything the parent chrome needs', () => {
     const at = mount();
     const sel = describeSelection(at('0.1.0'), nodes)!;
@@ -55,6 +63,18 @@ describe('describeSelection', () => {
     expect(sel.rect).toEqual({
       x: expect.any(Number), y: expect.any(Number), width: expect.any(Number), height: expect.any(Number),
     });
+  });
+
+  it('keeps keyed repeat DOM IDs separate from the verified source owner and comment target', () => {
+    const parsed = parseJsx('<For id="orders" each={$rows} keyBy="id"><p id="row-template">{$_row.name}</p></For>');
+    if (!parsed.ok) throw new Error('fixture does not parse');
+    document.body.innerHTML = '<div id="orders" data-mx-ast="0" data-mx-source-node-id="orders">'
+      + `<p id="mx-instance-%5B%22orders%22%2C%22row-template%22%5D" data-mx-ast="0.0" data-mx-source-node-id="row-template" ${COMMENT_OWNER_ATTR}="orders" ${COMMENT_TARGET_ATTR}='{"kind":"repeat","scopes":[{"nodeId":"orders","key":42}],"templateNodeId":"row-template"}'>Ada</p></div>`;
+    const selection = describeCommentSelection(document.querySelector('p')!, parsed.nodes);
+    expect(selection).toMatchObject({ tag: 'For', nodeId: 'orders', path: '0', range: {
+      v: 1, kind: 'target', target: { kind: 'repeat', scopes: [{ nodeId: 'orders', key: 42 }], templateNodeId: 'row-template' },
+    } });
+    expect(document.querySelector('p')!.id).toMatch(/^mx-instance-/);
   });
 
   it('reports the ancestor chain OUTERMOST first, skipping hosts, components and the ROOT', () => {

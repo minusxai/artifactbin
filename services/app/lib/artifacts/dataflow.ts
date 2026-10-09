@@ -1,9 +1,10 @@
-import { canReadArtifact, canWriteDataset, ownerScope, ownsArtifact, type ArtifactRow, type RoleActor, type Scope, type TokenActor, type WriteRefusal, writerFor } from './access';
+import { canReadArtifact, canWriteDataset, ownerScope, ownsArtifact, type ArtifactRow, type Scope, type WriteRefusal, writerFor } from './access';
+import type { RoleActor, TokenActor } from '@/lib/accounts/actors';
 import { getArtifact, getArtifactById, getArtifactByUser, getArtifactFor, getLinkReadableArtifact, refLoaderFor, refLoaderForUser } from './store';
-import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../sql/document-queries';
+import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
 import { artifactQuery } from './document';
 import { JOIN_RELATIONS } from '../accounts/relation-state';
-import { grantContext, grantsOf, grantsPermitRead } from '../datasets/policy/grants';
+import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import { storedMediaReferences } from '../datasets/media-references';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
 import type { DataflowState } from '@/lib/dataflow';
@@ -31,19 +32,18 @@ import { bindMutationRequest } from '@/lib/dataflow/mutation-request';
 import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/dataflow/placement';
 import { readerZone, VIEWER, VIEWER_ID } from '@/lib/dataflow/builtins';
 import type { MutationRequest } from '@/lib/dataflow';
-import { schemaLoaderFor } from '@/lib/story/data/data-checks';
-import { mutationPolicy } from '@/lib/datasets/policy';
-import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
+import { schemaLoaderFor, type ServerRef, type ServerRefLoader } from '@/lib/datasets/schema-loader';
+import { mutationPolicy } from '@/lib/artifacts/dataset-policy';
+import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
 import { runMutation } from '@/lib/sql/engine';
 import { sqlExtensions } from '@/lib/sql/extensions';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/dataflow/local-state';
 import { localTableOverrides } from '@/lib/dataflow/local-tables';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
 import { storedRowStats } from '@/lib/datasets/dataset-store';
-import { childrenTableFor, CHILDREN_COLUMNS } from '@/lib/workspace/folders';
+import { childrenTableFor, CHILDREN_COLUMNS } from './placement';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import { checkDocumentData, type ServerRef, type ServerRefLoader } from '@/lib/story/data/data-checks';
 
 export function refLoaderForActor(actor: TokenActor): ServerRefLoader {
   return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId);
@@ -283,29 +283,6 @@ async function findDependentsScoped(scope: Scope, refId: string): Promise<Artifa
 
 export function findDependentsFor(actor: TokenActor, refId: string): Promise<ArtifactRow[]> {
   return findDependentsScoped(ownerScope(actor), refId);
-}
-
-/**
- * After a dataset/viz refresh: re-run reference validation for every dependent
- * against the NEW content. Warnings, never blocks: a data refresh
- * can't be stopped by a stale chart.
- */
-export async function refreshWarningsFor(actor: TokenActor, updated: ArtifactRow): Promise<Array<{ id: string; title: string | null; details: string[] }>> {
-  if (updated.format !== 'dataset' && updated.format !== 'viz') return [];
-  const dependents = await findDependentsFor(actor, updated.id);
-  if (dependents.length === 0) return [];
-  const base = refLoaderForActor(actor);
-  const load: ServerRefLoader = async (id) => (id === updated.id ? rowToResolvedRef(updated) : base(id));
-  const warnings: Array<{ id: string; title: string | null; details: string[] }> = [];
-  for (const dep of dependents) {
-    if (!dep.source) continue;
-    // The SAME checks the publish door runs (refs, SQL dry run, chart bindings
-    // against query columns) — so "which dependents broke" is answered by the
-    // rule that admitted them.
-    const checked = await checkDocumentData(dep.source, load);
-    if (!checked.ok) warnings.push({ id: dep.id, title: dep.title, details: checked.details });
-  }
-  return warnings;
 }
 
 /**

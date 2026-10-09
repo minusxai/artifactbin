@@ -2,7 +2,7 @@ import {timingSafeEqual} from 'node:crypto';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {INTERNAL_SERVICE_SECRET} from '@/lib/platform';
 import {getDb} from '@/lib/platform';
-import {membershipInbox} from '@/lib/accounts';
+import { membershipInbox } from '@/lib/artifacts';
 import {json,readJson} from '@/lib/http';
 export async function POST(request:Request){
  const supplied=Buffer.from(request.headers.get(SERVICE_AUTH_HEADER)??''),expected=Buffer.from(INTERNAL_SERVICE_SECRET??'');

@@ -14,7 +14,7 @@ import {
   updateSharingFor,
 } from '@/lib/artifacts';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { request, useAppHarness } from './harness';
 useAppHarness();

@@ -1,5 +1,5 @@
 import { artifactPwaEnabled } from './artifact-pwa.server';
-import { membershipState } from '@/lib/accounts/membership';
+import { membershipState } from '@/lib/artifacts/membership/membership';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
@@ -11,7 +11,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * ONE answer for both doors: the JSON route (client navigation,
  * app/api/page/artifact/[id]) and the app page (server/app), which also draws
  * the document's frame — the document itself is only ever rendered on its own
- * origin (lib/serving/pages-origin, app/a/[id]/raw), never inside the app page.
+ * origin (lib/http/pages-origin, app/a/[id]/raw), never inside the app page.
  *
  * A DOCUMENT is served from its prepared page (lib/story/prepared/prepared-page.server):
  * the reader payload carries no source, no document graph and no raw
@@ -21,33 +21,31 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
 import { archivedVersionFor, servedRow } from '@/lib/artifacts/archived-version';
 import { UnservableDocument } from '@/lib/artifacts/servable';
 import { countOpenAnnotations } from '@/lib/annotations/store';
-import { canReadArtifact } from '@/lib/artifacts/access';
+import { canReadArtifact, roleFor } from '@/lib/artifacts/access';
 import { getArtifactFor, getArtifactById } from '@/lib/artifacts/store';
 import { folderPageFor } from '@/lib/workspace/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { verifyExportKey } from './export-read-key';
+import { verifyExportKey } from '@/lib/platform/export-read-key';
 import { baseUrl, json } from '@/lib/http/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform/ids';
 import { count, has } from '@/lib/accounts/relations';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import { ARTIFACT_FORMATS, type ArtifactFormat } from '@artifactbin/contracts';
+import { ARTIFACT_FORMATS, CARD_RENDER_GENERATION, isStartPlaceholder, type ArtifactFormat } from '@artifactbin/contracts';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { getUserById, ownerUsername } from '@/lib/accounts/users';
 import { avatarUrl } from '@/lib/accounts/avatars';
-import { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, roleFor, sessionActor } from '@/lib/accounts/viewer';
+import { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, sessionActor } from '@/lib/accounts/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import { canAnnotate, canEdit } from '@/lib/artifacts/share-roles';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/story/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { firstHeadingTitle } from '@/lib/document/head';
-import { isStartPlaceholder } from './start-placeholder';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { CARD_RENDER_GENERATION } from './og-card';
 import { issuePagesTicket } from '@/lib/accounts/pages-sessions';
-import { pagesOriginFor, pagesSessionUrl, type PagesSite } from './pages-origin';
+import { pagesOriginFor, pagesSessionUrl, type PagesSite } from '../http/pages-origin';
 import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';
 

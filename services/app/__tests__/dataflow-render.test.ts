@@ -10,11 +10,11 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 
 
-import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
 const harness = useAppHarness();
 

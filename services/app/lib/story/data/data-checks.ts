@@ -15,13 +15,12 @@ import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { isQueryFailure, runMutation } from '@/lib/sql/engine';
 import { sqlExtensions } from '@/lib/sql/extensions';
 import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
-import { datasetSqlParams } from '@/lib/dataflow/sql-parameters';
 import { importedTables } from '@/lib/datasets/catalog';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import { schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { refName, isEmptyDataflow } from '@/lib/dataflow/dataflow';
 import { dataflowOf, splitHelmet } from '../../document/helmet';
-import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader, type ResolvedRef } from '@/lib/dataflow/refs';
-import { compileDataflow, prepareCompile, type ImportSource, type SchemaLoader } from '@/lib/dataflow/compile-dataflow';
+import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader } from '@/lib/dataflow/refs';
+import { compileDataflow, prepareCompile } from '@/lib/dataflow/compile-dataflow';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 import { bindParams, bindTypes, importRef, mutationParams, mutationReads, valueTypes } from '@/lib/dataflow/compiled-flow';
 import { getTemplate, VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
@@ -31,30 +30,6 @@ type DataCheckResult =
   | { ok: true; refs: Array<{ id: string; kind: string }>; compiled: CompiledDataflow | null }
   | { ok: false; error: 'invalid_refs' | 'invalid_sql'; details: string[] };
 
-/**
- * A reference as the server resolves it: the data language's `ResolvedRef` plus the dataset's catalog,
- * which only these publish checks read (to compile an import against its tables). Kept here, above
- * lib/dataflow, so the data language never depends on the dataset module.
- */
-export type ServerRef = ResolvedRef & { catalog?: DatasetCatalog };
-/** What the server's ref loaders answer; one is also a dataflow `RefLoader`. */
-export type ServerRefLoader = (id: string) => Promise<ServerRef | null>;
-
-/** What an artifact is to the compiler: a dataset's tables, a folder's listing, or a database to run inside. */
-function schemaSourceOf(r: ServerRef | null): ImportSource | null {
-  if (!r) return null;
-  if (r.format === 'folder') return { kind: 'folder', tables: [{ name: 'rows', columns: r.columns ?? [] }] };
-  if (r.format !== 'dataset') return null;
-  if (r.catalog?.kind === 'postgres') {
-    const query = r.query;
-    return { kind: 'postgres', tables: [], ...(query ? { probe: async (sql, params, types) => ({ columns: (await query(sql, params, types)).columns, params: datasetSqlParams(sql) }) } : {}) };
-  }
-  const query = r.query;
-  return { kind: 'dataset', ...(query ? { probe: async (sql, params, types) => ({ columns: (await query(sql, params, types)).columns, params: datasetSqlParams(sql) }) } : {}), tables: r.catalog ? importedTables(r.catalog).map((t) => ({ name: t.name, columns: t.columns })) : [{ name: 'rows', columns: r.columns ?? [] }] };
-}
-
-/** The compiler's loader over a ref loader. */
-export const schemaLoaderFor = (load: ServerRefLoader): SchemaLoader => async (ref) => schemaSourceOf(await load(ref));
 
 export async function checkDocumentData(source: string, load: ServerRefLoader): Promise<DataCheckResult> {
   const checked = await validateRefs(source, load);

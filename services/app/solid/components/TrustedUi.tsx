@@ -7,9 +7,9 @@
  * portal is where solid/components/Popover, Tooltip and MobileSheet mount (lib/islands/trusted-portal).
  */
 import { createEffect, onCleanup, onMount, type Accessor, type JSX } from 'solid-js';
-import { openOverlay, overlays } from '@/lib/serving/trusted-ui-styles';
+import { openOverlay, overlays } from '@/lib/islands/trusted-ui-styles';
 import { Portal } from 'solid-js/web';
-import { createTrustedOverlayHost, type TrustedLayer } from '@/lib/story-runtime/trusted-overlay-host';
+import { createTrustedOverlayHost, type TrustedLayer } from '@/lib/islands/trusted-overlay-host';
 
 export function TrustedUi(props: { overlay?: boolean; layer?: TrustedLayer; children: JSX.Element }): JSX.Element {
   const holder = document.createElement('div');

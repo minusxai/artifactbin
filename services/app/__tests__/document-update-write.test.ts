@@ -1,5 +1,5 @@
 import {createUser} from '@/lib/accounts';
-import {prepareDocumentAuthoringContext} from '@/lib/artifacts/write/document-authoring-context';
+import {prepareDocumentAuthoringContext} from '@/lib/story/publish';
 import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/document/document-update-history';
 import {afterEach,expect,it,vi} from 'vitest';
 import {useAppHarness,request,settleBackgroundWrites} from './harness';

@@ -10,7 +10,7 @@ import { agentCookie, useAppHarness, setSession } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';

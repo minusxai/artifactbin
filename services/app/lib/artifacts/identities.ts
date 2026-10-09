@@ -1,5 +1,5 @@
 /** Shared namespace for reserved and normally created identities. */
-import type { TokenActor } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {getDb,type Queryable} from '../platform/db';
 import {generateFileId} from '../platform/ids';
 import {CreationReplay} from './creation-ledger';

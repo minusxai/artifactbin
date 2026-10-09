@@ -1,15 +1,15 @@
 import {services} from '../platform/services';
 import {managedTerminalView,managedTerminalInput,stopManagedTerminal} from './managed-terminal';
 import {managedRunRosterStatus} from './managed-status';
-import {externalHostedProofHash} from './hosted-comments';
+import {externalHostedProofHash} from './hosted-proof';
 import {hostedStatusSnapshot,refreshHostedStatus,hostedRemoteAgent} from './hosted-interface';
 import {isTerminalFeedback} from './terminal-input';
 import { getArtifactById } from '../artifacts/store';
 import { canReadArtifact } from '../artifacts/access';
 import {createHash,randomUUID} from 'node:crypto';
 import {getDb,type Queryable} from '../platform/db';
-import {sessionMentions} from '../annotations/session-mentions';
-import {channelForAnnotations} from '../story/realtime/live';
+import {sessionMentions} from './session-mentions';
+import {annotationsChannel} from '@artifactbin/contracts';
 import {RemoteRegistry,RemoteError,remoteSessions,type Registration} from './registry';
 import {REMOTE_WORK_LIMIT,REMOTE_WORK_BYTES,remoteColor} from '../../../contracts/src/remote';
 import type {RemoteSessionInfo,RemoteExchange,RemoteWork,RemoteWorkPhase} from '../../../contracts/src/remote';
@@ -255,6 +255,6 @@ export class RemoteAgents {
   agent.info.activity=busy?'working':receipt.phase==='blocked'?'blocked':'listening';await this.save(tx,agent);
   return {label:agent.info.name,sessionId:agent.id,color:agent.info.color,harness:agent.info.harness};
  }
- private async notify(tx:Queryable,artifactId:string,threadId:string){await tx.query('SELECT pg_notify($1,$2)',[channelForAnnotations(artifactId),threadId]);}
+ private async notify(tx:Queryable,artifactId:string,threadId:string){await tx.query('SELECT pg_notify($1,$2)',[annotationsChannel(artifactId),threadId]);}
 }
 export const remoteAgents=new RemoteAgents();

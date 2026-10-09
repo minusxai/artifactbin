@@ -1,10 +1,6 @@
 /** Production annotation wires over local state; anchors are resolved against today's file on every read. */
 import {randomUUID} from 'node:crypto';
-import type {AnnotationWire,AnnotationAuthor} from '../../../app/lib/annotations/store';
-import {nodeIndex} from '../../../app/lib/document/node-ids';
-import {sourcePathToBodyPath} from '../../../app/lib/document/edit-compose';
-import {canonicalQuote,parseAnnotationRange} from '../../../app/lib/document/annotation-range';
-import {BackendRequestError} from '../../../app/lib/artifact-backend/errors';
+import {type AnnotationWire,type AnnotationAuthor,nodeIndex,sourcePathToBodyPath,canonicalQuote,parseAnnotationRange,BackendRequestError} from '../../../app/lib/cli-toolkit';
 import type {State} from '../state';
 import type {PreviewComment} from './comments';
 

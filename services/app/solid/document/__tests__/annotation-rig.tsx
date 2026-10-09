@@ -171,6 +171,7 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
     const ui = () => <AnnotationLayer
       id={p().id ?? 'doc1'}
       backend={p().backend ?? httpBackend(p().id ?? 'doc1')}
+      canDeleteAny={p().canDeleteAny ?? true}
       runtimeRef={p().runtimeRef ?? runtime.ref}
       sessionNonce={p().sessionNonce === undefined ? NONCE : p().sessionNonce}
       railOpen={p().railOpen ?? false}

@@ -48,11 +48,21 @@ import {
 } from '@/lib/data/story/typography';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { selectionToolbarPlan } from '@/solid/lib/selection-toolbar';
-import type { StoryEditSelection } from '@/lib/story-runtime/contract';
+import type { MarkdownBlockKind, MarkdownTableAction, StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { ComposableFormatEdit } from '@/lib/document/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
+import { SelectMenu } from '@/solid/components/SelectMenu';
 import { Tooltip } from '@/solid/components/Tooltip';
 import { nodeName } from '@/lib/story-ui/node-names';
+
+const MARKDOWN_BLOCK_OPTIONS: Array<{ value: MarkdownBlockKind; label: string }> = [
+  { value: 'paragraph', label: 'Paragraph' },
+  { value: 'h1', label: 'Heading 1' }, { value: 'h2', label: 'Heading 2' }, { value: 'h3', label: 'Heading 3' },
+  { value: 'h4', label: 'Heading 4' }, { value: 'h5', label: 'Heading 5' }, { value: 'h6', label: 'Heading 6' },
+  { value: 'bullet', label: 'Bullet list' }, { value: 'number', label: 'Numbered list' },
+  { value: 'check', label: 'Checklist' }, { value: 'quote', label: 'Quote' }, { value: 'code', label: 'Code block' },
+  { value: 'hr', label: 'Horizontal rule' }, { value: 'table', label: 'Table' },
+];
 
 interface ImageControls {
   /** The image's alt text; null when it has none (the button then hints). */
@@ -76,6 +86,8 @@ interface StoryFormatToolbarProps {
   selection: StoryEditSelection | null;
   onApply: (path: string, edit: ComposableFormatEdit) => void;
   onApplyInline?: (tag: 'strong' | 'em' | 'u') => void;
+  onMarkdownBlock?: (block: MarkdownBlockKind) => void;
+  onMarkdownTable?: (action: MarkdownTableAction) => void;
   onAutoHeight?: () => void;
   historyControls?: JSX.Element;
   insertionControls?: JSX.Element;
@@ -198,12 +210,36 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
               </Show>
 
               <Show when={plan().text}>
+                <Show when={selection().tag !== 'Markdown'}>
                 <Chip label="Decrease font size" onClick={() => apply(stepSizeClass(cls(), -1))}><AArrowDown size={14} /></Chip>
                 <Chip label="Increase font size" onClick={() => apply(stepSizeClass(cls(), 1))}><AArrowUp size={14} /></Chip>
+                </Show>
                 <Chip label="Toggle bold" on={selection().inline?.strong ?? currentChoice(cls(), 'weight') === 'font-bold'} onClick={() => toggle('weight', 'font-bold')}><Bold size={14} /></Chip>
                 <Chip label="Toggle italic" on={selection().inline?.em ?? currentChoice(cls(), 'fontStyle') === 'italic'} onClick={() => toggle('fontStyle', 'italic')}><Italic size={14} /></Chip>
-                <Chip label="Toggle underline" on={selection().inline?.u ?? currentChoice(cls(), 'decoration') === 'underline'} onClick={() => toggle('decoration', 'underline')}><Underline size={14} /></Chip>
+                <Show when={selection().tag !== 'Markdown'}><Chip label="Toggle underline" on={selection().inline?.u ?? currentChoice(cls(), 'decoration') === 'underline'} onClick={() => toggle('decoration', 'underline')}><Underline size={14} /></Chip></Show>
+                <Show when={selection().tag === 'Markdown' && props.onMarkdownBlock}>
+                  <SelectMenu ariaLabel="Markdown block style" value={selection().markdownBlock ?? ''}
+                    placeholder={selection().markdownBlock === 'mixed' ? 'Mixed styles' : 'Text style'}
+                    options={MARKDOWN_BLOCK_OPTIONS} disabled={selection().markdownBlock === 'table'}
+                    onChange={value => props.onMarkdownBlock?.(value as MarkdownBlockKind)} />
+                </Show>
                 <span class="mx-0.5 h-4 w-px bg-edge" />
+              </Show>
+
+              <Show when={selection().markdownBlock === 'table' && props.onMarkdownTable}>
+                <div aria-label="Table controls" class="flex flex-wrap gap-1">
+                  <For each={[
+                    ['row-before', 'Add row above'], ['row-after', 'Add row below'],
+                    ['column-before', 'Add column left'], ['column-after', 'Add column right'],
+                    ['delete-row', 'Delete row'], ['delete-column', 'Delete column'], ['delete-table', 'Delete table'],
+                  ] as const}>{([action, label]) => <button type="button" aria-label={label} onMouseDown={keepFocus}
+                    onClick={() => props.onMarkdownTable?.(action)} class="rounded border border-edge px-2 py-1 text-xs hover:bg-surface">{label}</button>}</For>
+                </div>
+              </Show>
+
+              <Show when={selection().tag === 'Markdown' && selection().mode === 'block'}>
+                <Chip label="Decrease font size" onClick={() => apply(stepSizeClass(cls(), -1))}><AArrowDown size={14} /></Chip>
+                <Chip label="Increase font size" onClick={() => apply(stepSizeClass(cls(), 1))}><AArrowUp size={14} /></Chip>
               </Show>
 
               <Show when={plan().image && props.image}>

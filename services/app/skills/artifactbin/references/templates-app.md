@@ -40,10 +40,10 @@ Pick ONE composition and build that. Publish with `template: app`.
   local state. A stored write is a `<Mutation>` over an imported dataset with
   `expectedAffected`, run by `<Button run="$name">`. Define the transitions
   before the screens.
-- Interactive wireframes and apps for design review register the state that
-  determines the view with `reviewState` from `page`; native comments then
-  restore screens, tabs and dialogs. Start with one view-state object at app
-  lifetime; Values are optional. Follow [saved comment views](review-state.md).
+- Interactive wireframes and apps for design review keep the state that
+  determines the view in Values, kit controls or named signals
+  (`createSignal(initial, { name })`); native comments then restore screens,
+  tabs and dialogs. Follow [saved comment views](review-state.md).
 - A page several people use is built from [apps.md](apps.md): accounts,
   grants and mentions, never typed names; `User` and `SignIn` when identity
   matters. A local prototype with page-local state is a different thing from

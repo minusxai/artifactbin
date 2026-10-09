@@ -7,7 +7,7 @@ import {datasetSqlParams} from '@/lib/dataflow/sql-parameters';
 import {queryPostgres} from './postgres';
 import {DatasetError} from './errors';
 import {resolveDatasetConnection} from './secrets';
-import type {RoleActor} from '@/lib/artifacts';
+import type { RoleActor } from '@/lib/accounts/actors';
 import {storedTables} from './catalog';
 import type {DatasetCatalog} from './types';
 import {getDb} from '@/lib/platform/db';

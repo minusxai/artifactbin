@@ -1,17 +1,16 @@
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility, writerFor } from './access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type Visibility } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
-import { commitDocumentUpdate } from './write/document-update-write';
+import { artifactChannel } from '@artifactbin/contracts';
+import { commitDocumentUpdate, openAnnotationsSql } from './write/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import type { ProseOperation } from '../document';
 import type { DocumentOperation } from '@artifactbin/contracts';
-import { createDocumentGraph } from '../document/document-graph';
-import { prepareClientDocumentPublication } from '../document/document-update-client';
-import { prepareDocumentAuthoringContext } from './write/document-authoring-context';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '../accounts/relation-state';
-import { documentMentions } from '../annotations/saved-mentions';
-import { grantsOf, grantsPermitRead } from '../datasets/policy/grants';
+import { documentMentions } from './membership/document-mentions';
+import { grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import { claimArtifactId } from './identities';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
 import { validateUserContent, retainUserScope, resolveUserColumnScope } from '@/lib/datasets/user-fields';
@@ -19,15 +18,14 @@ import { userKindOf } from '@/lib/accounts/user-kinds';
 import { sourceChanges } from '../document/source-changes';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState } from './state';
-import { channelFor } from '../story/realtime/live';
 import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from '../document/annotation-edits';
-import type { AnnotationOperation } from '../editor-v2/annotation-map';
+import type { AnnotationOperation } from '../editor-engine/annotation-map';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { claimPendingDatasetSecret, resolveDatasetConnection } from '@/lib/datasets/secrets';
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '../platform/analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from '../platform/config';
-import { assetByteQuotaExceeded } from '../story/assets/asset-quota';
+import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from '../platform/db';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { defaultDatasetGrants } from '@artifactbin/utils';
@@ -41,11 +39,11 @@ import { newEditId } from '../document/splice';
 import type { StringEdit } from '../document';
 import { nodeIndex, stampNodeIds } from '../document/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } from '@/lib/document/server';
-import { warmPreparedPage } from '../story/prepared/prepared-page.server';
+import { emitHeadCommitted } from './after-commit';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/data-syntax';
 import { servableDocument } from './servable';
-import { ancestorsForMove, notifyParent, parentOf } from '@/lib/workspace/folders';
-import type { ServerRef, ServerRefLoader } from '@/lib/story/data/data-checks';
+import { ancestorsForMove, notifyParent, parentOf } from './placement';
+import type { ServerRef, ServerRefLoader } from '@/lib/datasets/schema-loader';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 import { type ShareEntry, type ShareRole } from './share-roles';
 
@@ -152,7 +150,7 @@ export async function createArtifact(
    *                resetting the role would be incoherent.
    *   datasetPolicy— the stored write policy, copied WITH the dataset it
    *                governs (a fork of an app copies both). Every other route to
-   *                a policy is lib/datasets/policy `setDatasetPolicy`, which
+   *                a policy is lib/artifacts/dataset-policy `setDatasetPolicy`, which
    *                needs the row to exist first; a copy has no "first".
    *   tx         — run inside the caller's OPEN transaction instead of opening
    *                one. The caller then owns the post-commit effects
@@ -196,8 +194,8 @@ export async function createArtifact(
 /** What a creation says to the rest of the system, AFTER its transaction committed. */
 export async function afterCreated(row: ArtifactRow, userId: string | null): Promise<void> {
   void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
-  // The first reader of a new document finds it prepared (lib/story/prepared/prepared-page.server).
-  if (row.format === 'markup') warmPreparedPage(row.id);
+  // The first reader of a new document finds it prepared (story's listener, lib/story/prepared/commit-hooks.server).
+  if (row.format === 'markup') emitHeadCommitted(row.id);
   // Its diagrams are drawn to stored SVG in the background; nothing waits on it.
   void queueMermaidHarvest(row);
   // A child arriving wakes the folder it landed in, so an open listing
@@ -403,8 +401,7 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
      VALUES ($1, $2, 0, $3, $4, 0, $5, $6, $7, $8::jsonb)`,
     [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, changes?JSON.stringify(changes):null],
   );
-  // Lowercased to match channelFor (lib/story/realtime/live.ts) — see the note there.
-  await tx.query('SELECT pg_notify($1, $2)', [`artifact_${after.id.toLowerCase()}`, after.edit_id]);
+  await tx.query('SELECT pg_notify($1, $2)', [artifactChannel(after.id), after.edit_id]);
 }
 
 /**
@@ -425,23 +422,6 @@ export async function commitNormalizedMarkup(
  const committed=await commitDocumentUpdate(tx,actor,scope,current.id,normalized.update);
  if(!committed?.applied)throw new Error('artifact changed after identity preparation');
  return committed.row;
-}
-
-/** Administrative authoring uses the same client compiler and commit contract. */
-export async function publishMarkupForArtifact(current:ArtifactRow,source:string,metaOverride:Record<string,unknown>=current.meta):Promise<Response|PreparedMarkupWrite>{
- const db=await getDb();
- const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
- const identity=stampNodeIds(source,{previousSource:current.source,reservedIds:reserved.rows.map(row=>row.source_id)});
- try{
-  const document=current.document?.kind==='graph'?current.document:createDocumentGraph(current.source??'',current.version);
-  const metadata={theme:(metaOverride.theme??null) as string|null,template:(metaOverride.template??null) as string|null,colorMode:(metaOverride.colorMode??null) as 'light'|'dark'|null};
-  const update=await prepareClientDocumentPublication({...current,document},{source:identity.source,metadata,whole:true},async context=>{
-   const response=await prepareDocumentAuthoringContext(writerFor(current),current.id,{source:context});
-   if(!response.ok)throw response;
-   return response.json();
-  });
-  return {source:identity.source,meta:metaOverride,ids:identity.ids,update};
- }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[`${error}`]},400);}
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
@@ -863,7 +843,7 @@ function settleCommittedHead(id: string, version: number): void {
       if (!head) return;
       const row = await storeCompiledRecord(db, head);
       await queueMermaidHarvest(row);
-      if (row.format === 'markup') warmPreparedPage(row.id, row);
+      if (row.format === 'markup') emitHeadCommitted(row.id, row);
     } catch (error) {
       console.warn('[edits] could not settle the committed head', id, version, (error as Error).message);
     }
@@ -934,7 +914,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     }
     const row=await storeCompiledRecord(db,committed.row);
     // After the commit, off the write's path: the new head is prepared for its readers, and its diagrams harvested.
-    if(row.format==='markup')warmPreparedPage(row.id);
+    if(row.format==='markup')emitHeadCommitted(row.id);
     void queueMermaidHarvest(row);
     return {applied:true,row};
   }
@@ -1131,7 +1111,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
     if(opts.dryRun)return {...current,...patch,meta};
     const updated = (await artifactQuery<ArtifactRow>(tx,`UPDATE artifacts SET title=$3,description=$4,meta=$5::jsonb,
       visibility=$6,access=$7,ancestor_ids=$8::text[],link_role=$9,updated_at=now(),actor_user_id=$10,actor_token_id=$11
-      WHERE id=$1 AND ${scope.where('$2')} RETURNING *`, [id,scope.val,
+      WHERE id=$1 AND ${scope.where('$2')} RETURNING *,${openAnnotationsSql('artifacts.id')} AS open_annotations`, [id,scope.val,
       patch.title === undefined ? current.title : patch.title?.trim() ?? null,
       patch.description === undefined ? current.description : patch.description,
       JSON.stringify(meta),patch.visibility ?? current.visibility,patch.access ?? current.access,
@@ -1158,7 +1138,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
   if (result && !isVersionConflict(result) && !opts.dryRun) {
     if (moved) {await wakeParents(moved);sayMoved(actor,id,moved);}
     else await notifyParent(parentOf(result));
-    if (patch.access || patch.visibility || patch.link_role || patch.shares || patch.policy!==undefined) await db.query('SELECT pg_notify($1,$2)',[channelFor(id),result.edit_id]);
+    if (patch.access || patch.visibility || patch.link_role || patch.shares || patch.policy!==undefined) await db.query('SELECT pg_notify($1,$2)',[artifactChannel(id),result.edit_id]);
   }
   return result;
 }

@@ -6,6 +6,7 @@ export { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, EVENT
 export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb } from './db';
 export type { Db } from './db';
 export { emit, envelope } from './events';
+export { mintExportKey, verifyExportKey } from './export-read-key';
 export type { EventObject, EventSubject } from './events';
 export { FILE_ID_LENGTH, ID_RE, generateFileId, generateInternalId, generateTokenId } from './ids';
 export { runWithRequest } from './request-context';

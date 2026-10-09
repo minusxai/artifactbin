@@ -14,8 +14,8 @@
  *                       the source is left alone.
  */
 import { createSignal, type Accessor } from 'solid-js';
-import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
-import { SourceHistory, type HistoryResult } from '@/lib/editor-v2/history';
+import type { EditorSelectionChange } from '@/lib/editor-engine/bookmark';
+import { SourceHistory, type HistoryResult } from '@/lib/editor-engine/history';
 import type { PendingChange } from './create-live-edits';
 
 type HistoryOutcome = HistoryResult | { ok: false; reason: 'unavailable'; message: string };

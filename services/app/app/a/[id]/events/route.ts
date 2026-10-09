@@ -13,14 +13,13 @@
  * wakeup converges on the next event with no cursor bookkeeping.
  */
 import { trackEvent } from '@/lib/platform';
-import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, datasetsForDocument, getArtifactById, isOwner, roleFor } from '@/lib/artifacts';
 import { isDocumentFormat } from '@/lib/story/document/input';
-import { isOwner, roleFor, sessionActor } from '@/lib/accounts';
 import { canAnnotate } from '@/lib/artifacts';
-import { authorHandle } from '@/lib/accounts';
+import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
-import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story/realtime/live';
-import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
+import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/story/realtime/live';
+import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import { changedSince } from '@/lib/story/prepared/served-results.server';
 import { LIVE_KEEPALIVE_EVENT, LIVE_KEEPALIVE_MS } from '@/lib/http';
 
@@ -58,7 +57,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * THE DOCUMENT'S DATASETS, WATCHED BESIDE THE DOCUMENT ITSELF.
    *
    * A dataset write is a version on the DATASET's row and a NOTIFY on the
-   * DATASET's channel (lib/story/datasets/dataset-mutate) — nothing about the document
+   * DATASET's channel (lib/artifacts/write/dataset-mutate) — nothing about the document
    * changes, so the stream above would never mention it and every chart built
    * on that data would sit stale until someone reloaded. So this stream also
    * listens on each dataset the document reads or writes, and forwards a small

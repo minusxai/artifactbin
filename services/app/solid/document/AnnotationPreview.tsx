@@ -5,12 +5,13 @@
  * Google-Docs-shaped attribution: a person is their face (picture, else their initial on the colour
  * their ACCOUNT id picks), an agent is its product mark. The floating marks are one identity per
  * open thread at its anchor's y over the document's right edge; one widens into a preview on hover
- * or focus and opens the rail on click, so annotations stay ambient without becoming a second
- * reading column.
+ * or focus, where it can open the rail or resolve an open thread without leaving the document.
  */
 import { createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
-import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { StoryEditRect } from '@/lib/story-runtime/contract';
+import Check from 'lucide-solid/icons/check';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
@@ -174,9 +175,10 @@ const ACTIVE_PHASES = ['queued', 'dispatching', 'delivered', 'acknowledged'];
 /** A quiet identity mark until intent is shown; then enough context to choose. */
 export function AnnotationPreview(props: {
   row: AnnotationWire; top: number; remaining?: number; hovered: boolean;
+  resolving?: boolean; resolveError?: string;
   /** Room taken on the right (the edit panel): the mark sits beside it, never under it. */
   rightInset?: number;
-  onOpen: () => void; onHover: (id: string | null) => void;
+  onOpen: () => void; onHover: (id: string | null) => void; onResolve?: () => void;
 }): JSX.Element {
   const [repliesExpanded, setRepliesExpanded] = createSignal(false);
   const [continuation, setContinuation] = createSignal<HTMLButtonElement>();
@@ -247,9 +249,20 @@ export function AnnotationPreview(props: {
       <span class="pointer-events-none relative z-10 flex h-full animate-[rise_.12s_ease-out] flex-col">
         <span class="flex items-center justify-between gap-2">
           <AuthorIdentity author={first()!.author} />
-          <CommentTimestamp iso={first()!.created_at} class="font-mono text-[10px] text-faint" />
+          <span class="pointer-events-auto relative z-10 flex items-center gap-2">
+            <CommentTimestamp iso={first()!.created_at} class="font-mono text-[10px] text-faint" />
+            <Show when={props.row.status === 'open' && props.onResolve}>
+              <Tooltip content="resolve thread">
+                <button type="button" aria-label="Resolve thread" disabled={props.resolving} onClick={(event) => { event.stopPropagation(); props.onResolve?.(); }}
+                  class="inline-flex h-6 items-center gap-1 rounded-[3px] px-1.5 text-[10px] font-semibold text-muted hover:bg-accent-soft hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-40">
+                  <Check size={12} strokeWidth={2} />Resolve
+                </button>
+              </Tooltip>
+            </Show>
+          </span>
         </span>
         <span class="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
+        <Show when={props.resolveError}><span role="alert" class="mt-1 font-mono text-[10px] text-danger">{props.resolveError}</span></Show>
         <span class="mt-auto flex items-center justify-between font-mono text-[10px] text-faint">
           <Show when={messages() > 1} fallback={<ThreadContinuation thread={props.row.thread} />}>
             <button ref={setContinuation} type="button" aria-label="Expand replies" aria-expanded={repliesExpanded()} onClick={() => setRepliesExpanded(true)}

@@ -15,18 +15,20 @@
  * "the frame said so" is not evidence of anything.
  */
 import type { JsxNode } from '@/lib/jsx';
-import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-v2/bookmark';
-import { flushFlowView } from '@/lib/editor-v2/flow-view';
+import { createMarkdownRegions } from './markdown-regions';
+import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-engine/bookmark';
+import { flushFlowView } from '@/lib/editor-engine/flow-view';
 import { syncDocumentOutline } from '../outline-view';
-import { toggleInline, pasteFragment } from '@/lib/editor-v2/model';
-import { clipboardAst } from '@/lib/editor-v2/clipboard';
-import { SELECTION_PRESENTATION } from '../selection-presentation';
+import { toggleInline, pasteFragment } from '@/lib/editor-engine/model';
+import { clipboardAst } from '@/lib/editor-engine/clipboard';
+import { SELECTION_PRESENTATION } from '@/lib/editor-engine/selection-presentation';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel } from '../pristine';
 import {
   STORY_EDIT_KEY_MESSAGE,
   STORY_EDIT_READY_MESSAGE,
   STORY_INLINE_MESSAGE,
+  STORY_MARKDOWN_BLOCK_MESSAGE, STORY_MARKDOWN_TABLE_MESSAGE,
   STORY_PASTE_MESSAGE,
   STORY_FLOW_EDIT_MESSAGE,
   STORY_TEXT_EDIT_MESSAGE,
@@ -244,6 +246,12 @@ export function createFrameEditSession({
     typingReported = isTyping;
     post({ type: STORY_TYPING_MESSAGE, active: isTyping });
   };
+  const markdown = createMarkdownRegions(root, {
+    change(path, expected, replacement) { post({ type: STORY_FLOW_EDIT_MESSAGE, path, expected, replacement }); },
+    busy: reportTyping,
+    selection(el) { selection.reportSelection(selection.describeWithQuote(el)); },
+    error(message) { post({ type: 'mx:edit-error', message }); },
+  });
 
   /** Send what a host now holds, if the user really changed it. */
   const commitHost = (host: ActiveHost | null): boolean => {
@@ -284,7 +292,7 @@ export function createFrameEditSession({
     // An arrow on a region's edge line continues into the next text region.
     // Block selection keeps its own arrow behaviour.
     if (
-      event.key.startsWith('Arrow') &&
+      event.key.startsWith('Arrow') && !(event.target as Element | null)?.closest?.('[data-mx-lexical]') &&
       !selection.blockSelected() &&
       navigateAcrossRegions(event, {
         regions: collectTextRegions(root, views.all),
@@ -363,19 +371,20 @@ export function createFrameEditSession({
   const format = createFormatLink({ win, root, views, channel, post, republishRect: selection.republishRect });
 
   return {
-    canApplyDraft() { return !typingReported && !active?.userEdited; },
-    reconcileDraft(before, after, next, draft, options) { return !disposed && !!compiledMount?.reconcile(before, after, next, draft, options); },
+    canApplyDraft() { return !typingReported && !active?.userEdited && !markdown.busy(); },
+    reconcileDraft(before, after, next, draft, options) { return !disposed && (markdown.reconcile(before, after, next) || !!compiledMount?.reconcile(before, after, next, draft, options)); },
     holdUnchanged(next, draft) {
       held?.dispose();
       held = null;
       if (disposed || !compiledMount) return new Map();
       // What is half-typed is handed over first: an editor is held for the prose it has handed over.
       for (const view of views.all) flushFlowView(view);
+      markdown.flush();
       // Read a task ahead of the morph, while the page is laid out: in the morph's task (a new stylesheet written,
       // blocks moved) the read laid the whole page out at once.
       scrollBeforeRedraw = { x: win.scrollX, y: win.scrollY };
       held = compiledMount.hold(next, draft);
-      return held.stands;
+      return new Map([...held.stands, ...markdown.hold(next, draft)]);
     },
     prepareHold(next, draft, more) {
       if (disposed || !compiledMount) return true;
@@ -384,11 +393,13 @@ export function createFrameEditSession({
       return compiledMount.prepareHold(next, draft, more);
     },
     releaseHeld() {
+      markdown.release();
       held?.release();
       held = null;
       scrollBeforeRedraw = null;
     },
     unmountCompiledDom() {
+      markdown.flush(); markdown.unmount();
       scrollBeforeRedraw ??= { x: win.scrollX, y: win.scrollY };
       for (const view of views.all) flushFlowView(view);
       const toolbarFocus = doc.activeElement instanceof HTMLElement
@@ -430,6 +441,7 @@ export function createFrameEditSession({
         onHostInput: hostSession.onInput,
         onHostBlur: hostSession.onBlur,
       }, keep);
+      markdown.mount(nodes);
       // Replacing prose with ProseMirror briefly shortens the page. Put the reader back after
       // layout settles; a draft recompile uses this same mounter and keeps its visible place.
       win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
@@ -454,15 +466,24 @@ export function createFrameEditSession({
       selection.nodesChanged();
     },
     onParentMessage(message: StoryEditParentMessage) {
+      const md = !selection.blockMode() ? markdown.at(selection.selectedPath()) : undefined;
       const view = views.last && views.all.has(views.last) ? views.last : null;
       switch (message.type) {
+        case STORY_MARKDOWN_TABLE_MESSAGE:
+          md?.table(message.action);
+          break;
+        case STORY_MARKDOWN_BLOCK_MESSAGE:
+          md?.block(message.block);
+          break;
         case STORY_INLINE_MESSAGE:
+          if (md) { md.inline(message.tag); break; }
           if (view) {
             view.dispatch(toggleInline(view.state, message.tag).setMeta('mx-command', true));
             view.focus();
           }
           break;
         case STORY_PASTE_MESSAGE:
+          if (md) { md.paste(message.value, message.kind); break; }
           if (view) {
             try {
               const ast = clipboardAst(message.kind, message.value);
@@ -486,9 +507,11 @@ export function createFrameEditSession({
           format.applyFormat(message.path, message.className, message.style);
           break;
         case STORY_APPLY_LINK_MESSAGE:
+          if (md) { md.link(message.href); break; }
           format.applyLink(message.path, message.href);
           break;
         case STORY_FOCUS_TEXT_MESSAGE:
+          if (md) { md.focus(); break; }
           view?.focus();
           break;
         case STORY_COMMIT_MESSAGE:
@@ -498,6 +521,7 @@ export function createFrameEditSession({
             break;
           }
           // Whatever is half-typed, hand it over — the page is leaving.
+          markdown.flush();
           for (const entry of views.all) flushFlowView(entry);
           commitHost(active);
           post({ type: STORY_COMMITTED_MESSAGE });
@@ -513,6 +537,7 @@ export function createFrameEditSession({
       }
     },
     dispose() {
+      markdown.destroy();
       compiledMount?.dispose();
       compiledMount = null;
       held?.dispose();

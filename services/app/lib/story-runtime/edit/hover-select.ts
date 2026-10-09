@@ -13,10 +13,10 @@
 import type { JsxNode } from '@/lib/jsx';
 import type { EditorView } from 'prosemirror-view';
 import { TextSelection, type EditorState } from 'prosemirror-state';
-import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-v2/node-chrome';
-import { createBlockSelection } from '@/lib/editor-v2/block-selection';
-import { inlineStates } from '@/lib/editor-v2/model';
-import { linkAt } from '@/lib/editor-v2/links';
+import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-engine/node-chrome';
+import { createBlockSelection } from '@/lib/editor-engine/block-selection';
+import { inlineStates } from '@/lib/editor-engine/model';
+import { linkAt } from '@/lib/editor-engine/links';
 import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
@@ -30,6 +30,7 @@ import {
 } from '../contract';
 import { describedKind, describeSelection } from './describe-selection';
 import { captureSelection } from './selection-range';
+import { markdownEditorFor } from '@/lib/markdown/editor';
 import { canResize, editChromeKind, gripTarget, isComponentPart } from './edit-chrome';
 
 /**
@@ -235,6 +236,16 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
   const describeWithQuote = (el: Element): StoryEditSelection | null => {
     const selection = describeSelection(el, nodes());
     if (!selection) return null;
+    const markdown = markdownEditorFor(el);
+    if (markdown) {
+      const { link, block, ...inline } = markdown.selection();
+      selection.inline = inline; selection.link = link; selection.markdownBlock = block;
+      const native = win.getSelection();
+      if (native?.rangeCount && el.contains(native.anchorNode)) {
+        const rect = native.getRangeAt(0).getBoundingClientRect?.();
+        if (rect) selection.textRect = { x: rect.x, y: rect.y, width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
+      }
+    }
     for (const view of views.all)
       if (view.dom.contains(el)) {
         const state = liveState(view, win);
@@ -308,7 +319,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     // region's container, never the block, so the toolbar lost the block it was formatting.
     const anchor = win.getSelection()?.anchorNode;
     const target = anchor?.nodeType === 1 ? anchor as Element : anchor?.parentElement;
-    if (!target?.closest('.ProseMirror') || !root.contains(target)) return;
+    if (!target?.closest('.ProseMirror, [data-mx-lexical]') || !root.contains(target)) return;
     views.last = viewHolding(target) ?? views.last;
     const el = target.closest(`[${AST_PATH_ATTR}]`);
     if (el) reportSelection(describeWithQuote(el));
@@ -329,7 +340,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     // Chrome the document draws for itself (the deck rail and its slide previews) re-renders the
     // slide's own nodes, so ids and AST stamps appear twice — a click there must never select the copy.
     if (target.closest(DOCUMENT_CHROME)) return;
-    if (target.closest('.ProseMirror') && target.closest('a')) event.preventDefault();
+    if (target.closest('.ProseMirror, [data-mx-lexical]') && target.closest('a')) event.preventDefault();
     // A drag ends with a click on the common ancestor. It is still a text selection, never an
     // instruction to resize that entire container.
     const native = win.getSelection();
@@ -390,6 +401,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     const described = () => {
       const el = at(path);
       if (el && message.nodeId && el.id !== message.nodeId) return null; // the old document, still drawn
+      if (el?.hasAttribute('data-mx-markdown') && message.focusText && !markdownEditorFor(el)) return null;
       return el && describeSelection(el, nodes()) ? el : null;
     };
     /** Scroll it to the middle — and again once an image has its height, or it lands half-shown. */
@@ -398,9 +410,14 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
       if (el.localName === 'img' && !(el as HTMLImageElement).complete) el.addEventListener('load', go, { once: true });
       go();
     };
+    const selectFound = (el: Element) => {
+      const markdown = message.focusText ? markdownEditorFor(el) : undefined;
+      if (markdown) { reportSelection(describeWithQuote(el)); markdown.focus(); }
+      else selectBlock(el);
+    };
     const found = described();
     if (found || !message.reveal) {
-      if (found) selectBlock(found);
+      if (found) selectFound(found);
       else reportSelection(null);
       if (found && message.reveal) bringIntoView(found);
       return;
@@ -411,7 +428,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
       if (disposed || request !== selectRequest) return;
       const late = described();
       if (late) {
-        selectBlock(late);
+        selectFound(late);
         bringIntoView(late);
       } else if (++tries < 60) win.setTimeout(wait, 25);
     };

@@ -1,4 +1,4 @@
-import { dailySeries } from './daily-series';
+import { dailySeries } from '@/lib/viz/daily-series';
 /**
  * THE READER — every query the app makes against the events schema, and the
  * only module that names it. All of them are SELECTs joining the app's own

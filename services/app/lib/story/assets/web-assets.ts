@@ -14,7 +14,7 @@
  *
  * The cache is GLOBAL and the FIRST importer wins: the same URL is the same
  * bytes for everyone, so a second document naming it fetches nothing, stores
- * nothing and is charged nothing (./asset-quota). Staleness is the price, and
+ * nothing and is charged nothing (lib/artifacts/asset-quota). Staleness is the price, and
  * `refreshWebAsset` is what pays it — re-fetch and REPOINT the row, keeping the
  * address (see the note there about what a cached reader still sees).
  *
@@ -32,7 +32,7 @@ import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/
 import { assetUrlFor, canonicalAssetUrl, urlHash } from '@/lib/document/asset-url';
 import { docAssetImportRateLimited } from '@/lib/accounts/auth';
 import { collectExternalAssetUrls } from '@/lib/document/external-images';
-import { assetByteQuotaExceeded } from './asset-quota';
+import { assetByteQuotaExceeded } from '@/lib/artifacts/asset-quota';
 import { webIngestRateLimited } from '@/lib/accounts/auth';
 
 /** What kind of asset a caller expects the URL to hold — the sniff, the cap and the optimiser follow it. */

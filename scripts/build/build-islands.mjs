@@ -63,7 +63,7 @@ function glyphCatalog() {
 /** The contract's constants, read from the TypeScript so there is one table (both files import only types). */
 function readContracts() {
   const out = esbuild.buildSync({
-    stdin: { contents: "export { KIT_FAMILIES } from './lib/islands/contract'; export { AUTHOR_VENDOR_EXPORTS } from './lib/author-script/contract'; export { ISLANDS_PATH } from './lib/compiled-page/contract';", resolveDir: APP, loader: 'ts' },
+    stdin: { contents: "export { KIT_FAMILIES } from './lib/islands/contract'; export { AUTHOR_VENDOR_EXPORTS } from './lib/author-script/contract'; export { ISLANDS_PATH } from './lib/story-runtime/contract';", resolveDir: APP, loader: 'ts' },
     bundle: true, format: 'cjs', platform: 'node', write: false, logLevel: 'silent', alias: { '@': APP },
   });
   const module = { exports: {} };
@@ -124,7 +124,7 @@ const STANDALONE_LAZY = [
 
 /**
  * THE FRAME EDITOR (`@mx/frame-editor`, lib/islands/frame-editor): the editor's document half for a document framed
- * on its own origin (lib/story-runtime/frame-bridge). The page behaviour's door (`@mx/page`, lib/islands/page) asks
+ * on its own origin (lib/islands/frame-bridge, lib/story-runtime/frame-bridge). The page behaviour's door (`@mx/page`, lib/islands/page) asks
  * for it with `import('./frame-editor')` only when the app page attaches to edit or comment, so it is no reader's
  * closure. It is its OWN graph, not an entry of the shared one: an entry there would re-partition the shared
  * chunks under the rt+boot budget for a module no reader loads. Split, so the controller and the relay load on
@@ -305,7 +305,13 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const offlineHalf = await offlineHalfBuild;
   // Exactly one framework: an island that reached a React or Preact file would carry a second runtime ...
   const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs, ...offlineHalf.inputs, ...standalone.flatMap((b) => b.inputs), ...editor.inputs])].sort();
-  const react = inputs.filter((i) => /node_modules\/(react|react-dom|preact|@preact\/[\w-]+)\//.test(i));
+  // Lexical's edit-only extensions use signals-core (reactive primitives, no Preact renderer).
+  // Keep the exception confined to the standalone editor; React/Preact DOM runtimes remain forbidden.
+  const react = inputs.filter((i) => /node_modules\/(react|react-dom|preact|@preact\/(?!signals-core\/)[\w-]+)\//.test(i));
+  const signals = inputs.filter(i => /node_modules\/@preact\/signals-core\//.test(i));
+  if (signals.some(i => !editor.inputs.includes(i) || Object.hasOwn(result.metafile.inputs, i) || ssrHalf.inputs.includes(i))) {
+    throw new Error('build-islands: Lexical signals-core escaped the edit-only bundle');
+  }
   if (react.length) throw new Error(`build-islands: a second framework reached the island graph (${react.slice(0, 3).join(', ')})`);
   // ... and exactly one Solid: one copy of each of its files (no nested install, no dev build beside the production one).
   const solidFiles = inputs.filter((i) => /node_modules\/(.*\/)?solid-js\//.test(i));

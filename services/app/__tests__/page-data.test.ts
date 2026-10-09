@@ -156,7 +156,7 @@ describe('GET /api/page/artifact/:id', () => {
   });
   it('lets the exporter\'s signed key read a private document without a session', async () => {
     const w = await world();
-    const { mintExportKey } = await import('@/lib/serving/export-read-key');
+    const { mintExportKey } = await import('@/lib/platform/export-read-key');
     const res = await artifactPage(request(`/api/page/artifact/${w.priv.id}?key=${mintExportKey(w.priv.id)}`), params({ id: w.priv.id }));
     expect(res.status).toBe(200);
     expect((await res.json()).surface.captureKey).toBeTruthy();

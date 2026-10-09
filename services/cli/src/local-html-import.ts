@@ -1,17 +1,9 @@
 import {recordLocalHistory} from './local-history';
 /** An HTML file is untrusted data. Parse its JSON carrier, never run its embedded reader or author scripts. */
-import {readArtifactFileHtml as readSharedArtifactFileHtml} from '../../app/lib/offline/offer';
+import {readArtifactFileHtml as readSharedArtifactFileHtml,sourceDigest,type ArtifactFile,resolveStoredStoryDesign,collectRefUses,validateMarkupStructure,parseJsx,nodeIndex,validateFileComments,type AnnotationWire} from '../../app/lib/cli-toolkit';
 import {readFile,stat,realpath,lstat} from 'node:fs/promises';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {isAbsolute,relative,resolve,join,sep} from 'node:path';
-import {sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
-import {resolveStoredStoryDesign} from '../../app/lib/data/story/story-themes';
-import {collectRefUses} from '../../app/lib/dataflow/refs';
-import {validateMarkupStructure} from '../../app/lib/document/local-validation';
-import {parseJsx} from '../../app/lib/jsx';
-import {nodeIndex} from '../../app/lib/document/node-ids';
-import {validateFileComments} from '../../app/lib/offline/comment-validation';
-import type {AnnotationWire} from '../../app/lib/annotations/store';
 import {confinedPath,type FileChange} from './journal';
 import {atomicWrite,digest,readOptional,privateDirectory,isMissing} from './files';
 import {parseDocument,writeDocument} from './document';

@@ -1,12 +1,14 @@
 import { getArtifactById } from './store';
 import type { StoredDocument } from '../document';
-import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from '../datasets/policy/grants';
-import { hasDocumentEditorAccess, type VerifiedAccount } from './document-policy';
+import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
+import { hasDocumentEditorAccess } from './document-policy';
+import type { RoleActor, TokenActor, Viewer } from '@/lib/accounts/actors';
+import type { RequestActor } from '@/lib/accounts/viewer';
 import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/accounts/user-kinds';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb, type Queryable } from '../platform/db';
 import { type ArtifactFormat } from '@artifactbin/contracts';
-import { canUseDataPolicy } from '@/lib/datasets/policy';
+import { canUseDataPolicy } from '@/lib/artifacts/dataset-policy';
 import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
 
 /**
@@ -94,9 +96,6 @@ export interface ArtifactRow {
   deleted_at: string | null;
 }
 
-/** Who is looking, as far as the serving paths know. Null = no session. */
-export type Viewer = (VerifiedAccount & { userId: string; email: string | null }) | null;
-
 /**
  * The ONE read-access decision, made by every public serving path before any
  * bytes leave. Fail closed: an unresolvable session is just a null viewer.
@@ -118,23 +117,29 @@ export async function canReadArtifact(
   return canRead(await effectiveRole({ ...row, token_id: '' }, { ...viewer, userId: viewer?.userId ?? null, tokenId: null }));
 }
 
-/** Any credential the serving paths resolve, as the ids and address effectiveRole needs. */
-export interface RoleActor extends VerifiedAccount {
-  userId: string | null;
-  tokenId: string | null;
-  /**
-   * The address the session carries, when it carries one. Only ever consulted
-   * for a share that is still UNRESOLVED — the moment one matches it is stamped
-   * with the user id and matched by that forever after. Email is an attribute,
-   * never an identity key.
-   */
-  email?: string | null;
-}
-
 /** Does this actor OWN the row — pure, the account by user_id, a bare token by token_id. */
 export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: RoleActor): boolean {
   if (actor.userId && row.user_id) return row.user_id === actor.userId;
   return !!actor.tokenId && row.token_id === actor.tokenId;
+}
+
+/** A request's credentials as the ids and address the role decision reads. */
+const roleActor = (actor: RequestActor): RoleActor => ({ ...actor.viewer, userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId });
+
+/** Does this request's actor OWN the row — pure (ownsArtifact), for the places that need only that. */
+export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: RequestActor): boolean {
+  return ownsArtifact(row, roleActor(actor));
+}
+
+/**
+ * This request's actor's ROLE on the row — the one definition, used by page and app
+ * server alike: the MAX of ownership, the share list and what the link grants
+ * (effectiveRole). Both halves of the reader/owner split ask
+ * this, so they cannot disagree on who gets the shell; `none` is the miss that
+ * every serving path answers as the uniform 404.
+ */
+export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>, actor: RequestActor): Promise<ArtifactRole> {
+  return effectiveRole(row, roleActor(actor));
 }
 
 /**
@@ -360,24 +365,6 @@ export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'ed
  * named editor only one they wrote.
  */
 export const annotationScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'commenter');
-
-// ── The bearer actor ─────────────────────────────────────────────────────────
-//
-// A presented token acts in ONE of the two scopes above. A token claimed by an
-// account acts ACCOUNT-WIDE: any of a user's tokens may read, edit, and manage
-// anything the user owns, because handing an agent a token IS handing it the
-// account's documents — a second agent must be able to pick up a document the
-// first one created. (Render-time ref resolution already widened this way; see
-// refDataForRow.) An anonymous token reaches only what it itself created —
-// there is no account to widen to, so the token-scope boundary stands.
-//
-// Safe because creation stamps user_id from the token and claiming backfills
-// it: a user-owned token cannot have artifacts its user scope would miss.
-
-export interface TokenActor extends VerifiedAccount {
-  tokenId: string;
-  userId: string | null;
-}
 
 // ── Writable datasets ────────────────────────────────────────────────────────
 

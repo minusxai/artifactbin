@@ -54,7 +54,7 @@ const liveDocument = async (page) => {
   await doc.locator('html[data-mx-ready] [data-mx-inline-story]').first().waitFor({ timeout: 30_000, state: 'visible' });
   return doc;
 };
-/** The document's own origin, where its standalone page is served (lib/serving/pages-origin). */
+/** The document's own origin, where its standalone page is served (lib/http/pages-origin). */
 const documentOrigin = (id) => { const app = new URL(B); return `${app.protocol}//${Buffer.from(id, 'utf8').toString('hex')}.${PAGES_HOST}${app.port ? `:${app.port}` : ''}`; };
 /** Armed BEFORE a navigation: the framed document's own navigation response (after the pages-session redirect). */
 const documentResponse = (page) => page.waitForResponse((r) => { try { return r.frame() !== page.mainFrame() && r.request().isNavigationRequest() && r.status() === 200; } catch { return false; } }, { timeout: 30_000 });

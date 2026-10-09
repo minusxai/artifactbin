@@ -5,10 +5,10 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { markupCsp } from '@/lib/compiled-page/styles/markup-csp';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();

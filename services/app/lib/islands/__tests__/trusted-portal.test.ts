@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { trustedPortalOf } from '../trusted-portal';
 import { createIslandRuntime } from '../rt';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import { createTrustedOverlayHost } from '@/lib/story-runtime/trusted-overlay-host';
+import { createTrustedOverlayHost } from '@/lib/islands/trusted-overlay-host';
 
 /** The structure TrustedUi's `attach` builds (a layered overlay's host names its layer). */
 function trustedUi(layer?: string): HTMLElement {

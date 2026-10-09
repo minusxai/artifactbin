@@ -2,8 +2,8 @@
  * A visible widget starts on the next task; an offscreen widget starts at idle so
  * exports and full-page captures still reach the same settled DOM.
  */
-import { READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLANDS_READY_EVENT } from './contract';
+import { READER_READY_ATTR } from '@/lib/story-runtime/contract';
 
 export function deferEngine(host: Element, start: () => void): () => void {
   const doc = host.ownerDocument;

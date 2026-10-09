@@ -8,7 +8,7 @@
  * The Solid work — hydrating an island — is the running document's own (boot's `IslandMorphSeam`); this
  * module matches, and moves DOM.
  *
- *  1. FETCH the new version's story fragment (`/a/:id/story`, lib/compiled-page/story-fragment): the same
+ *  1. FETCH the new version's story fragment (`/a/:id/story`, lib/story-runtime/story-fragment): the same
  *     assembler output the page was served, for this page's surface and query string (its `$` values).
  *     A version the server has not compiled yet answers 409 and is asked again, briefly.
  *  2. MATCH islands. The new page's module (imported: its `boot` hands `{ ISLANDS, FLOW }` to the running
@@ -24,9 +24,7 @@
  *
  * Anything it cannot do throws, and the caller reloads keeping the reader's place (../live-update).
  */
-import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR } from '@/lib/compiled-page/contract';
-import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-fragment';
-import { LITERALS_ATTR } from '@/lib/compiled-page/carriers';
+import { storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-fragment';
 import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
 import { applyColorMode, readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
@@ -35,6 +33,7 @@ import { ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, S
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR, LITERALS_ATTR } from '@/lib/story-runtime/contract';
 
 const HK = 'data-hk';
 /** Sheets that belong to one version and may be absent from the next (lib/compiled-page/styles/document-styles, the assembler). */
@@ -526,7 +525,7 @@ export function readRestoreBlocker(root: HTMLElement, doc: Document, next: Docum
 }
 
 /**
- * The page now runs `next`, drawn in place of its drafts (lib/story-runtime/island-controller): its sheets,
+ * The page now runs `next`, drawn in place of its drafts (lib/islands/island-controller): its sheets,
  * its data island (the author script, the page's values), its live edit id and its module record become the
  * page's, so the next version is compared with what is on screen, exactly as after a reader's morph.
  */

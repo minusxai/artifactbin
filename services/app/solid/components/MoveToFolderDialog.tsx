@@ -9,7 +9,7 @@ import House from 'lucide-solid/icons/house';
 import Search from 'lucide-solid/icons/search';
 import Check from 'lucide-solid/icons/check';
 import { parentOfRow, type ShelfRow } from '@/lib/workspace/shelf';
-import { displayTitle } from '@/lib/document/title';
+import { displayTitle } from '@/lib/document/display-title';
 import { DialogShell } from './DialogShell';
 import { Button } from './ui';
 

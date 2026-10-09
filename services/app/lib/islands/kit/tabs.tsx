@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 import { useIsland } from '../context';
+import { kitSignal } from '../comment-state';
 import { createContext, createEffect, createSignal, createUniqueId, on, onCleanup, onMount, splitProps, untrack, useContext, type JSX } from 'solid-js';
 
 /**
@@ -26,7 +27,8 @@ const Context = createContext<TabsState>();
 const state = () => { const value = useContext(Context); if (!value) throw new Error('Tabs child outside Tabs'); return value; };
 
 export function Tabs(props: JSX.HTMLAttributes<HTMLDivElement> & { value?: string; defaultValue?: string; orientation?: 'horizontal' | 'vertical'; onValueChange?: (value: string) => void }) {
-  const [local, setLocal] = createSignal(props.defaultValue ?? '');
+  // Uncontrolled, the chosen tab is comment state under this element's node id (a bound `value` is saved as that Value).
+  const [local, setLocal] = kitSignal('value', props, props.value, props.defaultValue ?? '');
   const rootId = createUniqueId();
   const orientation = props.orientation ?? 'horizontal';
   const [triggerIds, setTriggerIds] = createSignal<Record<string, string>>({});

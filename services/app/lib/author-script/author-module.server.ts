@@ -9,7 +9,8 @@
  *    publish error with the line, and so is `createSignal('$region')` (a local signal that only looks bound);
  *  - `solid-js`, `solid-js/web` and `solid-js/store` stay bare, limited to the names the island build's vendor chunks
  *    export (lib/author-script/contract AUTHOR_VENDOR_EXPORTS): the runtime points them at the serving build's chunks when the module
- *    loads, so the script runs on the kit's one Solid;
+ *    loads, so the script runs on the kit's one Solid. `createSignal` alone is re-pointed at a generated shim whose
+ *    `createSignal(value, {name})` is the runtime's: a named signal is comment state (lib/islands/comment-state);
  *  - any other bare specifier is a package on esm.sh (`three` → `https://esm.sh/three`), and a full URL is
  *    kept as written; a relative path is an error, since nothing sits beside the script.
  *
@@ -21,7 +22,7 @@ import { createHash } from 'node:crypto';
 // esbuild's import-time realm check (TextEncoder output instanceof the global Uint8Array) never runs in a jsdom
 // test that publishes through jsx-tier — there the two come from different realms and the import itself throws.
 import type * as esbuild from 'esbuild';
-import { transformAsync, type PluginObj, type types as BabelTypes } from '@babel/core';
+import { transformAsync, types as t, type PluginObj, type types as BabelTypes } from '@babel/core';
 import solidPreset from 'babel-preset-solid';
 import { AUTHOR_VENDOR_EXPORTS, ESM_CDN_ORIGIN, PAGE_GLOBAL } from './contract';
 import type { HelmetContent } from '@/lib/document/helmet';
@@ -31,7 +32,10 @@ const PAGE_SPECIFIER = 'page';
 const PAGE_BINDERS = ['signal', 'query', 'mutation'] as const;
 type PageExport = (typeof PAGE_BINDERS)[number];
 /** Everything `page` exports: the binders, and `proxy(url)` (lib/islands/page-runtime pageProxyUrl), which takes any https URL. */
-const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy', 'reviewState', 'upload', 'fileUrl', 'uploadImage', 'imageUrl'] as const;
+const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy', 'upload', 'fileUrl', 'uploadImage', 'imageUrl'] as const;
+const SOLID_SPECIFIER = 'solid-js';
+/** The esbuild namespace of the generated `solid-js` shim. */
+const SOLID_SHIM = 'page-solid';
 
 /** The declared names by kind: `values` are scalar Values; `tables` are table Values (rows, like a Query). */
 export interface AuthorModuleNames { values: string[]; tables?: string[]; queries: string[]; mutations: string[] }
@@ -64,7 +68,15 @@ export function pageModuleSource(): string {
     `export const uploadImage = (importName, file) => b.uploadImage(importName, file);`,
     `export const imageUrl = (importName, ref) => b.imageUrl(importName, ref);`,
     `export const proxy = (url) => b.proxy(url);`,
-    `export const reviewState = (part) => b.reviewState(part);`,
+  ].join('\n') + '\n';
+}
+
+/** The script's `createSignal`: Solid's, unless `{name}` makes it comment state through the runtime (lib/islands/page-runtime scriptCreateSignal). */
+export function solidShimSource(): string {
+  return [
+    `import { createSignal as plain } from ${JSON.stringify(SOLID_SPECIFIER)};`,
+    `const b = globalThis[${JSON.stringify(PAGE_GLOBAL)}];`,
+    `export const createSignal = (value, options) => (options && typeof options.name === 'string' && b ? b.createSignal(value, options) : plain(value, options));`,
   ].join('\n') + '\n';
 }
 
@@ -101,6 +113,8 @@ function pageCallsPlugin(names: AuthorModuleNames, errors: string[]): PluginObj 
       Program(program) {
         const binders = new Map<string, PageExport>();
         const createSignals = new Set<string>();
+        /** `import { createSignal } from 'solid-js'` specifiers, moved to the shim once the imports are read. */
+        const shimmed: Array<{ stmt: ReturnType<typeof program.get>; spec: BabelTypes.ImportSpecifier }> = [];
         /** Locals bound by a page call: `region` and `setRegion` from `signal('$region')`, `monthly` from `query('$monthly')`. */
         const accessors = new Map<string, { kind: PageExport; setter?: string }>();
         for (const stmt of program.get('body')) {
@@ -117,11 +131,17 @@ function pageCallsPlugin(names: AuthorModuleNames, errors: string[]): PluginObj 
               }
               // `proxy` takes a URL, not a declared name: nothing to check at its calls.
               if ((PAGE_BINDERS as readonly string[]).includes(imported)) binders.set(spec.local.name, imported as PageExport);
-            } else if (source === 'solid-js' && spec.type === 'ImportSpecifier') {
+            } else if (source === SOLID_SPECIFIER && spec.type === 'ImportSpecifier') {
               const imported = spec.imported.type === 'Identifier' ? spec.imported.name : spec.imported.value;
-              if (imported === 'createSignal') createSignals.add(spec.local.name);
+              if (imported === 'createSignal') { createSignals.add(spec.local.name); shimmed.push({ stmt: stmt as never, spec }); }
             }
           }
+        }
+        for (const { stmt, spec } of shimmed) {
+          const decl = (stmt as unknown as { node: BabelTypes.ImportDeclaration; remove(): void });
+          decl.node.specifiers = decl.node.specifiers.filter((s) => s !== spec);
+          if (!decl.node.specifiers.length) decl.remove();
+          program.unshiftContainer('body', t.importDeclaration([t.importSpecifier(t.identifier(spec.local.name), t.identifier('createSignal'))], t.stringLiteral(SOLID_SHIM)));
         }
         program.traverse({
           Identifier(path) {
@@ -249,6 +269,7 @@ async function build(script: string, names: AuthorModuleNames): Promise<AuthorMo
         if (args.kind === 'entry-point') return undefined;
         const spec = args.path;
         if (spec === PAGE_SPECIFIER) return { path: spec, namespace: PAGE_SPECIFIER };
+        if (spec === SOLID_SHIM) return { path: spec, namespace: SOLID_SHIM };
         if (VENDOR[spec]) return { path: spec, external: true };
         if (/^https?:\/\//.test(spec)) return { path: spec, external: true };
         if (spec.startsWith('.') || spec.startsWith('/')) {
@@ -268,6 +289,7 @@ async function build(script: string, names: AuthorModuleNames): Promise<AuthorMo
         return { path: spec, external: true };
       });
       b.onLoad({ filter: /.*/, namespace: PAGE_SPECIFIER }, () => ({ contents: pageModuleSource(), loader: 'js' }));
+      b.onLoad({ filter: /.*/, namespace: SOLID_SHIM }, () => ({ contents: solidShimSource(), loader: 'js' }));
     },
   };
   try {

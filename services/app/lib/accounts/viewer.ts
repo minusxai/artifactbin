@@ -3,29 +3,28 @@ import {hostedRequestRefusal} from '@/lib/accounts/request-authority';
  * The auth() → Viewer bridge, in its own module ON PURPOSE: the serving
  * routes need "who is looking" but lib/artifacts must stay importable
  * without dragging account authentication into every test and client bundle that touches
- * artifact SQL. This is the only non-route file that imports @/auth.
+ * artifact SQL. The session it falls back to is `./session` (re-exported as `@/auth`).
  */
-import { pagesRequestOf } from '../serving/pages-origin';
+import { pagesRequestOf } from '../http/pages-origin';
 import { currentRequest } from '../platform/request-context';
 import { actorOf } from '@artifactbin/utils';
 import { mergeGuestUsers } from './guest-owner';
 import { BROWSER_SESSION_HEADER, type Credential } from '@artifactbin/contracts';
 import { DuplicateProfileEmail, syncProfile } from './profiles';
-import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRow, type RoleActor, type TokenActor, type Viewer } from '../artifacts/access';
-import { type ArtifactRole } from '../artifacts/share-roles';
+import type { TokenActor, Viewer } from './actors';
 import { canAuthenticateUser } from './user-kinds';
 import { resolveToken, resolveTokenById, touchToken } from './tokens';
+import { auth } from './session';
 
 /**
  * The account behind the request, if any. Behind the proxy that is the signed
  * actor header; without one (a direct handler call in a test) it is whatever
- * the test mocked `@/auth` to say. Fail-safe: never a crash.
+ * the test harness's `overrideSession` says. Fail-safe: never a crash.
  */
 async function sessionViewer(request?: Request): Promise<Viewer> {
   try {
     const fromProxy = await proxyActor(request);
     if (fromProxy) return fromProxy.credential === 'session' ? fromProxy.viewer : null;
-    const { auth } = await import('@/auth');
     const session = await auth();
     return session?.user?.id ? { userId: session.user.id, email: session.user.email ?? null } : null;
   } catch {
@@ -175,25 +174,6 @@ export async function requestOrSessionActor(request: Request): Promise<RequestAc
 export function actorForArtifacts(actor: RequestActor): TokenActor | null {
   if (actor.viewer?.userId) return { ...actor.viewer, tokenId: actor.tokenId ?? '' };
   return actor.tokenId ? { tokenId: actor.tokenId, userId: null } : null;
-}
-
-/** A request's credentials as the ids and address the role decision reads. */
-const roleActor = (actor: RequestActor): RoleActor => ({ ...actor.viewer, userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId });
-
-/** Does this actor OWN the row — pure (lib/artifacts ownsArtifact), for the places that need only that. */
-export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: RequestActor): boolean {
-  return ownsArtifact(row, roleActor(actor));
-}
-
-/**
- * This actor's ROLE on the row — the one definition, used by page and app
- * server alike: the MAX of ownership, the share list and what the link grants
- * (lib/artifacts effectiveRole). Both halves of the reader/owner split ask
- * this, so they cannot disagree on who gets the shell; `none` is the miss that
- * every serving path answers as the uniform 404.
- */
-export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>, actor: RequestActor): Promise<ArtifactRole> {
-  return artifactRole(row, roleActor(actor));
 }
 
 /** Browser controls reflect email sessions only; legacy ownership proofs are not login. */

@@ -49,6 +49,7 @@ interface SelectionToolbarPlan {
 export function selectionToolbarPlan(
   selection: Pick<StoryEditSelection, 'kind' | 'tag' | 'mode'>,
 ): SelectionToolbarPlan {
+  if (selection.tag === 'Markdown') return { text: selection.mode !== 'block', format: selection.mode === 'block', color: false, link: selection.mode !== 'block', image: false };
   if (selection.kind === 'embed') return { text: false, format: false, color: false, link: false, image: false };
   // An image is never text, in either mode: replace and alt text instead, plus layout.
   if (selection.tag.toLowerCase() === 'img') return { text: false, format: true, color: false, link: false, image: true };

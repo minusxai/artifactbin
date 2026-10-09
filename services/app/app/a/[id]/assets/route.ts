@@ -27,11 +27,10 @@
  * the import bounds belong with the importer.
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { verifyExportKey } from '@/lib/serving';
 import { requestOrSessionActor } from '@/lib/accounts';
 import {resolveImageReference} from '@/lib/artifacts';
 import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/story/assets/web-assets';
-import { ASSETS_ORIGIN } from '@/lib/platform';
+import { ASSETS_ORIGIN, verifyExportKey } from '@/lib/platform';
 import {publicRefAsset} from '@/lib/serving';
 import { json } from '@/lib/http';
 

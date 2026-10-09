@@ -1,5 +1,4 @@
-import {createDocumentGraph,graphSource} from '../../app/lib/document/document-graph';
-import {applyGraphPatch} from '../../app/lib/document/document-graph-patch';
+import {createDocumentGraph,graphSource,applyGraphPatch} from '../../app/lib/cli-toolkit';
 import {hostDirectory} from '../src/config';
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';

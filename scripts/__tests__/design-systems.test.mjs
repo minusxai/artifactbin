@@ -108,7 +108,14 @@ describe('the committed outputs are what the generator emits now', () => {
   });
   it('the catalogue and every system reference', () => {
     expect(read(path.join(REFS, 'design-systems.md'))).toBe(catalogueMd());
-    for (const slug of ROSTER) expect(read(path.join(REFS, `system-${slug}.md`)), slug).toBe(systemMd(slug));
+    for (const slug of ROSTER) {
+      const guide = read(path.join(REFS, `system-${slug}.md`));
+      expect(guide, slug).toBe(systemMd(slug));
+      expect(guide, slug).toContain('Use `<Markdown>` for long prose on any page type');
+      expect(guide, slug).toContain('### Doc\n\nTemplate: doc.');
+      expect(guide, slug).toContain('[the Doc guide](templates-doc.md)');
+      expect(guide, slug).toContain('inherits this system\'s fonts and colors with a transparent background');
+    }
     expect(read(path.join(REFS, 'system-redline.md'))).toContain('`rl-paper`, `rl-red`, `rl-ink` and `rl-on-*` classes set SVG fills only; they do not paint HTML slides. For HTML, use stage classes such as `rl-stage-red`, which set background and text colors.');
   });
 });

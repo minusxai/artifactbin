@@ -5,11 +5,11 @@ import { createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
-import { changeMembership } from '@/lib/accounts';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
-import { readableArtifact } from '@/lib/artifacts';
-import { getArtifactById, forkArtifact, dataflowForRow } from '@/lib/artifacts';
+import { readableArtifact, changeMembership } from '@/lib/artifacts';
+import { getArtifactById, dataflowForRow } from '@/lib/artifacts';
+import { forkArtifact } from '@/lib/story/publish';
 useAppHarness();
 it('allows a recipient through a saved owner artifact only after approval',async()=>{
  const owner=await createUser({email:'mxmx_test_grants_owner@example.com'}),bob=await createUser({email:'mxmx_test_grants_bob@example.com'});

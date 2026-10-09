@@ -1,4 +1,3 @@
-import {backfillExplicitJoins} from '../accounts/relation-state';
 /**
  * Database adapter: PGLite (embedded, default) or Postgres — selected by ONE
  * env, `DATABASE_URL`, via scheme dispatch (lib/database-url parseDatabaseUrl).
@@ -362,19 +361,11 @@ async function createDb(): Promise<Db> {
 
 /**
  * The DATA half of the boot migration, beside the DDL half: statements that
- * move existing rows onto a new shape, idempotent, run on every start.
- *
- * `lib/testusers` is reached by a DYNAMIC import, and it is the one exception
- * to top-level imports in this file: that module reads the schema and mints
- * tokens, both of which reach the database, so importing it at the top would
- * close a cycle through the module that is being constructed here. The open
- * adapter is handed in for the same reason — `getDb()` would wait on the
- * promise this very call resolves.
+ * move existing rows onto a new shape, idempotent, run on every start. The open
+ * adapter is handed in because `getDb()` would wait on the promise this very
+ * call resolves.
  */
 async function applyBackfills(db: Db): Promise<void> {
-  const { backfillUserKinds } = await import('../accounts/testusers');
-  await backfillUserKinds(db);
-  await backfillExplicitJoins(db);
   // Existing likes/follows predate lifecycle fields. Membership has no legacy migration.
   await db.query("UPDATE relations SET initiated_by=coalesce(initiated_by,subject_id),accepted_at=coalesce(accepted_at,created_at),status=CASE WHEN deleted_at IS NULL THEN status ELSE 'left' END WHERE verb IN ('like','follow') AND initiated_by IS NULL");
 }

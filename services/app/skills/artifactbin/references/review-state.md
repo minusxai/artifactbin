@@ -1,42 +1,54 @@
 ---
 name: review-state
 description: >-
-  Makes native comments restore an interactive app or wireframe's registered UI state.
+  What a native comment saves and restores on an interactive page: declared Values, kit view state and named signals.
 ---
 ## Read first
 
-For an interactive wireframe or app reviewed through comments, register the
-state that determines its view with `reviewState({id, get, restore})` from
-`page`. Native comments capture it when the reader picks a target; opening
-the thread restores it before locating the target. Keep afbin's native
-comments; the app only supplies state. No registration is needed for static
-pages or side-by-side wireframe drawings.
+A native comment on an interactive wireframe or app saves the state that
+determines its view when the reader picks a target, and puts it back when the
+thread opens, before locating and highlighting the target. Nothing registers
+by hand; three kinds of state are saved:
 
-Use ordinary Solid local state or bind existing Values with `signal` from
-`page`. `Value` is optional; neither Values nor kit controls are captured
-automatically. Conditional rendering and show/hide both work when driven by
-registered state. Do not try to serialize the DOM or replay the reader's clicks.
+- **Declared Values** the link carries (every scalar `<Value>` without
+  `url={false}`): the step, the region, the selected row. Write them with
+  `signal('$step')` from `page` or bind a control to them.
+- **Kit view state**: the chosen `Tabs` tab, the open `Accordion` item, a
+  `Collapsible` or `Dialog` open or closed, each under its element's own `id`.
+  A kit element bound to a Value (`<Tabs value="$tab">`) is saved as that Value.
+- **Named signals** in the script: `createSignal(initial, { name: 'screen' })`
+  from `solid-js`. An unnamed `createSignal` is scratch state and is never saved.
 
-## Authoring pattern
+Static pages and side-by-side wireframe drawings need nothing. Keep afbin's
+native comments; do not serialize the DOM or replay the reader's clicks.
 
-Start with one small object for the whole view: screen, selected item ID,
-tab, filter, dialog open/closed, and a deterministic mock scenario such as
-`payment-declined`. Render from it. Keep derived display text out of the
-snapshot. Register once at app lifetime, outside conditional screens; keep
-the registration ID stable across edits. Multiple independent registrations
-are supported when needed. Each body element also retains its persistent
-source `id`, so native comments can locate it after restoring the view.
+## Writing a component
 
-This minimal example uses static source targets and ordinary local state:
+Nobody predicts where comments will land. Keep what the view depends on in
+named signals — the screen, the selected id, the step, the open dialog, the
+mock scenario — and derive everything else with `createMemo`. Scratch state
+(a typing buffer, hover, animation, a fetched response) stays unnamed. Name
+the signal where it is created; nothing else is needed.
+
+## Naming
+
+A named signal inside an exported component is saved under the node the
+component mounts at (`aBcD:time`), so two `<Player>` tags each keep their
+own; at module level it is saved under its bare name. Two signals with one
+name in one mount: the last one wins, with a console warning, so give list
+items their own names (`{ name: 'open:' + props.item }`). A kit element inside
+a component's own JSX gets its own `id` for the same reason.
+
+## Example without Values
+
+Module-level named state and static source targets:
 
 ```jsx
 <Helmet>
   <script>{`
     import { createSignal, createEffect } from 'solid-js';
-    import { reviewState } from 'page';
     const initial = () => ({screen: 'plans', declined: false});
-    const [view, setView] = createSignal(initial());
-    reviewState({id: 'checkout', get: view, restore: saved => setView(saved)});
+    const [view, setView] = createSignal(initial(), { name: 'checkout' });
     const el = id => document.getElementById(id);
     el('continue').addEventListener('click', () => setView({screen: 'checkout', declined: false}));
     el('try-payment').addEventListener('click', () => setView({screen: 'checkout', declined: true}));
@@ -63,33 +75,27 @@ This minimal example uses static source targets and ordinary local state:
 </div>
 ```
 
-Already using a declared scalar Value? Register its accessor and setter:
-`const [step, setStep] = signal('$step');`
-`reviewState({id: 'step', get: step, restore: saved => setStep(saved)});`
-For several signals, restore them together with Solid's `batch`.
+A screen the restore mounts reads its own saved values as it mounts, so a
+`<Show>` screen may keep named signals of its own.
 
 ## Snapshot contract
 
-- `get()` returns small JSON data. Include defaults, `false`, `null` and
-  empty selections; omitting closed/default state leaves the previous view behind.
-- `restore(saved)` synchronously sets state. It must not submit a form,
-  call a Mutation, retry a payment, or fetch. Effects triggered by restored
-  signals must not perform writes either; keep writes in explicit user actions.
-- Save only UI choices and safe mock data that every comment reader may see.
-  Exclude credentials, private drafts, DOM nodes, functions and network responses.
-  The combined snapshot is limited to 32 KiB and 64 registrations.
-- Registration returns a cleanup callback; a Solid owner and author-module
-  disposal also clean up. Register above conditional screens so navigation
-  does not change the set of registered IDs.
-- Restore uses the current artifact, not an archived version or backend
-  snapshot. Changed registration IDs refuse restoration; your adapter must
-  handle or reject older shapes within an ID. Keep the comment target and discussion.
+- A saved value is plain JSON: strings, numbers, booleans, `false`, `null`,
+  arrays and plain objects. The comment holds up to 32 KiB and 256 keys; a
+  signal holding a DOM node, a function or a Date is skipped with a warning.
+- Restoring sets Values and signals as a user's change would; effects run.
+  Keep writes in explicit user actions: never submit a form, call a Mutation
+  or fetch from an effect of restorable state.
+- Save only UI choices and safe mock data every comment reader may see.
+  Credentials, private drafts and network responses stay in unnamed signals.
+- Restore uses the current artifact, not an archived version. Saved keys the
+  page no longer has are ignored; an element written anew gets a new `id`, so
+  its saved state goes with the old one. The target and discussion stay.
 
 ## Verify through native comments
 
 In a [live session](live-sessions.md), reach a non-default view and create a
 native comment on its visible target. Navigate away or reset, then open that
-thread: screen, selection and dialog must return together. Reload and open
-the persisted thread again. Also save a closed/default view and restore it
-from an open dialog. Verify action counters or dataset rows did not change.
-Static pages continue to use their existing target and selected-text anchors.
+thread: screen, tab, selection and dialog must return together. Reload and
+open the persisted thread again. Also save a closed/default view and restore
+it from an open dialog. Verify action counters or dataset rows did not change.

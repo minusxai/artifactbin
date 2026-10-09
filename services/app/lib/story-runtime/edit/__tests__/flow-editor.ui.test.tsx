@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 /**
- * services/app/lib/editor-v2/__tests__/flow-editor.ui.test.tsx, PORTED to @solidjs/testing-library
+ * services/app/lib/editor-engine/__tests__/flow-editor.ui.test.tsx, PORTED to @solidjs/testing-library
  * against the Solid FlowEditor. Every assertion is the original's; what changes is how a test
  * gives a component NEW PROPS: React's `rerender(<C {...next} />)` becomes a signal the test sets
  * (Solid components run once; there is no re-render to request).
@@ -11,11 +11,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@/solid/__tests__/helpers';
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import type { EditorView } from 'prosemirror-view';
-import { editorDocument, sourceNodes } from '@/lib/editor-v2/model';
+import { editorDocument, sourceNodes } from '@/lib/editor-engine/model';
 import { FlowEditor } from '../FlowEditor';
-import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-v2/flow-view';
+import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-engine/flow-view';
 import { createEditorSource } from '@/solid/editor/create-editor-source';
-import { captureBookmark } from '@/lib/editor-v2/bookmark';
+import { captureBookmark } from '@/lib/editor-engine/bookmark';
 
 function nodes(source: string) {
   const p = parseJsx(source);
@@ -345,11 +345,8 @@ it('keeps the first line\'s leading and the last line\'s trailing spaces of a mu
   expect(serializeJsx(onChange.mock.calls.at(-1)![0])).toMatch(/alpha first<\/p>.*>last omega<\/p>$/);
 });
 
-/**
- * Markdown block shortcuts, typed through ProseMirror's own text-input path (handleTextInput, then the
- * default insertion), with every change recorded by the real source store, as the page records it.
- */
-describe('markdown block shortcuts', () => {
+/** HTML typing stays literal; rich formatting remains an explicit command. */
+describe('HTML text editing', () => {
   function editor(source: string) {
     let engine: EditorView | null = null;
     const initial = serializeJsx(nodes(source));
@@ -370,122 +367,48 @@ describe('markdown block shortcuts', () => {
     return { view, store, type, enter, caret, v };
   }
 
-  it.each([['**bold**', 'strong', 'bold'], ['*italic*', 'em', 'italic']])('formats typed %s while preserving identity, caret and undo', async (markdown, tag, text) => {
-    const e = editor('<p id="paragraph"></p>');
-    e.type(markdown);
-    expect(e.view.container.querySelector(`p#paragraph > ${tag}`)?.textContent).toBe(text);
-    const converted = e.store.current();
-    expect(converted).not.toContain(markdown);
-    expect(e.v().state.selection.$from.parentOffset).toBe(text.length);
-    await e.store.undo();
-    expect(e.store.current()).toBe(`<p id="paragraph">${markdown}</p>`);
-    await e.store.redo();
-    expect(e.store.current()).toBe(converted);
-    e.type(' next');
-    expect(e.view.container.querySelector(tag)?.textContent).toBe(text);
-    expect(e.view.container.querySelector('p')?.textContent).toBe(`${text} next`);
-  });
-
-  it.each(['<pre id="code"></pre>', '<ul><li><p id="item"></p></li></ul>', '<table><tbody><tr><td><p id="cell"></p></td></tr></tbody></table>'])('keeps typed inline markers literal outside ordinary prose: %s', source => {
-    const e = editor(source);
-    e.type('**literal**');
-    expect(e.store.current()).toContain('**literal**');
-    expect(e.view.container.querySelector('strong')).toBeNull();
-  });
-
-  it('keeps inline Markdown literal during composition and plain-text paste', () => {
-    const composing = editor('<p id="ime"></p>');
-    fireEvent.compositionStart(composing.view.getByRole('textbox'));
-    composing.type('**literal**');
-    expect(composing.view.container.querySelector('strong')).toBeNull();
-    const pasted = editor('<p id="paste"></p>');
-    fireEvent.paste(pasted.view.getByRole('textbox'), { clipboardData: { files: [], getData: (type: string) => type === 'text/plain' ? '**literal**' : '' } });
-    expect(pasted.store.current()).toContain('**literal**');
-    expect(pasted.view.container.querySelector('strong')).toBeNull();
-  });
-
-  it('preserves surrounding prose and leaves escaped or empty emphasis literal', () => {
-    const e = editor('<p id="prose">Before </p>');
-    e.caret('end');
-    e.type('**word** after');
-    expect(e.view.container.querySelector('strong')?.textContent).toBe('word');
-    expect(e.view.container.querySelector('p')?.textContent).toBe('Before word after');
-    const literal = editor('<p id="literal"></p>');
-    literal.type('\\*escaped* ** **');
-    expect(literal.view.container.querySelector('em, strong')).toBeNull();
-  });
-
-  const ID = 'e[0-9a-f]{32}';
-
-  it.each(['space', 'enter'])('inserts a horizontal rule with --- and %s, preserving undo and a place to type', async trigger => {
-    const e = editor('<article id="doc"><p id="divider"></p></article>');
-    e.type('---');
-    if (trigger === 'space') e.type(' '); else e.enter();
-    expect(e.view.container.querySelector('article > hr#divider')).not.toBeNull();
-    expect(e.view.container.querySelector('hr + p')).not.toBeNull();
-    const converted = e.store.current();
-    expect(serializeJsx(sourceNodes(editorDocument(nodes(converted))))).toBe(converted);
-    await e.store.undo();
-    expect(e.store.current()).toBe(`<article id="doc"><p id="divider">---${trigger === 'space' ? ' ' : ''}</p></article>`);
-    await e.store.redo();
-    expect(e.store.current()).toBe(converted);
-    e.type('After the divider');
-    expect(e.view.container.querySelector('hr + p')?.textContent).toBe('After the divider');
-  });
-
-  it('keeps text after the horizontal-rule marker in the following paragraph', () => {
-    const e = editor('<p id="divider">Keep me</p>');
-    e.caret('start');
-    e.type('--- ');
-    expect(e.view.container.querySelector('hr + p')?.textContent).toBe('Keep me');
-  });
-
-  it.each(['[] ', '[ ] ', '[x] '])('creates a saved, toggleable checkbox from %s', async prefix => {
-    const e = editor('<p id="task"></p>');
-    e.type(`${prefix}Ship it`);
-    const checkbox = e.view.getByRole('checkbox') as HTMLInputElement;
-    expect(checkbox.checked).toBe(prefix === '[x] ');
-    expect(checkbox.disabled).toBe(false);
-    const before = e.store.current();
-    fireEvent.click(checkbox);
+  it.each(['# ', '## ', '###### ', '- ', '* ', '1. ', '> ', '[] ', '[x] ', '``` ', '--- ', '**bold**', '*italic*'])('keeps typed %s literal, preserving identity, classes and undo', async text => {
+    const e = editor('<p id="a" className="lead"></p>');
+    e.type(text);
+    expect(e.view.container.querySelector('p#a.lead')?.textContent).toBe(text);
+    expect(e.view.container.querySelector('h1,h2,ul,ol,hr,pre,blockquote,strong,em,input')).toBeNull();
     const saved = e.store.current();
-    expect(saved).not.toBe(before);
-    expect(e.view.getByRole('checkbox').getAttribute('aria-label')).toBe('Task completed');
     expect(serializeJsx(sourceNodes(editorDocument(nodes(saved))))).toBe(saved);
-    expect(saved).toContain('disabled');
     await e.store.undo();
-    expect(e.store.current()).toBe(before);
+    expect(e.store.current()).toBe('<p id="a" className="lead"></p>');
+    await e.store.redo();
+    expect(e.store.current()).toBe(saved);
   });
-
-  it('continues checkboxes unchecked on Enter and exits an empty task', () => {
-    const e = editor('<p id="task"></p>');
-    e.type('[x] Done');
-    e.enter();
-    e.type('Next');
-    const boxes = e.view.getAllByRole('checkbox') as HTMLInputElement[];
-    expect(boxes.map(box => box.checked)).toEqual([true, false]);
-    e.enter();
-    e.enter();
-    e.type('Plain paragraph');
+  it.each(['---', '```'])('Enter after %s creates an ordinary paragraph', marker => {
+    const e = editor('<p id="a"></p>');
+    e.type(marker); e.enter(); e.type('Next');
+    expect([...e.view.container.querySelectorAll('p')].map(p => p.textContent)).toEqual([marker, 'Next']);
+    expect(e.view.container.querySelector('hr,pre')).toBeNull();
+  });
+  it('continues existing HTML checkboxes and leaves an empty task', () => {
+    const e = editor('<p id="task"><input type="checkbox" disabled checked={true} /> Done</p>');
+    e.caret('end'); e.enter(); e.type('Next');
+    expect((e.view.getAllByRole('checkbox') as HTMLInputElement[]).map(box => box.checked)).toEqual([true, false]);
+    e.enter(); e.enter(); e.type('Plain paragraph');
     expect(e.view.getAllByRole('checkbox')).toHaveLength(2);
     expect(e.view.container.querySelector('p:last-child')?.textContent).toBe('Plain paragraph');
   });
-
-  it.each(['space', 'enter'])('starts a literal code block with a fence and %s', trigger => {
-    const e = editor('<p id="code" className="lead"></p>');
-    e.type('```');
-    if (trigger === 'space') e.type(' '); else e.enter();
-    e.type('# literal');
-    e.enter();
-    e.type('  indented');
+  it('keeps newlines in authored code and Mod-Enter leaves it', () => {
+    const e = editor('<pre id="code"></pre>');
+    e.type('# literal'); e.enter(); e.type('  indented');
     expect(e.store.current()).toBe('<pre id="code"># literal\n  indented</pre>');
-    expect(serializeJsx(sourceNodes(editorDocument(nodes(e.store.current()))))).toBe(e.store.current());
     const mac = /Mac/.test(navigator.platform);
     e.v().someProp('handleKeyDown', f => f(e.v(), new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: !mac, metaKey: mac })));
     e.type('After code');
     expect(e.view.container.querySelector('pre + p')?.textContent).toBe('After code');
   });
-
+  it.each(['ul', 'ol'])('continues authored %s items and leaves an empty item', list => {
+    const e = editor(`<${list} id="list"><li id="item"><p id="a">one</p></li></${list}>`);
+    e.caret('end'); e.enter(); e.type('two'); e.enter(); e.enter(); e.type('after');
+    expect(e.view.container.querySelectorAll(`${list} > li`)).toHaveLength(2);
+    expect(e.view.container.querySelector(`${list} + p`)?.textContent).toBe('after');
+    expect(new Set(e.store.current().match(/id="[^"]+"/g)).size).toBe(e.store.current().match(/id="[^"]+"/g)!.length);
+  });
   it('preserves code newlines and indentation when native typing changes the DOM', async () => {
     const e = editor('<pre id="code"># literal\n  codeCode</pre>');
     const text = e.view.container.querySelector('pre')!.firstChild!;
@@ -494,33 +417,6 @@ describe('markdown block shortcuts', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     flushFlowView(e.v());
     expect(e.store.current()).toBe('<pre id="code"># literal\n  codeXCode</pre>');
-  });
-
-  it('wraps a paragraph in a blockquote and exits an empty quote', () => {
-    const e = editor('<p id="quote"></p>');
-    e.type('> Quoted');
-    expect(e.view.container.querySelector('blockquote > p#quote')?.textContent).toBe('Quoted');
-    e.enter();
-    e.enter();
-    e.type('After quote');
-    expect(e.view.container.querySelector('blockquote + p')?.textContent).toBe('After quote');
-  });
-
-  it.each(['[] ', '``` ', '> '])('undoes the %s conversion back to its literal marker', async prefix => {
-    const e = editor('<p id="a"></p>');
-    e.type(prefix);
-    await e.store.undo();
-    expect(e.store.current()).toBe(`<p id="a">${prefix.replace('>', '&gt;')}</p>`);
-  });
-
-  it.each(['[] ', '``` ', '> ', '--- '])('keeps %s literal in code, a cell, and mid-paragraph', prefix => {
-    for (const source of ['<pre id="a"></pre>', '<table><tr><td><p id="a"></p></td></tr></table>', '<p id="a">Literal: </p>']) {
-      const e = editor(source);
-      e.caret('end');
-      e.type(prefix);
-      expect(e.view.container.querySelector('#a')?.textContent).toContain(prefix);
-      expect(e.view.queryByRole('checkbox')).toBeNull();
-    }
   });
 
   it('keeps a saved checkbox disabled when prose is not editable', () => {
@@ -533,127 +429,7 @@ describe('markdown block shortcuts', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('keeps repeated Enter and markdown headings inside the document column', () => {
-    const e = editor('<article id="doc" className="max-w-3xl"><h1 id="title">Notes</h1><p id="body">Body</p></article>');
-    e.caret('end');
-    for (let i = 0; i < 5; i++) e.enter();
-    e.type('## Section');
-    const saved = nodes(e.store.current());
-    expect(saved).toHaveLength(1);
-    expect(e.view.container.querySelector('article > h2')?.textContent).toBe('Section');
-    e.enter();
-    e.type('Following paragraph');
-    expect(e.view.container.querySelector('article > h2 + p')?.textContent).toBe('Following paragraph');
-  });
-
-  it('keeps the converted heading selectable after the source echoes back', () => {
-    // The real mounter echoes saved nodes without replacing a matching engine document.
-    const [source, setSource] = createSignal(nodes('<article id="doc"><p id="section"></p></article>'));
-    let engine: EditorView | null = null;
-    const mounted = render(() => <FlowEditor nodes={source()} path="0" onChange={setSource} onView={v => { if (v) engine = v; }} />);
-    const v = engine! as EditorView;
-    for (const ch of '## Section') {
-      const { from, to } = v.state.selection;
-      const typing = () => v.state.tr.insertText(ch, from, to);
-      if (!v.someProp('handleTextInput', f => f(v, from, to, ch, typing))) v.dispatch(typing());
-    }
-    flushFlowView(v);
-    expect(mounted.container.querySelector('h2#section')?.getAttribute('data-mx-ast')).toBe('0.0');
-  });
-
-  it.each([1, 2, 3, 4, 5, 6])('turns %i hash marks and a space at the start of a paragraph into that heading level', (level) => {
-    const e = editor('<p id="a" className="mt-6 text-lg">Title</p>');
-    e.caret('start');
-    e.type(`${'#'.repeat(level)} `);
-    expect(e.store.current()).toBe(`<h${level} id="a">Title</h${level}>`);
-    expect(e.view.container.querySelector(`h${level}#a`)!.textContent).toBe('Title');
-    e.type('New ');
-    expect(e.store.current()).toBe(`<h${level} id="a">New Title</h${level}>`);
-  });
-
-  it.each([['* ', 'ul'], ['- ', 'ul'], ['1. ', 'ol']])('turns "%s" at the start of a paragraph into a %s item, keeping the paragraph\'s identity', (prefix, list) => {
-    const e = editor('<p id="a" className="mt-6">item</p>');
-    e.caret('start');
-    e.type(prefix);
-    expect(e.store.current()).toMatch(new RegExp(`^<${list} id="${ID}"><li id="${ID}"><p id="a">item</p></li></${list}>$`));
-    expect(e.view.container.querySelector(`${list} > li > p#a`)!.textContent).toBe('item');
-  });
-
-  it('restores the literal prefix with one undo, then redoes the conversion', async () => {
-    const e = editor('<p id="a" className="lead"></p>');
-    e.type('## ');
-    expect(e.store.current()).toBe('<h2 id="a"></h2>');
-    expect((await e.store.undo()).ok).toBe(true);
-    expect(e.store.current()).toBe('<p id="a" className="lead">## </p>');
-    expect((await e.store.redo()).ok).toBe(true);
-    expect(e.store.current()).toBe('<h2 id="a"></h2>');
-    const e2 = editor('<p id="b"></p>');
-    e2.type('- ');
-    await e2.store.undo();
-    expect(e2.store.current()).toBe('<p id="b">- </p>');
-  });
-
-  it('continues a list on Enter and leaves it on Enter in an empty item', () => {
-    const e = editor('<p id="a"></p>');
-    e.type('- one');
-    e.enter();
-    e.type('two');
-    e.enter();
-    expect(e.view.container.querySelectorAll('ul > li')).toHaveLength(3);
-    e.enter();
-    e.type('after');
-    const source = e.store.current();
-    expect(source).toMatch(new RegExp(`^<ul id="${ID}"><li id="${ID}"><p id="a">one</p></li><li id="${ID}"><p id="${ID}">two</p></li></ul><p id="${ID}">after</p>$`));
-    expect(new Set(source.match(/id="[^"]+"/g)).size).toBe(source.match(/id="[^"]+"/g)!.length);
-    const items = e.view.container.querySelectorAll('ul > li');
-    expect(items).toHaveLength(2);
-    expect(e.view.container.querySelector('ul + p')!.textContent).toBe('after');
-  });
-
-  it('numbers continued items in a numbered list', () => {
-    const e = editor('<p id="a"></p>');
-    e.type('1. first');
-    e.enter();
-    e.type('second');
-    expect(e.store.current()).toMatch(new RegExp(`^<ol id="${ID}"><li id="${ID}"><p id="a">first</p></li><li id="${ID}"><p id="${ID}">second</p></li></ol>$`));
-  });
-
-  it('keeps the converted source through save and reload', () => {
-    const e = editor('<p id="a">intro</p><p id="b"></p><p id="c"></p>');
-    e.v().dispatch(e.v().state.tr.setSelection(TextSelection.create(e.v().state.doc, 'intro'.length + 3)));
-    e.type('### Results');
-    e.v().dispatch(e.v().state.tr.setSelection(TextSelection.atEnd(e.v().state.doc)));
-    e.type('* point');
-    const saved = e.store.current();
-    const parsed = nodes(saved);
-    expect(serializeJsx(sourceNodes(editorDocument(parsed)))).toBe(saved);
-    const reloaded = render(() => <FlowEditor nodes={parsed} path="0" onChange={() => {}} />);
-    expect(reloaded.container.querySelector('h3#b')!.textContent).toBe('Results');
-    expect(reloaded.container.querySelector('ul > li > p#c')!.textContent).toBe('point');
-    expect(reloaded.container.querySelector('p#a')!.textContent).toBe('intro');
-  });
-
-  it('types the marker literally inside code, mid-prose, inside lists, for other markers and while composing', () => {
-    const code = editor('<pre id="c"></pre>');
-    code.type('# x');
-    expect(code.store.current()).toBe('<pre id="c"># x</pre>');
-    const prose = editor('<p id="a">hello</p>');
-    prose.caret('end');
-    prose.type(' # - 1. x');
-    expect(prose.store.current()).toBe('<p id="a">hello # - 1. x</p>');
-    const listed = editor('<ul id="u"><li id="l"><p id="a"></p></li></ul>');
-    listed.type('# x');
-    expect(listed.store.current()).toBe('<ul id="u"><li id="l"><p id="a"># x</p></li></ul>');
-    const other = editor('<p id="a"></p>');
-    other.type('#tag 2. ####### +');
-    expect(other.store.current()).toBe('<p id="a">#tag 2. ####### +</p>');
-    const composing = editor('<p id="a"></p>');
-    fireEvent.compositionStart(composing.view.getByRole('textbox'));
-    composing.type('# ');
-    expect(composing.store.current()).toBe('<p id="a"># </p>');
-  });
 });
-
 
 describe('selection during collaborative Markdown updates', () => {
   const initial = '<p id="a">alpha</p><p id="b">bravo</p><p id="c">charlie</p>';
@@ -814,10 +590,10 @@ describe('document-editor keys: Tab indents, links are typed, pasted and found',
     expect(list.view.container.querySelector('li a')?.getAttribute('href')).toBe('https://www.example.com');
   });
 
-  it('turns a typed [text](url) into linked text, and leaves an unsafe one literal', async () => {
+  it('keeps typed Markdown links literal in HTML', () => {
     const e = editor('<p id="p"></p>');
     e.type('Read [the guide](example.com/guide) first');
-    expect(e.saved()).toBe('<p id="p">Read <a href="https://example.com/guide">the guide</a> first</p>');
+    expect(e.saved()).toBe('<p id="p">Read [the guide](example.com/guide) first</p>');
     const unsafe = editor('<p id="p"></p>');
     unsafe.type('[x](javascript:alert(1))');
     expect(unsafe.view.container.querySelector('a')).toBeNull();
@@ -837,7 +613,7 @@ describe('document-editor keys: Tab indents, links are typed, pasted and found',
   });
 
   it('finds the whole link at a caret, edits or removes all of it, and inserts the address at a bare caret', async () => {
-    const { linkAt, setLink } = await import('@/lib/editor-v2/links');
+    const { linkAt, setLink } = await import('@/lib/editor-engine/links');
     const e = editor('<p id="p">Go <a href="https://a.example"><strong>to</strong> here</a> now</p>');
     e.select(e.at(' here', 2));
     expect(linkAt(e.v().state)).toEqual({ href: 'https://a.example', from: e.at('to'), to: e.at(' here', 5) });

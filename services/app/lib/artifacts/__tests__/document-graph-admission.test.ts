@@ -5,7 +5,7 @@ import {prepareGraphOperation,prepareGraphSource,graphAdmissionPlan} from '../wr
 import {applyGraphPatch} from '../../document/document-graph-patch';
 import {publishJsx} from '@/lib/story/document/jsx-tier';
 import {stampNodeIds} from '../../document/node-ids';
-const context={loadRef:async()=>null};
+const context={loadRef:async()=>null,publish:publishJsx};
 async function setup(source='<section id="root"><p id="a">Alpha</p><p id="b">Beta</p></section>'){
  const published=await publishJsx({},source,context);if(published instanceof Response)throw new Error(await published.text());
  return {id:'test',version:1,document:createDocumentGraph(stampNodeIds(published.source!).source,1),meta:published.meta};

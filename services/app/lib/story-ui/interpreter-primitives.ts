@@ -5,7 +5,7 @@ import { immutableSet } from '@/lib/jsx/immutable-set';
 import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/dataflow/dataflow';
 import { substituteRow } from '@/lib/jsx/row-scope';
 import { needsFrameReferrer } from './document-sources';
-import { AST_PATH_ATTR } from './ast-path';
+import { AST_PATH_ATTR, SOURCE_NODE_ID_ATTR } from './ast-path';
 
 /** JSX attr names → React prop names for HTML tags (agents author HTML spellings). */
 const HTML_ATTR_TO_REACT: Record<string, string> = { class: 'className', for: 'htmlFor' };
@@ -115,6 +115,10 @@ export function rawBuildProps(
     }
 
     props[name] = value;
+  }
+  const sourceId = attributes.find((a) => a.name.toLowerCase() === 'id')?.value;
+  if (sourceId?.static && typeof sourceId.json === 'string' && sourceId.json) {
+    props[SOURCE_NODE_ID_ATTR] = sourceId.json;
   }
   if (!isComponent && tag.toLowerCase() === 'iframe' && typeof props.src === 'string' && needsFrameReferrer(props.src)) {
     props.referrerpolicy = 'strict-origin-when-cross-origin';

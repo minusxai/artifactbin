@@ -3,19 +3,19 @@
 import { createSignal, type Setter } from 'solid-js';
 import { render } from 'solid-js/web';
 import { serializeJsx, type JsxNode } from '@/lib/jsx';
-import { editorDocument, isProseTree, sourceNodes } from '@/lib/editor-v2/model';
-import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
+import { editorDocument, isProseTree, sourceNodes } from '@/lib/editor-engine/model';
+import type { EditorSelectionChange } from '@/lib/editor-engine/bookmark';
 import type { EditorView } from 'prosemirror-view';
 import { isEditableTextHost } from '@/lib/story-ui/host-classify';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { STORY_GRID_EDIT_CSS } from '@/lib/story-ui/grid-css';
 import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
 import { FlowEditor } from './FlowEditor';
-import { flushFlowView, repathFlowView } from '@/lib/editor-v2/flow-view';
+import { flushFlowView, repathFlowView } from '@/lib/editor-engine/flow-view';
 import { GridEdit, type GridTile } from './GridEdit';
 import { discoverSlides } from '@/lib/story-runtime/slides';
 import { AST_PATH_ATTR as AST_PATH } from '@/lib/story-ui/ast-path';
-import { isScriptComponent, MOUNT_ATTR } from '@/lib/compiled-page/script-mount';
+import { isScriptComponent, MOUNT_ATTR } from '@/lib/story-runtime/script-mount';
 
 export interface CompiledEditCallbacks {
   onFlow(path: string, expected: string, replacement: string, group?: string, selection?: EditorSelectionChange): void;

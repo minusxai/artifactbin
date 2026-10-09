@@ -1,5 +1,4 @@
 import {hostedRequestRefusal} from '@/lib/accounts/request-authority';
-import cliRelease from '../../public/chat/release.json';
 import {BROWSER_SESSION_HEADER,CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 /**
  * The bearer/cookie route wrapper, and the two in-memory web-ingest allowances
@@ -10,7 +9,7 @@ import {BROWSER_SESSION_HEADER,CLI_PROTOCOL_VERSION} from '@artifactbin/contract
  * resolve never falls back to a cookie identity. The operator's secret is
  * lib/admin-auth's, with its own uniform 404.
  */
-import { WEB_INGEST_MAX_PER_HOUR } from '../platform/config';
+import { cliReleaseVersion, WEB_INGEST_MAX_PER_HOUR } from '../platform/config';
 import { ARTIFACTBIN_AGENT_HEADER, identifyClient } from '../platform/client-identity';
 import { isCrossSiteRequest, json, unauthorized } from '../http/http';
 import { rememberTokenClient, resolveToken, touchToken } from './tokens';
@@ -149,7 +148,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     if(npmRequired)return npmRequired;
     // Old clients inspect this header before JSON errors: keep required protocol in the body
     // so a future incompatible server cannot mask its concrete npm launch instruction.
-    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,required_version:cliRelease.version,hint:'Run afbin update, then retry.'}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-CLI-Version':cliRelease.version}});
+    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,required_version:cliReleaseVersion(),hint:'Run afbin update, then retry.'}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-CLI-Version':cliReleaseVersion()}});
     const account=actor.userId??actor.id;
     const expectedAccount=request.headers.get('X-Artifactbin-Account');
     if(expectedAccount&&!await matchesWorkspaceAccount(expectedAccount,account))return json({error:'account_mismatch',expected_account:expectedAccount,actual_account:account,hint:'Use the credentials for this workspace account.'},409);
@@ -177,7 +176,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     const headers=new Headers(response.headers);
     headers.set('X-Artifactbin-Account',expectedAccount||account);
     headers.set('X-Artifactbin-Protocol',String(CLI_PROTOCOL_VERSION));
-    headers.set('X-Artifactbin-CLI-Version',cliRelease.version);
+    headers.set('X-Artifactbin-CLI-Version',cliReleaseVersion());
     return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   };
 }

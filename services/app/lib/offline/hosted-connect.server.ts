@@ -1,11 +1,12 @@
 /** Hosted handoff: authenticated baseline proof, existing atomic graph edits, then recoverable existing annotation operations. The offered HTML never executes. */
 import {createHash} from 'node:crypto';
 import {browserActor,actorForArtifacts,ownerUsername} from '../accounts';
-import {applyEditFor,createArtifactFromBody,durableMutation,getEditableArtifactFor,getVersionFor,respondToEdit,capabilityGuard,type TokenActor} from '../artifacts';
+import { applyEditFor, durableMutation, getEditableArtifactFor, getVersionFor, respondToEdit, capabilityGuard } from '../artifacts';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {UnservableDocument} from '../artifacts/servable';
 import {actOnAnnotationFor,createAnnotationFor,listAnnotationsFor,type AnnotationWire} from '../annotations';
 import {baseUrl,json} from '../http';
-import {prepareDocumentAuthoringContext} from '@/lib/artifacts/write/document-authoring-context';
+import {createArtifactFromBody,prepareDocumentAuthoringContext} from '@/lib/story/publish';
 import {readFileOffer} from './offer';
 import {prepareHostedFileUpdate,prepareHostedFilePublication} from './hosted-connect';
 import {validateFileComments} from './comment-validation';

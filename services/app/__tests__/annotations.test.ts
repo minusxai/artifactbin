@@ -1,5 +1,6 @@
 import {artifactQuery} from '@/lib/artifacts';
-import {observedRequest} from '@/__tests__/conditional-request';
+import {observedRequest,patchMetadata} from '@/__tests__/conditional-request';
+import { getDb } from '@/lib/platform';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes, with reply/state transitions.
  *
@@ -72,7 +73,7 @@ const headEditId = async (token: string, id: string) => {
 describe('creating (browser door, owner only)', () => {
   it('persists optional review context through create and fresh list; old comments remain context-free', async () => {
     const { doc, actor } = await publish();
-    const view_state = { v: 1, components: { checkout: { screen: 'payment', error: false } } };
+    const view_state = { v: 2, state: { $: { screen: 'payment' }, 'aBcD:value': 'billing', 'eFgH:open': false } };
     const res = await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'Review this state', view_state });
     expect(res.status).toBe(201);
     expect((await res.json()).view_state).toEqual(view_state);
@@ -80,7 +81,7 @@ describe('creating (browser door, owner only)', () => {
     expect((await listed.json()).annotations[0].view_state).toEqual(view_state);
     const plain = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'Ordinary text' });
     expect((await plain.json()).view_state).toBeUndefined();
-    const bad = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 2, components: {} } });
+    const bad = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 1, components: {} } });
     expect(bad.status).toBe(400);
   });
 
@@ -188,6 +189,24 @@ describe('the wire — colocation on GET', () => {
     expect(rows.annotations[0].orphaned).toBe(true); // a whole-document write destroys every anchor…
     expect(rows.annotations[0].anchor).toBeNull();
     expect(rows.annotations[0].snippet).toContain('Revenue'); // …but never the comment
+  });
+
+  it('a folder\'s metadata writes echo the open count their own commit read (PATCH and PUT)', async () => {
+    const t = await mintToken('agent');
+    const folder = await create(t.token, { format: 'folder', title: 'Reports' });
+    // A thread on the folder itself, written straight to the table: the count is the commit's, not a second read.
+    await (await getDb()).query("INSERT INTO annotations (id, artifact_id, body, author_kind) VALUES ('ann_folder_open', $1, 'file the Q3 deck here', 'human')", [folder.id]);
+
+    const patched = await patchMetadata(t.token, folder.id, { title: 'Renamed' });
+    expect(patched.status, await patched.clone().text()).toBe(200);
+    expect(await patched.json()).toMatchObject({ title: 'Renamed', open_annotations: 1 });
+
+    const put = await putArtifactRoute(
+      await observedRequest(`/api/artifacts/${folder.id}`, { method: 'PUT', token: t.token, json: { title: 'Again' } }),
+      params({ id: folder.id }),
+    );
+    expect(put.status, await put.clone().text()).toBe(200);
+    expect(await put.json()).toMatchObject({ title: 'Again', open_annotations: 1 });
   });
 
   it('the bearer list honours ?status=', async () => {
@@ -359,6 +378,37 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 });
 
 describe('lifecycle', () => {
+  it('soft-deletes one reply while preserving its thread, sibling reply and open count', async () => {
+    const { t, doc, actor } = await publish();
+    const root = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'keep the root' })).json()) as AnnotationWire;
+    for (const reply of ['delete only this reply', 'keep this sibling']) {
+      const saved = await actOnAnnotationRoute(
+        request(`/api/artifacts/${doc.id}/annotations/${root.id}`, { method: 'POST', token: t.token, json: { reply } }),
+        params({ id: doc.id, annId: root.id }),
+      );
+      expect(saved.status).toBe(200);
+    }
+    const db = await harness.db();
+    const before = await artifactQuery<{ id: string; body: string }>(db,
+      'SELECT id, body FROM annotations WHERE root_id = $1', [root.id]);
+    const replyId = before.rows.find((row) => row.body === 'delete only this reply')!.id;
+    const deleted = await myDeleteAnnotationRoute(
+      request(`/api/my/artifacts/${doc.id}/annotations/${replyId}`, { method: 'DELETE', actor }),
+      params({ id: doc.id, annId: replyId }),
+    );
+    expect(deleted.status).toBe(200);
+    const stored = await artifactQuery<{ id: string; deleted_at: string | null }>(db,
+      'SELECT id, deleted_at FROM annotations WHERE id = $1 OR root_id = $1', [root.id]);
+    expect(stored.rows).toHaveLength(3);
+    expect(stored.rows.find((row) => row.id === replyId)!.deleted_at).not.toBeNull();
+    expect(stored.rows.filter((row) => row.id !== replyId).every((row) => row.deleted_at === null)).toBe(true);
+    const response = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor }), params({ id: doc.id }));
+    const listed = (await response.json()).annotations as AnnotationWire[];
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.thread.map((comment) => comment.body)).toEqual(['keep the root', 'keep this sibling']);
+    expect(await countOpenAnnotations(doc.id)).toBe(1);
+  });
+
   it('the owner deletes a thread outright — root and replies; a stranger gets the uniform 404', async () => {
     const { t, doc, actor } = await publish();
     const a = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'erase me' })).json()) as AnnotationWire;

@@ -9,7 +9,7 @@ import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { artifactState } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { publishDataset } from '@/lib/datasets/data-tiers';
 import type { StoredContent } from '@/lib/document/stored-content';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

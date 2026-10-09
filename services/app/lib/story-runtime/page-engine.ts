@@ -5,7 +5,7 @@
  * nodes placed in the browser (lib/dataflow/placement) and the server the rest.
  *
  * It answers what the server would, by running the SAME code: the dataflow
- * evaluator (lib/sql/dataflow-core) for reads — over ONE database the page
+ * evaluator (lib/dataflow/evaluate) for reads — over ONE database the page
  * keeps open (SqliteEngine.held), so a held dataset crosses into SQLite once,
  * not on every run — the write signature
  * (lib/dataflow/mutation-request bindMutationRequest) and the local-table write
@@ -31,7 +31,7 @@
 import type { MutationInput, Row, Scalar } from '@artifactbin/contracts';
 import { DISPLAY_ROWS, isQueryFailure } from '@artifactbin/contracts';
 import type { HeldDatabase, SqliteEngine } from '@artifactbin/sql/core';
-import { evaluateDataflow } from '@/lib/sql/dataflow-core';
+import { evaluateDataflow } from '@/lib/dataflow/evaluate';
 import type { CompiledDataflow, CompiledMutation } from '@/lib/dataflow/compiled-dataflow';
 import { importRef, mutationReads, type ImportTables } from '@/lib/dataflow/compiled-flow';
 import type { TableResult } from '@/lib/dataflow/dataflow';

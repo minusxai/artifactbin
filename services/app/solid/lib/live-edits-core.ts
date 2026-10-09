@@ -20,10 +20,10 @@
 import type { DocumentGraph } from '@artifactbin/contracts';
 import { advanceBrowserDocument, prepareBrowserDocumentUpdate, preparesOffThread, warmBrowserPreparer } from '@/lib/document/document-authoring-client';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
+import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-engine/annotation-map';
 import { rebaseEditBatch } from '@/lib/document/edit-batch';
-import { sourceChanges } from '@/lib/editor-v2/history';
-import { sourceEdits } from '@/lib/editor-v2/source-edits';
+import { sourceChanges } from '@/lib/editor-engine/history';
+import { sourceEdits } from '@/lib/editor-engine/source-edits';
 
 /** How long a burst of typing coalesces before it is persisted. */
 const FLUSH_DEBOUNCE_MS = 500;

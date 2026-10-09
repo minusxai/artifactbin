@@ -1,9 +1,4 @@
-/** Authenticated account claims supplied by the identity bridge, never request JSON. */
-export interface VerifiedAccount {
-  userId: string | null;
-  email?: string | null;
-  emailVerified?: boolean;
-}
+import type { VerifiedAccount } from '@/lib/accounts/actors';
 
 /** Optional host-owned grant for editing markup documents; never ownership or dataset writes. */
 export type DocumentEditorPolicy = (account: VerifiedAccount) => boolean;

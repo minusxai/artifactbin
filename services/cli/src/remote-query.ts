@@ -5,7 +5,7 @@ import {localDefinition} from './dataset-source';
 import {digest} from './files';
 import {resolve} from 'node:path';
 import {batchCommand} from './batch';
-import type {DatasetConnection} from '../../app/lib/datasets/types';
+import type {DatasetConnection} from '../../app/lib/cli-toolkit';
 import {inspectWorkspace,type Workspace,type Snapshot} from './workspace';
 import type {HttpClient} from './http';
 

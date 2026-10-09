@@ -1,7 +1,7 @@
 /**
  * THE DOCUMENT'S FRAME ON THE APP PAGE — the one way a document is shown on the app's origin.
  *
- * A document is rendered only on its own origin (`<hex(id)>.<pages host>`, lib/serving/pages-origin), as the
+ * A document is rendered only on its own origin (`<hex(id)>.<pages host>`, lib/http/pages-origin), as the
  * standalone compiled page (`/raw`, lib/compiled-page/assembler). The app page (server/app) is the app's own
  * shell — its bar, its rail, the consent slot — and this one frame, drawn by the SERVER into the shell's body so
  * the document starts loading with the page rather than after the app's code (solid/pages/Document adopts it and
@@ -11,7 +11,7 @@
  * takes the tab) and nothing it does not; the app's own CSP `frame-src` admits only the pages hosts.
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { STORY_FRAMED_ATTR } from '@/lib/islands/contract';
+import { STORY_FRAMED_ATTR } from '@/lib/islands';
 import { APP_BAR_H } from '@/lib/story-ui/edit-bar';
 
 /** What the app page needs to draw a document's frame and name the document in its head. */

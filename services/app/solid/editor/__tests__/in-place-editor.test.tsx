@@ -156,16 +156,21 @@ it('keeps an offline context reference without making a network request', () => 
   expect(view.queryByRole('link', { name: 'Open document' })).toBeNull();
 });
 
-it('offers image and Markdown insertion directly in the right panel', () => {
+it('inserts an empty Markdown component from the right panel and supports undo', async () => {
   const { sent, view } = mountEditor();
   const insert = within(view.getByRole('region', { name: 'Insert content' }));
   fireEvent.click(insert.getByRole('button', { name: 'Insert image' }));
   expect(screen.getByRole('dialog', { name: 'Insert image' })).toBeInTheDocument();
   fireEvent.keyDown(document, { key: 'Escape' });
-  fireEvent.click(insert.getByRole('button', { name: 'Paste Markdown' }));
-  fireEvent.input(screen.getByRole('textbox', { name: 'Markdown to insert' }), { target: { value: '## Notes' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Insert Markdown' }));
-  expect(sent.at(-1)).toMatchObject({ type: 'mx:paste', kind: 'markdown', value: '## Notes' });
+  fireEvent.click(insert.getByRole('button', { name: 'Insert Markdown' }));
+  await vi.waitFor(() => expect(queued.at(-1)?.source).toMatch(/<Markdown id="[A-Za-z][A-Za-z0-9]{3}">\{``\}<\/Markdown>/));
+  const source = queued.at(-1)!.source!;
+  expect(source).toContain(SOURCE);
+  expect(source.indexOf('<Markdown')).toBeGreaterThan(source.indexOf('</p>'));
+  expect(screen.queryByRole('textbox', { name: 'Markdown to insert' })).toBeNull();
+  expect(sent.at(-1)).toMatchObject({ type: 'mx:select', path: '1', reveal: true, focusText: true });
+  fireEvent.click(view.getByRole('button', { name: 'Undo' }));
+  await vi.waitFor(() => expect(queued.at(-1)?.source).toBe(SOURCE));
 });
 
 it('saves a design-system pick and redraws with its identity and default mode, then can undo it', () => {

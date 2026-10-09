@@ -4,6 +4,7 @@
  * document's edit runtime can use it without pulling in the toolbar.
  */
 const NODE_NAMES: Record<string, string> = {
+  Markdown: 'Markdown text',
   p: 'Paragraph',
   div: 'Container',
   section: 'Section',

@@ -1,7 +1,7 @@
 /** Every document on its own origin: the APP__PAGES_HOST setting and the hostname ⇄ id mapping. */
 import { describe, expect, it } from 'vitest';
 import { parsePagesHost, requirePagesHost } from '@/lib/platform/config';
-import { idFromPagesHost, idFromPagesLabel, idFromPagesOrigin, isPagesApexHost, pagesApexOrigin, pagesLabel, pagesOriginFor, pagesSiteFor } from '@/lib/serving/pages-origin';
+import { idFromPagesHost, idFromPagesLabel, idFromPagesOrigin, isPagesApexHost, pagesApexOrigin, pagesLabel, pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
 
 const prod = pagesSiteFor('pages.example.com', 'https://app.example.com')!;
 const dev = pagesSiteFor('lvh.me', 'http://app.lvh.me:11001')!;

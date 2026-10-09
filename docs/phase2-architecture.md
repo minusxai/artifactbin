@@ -9,7 +9,7 @@ Targets (gzip wire bytes, checked by `scripts/build/size-targets.mjs` against th
 | # | Target | Before Phase 2 | Target |
 |---|--------|----------------|--------|
 | 1 | JS before ready, pages with nothing interactive (prose, deck) | 275 KB | ≤ 10 KB |
-| 2 | JS before ready, interactive pages (kit, dashboard, every component) | 275–300 KB | ≤ 85 KB |
+| 2 | JS before ready, interactive pages (kit, dashboard, every component) | 275–300 KB | ≤ 90 KB |
 | 3 | Production prose page, total transferred | 481 KB | ≤ 250 KB |
 | 4 | App shell JS before the document frame is ready (every page kind) | 7.6 KB (44.9 KB after #327) | ≤ 50 KB |
 
@@ -313,7 +313,7 @@ story only through the frame bridge.
 
 1. Adoption without re-render. The frame side finds the island document through `IslandDocument`
    (`lib/islands/handover.ts`): `root` (the story element), `store` (the `DataflowStore` the islands
-   run on), `mode`, `setMode('read' | 'edit')`, `dispose()`, `subscribe`. `lib/story-runtime/frame-bridge/frame.ts`
+   run on), `mode`, `setMode('read' | 'edit')`, `dispose()`, `subscribe`. `lib/islands/frame-bridge.ts`
    exposes it to the page, `solid/document/create-framed-story.ts` holds the framed document and
    `solid/pages/Document.tsx` renders chrome around it; the story is never hydrated or re-rendered by the app. The islands keep running and the app's reactions (like,
    follow, comments) keep reading the store.

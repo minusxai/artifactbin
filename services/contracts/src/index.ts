@@ -55,9 +55,14 @@ export type {CommentViewState, ReviewJson} from './comment-view-state';
 export type { DatasetUploadResult } from './dataset-upload';
 
 export * from './artifact-format';
+export * from './live-channels';
 export { BASEMAP_PATH } from './basemap';
 export { DOMAIN_FOOTER_TEXT } from './domain-footer';
 export { MAX_PEOPLE_IDS } from './query-request';
 export * from './sign-in-required';
 
 export * from './comment-changes';
+export * from './agent-guidance';
+export { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './og-card';
+export { BLANK_REPORT_MARKUP, EMPTY_ARTIFACT_MARKUP, isStartPlaceholder, START_PLACEHOLDER_MARKUP } from './start-placeholder';
+export type { AnnotationAuthor, AnnotationCommentWire, AnnotationWireAuthor } from './annotation-comment';

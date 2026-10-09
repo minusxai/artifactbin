@@ -7,7 +7,8 @@ import {documentAnnotationSql,annotationSqlInput,annotationSqlGuard} from './doc
  * SQL or authorization predicates. Permissions, dependency guards, history and
  * identity maintenance share the artifact row lock and the same SQL statement. */
 import type {DocumentUpdate,Queryable} from '@artifactbin/contracts';
-import { ownerPredicate, type ArtifactRow, type Scope, type TokenActor } from '../access';
+import { ownerPredicate, type ArtifactRow, type Scope } from '../access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {hydrateArtifactDocument} from '../document';
 import {GRAPH_POLICY} from '../../document/document-graph';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
@@ -22,6 +23,11 @@ import {TABLES} from '../../platform/schema';
 const HEAD_COLUMNS=TABLES.find(table=>table.name==='artifacts')!.columns.map(column=>column.name).filter(name=>name!=='document');
 const headWithoutDocument=(alias:string)=>`jsonb_build_object(${HEAD_COLUMNS.map(name=>`'${name}',${alias}.${name}`).join(',')})`;
 /** `withheld`: the row came back without its document or source (see `withholdDocument`), on any head. */
+/**
+ * A document's open-thread count, read in the statement that commits its row so the reply carries it
+ * (lib/artifacts/wire committedOpenAnnotations). The predicate is lib/annotations countOpenAnnotations'.
+ */
+export const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annotations a WHERE a.artifact_id=${artifactId} AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open')`;
 export type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean;invalidGraph?:boolean};
 export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
  /**
@@ -147,7 +153,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  ), ${mention.after} ${resources.after} ${editEvents} response AS (
   SELECT true AS applied,CASE WHEN u.withheld THEN ${headWithoutDocument('u')} ELSE to_jsonb(u)-'previous'-'withheld'-'after_ids' END AS artifact,u.withheld,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
   UNION ALL SELECT false,to_jsonb(l),false,l.id FROM locked l WHERE NOT EXISTS(SELECT 1 FROM updated)
- ) SELECT applied,withheld,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,${invalidGraph('updated')} AS invalid_graph,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
+ ) SELECT applied,withheld,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,${invalidGraph('updated')} AS invalid_graph,artifact||jsonb_build_object('open_annotations',${openAnnotationsSql('response.id')},'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
  const preview=`SELECT true AS applied,to_jsonb(t)-'next_document'-'archiving'-'slim_document'-'after_ids' AS artifact,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,FALSE AS invalid_graph FROM transformed t UNION ALL SELECT false,to_jsonb(l),${mention.refusal},${ownerOnly},${invalidParent},${invalidGraph('transformed')} FROM locked l WHERE NOT EXISTS(SELECT 1 FROM transformed)`;
  const query=prefix+(options.dryRun?preview:commit);
  // Dry-run omits commit-only parameters as well as every write CTE. Compact

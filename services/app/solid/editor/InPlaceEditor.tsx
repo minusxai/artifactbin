@@ -46,12 +46,12 @@ import X from 'lucide-solid/icons/x';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { editBlock } from '@/lib/editor-v2/block-edit';
+import { editBlock } from '@/lib/editor-engine/block-edit';
 import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story-ui/edit-bar';
 import { storyUpdateParts, storyUpdatePartsShared } from '@/lib/document/update-parts';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/document/edit-compose';
 import {
-  freshNodeId, imageAltInJsx, imageTargetInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath,
+  freshNodeId, imageAltInJsx, imageTargetInJsx, nodeTargetInJsx, placeImageInJsx, placeMarkdownInJsx, removeJsxNodeAtPath,
   replaceImageSrcInJsx, setImageAltInJsx, type JsxImageTarget, type JsxInsertAnchor,
 } from '@/lib/data/story/jsx-edit';
 import { readQuestionChart, updateQuestionChartInJsx, updateQuestionTitleInJsx, type VizEnvelopeValue } from '@/lib/data/story/story-viz';
@@ -83,7 +83,6 @@ import NumberEditorPanel from './panels/NumberEditorPanel';
 import MermaidEditorPanel from './panels/MermaidEditorPanel';
 import QueryNotebookPanel from './panels/QueryNotebookPanel';
 import ImageDialog, { IMAGE_ACCEPT, type ChosenImage, type ImageChoice } from './panels/ImageDialog';
-import MarkdownPasteDialog from './panels/MarkdownPasteDialog';
 import ThemePicker, { ModeChip, TemplateChip } from './ThemePicker';
 import { VersionHistory } from '../document/VersionHistory';
 import { Tooltip } from '../components/Tooltip';
@@ -158,7 +157,10 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
    * document's first heading, following it as it is edited — so edit mode names the document as reading did.
    */
   const [title, setTitle] = createSignal<string | null>(art.title?.trim() ? art.title : null);
-  const shownTitle = () => title() ?? firstHeadingTitle(source()) ?? '';
+  const shownTitle = () => {
+    const explicit = title();
+    return explicit?.trim() ? explicit : firstHeadingTitle(source()) ?? '';
+  };
   createEffect(() => props.onTitleChange?.(shownTitle()));
   const [theme, setTheme] = createSignal<StoryDesignName | null>((art.theme as StoryDesignName) ?? null);
   const [colorMode, setColorMode] = createSignal<'light' | 'dark' | null>(art.colorMode === 'dark' ? 'dark' : art.colorMode === 'light' ? 'light' : null);
@@ -199,7 +201,6 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const setCollapsed = (next: boolean) => { setCollapsedState(next); writeEditPanelCollapsed(next); };
   const [sheet, setSheet] = createSignal<'selection' | 'history' | null>(null);
 
-  const [markdownDraft, setMarkdownDraft] = createSignal<string | null>(null);
   const [discardDraft, setDiscardDraft] = createSignal(false);
   const [rejectedFragment, setRejectedFragment] = createSignal<string | null>(null);
   const [historyError, setHistoryError] = createSignal<string | null>(null);
@@ -433,7 +434,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
 
   // ── links: the card under the caret (lib LinkCard) ──
   const [linkEditing, setLinkEditing] = createSignal(false);
-  const proseCaret = () => { const s = selection(); return !!s && s.editor === 'prose' && s.mode !== 'block'; };
+  const proseCaret = () => { const s = selection(); return !!s && !!s.editor && s.mode !== 'block'; };
   function openLink() { if (proseCaret()) setLinkEditing(true); }
   createEffect(() => { if (!proseCaret()) setLinkEditing(false); });
   const linkCardAt = () => {
@@ -558,6 +559,17 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     const bodyPath = sourcePathToBodyPath(placed.source, placed.path);
     if (bodyPath) inPlace.select(bodyPath, { reveal: true, nodeId });
   };
+  const insertMarkdown = async () => {
+    setImageMenuOpen(false);
+    const anchor = anchorAt(selection()?.path);
+    if (!(await drainTyping())) return;
+    const nodeId = freshNodeId(editorSource.current());
+    const placed = placeMarkdownInJsx(editorSource.current(), nodeId, anchor);
+    if (placed.source === editorSource.current() || !placed.path) return;
+    commitStructural(placed.source);
+    const bodyPath = sourcePathToBodyPath(placed.source, placed.path);
+    if (bodyPath) inPlace.select(bodyPath, { reveal: true, nodeId, focusText: true });
+  };
   const replaceImage = async (target: JsxImageTarget, image: ChosenImage) => {
     if (!(await drainTyping())) return;
     const next = replaceImageSrcInJsx(editorSource.current(), target, image.id);
@@ -640,8 +652,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     <StoryToolbarMenu label={wide() ? 'Insert' : '+'} name="Insert" open={imageMenuOpen()} onOpenChange={setImageMenuOpen}>
       <div class="flex w-44 flex-col">
         <button type="button" onClick={openInsertDialog} class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-raised">Image…</button>
-        <button type="button" aria-label="Paste Markdown" onClick={() => { setImageMenuOpen(false); setMarkdownDraft(''); }}
-          class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-raised">Paste Markdown</button>
+        <button type="button" aria-label="Insert Markdown" onClick={() => void insertMarkdown()}
+          class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-raised">Markdown</button>
       </div>
     </StoryToolbarMenu>
   );
@@ -669,13 +681,13 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   // typing is a new selection, and rebuilding the toolbar for each one cost a keystroke its frame.
   const formatShown = createMemo(() => !!selection() && mode() === 'design' && !preview() && contentView() === null);
   const formatControls = () => <Show when={formatShown()}>
-    <StoryFormatToolbar layout="panel" artifactId={art.id} selection={selection()} onApply={inPlace.applyFormat} onApplyLink={inPlace.applyLink} onEditLink={openLink} onApplyInline={inPlace.applyInline}
+    <StoryFormatToolbar layout="panel" artifactId={art.id} selection={selection()} onApply={inPlace.applyFormat} onApplyLink={inPlace.applyLink} onEditLink={openLink} onApplyInline={inPlace.applyInline} onMarkdownBlock={inPlace.applyMarkdownBlock} onMarkdownTable={inPlace.applyMarkdownTable}
       onAutoHeight={() => { const s = selection(); if (s) commitStructural(editBlock(editorSource.current(), { kind: 'auto-height', path: s.path })); }}
       onSelect={inPlace.select} onDelete={deleteSelected} onComment={props.onComment} image={imageControls()} backend={formatBackend} />
   </Show>;
   const titleEditor = () => (
     <input aria-label="Title" value={shownTitle()} placeholder="untitled"
-      onInput={(e) => { setTitle(e.currentTarget.value); queue({ title: e.currentTarget.value }); }}
+      onInput={(e) => { const value = e.currentTarget.value; setTitle(value); queue({ title: value }); }}
       style={{ width: `calc(${Math.max(9, Math.min(shownTitle().length + 2, 64))}ch + 14px)`, 'max-width': '100%' }}
       class="min-w-0 text-ellipsis rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none" />
   );
@@ -703,7 +715,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       <div class="grid grid-cols-2 gap-2">
         <button type="button" aria-label="Insert image" onMouseDown={event => event.preventDefault()} onClick={openInsertDialog}
           class="flex h-8 cursor-pointer items-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-fg hover:border-edge-bright hover:bg-raised"><ImagePlus size={14} class="text-muted" />Image</button>
-        <button type="button" aria-label="Paste Markdown" onMouseDown={event => event.preventDefault()} onClick={() => setMarkdownDraft('')}
+        <button type="button" aria-label="Insert Markdown" onMouseDown={event => event.preventDefault()} onClick={() => void insertMarkdown()}
           class="flex h-8 cursor-pointer items-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-fg hover:border-edge-bright hover:bg-raised"><FileCode size={14} class="text-muted" />Markdown</button>
       </div>
     </section>
@@ -760,10 +772,6 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
             else void replaceImage(current.target, image);
           }} />
       )}</Show>
-      <Show when={markdownDraft() !== null}>
-        <MarkdownPasteDialog value={markdownDraft() ?? ''} onChange={setMarkdownDraft} onClose={() => setMarkdownDraft(null)}
-          onInsert={() => { inPlace.pasteMarkdown(markdownDraft() ?? ''); setMarkdownDraft(null); }} />
-      </Show>
       <Show when={live.state.status.startsWith('not saved')}>
         <div role="alert" class="fixed bottom-4 right-4 z-50 max-w-md rounded border border-edge bg-surface p-3 text-sm">
           <p>{live.state.status}</p>

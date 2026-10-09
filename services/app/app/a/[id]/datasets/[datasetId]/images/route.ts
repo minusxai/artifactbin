@@ -1,6 +1,6 @@
 import { sessionActor, refusesCrossSite } from '@/lib/accounts';
 import { DatasetError } from '@/lib/datasets/errors';
-import { uploadDatasetImage } from '@/lib/datasets/feedback-images';
+import { uploadDatasetImage } from '@/lib/artifacts/feedback-images';
 import { MAX_IMAGE_BYTES } from '@/lib/platform/config';
 import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';

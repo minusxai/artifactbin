@@ -19,14 +19,14 @@ import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { artifactQuotaExceeded, getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
-import { backfillUserKinds, createTestUser, listTestUsers, sweepTestUsers, TESTUSER_LABEL } from '@/lib/accounts';
-import { noteTestUserSession, testUserSessionCount } from '@/lib/accounts';
+import { sweepTestUsers } from '@/lib/operations/testuser-erase';
+import { noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { resolveTokenById } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { count, has, link } from '@/lib/accounts';
-import { request, useAppHarness, createGuestOwner } from './harness';
+import { request, useAppHarness } from './harness';
 
 const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -149,22 +149,4 @@ it('sweeps the ones nobody deleted, and leaves the live ones alone', async () =>
   expect((await db.query('SELECT 1 FROM artifacts WHERE user_id = $1', [stale.id])).rows).toHaveLength(0);
   expect(await getUserById(live.id)).not.toBeNull();
   expect(await sweepTestUsers(), 'the sweep is idempotent').toBe(0);
-});
-
-it('erases P12\'s leftovers at boot, and every other guest keeps its drafts', async () => {
-  const db = await harness.db();
-  const guest = await createGuestOwner();
-  const leftover = await createGuestOwner({ name: TESTUSER_LABEL });
-  const draft = await publish((await mintToken('anon')).token, { markup: '<p>anonymous</p>' });
-  await db.query('UPDATE artifacts SET user_id = $2 WHERE id = $1', [draft.id, leftover.userId]);
-  await backfillUserKinds(db);
-
-  expect((await getUserById(guest.userId))!.kind).toBe('guest');
-  // The throwaway second people the old design left behind are gone, with the
-  // artifacts nobody will ever claim.
-  expect(await getUserById(leftover.userId)).toBeNull();
-  expect(await getArtifactById(draft.id)).toBeNull();
-  // Idempotent: the boot after this one changes nothing.
-  await backfillUserKinds(db);
-  expect((await getUserById(guest.userId))!.kind).toBe('guest');
 });

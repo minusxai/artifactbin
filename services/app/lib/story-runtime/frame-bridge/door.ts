@@ -15,11 +15,10 @@
  * Framework-free, value-free imports only: it is part of every framed reader's `@mx/page` chunk.
  */
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '@/lib/story-runtime/contract';
+export { APP_ORIGIN_ATTR, frameAppOrigin } from './origin';
 
 /** lib/story-runtime/contract STORY_FRAME_BRIDGE_MESSAGE, restated so the reader chunk carries no contract value (door.test pins them equal). */
 export const FRAME_BRIDGE_MESSAGE = 'mx:frame-bridge';
-/** The attribute the server writes on a pages-origin document's `<html>`: the app origin that frames it. */
-export const APP_ORIGIN_ATTR = 'data-mx-app-origin';
 
 export interface FrameBridgeSession {
   receive(payload: FrameBridgeParentPayload): void;
@@ -32,15 +31,6 @@ export interface FrameBridgeStartOptions {
   attach: FrameBridgeAttach;
 }
 export type FrameBridgeStart = (options: FrameBridgeStartOptions) => FrameBridgeSession;
-
-/**
- * The origin allowed to drive this document: what the server wrote on `<html>` (a document on its own pages
- * origin), else this page's own URL origin — the app itself serves `/a/<id>/raw`. Read before the author's script
- * runs. A pages-origin document without the attribute names its own origin, which never frames it: closed.
- */
-export function frameAppOrigin(doc: Document, win: Window): string {
-  return doc.documentElement.getAttribute(APP_ORIGIN_ATTR) || win.location.origin;
-}
 
 const MIN_KEY = 16;
 

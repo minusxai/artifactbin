@@ -23,8 +23,8 @@ import {
   attachDomain, domainOf, isServable, normalizeHostname, ownerForHost, recheckDomains, removeDomain, verifiedHostOf, verifyDomain,
   type CaaRecord, type DomainResolver,
 } from '@/lib/serving';
-import { createTestUser, eraseTestUser } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts';
+import { eraseTestUser } from '@/lib/operations/testuser-erase';
+import { mintToken, createTestUser } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();

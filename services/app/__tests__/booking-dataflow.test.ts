@@ -11,7 +11,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { readCompiledDataflow, storedCompiledDataflow } from '@/lib/document/parsed-artifact-metadata';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

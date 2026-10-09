@@ -7,7 +7,7 @@
  *
  *  - right after the doctype, a plain-English note for a coding agent asked
  *    to edit the file (artifactFileAgentNote), and in `<head>` the same
- *    discovery tags every served page carries (lib/agent-discovery-tags) —
+ *    discovery tags every served page carries (lib/compiled-page/agent-discovery) —
  *    neither is fetched;
  *  - `#afbin-file`  the ArtifactFile JSON (application/json, `<` escaped),
  *    `source` its second key — FIRST, so a reader that stops early sees it;
@@ -21,7 +21,7 @@
  * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
-import { agentDiscovery, agentDiscoveryHead } from '@/lib/serving/agent-discovery-tags';
+import { agentDiscovery, agentDiscoveryHead } from '@/lib/compiled-page/agent-discovery';
 import { documentRootAttributes } from '@/lib/compiled-page/styles/document-root';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { withModuleDataId } from '@/lib/compiled-page/carriers';

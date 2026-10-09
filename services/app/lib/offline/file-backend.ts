@@ -1,4 +1,5 @@
 import { parseCommentViewState } from '../../../contracts/src/comment-view-state';
+import { markdownContent, markdownSource } from '@/lib/markdown/content';
 /**
  * THE OFFLINE FILE'S BACKEND — the ArtifactBackend (lib/artifact-backend/types)
  * a downloaded `.html` answers from its own ArtifactFile, so the site's editor
@@ -17,8 +18,9 @@ import { parseCommentViewState } from '../../../contracts/src/comment-view-state
  */
 import { assertProjectionSupported } from './project-document';
 import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate } from '@artifactbin/contracts';
-import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
-import { anchorIndex, snippetOf, type AnchorEntry as Anchored } from '@/lib/annotations/anchors';
+import type { AnnotationWire } from '@/lib/annotations';
+import type { AnnotationCommentWire } from '@artifactbin/contracts';
+import { anchorIndex, snippetOf, type AnchorEntry as Anchored } from '@/lib/document/anchors';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend, BackendFeature, EditAnswer, FlushResponse, LoadedArtifact } from '@/lib/artifact-backend/types';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
@@ -142,7 +144,7 @@ export function fileAssetInliner(file: Pick<ArtifactFile, 'source' | 'island'>):
 // ── comments' anchors, against the current source ───────────────────────────
 
 const textOf = (node: JsxNode): string =>
-  node.type === 'text' ? node.value : node.type === 'element' ? node.children.map(textOf).join('') : '';
+  node.type === 'text' ? node.value : node.type === 'element' ? node.tag === 'Markdown' ? markdownContent(markdownSource(node) ?? '').text : node.children.map(textOf).join('') : '';
 
 /**
  * A thread as the server would read it back now: anchor, snippet and quote
@@ -540,6 +542,8 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
     async listAnnotations(status = 'open') {
       return threadsNow().filter((thread) => thread.status === status);
     },
+
+    canDeleteLocalAnnotation(annotationId) { return file.localIds.includes(annotationId); },
 
     async createAnnotation(body, idempotencyKey) {
       const again = created.get(idempotencyKey);

@@ -136,6 +136,7 @@ ${S.motifs_note}
   out.push("\nTheir markup is in the published specimen's source (section 06); copy one, never a palette.\n");
 
   out.push("\n## On each page type\n\nThe page type's reference owns the structure (grid, stage, measure, step column, beats); this system owns the look. A best fit carries its specimen: the same markup every system wears, dressed by this one, to start from at the dress step; its `ds-tpl-*` classes are the page-type kit the runtime provides. A specimen reads `$series`, `$table`, `$totals`, `$pick` and `$flag` from the page's own Helmet; declare the artifact's own data instead. Drawings are left as a comment: draw the artifact's object in the hand.\n");
+  out.push('\nUse `<Markdown>` for long prose on any page type. Keep headings, paragraphs and lists in one component per continuous passage; split around charts, images or other embeds. HTML remains available for custom titles and individually designed text.\n\n### Doc\n\nTemplate: doc. Follow [the Doc guide](templates-doc.md): the page supplies the reading column and gutters; use `<Markdown>` for the main body. It inherits this system\'s fonts and colors with a transparent background. Keep the writing surface quiet; decorative devices are optional.\n');
   TEMPLATES.forEach(([key, title, note, fn], i) => {
     const rating = RATING[fit[i]];
     const markup = specimen(S, key, fn);
@@ -180,6 +181,8 @@ description: >-
 Every artifact wears one design system. The page type is the shape of the content, the system is the hand that draws it, the subject supplies the object and the data.
 
 A system has three layers, each works alone: the **tokens and faces** (name the system and kit components, token classes and charts already look right), the **hand** (one drawing mode and a few devices written against hand variables, so a borrowed device takes this ink) and the **page-type recipes** (the look on each of the seven page types). The runtime serves all three; the agent writes no CSS to get them.
+
+Docs use the same fonts and colors with a quiet reading column; see [the Doc guide](templates-doc.md). On any page type, use \`<Markdown>\` for long continuous prose; keep HTML for individually designed text.
 
 Pick ONE system from the table by the subject's world and the page type, read its file, and name it in the fence. Never read a second system for the same artifact; one system owns colour and type.
 

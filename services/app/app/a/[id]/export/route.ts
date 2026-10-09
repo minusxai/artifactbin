@@ -3,8 +3,8 @@
 import { trackEvent } from '@/lib/platform';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
 import { refusingUnservable } from '@/lib/artifacts/servable';
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { requestOrSessionActor, roleFor } from '@/lib/accounts';
+import { canReadArtifact, getArtifactById, roleFor } from '@/lib/artifacts';
+import { requestOrSessionActor } from '@/lib/accounts';
 import { exportImageResponse } from '@/lib/export';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';

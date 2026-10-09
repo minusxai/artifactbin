@@ -1,7 +1,8 @@
 import type {MutationInput,MutationOutcome,SqlService} from '@artifactbin/contracts';
-import type { ArtifactRow, RoleActor } from './access';
+import type { ArtifactRow } from './access';
+import type { RoleActor } from '@/lib/accounts/actors';
 import type {Db} from '@/lib/platform';
-import type {MutationDocument} from '../datasets/policy/index';
+import type {MutationDocument} from '@/lib/artifacts/dataset-policy';
 export interface MutationContext {
  dataset:ArtifactRow;
  actor:RoleActor;

@@ -15,6 +15,7 @@ import ChevronRight from 'lucide-solid/icons/chevron-right';
 import EllipsisVertical from 'lucide-solid/icons/ellipsis-vertical';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
@@ -42,6 +43,8 @@ export interface AnnotationThreadProps {
   artifactId: string;
   backend: ArtifactBackend;
   a: AnnotationWire;
+  /** The document owner may remove any comment; authorship for other viewers is checked below. */
+  canDeleteAny?: boolean;
   open: boolean;
   resolved?: boolean;
   targetMissing?: boolean;
@@ -58,14 +61,14 @@ export interface AnnotationThreadProps {
   onReply: (body: string) => Promise<boolean>;
   onResolve: () => void;
   onReopen: () => void;
-  onDelete: () => void;
+  onDelete: (commentId: string) => void;
   onToggleFold: () => void;
   onToggleComment: (commentId: string) => void;
 }
 
 export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   let threadElement: HTMLDivElement | undefined;
-  let menuRoot: HTMLDivElement | undefined;
+  const menuRoots = new Map<string, HTMLDivElement>();
   const inbox = useOptionalInbox();
   const { session } = useSession();
   const newestFolded = () => props.isCommentFolded(props.a.thread.at(-1)?.id ?? '');
@@ -87,10 +90,16 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   const [reply, setReply] = createSignal('');
   let sending = false;
   const [replyError, setReplyError] = createSignal('');
-  const [menuOpen, setMenuOpen] = createSignal(false);
+  const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
   const replyCount = () => Math.max(0, props.a.thread.length - 1);
+  const canDelete = (comment: AnnotationCommentWire) => {
+    const userId = session()?.user?.id;
+    return props.canDeleteAny === true
+      || (userId !== undefined && userId !== null && comment.author.user_id === userId)
+      || props.backend.canDeleteLocalAnnotation?.(comment.id) === true;
+  };
 
   // ONE send for the button and for ⌘↵ — the field owns the key, the thread owns whether there is anything to send.
   const sendReply = async () => {
@@ -104,9 +113,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   };
 
   createEffect(() => {
-    if (!menuOpen()) return;
-    const dismiss = (event: PointerEvent) => { if (!menuRoot || !event.composedPath().includes(menuRoot)) setMenuOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false); };
+    const open = menuOpen();
+    if (!open) return;
+    const dismiss = (event: PointerEvent) => { const menuRoot = menuRoots.get(open); if (!menuRoot || !event.composedPath().includes(menuRoot)) setMenuOpen(null); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(null); };
     document.addEventListener('pointerdown', dismiss);
     document.addEventListener('keydown', escape);
     onCleanup(() => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); });
@@ -219,20 +229,20 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                 <button type="button" aria-label="Hide resolved conversation" aria-expanded="true" onClick={() => props.onOpen()}
                   class="cursor-pointer rounded-[3px] px-1 font-mono text-[11px] text-faint hover:bg-raised hover:text-accent">↑</button>
               </Show>
-              <Show when={index() === 0 && (!props.resolved || props.open)}>
-                <div ref={menuRoot} class="relative">
-                  <Tooltip content="thread actions">
-                    <button type="button" aria-label="Annotation actions" aria-expanded={menuOpen()} onClick={() => setMenuOpen((current) => !current)}
+              <Show when={canDelete(c()) && (index() > 0 || !props.resolved || props.open)}>
+                <div ref={(el) => { menuRoots.set(c().id, el); }} class="relative">
+                  <Tooltip content={index() === 0 ? 'thread actions' : 'comment actions'}>
+                    <button type="button" aria-label={index() === 0 ? 'Annotation actions' : `Comment actions ${index()}`} aria-expanded={menuOpen() === c().id} onClick={() => setMenuOpen((current) => current === c().id ? null : c().id)}
                       class="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-[3px] text-faint hover:bg-raised hover:text-fg">
                       <EllipsisVertical size={13} strokeWidth={1.8} />
                     </button>
                   </Tooltip>
-                  <Show when={menuOpen()}>
-                    <div role="menu" aria-label="Annotation action menu" class="absolute right-0 top-6 z-20 min-w-24 rounded-[5px] border border-edge-bright bg-surface p-1 shadow-lg">
-                      <button type="button" role="menuitem" aria-label="Delete annotation" disabled={props.busy} onClick={() => { setMenuOpen(false); props.onDelete(); }}
+                  <Show when={menuOpen() === c().id}>
+                    <div role="menu" aria-label={index() === 0 ? 'Annotation action menu' : 'Comment action menu'} class="absolute right-0 top-6 z-20 min-w-24 rounded-[5px] border border-edge-bright bg-surface p-1 shadow-lg">
+                      <button type="button" role="menuitem" aria-label={index() === 0 ? 'Delete thread' : 'Delete comment'} disabled={props.busy} onClick={() => { setMenuOpen(null); props.onDelete(c().id); }}
                         class="flex w-full cursor-pointer items-center gap-2 rounded-[3px] px-2 py-1.5 text-left font-mono text-[11px] text-danger hover:bg-raised disabled:cursor-default disabled:opacity-40">
                         <Trash2 size={12} strokeWidth={1.75} />
-                        delete
+                        {index() === 0 ? 'delete thread' : 'delete comment'}
                       </button>
                     </div>
                   </Show>

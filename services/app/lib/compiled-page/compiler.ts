@@ -25,8 +25,9 @@
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
+import { SOURCE_NODE_ID_ATTR } from '@/lib/story-ui/ast-path';
 import { STORY_SVG_TAGS } from '@/lib/jsx/component-names';
-import { isScriptComponent, MOUNT_ATTR } from './script-mount';
+import { isScriptComponent, MOUNT_ATTR } from '@/lib/story-runtime/script-mount';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
 import { buildGlyphMap } from '@/lib/story-ui/icon-glyphs.server';
@@ -40,10 +41,9 @@ import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides'
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { RECIPES, cn } from '@/lib/islands/kit/recipes';
-import { peopleClasses } from '@/lib/islands/kit/recipes/people';
+import { cn, peopleClasses, RECIPES } from '@/lib/islands';
 import type { GeneratedSources } from './codegen-safety';
-import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
+import { EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
 import { planOf } from './plan';
 import { buildDocumentModules, loadKitServer, type KitServer } from './bundle.server';
@@ -51,6 +51,8 @@ import { contentSha } from './speculation';
 import { MODULE_DATA_READ_CODE } from './carriers';
 import { reactAttrs } from './static-solid/attrs';
 import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, solidTextValue, solidTrimText, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
+import { markdownContent, markdownSource } from '@/lib/markdown/content';
+import { CHART_SLOT_ATTR } from '@/lib/story-runtime/contract';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code
@@ -93,7 +95,10 @@ interface KitMeta {
   noChildren?: true;
 }
 
-/** Which module each ported kit component comes from, and its API props (everything else is a DOM attribute). */
+/**
+ * Which module each ported kit component comes from, and its API props (everything else is a DOM attribute).
+ * Compiler-native tags such as Markdown, Grid and For render directly; they have no shared kit export.
+ */
 export const KIT: Readonly<Record<string, KitMeta>> = {
   Badge: { mod: 'basic', api: ['variant'] }, Alert: { mod: 'basic', api: ['variant'] }, AlertTitle: { mod: 'basic' }, AlertDescription: { mod: 'basic' },
   Progress: { mod: 'basic', api: ['value'] }, Icon: { mod: 'basic', api: ['name', 'glyphs', 'catalogUrl'] },
@@ -196,7 +201,7 @@ const isElement = (node: JsxNode): node is JsxElement => node.type === 'element'
  * A capitalized tag outside the registry is a component the document's SCRIPT exports (validated at publish against
  * the built module's exports): the compiler emits its mount node, with its props as data and its children as the
  * server-rendered fallback, and the page runtime renders the component into it (lib/islands/page-runtime). The
- * predicate and the attribute live in ./script-mount, which the editor reads too.
+ * predicate and the attribute live in lib/story-runtime/script-mount, which the editor reads too.
  */
 /** The mount's props (literal JSON), its bindings (prop → declared name) and the DOM attributes the node keeps. */
 function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: Record<string, string>; id?: string; cls?: string } {
@@ -292,6 +297,10 @@ type GenerateInput = Omit<CompileInput, 'build'> & {
 
 export function generate(input: GenerateInput): Generated {
   const elementAttrs = reactAttrs;
+  const markdownAttrs = (node: JsxElement, path: string): Attr[] => {
+    const props = rawBuildProps(node.attributes, true, node.tag, path);
+    return elementAttrs('div', { ...props, 'data-mx-markdown': '', className: cn('mx-markdown', typeof props.className === 'string' ? props.className : '') });
+  };
   const jsxAttrs = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}={${v === '' && /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i.test(n) ? 'true' : lit(v)}}`).join('');
   const refData = input.refData ?? {};
   const nodes = input.nodes ?? [];
@@ -504,6 +513,10 @@ export function generate(input: GenerateInput): Generated {
   }
   function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
     if (node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
+    if (node.tag === 'Markdown') {
+      const attrs = solidAttrs(markdownAttrs(node, path), safeAttr);
+      return attrs === null ? null : `<div${attrs}>${markdownContent(markdownSource(node) ?? '').html}</div>`;
+    }
     if (node.tag === 'Grid' || node.tag === 'GridItem') return gridHtml(node, path, ctx);
     if (node.isComponent) return isScriptComponent(node) ? mountHtml(node, path, ctx) : kitHtml(node, path, ctx);
     const lower = node.tag.toLowerCase();
@@ -585,7 +598,7 @@ export function generate(input: GenerateInput): Generated {
     const cls = meta.dom === 'identity' ? null : node.tag === 'Icon' ? cn(ICON_BASE_CLASS, typeof props.className === 'string' ? props.className : undefined) : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
     let dom: Props = { ...props };
     for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
-    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST || (node.tag === 'DataTable' && k.startsWith('data-'))));
+    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST || k === SOURCE_NODE_ID_ATTR || (node.tag === 'DataTable' && k.startsWith('data-'))));
     // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
     if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
     if (inGrid) api.inGridItem = true;
@@ -595,6 +608,7 @@ export function generate(input: GenerateInput): Generated {
 
   function emitElement(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const children = (inner: Ctx = ctx): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, inner)).join('');
+    if (node.tag === 'Markdown') return `<div${jsxAttrs(markdownAttrs(node, path))} innerHTML={${lit(markdownContent(markdownSource(node) ?? '').html)}} />`;
     if (node.tag === 'For') return emitFor(node, path, mode, ctx);
     if (node.tag === 'Grid' || node.tag === 'GridItem') return emitGrid(node, path, mode, ctx);
     // A control with `run` in a column's content is an editing cell (interpreter renderNode → cellControl).
@@ -614,7 +628,12 @@ export function generate(input: GenerateInput): Generated {
     if (isScriptComponent(node)) return mountJsx(node, path, mode, ctx);
     if (node.isComponent) {
       const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
-      if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
+      if (!meta) {
+        unported.add(node.tag);
+        const id = node.attributes.find((a) => a.name.toLowerCase() === 'id')?.value;
+        const witness = id?.static && typeof id.json === 'string' && id.json ? ` data-mx-source-node-id={${lit(id.json)}}` : '';
+        return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}${witness}></div>`;
+      }
       useKit(node.tag, mode, ctx);
       const parts = kitParts(node, path, mode, ctx, meta);
       if (typeof parts === 'string') return parts;
@@ -670,7 +689,13 @@ export function generate(input: GenerateInput): Generated {
     if (ctx.preview) props = ctx.preview.rewrite(props);
     // A static wrapper with live descendants is already served. Its id may be minted
     // anew by an edit; leaving it to the DOM keeps the browser module reusable.
-    if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) delete props.id;
+    if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) {
+      delete props.id;
+      // The served skeleton owns this wrapper's stable identity. The browser module must not
+      // capture it, or a prose-only version change changes the reusable island module hash.
+      // Omitting it here also leaves the server-rendered witness in place during hydration.
+      delete props[SOURCE_NODE_ID_ATTR];
+    }
     const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
     const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
     const reactive = ctx.preview ? [] : node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));
@@ -874,6 +899,7 @@ export function generate(input: GenerateInput): Generated {
       if (attrHtml === null || inner === null) return null;
       return { kind: P.ELEMENT, html: VOID.test(tag) ? `<${tag}${attrHtml}>` : `<${tag}${attrHtml}>${inner}</${tag}>` };
     };
+    if (node.tag === 'Markdown') return element('div', markdownAttrs(node, path), markdownContent(markdownSource(node) ?? '').html);
     if (node.tag === 'For') {
       if (isTableParts(node)) return NONE;
       const owner = node.attributes.find((a) => a.name === 'id')?.value;

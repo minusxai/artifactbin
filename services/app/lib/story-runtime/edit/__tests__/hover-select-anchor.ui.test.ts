@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { $getSelection, $isRangeSelection } from 'lexical';
+import { mountMarkdownEditor } from '@/lib/markdown/editor';
+import { STORY_SELECTION_MESSAGE } from '@/lib/story-runtime/contract';
 import { createHoverSelect } from '../hover-select';
 
 afterEach(() => { document.body.replaceChildren(); });
@@ -27,5 +30,51 @@ it('reports the block whose whole contents are selected, not its container', () 
   getSelection()!.removeAllRanges(); getSelection()!.addRange(range);
   document.dispatchEvent(new Event('selectionchange'));
   expect(post.mock.calls.map(([message]) => message.selection).filter(Boolean).at(-1)).toMatchObject({ path: '0.3', tag: 'p' });
+  hover.dispose();
+});
+
+it('starts a text selection in a newly inserted Markdown region when requested', async () => {
+  const nodes = parseJsxOrThrow('<Markdown id="New1">{""}</Markdown>').nodes;
+  const root = document.createElement('div');
+  root.innerHTML = '<div id="New1" data-mx-ast="0" data-mx-markdown></div>';
+  document.body.append(root);
+  const el = root.firstElementChild as HTMLElement;
+  const editor = mountMarkdownEditor(el, { source: '', onChange() {} });
+  const hover = createHoverSelect({ win: window, root, nodes: () => nodes, views: { all: new Set(), last: null }, activePath: () => null, commitActive() {}, post() {} });
+  hover.select({ type: 'mx:select', path: '0', nodeId: 'New1', reveal: true, focusText: true });
+  await vi.waitFor(() => expect(editor.editor.getEditorState().read(() => $isRangeSelection($getSelection()))).toBe(true));
+  expect(hover.blockMode()).toBe(false);
+  expect(hover.selectedPath()).toBe('0');
+  hover.dispose(); editor.destroy();
+});
+
+it('does not capture a click selection from stale rendered identity at a reused AST path', () => {
+  const nodes = parseJsxOrThrow('<div><p id="bug-10-report">Item 10 report</p><h3 id="bug-11-heading">11. Resolve from the hover preview</h3></div>').nodes;
+  const root = document.createElement('div');
+  root.innerHTML = '<div data-mx-ast="0"><h3 data-mx-ast="0.0" data-mx-source-node-id="bug-11-heading">11. Resolve from the hover preview</h3></div>';
+  document.body.append(root);
+  const post = vi.fn();
+  const hover = createHoverSelect({ win: window, root, nodes: () => nodes, views: { all: new Set(), last: null }, activePath: () => null, commitActive() {}, post });
+  root.querySelector('h3')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  expect(post).not.toHaveBeenCalled();
+  hover.dispose();
+});
+
+it('does not attach a selected quote or source path from stale rendered identity', () => {
+  const nodes = parseJsxOrThrow('<div><p id="bug-10-report">Item 10 report</p><h3 id="bug-11-heading">11. Resolve from the hover preview</h3></div>').nodes;
+  const root = document.createElement('div');
+  root.innerHTML = '<div data-mx-ast="0"><div class="ProseMirror" contenteditable="true">'
+    + '<h3 data-mx-ast="0.0" data-mx-source-node-id="bug-11-heading">11. Resolve from the hover preview</h3></div></div>';
+  document.body.append(root);
+  const post = vi.fn();
+  const hover = createHoverSelect({ win: window, root, nodes: () => nodes, views: { all: new Set(), last: null }, activePath: () => null, commitActive() {}, post });
+  const heading = root.querySelector('h3')!;
+  const range = document.createRange();
+  range.selectNodeContents(heading);
+  getSelection()!.removeAllRanges(); getSelection()!.addRange(range);
+  document.dispatchEvent(new Event('selectionchange'));
+  const selections = post.mock.calls.map(([message]) => message).filter((message) => message.type === STORY_SELECTION_MESSAGE && message.selection);
+  expect(selections).toEqual([]);
+  getSelection()!.removeAllRanges();
   hover.dispose();
 });

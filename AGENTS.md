@@ -36,6 +36,7 @@ queues or rerun unchanged code to hide a slow run. Report cold and warm timings 
   libraries `services/app/lib/*`; packages the other `services/*`, importing only `contracts`, `utils` and themselves.
   `npm run validate` (`scripts/ci/module-graph.mjs`) fails a cycle through an entry point or the UI, a package
   import outside that floor, and any new edge inside the recorded lib cycle (`module-graph.allowed-cycles.json`).
+  `services/cli/src` imports app code only through `lib/cli-toolkit`'s per-bundle entries.
 - TDD for features and refactors: contracts, then behavioral tests, observe the failure, implement.
   Refactors: existing tests pass, prove the assertion detects broken behavior, restore it (Blue → Red → Blue).
   Report what actually ran; never claim red/green or end-to-end evidence you did not observe.

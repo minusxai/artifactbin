@@ -14,6 +14,6 @@ the islands, the story runtime and the CLI.
   (`prepareCompile`/`compileWithLoader` `{ extensions }`, the server's `sqlExtensions()`); without
   them a `<Mutation>` calling one is refused.
 - `ResolvedRef` carries what the reference checks read. The dataset catalog that only the server's
-  publish checks need rides on `ServerRef` in `lib/story/data/data-checks.ts`, so this module never
+  publish checks need rides on `ServerRef` in `lib/datasets/schema-loader.ts`, so this module never
   depends on `lib/datasets`. `DatasetColumn` is defined once, in `dataset-shape.ts`.
 - The `$name` lexer (`sql-parameters.ts`) lives here; `lib/datasets/sql` binds with it.

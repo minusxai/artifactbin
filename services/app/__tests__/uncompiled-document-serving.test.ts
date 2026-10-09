@@ -16,7 +16,7 @@ import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { liveFrameFor } from '@/lib/story/data/frame';
-import { queryResourceForRequest } from '@/lib/http';
+import { queryResourceForRequest } from '@/lib/operations/resource-query';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 

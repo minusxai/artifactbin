@@ -1,3 +1,4 @@
+import type { ArtifactFormat } from '@artifactbin/contracts';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 import type { Row } from '@/lib/dataflow/dataflow';
 
@@ -42,3 +43,8 @@ export interface PostgresConfig {
   ssl: boolean;
 }
 export interface DiscoveredTable { schema: string; name: string; columns: DatasetColumn[] }
+/**
+ * The fields of the artifact row hosting a dataset that the engine reads. The row type itself
+ * belongs to lib/artifacts, which sits above datasets; any artifact row satisfies this shape.
+ */
+export interface DatasetHost { id: string; format: ArtifactFormat; meta: Record<string, unknown>; dataset_policy?: unknown }

@@ -45,6 +45,10 @@ describe('the renderer only renders', () => {
     expect(propsOf('<TabsTrigger value="a">A</TabsTrigger>')).toMatchObject({ value: 'a' });
   });
 
+  it('carries the authored source ID separately from the runtime DOM ID', () => {
+    expect(propsOf('<p id="row-template">a row</p>')).toMatchObject({ id: 'row-template', 'data-mx-source-node-id': 'row-template' });
+  });
+
   it('sends the document origin to a YouTube player, which refuses to play without a referrer, and to no other frame', () => {
     for (const src of ['https://www.youtube.com/embed/abc', 'https://www.youtube-nocookie.com/embed/abc?start=5']) {
       expect(propsOf(`<iframe src="${src}" title="t" />`), src).toMatchObject({ referrerpolicy: 'strict-origin-when-cross-origin' });

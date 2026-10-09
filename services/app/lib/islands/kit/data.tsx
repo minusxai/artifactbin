@@ -24,11 +24,10 @@ import { numberFormatter } from '@/lib/dataflow/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story-ui/data-table';
 import { commentMetadata, keyedRowsError } from '@/lib/story-ui/repeat-identity';
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
-import { personFaceBackground, personInitial } from '@/lib/accounts/person-face';
+import { personFaceBackground, personInitial } from '../person-face';
 import type { PersonCard } from '@artifactbin/contracts';
 export { Select } from './select';
 import type { Row } from '@/lib/dataflow/dataflow';
-import { CHART_SLOT_ATTR, CHART_STATE_ATTR, type DrawnChart } from '@/lib/compiled-page/contract';
 import { questionEnvelope } from '@/lib/viz/chart-envelope';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
@@ -36,6 +35,7 @@ import type { IslandChart, IslandChartModule } from '../contract';
 import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
 import { rowsDigest } from '../digest';
 import type { CellScope } from './cells';
+import { CHART_SLOT_ATTR, CHART_STATE_ATTR, type DrawnChart } from '@/lib/story-runtime/contract';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
 /** The authored identity the former adapters put on their outer element: the id and the compiler's `data-*` stamps, never the chart slot marker. */

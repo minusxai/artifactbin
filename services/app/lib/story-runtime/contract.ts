@@ -1,6 +1,6 @@
 import type { CommentViewState } from '../../../contracts/src/comment-view-state';
-import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmark';
-import type { BlockEdit } from '@/lib/editor-v2/block-edit';
+import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-engine/bookmark';
+import type { BlockEdit } from '@/lib/editor-engine/block-edit';
 /**
  * The framework-free contract between the document builder (server), the compiler, and the browser
  * islands. BOTH sides import it, so it carries ONLY types and ids: a value
@@ -14,7 +14,7 @@ import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
-import type { PersonCard, StoredMermaidImage } from '@artifactbin/contracts';
+import type { DocumentGraph, PersonCard, StoredMermaidImage } from '@artifactbin/contracts';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -206,6 +206,50 @@ export const QUERY_REQUEST_PARAM = 'q';
 
 /** DOM contract between the builder and the entry. */
 export const STORY_ROOT_ID = 'mx-story-root';
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The compiled reader page: what the assembler and compiler (lib/compiled-page) write
+ * and the islands (lib/islands) read
+ * ──────────────────────────────────────────────────────────────────────────── */
+/** The element ids and attributes the assembled page and the runtime agree on. */
+export const ISLAND_DATA_ID = 'mx-story-data';
+/**
+ * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
+ * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
+ * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
+ * the attribute when it mounts (the served DOM then matches the former render), and
+ * re-draws only when its table changes or the reader interacts (Vega loads then).
+ */
+export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
+/** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */
+export const CHART_STATE_ATTR = 'data-mx-chart-state';
+/** Set on `<html>` when every island has hydrated (or at DOMContentLoaded on a page with no module): the lab's ready marker. */
+export const READER_READY_ATTR = 'data-mx-ready';
+/** Live data widget contents belong to Solid, rather than the server-fragment morph. */
+export const LIVE_DATA_ATTR = 'data-mx-live';
+/** The string-literals carrier's attribute (lib/compiled-page/carriers); the module reads its literals by DOM lookup. */
+export const LITERALS_ATTR = 'data-mx-island-literals';
+/** The route prefix per-document modules and speculation-rule files are served under. */
+export const ISLANDS_PATH = '/islands';
+export const DOCUMENT_MODULE_PATH = `${ISLANDS_PATH}/d`;
+
+/** A `<Question>` drawn on the server, keyed by the question's node id (or path when it has none). */
+export interface DrawnChart {
+  svg: string;
+  /** The table it was drawn from and the digest of the rows, so a client re-draw can tell whether it is stale. */
+  table: string;
+  rows: string;
+}
+
+/** `GET /a/:id/viewer?<$values>` — what only this reader decides, answered with the query door's admission (w3-viewer-writes). */
+export interface ViewerOverlay {
+  viewer: StoryViewer | null;
+  /** The `viewer`-scope queries' answers for this reader at these values. */
+  results: ServedResults;
+  /** The imports this reader may hold in full (StoryIslandDataflow.hold). */
+  hold: string[];
+}
+
 /**
  * The QUERY RELAY — how a served document INSIDE A PARENT PAGE (the owner's
  * shell, the canvas, a capture) re-runs its queries after a value changes:
@@ -217,7 +261,7 @@ export const STORY_ROOT_ID = 'mx-story-root';
  * `id`; a request the page never answers times out in the frame's transport.
  */
 /**
- * A NEW VERSION OF THIS DOCUMENT, posted to the page's controller (lib/story-runtime/island-controller).
+ * A NEW VERSION OF THIS DOCUMENT, posted to the page's controller (lib/islands/island-controller).
  *
  * The app's editor sends an `EditDraft`: unsaved source the controller compiles on the
  * server (`/a/<id>/draft-preview`) and morphs into the running islands. The reader page sends a
@@ -244,7 +288,7 @@ export interface EditDraft {
   preview?: true;
   /**
    * Everything since the previous draft was typed into prose the editor already shows: its compile
-   * may only reconcile the editor, never redraw it (lib/story-runtime/island-controller).
+   * may only reconcile the editor, never redraw it (lib/islands/island-controller).
    */
   typing?: true;
   /** A new look (theme, colour mode): drawn by the compiler, never only reconciled into the editors. */
@@ -293,6 +337,17 @@ export interface StoryController {
   subscribe(listener: (event: unknown) => void): () => void;
   getViewportRect(): DOMRect;
   dispose(): void;
+}
+
+/** The page's handle on its adopted story root (lib/islands/island-controller), as the page shell and the frame bridge see it. */
+export interface IslandStoryController extends StoryController {
+  selectionReady(): void;
+  /**
+   * Settles once the page reads again IN PLACE after editing: the saved version drawn on the running islands
+   * and the islands back in read mode (lib/islands/boot). Resolves at once when editing never froze them;
+   * rejects when the version cannot be drawn here (the caller reloads, keeping the reader's place).
+   */
+  restored(): Promise<void>;
 }
 
 /**
@@ -422,6 +477,12 @@ interface StoryEditReadyMessage { type: typeof STORY_EDIT_READY_MESSAGE; nonce: 
  * the same sanitizing write-back the canvas used (lib/data/story/jsx-edit).
  */
 export const STORY_INLINE_MESSAGE = 'mx:inline';
+export const STORY_MARKDOWN_BLOCK_MESSAGE = 'mx:markdown-block';
+export type MarkdownBlockKind = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'bullet' | 'number' | 'code' | 'check' | 'hr' | 'table';
+export type MarkdownTableAction = 'row-before' | 'row-after' | 'column-before' | 'column-after' | 'delete-row' | 'delete-column' | 'delete-table';
+export const STORY_MARKDOWN_TABLE_MESSAGE = 'mx:markdown-table';
+interface StoryMarkdownTableMessage { type: typeof STORY_MARKDOWN_TABLE_MESSAGE; action: MarkdownTableAction }
+interface StoryMarkdownBlockMessage { type: typeof STORY_MARKDOWN_BLOCK_MESSAGE; block: MarkdownBlockKind }
 interface StoryInlineMessage {type:typeof STORY_INLINE_MESSAGE;tag:'strong'|'em'|'u'}
 export const STORY_PASTE_MESSAGE = 'mx:paste';
 interface StoryPasteMessage {type:typeof STORY_PASTE_MESSAGE;value:string;kind:'markdown'|'text'}
@@ -466,7 +527,9 @@ export interface StoryEditSelection {
   /** Unclipped drag in this document viewport, separate from the node-relative anchor. */
   captureRect?: StoryEditRect;
   /** The prose engine owns formatting transactions and their source write-back. */
-  editor?: 'prose';
+  editor?: 'prose' | 'markdown';
+  /** Lexical block at the caret, or mixed when the range spans different block styles. */
+  markdownBlock?: MarkdownBlockKind | 'mixed';
   customHeight?:boolean;
   inline?:Record<'strong'|'em'|'u',boolean|'mixed'>;
   /** Prose only: where the caret or selected words are, so link chrome can sit beside them. */
@@ -644,6 +707,8 @@ interface StorySelectMessage {
    * document is still rendering), so wait briefly for it, then scroll it into view.
    */
   reveal?: boolean;
+  /** Start typing in a just-inserted rich-text region once its editor mounts. */
+  focusText?: boolean;
   /** With `reveal`: the id of the node meant — until the re-render lands, an OLD node sits at that path. */
   nodeId?: string;
 }
@@ -772,7 +837,7 @@ export const STORY_ANNOTATIONS_EVENT = 'annotations';
 /* ────────────────────────────────────────────────────────────────────────────
  * KEYS A FRAMED DOCUMENT FORWARDS — the page's editor listens on its own window,
  * and a key pressed inside a framed document never reaches it. The frame half of
- * the bridge (lib/story-runtime/frame-bridge/frame) sends these instead, signed
+ * the bridge (lib/islands/frame-bridge) sends these instead, signed
  * like every other frame → parent message. Undo/redo travels as `mx:history`.
  * ──────────────────────────────────────────────────────────────────────────── */
 
@@ -868,7 +933,7 @@ type StoryEditFrameMessage =
   | StoryImageDropMessage | StoryImageReplaceMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage
   | StoryEditFlushMessage | StoryCommentKeyMessage | StoryLinkKeyMessage | StoryOpenScriptMessage;
 export type StoryEditParentMessage =
-  | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StoryFocusTextMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
+  | StoryMarkdownTableMessage | StoryMarkdownBlockMessage | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StoryFocusTextMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
   | StoryAnnotationsMessage | StorySelectionActionsMessage;
 
 const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
@@ -881,6 +946,7 @@ const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
   STORY_OPEN_SCRIPT_MESSAGE,
 ]);
 const EDIT_PARENT_TYPES: ReadonlySet<string> = new Set([
+  STORY_MARKDOWN_BLOCK_MESSAGE, STORY_MARKDOWN_TABLE_MESSAGE,
   STORY_INLINE_MESSAGE, STORY_PASTE_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_FOCUS_TEXT_MESSAGE, STORY_SELECT_MESSAGE,
   STORY_SPOTLIGHT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE,
 ]);
@@ -901,3 +967,94 @@ export function isEditParentMessage(data: unknown): data is StoryEditParentMessa
 /** What `mutationUnavailable` answers while a write's access check is in flight; the store and the island kit share this one string. */
 export const ACCESS_PENDING = 'Checking edit access…';
 
+/**
+ * THE LIVE STREAM'S WIRE — what app/a/[id]/events sends and the reader's live
+ * store (solid/editor/create-live-artifact, lib/artifact-backend) reads. The
+ * subscription that wakes the stream (lib/story/realtime/live) only says "go
+ * look"; these are the frames the route then writes, declared here with the
+ * rest of the reader wire so neither a route handler nor the server's story
+ * module is where a reader has to import a shape from.
+ */
+
+/**
+ * A DATA wakeup: a dataset this document reads was written, so the queries
+ * that read it must re-run.
+ */
+export interface ArtifactDataEvent {
+  /** Dataset artifact ids (today always exactly one — the one that was written). */
+  datasets: string[];
+  /** The version that dataset reached, for a client that wants to drop a repeat. */
+  version: number;
+}
+
+/** What the stream sends on a version: the head's identity, nothing else. */
+export interface ArtifactVersionPing {
+  editId: string;
+  version: number;
+  /** The handle of the account that made this version, or null. */
+  by: string | null;
+}
+
+export interface ArtifactLiveEvent {
+  document?:DocumentGraph;
+  editId: string;
+  version: number;
+  /**
+   * The handle of the account that made this version, or null (a token, an
+   * unnamed account, a version that predates attribution). A collaborator's
+   * open document can say WHO moved it under them.
+   */
+  by: string | null;
+  format: string;
+  title: string | null;
+  /** Derived by the server so readers can follow heading edits without loading source parsers. */
+  heading?: string | null;
+  /** markup source (the document tier) — null for other tiers. */
+  source: string | null;
+  /**
+   * Dataset/viz preview data, which the page displays inline. Images are
+   * deliberately absent: it renders straight from ./raw, so the client only
+   * needs to know the document changed (the editId) to refetch.
+   */
+  dataPreview: string | null;
+  /**
+   * OMITTED when it has not changed since the last frame on this connection.
+   * The compiled stylesheet is ~65KB and changes only when new Tailwind
+   * classes appear, so sending it with every keystroke-sized edit would
+   * dominate the stream. `null` still means "there is none"; absent means
+   * "keep what you have".
+   */
+  compiledCss?: string | null;
+  /**
+   * The authored DESIGN, sent on every frame (all three are tiny scalars next
+   * to the source they accompany). Without them a watcher renders new content
+   * under the design it first loaded with — the start-flow moment, where a
+   * themeless placeholder becomes a themed deck, arrives unthemed until a
+   * reload. `colorMode` is the AUTHOR's default mode; a reader who flipped the
+   * mode toggle keeps their override (document-update skips the mode class
+   * while one is active) — the rest of the design still applies.
+   * `template` never reaches the render — it travels so that entering edit mode
+   * after a live change seeds the editor with the genre actually stored.
+   */
+  theme: StoryDesignName | null;
+  colorMode: 'light' | 'dark' | null;
+  template: string | null;
+  /**
+   * The document's BODY, parsed — what a reader's already-open document
+   * re-renders itself from (lib/story-runtime/contract StoryDocumentUpdate).
+   * The runtime ships no JSX parser, so the nodes are made here, through the
+   * same door that builds the served document.
+   */
+  nodes?: JsxNode[];
+  /** The author's own <Helmet> <style>, on the same absent/null rule as compiledCss. */
+  authorCss?: string | null;
+  /** Legacy Helmet script; null revokes the prior isolated realm. */
+  authorScript?: string | null;
+  /**
+   * The data declarations and their freshly run state — sent ONLY when the
+   * declarations changed. A prose edit needs no query engine, and running a
+   * document's SQL for every sentence an agent writes would put a DuckDB run
+   * behind each one. Absent means "the data is as you have it".
+   */
+  dataflow?: StoryIslandDataflow;
+}

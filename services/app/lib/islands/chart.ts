@@ -6,9 +6,9 @@
  * the controller chunk (chart-controller.ts: Vega and lib/viz) on the first call, once per page;
  * nothing here imports Vega statically. Islands reach it as `IslandContext.loadChart` (boot injects it).
  */
-import type { DrawnChart } from '@/lib/compiled-page/contract';
 import type { IslandChartModule } from './contract';
 import { rowsDigest } from './digest';
+import type { DrawnChart } from '@/lib/story-runtime/contract';
 
 /**
  * The classes a server drawing's root `<svg>` carries (charts.server `drawChart`): out of flow and the

@@ -19,9 +19,8 @@ import { mintAccountToken } from '@/__tests__/harness';
 import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
 
 
-import { setServices } from '@/lib/platform';
-import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/serving';
-import { mintExportKey } from '@/lib/serving';
+import { setServices, mintExportKey } from '@/lib/platform';
+import { CARD_HEIGHT, CARD_WIDTH } from '@artifactbin/contracts';
 
 const EXPORT_BYTES = EXPORT_PNG;
 useAppHarness();

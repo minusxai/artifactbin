@@ -13,7 +13,8 @@ import { POST as internalMintRoute } from '@/app/api/internal/tokens/route';
 import { POST as startRoute } from '@/app/api/start/route';
 
 
-import { mintToken, claimToken, createUser, getUserByEmail, listArtifactsByUser } from '@/lib/accounts';
+import { mintToken, claimToken, createUser, getUserByEmail } from '@/lib/accounts';
+import { listArtifactsByUser } from '@/lib/workspace';
 import { createArtifact } from '@/lib/artifacts';
 import { useAppHarness, request } from '@/__tests__/harness';
 

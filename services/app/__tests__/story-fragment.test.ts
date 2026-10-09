@@ -18,7 +18,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
-import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
+import { storyFragmentUrl } from '@/lib/story-runtime/story-fragment';
 
 const harness = useAppHarness();
 beforeEach(() => setSession(null));

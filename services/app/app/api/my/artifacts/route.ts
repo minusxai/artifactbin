@@ -9,7 +9,7 @@
  * show an anonymous owner their document.
  */
 import { browserActor } from '@/lib/accounts';
-import { listOwnedArtifacts } from '@/lib/accounts';
+import { listOwnedArtifacts } from '@/lib/workspace';
 import { artifactSummaryToWire } from '@/lib/artifacts';
 import { actorForArtifacts } from '@/lib/accounts';
 import { ensureUserToken } from '@/lib/accounts';

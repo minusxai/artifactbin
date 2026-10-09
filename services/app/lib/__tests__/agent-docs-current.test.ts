@@ -29,7 +29,7 @@ const buildDesignDoc = files('artifactbin/references/design.md');
 const buildThemesDoc = files('artifactbin/references/themes.md');
 const buildTemplatesDoc = files('artifactbin/references/templates.md');
 const buildTemplateDoc = (name: string, base: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
-import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@/lib/serving';
+import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@artifactbin/contracts';
 import { parseJsx } from '../jsx';
 import { validateJsx } from '../jsx/validate';
 import { STORY_HTML_TAGS } from '../jsx/component-names';
@@ -58,7 +58,7 @@ describe('no agent-facing doc denies a capability the door allows', () => {
   // Only an OFFER counts: "there is no separate markdown or html tier" is the
   // sentence we want, not the one we are hunting.
   it.each(SURFACES)('%s never offers a retired tier', (_name, text) => {
-    expect(text).not.toMatch(/html tier:|markdown input|<Markdown>|send (markdown|html)\b/i);
+    expect(text).not.toMatch(/html tier:|markdown input|send (markdown|html)\b/i);
   });
 });
 
@@ -144,9 +144,9 @@ describe('saved-view authoring guidance', () => {
   it('publishes a complete local-state example without Values and preserves source on a second save', async () => {
     const guide = renderDoc('artifactbin/references/review-state.md', BASE);
     const sample = /```jsx\n([\s\S]*?)\n```/.exec(guide)?.[1];
-    expect(sample).toContain("import { reviewState } from 'page'");
+    expect(sample).toContain("import { createSignal, createEffect } from 'solid-js'");
     expect(sample).not.toContain('<Value');
-    expect(sample).toContain('restore: saved => setView(saved)');
+    expect(sample).toContain("createSignal(initial(), { name: 'checkout' })");
     const saved = await publishJsx({}, sample!);
     expect(saved instanceof Response ? await saved.text() : null).toBeNull();
     const source = (saved as StoredContent).source!;

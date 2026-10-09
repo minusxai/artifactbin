@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts';
-import type { ArtifactRow, TokenActor } from './access';
+import type { ArtifactRow } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {matchesWorkspaceAccount} from '../accounts/guest-owner';
 
 interface CreationReply {status: number; body: Record<string,unknown>}

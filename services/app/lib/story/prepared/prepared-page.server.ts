@@ -31,11 +31,12 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getDb } from '@/lib/platform/db';
-import type { ArtifactRow, Viewer } from '@/lib/artifacts';
+import type { ArtifactRow } from '@/lib/artifacts';
+import type { Viewer, RoleActor } from '@/lib/accounts/actors';
 import { declarationsForRow, holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/artifacts/dataflow';
-import { LIVE_ARTIFACT_SQL, type RoleActor } from '@/lib/artifacts/access';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/access';
 import { artifactQuery } from '@/lib/artifacts/document';
-import { savedMentionStates } from '@/lib/accounts/membership';
+import { savedMentionStates } from '@/lib/artifacts/membership/membership';
 import { archivedReadOnly, servedRow, type ArchivedRender } from '@/lib/artifacts/archived-version';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
@@ -315,8 +316,11 @@ export async function reprepareStoredPage(stored: ArtifactRow, at: ArchivedRende
 const RESTYLES_QUEUED = 256;
 const restyles = new Map<string, () => Promise<unknown>>();
 let restyling: Promise<void> | null = null;
+/** Like warm-ups, background work for a SERVER: off until story's hooks are installed (commit-hooks.server). */
+let restylesEnabled = false;
+export function enableBackgroundRestyles(): void { restylesEnabled = true; }
 function queueRestyle(stored: ArtifactRow, at: ArchivedRender | null): void {
-  if (!warming) return;
+  if (!restylesEnabled) return;
   const key = `${stored.id}\u0000${slotOf(at)}`;
   if (restyles.has(key) || restyles.size >= RESTYLES_QUEUED) return;
   restyles.set(key, () => reprepareStoredPage(stored, at));
@@ -414,34 +418,35 @@ export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: R
  * PUBLISH-TIME PREPARATION. After a write commits, the new head is prepared
  * off the write's path: one worker, one pending entry per artifact (a burst
  * of edits prepares the last head once), every failure swallowed — a warm-up
- * that fails is a first reader who misses, nothing more.
+ * that fails is a first reader who misses, nothing more. Background work
+ * belongs to a SERVER: it is queued by story's after-commit listener
+ * (commit-hooks.server installStoryCommitHooks), which only the serving
+ * composition registers. A caller that writes without serving — a script, a
+ * unit test measuring one statement — gets no work behind its back, and its
+ * readers still miss and write back.
  */
-const queued = new Map<string, { row?: ArtifactRow }>();
+const queued = new Map<string, { row?: ArtifactRow; replace?: boolean }>();
 let worker: Promise<void> | null = null;
-let warming = false;
 
 /**
- * Background work belongs to a SERVER: the app's composition (server/app
- * createAppServer) turns publish-time preparation on. A caller that writes
- * without serving — a script, a unit test measuring one statement — gets no
- * work behind its back, and its readers still miss and write back.
+ * `row`: the head the caller already read and decoded (lib/artifacts settleCommittedHead), so it is not read again.
+ * `replace`: the stored head page was rendered before something it shows changed (diagrams drawn since): drop it
+ * first, so the head is prepared again rather than found prepared. Sticky across a burst for the same artifact.
  */
-export function enablePreparedPageWarmups(): void { warming = true; }
-
-/** `row`: the head the caller already read and decoded (lib/artifacts settleCommittedHead), so it is not read again. */
-export function warmPreparedPage(id: string, row?: ArtifactRow): void {
-  if (!warming) return;
-  queued.set(id, row ? { row } : {});
+export function warmPreparedPage(id: string, row?: ArtifactRow, opts: { replace?: boolean } = {}): void {
+  const replace = !!opts.replace || !!queued.get(id)?.replace;
+  queued.set(id, { ...(row ? { row } : {}), ...(replace ? { replace } : {}) });
   if (worker) return;
   // A microtask, not a timer: a test's fake clock must never strand the queue.
   worker = Promise.resolve().then(async () => {
     while (queued.size) {
-      const [next, { row: held }] = queued.entries().next().value!;
+      const [next, { row: held, replace: drop }] = queued.entries().next().value!;
       queued.delete(next);
       try {
         // Decoded, never MIGRATED: a warm-up writes nothing but its own cache (a first reader's
         // read still performs the lazy representation migration it always has).
         const db = await getDb();
+        if (drop) await db.query("DELETE FROM prepared_pages WHERE artifact_id=$1 AND slot='head'", [next]);
         const row = held ?? (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [next])).rows[0];
         if (row?.format === 'markup') await preparedPageFor(row, null);
       } catch (error) {
