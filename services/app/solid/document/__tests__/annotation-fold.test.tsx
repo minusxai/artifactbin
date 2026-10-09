@@ -262,6 +262,61 @@ describe('selecting a resolved thread', () => {
 describe('a thread resolved elsewhere counts down on its marker', () => {
   beforeEach(() => { knobs.open = [ANN]; knobs.resolved = null; });
 
+  it('resolves from the ambient preview without opening the sidebar', async () => {
+    const view = layer({ railOpen: false, showViewComments: true });
+    await flush(); await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    const marker = screen.getByLabelText(/Open annotation conversation by/);
+    fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
+    const resolve = screen.getByLabelText('Resolve thread');
+    resolve.focus();
+    expect(resolve.tagName).toBe('BUTTON');
+    expect(document.activeElement).toBe(resolve);
+    fireEvent.click(resolve);
+    await flush(); await flush();
+    expect(fetchCalls.some((call) => call.url.endsWith(`/annotations/${ANN.id}`)
+      && call.init?.method === 'POST' && JSON.parse(String(call.init.body)).resolve === true)).toBe(true);
+    expect(screen.queryByLabelText('Annotation sidebar')).toBeNull();
+    expect(screen.queryByLabelText(/Open annotation conversation by/)).toBeNull();
+  });
+
+  it('disables ambient resolve while pending and dismisses its marker on success', async () => {
+    let finish!: (row: AnnotationWire) => void;
+    const actOnAnnotation = vi.fn(() => new Promise<AnnotationWire>((done) => { finish = done; }));
+    const backend = { ...httpBackend('doc1'), actOnAnnotation };
+    const view = layer({ showViewComments: true, backend });
+    await flush(); await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    const marker = screen.getByLabelText(/Open annotation conversation by/);
+    fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
+    const resolve = screen.getByLabelText('Resolve thread');
+    fireEvent.click(resolve);
+    expect(actOnAnnotation).toHaveBeenCalledWith(ANN.id, { resolve: true });
+    expect(resolve).toBeDisabled();
+    expect(screen.queryByLabelText('Annotation sidebar')).toBeNull();
+
+    finish({ ...ANN, status: 'resolved', revision: 2 });
+    await flush(); await flush();
+    expect(screen.queryByLabelText(/Open annotation conversation by/)).toBeNull();
+    expect(screen.queryByLabelText('Annotation sidebar')).toBeNull();
+    expect(view.runtime.posts().at(-1).pins).not.toContainEqual(expect.objectContaining({ id: ANN.id }));
+  });
+
+  it('shows ambient resolve failures in the preview without opening the sidebar', async () => {
+    const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(async () => { throw new Error('offline'); }) };
+    const view = layer({ showViewComments: true, backend });
+    await flush(); await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    const marker = screen.getByLabelText(/Open annotation conversation by/);
+    fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
+    fireEvent.click(screen.getByLabelText('Resolve thread'));
+    await flush(); await flush();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not resolve this thread');
+    expect(screen.getByLabelText(/Open annotation conversation by/)).toBeTruthy();
+    expect(screen.queryByLabelText('Annotation sidebar')).toBeNull();
+  });
+
   it('removes a deleted reply from the retained preview while the resolved index refresh is pending', async () => {
     const resolved: AnnotationWire = {
       ...ANN,

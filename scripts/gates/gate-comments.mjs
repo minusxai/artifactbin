@@ -528,9 +528,22 @@ async function tableSelectionLeg(browser, { id, token }) {
     }, `mx-annotation-${annotation.id}`), words => words.length === 4, 10000);
     check(JSON.stringify(selectedWords) === JSON.stringify(['24', 'Deploy npm race', '25', 'Ask reporter to retry']),
       'reopening the comment after refresh highlights all selected cells');
-    await page.getByLabel('Resolve annotation', { exact: true }).click();
-    await page.getByLabel('Show resolved conversation', { exact: true }).waitFor();
     await page.getByLabel('Close comments', { exact: true }).click();
+    const ambientMarker = page.locator('[aria-label^="Open annotation conversation by"]');
+    await ambientMarker.hover();
+    const previewResolve = page.getByRole('button', { name: 'Resolve thread', exact: true });
+    await previewResolve.waitFor();
+    await previewResolve.focus();
+    await page.keyboard.press('Space');
+    await until(() => ambientMarker.count(), count => count === 0, 8000);
+    check(await page.getByLabel('Annotation sidebar').count() === 0,
+      'keyboard resolution from the hover preview keeps the comment sidebar closed');
+    const previewResolvedResponse = await fetch(`${BASE}/api/artifacts/${id}/annotations?status=resolved`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const previewResolved = await previewResolvedResponse.json();
+    check(previewResolved.annotations?.some(row => row.id === annotation.id && row.status === 'resolved'),
+      'the hover Resolve action persists the resolved thread');
     check(await page.locator('[aria-label^="Open annotation conversation by"]').count() === 0,
       'my successful resolution immediately dismisses its countdown marker');
     await page.reload({ waitUntil: 'load' });
