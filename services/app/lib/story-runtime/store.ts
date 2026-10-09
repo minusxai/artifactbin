@@ -36,7 +36,8 @@ import type { LocalMutationResult } from '@/lib/dataflow/local-state';
 import { importRef, selectQueries, type ImportTables } from '@/lib/dataflow/compiled-flow';
 import { localZone } from '@/lib/dataflow/builtins';
 import { placeDataflow, type DataflowPlacement } from '@/lib/dataflow/placement';
-import { MAX_PEOPLE_IDS, type PersonCard } from '@artifactbin/contracts';
+import type { PersonCard } from '@artifactbin/contracts';
+import { MAX_PEOPLE_IDS } from '@artifactbin/contracts/query-request';
 import {
   ACCESS_FAILED, ACCESS_PENDING, accessUnavailable, accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople, versionsNow,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,

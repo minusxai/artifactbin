@@ -4,7 +4,7 @@
  * from 'self' (lib/story/styles/markup-csp), so the browser rewrites every upstream URL
  * the style names onto the proxy, and the proxy forwards only this allowlist.
  */
-import { BASEMAP_PATH } from '@artifactbin/contracts';
+import { BASEMAP_PATH } from '@artifactbin/contracts/basemap';
 
 export const BASEMAP_UPSTREAM = 'https://tiles.openfreemap.org';
 /** MapLibre's module worker, served same-origin: a blob: worker is refused. */
