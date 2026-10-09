@@ -61,6 +61,7 @@ export function createFormatLink({ win, root, views, channel, post, republishRec
       }
     }
     if (className !== undefined) {
+      if (el.hasAttribute('data-mx-markdown')) className = `mx-markdown ${className}`;
       if (className.trim()) el.setAttribute('class', className);
       else el.removeAttribute('class');
     }

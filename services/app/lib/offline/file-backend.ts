@@ -1,4 +1,5 @@
 import { parseCommentViewState } from '../../../contracts/src/comment-view-state';
+import { markdownContent, markdownSource } from '@/lib/markdown/content';
 /**
  * THE OFFLINE FILE'S BACKEND — the ArtifactBackend (lib/artifact-backend/types)
  * a downloaded `.html` answers from its own ArtifactFile, so the site's editor
@@ -142,7 +143,7 @@ export function fileAssetInliner(file: Pick<ArtifactFile, 'source' | 'island'>):
 // ── comments' anchors, against the current source ───────────────────────────
 
 const textOf = (node: JsxNode): string =>
-  node.type === 'text' ? node.value : node.type === 'element' ? node.children.map(textOf).join('') : '';
+  node.type === 'text' ? node.value : node.type === 'element' ? node.tag === 'Markdown' ? markdownContent(markdownSource(node) ?? '').text : node.children.map(textOf).join('') : '';
 
 /**
  * A thread as the server would read it back now: anchor, snippet and quote

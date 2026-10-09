@@ -113,12 +113,14 @@ export interface InPlaceEditController {
   /** Ask the frame to link the live text selection; it answers with a text edit. */
   applyLink: (path: string, href: string | null) => void;
   applyInline: (tag: 'strong' | 'em' | 'u') => void;
+  applyMarkdownBlock: (block: import('@/lib/story-runtime/contract').MarkdownBlockKind) => void;
+  applyMarkdownTable: (action: import('@/lib/story-runtime/contract').MarkdownTableAction) => void;
   /** Return the caret to the document's text (page chrome that took focus closed without a change). */
   focusText: () => void;
   pasteMarkdown: (value: string) => void;
   restoreSelection: (bookmark: EditorBookmark) => void;
   /** Select a node by path (a breadcrumb click, a panel opening) or clear it. */
-  select: (path: string | null, options?: { reveal?: boolean; nodeId?: string }) => void;
+  select: (path: string | null, options?: { reveal?: boolean; nodeId?: string; focusText?: boolean }) => void;
   /** Outline nodes by path WITHOUT selecting them (the query notebook pointing at what a query powers); [] clears. */
   spotlight: (paths: string[]) => void;
   /**
@@ -303,7 +305,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
     postToFrame({ type: STORY_APPLY_LINK_MESSAGE, path, href });
   };
 
-  const select = (path: string | null, opts?: { reveal?: boolean; nodeId?: string }) => {
+  const select = (path: string | null, opts?: { reveal?: boolean; nodeId?: string; focusText?: boolean }) => {
     /*
      * DESELECTING NEEDS NO ANSWER. Selecting does — only the document can
      * describe what is at a path (its rect, its classes, its ancestors), so
@@ -318,6 +320,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
       path,
       ...(opts?.reveal ? { reveal: true } : {}),
       ...(opts?.nodeId ? { nodeId: opts.nodeId } : {}),
+      ...(opts?.focusText ? { focusText: true } : {}),
     });
   };
 
@@ -360,6 +363,8 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
     applyFormat,
     applyLink,
     applyInline: (tag: 'strong' | 'em' | 'u') => postToFrame({ type: 'mx:inline', tag }),
+    applyMarkdownTable: (action: import('@/lib/story-runtime/contract').MarkdownTableAction) => postToFrame({ type: 'mx:markdown-table', action }),
+    applyMarkdownBlock: (block: import('@/lib/story-runtime/contract').MarkdownBlockKind) => postToFrame({ type: 'mx:markdown-block', block }),
     focusText: () => postToFrame({ type: 'mx:focus-text' }),
     pasteMarkdown: (value: string) => postToFrame({ type: 'mx:paste', kind: 'markdown', value }),
     select,

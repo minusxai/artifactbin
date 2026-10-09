@@ -118,7 +118,7 @@ export interface ContentInputCtx {
 export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
   // Retired inputs, answered by name.
   const RETIRED: Record<string, string> = {
-    markdown: 'markdown is not an authoring format here — send markup: prose is ordinary HTML tags (<h1>, <p>, <ul>…)',
+    markdown: 'send markup containing <Markdown> for continuous prose, or ordinary HTML tags for individually designed text; the top-level markdown field is not supported',
     html: 'html is vocabulary inside markup now — send markup; put <style>/<script>/<title> in a top-level <Helmet>',
     jsx: 'the jsx field is retired — send markup',
   };

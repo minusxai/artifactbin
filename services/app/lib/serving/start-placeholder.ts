@@ -31,4 +31,4 @@ export const START_PLACEHOLDER_MARKUP =
   `</p><p className="sr-only">${AGENT_LINE}</p></div>`;
 
 /** Ordinary editable prose, shared by creation and the optional starter transition. */
-export const BLANK_REPORT_MARKUP = '<article data-design="tw" className="mx-auto max-w-3xl px-6 py-12"><h1 className="text-4xl font-semibold tracking-tight">Untitled report</h1><p className="mt-6 text-lg leading-relaxed">Start writing here.</p></article>';
+export const BLANK_REPORT_MARKUP = '<article data-design="tw" className="mx-auto max-w-3xl px-6 py-12"><h1 className="text-4xl font-semibold tracking-tight">Untitled report</h1><Markdown className="mt-6 text-lg leading-relaxed">{`Start writing here.`}</Markdown></article>';

@@ -175,7 +175,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     if (isCommentKey(event)) { event.preventDefault(); emit({ type: STORY_COMMENT_KEY_MESSAGE }); return; }
     if (isLinkKey(event)) {
       const target = (event.composedPath()[0] ?? event.target) as Element | null;
-      if (!target?.closest?.('.ProseMirror')) return;
+      if (!target?.closest?.('.ProseMirror,[data-mx-lexical]')) return;
       event.preventDefault();
       emit({ type: STORY_LINK_KEY_MESSAGE });
       return;

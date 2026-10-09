@@ -27,6 +27,7 @@ export function selectionKindAt(nodes: JsxNode[], path: string): StoryEditSelect
   if (!path) return null;
   const node = resolveJsxNodeAtPath(nodes, path);
   if (!node || node.type !== 'element') return null;
+  if (node.tag === 'Markdown') return 'text';
   if (node.isComponent) return 'embed';
   return isEditableTextHost(node) ? 'text' : 'element';
 }
@@ -83,13 +84,13 @@ export function describeSelection(el: Element, nodes: JsxNode[]): StoryEditSelec
   const r = el.getBoundingClientRect();
   return {
     kind,
-    ...(el.closest('.ProseMirror') ? { editor: 'prose' as const } : {}),
+    ...(el.hasAttribute('data-mx-markdown') ? { editor: 'markdown' as const } : el.closest('.ProseMirror') ? { editor: 'prose' as const } : {}),
     customHeight:node.attributes.some(a=>a.name==='minHeight'&&a.value.static&&typeof a.value.json==='number')||/\bmin-h-\[\d+px\]/.test(el.getAttribute('class')??''),
     path,
     ...(nodeId ? { nodeId } : {}),
     tag: node.tag,
     rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-    className: el.getAttribute('class') ?? '',
+    className: (el.getAttribute('class') ?? '').split(/\s+/).filter(value => value !== 'mx-markdown').join(' '),
     style: el.getAttribute('style') ?? '',
     ancestors: ancestorCrumbs(el, nodes),
   };

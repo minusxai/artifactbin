@@ -14,10 +14,10 @@ import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { mergeIdentityMaps } from './annotation-map';
 import { captureBookmark, resolveBookmark, type EditorSelectionChange } from './bookmark';
 import { clipboardAst, type ClipboardKind } from './clipboard';
-import { inlineShortcut, BLOCK_SHORTCUT, ordinaryParagraph, blockShortcut, splitTask, leaveCode } from './block-shortcuts';
+import { splitTask, leaveCode } from './block-keys';
 import { editorDocument, editorSchema, normalizeIdentities, pasteFragment, sourceNodes, toggleInline } from './model';
 import { indentBlocks, outdentAtStart } from './indent';
-import { autolink, linkEndingAt, markdownLink, pastedLink, TYPED_MARKDOWN_LINK, TYPED_URL } from './links';
+import { autolink, linkEndingAt, pastedLink, TYPED_URL } from './links';
 
 export interface FlowEditorProps {
   nodes: JsxNode[];
@@ -216,13 +216,6 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
           'Mod-Enter': leaveCode,
           Backspace: chainCommands(outdentAtStart, baseKeymap.Backspace!),
           Enter: linkFirst(chainCommands(
-            (state, dispatch, view) => {
-              if (view?.composing) return false;
-              const tr = blockShortcut(state, true);
-              if (!tr) return false;
-              dispatch?.(tr.setMeta('mx-command', true));
-              return true;
-            },
             splitTask,
             (state, dispatch) => {
               if (state.selection.$from.parent.attrs.tag !== 'pre') return false;
@@ -369,34 +362,16 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         const defaultTyping = typing;
         typing = () => defaultTyping().removeMark(from, from + text.length, endingLink);
       }
-      // A finished address, or a closed `[text](url)`, becomes a link: in any prose, lists and cells included.
+      // A finished URL becomes a link; Markdown syntax stays literal in HTML.
       const typed = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc') + text;
-      if (text === ')' ? TYPED_MARKDOWN_LINK.test(typed) : /^[ \u00a0]$/.test(text) && TYPED_URL.test(typed.slice(0, -1))) {
+      if (/^[ \u00a0]$/.test(text) && TYPED_URL.test(typed.slice(0, -1))) {
         view.dispatch(typing());
-        const convert = text === ')' ? markdownLink(view.state) : autolink(view.state, view.state.selection.from - 1);
+        const convert = autolink(view.state, view.state.selection.from - 1);
         if (convert) view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());
         return true;
       }
-      const plainTyping = () => {
-        if (!endingLink) return false;
-        view.dispatch(typing());
-        return true;
-      };
-      if (!ordinaryParagraph($from)) return plainTyping();
-      if (text === '*') {
-        const inserted = typing();
-        const convert = inlineShortcut(view.state.apply(inserted));
-        if (!convert) return plainTyping();
-        view.dispatch(inserted);
-        view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());
-        // Identity normalization adds mark steps; clear typing marks after it.
-        view.dispatch(view.state.tr.setStoredMarks([]));
-        return true;
-      }
-      if (!/^[ \u00a0]$/.test(text) || !BLOCK_SHORTCUT.test($from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc') + text)) return plainTyping();
+      if (!endingLink) return false;
       view.dispatch(typing());
-      const convert = blockShortcut(view.state);
-      if (convert) view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());
       return true;
     },
     handleKeyDown(view, event) {

@@ -51,6 +51,7 @@ import { contentSha } from './speculation';
 import { MODULE_DATA_READ_CODE } from './carriers';
 import { reactAttrs } from './static-solid/attrs';
 import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, solidTextValue, solidTrimText, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
+import { markdownContent, markdownSource } from '@/lib/markdown/content';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code
@@ -95,6 +96,7 @@ interface KitMeta {
 
 /** Which module each ported kit component comes from, and its API props (everything else is a DOM attribute). */
 export const KIT: Readonly<Record<string, KitMeta>> = {
+  Markdown: { mod: 'static' }, // Compiled directly to HTML; Lexical belongs only to edit mode.
   Badge: { mod: 'basic', api: ['variant'] }, Alert: { mod: 'basic', api: ['variant'] }, AlertTitle: { mod: 'basic' }, AlertDescription: { mod: 'basic' },
   Progress: { mod: 'basic', api: ['value'] }, Icon: { mod: 'basic', api: ['name', 'glyphs', 'catalogUrl'] },
   Card: { mod: 'basic' }, CardHeader: { mod: 'basic' }, CardTitle: { mod: 'basic' }, CardDescription: { mod: 'basic' }, CardAction: { mod: 'basic' }, CardContent: { mod: 'basic' }, CardFooter: { mod: 'basic' },
@@ -292,6 +294,10 @@ type GenerateInput = Omit<CompileInput, 'build'> & {
 
 export function generate(input: GenerateInput): Generated {
   const elementAttrs = reactAttrs;
+  const markdownAttrs = (node: JsxElement, path: string): Attr[] => {
+    const props = rawBuildProps(node.attributes, true, node.tag, path);
+    return elementAttrs('div', { ...props, 'data-mx-markdown': '', className: cn('mx-markdown', typeof props.className === 'string' ? props.className : '') });
+  };
   const jsxAttrs = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}={${v === '' && /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i.test(n) ? 'true' : lit(v)}}`).join('');
   const refData = input.refData ?? {};
   const nodes = input.nodes ?? [];
@@ -504,6 +510,10 @@ export function generate(input: GenerateInput): Generated {
   }
   function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
     if (node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
+    if (node.tag === 'Markdown') {
+      const attrs = solidAttrs(markdownAttrs(node, path), safeAttr);
+      return attrs === null ? null : `<div${attrs}>${markdownContent(markdownSource(node) ?? '').html}</div>`;
+    }
     if (node.tag === 'Grid' || node.tag === 'GridItem') return gridHtml(node, path, ctx);
     if (node.isComponent) return isScriptComponent(node) ? mountHtml(node, path, ctx) : kitHtml(node, path, ctx);
     const lower = node.tag.toLowerCase();
@@ -595,6 +605,7 @@ export function generate(input: GenerateInput): Generated {
 
   function emitElement(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const children = (inner: Ctx = ctx): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, inner)).join('');
+    if (node.tag === 'Markdown') return `<div${jsxAttrs(markdownAttrs(node, path))} innerHTML={${lit(markdownContent(markdownSource(node) ?? '').html)}} />`;
     if (node.tag === 'For') return emitFor(node, path, mode, ctx);
     if (node.tag === 'Grid' || node.tag === 'GridItem') return emitGrid(node, path, mode, ctx);
     // A control with `run` in a column's content is an editing cell (interpreter renderNode → cellControl).
@@ -874,6 +885,7 @@ export function generate(input: GenerateInput): Generated {
       if (attrHtml === null || inner === null) return null;
       return { kind: P.ELEMENT, html: VOID.test(tag) ? `<${tag}${attrHtml}>` : `<${tag}${attrHtml}>${inner}</${tag}>` };
     };
+    if (node.tag === 'Markdown') return element('div', markdownAttrs(node, path), markdownContent(markdownSource(node) ?? '').html);
     if (node.tag === 'For') {
       if (isTableParts(node)) return NONE;
       const owner = node.attributes.find((a) => a.name === 'id')?.value;
