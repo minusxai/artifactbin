@@ -85,3 +85,17 @@ Running app: own dev5001, local disposable email login via protected `npm run de
 ===CONCISE===
 
 Scoped default authority fails closed before admission; ordinary tokens stay independent. Cancellation and blocked delivery are terminal; stale annotation responses cannot replace newer snapshots. Actual-owned-handler and compatibility regressions pass; readonly default snapshot avoids ensure inside annotation transactions. Commits4a006bee+bf4ba122. Local shell/document render passed; human comment-save/default-composed UI not claimed. Dev5001 retained; browser and unusedfixture cleaned.
+
+## Browser request scope companion, 2026-10-09
+
+A browser session stores the trusted opaque request scope at creation. Every script checks exact scope equality after owner verification and before lease touch, viewer conflict, execution-receipt lookup or worker invocation. This includes `create:true` collisions and script receipt retries. Legacy undefined scopes match only undefined. Same-owner credential rotation within the same scope resumes normally; owner status/close retain existing cleanup behavior. Existing sessions are never relabeled.
+
+The app copies scope from the authenticated allowed-authority decision into `OpContext` and then the service request. Caller operation input is stripped and cannot override it. A scoped browser script without a nonempty scope, or with malformed/blank/oversized scope, fails403 with definitive `admission_refused:true` before reaching the browser service. Ordinary sessions remain unscoped and independent of hosted authority.
+
+Observed RED: seeded actual BrowserSessions regression1failed/9passed. App propagation test first ran while source was changing and passed; this was not treated as baseline RED. I then deliberately removed the trusted HTTP→OpContext propagation from the passing implementation:1failed/12passed, expected trusted-A but got undefined; restored it before final verification (Blue→Red→Blue). Final FAST: `npm run validate` passed; `npm test -- --files services/browser/__tests__/sessions.test.ts services/app/__tests__/testusers-sessions.test.ts services/app/__tests__/hosted-request-scope.test.ts` passed3files37tests. `git diff --check` passed. An initial selected command mistakenly named nonexistent utils browser.test.ts and exited2 with no successful verification; corrected to the actual three affected test files. No full suites, gates, local builds, pushes, production actions, browser/provider resources, or development servers were started for this boundary-only brief.
+
+Evidence: `.agent/scope-red.log`, `.agent/app-propagation-red.log`, `.agent/final-scope-green.log`, `.agent/final-scope-validate.log`; copied to the stress task's `evidence/public-browser-scope`. Private A was notified of the stable source snapshot for integrated service/worker coverage. Root owns compiled artifact and deployment acceptance.
+
+===CONCISE===
+
+Browser scopes cannot be forged or relabeled through existing-session creation/replay. Ordinary sessions, owner cleanup, and same-scope credential rotation remain compatible. Genuine browser RED and app Blue→Red→Blue observed; validate+3files37tests passed. No resources or production changes.
