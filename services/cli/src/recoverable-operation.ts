@@ -38,7 +38,14 @@ export async function recoverableOperation(workspace:Workspace,client:HttpClient
   if(!saved.response){
    let response:Record<string,unknown>;
    try{response=await client.request(saved.path,saved.method,saved.body,{...(saved.agent?{[AGENT_HEADER]:saved.agent}:{}),'Idempotency-Key':saved.key},{timeoutMs:MUTATION_REPLY_TIMEOUT_MS});}
-   catch(error){if(error instanceof CliError&&(error.details as {mutation_receipt?:unknown}|undefined)?.mutation_receipt===saved.key)archive({pending:saved,refusal:error.details});throw error;}
+   catch(error){
+    const details=error instanceof CliError?error.details as {mutation_receipt?:unknown;admission_refused?:unknown;http_status?:unknown}|undefined:undefined;
+    // A scope refusal precedes durable admission, so there is no mutation receipt.
+    // Only the explicit definitive refusal may release this local intent; uncertain
+    // transport/server failures retain the same recovery identity.
+    if(details?.mutation_receipt===saved.key||details?.admission_refused===true&&details.http_status===403)archive({pending:saved,refusal:error instanceof CliError?error.details:undefined});
+    throw error;
+   }
    const {checksum:_old,...value}=saved;const next={...value,response,account:value.account??client.account??null};saved={...next,checksum:checksum(next)};state.put(workspace.root,'pending-operation',CURRENT,saved);
   }
   await operation.finalize?.(saved.response!,saved.context);
