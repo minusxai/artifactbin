@@ -9,6 +9,7 @@ import { catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '../platform/analytics';
 import { sourceWithoutAnchors } from '../annotations/anchors';
+import { unservable } from './servable';
 import { getDb } from '../platform/db';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../story/document/input';
@@ -90,6 +91,9 @@ export async function forkArtifact(
    */
   const unforkable = forkRefusal(source);
   if (unforkable) return unforkable;
+  // A copy is born marked current (lib/story/data/data-syntax): a retired stored shape is never copied into one.
+  const retired = unservable(source);
+  if (retired) return retired.response();
   const copying = await writtenDatasetForkPlan(actor, source, owner);
   // The page PLUS its dataset copies: one cap, counted against what this call
   // will really create rather than against the page alone.
@@ -296,7 +300,7 @@ async function forkInput(
   }
   const meta = source.meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
   // Publish the LIVE vocabulary, exactly as the wire echo does: a stored
-  // retired theme would otherwise make an old document unforkable for a reason
+  // unknown theme would otherwise make an old document unforkable for a reason
   // nobody could act on.
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode ?? null);
   const parsed = await parseContentInput({

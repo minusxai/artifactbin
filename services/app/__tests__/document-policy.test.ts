@@ -1,4 +1,5 @@
 import {documentEditBody} from './prepared-document';
+import {createDocumentGraph} from '@/lib/story/graph/document-graph';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {setDocumentEditorPolicy} from '@/lib/artifacts';
 import type {Actor} from '@artifactbin/contracts';
@@ -17,7 +18,7 @@ const path='/api/my/artifacts/abc123';
 const context={params:Promise.resolve({id:'abc123'})};
 beforeEach(async()=>{
  setDocumentEditorPolicy(actor=>actor.userId==='usr_admin' && actor.emailVerified===true);
- await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,source,format,visibility,edit_id) VALUES ('abc123','tok_owner','usr_owner','Private document','<p id="intro">Before</p>','markup','private','base-edit')`);
+ await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,document,meta,format,visibility,edit_id) VALUES ('abc123','tok_owner','usr_owner','Private document',$1::jsonb,'{"dataSyntax":2}','markup','private','base-edit')`,[JSON.stringify(createDocumentGraph('<p id="intro">Before</p>',1))]);
 });
 it('opens private documents in the ordinary editor with server-provided editor permission',async()=>{
  const req=request(path,options),actor=await sessionActor(req),row=(await getArtifactById('abc123'))!;

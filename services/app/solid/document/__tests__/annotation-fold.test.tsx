@@ -341,3 +341,17 @@ describe('comment timestamps', () => {
     expect(invalid.container.querySelector('time')).toBeNull();
   });
 });
+
+describe('an open comment with no anchor (a detached legacy anchor: anchor_key NULL)', () => {
+  it('stays in the rail and opens, paints no highlight, and says its passage is gone', async () => {
+    const detached: AnnotationWire = { ...ANN, id: 'ann_det', anchor: null, orphaned: true, snippet: 'the old revenue line', thread: [human('ann_det', 'is this still right?', '2026-08-01T00:00:00Z')] };
+    knobs.open = [detached];
+    const { thread, view } = await openRailThread();
+    expect(thread.textContent).toContain('is this still right?');
+    expect(within(thread).getByText(/removed from the document/i)).toBeTruthy();
+    expect(within(thread).getByText('the old revenue line')).toBeTruthy();
+    // No pin, open or not: there is nothing in the document to highlight.
+    for (const message of view.runtime.posts()) expect((message.pins ?? []).map((p: { id: string }) => p.id)).not.toContain('ann_det');
+  });
+});
+

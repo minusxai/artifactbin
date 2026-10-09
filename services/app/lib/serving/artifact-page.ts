@@ -19,6 +19,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * (`?part=editor`) — prefetched on idle, so entering edit mode stays instant.
  */
 import { archivedVersionFor, servedRow } from './archived-version';
+import { UnservableDocument } from '@/lib/artifacts/servable';
 import { countOpenAnnotations } from '@/lib/annotations/store';
 import { canReadArtifact } from '@/lib/artifacts/access';
 import { getArtifactFor, getArtifactById } from '@/lib/artifacts/store';
@@ -103,7 +104,16 @@ async function admittedFrameSrc(request: Request, artifact: ArtifactRow, actor: 
   return { src: pagesSessionUrl(site, `${origin}/${search}`, ticket), origin };
 }
 
+/** The page's answer; a stored shape the current code no longer serves is its 410 (lib/artifacts/servable). */
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {
+  try { return await answerArtifactPage(request, id, options); }
+  catch (error) {
+    if (error instanceof UnservableDocument) return { status: error.status, body: { error: error.code, message: error.message } };
+    throw error;
+  }
+}
+
+async function answerArtifactPage(request: Request, id: string, options: ArtifactPageOptions): Promise<ArtifactPageAnswer> {
   if (!ID_RE.test(id)) return notFound();
   const admitted = options.admitted?.id === id ? options.admitted : null;
   const artifact = admitted ?? await getArtifactById(id);

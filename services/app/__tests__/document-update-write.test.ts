@@ -201,15 +201,6 @@ it('maps UTF-16 annotation ranges only when their quote still matches and refuse
  expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,unknown))?.applied).toBe(false);expect((await getArtifactById(id))!.version).toBe(joined.row.version);
 });
 
-it('normalizes a legacy annotation alias before composing its text mapping',async()=>{
- const {db,actor,id,base}=await setup();
- await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,anchor_key,range) VALUES('legacy_join',$1,'Comment','agent','old-b',$2)",[id,JSON.stringify({v:1,parts:[{rel:'',start:0,end:4,text:'Beta'}]})]);
- const update=prepareClientDocumentUpdate(base,{source:'<main id="root"><p id="a">AlphaBeta</p></main>',annotationOps:[{id:'legacy-map-abcdefghijkl',kind:'map',maps:[{fromId:'b',toId:'a',fromText:'Beta',toText:'AlphaBeta',segments:[{from:0,to:5,length:4}]}]}]});
- update.aliases=[{legacyKey:'old-b',nodeId:'b',path:'0.1'}];
- expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,update))?.applied).toBe(true);
- const row=(await db.query<{anchor_key:string;range:string}>("SELECT anchor_key,range FROM annotations WHERE id='legacy_join'")).rows[0]!;
- expect(row.anchor_key).toBe('a');expect(JSON.parse(row.range).parts[0]).toMatchObject({start:5,end:9});
-});
 it('restores an archived document over a native dataset using one guarded replacement statement',async()=>{
  const {db,actor,id,row}=await setup();
  await db.query("UPDATE artifacts SET format='dataset',document=NULL,source='table: rows',meta='{\"catalog\":{\"kind\":\"stored\"}}',version=2 WHERE id=$1",[id]);

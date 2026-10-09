@@ -14,7 +14,8 @@ import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { DELETE as deleteCommentRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
-import { createArtifact,getArtifactById,getVersionFor,type ArtifactRow } from '@/lib/artifacts';
+import { createArtifact,getArtifactById,type ArtifactRow } from '@/lib/artifacts';
+import { createDocumentGraph } from '@/lib/story/graph/document-graph';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 async function setup(markup:string) {
@@ -127,8 +128,8 @@ describe('node project through real routes',()=>{
   it('normalizes and reserves identities when reverting a pre-identity archive',async()=>{
     const s=await setup('<main id="root"><p id="current">Current</p></main>');const db=await getDb();
     await artifactQuery(db,'UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,description,format,source,meta)
-      VALUES($1,1,'old',NULL,'markup',$2,$3)`,[s.doc.id,'<main><p>Archived</p></main>',JSON.stringify({theme:'modernist',template:null,colorMode:'light'})]);
+    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,description,format,document,meta)
+      VALUES($1,1,'old',NULL,'markup',$2::jsonb,$3)`,[s.doc.id,JSON.stringify(createDocumentGraph('<main><p>Archived</p></main>',1)),JSON.stringify({theme:'modernist',template:null,colorMode:'light',dataSyntax:2})]);
     const response=await restoreDocument(s.t.token,s.doc.id,1);
     expect(response.status,await response.clone().text()).toBe(200);
     const head=await s.read();const ids=bodyIds(head.markup) as string[];expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
@@ -139,18 +140,15 @@ describe('node project through real routes',()=>{
   });
   it('a refused archived publish leaves head and history unchanged',async()=>{
     const s=await setup('<p id="safe">Safe</p>');const db=await getDb();await artifactQuery(db,'UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,format,source,meta) VALUES($1,1,'bad','markup',$2,'{}')`,[s.doc.id,'<p id="bad" onClick="run()">Bad</p>']);
-    await getVersionFor({tokenId:s.t.id,userId:null},s.doc.id,1);
+    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,format,document,meta) VALUES($1,1,'bad','markup',$2::jsonb,'{"dataSyntax":2}')`,[s.doc.id,JSON.stringify(createDocumentGraph('<p id="bad" onClick="run()">Bad</p>',1))]);
     const before=await history(s.doc.id);const head=await s.read();
     await expect(restoreDocument(s.t.token,s.doc.id,1)).rejects.toThrow();
     expect((await s.read()).markup).toBe(head.markup);expect(await history(s.doc.id)).toEqual(before);
   });
   it('metadata-only edits preserve source bytes',async()=>{
-    const s=await setup('<main id="root"><p id="para">Same</p></main>');
-    const legacy="<main id='root'><p>Same</p></main>";
-    await (await getDb()).query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[s.doc.id,legacy]);
+    const s=await setup('<main id="root"><p id="para">Same</p></main>');const before=(await s.read()).markup;
     const response=await patchMetadata(s.t.token,s.doc.id,{title:'Renamed'});expect(response.status).toBe(200);
-    expect((await s.read()).markup).toMatch(/<main id="root"><p id="[^"]+">Same<\/p><\/main>/);
+    expect((await s.read()).markup).toBe(before);
   });
   it('reactivates a retired id when an archived source is restored',async()=>{
     const s=await setup('<main id="root"><p id="returning">Back</p></main>');const base=await s.read();
@@ -160,9 +158,5 @@ describe('node project through real routes',()=>{
     expect(restored.status,await restored.clone().text()).toBe(200);
     expect((await artifactQuery<{retired_version:number|null}>(db,'SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).toBeNull();
   });
-  it.each(['"old"','{"old"}'])('duplicate legacy aliases %s refuse a full replace without mutation',async value=>{
-    const s=await setup('<main id="root"><p id="para">Same</p></main>');const before=await s.read();const beforeHistory=await history(s.doc.id);
-    await expect(observedRequest(`/api/artifacts/${s.doc.id}`,{method:'PUT',token:s.t.token,json:{markup:`<main><p data-annotation-anchor=${value}>A</p><p data-annotation-anchor=${value}>B</p></main>`}})).rejects.toThrow(/duplicate/i);
-    expect((await s.read()).markup).toBe(before.markup);expect(await history(s.doc.id)).toEqual(beforeHistory);
-  });
+
 });

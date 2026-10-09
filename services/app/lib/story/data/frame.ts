@@ -24,7 +24,7 @@ import type { ArtifactLiveEvent } from '../realtime/live';
 import { storyUpdateParts } from '../document/update-parts';
 import { assetLookupFrom } from '../assets/asset-url';
 import { webAssetsForSource } from '@/lib/serving/web-assets';
-import { inCurrentSyntax } from '@/lib/migrate/sqlite/stored';
+import { servableDocument } from '@/lib/artifacts/servable';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
@@ -51,8 +51,8 @@ export function frameBuilds(): number { return builds; }
 
 async function build(stored: ArtifactRow): Promise<LiveFrame> {
   builds++;
-  // The frame is the document as it is served: in the current data syntax (lib/migrate/sqlite/stored).
-  const row = stored.format === 'markup' ? await inCurrentSyntax(stored) : stored;
+  // The frame is the document as it is served; a retired shape is refused (lib/artifacts/servable).
+  const row = servableDocument(stored);
   const meta = row.meta as {
     compiledCss?: string | null; theme?: StoryDesignName | null; colorMode?: 'light' | 'dark' | null;
     template?: string | null; cssCompileVersion?: string | null;

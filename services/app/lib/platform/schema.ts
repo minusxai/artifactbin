@@ -25,17 +25,13 @@ const USERS: Table = {
      *   'testuser' — a throwaway second person an account minted (parent_user_id),
      *                erased with everything it owns.
      * The default is 'account' so the additive ALTER is legal on a non-empty
-     * table; boot backfills the guests from `is_guest` (lib/user-kinds).
+     * table.
      */
     { name: 'kind', type: 'TEXT', notNull: true, default: "'account'" },
     /** The ACCOUNT that minted a test user; NULL for everyone else. */
     { name: 'parent_user_id', type: 'TEXT' },
     /** A test user's death date; NULL for an account or a guest, which do not expire. */
     { name: 'expires_at', type: 'TIMESTAMPTZ' },
-    // Retired: `kind` says it, and it says more (a test user is not a guest).
-    // Existing rows keep the flag; boot reads it ONCE to backfill `kind` and
-    // nothing reads it afterwards.
-    { name: 'is_guest', type: 'BOOLEAN', default: 'false', retired: true },
     // Verified guest adoption preserves the identity pinned by existing CLI workspaces.
     { name: 'merged_into_user_id', type: 'TEXT' },
     { name: 'name', type: 'TEXT' },
@@ -53,9 +49,6 @@ const USERS: Table = {
     // set at insert rather than a timestamp that would have to be back-dated.
     { name: 'auto_accept_mentions', type: 'BOOLEAN', notNull: true, default: 'true' },
     { name: 'welcome_pending', type: 'BOOLEAN', notNull: true, default: 'false' },
-    // Retired: login is email + OTP, there are no passwords. Existing rows keep
-    // their dead bcrypt hash; nothing reads or writes this.
-    { name: 'password_hash', type: 'TEXT', retired: true },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['id'],
@@ -69,6 +62,9 @@ const USERS: Table = {
     // are both this index; the cap is read on every mint.
     { name: 'idx_users_parent', columns: ['parent_user_id'] },
   ],
+  // `is_guest` (replaced by `kind`, which says more: a test user is not a guest) and
+  // `password_hash` (login is email + OTP; there are no passwords). Dead data, dropped on boot.
+  dropped: ['is_guest', 'password_hash'],
 };
 
 /**
@@ -299,30 +295,13 @@ const ARTIFACT_SOURCE_IDS: Table = {
   primaryKey: ['artifact_id', 'source_id'],
 };
 
-/** Explicit migration map from retired annotation keys to source identity. */
-const ARTIFACT_NODE_ALIASES: Table = {
-  name: 'artifact_node_aliases',
-  columns: [
-    { name: 'artifact_id', type: 'TEXT', notNull: true },
-    { name: 'legacy_key', type: 'TEXT', notNull: true },
-    { name: 'source_id', type: 'TEXT', notNull: true },
-    { name: 'source_path', type: 'TEXT', notNull: true },
-    { name: 'created_version', type: 'INTEGER', notNull: true },
-  ],
-  primaryKey: ['artifact_id', 'legacy_key'],
-};
-
-const NODE_IDENTITY_MIGRATION_JOBS: Table = {
-  name: 'node_identity_migration_jobs',
-  columns: [
-    { name: 'name', type: 'TEXT', notNull: true },
-    { name: 'version', type: 'INTEGER', notNull: true },
-    { name: 'cursor', type: 'TEXT' },
-    { name: 'completed_at', type: 'TIMESTAMPTZ' },
-    { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-  ],
-  primaryKey: ['name'],
-};
+// RETIRED TABLES — `artifact_node_aliases` (the map from retired `data-annotation-anchor`
+// keys to node ids; empty on production) and `node_identity_migration_jobs` (the
+// one-off migrations' cursors; its last job, `sqlite-data-syntax`, completed) went
+// with the code that read them, in the change that deleted the SQLite-syntax and
+// legacy-anchor compatibility shims. Boot DDL is additive-only, so databases created
+// before it keep the tables; nothing reads or writes them. A fresh database never
+// creates them.
 
 /**
  * The NAMED people on an artifact and what they may do — the sibling of
@@ -353,13 +332,11 @@ const ARTIFACT_SHARES: Table = {
  * comment. A ROOT row (root_id NULL) carries the anchor and the open/resolved
  * status; replies point at their root. Deliberately a SIDECAR, never part of
  * the source: a PUT/edit can no more clobber a comment than it can flip
- * `visibility`. The anchor key is stored in the node's own
- * `data-annotation-anchor` attribute, stamped into the SOURCE through the edit protocol
- * when the first comment lands on a node (so concurrent edits, versioning and
- * revert all treat it as the ordinary edit it is). Resolution is a lookup in
- * the CURRENT source: attribute present → anchored, absent → orphaned, and
- * orphaned is re-checked on every read, so a revert that brings the text back
- * re-anchors the thread. No FKs (house rule).
+ * `visibility`. The anchor key is the node's own `id` (lib/story/document/node-ids
+ * stamps one on every element), so commenting never edits the document; NULL is a
+ * comment with no anchor. Resolution is a lookup in the CURRENT source: id present →
+ * anchored, absent → orphaned, and orphaned is re-checked on every read, so a revert
+ * that brings the node back re-anchors the thread. No FKs (house rule).
  */
 const ANNOTATIONS: Table = {
   name: 'annotations',
@@ -966,7 +943,7 @@ const DOCUMENT_TRUST: Table = {
   {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
  ],primaryKey:['user_id','artifact_id'],
 };
-export const TABLES: Table[] = [...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

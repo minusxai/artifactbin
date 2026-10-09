@@ -14,7 +14,7 @@ import {prepareGraphPatch} from './document-graph-patch';
 import {graphValidationScope} from './document-graph-scope';
 import {applyOperationsToNodes} from './document-operation';
 import {validateMarkupStructure} from '../document/local-validation';
-import {stampNodeIds,nodeIndex,hasAmbiguousLegacyAliases} from '../document/node-ids';
+import {stampNodeIds,nodeIndex} from '../document/node-ids';
 import {canonicalizeMarkup} from '../document/canonical-source';
 import {repairJsxSource} from '../../jsx/repair';
 import {extractClassCandidates} from '../../data/story/story-css';
@@ -28,8 +28,7 @@ export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientD
  source=repairJsxSource(source)?.source??source;
  if(source.includes('\0')||!source.isWellFormed())throw new Error('Document source must be valid Unicode without NUL characters');
  source=canonicalizeMarkup(source);
- if(hasAmbiguousLegacyAliases(source))throw new Error('Ambiguous duplicate legacy annotation anchors');
- const identity=stampNodeIds(source,{previousSource:before,reservedIds:Object.keys(base.document.claimedIds),retireLegacyAliases:true});
+ const identity=stampNodeIds(source,{previousSource:before,reservedIds:Object.keys(base.document.claimedIds)});
  const checked=validateMarkupStructure(identity.source);
  if(checked.errors.length)throw new Error(checked.errors.map(error=>error.message).join('\n'));
  const whole=change.whole||change.operations?.some(operation=>operation.kind==='replaceDocument')||false;
@@ -56,7 +55,7 @@ export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientD
   return old?.static&&old.json===href.json?[]:[{nodeId,userId:href.json.slice('/people/'.length)}];
  });
  const css=JSON.stringify(extractClassCandidates(before))!==JSON.stringify(extractClassCandidates(identity.source))||['theme','template','colorMode'].some(key=>Object.hasOwn(metadata,key)&&metadata[key as keyof typeof metadata]!==base.meta[key]);
- const update:DocumentUpdate={schema:1,...(mentions.length?{mentions}:{}),...(annotationOps.length?{annotationOps}:{}),...(identity.aliases.length?{aliases:identity.aliases}:{}),patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),
+ const update:DocumentUpdate={schema:1,...(mentions.length?{mentions}:{}),...(annotationOps.length?{annotationOps}:{}),patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),
   effects:{css,references:JSON.stringify(graphReferences(base.document))!==JSON.stringify(graphReferences(candidate))},
   ...(Object.keys(metadata).length?{metadata,expectedMetadata:Object.fromEntries(Object.keys(metadata).map(key=>[key,(key==='title'?base.title:key==='description'?base.description:base.meta[key])??null]))}:{}),...(whole?{whole:true,replacement:candidate}:{})};
  return {update,...(needsAuthoringContext(scope.source)?{context:scope.source}:{})};

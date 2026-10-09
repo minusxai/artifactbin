@@ -2,6 +2,7 @@
 import {createHash} from 'node:crypto';
 import {browserActor,actorForArtifacts,ownerUsername} from '../accounts';
 import {applyEditFor,createArtifactFromBody,durableMutation,getEditableArtifactFor,getVersionFor,respondToEdit,capabilityGuard,type TokenActor} from '../artifacts';
+import {UnservableDocument} from '../artifacts/servable';
 import {actOnAnnotationFor,createAnnotationFor,listAnnotationsFor,type AnnotationWire} from '../annotations';
 import {baseUrl,json} from '../http';
 import {prepareDocumentAuthoringContext} from '../story/document/document-authoring-context';
@@ -17,7 +18,11 @@ async function actorOf(request:Request):Promise<TokenActor|Response>{
  const actor=await browserActor(request);if(actor instanceof Response)return actor;
  const scoped=actorForArtifacts(actor);return scoped?.userId?scoped:json({error:'authentication_required',hint:'Log in with email to apply this file.'},401);
 }
+/** The file's server base, or null when it is unavailable here — a retired stored shape (lib/artifacts/servable) included. */
 async function baseline(actor:TokenActor,file:ArtifactFile){
+ try{return await servedBaseline(actor,file);}catch(error){if(error instanceof UnservableDocument)return null;throw error;}
+}
+async function servedBaseline(actor:TokenActor,file:ArtifactFile){
  if(!(/^[A-Za-z0-9]{6,12}$/).test(file.artifactId))return null;
  const head=await getEditableArtifactFor(actor,file.artifactId);if(!head||head.format!=='markup'||head.document?.kind!=='graph')return null;
  if(head.version===file.base.version)return {document:head.document,version:head.version,markup:head.source??'',meta:head.meta,title:head.title,description:head.description};

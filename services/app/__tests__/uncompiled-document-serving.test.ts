@@ -5,11 +5,10 @@
  * frame and the command-line query. A write it declares is refused with the
  * same errors. Nothing answers with silence (no rows and no error).
  *
- * Such a document exists because its imports can change shape after publish,
- * and because a document the previous engine stored is served converted
- * (lib/migrate/sqlite/stored) before the migration has compiled it.
+ * Such a document exists because its imports can change shape after publish.
  */
 import { artifactQuery } from '@/lib/artifacts';
+import { createDocumentGraph } from '@/lib/story/graph/document-graph';
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
@@ -33,7 +32,7 @@ async function owner() {
 type Owner = Awaited<ReturnType<typeof owner>>;
 
 async function store(who: Owner, id: string, source: string, meta: Record<string, unknown>) {
-  await artifactQuery(await harness.db(), `INSERT INTO artifacts (id,token_id,user_id,source,format,version,visibility,meta) VALUES ($1,$2,$3,$4,'markup',1,'unlisted',$5::jsonb)`, [id, who.tokenId, who.userId, source, JSON.stringify(meta)]);
+  await artifactQuery(await harness.db(), `INSERT INTO artifacts (id,token_id,user_id,document,format,version,visibility,meta) VALUES ($1,$2,$3,$4::jsonb,'markup',1,'unlisted',$5::jsonb)`, [id, who.tokenId, who.userId, JSON.stringify(createDocumentGraph(source, 1, { preserveSource: true })), JSON.stringify(meta)]);
 }
 
 const query = async (doc: string, who: Owner) => {
@@ -56,10 +55,10 @@ const SOURCE = [
 ].join('');
 
 describe('a document whose data does not compile', () => {
-  for (const [kind, meta] of [['in the current syntax', { dataSyntax: 2 }], ['stored by the previous engine', {}]] as const) {
+  for (const [kind, meta] of [['in the current syntax', { dataSyntax: 2 }]] as const) {
     it(`${kind}: renders, and every query answers with the compile error by declaration name`, async () => {
       const who = await owner();
-      const id = kind === 'stored by the previous engine' ? 'oldbrk' : 'curbrk';
+      const id = 'curbrk';
       await store(who, id, SOURCE, meta);
 
       const page = await serveArtifact(request(`/a/${id}/raw`, { token: who.token }), ctx(id));

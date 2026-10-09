@@ -179,7 +179,6 @@ const CONTENT_ERRORS: OperationError[] = [
   INVALID_JSX,
   INVALID_REFS,
   { status: 400, code: 'unknown_theme', fix: 'the 400 carries allowed — the live theme and design-system names' },
-  { status: 400, code: 'retired_theme', fix: 'the hint names the successor theme — use it' },
   { status: 400, code: 'image_fetch_failed', fix: 'the named image URL could not be imported — check it serves image bytes publicly' },
   { status: 400, code: 'invalid_pdf', fix: 'pdf must be a base64 data:application/pdf URL whose BYTES are a PDF — to publish one already on the web send pdfUrl' },
   { status: 413, code: 'pdf_too_large', fix: 'the file is over the PDF cap named in maxBytes — link a smaller copy' },
@@ -191,6 +190,8 @@ const CONTENT_ERRORS: OperationError[] = [
 ];
 
 const NOT_FOUND: OperationError = { status: 404, code: 'not_found', fix: 'the id is wrong OR this token cannot reach it — existence is never revealed; list_artifacts shows what you can reach' };
+/** A stored shape this server no longer serves (lib/artifacts/servable): refused by name, never converted. */
+const UNSERVABLE: OperationError = { status: 410, code: 'unservable_document', fix: 'that version predates the current data syntax or no longer decodes — read another version; the deployment operator can restore it from a backup' };
 
 /**
  * A DATASET UNDER A WRITE POLICY. Both of these exist because the answer used
@@ -265,7 +266,7 @@ const getArtifactOp: Operation = {
   name: 'get_artifact',
   title: 'Read an artifact',
   http: { method: 'GET', path: '/api/artifacts/{id}' },
-  description: 'Read markup source, dataset rows/columns, or a recipe, plus edit_id, parent_id and ancestor_ids. Markup reads inline OPEN annotations; inspect them before editing. anchor.nodeId identifies a persistent body id: preserve ids through edits and full rewrites, and move them with their nodes. Comments are relations and never rewrite source or flush the editor. Legacy data-annotation-anchor attributes are read compatibility only; do not author them. Reply, resolve or reopen with annotate. A folder has no content: its page is a viewer-scoped listing.',
+  description: 'Read markup source, dataset rows/columns, or a recipe, plus edit_id, parent_id and ancestor_ids. Markup reads inline OPEN annotations; inspect them before editing. anchor.nodeId identifies a persistent body id: preserve ids through edits and full rewrites, and move them with their nodes. Comments are relations and never rewrite source or flush the editor. Legacy data-annotation-anchor attributes are inert; do not author them. Reply, resolve or reopen with annotate. A folder has no content: its page is a viewer-scoped listing.',
   input: { id: z.string() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9' } },
@@ -351,11 +352,11 @@ const getVersionOp: Operation = {
   name: 'get_version',
   title: 'Read one archived version',
   http: { method: 'GET', path: '/api/artifacts/{id}/versions/{version}' },
-  description: 'Read one archived version of an artifact, content included (`markup` carries the source). A document version reads in the current data syntax; `previous_engine` says one written for the previous query engine needs converting by hand and cannot be restored as it stands.',
+  description: 'Read one archived version of an artifact, content included (`markup` carries the source). A document version stored in a form this server no longer serves answers 410 unservable_document.',
   input: { id: z.string(), version: z.number() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9', version: 2 } },
-  errors: [NOT_FOUND],
+  errors: [NOT_FOUND, UNSERVABLE],
   async run(ctx, input) {
     const v = Number(input.version);
     if (!Number.isInteger(v) || v < 1) return reply({ error: 'not_found' }, 404);

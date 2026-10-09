@@ -40,21 +40,13 @@ describe('document creation guards', () => {
     }
   });
 
-  it('rejects a retired theme BY NAME, hinting the successor', async () => {
+  it('rejects a retired theme name as unknown, listing the live names', async () => {
     const t = await mintToken('t');
-    const cases: Array<[string, string]> = [
-      // broadsheet and nocturne, once retired aliases, are design systems since 3 Oct 2026: accepted names.
-      ['classical', 'manuscript'],
-    ];
-    for (const [theme, successor] of cases) {
-      const res = await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>x</p>', theme } }),
-      );
-      expect(res.status, theme).toBe(400);
-      const body = await res.json();
-      expect(body.error, theme).toBe('retired_theme');
-      expect(body.hint, theme).toContain(successor);
-    }
+    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>x</p>', theme: 'classical' } }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('unknown_theme');
+    expect(body.allowed).toContain('manuscript');
   });
 });
 

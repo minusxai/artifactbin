@@ -1,5 +1,6 @@
 import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/artifacts/mutation-operation';
 import {MembershipError} from '../accounts/membership';
+import {refusingUnservable} from '@/lib/artifacts/servable';
 import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
 import {tokenActorForRequest} from '@/lib/accounts/viewer';
 import {readableArtifact} from '@/lib/artifacts/read-access';
@@ -91,5 +92,6 @@ export async function runOperation(
     const terminal=!['operation_pending','outcome_unknown','idempotency_mismatch','invalid_idempotency_key'].includes(String(result.body.error));
     return opResponse({...result,...(terminal?{headers:{'X-Artifactbin-Mutation-Receipt':key}}:{})});
   }
-  try{return opResponse(await operation(name).run(ctx, input));}catch(error){if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);throw error;}
+  // A stored shape the current code no longer serves is its 410 at every operation (lib/artifacts/servable).
+  return refusingUnservable(async()=>{try{return opResponse(await operation(name).run(ctx, input));}catch(error){if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);throw error;}});
 }

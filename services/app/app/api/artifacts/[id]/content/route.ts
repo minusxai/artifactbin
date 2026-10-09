@@ -10,6 +10,7 @@ import {serializeDatasetDefinition} from '@/lib/datasets/definition';
 import type {DatasetCatalog} from '@/lib/datasets/types';
 import {objectStore} from '@/lib/object-store';
 import {json} from '@/lib/http';
+import {refusingUnservable,servableDocument} from '@/lib/artifacts/servable';
 
 /** A reader's definition names the public relations only: no connection, no notebook. */
 const readableDefinition=(catalog:DatasetCatalog)=>serializeDatasetDefinition({
@@ -17,13 +18,13 @@ const readableDefinition=(catalog:DatasetCatalog)=>serializeDatasetDefinition({
  tables:catalog.tables.map(table=>({schema:table.schema,name:table.name,columns:table.columns.map(column=>column.name)})),
 });
 
-export const GET=withTokenAuth(async(request,{tokenId,userId,params})=>{
+export const GET=withTokenAuth((request,{tokenId,userId,params})=>refusingUnservable(async()=>{
  const actor=tokenActorForRequest(request,{tokenId,userId});const readable=await readableArtifact(actor,params.id);
  if(!readable)return json({error:'not_found'},404);
  const head=readable.row;
  const raw=new URL(request.url).searchParams.get('version');
  if(raw!==null&&(!/^[1-9]\d*$/.test(raw)||!Number.isSafeInteger(Number(raw))))return json({error:'invalid_version'},400);
- const row=raw===null||Number(raw)===head.version?head:await getVersionFor(actor,head.id,Number(raw));
+ const row=raw===null||Number(raw)===head.version?servableDocument(head):await getVersionFor(actor,head.id,Number(raw));
  if(!row)return json({error:'not_found'},404);
  if(['image','pdf','file'].includes(row.format))return serveStoredFile(request,{id:head.id,meta:row.meta});
  if(row.format==='dataset'){
@@ -37,4 +38,4 @@ export const GET=withTokenAuth(async(request,{tokenId,userId,params})=>{
   return new Response(definition,{headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
  }
  return new Response(row.source??'',{headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
-});
+}));

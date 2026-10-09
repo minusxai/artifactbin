@@ -32,7 +32,7 @@ import { SHARE_ROLES, type ShareEntry, type ShareRole } from './share-roles';
 import { artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { findDependentsFor, refLoaderForActor, refreshWarningsFor, declarationsForRow, runDocumentMutation } from './dataflow';
 import { AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations/store';
-import { hasAmbiguousLegacyAliases, normalizeNodeIds } from '@/lib/story/document/node-ids';
+import { normalizeNodeIds } from '@/lib/story/document/node-ids';
 import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/story/data';
@@ -175,9 +175,8 @@ export async function artifactToWire(row: ArtifactRow, base: string, content = t
   // null — a key in every agent's context that can carry no news.
   const { source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, ...rest } = row;
   const m = meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
-  // Echo the LIVE vocabulary: a stored retired theme reads back as its
-  // successor, so an agent that read-before-writes never learns a name that
-  // publish would reject.
+  // Echo the LIVE vocabulary: a stored unknown theme reads back as none, so an
+  // agent that read-before-writes never learns a name that publish would reject.
   const design = resolveStoredStoryDesign(m.theme, m.colorMode ?? null);
   // A FOLDER is a markup document whose source we wrote — it reads back, edits,
   // comments and echoes exactly like one.
@@ -390,10 +389,9 @@ export async function replaceArtifactWithBody(
   if (expected instanceof Response) return expected;
   let normalizeMarkup: ((source: string) => ReturnType<typeof normalizeNodeIds>) | undefined;
   if(typeof body.markup==='string') {
-    if(hasAmbiguousLegacyAliases(body.markup)) return json({error:'ambiguous_node_alias'},409);
     const db=await getDb();
     const lifetime=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
-    normalizeMarkup = source => normalizeNodeIds(source,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id),retireLegacyAliases:false});
+    normalizeMarkup = source => normalizeNodeIds(source,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id)});
   }
   /*
    * A FOLDER HAS NO CONTENT, AND THE REPLACE DOOR IS WHERE THAT IS ENFORCED.
@@ -586,7 +584,7 @@ export async function createArtifactFromBody(
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
   const sentMarkup=body.markup;
   const prepared = await prepareContentInput(body, {
-    normalizeMarkup: source => normalizeNodeIds(source,{retireLegacyAliases:true}),
+    normalizeMarkup: source => normalizeNodeIds(source),
     creating: true,
     prepareDataset: (input,objects) => prepareCatalog(input,actor,undefined,objects),
     loadRef: refLoaderForActor(actor),

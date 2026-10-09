@@ -22,6 +22,8 @@
 import { trackEvent } from '@/lib/platform/analytics';
 import { LIVE_ARTIFACT_SQL, ownerPredicate, type TokenActor } from '@/lib/artifacts/access';
 import { getDb } from '@/lib/platform/db';
+import { artifactQuery } from '@/lib/artifacts/document';
+import { servableDocument } from '@/lib/artifacts/servable';
 import { actorSubject, emit } from '@/lib/platform/events';
 import { ancestorsForMove, notifyParent, parentOf } from './folders';
 
@@ -100,7 +102,10 @@ export async function trashArtifactFor(actor: TokenActor, id: string): Promise<s
  * parent it names is not there to go back to.
  *
  * Answers the row's placement AFTER the restore, so a caller can say where it
- * landed; null when the id is unknown, foreign, or not in the trash.
+ * landed; null when the id is unknown, foreign, or not in the trash. A document
+ * it would bring back in a stored shape the current code no longer serves
+ * refuses the whole restore (UnservableDocument, lib/artifacts/servable): it
+ * would come back live and unreadable.
  */
 export async function restoreArtifactFor(actor: TokenActor, id: string): Promise<{ id: string; ancestor_ids: string[] } | null> {
   const db = await getDb();
@@ -113,6 +118,13 @@ export async function restoreArtifactFor(actor: TokenActor, id: string): Promise
     );
     const row = found.rows[0];
     if (!row) return null;
+    const documents = await artifactQuery<{ format: string; version: number; meta: unknown; source: string | null; document: unknown }>(tx,
+      `SELECT format, version, meta, source, document FROM artifacts
+        WHERE (id = $1 OR (ancestor_ids @> ARRAY[$1] AND deleted_at = $3))
+          AND format = 'markup' AND deleted_at IS NOT NULL AND (${scope.where('$2')})`,
+      [id, scope.val, row.deleted_at],
+    );
+    documents.rows.forEach((document) => servableDocument(document));
     await tx.query(
       `UPDATE artifacts SET deleted_at = NULL
         WHERE (id = $1 OR (ancestor_ids @> ARRAY[$1] AND deleted_at = $3))

@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { createDocumentGraph } from '@/lib/story/graph/document-graph';
 import sharp from 'sharp';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
@@ -127,6 +128,6 @@ it('requires explicit opt-in and stops discovery when disabled, while preserving
   for (const asset of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png']) expect((await app.request(base + asset)).status).toBe(404);
   const on = await world();
   expect((await app.request(`/a/${on.public.id}/app/manifest.webmanifest`)).status).toBe(200);
-  await (await harness.db()).query('UPDATE artifacts SET source=$1, document=NULL WHERE id=$2', ['<h1>Disabled</h1>', on.public.id]);
+  await (await harness.db()).query('UPDATE artifacts SET source=NULL, document=$1::jsonb WHERE id=$2', [JSON.stringify(createDocumentGraph('<h1>Disabled</h1>', 1)), on.public.id]);
   expect((await app.request(`/a/${on.public.id}/app/manifest.webmanifest`)).status).toBe(404);
 });

@@ -19,7 +19,6 @@ export interface GraphBaseline {id:string;version:number;document:DocumentGraph;
 export interface GraphAdmissionPlan {
  id:string;patch:GraphPatch;references:ReferenceValidationState[];
  fields:Record<string,unknown>;expectedFields:Record<string,unknown>;meta:Record<string,unknown>;ids:string[];newIds:string[];
- aliases:Array<{legacyKey:string;nodeId:string;path:string}>;
 }
 declare const admitted:unique symbol;
 export type GraphAdmission={readonly [admitted]:true};
@@ -54,7 +53,7 @@ async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,co
  const normalization=context.normalizeMarkup?.(canonicalizeMarkup(source))??source;
  source=typeof normalization==='string'?normalization:normalization.source;
  source=canonicalizeMarkup(source);
- const identity=stampNodeIds(source,{previousSource:graphSource(base.document),reservedIds:base.reservedIds,retireLegacyAliases:true});
+ const identity=stampNodeIds(source,{previousSource:graphSource(base.document),reservedIds:base.reservedIds});
  try{candidate=whole?createDocumentGraph(identity.source,base.version+1):graphFromSource(base.document,identity.source,base.version+1);}
  catch(error){if(error instanceof Error)return invalid(error.message);throw error;}
  if(candidate.bytes>MAX_CONTENT_BYTES)return json({error:'too_large',maxBytes:MAX_CONTENT_BYTES},413);
@@ -77,7 +76,7 @@ async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,co
  const meta={...base.meta,...metadataFields,refs:graphReferences(candidate)} as Record<string,unknown>;
  delete meta.compiledCss;delete meta.cssCompileVersion;delete meta.parsedArtifact;
  const oldIds=new Set(Object.values(base.document.nodes).flatMap(node=>node.selectors.filter(selector=>selector.startsWith('id:')).map(selector=>selector.slice(3))));
- admissions.set(token,{id:base.id,patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),references:[...references.values()],fields:metadataFields,expectedFields:Object.fromEntries(Object.keys(metadataFields).map(key=>[key,base.meta[key]??null])),meta,ids:identity.ids,newIds:identity.ids.filter(id=>!oldIds.has(id)),aliases:identity.aliases});
+ admissions.set(token,{id:base.id,patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),references:[...references.values()],fields:metadataFields,expectedFields:Object.fromEntries(Object.keys(metadataFields).map(key=>[key,base.meta[key]??null])),meta,ids:identity.ids,newIds:identity.ids.filter(id=>!oldIds.has(id))});
 
  return token;
 }

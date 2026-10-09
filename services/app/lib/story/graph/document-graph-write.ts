@@ -11,11 +11,11 @@ import type {BatchChange} from '../document/edit-batch';
 import {newEditId} from '../document/splice';
 import {graphProseSql} from './document-graph-prose';
 import type {ProseOperation} from './document-prose';
-export interface GraphCommitOptions {historyChanges?:{source:string;changes:BatchChange[]};archive?:'always'|'coalesce';history?:'whole'|'nodes';title?:string|null;description?:string|null;expectedEditId?:string;initialize?:{document:DocumentGraph;source:string};effects?:ReturnType<typeof annotationEffects>;aliases?:Array<{legacyKey:string;nodeId:string;path:string}>;visibility?:string;ancestorIds?:string[];access?:string;linkRole?:string|null;provenance?:'migration'|'authored'}
+export interface GraphCommitOptions {historyChanges?:{source:string;changes:BatchChange[]};archive?:'always'|'coalesce';history?:'whole'|'nodes';title?:string|null;description?:string|null;expectedEditId?:string;initialize?:{document:DocumentGraph;source:string};effects?:ReturnType<typeof annotationEffects>;visibility?:string;ancestorIds?:string[];access?:string;linkRole?:string|null;provenance?:'migration'|'authored'}
 export async function commitGraphOperation(db:Queryable,actor:TokenActor|null,scope:Scope,token:GraphAdmission,options:GraphCommitOptions={}):Promise<ArtifactRow|null>{
  return commitGraphMutation(db,actor,scope,graphAdmissionPlan(token),options);
 }
-async function commitGraphMutation(db:Queryable,actor:TokenActor|null,scope:Scope,plan:Pick<GraphAdmissionPlan,'id'|'fields'|'expectedFields'|'references'|'aliases'>&Partial<Pick<GraphAdmissionPlan,'patch'>>,options:GraphCommitOptions,prose?:{baseEditId:string;op:ProseOperation}):Promise<ArtifactRow|null>{
+async function commitGraphMutation(db:Queryable,actor:TokenActor|null,scope:Scope,plan:Pick<GraphAdmissionPlan,'id'|'fields'|'expectedFields'|'references'>&Partial<Pick<GraphAdmissionPlan,'patch'>>,options:GraphCommitOptions,prose?:{baseEditId:string;op:ProseOperation}):Promise<ArtifactRow|null>{
  const editId=newEditId();
  const effective=options.initialize?'$6::jsonb':'l.document';
  const initial=[plan.id,scope.val,editId,actor?.userId??null,actor?.tokenId||null,...(options.initialize?[JSON.stringify(options.initialize.document)]:[])];
@@ -28,7 +28,7 @@ async function commitGraphMutation(db:Queryable,actor:TokenActor|null,scope:Scop
  const expectedFields=param(JSON.stringify(plan.expectedFields));
  const meta=prose?"'{}'::jsonb":param(JSON.stringify(plan.fields)),policy=param(GRAPH_POLICY),archive=param(options.archive==='always');
  const title=param(options.title??null),hasTitle=param(options.title!==undefined),description=param(options.description??null),hasDescription=param(options.description!==undefined);
- const expectedEdit=param(options.expectedEditId??null),aliases=param(JSON.stringify(options.aliases??plan.aliases));
+ const expectedEdit=param(options.expectedEditId??null);
  const visibility=param(options.visibility??null),ancestors=param(options.ancestorIds??null),access=param(options.access??null),linkRole=param(options.linkRole??null),provenance=param(options.provenance??'authored');
  const references=param(JSON.stringify(plan.references)),referenceCount=param(plan.references.length);
  const priorSource=originalSource?`${originalSource}::text`:graphSourceSql("(u.previous->'document')");
@@ -87,12 +87,6 @@ async function commitGraphMutation(db:Queryable,actor:TokenActor|null,scope:Scop
  ), identities AS (
   UPDATE artifact_source_ids SET retired_version=CASE WHEN source_id=ANY(k.ids) THEN NULL ELSE k.version END
   FROM current_ids k WHERE artifact_id=k.id
- ), aliases AS (
-  INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version)
-  SELECT u.id,x->>'legacyKey',x->>'nodeId',x->>'path',u.version FROM updated u CROSS JOIN jsonb_array_elements(${aliases}::jsonb) x ON CONFLICT DO NOTHING
-  RETURNING artifact_id,legacy_key,source_id
- ), anchors AS (
-  UPDATE annotations a SET anchor_key=x.source_id FROM aliases x WHERE a.artifact_id=x.artifact_id AND a.anchor_key=x.legacy_key
  ) SELECT (to_jsonb(u)-'previous')||jsonb_build_object('shares',COALESCE((SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=u.id),'[]'::jsonb)) AS artifact
  FROM updated u WHERE EXISTS(SELECT 1 FROM logged)`,sql.params);
  return result.rows[0]?hydrateArtifactDocument(result.rows[0].artifact):null;

@@ -54,16 +54,13 @@ describe('persisted source node identity', () => {
     expect(result.source).toBe(source);
     expect(result.ids).toEqual(['a&b"c']);
   });
-  it('converts lone legacy anchors, preserving conflicting authored ids with alias report', () => {
+  it('treats the retired data-annotation-anchor attribute as inert: no identity, kept as written', () => {
     const source='<p data-annotation-anchor="old">A</p><p id="intro" data-annotation-anchor="other">B</p>';
-    const result=stampNodeIds(source);
-    expect(result.ids).toEqual(['old','intro']);
-    expect(result.aliases).toEqual([{legacyKey:'other',nodeId:'intro',path:'1'}]);
+    const result=stampNodeIds(source,{mint:mint('a001')});
+    expect(result.ids).toEqual(['a001','intro']);
+    expect(result.source).toContain('data-annotation-anchor="old"');
     expect(result.source).toContain('data-annotation-anchor="other"');
-    expect(result.source).not.toContain('data-annotation-anchor="old"');
-    const retired=stampNodeIds(source,{retireLegacyAliases:true});
-    expect(retired.source).not.toContain('data-annotation-anchor');
-    expect(retired.aliases).toEqual(result.aliases);
+    expect(nodeIndex(result.source).has('old')).toBe(false);
   });
   it('carries unique exact-content ids across reorder with no positional guessing', () => {
     const result=stampNodeIds('<p>B</p><p>A</p>',{previousSource:'<p id="aaaa">A</p><p id="bbbb">B</p>'});
@@ -85,16 +82,6 @@ describe('persisted source node identity', () => {
     const p=nodeIndex(once.source).get('bbbb')!;
     expect(once.source.slice(p.node.start,p.node.end)).toBe('<p id="bbbb">A</p>');
     expect(p.path).toBe('0.0');
-  });
-
-  it('does not let a legacy key collide with an authored id on another node', () => {
-    const result=stampNodeIds('<p data-annotation-anchor="intro">Legacy target</p><p id="intro">Authored target</p>',{mint:mint('a001')});
-    expect(result.ids).toEqual(['a001','intro']);
-    expect(result.aliases).toEqual([{legacyKey:'intro',nodeId:'a001',path:'0'}]);
-    expect(nodeIndex(result.source).size).toBe(2);
-    // Alias resolution is deliberately not part of nodeIndex: `intro` remains
-    // the authored node, while the transactional caller migrates the old relation.
-    expect(nodeIndex(result.source).get('intro')?.path).toBe('1');
   });
 
   it('reserves later authored ids against exact-content recovery', () => {
@@ -119,13 +106,6 @@ describe('persisted source node identity', () => {
     expect(result.repairs.map(({from,reason})=>({from,reason}))).toEqual([
       {from:'two words',reason:'invalid'},{from:'line\nbreak',reason:'invalid'},
     ]);
-  });
-
-  it('reserves a later lone legacy identity before minting earlier nodes', () => {
-    const result=stampNodeIds('<p>Earlier</p><p data-annotation-anchor="a001">Legacy</p>',{mint:mint('a001','a002')});
-    expect(result.ids).toEqual(['a002','a001']);
-    expect(result.aliases).toEqual([]);
-    expect(result.source).not.toContain('data-annotation-anchor');
   });
 
   it('bounds an adversarial mint and falls back without reusing reservations', () => {

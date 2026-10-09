@@ -30,7 +30,7 @@ const FIXTURE = path.resolve(APP, '../../scripts/fixtures/offline-file');
  * Stamped the way publish stamps every stored document (lib/artifacts), so the
  * fixture's elements carry the node ids comments anchor to and edits keep.
  */
-const source = stampNodeIds(readFileSync(path.join(FIXTURE, 'dashboard.jsx'), 'utf8').trim(), { retireLegacyAliases: true }).source;
+const source = stampNodeIds(readFileSync(path.join(FIXTURE, 'dashboard.jsx'), 'utf8').trim()).source;
 
 const declared = declarationsOf(source);
 if (!declared) throw new Error('dashboard.jsx does not parse');

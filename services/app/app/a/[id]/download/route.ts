@@ -12,12 +12,17 @@ import { assembleArtifactFile, OFFLINE_FILE_MAX_BYTES, serverTiming, timed, type
 import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
 import {getArtifactById} from '@/lib/artifacts';
+import { refusingUnservable } from '@/lib/artifacts/servable';
 import {GET as rawArtifact} from '../raw/route';
 
 /** A filename every OS accepts, from the document's title. */
 const fileName = (title: string) => `${title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'artifact'}.jsx.html`;
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
+export function GET(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  return refusingUnservable(() => download(request, ctx));
+}
+
+async function download(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404);
   const artifact=await getArtifactById(id);

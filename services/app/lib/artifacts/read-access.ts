@@ -1,7 +1,7 @@
 import {grantsOf,grantsPermitRead} from '../datasets/policy/grants';
 import { effectiveRole, type TokenActor } from './access';
 import { getArtifactById, getEditableArtifactFor } from './store';
-import {inCurrentSyntax} from '../migrate/sqlite/stored';
+import {servableDocument} from './servable';
 import {canRead,canEdit,canAnnotate} from './share-roles';
 import {artifactToWireWithAnnotations} from './wire';
 import {publicCatalogOf} from '../datasets/catalog';
@@ -19,8 +19,8 @@ export async function readArtifactSnapshot(actor:TokenActor,id:string,base:strin
  const readable=await readableArtifact(actor,id);if(!readable)return null;
  const {row,role}=readable;const editable=canEdit(role);
  // Recheck the edit predicate in the query that reads the invitation snapshot.
- // An editor reads the head it will edit, converted for real; anyone else the head as served (lib/migrate/sqlite/stored).
- const snapshot=editable?await getEditableArtifactFor(actor,id):row.format==='markup'?await inCurrentSyntax(row):row;
+ // An editor reads the head it will edit; anyone else the head as served. Either refuses a retired shape (lib/artifacts/servable).
+ const snapshot=editable?await getEditableArtifactFor(actor,id):servableDocument(row);
  if(!snapshot)return null;
  const wire:Record<string,unknown>=await artifactToWireWithAnnotations(snapshot,base);
  if(!editable){

@@ -230,7 +230,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: Retu
   const css = inlineStoryCss(sheet);
   const overrides = styleOverrides(nodes, inlineStoryNodes(nodes, sheet));
   // A document whose compiled data is stored with its source compiles against nothing else.
-  const compiledElsewhere = !!row.source && !row.previousEngine && !storedCompiledDataflow(row.meta, row.source);
+  const compiledElsewhere = !!row.source && !storedCompiledDataflow(row.meta, row.source);
   const datasets = compiledElsewhere
     ? [...new Set([...(declared?.flow.imports ?? []).map((i) => i.ref), ...(meta.refs ?? []).filter((r) => r.kind === 'dataset').map((r) => r.id)])].sort()
     : [];

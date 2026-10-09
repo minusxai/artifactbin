@@ -261,10 +261,8 @@ export async function sweepTestUsers(now: number = Date.now()): Promise<number> 
 /**
  * BOOT BACKFILL, idempotent, in the schema-apply path.
  *
- * Two statements and one erase. Every `is_guest` row becomes `kind='guest'`,
- * which is the whole migration for the flag this column replaced. Then the rows
- * P12 left behind — the guest second people its sessions minted, recognisable
- * by the name it gave them — become test users with no parent and are ERASED by
+ * One statement and one erase. The rows P12 left behind — the guest second
+ * people its sessions minted, recognisable by the name it gave them — become test users with no parent and are ERASED by
  * the same routine as a deliberate delete, because they are exactly what a test
  * user is: a throwaway person, with artifacts nobody will claim.
  *
@@ -272,7 +270,6 @@ export async function sweepTestUsers(now: number = Date.now()): Promise<number> 
  * resolved yet, so asking for it here would wait for this call to return.
  */
 export async function backfillUserKinds(db: Database): Promise<void> {
-  await db.query("UPDATE users SET kind = 'guest' WHERE is_guest AND kind = 'account'");
   const left = await db.query<{ id: string }>(
     "UPDATE users SET kind = 'testuser' WHERE kind = 'guest' AND name = $1 RETURNING id", [TESTUSER_LABEL],
   );

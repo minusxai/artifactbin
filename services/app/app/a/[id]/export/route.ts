@@ -2,6 +2,7 @@
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/platform';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
+import { refusingUnservable } from '@/lib/artifacts/servable';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { requestOrSessionActor, roleFor } from '@/lib/accounts';
 import { exportImageResponse } from '@/lib/export';
@@ -14,7 +15,11 @@ import { canEdit } from '@/lib/artifacts';
  * export asset: a custom domain's home page (server/custom-host), whose
  * thumbnails must come from that host alone.
  */
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; delivery?: 'bytes' }) {
+export function GET(request: Request, ctx: { params: Promise<{ id: string }>; delivery?: 'bytes' }): Promise<Response> {
+  return refusingUnservable(() => exportArtifact(request, ctx));
+}
+
+async function exportArtifact(request: Request, ctx: { params: Promise<{ id: string }>; delivery?: 'bytes' }): Promise<Response> {
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404);
   const artifact = await getArtifactById(id);

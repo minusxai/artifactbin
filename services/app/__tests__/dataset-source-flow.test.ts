@@ -8,36 +8,9 @@ import {POST as tableQuery} from '@/app/a/[id]/tables/route';
 import {GET as getArtifact} from '@/app/api/artifacts/[id]/route';
 import {POST as mutateRows} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
-import {convertDocument} from '@/lib/migrate/sqlite/convert';
 import {runDocumentDataflow} from '@/lib/artifacts';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
-
-it('preserves legacy DuckDB computations and parameters through conversion to SQLite', async () => {
- const token=await mintToken('migration owner');
- const rows=[{hours:1,day:'2026-01-01'},{hours:5,day:'2026-01-03'},{hours:null,day:'2026-01-05'}];
- const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:rows}}));
- expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
- const sql=`select median(hours)::double as hours, min(day) as first_day, strftime(strptime(min(day)::varchar, '%Y-%m-%d'), '%Y-%m') as month from ref_${id} where hours >= $minimum`;
- const legacy=`<Helmet><Value name="minimum" type="number" default={0} /><Query name="stats">{\`${sql}\`}</Query></Helmet><DataTable data="$stats" />`;
- const converted=convertDocument(legacy,{importName:()=>'hours_log',kind:()=>'dataset'});
- expect(converted.manual).toEqual([]);
- expect(convertDocument(converted.source,{importName:()=>'hours_log',kind:()=>'dataset'}).changes).toEqual([]);
- const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:converted.source}}));
- expect(doc.status,await doc.clone().text()).toBe(201);const docId=(await doc.json()).id;
- // What DuckDB answered for the legacy statement, per minimum.
- const expected:Record<number,unknown>={
-  0:{hours:3,first_day:'2026-01-01',month:'2026-01'},
-  4:{hours:5,first_day:'2026-01-03',month:'2026-01'},
-  10:{hours:null,first_day:null,month:null},
- };
- for(const minimum of [0,4,10]) {
-  const response=await query(request(`/a/${docId}/query`,{method:'POST',token:token.token,json:{values:{minimum},only:['stats']}}),ctx(docId));
-  expect(response.status,await response.clone().text()).toBe(200);
-  const state=await response.json();expect(state.errors).toEqual({});
-  expect(state.tables.stats.rows).toEqual([expected[minimum]]);
- }
-});
 
 it('aggregates complete stored source inputs beyond both source page limits while bounding displayed rows', async () => {
  const token=await mintToken('large migration owner');

@@ -1,7 +1,10 @@
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';
-import {encodeDocument,decodeDocument,type StoredDocument} from '@/lib/story/document/document-codec';
+import {parseJsx} from '@/lib/jsx';
+import {encodeDocumentNodes} from '@/lib/story/document/document-node-codec';
+/** Any JSONB document: the patch is representation-agnostic, so a plain node tree serves. */
+const encodeDocument=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return encodeDocumentNodes(parsed.nodes);};
 import {prepareDocumentPatch,documentPatchSql} from '@/lib/story/graph/document-patch';
 useAppHarness();
 it('composes nested text, attributes, insertion, removal and reordering in one JSONB update',async()=>{
@@ -10,8 +13,8 @@ it('composes nested text, attributes, insertion, removal and reordering in one J
  const db=await getDb();await db.query('CREATE TEMP TABLE document_patch_test (id int primary key, document jsonb)');
  await db.query('INSERT INTO document_patch_test VALUES(1,$1::jsonb)',[JSON.stringify(before)]);
  const plan=prepareDocumentPatch(before,after),sql=documentPatchSql('document',plan,[]);
- const result=await db.query<{document:StoredDocument}>(`UPDATE document_patch_test SET document=${sql.expression} WHERE id=1 RETURNING document`,sql.params);
- expect(decodeDocument(result.rows[0].document)).toBe(decodeDocument(after));
+ const result=await db.query<{document:unknown}>(`UPDATE document_patch_test SET document=${sql.expression} WHERE id=1 RETURNING document`,sql.params);
+ expect(result.rows[0].document).toEqual(after);
 });
 it('patches one leaf without sending the unchanged document in SQL parameters',()=>{
  const source='<section id="root"><p id="a">Alpha</p><p id="b">'+ 'unchanged '.repeat(10000)+'</p></section>';

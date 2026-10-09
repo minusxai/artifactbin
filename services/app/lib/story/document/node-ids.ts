@@ -3,19 +3,14 @@ import type { SourceRepair } from '@/lib/jsx/repair';
 
 import { parseJsx, serializeJsx, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 
-interface NodeIdEntry { id: string; path: string; node: JsxElement; legacyKey: string | null }
+interface NodeIdEntry { id: string; path: string; node: JsxElement }
 interface NodeIdRepair { path: string; from: string | null; to: string; reason: 'duplicate' | 'invalid' }
-interface NodeIdAlias { legacyKey: string; nodeId: string; path: string }
 interface NodeIdOptions {
   previousSource?: string | null;
   /** Lifetime ledger, not just the current head. Only fresh generation excludes these. */
   reservedIds?: Iterable<string>;
-  /** Durable legacy mapping when restoring pre-migration source. */
-  legacyAliases?: ReadonlyMap<string, string>;
   /** Defaults to cryptographic letter-first, four-character ids. */
   mint?: () => string;
-  /** Removing conflicting legacy attributes requires atomic relation migration by caller. */
-  retireLegacyAliases?: boolean;
 }
 interface NodeIdResult {
   source: string;
@@ -23,11 +18,9 @@ interface NodeIdResult {
   minted: number;
   carried: number;
   repairs: NodeIdRepair[];
-  aliases: NodeIdAlias[];
 }
 
 const ID_ATTR = 'id';
-const LEGACY_ATTR = 'data-annotation-anchor';
 const FIRST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const REST = FIRST + '0123456789';
 const MINT_ATTEMPTS = 64;
@@ -73,20 +66,6 @@ function parsed(source: string): JsxNode[] {
   return result.nodes;
 }
 
-/** Inspect real body attributes only; syntax errors remain the publisher's responsibility. */
-export function hasAmbiguousLegacyAliases(source: string): boolean {
-  const result = parseJsx(source);
-  if (!result.ok) return false;
-  const seen = new Set<string>();
-  for (const { node } of elements(result.nodes)) {
-    const key = stringValue(attr(node, LEGACY_ATTR));
-    if (!key) continue;
-    if (seen.has(key)) return true;
-    seen.add(key);
-  }
-  return false;
-}
-
 const encoded = (value: unknown): string => JSON.stringify(value) ?? 'undefined';
 
 /** Linear structural digest of exact parsed content, ignoring only identity attributes. */
@@ -97,7 +76,7 @@ function signatures(nodes: JsxNode[], pool:Map<string,string>): Map<JsxElement, 
     if (node.type === 'text') return intern(encoded(['text', node.value]));
     if (node.type === 'expression') return intern(encoded(['expression', node.value]));
     const attributes = node.attributes
-      .filter((a) => a.name !== ID_ATTR && a.name !== LEGACY_ATTR)
+      .filter((a) => a.name !== ID_ATTR)
       .map((a) => [a.name, a.value]);
     const children = node.children.map(digest);
     const value = intern(encoded(['element', node.tag, node.selfClosing, attributes, children]));
@@ -120,24 +99,17 @@ function setStringAttr(node: JsxElement, name: string, value: string): void {
   else node.attributes.push({ name, value: { static: true, json: value }, start: node.start, end: node.start });
 }
 
-function removeAttr(node: JsxElement, name: string): void {
-  node.attributes = node.attributes.filter((candidate) => candidate.name !== name);
-}
-
 /** Preserve explicit ids. Recover only unambiguous exact-content matches without ids. */
 export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeIdResult {
   const nodes = parsed(source);
   const walked = elements(nodes);
   const used = new Set<string>(options.reservedIds ?? []);
   const explicitIds = new Set<string>();
-  // Reserve every explicit id and valid legacy identity before visiting the
-  // first node. Both win over generation regardless of source order; authored
-  // ids still win when the two namespaces collide on different nodes.
+  // Reserve every explicit id before visiting the first node: an authored id
+  // wins over generation regardless of source order.
   for (const { node } of walked) {
     const id = stringValue(attr(node, ID_ATTR));
     if (id) { used.add(id); explicitIds.add(id); }
-    const legacy = stringValue(attr(node, LEGACY_ATTR));
-    if (legacy) used.add(legacy);
   }
 
   const previousNodes = options.previousSource ? parsed(options.previousSource) : [];
@@ -168,7 +140,6 @@ export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeI
 
   const assigned = new Set<string>();
   const repairs: NodeIdRepair[] = [];
-  const aliases: NodeIdAlias[] = [];
   let minted = 0;
   let carried = 0;
   let fallbackCounter = 0;
@@ -195,40 +166,23 @@ export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeI
     const idAttribute = attr(node, ID_ATTR);
     const explicit = stringValue(idAttribute);
     const originalId = reportedValue(idAttribute);
-    const legacy = stringValue(attr(node, LEGACY_ATTR));
-    const restored = legacy ? options.legacyAliases?.get(legacy) : undefined;
     let id: string;
     if (explicit && !assigned.has(explicit)) {
       id = explicit;
-    } else if (!explicit && restored && !assigned.has(restored) && !explicitIds.has(restored)) {
-      id = restored;
-      setStringAttr(node, ID_ATTR, id);
-      aliases.push({ legacyKey: legacy!, nodeId: id, path });
-      if (options.retireLegacyAliases) removeAttr(node, LEGACY_ATTR);
-    } else if (!explicit && legacy && !assigned.has(legacy) && !explicitIds.has(legacy)) {
-      id = legacy;
-      setStringAttr(node, ID_ATTR, id);
-      removeAttr(node, LEGACY_ATTR);
     } else {
-      const matches = !explicit && !legacy ? previousMatches.get(currentSignatures.get(node)!) : undefined;
+      const matches = !explicit ? previousMatches.get(currentSignatures.get(node)!) : undefined;
       const carry = matches?.length === 1 && currentCounts.get(currentSignatures.get(node)!) === 1
         && !assigned.has(matches[0]) && !explicitIds.has(matches[0]) ? matches[0] : null;
       id = carry ?? mintFresh();
       setStringAttr(node, ID_ATTR, id);
       if (carry) carried++; else minted++;
       if (idAttribute) repairs.push({ path, from: originalId, to: id, reason: explicit ? 'duplicate' : 'invalid' });
-      if (legacy) aliases.push({ legacyKey: legacy, nodeId: id, path });
-      if (legacy && options.retireLegacyAliases) removeAttr(node, LEGACY_ATTR);
-    }
-    if (explicit && id === explicit && legacy && explicit !== legacy) {
-      aliases.push({ legacyKey: legacy, nodeId: id, path });
-      if (options.retireLegacyAliases) removeAttr(node, LEGACY_ATTR);
     }
     assigned.add(id);
     used.add(id);
     ids.push(id);
   }
-  return { source: serializeJsx(nodes), ids, minted, carried, repairs, aliases };
+  return { source: serializeJsx(nodes), ids, minted, carried, repairs };
 }
 /** Source-node index; real ids only, first occurrence wins on legacy malformed documents. */
 export function nodeIndex(source: string): Map<string, NodeIdEntry> {
@@ -236,7 +190,7 @@ export function nodeIndex(source: string): Map<string, NodeIdEntry> {
   for (const { node, path } of elements(parsed(source))) {
     const id = stringValue(attr(node, ID_ATTR));
     if (!id || out.has(id)) continue;
-    out.set(id, { id, path, node, legacyKey: stringValue(attr(node, LEGACY_ATTR)) });
+    out.set(id, { id, path, node });
   }
   return out;
 }

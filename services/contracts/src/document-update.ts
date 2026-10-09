@@ -30,7 +30,6 @@ export interface DocumentUpdate extends Pick<DocumentResourcePreparation,'datase
  expectedSharingRevision?:number;
  expectedParentIds?:string[];
  annotationOps?:DocumentAnnotationOperation[];
- aliases?:Array<{legacyKey:string;nodeId:string;path:string}>;
  schema:1;
  replacement?:DocumentGraph;
  patch:GraphPatch;
@@ -85,7 +84,6 @@ export function parseDocumentUpdate(value:unknown):DocumentUpdate|null {
   if(!integer(value.expectedSharingRevision))return null;
   if(s.parentId!==undefined&&!strings(value.expectedParentIds))return null;
  }
- if(value.aliases!==undefined&&(!Array.isArray(value.aliases)||!value.aliases.every(a=>object(a)&&['legacyKey','nodeId','path'].every(k=>typeof a[k]==='string'))))return null;
  if(value.whole!==undefined&&typeof value.whole!=='boolean')return null;
  if(value.metadata!==undefined){
   if(!object(value.metadata)||!Object.entries(value.metadata).every(([k,v])=>['title','description','theme','template','colorMode'].includes(k)&&(v===null||typeof v==='string')))return null;

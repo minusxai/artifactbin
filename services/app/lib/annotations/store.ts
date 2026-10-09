@@ -24,7 +24,7 @@ import type { CommentTarget } from '@/lib/story/annotations';
  */
 import { annotationScope, effectiveRole, type ArtifactRow, type Scope, type TokenActor } from '@/lib/artifacts/access';
 import { canGovern } from '@/lib/artifacts/share-roles';
-import { ANNOTATION_ANCHOR_ATTR, anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from './anchors';
+import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from './anchors';
 import { avatarUrl } from '@/lib/accounts/avatars';
 import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
@@ -34,13 +34,6 @@ import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type Ann
 import { sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
 import { channelForAnnotations } from '@/lib/story/realtime/live';
 
-/**
- * The attribute that ties a node to its threads. It stores an opaque key, never
- * comment text. It lives in a PURE module (lib/annotation-anchors) because the
- * fork door has to strip anchors from a document's source and may not import
- * this one — which imports lib/artifacts.
- */
-export { ANNOTATION_ANCHOR_ATTR };
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */
 interface AnnotationAnchor {

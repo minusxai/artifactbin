@@ -4,8 +4,6 @@ import {documentEdit,documentEditBody} from './prepared-document';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,applyEditScoped} from '@/lib/artifacts';
-import {documentAfterOperation,type DocumentOperationHistory} from '@/lib/story/graph/document-update-history';
-import {graphSource} from '@/lib/story/graph/document-graph';
 import {POST as editRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
@@ -43,24 +41,9 @@ it('accepts an independent edit 23 versions behind and rejects same-leaf ABA',as
  const restore=await applyEditScoped(actor,id,documentEdit(head,{source:head.source!.replace('Value 22','Alpha')}));expect(restore&&!(restore instanceof Response)&&restore.applied).toBe(true);
  const stale=await applyEditScoped(actor,id,documentEdit(row,{source:row.source!.replace('Alpha','Stale overwrite')}));expect(stale&&!(stale instanceof Response)&&!stale.applied).toBe(true);
 });
-it('first-load migration followed by structural operations has exact compact history replay',async()=>{
- const {id,actor,row}=await setup(),db=await getDb();await db.query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[id,row.source]);
- const migrated=(await getArtifactById(id))!;
- const direct=await applyEditScoped(actor,id,documentEdit(migrated,{source:migrated.source!.replace('Alpha','Migrated')}));expect(direct&&!(direct instanceof Response)&&direct.applied).toBe(true);
- const head=(await getArtifactById(id))!;
- const structure=await applyEditScoped(actor,id,documentEdit(head,{operations:[{kind:'insert',parent:[0],index:2,source:'<p>Added</p>'}]}));expect(structure&&!(structure instanceof Response)&&structure.applied).toBe(true);
- const final=(await getArtifactById(id))!;expect(final.source).toContain('Added');
- if(migrated.document?.kind!=='graph')throw new Error('Missing migrated graph');let graph=migrated.document;
- for(const e of (await db.query<{document_state:DocumentOperationHistory}>("SELECT document_state FROM artifact_edits WHERE artifact_id=$1 AND document_state->>'kind'='operations' ORDER BY seq",[id])).rows)graph=documentAfterOperation(graph,e.document_state);
- expect(graphSource(graph)).toBe(final.source);
-});
 it('does not let a stale child edit bypass a parent mutation',async()=>{
  const {id,actor,row}=await setup();const changed=await applyEditScoped(actor,id,documentEdit(row,{operations:[{kind:'setAttribute',path:[0],name:'className',value:'p-4'}]}));expect(changed&&!(changed instanceof Response)&&changed.applied).toBe(true);
  const result=await applyEditScoped(actor,id,documentEdit(row,{source:row.source!.replace('Alpha','Stale')}));expect(result&&!(result instanceof Response)&&!result.applied).toBe(true);
-});
-it('read migrations do not manufacture validation certificates',async()=>{
- const {id,row}=await setup(),db=await getDb();await db.query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[id,row.source]);await getArtifactById(id);
- expect((await db.query<{document:{prose?:unknown}}>('SELECT document FROM artifacts WHERE id=$1',[id])).rows[0]!.document.prose).toBeUndefined();
 });
 it('the wire returns the next authoring graph and refuses mixed legacy forms',async()=>{
  const {id,token,row}=await setup(),update=documentEditBody(row,{source:row.source!.replace('Alpha','Wire edit')});

@@ -17,8 +17,11 @@ import {loadWorkspace,saveTracking,writeTracking,type Workspace} from '../src/wo
 import {snapshotDocument} from '../src/local';
 import {writeDocument} from '../src/document';
 import {createDocumentGraph,graphSource} from '../../app/lib/story/graph/document-graph';
+import {encodeDocumentNodes} from '../../app/lib/story/document/document-node-codec';
+import {parseJsx} from '../../app/lib/jsx/parse';
+/** The tree an older server stored for a fork's create (no graph): what the CLI must still upgrade through a read. */
+const legacyTree=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return encodeDocumentNodes(parsed.nodes);};
 import {applyGraphPatch} from '../../app/lib/story/graph/document-graph-patch';
-import {encodeDocument} from '../../app/lib/story/document/document-codec';
 import {startPreview} from '../src/preview/session';
 import {localIdentities} from '../src/identities';
 import {localInputReferences} from '../src/preview/local-inputs';
@@ -38,7 +41,7 @@ async function fixture(){
   if(path==='/api/artifacts'&&method==='POST'){
    if(rejectCreate){rejectCreate=false;return Response.json({error:'invalid_sql',details:['Bad query']},{status:400,headers});}
    const key=new Headers(init?.headers).get('Idempotency-Key')!;if(keys.has(key))return Response.json(keys.get(key),{headers});
-   const id=body.reserved_id;const markup=body.markup?.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':body.image?'image':'dataset',...(body.image?{markup:null}:{}),...(markup?{markup,document:body.forked_from?encodeDocument(markup):createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
+   const id=body.reserved_id;const markup=body.markup?.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':body.image?'image':'dataset',...(body.image?{markup:null}:{}),...(markup?{markup,document:body.forked_from?legacyTree(markup):createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
   }
   const id=path.split('/')[3],head=heads.get(id);
   if(method==='GET'&&path.endsWith('/content'))return Response.json([{name:'One',count:1}],{headers});
@@ -378,7 +381,7 @@ test('upgrading a fork snapshot cannot adopt a concurrent writer as the local au
  const f=await fixture();try{
   await writeFile(join(f.workspace.root,'child.jsx'),'---\nid: loc002\nforked_from: old001\n---\n<p id="text">One</p>');
   await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
-  const head=[...f.heads.values()][0];head.markup='<p id="text">Concurrent</p>';head.document=encodeDocument(head.markup);head.version=2;head.edit_id='edit-other';head.state=digest('concurrent');
+  const head=[...f.heads.values()][0];head.markup='<p id="text">Concurrent</p>';head.document=legacyTree(head.markup);head.version=2;head.edit_id='edit-other';head.state=digest('concurrent');
   const proposal=(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Local');await writeFile(join(f.workspace.root,'child.jsx'),proposal);
   const before=f.calls.length;
   await assert.rejects(publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{}),{code:'state_conflict'});

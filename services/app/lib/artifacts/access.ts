@@ -40,12 +40,6 @@ export const DATASET_ACCESS: readonly DatasetAccess[] = ['read', 'readwrite'];
 export interface ArtifactRow {
   document?:StoredDocument|null;
   open_annotations?:number;
-  /**
-   * Not a column: set only on a SERVED row (lib/migrate/sqlite/stored
-   * inCurrentSyntax) written for the previous query engine and not
-   * convertible without a person. Its dataflow is {@link unrunnableDataflow}.
-   */
-  previousEngine?: true;
   id: string;
   token_id: string;
   /** Owner account; NULL until the creating token is claimed. */

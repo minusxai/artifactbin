@@ -1,11 +1,12 @@
 /**
- * THE REHEARSAL'S ENVIRONMENT BOUNDARY: point the app at a restored database
- * and a local copy of its object store, with the query engine in process.
+ * THE SCRIPTS' ENVIRONMENT BOUNDARY: point the app at a database and a local
+ * copy of its object store (or, with `liveObjects`, the deployment's own), with
+ * the query engine in process.
  *
  * The app reads its settings once, when lib/config is first imported, so a
  * script awaits this BEFORE importing any app module — which is why this and
  * the scripts beside it import the app dynamically. Nothing here reaches a
- * remote store or a separate service: a rehearsal never touches production.
+ * separate service, and no remote object store unless `liveObjects` asks.
  * The engine is registered the way the server's composition root does it
  * (server.ts), from the same local entry.
  */

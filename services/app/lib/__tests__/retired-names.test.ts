@@ -64,12 +64,11 @@ const SCANS: Scan[] = [
     // The theme lineup is six dual-palette themes. The retirement touched the registry, the publish
     // gate, the docs, the guidance yaml, the seeds and the gates — a leftover in any one of them is
     // a contract an agent will believe.
-    label: 'no retired theme name is used as a value outside the alias table',
+    label: 'no retired theme name is used as a value (the alias table is gone too)',
     dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`, 'scripts'],
     extensions: /\.(tsx?|mjs)$/,
     // broadsheet and nocturne returned as design systems (lib/data/story/story-systems) on 3 Oct 2026.
     pattern: /['"](classical)['"]/,
-    allow: [`${APP}/lib/data/story/story-themes.ts`],
     proof: { atLeast: 50, contains: `${APP}/lib/data/story/story-themes.ts` },
   },
   {

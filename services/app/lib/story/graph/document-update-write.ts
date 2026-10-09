@@ -24,8 +24,6 @@ const headWithoutDocument=(alias:string)=>`jsonb_build_object(${HEAD_COLUMNS.map
 /** `withheld`: the row came back without its document or source (see `withholdDocument`), on any head. */
 export type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean};
 export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
- /** Refuse (as not applied) a markup head not yet in the current data syntax (./data-syntax): the edit door converts it first. */
- currentSyntax?:boolean;
  /**
   * The caller answers with patches, never the document (the browser editor's save, lib/artifacts respondToEdit): the
   * statement returns the head WITHOUT its document, and the caller derives what needs the new source after it has
@@ -47,9 +45,9 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const {title,description,...metadata}={...update.metadata,...(update.whole?DATA_SYNTAX_META:{})};
  const meta=param(JSON.stringify(metadata)),expected=param(JSON.stringify(update.expectedMetadata??{}));
  const titleValue=param(title??null),hasTitle=param(title!==undefined),descriptionValue=param(description??null),hasDescription=param(description!==undefined);
- const annotationOps=param(JSON.stringify(annotationSqlInput(update.annotationOps))),aliases=param(JSON.stringify(update.aliases??[]));
+ const annotationOps=param(JSON.stringify(annotationSqlInput(update.annotationOps)));
  const replacement=param(update.replacement?JSON.stringify(update.replacement):null);
- const patch=param(JSON.stringify(update.patch)),whole=param(update.whole??false),wholeVersion=param(update.patch.baseVersion),policy=param(GRAPH_POLICY),currentSyntax=param(!!options.currentSyntax);
+ const patch=param(JSON.stringify(update.patch)),whole=param(update.whole??false),wholeVersion=param(update.patch.baseVersion),policy=param(GRAPH_POLICY);
  const withhold=param(!!options.withholdDocument&&!update.replacement&&!update.whole);
  const changed=param([...new Set([...Object.keys(update.patch.updated),...Object.keys(update.patch.inserted),...update.patch.removed])]);
  const preimage=param([...new Set([...Object.keys(update.patch.updated),...update.patch.removed])]),touched=param(update.patch.touched);
@@ -83,7 +81,6 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
    CROSS JOIN LATERAL (SELECT ${sql.expression} AS next_document OFFSET 0) nx
    CROSS JOIN LATERAL (SELECT (${whole}::boolean OR l.document_archived_at IS NULL OR l.document_archived_at<=now()-interval '120 seconds') AS archiving) a
   WHERE ${mention.guard} AND ${resources.guard} AND ${annotationSqlGuard(annotationOps)} AND (l.format='markup' OR(${replacement}::jsonb IS NOT NULL AND l.format<>'folder' AND l.dataset_policy IS NULL)) AND (${replacement}::jsonb IS NOT NULL OR d.document->>'policy'=${policy}) AND ${sql.guard} AND (NOT ${whole}::boolean OR l.version=${wholeVersion}::int)
-   AND (NOT ${currentSyntax}::boolean OR l.format<>'markup' OR l.meta @> '${JSON.stringify(DATA_SYNTAX_META)}'::jsonb)
    AND (${visibility}::text IS DISTINCT FROM 'private' OR l.user_id IS NOT NULL)
    AND (${sharing}::int IS NULL OR l.sharing_revision=${sharing}::int)
    AND (NOT ${hasParent}::boolean OR (l.ancestor_ids=${oldParent}::text[] AND (${parent}::text IS NULL OR EXISTS(SELECT 1 FROM destination))
@@ -108,7 +105,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
   INSERT INTO artifact_versions(artifact_id,version,title,description,format,source,meta,actor_user_id,actor_token_id,document)
   SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',(SELECT l.document FROM locked l) FROM updated
   WHERE (previous->>'archiving')::boolean ON CONFLICT DO NOTHING
- ), ${documentAnnotationSql(annotationOps,aliases)}, logged AS (
+ ), ${documentAnnotationSql(annotationOps)}, logged AS (
   INSERT INTO artifact_edits(artifact_id,edit_id,splice_start,removed,inserted,span_start,span_end,actor_user_id,actor_token_id,document_state,annotation_changes)
   SELECT u.id,u.edit_id,0,'','',0,0,$4,$5,jsonb_build_object('kind','operations','version',u.version,
    'beforeEditId',u.previous->'edit_id','forward',${patch}::jsonb,'replacement',${replacement}::jsonb,'beforeDocument',CASE WHEN ${replacement}::jsonb IS NOT NULL THEN u.previous->'document' END,
@@ -143,12 +140,6 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  ), resolved_shares AS (
   UPDATE artifact_shares SET user_id=$4 WHERE artifact_id=$1 AND user_id IS NULL AND ${shares}::jsonb IS NULL
    AND email=(SELECT email FROM users WHERE id=$4 AND kind='account') AND EXISTS(SELECT 1 FROM updated)
- ), aliases AS (
-  INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version)
-  SELECT u.id,x->>'legacyKey',x->>'nodeId',x->>'path',u.version FROM updated u CROSS JOIN jsonb_array_elements(${aliases}::jsonb) x ON CONFLICT DO NOTHING
-  RETURNING artifact_id,legacy_key,source_id
- ), anchors AS (
-  UPDATE annotations a SET anchor_key=x.source_id FROM aliases x WHERE a.artifact_id=x.artifact_id AND a.anchor_key=x.legacy_key AND NOT EXISTS(SELECT 1 FROM moved_annotations m WHERE m.id=a.id)
  ), ${mention.after} ${resources.after} ${editEvents} response AS (
   SELECT true AS applied,CASE WHEN u.withheld THEN ${headWithoutDocument('u')} ELSE to_jsonb(u)-'previous'-'withheld'-'after_ids' END AS artifact,u.withheld,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
   UNION ALL SELECT false,to_jsonb(l),false,l.id FROM locked l WHERE NOT EXISTS(SELECT 1 FROM updated)
