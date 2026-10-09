@@ -1,4 +1,3 @@
-import { reviewStateFor, type ReviewStateRegistration } from '@/lib/story-runtime/review-state';
 /**
  * THE AUTHOR SCRIPT'S RUNTIME (`@mx/page-runtime`), loaded by boot when a page carries a script or declares data.
  *
@@ -19,13 +18,16 @@ import { reviewStateFor, type ReviewStateRegistration } from '@/lib/story-runtim
  * Solid is the island build's one instance (lib/islands/vendor, lib/author-script/contract AUTHOR_VENDOR_EXPORTS): the script, this
  * runtime and the kit share one reactive graph.
  */
-import { batch, getOwner, onCleanup, untrack, type JSX } from 'solid-js';
+import { batch, createSignal as solidCreateSignal, getOwner, untrack, type JSX, type SignalOptions } from 'solid-js';
 import { createComponent, render } from 'solid-js/web';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/dataflow/dataflow';
 import { PAGE_GLOBAL } from '@/lib/author-script/contract';
 import { bindPage, type PageBindings, type MutationFn } from '@/lib/story-runtime/page-bindings';
+import { MountScope, commentSignal, commentStateKey, registerCommentSignal } from './comment-state';
+import { registerCommentState, setCommentStateTransaction } from '@/lib/story-runtime/comment-state';
+import { COMMENT_VALUES_KEY } from '../../../contracts/src/comment-view-state';
 export { bindPage, type PageBindings, type MutationFn, type QueryAccessor, type ValueSetter } from '@/lib/story-runtime/page-bindings';
 const bareName = (ref: string): string => (typeof ref === 'string' && ref.startsWith('$') ? ref.slice(1) : String(ref));
 
@@ -66,7 +68,27 @@ export function exposePage(win: Window, store: DataflowStore): () => void {
     imageUrl: bindings.imageUrl,
   });
   win.page = api;
-  return () => { if (win.page === api) delete win.page; bindings.dispose(); };
+  const stopValues = exposeCommentValues(win.document, store);
+  return () => { if (win.page === api) delete win.page; stopValues(); bindings.dispose(); };
+}
+
+/**
+ * The declared Values are comment state as one group: what the link carries, a native comment carries and puts back
+ * when its thread opens (lib/story-runtime/comment-state). The flow is read at each call: an agent's write may replace
+ * the declarations under an open document. Here, not in boot: the registry and Solid's batch stay out of the boot chunk.
+ */
+export function exposeCommentValues(doc: Document, store: DataflowStore): () => void {
+  setCommentStateTransaction(doc, batch);
+  const linked = () => store.flow.values.filter((v) => v.kind === 'scalar' && v.type !== 'table' && v.url !== false).map((v) => v.name);
+  return registerCommentState(doc, COMMENT_VALUES_KEY, {
+    get: () => Object.fromEntries(linked().map((name) => [name, store.getState().values[name] ?? null])),
+    set: (saved) => {
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+      const known = new Set(linked());
+      const values = Object.fromEntries(Object.entries(saved).filter(([name, value]) => known.has(name) && (value === null || typeof value !== 'object')));
+      if (Object.keys(values).length) store.setValues(values as Record<string, Scalar>);
+    },
+  });
 }
 
 /** Where the markup placed a component the script exports (compiler `data-mx-mount`). */
@@ -102,7 +124,9 @@ export function mountComponents(root: ParentNode, mod: ComponentModule, bindings
     const fallback = [...el.childNodes];
     el.replaceChildren();
     try {
-      const dispose = render(() => createComponent(component as Component, props), el);
+      // The mount's node id scopes the component's named signals (./comment-state MountScope).
+      const scope = el.id || null;
+      const dispose = render(() => createComponent(MountScope.Provider, { value: scope, get children() { return createComponent(component as Component, props); } }), el);
       mounted.push([el, fallback, dispose]);
     } catch (error) {
       console.error(`[page] <${name}> failed to render`, error);
@@ -150,20 +174,29 @@ export function resolveVendorImports(source: string, vendor: Readonly<Record<str
   return source.replace(new RegExp(`(["'])(${specifiers})\\1`, 'g'), (match, quote: string, spec: string) => (vendor[spec] ? `${quote}${vendor[spec]}${quote}` : match));
 }
 
+/**
+ * The script's `createSignal` (author-module.server's solid-js shim): `{name}` makes it comment state, keyed by the
+ * mount it renders in (`<node id>:<name>`), the bare name at module level. A component's signal goes with its owner;
+ * a module-level one has none, so `registrations` collects its removal for the module's stop.
+ */
+export function scriptCreateSignal(registrations: Set<() => void>) {
+  return (value: unknown, options?: SignalOptions<unknown> & { name?: unknown }) => {
+    const name = typeof options?.name === 'string' && options.name ? options.name : null;
+    if (!name) return solidCreateSignal(value, options);
+    const key = commentStateKey(name) ?? name;
+    if (getOwner()) return commentSignal(key, value, options);
+    const { signal, remove } = registerCommentSignal(key, value, options);
+    registrations.add(remove);
+    return signal;
+  };
+}
+
 /** Run the version's module in this document. Returns the stop function: unmounts its components and drops its bindings. */
 export async function startAuthorModule(input: AuthorModuleStart): Promise<() => void> {
   const bindings = bindPage(input.store);
   const registrations = new Set<() => void>();
-  const reviewState = (part: ReviewStateRegistration) => {
-    const owner = 'ownerDocument' in input.root ? input.root.ownerDocument ?? document : input.root;
-    const remove = reviewStateFor(owner).register({ ...part, get: () => untrack(part.get), restore: value => batch(() => part.restore(value)) });
-    const cleanup = () => { remove(); registrations.delete(cleanup); };
-    registrations.add(cleanup);
-    if (getOwner()) onCleanup(cleanup);
-    return cleanup;
-  };
-  // What the generated `page` module reads at import: the store's binders, and `proxy` for this document.
-  (globalThis as Record<string, unknown>)[PAGE_GLOBAL] = { ...bindings, reviewState, proxy: (url: unknown) => pageProxyUrl(input.id, url) };
+  // What the generated `page` module reads at import: the store's binders, `proxy` for this document, and `createSignal`.
+  (globalThis as Record<string, unknown>)[PAGE_GLOBAL] = { ...bindings, createSignal: scriptCreateSignal(registrations), proxy: (url: unknown) => pageProxyUrl(input.id, url) };
   const code = resolveVendorImports(input.source, input.vendor);
   const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
   let mod: ComponentModule;
