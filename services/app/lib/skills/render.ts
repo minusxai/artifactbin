@@ -28,10 +28,9 @@ import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/compone
 import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
 import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
-import { COMPUTED_FIGURE_RULE, NATIVE_TABLE_AUTHORING_RULE, PHONE_AUTHORING_RULE, PROGRESSIVE_AUTHORING_RULE, URL_REPLY_RULE } from '@/lib/serving/agent-guidance';
+import { COMPUTED_FIGURE_RULE, DISPLAY_ROWS, NATIVE_TABLE_AUTHORING_RULE, PHONE_AUTHORING_RULE, PROGRESSIVE_AUTHORING_RULE, SQL_FUNCTIONS, URL_REPLY_RULE } from '@artifactbin/contracts';
 import { OPERATIONS } from '@/lib/operations/registry';
 import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/dataflow';
-import { DISPLAY_ROWS, SQL_FUNCTIONS } from '@artifactbin/contracts';
 import { CORE_FUNCTIONS } from '@artifactbin/sql/core';
 import type { SkillFile } from './tree';
 

@@ -34,7 +34,7 @@ import { documentFonts, invalidFontFamilies } from '@/lib/compiled-page/styles/d
 import { cspExtensionsOf } from '../../document/csp-extensions';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '@/lib/document/server';
-import { buildLambdaModule } from '@/lib/runner/program.server';
+import { buildLambdaModule } from '@/lib/author-script/program.server';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/dataflow/compiled-dataflow';
 import { validateIconNames } from '../assets/icon-validation.server';
 

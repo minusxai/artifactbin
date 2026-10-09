@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import type * as Esbuild from 'esbuild';
 import { transformAsync, type PluginObj } from '@babel/core';
-import { buildAuthorModule, type AuthorModuleNames } from '@/lib/author-script/author-module.server';
+import { buildAuthorModule, type AuthorModuleNames } from './author-module.server';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 
 const SOLID = ['batch', 'createEffect', 'createMemo', 'createRoot', 'createSignal', 'on', 'onCleanup', 'onMount', 'untrack'];
@@ -17,7 +17,7 @@ async function runtimeSource(build: typeof Esbuild.build): Promise<string> {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     // Source/dev only. Production build-server emits the asset beside its bundle.
     const output = await build({
-      entryPoints: [fileURLToPath(new URL('./runtime.ts', import.meta.url))], bundle: true, write: false,
+      entryPoints: [fileURLToPath(new URL('../runner/runtime.ts', import.meta.url))], bundle: true, write: false,
       platform: 'browser', conditions: ['browser'], format: 'iife', globalName: 'LambdaPageRuntime',
       target: 'es2022', minify: true, logLevel: 'silent',
     });

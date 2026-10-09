@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, renderDoc } from '@/test/helpers/skill-docs';
-import { IMAGE_URL_FIELD_GUIDANCE } from '@/lib/serving';
+import { IMAGE_URL_FIELD_GUIDANCE } from '@artifactbin/contracts';
 import { OPERATIONS } from '../operations/registry';
 
 const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');

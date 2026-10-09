@@ -22,7 +22,7 @@ import { mintToken as mintRawToken } from '@/lib/accounts';
 import { createUser } from '@/lib/accounts';
 import { POST as createBrowserArtifact } from '@/app/api/my/artifacts/route';
 import { artifactStarter } from '@/lib/workspace/artifact-starters';
-import { isStartPlaceholder } from '@/lib/serving/start-placeholder';
+import { isStartPlaceholder } from '@artifactbin/contracts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();

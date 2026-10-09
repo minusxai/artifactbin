@@ -14,7 +14,7 @@ import FolderInput from 'lucide-solid/icons/folder-input';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import { writeBrowserArtifact } from '@/lib/artifacts/browser-artifact-write';
 import { buildShelf, parentOfRow, type ShelfRow } from '@/lib/workspace/shelf';
-import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@/lib/serving/og-card';
+import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { MicroLabel, PANEL, timeAgo } from './ui';
 import { Tooltip } from './Tooltip';

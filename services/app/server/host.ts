@@ -10,7 +10,8 @@ import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/artifacts
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
 import {useSqlExtensions} from '@/lib/sql/extensions';
 import type {Actor,Upstream,RunnerService,HostedRemoteAgent} from '@artifactbin/contracts';
-import {externalHostedComments,clearExternalHostedComments} from '@/lib/remote/hosted-comments';
+import {externalHostedComments} from '@/lib/runner/hosted-comments';
+import {clearExternalHostedAgent} from '@/lib/remote/hosted-proof';
 import {HOSTED_AGENT_SERVICE_URL,RUNNER_ACTOR_SECRET} from '@/lib/platform/config';
 import {getDb,type Db} from '@/lib/platform';
 import {inProcess,hostedAgentClient,hostedAgentDeliveryTransport,hostedAgentTransport} from '@artifactbin/utils';
@@ -64,7 +65,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  const fetch=options.identity?.(request).fetch??((incoming:Request)=>Promise.resolve(app.fetch(incoming)));
  let closing:Promise<void>|undefined;
  return {fetch,request,close:()=>closing??=(async()=>{
-  try{clearInterval(timer);await ticking;await hosted?.close?.();setHostedRemoteAgent(undefined);clearExternalHostedComments();setLambdaProgramResolver(undefined);await stopSchedules();await stopBackgroundTasks();await stopRecheck();await stopHarvester();await services().events.close?.();await options.shutdown?.();}
+  try{clearInterval(timer);await ticking;await hosted?.close?.();setHostedRemoteAgent(undefined);clearExternalHostedAgent();setLambdaProgramResolver(undefined);await stopSchedules();await stopBackgroundTasks();await stopRecheck();await stopHarvester();await services().events.close?.();await options.shutdown?.();}
   finally{await db.close();}
  })()};
 }

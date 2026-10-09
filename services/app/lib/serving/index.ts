@@ -2,7 +2,6 @@
 export { agentContract } from './agent-contract';
 export { existingPaste } from './agent-copy';
 export { agentBlurb } from './agent-discovery';
-export { COMPUTED_FIGURE_RULE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from './agent-guidance';
 export { APP_SHELL_FONT_PRELOADS } from './app-fonts';
 export { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/artifacts/archived-version';
 export type { ArchivedRender } from '@/lib/artifacts/archived-version';
@@ -17,8 +16,6 @@ export { domainPath, setDomainPath } from './custom-domains';
 export type { CaaRecord, DomainResolver } from './custom-domains';
 export { mintExportKey, verifyExportKey } from './export-read-key';
 export { GITHUB_EXTERNAL_URL } from './github-star';
-export { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './og-card';
 export { publicRefAsset, publicRefAssetResponse } from './public-ref-assets';
 export { REPO_URL } from './repo';
-export { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from './start-placeholder';
 export { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from './theme-bootstrap';

@@ -12,7 +12,6 @@
         "lib/notifications",
         "lib/operations",
         "lib/remote",
-        "lib/runner",
         "lib/serving",
         "lib/skills",
         "lib/story",
@@ -54,16 +53,11 @@
         "lib/operations -> lib/export",
         "lib/operations -> lib/notifications",
         "lib/operations -> lib/remote",
-        "lib/operations -> lib/serving",
         "lib/operations -> lib/story",
         "lib/operations -> lib/workspace",
         "lib/remote -> lib/accounts",
         "lib/remote -> lib/annotations",
         "lib/remote -> lib/artifacts",
-        "lib/remote -> lib/runner",
-        "lib/runner -> lib/accounts",
-        "lib/runner -> lib/artifacts",
-        "lib/runner -> lib/operations",
         "lib/serving -> lib/accounts",
         "lib/serving -> lib/annotations",
         "lib/serving -> lib/artifacts",
@@ -73,16 +67,13 @@
         "lib/serving -> lib/trust",
         "lib/serving -> lib/workspace",
         "lib/skills -> lib/operations",
-        "lib/skills -> lib/serving",
         "lib/story -> lib/accounts",
         "lib/story -> lib/artifacts",
         "lib/story -> lib/datasets",
-        "lib/story -> lib/runner",
         "lib/story -> lib/serving",
         "lib/trust -> lib/artifacts",
         "lib/workspace -> lib/accounts",
-        "lib/workspace -> lib/artifacts",
-        "lib/workspace -> lib/serving"
+        "lib/workspace -> lib/artifacts"
       ]
     }
   ]

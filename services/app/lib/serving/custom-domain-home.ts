@@ -23,7 +23,7 @@ import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from './theme-bootstrap'
 import { personFaceBackground, personInitial } from '@/lib/islands';
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/workspace/shelf';
 import { domainPostPath } from '@/lib/http/urls';
-import { CARD_RENDER_GENERATION } from './og-card';
+import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
 
 /** A public file, as the profile page route answers it (`strip()` in app/api/page/profile). */
 interface ProfileFile {

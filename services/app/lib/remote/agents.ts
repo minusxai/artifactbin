@@ -1,7 +1,7 @@
 import {services} from '../platform/services';
 import {managedTerminalView,managedTerminalInput,stopManagedTerminal} from './managed-terminal';
 import {managedRunRosterStatus} from './managed-status';
-import {externalHostedProofHash} from './hosted-comments';
+import {externalHostedProofHash} from './hosted-proof';
 import {hostedStatusSnapshot,refreshHostedStatus,hostedRemoteAgent} from './hosted-interface';
 import {isTerminalFeedback} from './terminal-input';
 import { getArtifactById } from '../artifacts/store';

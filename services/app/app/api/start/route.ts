@@ -14,7 +14,7 @@ import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/serving';
 import { baseUrl, json, unauthorized } from '@/lib/http';
-import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@/lib/serving';
+import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
 import { resolveToken } from '@/lib/accounts';
 import { canAuthenticateUser } from '@/lib/accounts/user-kinds';
 import { sessionActor } from '@/lib/accounts';

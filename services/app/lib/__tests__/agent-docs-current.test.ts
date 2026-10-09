@@ -29,7 +29,7 @@ const buildDesignDoc = files('artifactbin/references/design.md');
 const buildThemesDoc = files('artifactbin/references/themes.md');
 const buildTemplatesDoc = files('artifactbin/references/templates.md');
 const buildTemplateDoc = (name: string, base: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
-import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@/lib/serving';
+import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@artifactbin/contracts';
 import { parseJsx } from '../jsx';
 import { validateJsx } from '../jsx/validate';
 import { STORY_HTML_TAGS } from '../jsx/component-names';

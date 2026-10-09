@@ -34,7 +34,7 @@ export { withoutUnusedFaces } from '../offline/font-faces';
 
 // ---- Serving and export: fonts, social cards and the script render allowance.
 export { DOCUMENT_UI_FONT_CSS } from '../serving/app-fonts';
-export { CARD_HEIGHT, CARD_WIDTH } from '../serving/og-card';
+export { CARD_HEIGHT, CARD_WIDTH } from '@artifactbin/contracts';
 export { scriptModuleOrigins, scriptRenderAllowance } from '../export/script-origins';
 export { renderSocialPreviewImage } from '../story/assets/social-preview-image.server';
 

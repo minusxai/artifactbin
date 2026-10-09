@@ -25,7 +25,6 @@ import { ingestImageFromUrl } from '@/lib/story/ingest/image';
 import { ingestPdfFromUrl } from '@/lib/story/ingest/pdf';
 import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '@/lib/datasets/data-tiers';
 import { publishFile } from '@/lib/datasets/file-store';
-import {parseProgramDefinition} from '../../runner/program';
 import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
 
 
@@ -43,7 +42,7 @@ import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
  */
 export const isDocumentFormat = (format: string): boolean => format === 'markup';
 
-import { DATA_CONTENT_FIELDS, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
+import { DATA_CONTENT_FIELDS, parseProgramDefinition, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
 import type { SourceRepair } from '@/lib/jsx/repair';
 

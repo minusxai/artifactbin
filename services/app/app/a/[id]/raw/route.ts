@@ -40,7 +40,7 @@ import { appendCspExtensions, assetsPath, buildDocumentCsp, markupCsp, mutatePat
 import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { readUrlValues } from '@/lib/dataflow';
 import { displayTitle } from '@/lib/document/head';
-import { CARD_RENDER_GENERATION } from '@/lib/serving';
+import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
