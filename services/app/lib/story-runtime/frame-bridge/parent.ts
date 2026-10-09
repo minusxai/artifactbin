@@ -25,11 +25,10 @@
  */
 import type { JsxNode } from '@/lib/jsx/types';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
-import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
-import type { IslandStoryController } from '@/lib/story-runtime/island-controller';
+import { storyFragmentPath } from '@/lib/story-runtime/story-fragment';
 import {
   STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope,
-  type FrameBridgeFramePayload, type FrameBridgeParentPayload, type StoryDocumentUpdate,
+  type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController, type StoryDocumentUpdate,
 } from '@/lib/story-runtime/contract';
 
 export interface FrameBridgeParentOptions {

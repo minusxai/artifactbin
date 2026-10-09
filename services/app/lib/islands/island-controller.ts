@@ -10,7 +10,7 @@
 import type { IslandDocument } from '@/lib/islands/contract';
 import { serializeJsx } from '@/lib/jsx/serialize';
 import type { JsxNode } from '@/lib/jsx/types';
-import type { StoryController } from '@/lib/story-runtime/contract';
+import type { IslandStoryController } from '@/lib/story-runtime/contract';
 import type { FrameEditSession } from '@/lib/story-runtime/edit/session';
 import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
@@ -20,7 +20,7 @@ import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
 import { updateCompiledStory } from '@/lib/islands/live-update';
 import { nextTask, PARSE_SLICE_MS, parseHtmlInSlices } from '@/lib/story-runtime/sliced-parse';
-import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-fragment';
+import { storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
 import {
@@ -119,7 +119,7 @@ export interface IslandControllerInput {
    * How the controller makes its three APP-ORIGIN requests: the draft-preview GET (the edit sheet) and POST (a
    * draft's compile), and the story fragment fetched after Done. In the app page they are same-origin fetches with
    * the session (the default). A framed document has no app session and its CSP admits neither path, so the frame
-   * half of the bridge (lib/story-runtime/frame-bridge/frame) relays them through the page that frames it.
+   * half of the bridge (lib/islands/frame-bridge) relays them through the page that frames it.
    * `path` is always app-relative (`/a/<id>/…`); `init` carries method, headers and body.
    */
   appFetch?: (path: string, init: RequestInit) => Promise<Response>;
@@ -141,16 +141,6 @@ const RESTORE_RETRIES = 12;
 const RESTORE_DELAY_MS = 250;
 /** A draft that must redraw the document waits until typing has paused this long: the typed region is never redrawn under the caret. */
 export const TYPING_QUIET_MS = 1000;
-
-export interface IslandStoryController extends StoryController {
-  selectionReady(): void;
-  /**
-   * Settles once the page reads again IN PLACE after editing: the saved version drawn on the running islands
-   * and the islands back in read mode (lib/islands/boot). Resolves at once when editing never froze them;
-   * rejects when the version cannot be drawn here (the caller reloads, keeping the reader's place).
-   */
-  restored(): Promise<void>;
-}
 
 export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource, appFetch = sameOriginFetch(win), fragmentSurface = 'app' }: IslandControllerInput): IslandStoryController {
   let nodes = served;

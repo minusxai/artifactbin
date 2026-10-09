@@ -172,7 +172,7 @@ describe('buildIslands', () => {
     // Attaching (comments, selection actions) loads the controller and the relay; the editor itself is behind them.
     const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     const carried = (urls) => urls.flatMap((url) => outputInputs[url] ?? []);
-    expect(carried(closure([editor])).some((input) => input.endsWith('story-runtime/island-controller.ts'))).toBe(true);
+    expect(carried(closure([editor])).some((input) => input.endsWith('islands/island-controller.ts'))).toBe(true);
     expect(carried(closure([editor])).some((input) => input.includes('node_modules/prosemirror-view/'))).toBe(false);
     expect(carried(editorFiles).some((input) => input.includes('node_modules/prosemirror-view/'))).toBe(true);
   });

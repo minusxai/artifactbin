@@ -18,7 +18,7 @@ interface FakeController {
   emit(event: unknown): void;
 }
 const made = vi.hoisted(() => ({ controllers: [] as FakeController[] }));
-vi.mock('@/lib/story-runtime/island-controller', () => ({
+vi.mock('@/lib/islands/island-controller', () => ({
   createIslandController: (input: FakeController['input']) => {
     const controller = {
       input, nonce: 'n'.repeat(32), sent: [] as unknown[], updates: [] as unknown[], listeners: new Set<(event: unknown) => void>(), disposed: false,
@@ -38,7 +38,7 @@ vi.mock('@/lib/story-runtime/island-controller', () => ({
 }));
 
 import { openFrameDoor, FRAME_BRIDGE_MESSAGE, frameAppOrigin, APP_ORIGIN_ATTR } from '../door';
-import { startFrameBridge } from '../frame';
+import { startFrameBridge } from '@/lib/islands/frame-bridge';
 import { createFrameBridgeParent, relayedRequest, urlValuesOf } from '../parent';
 import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
 

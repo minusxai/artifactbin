@@ -3,13 +3,13 @@
  *
  * Loaded by the door (./door, opened by lib/islands/page before the author's script) on the page's first
  * `attach`, as `@mx/frame-editor` (lib/islands/frame-editor). It creates the SAME controller the app page creates
- * over an adopted story root (lib/story-runtime/island-controller: comments, selections, reader mode, data, and
+ * over an adopted story root (lib/islands/island-controller: comments, selections, reader mode, data, and
  * in-place editing — ProseMirror over the compiled DOM, whose chunks still load only on `mx:edit-mode` on) over
  * this document's root, and relays:
  *
  *  · page → controller: `send`, `update`, `restored`, and the live `context` the controller reads;
  *  · controller → page: every event, as the in-page controller emits it (signed with its nonce);
- *  · the controller's three app-origin requests (lib/story-runtime/island-controller `appFetch`): this document
+ *  · the controller's three app-origin requests (lib/islands/island-controller `appFetch`): this document
  *    holds no app session and its CSP admits neither path, so the page makes them;
  *  · keys the page's editor listens for on ITS window, which a key pressed here never reaches: Mod-Z/Y as
  *    `mx:history`, Enter and focus leaving a text host as `mx:edit-flush`, ⌘⌥M as `mx:comment-key`, ⌘K in text as `mx:link-key`;
@@ -21,18 +21,18 @@
  * must not draw a newer version under the editor: the frame half claims STORY_ADOPT_HOOK from edit mode on until the
  * page's `restored` has drawn the saved version, as the app page's in-page mount does for its lifetime.
  */
-import { createIslandController, type IslandStoryController } from '@/lib/story-runtime/island-controller';
+import { createIslandController } from '@/lib/islands/island-controller';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { ISLANDS_READY_EVENT, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
-import { createTrustedOverlayHost } from '@/lib/story-runtime/trusted-overlay-host';
+import { createTrustedOverlayHost } from '@/lib/islands/trusted-overlay-host';
 import { applyReaderChoice } from '@/lib/story-runtime/reader-actions';
 import {
   STORY_ADOPT_HOOK, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_HISTORY_MESSAGE, STORY_READER_MODE_MESSAGE,
-  type FrameBridgeParentPayload,
+  type FrameBridgeParentPayload, type IslandStoryController,
 } from '@/lib/story-runtime/contract';
-import type { FrameBridgeSession, FrameBridgeStartOptions } from './door';
+import type { FrameBridgeSession, FrameBridgeStartOptions } from '@/lib/story-runtime/frame-bridge/door';
 
 type FetchResult = Extract<FrameBridgeParentPayload, { kind: 'fetch-result' }>;
 

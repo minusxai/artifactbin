@@ -7,7 +7,7 @@
  * ordered by `layer` (selection < discussion < navigation < modal).
  */
 import { currentTrustedCss, installedStyles, openOverlay, overlays } from '@/lib/serving/trusted-ui-styles';
-import { TRUSTED_LAYER_ATTR } from '@/lib/islands/trusted-portal';
+import { TRUSTED_LAYER_ATTR } from './trusted-portal';
 
 export type TrustedLayer = 'selection' | 'discussion' | 'navigation' | 'modal';
 const PRIORITY: Record<TrustedLayer, number> = { selection: 0, discussion: 1, navigation: 2, modal: 4 };
