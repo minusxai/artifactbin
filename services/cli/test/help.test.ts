@@ -615,6 +615,8 @@ test('image export help distinguishes local inputs from fresh published renderin
 test('data authoring help tells agents to verify the result column and grain behind a table total',()=>{
  const help=helpDocument('markup-data-authoring');
  assert.match(help,/afbin query <id> --name <query>/);
+ assert.match(help,/afbin export <published-url> --refresh --output out\.png/);
+ assert.match(help,/without\s+`--refresh`\s+may return the existing image/);
  assert.match(help,/agg="sum"/);
  assert.match(help,/row grain/);
 });
