@@ -59,3 +59,5 @@ export { BASEMAP_PATH } from './basemap';
 export { DOMAIN_FOOTER_TEXT } from './domain-footer';
 export { MAX_PEOPLE_IDS } from './query-request';
 export * from './sign-in-required';
+
+export * from './comment-changes';

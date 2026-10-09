@@ -1,0 +1,21 @@
+import {expect,it} from 'vitest';
+import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
+import {POST as createArtifact} from '@/app/api/artifacts/route';
+import {POST as createComment} from '@/app/api/my/artifacts/[id]/annotations/route';
+import {POST as reply} from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
+import {GET as changes} from '@/app/api/artifacts/[id]/annotations/changes/route';
+useAppHarness();
+const params=<T extends Record<string,string>>(p:T)=>({params:Promise.resolve(p)});
+it('resumes from a checkpoint and delivers a human reply on an older thread exactly once per page',async()=>{
+ const t=await mintAccountToken('agent');
+ const actor={credential:'session' as const,userId:t.userId!,email:t.email!,emailVerified:true};
+ const made=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:'<p id="intro">Read this</p>'}}));expect(made.status).toBe(201);
+ const doc=await made.json();
+ const old=await createComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor,json:{node_id:'intro',edit_id:doc.edit_id,body:'Older root'}}),params({id:doc.id}));expect(old.status).toBe(201);const thread=await old.json();
+ const read=(after:string)=>changes(request(`/api/artifacts/${doc.id}/annotations/changes?after=${encodeURIComponent(after)}&wait=0`,{token:t.token}),params({id:doc.id}));
+ const baseline=await read('now');expect(baseline.status).toBe(200);const start=await baseline.json();expect(start.events).toEqual([]);expect(start.next_cursor).toEqual(expect.any(String));
+ const posted=await reply(request(`/api/my/artifacts/${doc.id}/annotations/${thread.id}`,{method:'POST',actor,json:{reply:'New human reply'}}),params({id:doc.id,annId:thread.id}));expect(posted.status).toBe(200);
+ const next=await read(start.next_cursor);expect(next.status).toBe(200);const page=await next.json();expect(page.events).toHaveLength(1);expect(page.events[0]).toMatchObject({type:'artifactbin.comment',annotation_id:thread.id,body:'New human reply'});
+ expect((await (await read(page.next_cursor)).json()).events).toEqual([]);
+ expect((await (await read(start.next_cursor)).json()).events[0].event_id).toBe(page.events[0].event_id);
+});
