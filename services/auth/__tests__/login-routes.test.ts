@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assemble } from '@artifactbin/utils';
 import { createHumanAuth, sessionStoreOf, type HumanAuth } from '../src/index';
 import { authParts } from '../src/parts';
@@ -25,14 +25,15 @@ const proxy = async (env: Record<string, string | undefined>): Promise<ReturnTyp
 const send = (app: ReturnType<typeof assemble<any>>, headers: Record<string, string> = {}) =>
   app.request(`${BASE}/api/auth/email-otp/send-verification-otp`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE, ...headers }, body: JSON.stringify({ email: 'i@example.com', type: 'sign-in' }) });
 
-beforeEach(async () => {
+// One database and one identity host for the file: each test signs in its own address, so none reads another's rows.
+beforeAll(async () => {
   pg = new PGlite();
   auth = await createHumanAuth({
     pglite: pg, secret: 'login-routes-secret'.padEnd(32, '0'), baseURL: BASE, mail: mailer,
   });
-  sent.length = 0; seenActor = null;
 });
-afterEach(async () => { await pg.close(); });
+beforeEach(() => { sent.length = 0; seenActor = null; });
+afterAll(async () => { await pg.close(); });
 
 describe('the login door is open (the invite gate is retired)', () => {
   it('sends the code even when stale launch settings remain set', async () => {
