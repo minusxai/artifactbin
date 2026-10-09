@@ -1,4 +1,4 @@
-import { SELECTION_PRESENTATION } from './selection-presentation';
+import { SELECTION_PRESENTATION } from '@/lib/editor-v2/selection-presentation';
 
 /** Shared inert comment chrome for markup and opaque managed frames.
  * The bootstrap serializes this data; no parent DOM or executable author capability crosses realms. */

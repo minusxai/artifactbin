@@ -21,7 +21,7 @@ import { flushFlowView } from '@/lib/editor-v2/flow-view';
 import { syncDocumentOutline } from '../outline-view';
 import { toggleInline, pasteFragment } from '@/lib/editor-v2/model';
 import { clipboardAst } from '@/lib/editor-v2/clipboard';
-import { SELECTION_PRESENTATION } from '../selection-presentation';
+import { SELECTION_PRESENTATION } from '@/lib/editor-v2/selection-presentation';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel } from '../pristine';
 import {

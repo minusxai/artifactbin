@@ -1,7 +1,7 @@
 /**
  * THE PAGE'S OWN ENGINE (lib/story-runtime/page-engine): the SQLite core over
  * the imports this reader holds, answering exactly what the server would —
- * the same evaluator (lib/sql/dataflow-core), the same binding, the same
+ * the same evaluator (lib/dataflow/evaluate), the same binding, the same
  * display window — plus the optimistic overlay a held write rides on until
  * the server decides. Run on the real core, in Node.
  */
