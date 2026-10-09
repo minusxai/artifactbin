@@ -45,6 +45,10 @@ export async function prepareBindings(workspace:Workspace,paths:string[],pathIds
   let tracked=workspace.tracking?.files[path];
   const other=identity?.id&&Object.entries(workspace.tracking?.files??{}).find(([other,entry])=>other!==path&&entry.id===identity.id);
   if(other)throw new CliError('duplicate_identity',`${path} and ${other[0]} claim the same published identity.`,'Use the tracked original or explicitly fork the copy.');
+  if(tracked&&identity&&tracked.selected?.version===undefined&&identity.version!==undefined
+   &&identity.id===tracked.id&&identity.edit_id===tracked.snapshot.edit_id&&identity.state===tracked.snapshot.state&&identity.head_version===tracked.snapshot.version)
+   throw new CliError('identity_mismatch',`${path} has an unexpected version field on a latest pull.`,
+    'Remove the added version field, retain the original id, edit_id, head_version and state, then retry push. version selects historical content; it is not head_version.');
   if(tracked&&identity&&(identity.id!==tracked.id||identity.edit_id!==tracked.snapshot.edit_id||identity.state!==tracked.snapshot.state||identity.head_version!==tracked.snapshot.version||identity.version!==undefined&&identity.version!==tracked.selected?.version))throw new CliError('identity_mismatch',`${path} disagrees with its tracked identity.`);
   // Existing mappings are deliberately retained, including old duplicates.
   if(localId&&manifest.ids[localId]&&manifest.ids[localId]!==tracked?.id)continue;

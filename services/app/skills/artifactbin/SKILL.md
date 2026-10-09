@@ -7,11 +7,11 @@ description: >-
 
 artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. Datasets/media too.
 
-Server: [[ base ]]. Prefer runnable CLI; otherwise [HTTP](references/http-api.md). Local preview/workspaces/npm need CLI/shell. Remote CLI commands use `--server [[ base ]]`. CLI `help <topic>` and linked references share guidance; HTTP reads links. Commands below are CLI examples.
+Server: [[ base ]]. Prefer an already installed runnable CLI; otherwise use [HTTP](references/http-api.md). Local preview/workspaces/npm need CLI/shell. Remote CLI commands use `--server [[ base ]]`. CLI `help <topic>` and linked references share guidance; HTTP reads links. Commands below are CLI examples.
 
 Setup: [[ base ]]/getting-started.md. Reuse the skill or extract [[ base ]]/skills/artifactbin.zip into the harness skill directory; restart. Without files read [[ base ]]/llms.txt. Download ≠ loading.
 
-- CLI chosen and `afbin` missing: run `npx --yes @afbin/cli@latest setup --server '[[ base ]]'` (Windows: `npx.cmd --yes @afbin/cli@latest setup --server '[[ base ]]'`); installs command/skill. [Setup details](references/npm-local.md).
+- Install CLI only when the user requests CLI or the operation needs local CLI (preview/workspace/serve). If `afbin` is missing: run `npx --yes @afbin/cli@latest setup --server '[[ base ]]'` (Windows: `npx.cmd --yes @afbin/cli@latest setup --server '[[ base ]]'`); installs command/skill. [Setup details](references/npm-local.md).
 - CLI chat/phone: ask email, run `afbin auth --email <email>`, ask code, then `afbin auth --email <email> --otp <code>`. Automatic browser approval only on a shared desktop or request. Reuse the origin-scoped credentials under `ARTIFACTBIN_HOME` or `~/.artifactbin`; [authentication](references/http-auth.md). never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. For a new artifact, CLI uses an afbin workspace; HTTP uses [authoring](references/http-authoring.md). Share its returned URL. [[ urlReplyRule ]]
 - Shared/friends/team/signup/vote/RSVP flows: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
@@ -23,7 +23,7 @@ Setup: [[ base ]]/getting-started.md. Reuse the skill or extract [[ base ]]/skil
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - Use `<Markdown>` for long prose; keep headings, paragraphs and lists together. Use HTML for individually designed text.
 - No CDN scripts; use `<Helmet>` CSS and `<script>` (Solid/npm) for behaviour; exports mount by name.
-- Preserve its identity: keep `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork: copy and remove those five fields.
+- Preserve exactly the identity fields returned in the YAML fence; never add `version` when absent. `version` is an optional historical selection, distinct from `head_version`. Fork: copy and remove `id`, `edit_id`, `head_version`, `state` and any `version`.
 - Copy: plain/short; preserve facts/caveats. [Copy guidance](references/copy.md).
 - Publishing does not verify appearance: one whole-document/all-slide `afbin export <artifact-url> --output out.png`. Files/IDs use local data; published URL or `--refresh` uses server data. [Export](references/publishing-versions.md).
 - [[ phoneAuthoringRule ]] (`afbin help live-sessions`).
