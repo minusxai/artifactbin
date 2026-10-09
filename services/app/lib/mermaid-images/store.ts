@@ -139,7 +139,7 @@ export async function queueMermaidHarvest(row: { id: string; version: number; fo
 }
 
 /**
- * THE BACKFILL (scripts/mermaid-backfill.ts): queue a harvest for every live
+ * THE BACKFILL: queue a harvest for every live
  * document head that may draw a `<Mermaid>` and has no harvest for the current
  * engine yet — newest first, at most `limit` — and, with `retryFailed`, give
  * failed harvests their attempts back. Idempotent: run it twice and the second
