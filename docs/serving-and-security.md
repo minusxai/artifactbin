@@ -95,8 +95,7 @@ binds only the declared names: Values and Queries as Solid signals over the
 page's store, Mutations through the same permission-checked `/mutate` door as
 the kit's controls. Components it exports mount where the markup names them,
 over their server-rendered fallback. There is no author frame, no `mx` bridge
-and no managed `<Iframe>`; `scripts/migrate-scripts.mjs` rewrites a document
-written for them.
+and no managed `<Iframe>`.
 
 **Data.** A document's `<Import>`s, `<Query>`s and `<Mutation>`s are compiled
 at publish — against the artifacts it may read, by the SQLite engine the
