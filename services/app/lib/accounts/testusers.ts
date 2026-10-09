@@ -29,7 +29,6 @@ import { TABLES } from '../platform/schema';
 import { userKindOf } from './user-kinds';
 import { closeTestUserSessions, testUserSessionCount } from './testuser-sessions';
 
-
 /** `users.name` for a minted row: what pages show, and what a person recognises in the database. */
 export const TESTUSER_LABEL = 'Test user';
 

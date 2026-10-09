@@ -1,4 +1,8 @@
 // Isolated process fixture: the test supplies private database/object-store paths.
+// It runs the app's real handlers, so it runs where the app does (cwd = services/app, as the vitest setup and
+// the server's public/ mount assume): the authenticated wrapper reads public/chat/release.json from there.
+import {fileURLToPath} from 'node:url';
+process.chdir(fileURLToPath(new URL('../../../app/', import.meta.url)));
 import {getDb} from '../../../app/lib/platform/db';
 import {mintToken} from '../../../app/lib/accounts/tokens';
 import {POST} from '../../../app/app/api/artifacts/route';
