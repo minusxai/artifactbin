@@ -508,7 +508,7 @@
    "services/app/lib/document/__tests__/asset-url.test.ts": 42,
    "services/app/lib/document/__tests__/bound-source.test.ts": 21,
    "services/app/lib/document/__tests__/dataset-source.test.ts": 17,
-   "services/app/lib/story/__tests__/dataset-usage.test.ts": 7,
+   "services/app/lib/datasets/__tests__/dataset-usage.test.ts": 7,
    "services/app/lib/story/__tests__/deck-columns.test.ts": 143,
    "services/app/lib/document/__tests__/declares-queries.test.ts": 19,
    "services/app/lib/story/__tests__/display-title.test.ts": 10,

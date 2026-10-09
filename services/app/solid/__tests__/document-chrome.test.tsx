@@ -10,7 +10,7 @@ import { Route, Router } from '@solidjs/router';
 import { waitFor, within } from '@testing-library/dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
-import type { ArtifactLiveEvent } from '@/lib/story/realtime/live';
+import type { ArtifactLiveEvent } from '@/lib/story-runtime/contract';
 import type { FramedStory } from '../document/create-framed-story';
 import * as liveEdits from '../editor/create-live-edits';
 

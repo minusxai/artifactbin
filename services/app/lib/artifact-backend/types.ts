@@ -21,8 +21,7 @@
 import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { DataflowState } from '@/lib/dataflow/dataflow';
-import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/realtime/live';
-import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from '@/lib/story-runtime/store';
 import type { RemoteSessionInfo } from '../../../contracts/src/remote';
 

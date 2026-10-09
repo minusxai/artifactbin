@@ -201,6 +201,8 @@ export async function mutateDataset(
       const locked=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
       if(!locked||artifactState(locked)!==guard.expectedState)return {rows:[] as ArtifactRow[]};
      }
+     // The NOTIFY below names the channel in SQL, 'artifact_' || lower(id): the same formula as
+     // artifactChannel (@artifactbin/contracts), held to it by __tests__/live-channels.test.ts.
      const result=await artifactQuery<ArtifactRow>(tx,
       `WITH updated AS (
          UPDATE artifacts

@@ -7,7 +7,7 @@ import {getArtifactById,canReadArtifact} from '../artifacts';
 import {runnerOperation} from '../runner';
 import {json} from '../http';
 import {readCommentContext} from './comment-context';
-import {channelForAnnotations} from '../story/realtime/live';
+import {annotationsChannel} from '@artifactbin/contracts';
 
 interface Work {id:string;owner:string;session_id:string;artifact_id:string;thread_id:string;comment_id:string;phase:string;data:{commentContext?:RunnerJson;payload:{body:string;author:string|null}}}
 let external:{agent:HostedRemoteAgent;key:string}|undefined;
@@ -30,13 +30,13 @@ export function externalHostedComments(agent:HostedRemoteAgent,secret:string,opt
     if(!agent.owns(work.owner,work.session_id)||!agent.deliverComment)continue;
     const artifact=await getArtifactById(work.artifact_id);
     if(!artifact||artifact.deleted_at||!await canReadArtifact(artifact,{userId:work.owner,email:null})){
-     await db.transaction(async tx=>{await tx.query("UPDATE remote_work SET phase='unavailable',updated_at=now() WHERE id=$1 AND phase IN ('queued','dispatching')",[work.id]);await tx.query('SELECT pg_notify($1,$2)',[channelForAnnotations(work.artifact_id),work.thread_id]);});continue;
+     await db.transaction(async tx=>{await tx.query("UPDATE remote_work SET phase='unavailable',updated_at=now() WHERE id=$1 AND phase IN ('queued','dispatching')",[work.id]);await tx.query('SELECT pg_notify($1,$2)',[annotationsChannel(work.artifact_id),work.thread_id]);});continue;
     }
     const context=work.data.commentContext??await readCommentContext(db,artifact,work.thread_id,work.comment_id);
     // Commit the lease before HTTP. Ambiguous acceptance must retry the SAME work ID.
     const claimed=await db.transaction(async tx=>{
      const changed=await tx.query("UPDATE remote_work w SET phase='dispatching',data=jsonb_set(w.data,'{commentContext}',COALESCE(w.data->'commentContext',$2::jsonb)),updated_at=now() WHERE w.id=$1 AND (w.phase='queued' OR (w.phase='dispatching' AND w.updated_at<now()-interval '60 seconds')) AND EXISTS(SELECT 1 FROM remote_agents a WHERE a.id=w.session_id AND a.owner=w.owner AND a.active=true) RETURNING w.data",[work.id,JSON.stringify(context)]);
-     if(changed.rows.length)await tx.query('SELECT pg_notify($1,$2)',[channelForAnnotations(work.artifact_id),work.thread_id]);
+     if(changed.rows.length)await tx.query('SELECT pg_notify($1,$2)',[annotationsChannel(work.artifact_id),work.thread_id]);
      return changed.rows[0]?.data as Work['data']|undefined;
     });
     if(!claimed)continue;

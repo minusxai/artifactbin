@@ -20,7 +20,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { authorHandle } from '@/lib/accounts/users';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import type { ArtifactLiveEvent } from '../realtime/live';
+import type { ArtifactLiveEvent } from '@/lib/story-runtime/contract';
 import { storyUpdateParts } from '../../document/update-parts';
 import { assetLookupFrom } from '../../document/asset-url';
 import { webAssetsForSource } from '../assets/web-assets';

@@ -8,14 +8,14 @@ import { collectRefUses } from '@/lib/dataflow/refs';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '../platform/analytics';
-import { sourceWithoutAnchors } from '../annotations/anchors';
+import { sourceWithoutAnchors } from '../document/anchors';
 import { unservable } from './servable';
 import { getDb } from '../platform/db';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../story/document/input';
 import { json } from '../http/http';
 import { mutationTargetRef } from '@/lib/dataflow/compiled-flow';
-import type { ServerRefLoader } from '@/lib/story/data/data-checks';
+import type { ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 
 /**

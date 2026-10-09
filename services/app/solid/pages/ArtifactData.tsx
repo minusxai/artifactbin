@@ -16,7 +16,7 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } f
 import type { ArtifactRole } from '@/lib/artifacts/share-roles';
 import { canEdit as canEditRole, canGovern } from '@/lib/artifacts/share-roles';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import { datasetQuerySnippet } from '@/lib/story/datasets/dataset-usage';
+import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
 import { formatFileSize } from '@/lib/workspace/file-display';
 import { displayTitle } from '@/lib/document/display-title';
 import type { ReaderForkedFrom } from '@/lib/serving/fork-credit.server';
