@@ -270,7 +270,7 @@ describe('the markup skill', () => {
    * markup.md, which owns the vocabulary.
    */
   it('the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
-    expect(doc).toContain('every tag closes (`<br />`)');
+    expect(doc).toContain('Close every tag (`<br />`)');
     expect(doc).toContain('{/* … */}');
     expect(doc).toContain('`<html>`');
   });

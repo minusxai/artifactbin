@@ -23,7 +23,7 @@ HTML is still available for custom title areas and individually designed text.
 Markdown inherits the design system's fonts and colors with a transparent background.
 
 ```jsx
-<article id="document" data-design="tw">
+<article id="document" data-design="tw" className="text-foreground">
   <Markdown id="body">{`# Project notes
 
 Start with the information the reader needs.

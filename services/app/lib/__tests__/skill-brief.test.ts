@@ -32,7 +32,7 @@ describe('the brief', () => {
 
   it('opens with what artifactbin and an artifact are, then the CLI loop, then the example, then the references', () => {
     const at = (s: string) => { const i = sheet.indexOf(s); expect(i, s).toBeGreaterThanOrEqual(0); return i; };
-    const order = [at('artifactbin publishes'), at('YAML fence'), at('afbin pull'), at('## Example'), at('```jsx'), at('## Read next'), at('references/design.md')];
+    const order = [at('Publish editable `.jsx`'), at('YAML metadata'), at('afbin pull'), at('## Example'), at('```jsx'), at('## Read next'), at('references/design.md')];
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
