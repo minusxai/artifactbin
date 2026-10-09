@@ -24,15 +24,15 @@ import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { applyEditFor, versionToWire, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor, revertArtifactFor, isVersionNotArchived } from '@/lib/artifacts/store';
 import { canReadArtifact, type TokenActor } from '@/lib/artifacts/access';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
-import { forkArtifact, forkDatasetPreview, forkRefusal, type ForkOverrides } from '@/lib/artifacts/fork';
+import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/story/publish';
 import { isParentRefusal, resolveParent } from '@/lib/workspace/folders';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
 import { trackEvent } from '@/lib/platform/analytics';
 import { exportImageResponse } from '@/lib/export/exporter';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import {
-  artifactSummaryToWire, artifactToWire, createArtifactFromBody, createdArtifactWire, parseParentField, parseVisibilityValue, replaceArtifactWithBody,
-  parseExpectedVersion, refreshAssetsFor, respondToAnnotationAction, respondToEdit, respondToMutate,
+  artifactSummaryToWire, artifactToWire, createdArtifactWire, parseParentField, parseVisibilityValue,
+  parseExpectedVersion, respondToAnnotationAction, respondToEdit, respondToMutate,
 } from '@/lib/artifacts/wire';
 import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE } from '@/lib/serving/agent-guidance';
 
@@ -563,7 +563,7 @@ const exportArtifactOp: Operation = {
  * The reach is the read ACL rather than ownership (the whole point: adapting
  * someone else's public document), so the miss is the same uniform 404 every
  * other operation answers. The copy is re-published as the FORKER
- * (lib/artifacts forkArtifact), which is why a refusal here can name a ref
+ * (lib/story/publish forkArtifact), which is why a refusal here can name a ref
  * that was fine for the original owner and is not for you — it passes through
  * verbatim rather than copying a document that would be broken on arrival.
  */

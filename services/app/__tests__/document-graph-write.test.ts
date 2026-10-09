@@ -11,6 +11,7 @@ import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditSc
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {createDocumentGraph} from '@/lib/document/document-graph';
 import {prepareGraphOperation} from '@/lib/artifacts/write/document-graph-admission';
+import {publishJsx} from '@/lib/story/document/jsx-tier';
 import {commitGraphOperation} from '@/lib/artifacts/write/document-graph-write';
 useAppHarness();
 async function setup(){
@@ -24,7 +25,7 @@ async function setup(){
 }
 it('atomically commits a structural edit, exact archive and invertible history in one statement',async()=>{
  const {db,actor,row,base}=await setup();
- const admission=await prepareGraphOperation(base,[{kind:'setAttribute',path:[0,0],name:'className',value:'font-bold'}],{loadRef:async()=>null});if(admission instanceof Response)throw new Error(await admission.text());
+ const admission=await prepareGraphOperation(base,[{kind:'setAttribute',path:[0,0],name:'className',value:'font-bold'}],{loadRef:async()=>null,publish:publishJsx});if(admission instanceof Response)throw new Error(await admission.text());
  const spy=vi.spyOn(db,'query'),result=await commitGraphOperation(db,actor,editorScope(actor),admission);
  expect(result?.source).toContain('className="font-bold"');expect(result?.version).toBe(2);expect(result?.meta.compiledCss).toBeTruthy();
  expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();
@@ -34,8 +35,8 @@ it('atomically commits a structural edit, exact archive and invertible history i
  expect(archive.document).toEqual(base.document);
 });
 it('uses the locked preimage after independent prose changes and denies other writers',async()=>{
- const {db,actor,base}=await setup(),token=await prepareGraphOperation(base,[{kind:'delete',path:[0,0]}],{loadRef:async()=>null});if(token instanceof Response)throw new Error(await token.text());
- const independent=await prepareGraphOperation(base,[{kind:'setText',path:[0,1,0],value:'Long β 👩'}],{loadRef:async()=>null});
+ const {db,actor,base}=await setup(),token=await prepareGraphOperation(base,[{kind:'delete',path:[0,0]}],{loadRef:async()=>null,publish:publishJsx});if(token instanceof Response)throw new Error(await token.text());
+ const independent=await prepareGraphOperation(base,[{kind:'setText',path:[0,1,0],value:'Long β 👩'}],{loadRef:async()=>null,publish:publishJsx});
  if(independent instanceof Response)throw new Error(await independent.text());
  expect(await commitGraphOperation(db,actor,editorScope(actor),independent)).not.toBeNull();
  const stranger={tokenId:'stranger',userId:null};expect(await commitGraphOperation(db,stranger,editorScope(stranger),token)).toBeNull();
@@ -46,7 +47,7 @@ it('uses the locked preimage after independent prose changes and denies other wr
 
 it('rejects a reference that changes after publication admission',async()=>{
  const {db,actor,base}=await setup(),ref=await createArtifact(actor.tokenId,null,{format:'image',source:null,meta:{}});
- const admission=await prepareGraphOperation(base,[{kind:'insert',parent:[],index:1,source:`<img src="ref:${ref.id}" />`}],{loadRef:refLoaderForActor(actor)});
+ const admission=await prepareGraphOperation(base,[{kind:'insert',parent:[],index:1,source:`<img src="ref:${ref.id}" />`}],{loadRef:refLoaderForActor(actor),publish:publishJsx});
  if(admission instanceof Response)throw new Error(await admission.text());
  await db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[ref.id]);
  expect(await commitGraphOperation(db,actor,editorScope(actor),admission)).toBeNull();
@@ -54,8 +55,8 @@ it('rejects a reference that changes after publication admission',async()=>{
 });
 it('rejects conflicting metadata changes without partially saving their node edits',async()=>{
  const {db,actor,base}=await setup();
- const first=await prepareGraphOperation(base,[{kind:'setAttribute',path:[0,0],name:'title',value:'First'}],{loadRef:async()=>null},{colorMode:'light'});
- const second=await prepareGraphOperation(base,[{kind:'setAttribute',path:[0,1],name:'title',value:'Second'}],{loadRef:async()=>null},{colorMode:'dark'});
+ const first=await prepareGraphOperation(base,[{kind:'setAttribute',path:[0,0],name:'title',value:'First'}],{loadRef:async()=>null,publish:publishJsx},{colorMode:'light'});
+ const second=await prepareGraphOperation(base,[{kind:'setAttribute',path:[0,1],name:'title',value:'Second'}],{loadRef:async()=>null,publish:publishJsx},{colorMode:'dark'});
  if(first instanceof Response||second instanceof Response)throw new Error('Unexpected rejection');
  expect(await commitGraphOperation(db,actor,editorScope(actor),first)).not.toBeNull();
  expect(await commitGraphOperation(db,actor,editorScope(actor),second)).toBeNull();
@@ -64,11 +65,11 @@ it('rejects conflicting metadata changes without partially saving their node edi
 
 it('applies a stale independent operation after a concurrent commit without a head read',async()=>{
  const {db,actor,row,base}=await setup();
- const first=await prepareGraphOperation(base,[{kind:'setText',path:[0,0,0],value:'First longer value'}],{loadRef:async()=>null});
+ const first=await prepareGraphOperation(base,[{kind:'setText',path:[0,0,0],value:'First longer value'}],{loadRef:async()=>null,publish:publishJsx});
  if(first instanceof Response)throw new Error(await first.text());
  const head=(await commitGraphOperation(db,actor,editorScope(actor),first))!;
  const stored=(await db.query<{document:typeof base.document}>('SELECT document FROM artifacts WHERE id=$1',[base.id])).rows[0]!;
- const next=await prepareGraphOperation({...base,version:head.version,document:stored.document,meta:head.meta},[{kind:'setText',path:[0,0,0],value:'Concurrent much longer text 👩'}],{loadRef:async()=>null});
+ const next=await prepareGraphOperation({...base,version:head.version,document:stored.document,meta:head.meta},[{kind:'setText',path:[0,0,0],value:'Concurrent much longer text 👩'}],{loadRef:async()=>null,publish:publishJsx});
  if(next instanceof Response)throw new Error(await next.text());
  expect(await commitGraphOperation(db,actor,editorScope(actor),next)).not.toBeNull();
  const update=documentEdit({...row,document:base.document},{source:row.source!.replace('Beta','Updated Beta')});

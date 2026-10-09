@@ -2,11 +2,11 @@ import {z} from 'zod';
 import type {DocumentGraph,DocumentResourcePreparation,RunnerJson} from '@artifactbin/contracts';
 import type {TokenActor} from '../artifacts';
 import {getEditableArtifactFor} from '../artifacts/store';
-import {OPERATIONS} from '../operations/registry';
-import {runOperation} from '../operations/http';
+import {OPERATIONS} from './registry';
+import {runOperation} from './http';
 import {json} from '../http/http';
 import {prepareClientDocument} from '../document/document-update-client';
-import {prepareDocumentAuthoringContext} from '@/lib/artifacts/write/document-authoring-context';
+import {prepareDocumentAuthoringContext} from '@/lib/story/publish/document-authoring-context';
 
 const names=['create_artifact','get_artifact','list_artifacts','query_resource','mutate_dataset'];
 const editInput=z.object({

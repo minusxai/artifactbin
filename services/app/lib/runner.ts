@@ -15,7 +15,7 @@ import { OPERATIONS } from './operations/registry';
 import { runOperation } from './operations/http';
 import { services } from './platform/services';
 import { json, readJson, isCrossSiteRequest } from './http';
-import {editHostedDocument} from './remote/tools';
+import {editHostedDocument} from './operations/hosted-tools';
 /** Published JSX is the default resolver; deployments/tests may supply another trusted compiler. */
 export type LambdaProgramResolver = (artifactId: string, userId: string) => Promise<{
     version: string;

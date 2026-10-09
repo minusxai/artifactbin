@@ -1,14 +1,14 @@
 /** Authoring-time IO for a client's affected context. Never reads or writes the
  * target document. The subsequent operation commit checks current permissions
  * and dependency revisions independently; this result is not a certificate. */
-import {catalogOf} from '../../datasets/catalog';
-import {retainUserScope} from '../../datasets/user-fields';
+import {catalogOf} from '@/lib/datasets/catalog';
+import {retainUserScope} from '@/lib/datasets/user-fields';
 import {MAX_DOCUMENT_BYTES,type DocumentResourcePreparation} from '@artifactbin/contracts';
-import {getDb} from '../../platform/db';
-import { editorScope, type TokenActor } from '../access';
-import { refLoaderForActor } from '../dataflow';
-import {json} from '../../http/http';
-import {prepareJsx} from '@/lib/story/document/jsx-tier';
+import {getDb} from '@/lib/platform/db';
+import { editorScope, type TokenActor } from '@/lib/artifacts/access';
+import { refLoaderForActor } from '@/lib/artifacts/dataflow';
+import {json} from '@/lib/http/http';
+import {prepareJsx} from '../document/jsx-tier';
 export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{
  if(typeof body.source!=='string'||Buffer.byteLength(body.source)>MAX_DOCUMENT_BYTES)return json({error:'invalid_authoring_context'},400);
  const db=await getDb(),scope=editorScope(actor);

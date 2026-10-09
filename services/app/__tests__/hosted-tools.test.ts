@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
 import {createUser} from '@/lib/accounts';
 import {runnerOperation} from '@/lib/runner';
-import {hostedOperationTools} from '@/lib/remote/tools';
+import {hostedOperationTools} from '@/lib/operations/hosted-tools';
 import {useAppHarness} from './harness';
 
 useAppHarness();

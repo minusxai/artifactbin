@@ -1,4 +1,4 @@
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility, writerFor } from './access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility } from './access';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -6,9 +6,6 @@ import { commitDocumentUpdate } from './write/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import type { ProseOperation } from '../document';
 import type { DocumentOperation } from '@artifactbin/contracts';
-import { createDocumentGraph } from '../document/document-graph';
-import { prepareClientDocumentPublication } from '../document/document-update-client';
-import { prepareDocumentAuthoringContext } from './write/document-authoring-context';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '../accounts/relation-state';
 import { documentMentions } from '../annotations/saved-mentions';
@@ -424,23 +421,6 @@ export async function commitNormalizedMarkup(
  const committed=await commitDocumentUpdate(tx,actor,scope,current.id,normalized.update);
  if(!committed?.applied)throw new Error('artifact changed after identity preparation');
  return committed.row;
-}
-
-/** Administrative authoring uses the same client compiler and commit contract. */
-export async function publishMarkupForArtifact(current:ArtifactRow,source:string,metaOverride:Record<string,unknown>=current.meta):Promise<Response|PreparedMarkupWrite>{
- const db=await getDb();
- const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
- const identity=stampNodeIds(source,{previousSource:current.source,reservedIds:reserved.rows.map(row=>row.source_id)});
- try{
-  const document=current.document?.kind==='graph'?current.document:createDocumentGraph(current.source??'',current.version);
-  const metadata={theme:(metaOverride.theme??null) as string|null,template:(metaOverride.template??null) as string|null,colorMode:(metaOverride.colorMode??null) as 'light'|'dark'|null};
-  const update=await prepareClientDocumentPublication({...current,document},{source:identity.source,metadata,whole:true},async context=>{
-   const response=await prepareDocumentAuthoringContext(writerFor(current),current.id,{source:context});
-   if(!response.ok)throw response;
-   return response.json();
-  });
-  return {source:identity.source,meta:metaOverride,ids:identity.ids,update};
- }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[`${error}`]},400);}
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {

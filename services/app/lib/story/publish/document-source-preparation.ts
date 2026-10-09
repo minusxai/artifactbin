@@ -2,11 +2,14 @@
  * compiler. It observes an authorized head but never commits or certifies it:
  * /edits independently checks ownership and graph dependencies at commit. */
 import {MAX_DOCUMENT_BYTES,type DocumentUpdate} from '@artifactbin/contracts';
-import {editorScope,type ArtifactRow,type TokenActor} from '../access';
-import {loadArtifactDocument} from '../document';
-import {getDb} from '../../platform/db';
-import {json} from '../../http/http';
-import {prepareClientDocumentPublication} from '../../document/document-update-client';
+import {editorScope,writerFor,type ArtifactRow,type TokenActor} from '@/lib/artifacts/access';
+import type {PreparedMarkupWrite} from '@/lib/artifacts/store';
+import {createDocumentGraph} from '@/lib/document/document-graph';
+import {stampNodeIds} from '@/lib/document/node-ids';
+import {loadArtifactDocument} from '@/lib/artifacts/document';
+import {getDb} from '@/lib/platform/db';
+import {json} from '@/lib/http/http';
+import {prepareClientDocumentPublication} from '@/lib/document/document-update-client';
 import {prepareDocumentAuthoringContext} from './document-authoring-context';
 
 export async function prepareDocumentSource(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{
@@ -30,4 +33,21 @@ export async function prepareDocumentSource(actor:TokenActor,id:string,body:Reco
   if(error instanceof Response)return error;
   return json({error:'invalid_markup',detail:error instanceof Error?error.message:'Invalid document source'},400);
  }
+}
+
+/** Administrative authoring uses the same client compiler and commit contract. */
+export async function publishMarkupForArtifact(current:ArtifactRow,source:string,metaOverride:Record<string,unknown>=current.meta):Promise<Response|PreparedMarkupWrite>{
+ const db=await getDb();
+ const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
+ const identity=stampNodeIds(source,{previousSource:current.source,reservedIds:reserved.rows.map(row=>row.source_id)});
+ try{
+  const document=current.document?.kind==='graph'?current.document:createDocumentGraph(current.source??'',current.version);
+  const metadata={theme:(metaOverride.theme??null) as string|null,template:(metaOverride.template??null) as string|null,colorMode:(metaOverride.colorMode??null) as 'light'|'dark'|null};
+  const update=await prepareClientDocumentPublication({...current,document},{source:identity.source,metadata,whole:true},async context=>{
+   const response=await prepareDocumentAuthoringContext(writerFor(current),current.id,{source:context});
+   if(!response.ok)throw response;
+   return response.json();
+  });
+  return {source:identity.source,meta:metaOverride,ids:identity.ids,update};
+ }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[`${error}`]},400);}
 }

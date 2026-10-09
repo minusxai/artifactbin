@@ -1,4 +1,4 @@
-import {hostedOperationTools} from '@/lib/remote/tools';
+import {hostedOperationTools} from '@/lib/operations/hosted-tools';
 import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
 import {startLambdaSchedules,setLambdaProgramResolver,type LambdaProgramResolver} from '@/lib/runner';
 import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notifications';
