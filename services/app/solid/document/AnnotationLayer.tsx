@@ -191,6 +191,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal<string | null>(null);
+  const [ambientResolveError, setAmbientResolveError] = createSignal<{ id: string; message: string } | null>(null);
   const [deleting, setDeleting] = createSignal<{ id: string; thread: boolean } | null>(null);
   const [confirmBusy, setConfirmBusy] = createSignal(false);
   const [confirmError, setConfirmError] = createSignal<string | null>(null);
@@ -512,6 +513,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       return true;
     } catch { return false; } finally { setBusy(false); }
   };
+  const resolveFromPreview = async (id: string) => {
+    setAmbientResolveError(null);
+    if (!await act(id, { resolve: true })) setAmbientResolveError({ id, message: 'Could not resolve this thread. Try again.' });
+  };
 
   const remove = async (annId: string) => {
     setBusy(true);
@@ -831,7 +836,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           <For each={placedIds()}>{(id) => (
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={recentResolved()[id]?.remaining}
-                hovered={hoverId() === id} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi} />
+                hovered={hoverId() === id} resolving={busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
+                onResolve={() => void resolveFromPreview(id)} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi} />
             )}</Show>
           )}</For>
         </div>
