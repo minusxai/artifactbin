@@ -1,3 +1,4 @@
+import {REMOTE_WORK_LIMIT} from '../../contracts/src/remote';
 import { setSession } from './harness';
 import {expect,it,afterEach} from 'vitest';
 import {useAppHarness} from './harness';
@@ -75,6 +76,7 @@ import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as comment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {POST as reply} from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import {remoteAgents} from '@/lib/remote/agents';
+import {POST as humanReply} from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import {remoteSessions} from '@/lib/remote/registry';
 afterEach(()=>remoteSessions.clear());
 it('commits mention delivery with the comment, authenticates receipts, and refuses resolving over a later human comment',async()=>{
@@ -228,4 +230,57 @@ it('a failure receipt preserves working status for another active request',async
  const failing=(await a.work(db,'artifact','failing'))[0];
  await db.transaction(tx=>a.receipt(tx,'owner','artifact','failing',{id:failing.id,sessionId:s.id,proof:s.runnerKey,phase:'failed'},false));
  expect((await a.read('owner',s.id)).activity).toBe('working');
+});
+
+it('routes a plain human clarification through the actual reply handler to the sole blocked agent',async()=>{
+ const user=await createUser({email:'mxmx_test_plain_clarification@example.test'}),token=await mintToken('plain-clarification',user.id);await claimToken(user.id,token.token);setSession({user:{id:user.id,email:token.email!}});
+ const cookie=await agentCookie([token.id]);const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="clarify">Budget</p>'}}));const doc=await made.json();const s=await remoteAgents.create(user.id,registration);
+ const root=await comment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',cookie,json:{node_id:'clarify',edit_id:doc.edit_id,body:`[@claude](/chat?session=${s.id}) Which currency?`}}),{params:Promise.resolve({id:doc.id})});expect(root.status).toBe(201);const thread=await root.json();const db=await getDb();const first=thread.remote_work[0];await remoteAgents.ready(user.id,s.id,s.runnerKey);const sent=await remoteAgents.exchange(user.id,s.id,exchange(s.runnerKey));for(const phase of ['acknowledged','blocked'] as const)await db.transaction(tx=>remoteAgents.receipt(tx,user.id,doc.id,thread.id,{id:first.id,sessionId:s.id,proof:s.runnerKey,phase},false));
+ const response=await humanReply(request(`/api/my/artifacts/${doc.id}/annotations/${thread.id}`,{method:'POST',cookie,json:{reply:'Use USD and ten percent.'}}),{params:Promise.resolve({id:doc.id,annId:thread.id})});expect(response.status).toBe(200);
+ const savedReply=(await response.json()).thread.at(-1);await db.transaction(tx=>remoteAgents.enqueue(tx,user.id,doc.id,thread.id,savedReply));
+ const work=await remoteAgents.work(db,doc.id,thread.id);expect(work).toHaveLength(2);expect(work[0]?.phase).toBe('superseded');expect(work[1]).toMatchObject({phase:'queued',sessionId:s.id});const next=await remoteAgents.exchange(user.id,s.id,{...exchange(s.runnerKey),ack:sent.inputs[0]!.id});expect(next.inputs).toHaveLength(1);expect(JSON.parse(next.inputs[0]!.data!)).toMatchObject({body:'Use USD and ten percent.',annotation_id:thread.id,artifact_id:doc.id});
+ expect((await remoteAgents.exchange(user.id,s.id,{...exchange(s.runnerKey),ack:next.inputs[0]!.id})).inputs).toHaveLength(0);
+ for(const phase of ['acknowledged','blocked'] as const)await db.transaction(tx=>remoteAgents.receipt(tx,user.id,doc.id,thread.id,{id:work[1]!.id,sessionId:s.id,proof:s.runnerKey,phase},false));
+ await db.transaction(tx=>remoteAgents.enqueue(tx,user.id,doc.id,thread.id,savedReply));expect((await remoteAgents.work(db,doc.id,thread.id))[1]?.phase).toBe('blocked');
+});
+
+async function blockedAdmissionFixture(harness='claude'){
+ const agents=fresh(),db=await getDb(),session=await agents.create('owner',{...registration,harness});
+ await db.transaction(tx=>agents.enqueue(tx,'owner','artifact','thread',{id:'thread',body:`[@agent](/chat?session=${session.id}) clarify`,author:{kind:'human',label:'Owner'}}));
+ await db.query("UPDATE remote_work SET phase='blocked' WHERE session_id=$1",[session.id]);
+ return {agents,db,session,reply:{id:'plain-reply',body:'Use USD',author:{kind:'human',label:'Owner'}}};
+}
+it.each(['claude','codex','pi','opencode'])('plain clarification targets the sole blocked %s agent',async harness=>{
+ const f=await blockedAdmissionFixture(harness);await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',f.reply));
+ expect(await f.agents.work(f.db,'artifact','thread')).toEqual([expect.objectContaining({phase:'superseded'}),expect.objectContaining({phase:'queued',sessionId:f.session.id})]);
+});
+it.each(['cancelled','completed','failed','uncertain','superseded','unavailable','queued','acknowledged'])('plain reply does not infer from %s work',async phase=>{
+ const f=await blockedAdmissionFixture();await f.db.query('UPDATE remote_work SET phase=$1 WHERE session_id=$2',[phase,f.session.id]);
+ await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',f.reply));expect(await f.agents.work(f.db,'artifact','thread')).toHaveLength(1);
+});
+it.each(['root','empty','agent','other-owner','other-artifact','other-thread','inactive','shell'])('refuses implicit clarification target for %s',async scenario=>{
+ const f=await blockedAdmissionFixture();if(scenario==='inactive')await f.db.query('UPDATE remote_agents SET active=false WHERE id=$1',[f.session.id]);
+ if(scenario==='shell')await f.db.query("UPDATE remote_agents SET info=info || '{\"runId\":\"raw-shell\"}'::jsonb WHERE id=$1",[f.session.id]);
+ await f.db.transaction(tx=>f.agents.enqueue(tx,scenario==='other-owner'?'other':'owner',scenario==='other-artifact'?'elsewhere':'artifact',scenario==='other-thread'?'elsewhere':'thread',{...f.reply,...(scenario==='root'?{id:'thread'}:{}),...(scenario==='empty'?{body:'  '} :{}),...(scenario==='agent'?{author:{kind:'agent',label:'Agent'}}:{})}));
+ expect((await f.db.query('SELECT id FROM remote_work')).rows).toHaveLength(1);expect((await f.agents.work(f.db,'artifact','thread'))[0]?.phase).toBe('blocked');
+});
+it('does not infer ambiguous blocked agents and keeps explicit mentions authoritative',async()=>{
+ const f=await blockedAdmissionFixture(),other=await f.agents.create('owner',{...registration,name:'codex',harness:'codex',recoveryKey:'b'.repeat(64)});
+ await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',{id:'second-request',body:`[@codex](/chat?session=${other.id}) clarify`,author:{kind:'human',label:'Owner'}}));await f.db.query("UPDATE remote_work SET phase='blocked' WHERE session_id=$1",[other.id]);
+ await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',f.reply));expect(await f.agents.work(f.db,'artifact','thread')).toHaveLength(2);
+ await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',{...f.reply,body:`[@codex](/chat?session=${other.id}) Use USD`}));
+ expect(await f.agents.work(f.db,'artifact','thread')).toEqual([expect.objectContaining({phase:'blocked',sessionId:f.session.id}),expect.objectContaining({phase:'superseded',sessionId:other.id}),expect.objectContaining({phase:'queued',sessionId:other.id})]);
+});
+
+it.each(['completed','failed','cancelled','queued'])('does not revive an older blocked row behind newer %s work',async phase=>{
+ const f=await blockedAdmissionFixture();await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',{...f.reply,id:'newer-request',body:`[@agent](/chat?session=${f.session.id}) Next request`}));
+ await f.db.query("UPDATE remote_work SET phase=CASE WHEN comment_id='thread' THEN 'blocked' ELSE $1 END,updated_at=CASE WHEN comment_id='thread' THEN now() ELSE now()-interval '1 hour' END WHERE session_id=$2",[phase,f.session.id]);
+ await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',{...f.reply,id:'later-plain'}));expect(await f.agents.work(f.db,'artifact','thread')).toHaveLength(2);
+});
+it('preserves the blocked clarification when capacity refuses its reply and can admit a later answer',async()=>{
+ const f=await blockedAdmissionFixture();
+ await f.db.query("INSERT INTO remote_work(id,owner,session_id,artifact_id,thread_id,comment_id,phase,data) SELECT 'full-'||n,owner,session_id,artifact_id,'other-thread-'||n,'other-comment-'||n,'queued',data FROM remote_work CROSS JOIN generate_series(1,$1::int) n WHERE comment_id='thread'",[REMOTE_WORK_LIMIT]);
+ await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',f.reply));expect(await f.agents.work(f.db,'artifact','thread')).toEqual([expect.objectContaining({phase:'blocked'}),expect.objectContaining({phase:'unavailable',reason:'queue_full'})]);
+ await f.db.query("DELETE FROM remote_work WHERE id LIKE 'full-%'");await f.db.transaction(tx=>f.agents.enqueue(tx,'owner','artifact','thread',{...f.reply,id:'later-answer'}));
+ expect((await f.agents.work(f.db,'artifact','thread')).at(-1)).toMatchObject({phase:'queued',sessionId:f.session.id});
 });

@@ -109,3 +109,17 @@ Observed actual RED after seeded expectations: chat-page1failed/36passed, unable
 ===CONCISE===
 
 Shared blocked status now says Waiting for input. Genuine RED→GREEN:1/36 to37/37; validation clean. No owned resources to clean up. Parent owns CI and deployed confirmation.
+
+## Plain human replies to blocked clarification
+
+The annotation transaction now infers a recipient only for a nonempty, unmentioned HUMAN reply (never the thread root) and only when the same owner/artifact/thread has exactly one active comment-capable agent whose latest admitted work is blocked. Sequence chronology, not recently updated timestamps, excludes older blocked rows behind completed, failed, cancelled or pending requests. Explicit mentions remain authoritative; raw Shell, other owners/artifacts/threads, inactive agents and ambiguous recipients are excluded. Native harnesses share this contract.
+
+Admission locks the selected agent and rechecks eligibility. Existing work for the same saved comment is recognized before supersession, so retries cannot duplicate the queue row or supersede a later blocked clarification. Queue-full inference records the refusal while preserving the blocked assignment; that refused work is not a newer admitted request, allowing a later answer after capacity frees. Explicit queue behavior otherwise retains its existing supersession semantics.
+
+Observed actual-handler RED1failed/36passed: the human reply persisted but work count remained1 instead of2. After inference, actual handler queues the plain answer, native relay delivers exactly one request, acknowledgment removes it, and replaying the saved comment remains idempotent after a later blocked result. Additional latest-work/queue-full tests observed genuine RED5failed/58passed before their fixes. One interim fixture import mistakenly used an unexported contracts subpath and collected zero tests; corrected to the existing source contract import before behavioral RED was recorded.
+
+Final fresh FAST: `npm run validate` passed; `npm test -- --files services/app/__tests__/remote-review.test.ts services/app/__tests__/remote-sessions.test.ts services/app/__tests__/hosted-comments.test.ts services/app/__tests__/annotations-events.test.ts` passed4files91tests; `git diff --check` passed. Tests include Claude/Codex/Pi/OpenCode, all excluded phases, scope boundaries, explicit/ambiguous recipients, replay and capacity recovery. No servers, browser/provider resources, SLOW gates, builds, pushes or production mutations were performed. Root owns exact deployed acceptance.
+
+===CONCISE===
+
+Plain answers resume only the sole latest-blocked owned recipient in that thread. Explicit targets override inference; duplicate admission and queue refusal are safe. Actual-handlerRED plus5edge-caseRED observed; validation+4files91tests passed. No resources remain.
