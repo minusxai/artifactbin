@@ -154,6 +154,13 @@ export function setSession(session: Session | (() => Session | null) | null): vo
 export interface AppHarness {
   /** The one open database of this file — an escape hatch for tests whose behaviour includes a direct row assertion. */
   db(): ReturnType<typeof getDb>;
+  /**
+   * ONE FIXTURE FOR A DESCRIBE WHOSE TESTS ONLY READ IT. Call inside a `describe`: before its first test the database
+   * is wiped once and `seed` runs; its tests then keep those rows (the per-test wipe is skipped, the drains, the rate
+   * limiter and the session still reset), and the next test outside it wipes as usual. Returns the seed's value. A
+   * test that writes builds its own fixture in a describe of its own, never in one of these.
+   */
+  shared<T>(seed: () => Promise<T>): () => T;
 }
 
 /**
@@ -164,19 +171,17 @@ export interface AppHarness {
  */
 export function useAppHarness(): AppHarness {
   let database: ReturnType<typeof getDb> | undefined;
+  /** Set while a `shared` describe runs: its tests keep the rows its seed wrote. */
+  let keepRows = false;
 
-  beforeAll(() => {
-    database = getDb();
-    return database;
-  });
-
-  beforeEach(async () => {
+  const wipe = async () => {
     const db = await database!;
     // A publish prepares its page after the response (lib/story/prepared/prepared-page.server): let the last
     // test's finish before its rows go, so no warm-up writes into the next test's database.
     await drainPreparedPageWarmups();
     // Likewise a guest-snapshot revalidation a write queued (server/app enables them).
     await drainSnapshotRevalidations();
+    if (keepRows) return;
     // The schema is declared parent-first. Reverse it so a future foreign key
     // can never make the shared wipe depend on a copied cleanup list.
     for (const table of SCHEMA_TABLES.toReversed()) {
@@ -188,6 +193,15 @@ export function useAppHarness(): AppHarness {
     // every other file's wipe stays a no-op rather than an error.
     const present = await db.query<{ present: boolean }>('SELECT to_regclass($1) IS NOT NULL AS present', [`${EVENTS_SCHEMA}.events`]);
     if (present.rows[0]?.present) await db.query(`DELETE FROM ${EVENTS_SCHEMA}.events`);
+  };
+
+  beforeAll(() => {
+    database = getDb();
+    return database;
+  });
+
+  beforeEach(async () => {
+    await wipe();
     resetRateLimit();
     overrideSession(undefined);
   });
@@ -210,6 +224,22 @@ export function useAppHarness(): AppHarness {
 
   return {
     db: () => database ?? getDb(),
+    shared<T>(seed: () => Promise<T>) {
+      let seeded: { value: T } | undefined;
+      beforeAll(async () => {
+        await wipe();
+        resetRateLimit();
+        overrideSession(undefined);
+        seeded = { value: await seed() };
+        await drainPreparedPageWarmups();
+        keepRows = true;
+      });
+      afterAll(() => { keepRows = false; seeded = undefined; });
+      return () => {
+        if (!seeded) throw new Error('harness.shared: read its value inside a test of the describe that seeded it');
+        return seeded.value;
+      };
+    },
   };
 }
 
