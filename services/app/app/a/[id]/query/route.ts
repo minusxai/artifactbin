@@ -4,7 +4,7 @@ import { json, readJson } from '@/lib/http';
 import { sessionActor } from '@/lib/accounts';
 import { parseQueryRequest, type QueryRequest } from '@/lib/story/data/query-request';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
-import { LocalStateInputError } from '@/lib/story/datasets';
+import { LocalStateInputError } from '@/lib/dataflow';
 import {DatasetError} from '@/lib/datasets/errors';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
@@ -117,7 +117,7 @@ async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleA
 
 /**
  * `{hold}` — every row of one import the document declares, for a reader's
- * page that runs its queries itself (lib/story/data/placement). Decided for THIS
+ * page that runs its queries itself (lib/dataflow/placement). Decided for THIS
  * door's viewer on every request (lib/artifacts holdImport): the island's
  * `hold` is only a hint. Anything else — an undeclared name, a ref, a dataset
  * the viewer may not read, a connected database, past the cap — is one answer,

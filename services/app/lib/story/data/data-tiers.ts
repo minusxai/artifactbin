@@ -27,9 +27,7 @@ import { sniffAssetType } from '@/lib/web-ingest/sniff';
 import type { StoredContent } from '../document/input';
 import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
 
-export type { DatasetColumn } from '../datasets/dataset-shape';
-import { inferColumns } from '../datasets/dataset-shape';
-import type { ColumnType, DatasetColumn } from '../datasets/dataset-shape';
+import { inferColumns, type ColumnType, type DatasetColumn } from '@/lib/dataflow/dataset-shape';
 
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}([T ].*)?$/;

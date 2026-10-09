@@ -959,7 +959,7 @@ async function pickLeg(browser, { id, token }) {
  * PINS THAT FOLLOW THE ITEM, on declarative content (from the former comment-targets gate): a keyed repeat, a
  * DataTable cell and an unkeyed list, each commented by a real pick, then reordered, renamed, removed, restored and
  * reloaded. What stays is what the frame paints. The target GRAMMAR (`repeat` scope keys,
- * `{kind:'table',rowKey,columnKey}`) is parsed in services/app/lib/story/__tests__/comment-target.test.ts; the exact
+ * `{kind:'table',rowKey,columnKey}`) is parsed in services/app/lib/story-ui/__tests__/comment-target.test.ts; the exact
  * values a browser click produces (`order-101`, an unkeyed owner's null range) are no longer asserted, and the
  * words-and-area comments on the unkeyed list, which asserted only those values, are dropped with them.
  */

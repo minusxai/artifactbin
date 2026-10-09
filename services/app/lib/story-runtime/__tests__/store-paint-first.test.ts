@@ -14,7 +14,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { createDataflowStore, type QueryTransport } from '../store';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 
 const rows = (n: number) => ({ rows: [{ v: n }], columns: [{ name: 'v', type: 'number' as const }] });

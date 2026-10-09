@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkDocumentData, vegaLiteStructureError } from '../data/data-checks';
-import type { DatasetColumn } from '../datasets/dataset-shape';
-import type { RefLoader } from '../data/refs';
+import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import type { RefLoader } from '@/lib/dataflow/refs';
 
 const DS = 'abc123';
 const columns: DatasetColumn[] = [

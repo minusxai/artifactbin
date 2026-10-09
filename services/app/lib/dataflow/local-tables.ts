@@ -1,5 +1,5 @@
-import { scalarMatches, type Row, type TableResult } from '../data/dataflow';
-import type { CompiledDataflow } from '../data/compiled-dataflow';
+import { scalarMatches, type Row, type TableResult } from './dataflow';
+import type { CompiledDataflow } from './compiled-dataflow';
 import type { DatasetColumn } from './dataset-shape';
 
 export class LocalStateInputError extends Error {}

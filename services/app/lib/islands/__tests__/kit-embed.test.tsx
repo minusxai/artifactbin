@@ -12,7 +12,7 @@ import { DeckGL } from '../kit/embed';
 import * as dataFamily from '../kit/data';
 import { KIT_FAMILIES } from '../contract';
 import type { IslandContext } from '../contract';
-import type { TableResult } from '@/lib/story/data/dataflow';
+import type { TableResult } from '@/lib/dataflow/dataflow';
 
 vi.mock('../kit/embed/deck-engine', () => ({
   mountDeckEngine: (box: HTMLElement, props: { rows: () => readonly Record<string, unknown>[]; height: number }) => {

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { DISPLAY_ROWS } from '@artifactbin/contracts';
 import { runDataflow, runDataflowMany } from '@/lib/sql/run-dataflow';
-import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/data/compiled-dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/dataflow/compiled-dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 
 const SALES = {

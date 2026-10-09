@@ -18,9 +18,9 @@
  */
 import { QUERY_REQUEST_PARAM } from './contract';
 import type { QueryTransport } from './store';
-import type { DataflowState, TableResult } from '@/lib/story/data/dataflow';
-import { localZone } from '@/lib/story/data/builtins';
-import type { ImportTables } from '@/lib/story/data/compiled-flow';
+import type { DataflowState, TableResult } from '@/lib/dataflow/dataflow';
+import { localZone } from '@/lib/dataflow/builtins';
+import type { ImportTables } from '@/lib/dataflow/compiled-flow';
 import type { PersonCard } from '@artifactbin/contracts';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -82,7 +82,7 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
     },
     /*
      * The WRITE, when this document is the page: a POST of the mutation request
-     * (lib/story/datasets/mutation-request) to the one write URL its CSP admits.
+     * (lib/dataflow/mutation-request) to the one write URL its CSP admits.
      * With the session (a signed-in page), it carries it: the write is the reader's.
      *
      * `text/plain` deliberately — that keeps it a SIMPLE request, so an opaque
@@ -93,9 +93,9 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
      */
     ...(mutateUrl
       ? {
-        mutate: async (request: import('@/lib/story/datasets/mutation-request').MutationRequest) => {
+        mutate: async (request: import('@/lib/dataflow/mutation-request').MutationRequest) => {
           const res = await post(mutateUrl, { tz: localZone(), ...request });
-          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; mutationRunId?:string; local?: import('@/lib/story/datasets/local-state').LocalMutationResult; error?: string; detail?: string };
+          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; mutationRunId?:string; local?: import('@/lib/dataflow/local-state').LocalMutationResult; error?: string; detail?: string };
           if (!res.ok || !body.ok) throw new Error(body.detail ?? body.error ?? `write failed (${res.status})`);
           return { dataset: body.dataset ?? '', local: body.local, mutationRunId: body.mutationRunId };
         },

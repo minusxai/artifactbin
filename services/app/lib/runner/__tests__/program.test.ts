@@ -2,7 +2,7 @@ import { runInNewContext } from 'node:vm';
 import { transform } from 'esbuild';
 import { describe, expect, it, vi } from 'vitest';
 import { buildLambdaModule } from '../program.server';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 import type { RunAnswer } from '@/lib/story-runtime/dataflow-core';
 
 const flow: CompiledDataflow = {

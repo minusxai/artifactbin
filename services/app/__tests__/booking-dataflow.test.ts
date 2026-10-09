@@ -21,7 +21,7 @@ import { request, useAppHarness } from './harness';
 useAppHarness();
 
 const GOLDEN = readFileSync(new URL('../lib/story/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
-const SNAPSHOT = JSON.parse(readFileSync(new URL('../lib/story/__tests__/__snapshots__/booking.compiled.json', import.meta.url), 'utf8'));
+const SNAPSHOT = JSON.parse(readFileSync(new URL('../lib/dataflow/__tests__/__snapshots__/booking.compiled.json', import.meta.url), 'utf8'));
 const COLUMNS = [
   { name: 'id', type: 'string' }, { name: 'day', type: 'date' }, { name: 'slot', type: 'string' },
   { name: 'booked_by', type: 'user' }, { name: 'note', type: 'string' }, { name: 'created_at', type: 'timestamp' },

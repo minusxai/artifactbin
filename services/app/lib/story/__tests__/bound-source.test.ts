@@ -1,5 +1,5 @@
 /**
- * BOUND IMAGE SOURCES — the grammar half (lib/story/data/dataflow.ts).
+ * BOUND IMAGE SOURCES — the grammar half (lib/dataflow/dataflow.ts).
  *
  * `<img src="$pick">` is a scalar reference like any other, and an image `src`
  * is the ONE position that also reads a reference inside the string
@@ -13,7 +13,7 @@ import { type JsxNode } from '@/lib/jsx';
 import {
   carriesRef, collectRefNameUses, isTemplateRefPosition, REF_ATTRS, resolveRefTemplate, templateRefNames,
   validateDataflow, type Dataflow, type Scalar,
-} from '@/lib/story/data/dataflow';
+} from '@/lib/dataflow/dataflow';
 import { assetUrlFor, runtimeAssetUrl } from '@/lib/story/assets/asset-url';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 

@@ -2,7 +2,7 @@
 /** A separate kit family: upload UI and page bindings load only on pages using FileUpload. */
 import { For, Show, createEffect, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { DEFAULT_UPLOAD_MAX_BYTES, type DatasetUploadResult } from '@artifactbin/contracts';
-import { refName } from '@/lib/story/data/dataflow';
+import { refName } from '@/lib/dataflow/dataflow';
 import { bindPage } from '@/lib/story-runtime/page-bindings';
 import { useIsland } from '../../context';
 

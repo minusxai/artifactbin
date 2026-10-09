@@ -20,7 +20,7 @@
  */
 import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { DataflowState } from '@/lib/story/data/dataflow';
+import type { DataflowState } from '@/lib/dataflow/dataflow';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/realtime/live';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from '@/lib/story-runtime/store';
@@ -139,7 +139,7 @@ export type ImageChoice = { ok: true; image: ChosenImage } | { ok: false; error:
 
 /** A draft's query results (POST /api/query). */
 /** A draft's rows, and its compiled declarations (null when the draft does not compile yet). */
-export type DraftQueryResult = Pick<DataflowState, 'tables' | 'errors'> & { flow?: import('@/lib/story/data/compiled-dataflow').CompiledDataflow | null };
+export type DraftQueryResult = Pick<DataflowState, 'tables' | 'errors'> & { flow?: import('@/lib/dataflow/compiled-dataflow').CompiledDataflow | null };
 
 /** One window of a dataset's rows (POST /a/<ref>/tables), as the notebook reads it. */
 export interface DatasetTableRead {

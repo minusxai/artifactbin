@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /** Inert rail miniatures for live controls. Their authored props are data from the compiler. */
 import type { JSX } from 'solid-js';
-import { refName } from '@/lib/story/data/dataflow';
+import { refName } from '@/lib/dataflow/dataflow';
 
 type Props = Record<string, unknown>;
 const str = (value: unknown): string | undefined => typeof value === 'string' ? value : undefined;

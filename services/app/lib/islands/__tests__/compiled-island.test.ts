@@ -19,7 +19,7 @@ import path from 'node:path';
 import * as rt from '../rt';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 import type { IslandRef } from '@/lib/compiled-page/contract';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import type { DataflowStore } from '@/lib/story-runtime/store';

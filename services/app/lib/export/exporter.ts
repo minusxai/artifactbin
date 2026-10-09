@@ -22,7 +22,7 @@ import { VERSION_PARAM } from '../serving/archived-version';
 import { mintExportKey } from '../serving/export-read-key';
 import { json } from '../http/http';
 import { objectStore } from '../object-store/index';
-import { urlSelection } from '../story/data/index';
+import { urlSelection } from '@/lib/dataflow';
 import { SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage, type SocialPreviewCrop } from '../story/assets/index';
 
 const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
@@ -110,7 +110,7 @@ export function exportCacheKey(
   format: ExportFormat,
   capture: ExportCapture,
   slide = 0,
-  /** The CANONICAL selection token (lib/story/data/url-values urlSelection), never raw params. */
+  /** The CANONICAL selection token (lib/dataflow/url-values urlSelection), never raw params. */
   selection = '',
   /** The ARCHIVED version this shot is of (`?version=N`), or null for the head. */
   version: number | null = null,

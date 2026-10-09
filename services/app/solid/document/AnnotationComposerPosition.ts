@@ -1,5 +1,5 @@
 import type { StoryEditSelection } from '@/lib/story-runtime/contract';
-import { APP_BAR_H } from '@/lib/story/reader/edit-bar';
+import { APP_BAR_H } from '@/lib/story-ui/edit-bar';
 
 /** Frame-relative selections stay beside their document node and clear the rail. */
 export function positionedComposer(selection: StoryEditSelection, frame: Pick<DOMRect, 'left' | 'top' | 'width'>,

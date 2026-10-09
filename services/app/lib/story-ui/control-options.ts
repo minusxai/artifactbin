@@ -1,4 +1,5 @@
-import { refName, type TableResult } from '@/lib/story/data/dataflow';
+/** A reader-kit helper (lib/story-ui): a bound control's authored `options` as one list (the offline file enumerates them, lib/offline/variants). */
+import { refName, type TableResult } from '@/lib/dataflow/dataflow';
 
 export interface ControlOption { value: string; label: string }
 

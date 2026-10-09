@@ -1,6 +1,6 @@
 /** Ephemeral server compile for an editor's unsaved source. */
 import { getArtifactById, dataflowForRow, declarationsForRow, refDataForRow } from '@/lib/artifacts';
-import { readUrlValues } from '@/lib/story/data';
+import { readUrlValues } from '@/lib/dataflow';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
@@ -13,7 +13,7 @@ import { STORY_DESIGN_NAMES, type StoryDesignName } from '@/lib/validation/atlas
 import { collectExternalAssetUrls } from '@/lib/story/assets';
 import { lookupWebAssets } from '@/lib/serving';
 import { createHash } from 'node:crypto';
-import { collectRefUses } from '@/lib/story/data';
+import { collectRefUses } from '@/lib/dataflow/server';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { inlineStoryCss } from '@/lib/story/styles/inline-css';
 

@@ -217,7 +217,7 @@ function validateElement(
 
   /**
    * The document's DATA declarations are Helmet children, never body nodes
-   * (lib/story/data/dataflow.ts). Named here so an author who writes one in the body
+   * (lib/dataflow/dataflow.ts). Named here so an author who writes one in the body
    * is told where it goes instead of only that it is unknown.
    */
   const HELMET_ONLY_COMPONENTS: Record<string, string> = {

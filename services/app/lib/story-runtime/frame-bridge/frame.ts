@@ -22,7 +22,7 @@
  * page's `restored` has drawn the saved version, as the app page's in-page mount does for its lifetime.
  */
 import { createIslandController, type IslandStoryController } from '@/lib/story-runtime/island-controller';
-import { writeUrlValues } from '@/lib/story/data/url-values';
+import { writeUrlValues } from '@/lib/dataflow/url-values';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { ISLANDS_READY_EVENT, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';

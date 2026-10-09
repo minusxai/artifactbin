@@ -144,7 +144,7 @@ async function votesLeg() {
      * Measured by a SENTINEL on the window rather than by counting navigation
      * events. A reload is what wipes it, and only a reload — where `framenavigated`
      * also fires for a SAME-DOCUMENT history write, which a reader's `<Value>` pick
-     * now makes (their choice travels in the address bar: lib/story/data/url-values).
+     * now makes (their choice travels in the address bar: lib/dataflow/url-values).
      */
     const sentinel = async (frame) => frame.evaluate(() => { window.__mxNoReload = 1; });
     const stillAlive = async (frame) => frame.evaluate(() => window.__mxNoReload === 1).catch(() => false);

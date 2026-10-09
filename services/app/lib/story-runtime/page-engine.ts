@@ -2,14 +2,14 @@
  * THE PAGE'S OWN ENGINE — the SQLite core (`@artifactbin/sql/core`, the same
  * wasm and functions the server runs) over the imports this reader holds, in
  * memory, on the main thread. The store (lib/story-runtime/store) sends it the
- * nodes placed in the browser (lib/story/data/placement) and the server the rest.
+ * nodes placed in the browser (lib/dataflow/placement) and the server the rest.
  *
  * It answers what the server would, by running the SAME code: the dataflow
  * evaluator (lib/sql/dataflow-core) for reads — over ONE database the page
  * keeps open (SqliteEngine.held), so a held dataset crosses into SQLite once,
  * not on every run — the write signature
- * (lib/story/datasets/mutation-request bindMutationRequest) and the local-table write
- * (lib/story/datasets/local-state) for writes, the same display window for what a run
+ * (lib/dataflow/mutation-request bindMutationRequest) and the local-table write
+ * (lib/dataflow/local-state) for writes, the same display window for what a run
  * returns. The only thing it owns is what it HOLDS:
  *
  *  - each held DATASET, fetched once (QueryTransport.hold, by the first import
@@ -32,12 +32,12 @@ import type { MutationInput, Row, Scalar } from '@artifactbin/contracts';
 import { DISPLAY_ROWS, isQueryFailure } from '@artifactbin/contracts';
 import type { HeldDatabase, SqliteEngine } from '@artifactbin/sql/core';
 import { evaluateDataflow } from '@/lib/sql/dataflow-core';
-import type { CompiledDataflow, CompiledMutation } from '@/lib/story/data/compiled-dataflow';
-import { importRef, mutationReads, type ImportTables } from '@/lib/story/data/compiled-flow';
-import type { TableResult } from '@/lib/story/data/dataflow';
-import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/datasets/local-state';
-import { localTableOverrides } from '@/lib/story/datasets/local-tables';
-import { bindMutationRequest, type MutationRequest } from '@/lib/story/datasets/mutation-request';
+import type { CompiledDataflow, CompiledMutation } from '@/lib/dataflow/compiled-dataflow';
+import { importRef, mutationReads, type ImportTables } from '@/lib/dataflow/compiled-flow';
+import type { TableResult } from '@/lib/dataflow/dataflow';
+import { runLocalStateMutation, type LocalMutationResult } from '@/lib/dataflow/local-state';
+import { localTableOverrides } from '@/lib/dataflow/local-tables';
+import { bindMutationRequest, type MutationRequest } from '@/lib/dataflow/mutation-request';
 import type { RunAnswer } from './dataflow-core';
 
 /** The one deadline and write cap every composition applies (services/sql caps). */

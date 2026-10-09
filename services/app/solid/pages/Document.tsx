@@ -34,7 +34,7 @@ import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
 import { EditEntryChrome } from '../editor/EditEntryChrome';
 import { createIsPhoneViewport } from '../components/MobileSheet';
-import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/reader/edit-bar';
+import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
 import type { EditorArtifact } from '../editor/InPlaceEditor';
 import { TrustedUi } from '../components/TrustedUi';

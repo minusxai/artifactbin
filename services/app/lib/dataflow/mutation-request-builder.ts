@@ -1,7 +1,7 @@
 /** The browser-safe write envelope, without the server's request parser or scalar validation. */
-import type { Row, Scalar } from '../data/dataflow';
-import { rowField } from '../data/builtins';
-import type { CompiledMutation } from '../data/compiled-dataflow';
+import type { Row, Scalar } from './dataflow';
+import { rowField } from './builtins';
+import type { CompiledMutation } from './compiled-dataflow';
 import type { MutationRequest } from './mutation-request';
 
 export function mutationRequestFor(m: Pick<CompiledMutation, 'name' | 'args' | 'reads'>, input: { values: Record<string, Scalar>; args?: Record<string, Scalar>; row?: Record<string, Scalar>; value?: Scalar; tz?: string; localTables?: Record<string, Row[]> }): MutationRequest {

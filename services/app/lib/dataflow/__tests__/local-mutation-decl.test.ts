@@ -6,8 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { runDataflow } from '@/lib/sql/run-dataflow';
-import { dataRefs, queriesReadingValues } from '../data/compiled-flow';
-import { collectRefUses } from '../data/refs';
+import { dataRefs, queriesReadingValues } from '../compiled-flow';
+import { collectRefUses } from '../refs';
 import { compiledOf } from '@/test/helpers/compiled';
 
 const HELMET = '<Value name="open" type="boolean" default={false} /><Value name="drafts" type="table" value={[{"id": 1}]} />';

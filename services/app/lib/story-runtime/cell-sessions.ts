@@ -1,4 +1,4 @@
-import type { Scalar } from '../story/data/dataflow';
+import type { Scalar } from '@/lib/dataflow/dataflow';
 
 /** Immutable snapshots shared by every mounted view of a cell. */
 interface CellSession {

@@ -1,14 +1,15 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { declarationsOf } from '../document/helmet';
-import { isEmptyDataflow, scalarMatches } from './dataflow';
-import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from './compiled-dataflow';
-import { compileWithLoader, type CompileResult, type SchemaLoader } from './compile-dataflow';
+import { isEmptyDataflow, scalarMatches } from '@/lib/dataflow/dataflow';
+import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { compileWithLoader, type CompileResult, type SchemaLoader } from '@/lib/dataflow/compile-dataflow';
+import { sqlExtensions } from '@/lib/sql/extensions';
 
 /**
  * A MARKUP DOCUMENT'S COMPILED DATAFLOW, stored in `meta.parsedArtifact` beside
  * the source it was compiled from. Compiling needs the imported artifacts in
- * hand (lib/story/data/compile-dataflow), so it happens at the publish door, before
+ * hand (lib/dataflow/compile-dataflow), so it happens at the publish door, before
  * any transaction opens; the commit only re-binds the record to the FINAL
  * source (node ids are stamped after the door) and stores it. A reader whose
  * record is missing or stale recompiles with the document owner's loader.
@@ -114,7 +115,7 @@ export async function readCompiledDataflow(meta: unknown, source: string, load: 
   const flow = declarationsOf(source);
   if (!flow) return null;
   if (isEmptyDataflow(flow)) return { ok: true, compiled: EMPTY_COMPILED_DATAFLOW };
-  return compileWithLoader(flow, load);
+  return compileWithLoader(flow, load, { extensions: sqlExtensions() });
 }
 
 /**

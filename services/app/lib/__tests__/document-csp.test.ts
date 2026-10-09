@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildDocumentCsp } from '@/lib/story/styles/document-csp';
-import { FRAME_HOSTS } from '@/lib/story/styles/document-sources';
+import { FRAME_HOSTS } from '@/lib/story-ui/document-sources';
 
 const SELF = 'https://416233784b39.pages.example.com';
 const APP = 'https://app.example.com';

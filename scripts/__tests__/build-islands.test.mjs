@@ -123,7 +123,7 @@ describe('buildIslands', () => {
     const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     const all = Object.values(outputInputs).flat();
     const modules = closure([manifest['@mx/rt'], manifest['@mx/boot']]).flatMap((url) => outputInputs[url]);
-    for (const name of ['story/annotations/comment-target.ts', 'contracts/src/comment-view-state.ts']) {
+    for (const name of ['story-ui/comment-target.ts', 'contracts/src/comment-view-state.ts']) {
       expect(all.some((input) => input.endsWith(name)), `${name} is in the build at all`).toBe(true);
       expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
     }

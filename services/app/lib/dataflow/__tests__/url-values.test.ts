@@ -8,8 +8,8 @@
  * the values that differ from the declared defaults, keeping every non-`$` param.
  */
 import { describe, expect, it } from 'vitest';
-import { readUrlValues, withUrlValuesOf, writeUrlValues } from '@/lib/story/data/url-values';
-import type { Dataflow } from '@/lib/story/data/dataflow';
+import { readUrlValues, withUrlValuesOf, writeUrlValues } from '@/lib/dataflow/url-values';
+import type { Dataflow } from '@/lib/dataflow/dataflow';
 
 const flow: Dataflow = {
   values: [

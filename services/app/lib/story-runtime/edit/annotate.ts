@@ -2,7 +2,7 @@ import { reviewStateFor, withReviewState } from '../review-state';
 'use client';
 
 import { COMMENT_PRESENTATION } from '../comment-presentation';
-import { COMMENT_TARGET_ATTR, COMMENT_OWNER_ATTR, parseCommentTarget } from '@/lib/story/annotations/comment-target';
+import { COMMENT_TARGET_ATTR, COMMENT_OWNER_ATTR, parseCommentTarget } from '@/lib/story-ui/comment-target';
 
 /**
  * THE ANNOTATION LAYER, INSIDE THE DOCUMENT — the frame half of annotations,

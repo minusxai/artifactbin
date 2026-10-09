@@ -1,7 +1,7 @@
 /** The one conversion from a Question viz prop to a chart envelope. */
-import type { TableResult } from '@/lib/story/data/dataflow';
-import type { RefDataMap } from '@/lib/story/data/ref-data';
-import { columnVizKind } from '@/lib/story/datasets/dataset-shape';
+import type { TableResult } from '@/lib/dataflow/dataflow';
+import type { RefDataMap } from '@/lib/dataflow/ref-data';
+import { columnVizKind } from '@/lib/dataflow/dataset-shape';
 import { materializeFileRecipe } from '@/lib/viz/recipe-file';
 import type { VizResultColumn } from '@/lib/viz/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';

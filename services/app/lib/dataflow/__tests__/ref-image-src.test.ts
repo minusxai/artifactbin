@@ -6,7 +6,7 @@
  * violation (scripts/gates/gate-full-kit.mjs caught it).
  */
 import { describe, expect, it } from 'vitest';
-import { resolveRefImageSrc, resolveRefProps, type RefDataMap } from '@/lib/story/data/ref-data';
+import { resolveRefImageSrc, resolveRefProps, type RefDataMap } from '@/lib/dataflow/ref-data';
 
 const REF_DATA: RefDataMap = {
   img123: { kind: 'image', url: '/a/img123/raw?v=3' },

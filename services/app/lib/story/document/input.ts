@@ -118,7 +118,7 @@ export interface ContentInputCtx {
    */
   creating?: boolean;
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
-  loadRef?: import('../data/refs').RefLoader;
+  loadRef?: import('../data/data-checks').ServerRefLoader;
   /**
    * "Is the caller already over their stored-byte quota?" — asked BEFORE a
    * tier stores something large, and answered by lib/asset-quota under the

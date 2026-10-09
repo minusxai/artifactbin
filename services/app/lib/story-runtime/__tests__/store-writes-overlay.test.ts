@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { ACCESS_PENDING, createDataflowStore, type StoreWriteEvent } from '@/lib/story-runtime/store';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 
 const reads = (r: Partial<CompiledDataflow['queries'][number]['reads']> = {}) => ({ imports: [], queries: [], values: [], builtins: [], ...r });
 const flow: CompiledDataflow = {

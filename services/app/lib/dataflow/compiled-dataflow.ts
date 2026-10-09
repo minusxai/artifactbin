@@ -6,7 +6,7 @@
  * server that executes queries, the runtime that decides what to re-run and
  * where, the view that binds results — reads this record and never SQL text.
  *
- * Types only. The compiler (lib/story/data/compile-dataflow) produces it; it is
+ * Types only. The compiler (lib/dataflow/compile-dataflow) produces it; it is
  * stored in `meta.parsedArtifact` and shipped to the runtime in the island.
  */
 import type { ColumnType, DatasetColumn } from '@artifactbin/contracts';

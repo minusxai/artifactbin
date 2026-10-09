@@ -1,4 +1,4 @@
-import { COMMENT_TARGET_ATTR } from '@/lib/story/annotations/comment-target';
+import { COMMENT_TARGET_ATTR } from '@/lib/story-ui/comment-target';
 /**
  * THE SELECTION, DESCRIBED FROM ITS ANCHOR — the frame half of a comment's quote.
  *

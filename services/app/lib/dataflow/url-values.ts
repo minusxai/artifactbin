@@ -8,7 +8,7 @@
  * grammar.
  *
  * Why `$name` and not a bare name: it is the document's OWN binding syntax
- * (`value="$season"`, `$season` inside SQL — lib/story/data/dataflow), so a reader
+ * (`value="$season"`, `$season` inside SQL — lib/dataflow/dataflow), so a reader
  * who sees the address bar sees the thing the author declared; and it cannot
  * collide with the keys the server itself reads on `/a/<id>` (`key`, `w`, `v`,
  * `chrome`, `edit`, `comment` — app/a/[id]/raw/route.ts), none of which may
@@ -27,7 +27,7 @@
  *    and every param that is not ours survives the round trip untouched.
  */
 import { coerceScalarInput, scalarMatches, type Scalar } from './dataflow';
-import type { ColumnType } from '../datasets/dataset-shape';
+import type { ColumnType } from './dataset-shape';
 
 /** What the link rules read of a document: its declared values (parsed or compiled). */
 type Declared = { values: ReadonlyArray<{ kind: 'scalar' | 'table'; name: string; type?: ColumnType | 'table'; default?: Scalar; url?: false }> };

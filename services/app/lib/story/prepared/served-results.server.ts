@@ -51,9 +51,9 @@ import { dataflowForRow } from '@/lib/artifacts/dataflow';
 import { getArtifactById } from '@/lib/artifacts/store';
 import { getDb } from '@/lib/platform/db';
 import { DatasetError } from '@/lib/datasets/errors';
-import type { CompiledDataflow } from '../data/compiled-dataflow';
-import { dataRefs, selectQueries } from '../data/compiled-flow';
-import { readUrlValues } from '../data/url-values';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { dataRefs, selectQueries } from '@/lib/dataflow/compiled-flow';
+import { readUrlValues } from '@/lib/dataflow/url-values';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 
 /**

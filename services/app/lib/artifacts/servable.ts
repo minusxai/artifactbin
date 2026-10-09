@@ -2,7 +2,7 @@
  * A STORED DOCUMENT THE CURRENT CODE STILL SERVES — or the one refusal for one it no longer does.
  *
  * Two stored shapes are retired, and nothing converts them any more:
- *  - a markup row without `meta.dataSyntax: 2` (lib/story/data/data-syntax): written for the
+ *  - a markup row without `meta.dataSyntax: 2` (lib/dataflow/data-syntax): written for the
  *    previous query engine, whose converter was deleted once production had run it;
  *  - a markup row whose stored document is not a graph this code decodes. lib/artifacts/document
  *    hands such a row back with `source: null` beside the `document` it could not read; a row with
@@ -15,7 +15,7 @@
  * trashed heads, and the database dump taken before the backfills holds their bytes.
  */
 import { json } from '../http/http';
-import { hasCurrentDataSyntax } from '../story/data/data-syntax';
+import { hasCurrentDataSyntax } from '@/lib/dataflow/data-syntax';
 
 const STATUS = 410;
 const CODE = 'unservable_document';

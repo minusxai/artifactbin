@@ -10,6 +10,9 @@
  * So the door refuses a bad spec by name, and a renderer that meets one
  * anyway — a document published before the door checked — falls back to the
  * default format rather than taking the document down.
+ *
+ * In the data language (lib/dataflow), not the reader kit: the reference checks (./refs) are the door
+ * that refuses a bad spec, and lib/dataflow imports nothing above it.
  */
 import { format as d3format } from 'd3-format';
 

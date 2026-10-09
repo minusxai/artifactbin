@@ -20,7 +20,7 @@
  * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
-import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from './document-sources';
+import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from '@/lib/story-ui/document-sources';
 import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/story/document/csp-extensions';
 
 export interface DocumentCspInput {

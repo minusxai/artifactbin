@@ -20,11 +20,11 @@
  */
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
-import { controlOptions as optionsOf, type ControlOption as Option, refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/story/data/dataflow';
+import { controlOptions as optionsOf, type ControlOption as Option, refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/dataflow/dataflow';
 import { substituteRow } from '@/lib/jsx/row-scope';
-import { VIEWER_ID } from '@/lib/story/data/builtins';
+import { VIEWER_ID } from '@/lib/dataflow/builtins';
 import { refusalText } from '@/lib/story/reader/sign-in-required';
-import { commentMetadata, instanceDomId } from '@/lib/story/data/repeat-identity';
+import { commentMetadata, instanceDomId } from '@/lib/story-ui/repeat-identity';
 import { createCellSessions, type CellSessions } from '@/lib/story-runtime/cell-sessions';
 import { rowAttrs } from './basic';
 import { useIsland } from '../context';
@@ -51,7 +51,7 @@ export interface CellScope {
   ids: readonly string[];
 }
 
-/** lib/story/annotations/comment-target isCommentKey (the interpreter's validRowKey), restated as kit/basic does. */
+/** lib/story-ui/comment-target isCommentKey (the interpreter's validRowKey), restated as kit/basic does. */
 // eslint-disable-next-line no-control-regex -- the same control-character rule as isCommentKey
 const stableKey = (value: unknown): value is string | number => (typeof value === 'string' && value.length <= 256 && !/[\u0000-\u001f]/.test(value)) || (typeof value === 'number' && Number.isFinite(value));
 const IDREFS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'aria-activedescendant', 'aria-details', 'aria-errormessage', 'aria-flowto', 'headers', 'list', 'form'];

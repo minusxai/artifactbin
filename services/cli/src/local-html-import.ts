@@ -6,7 +6,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {isAbsolute,relative,resolve,join,sep} from 'node:path';
 import {sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
 import {resolveStoredStoryDesign} from '../../app/lib/data/story/story-themes';
-import {collectRefUses} from '../../app/lib/story/data/refs';
+import {collectRefUses} from '../../app/lib/dataflow/refs';
 import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import {parseJsx} from '../../app/lib/jsx';
 import {nodeIndex} from '../../app/lib/story/document/node-ids';

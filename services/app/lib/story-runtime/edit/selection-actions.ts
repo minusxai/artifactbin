@@ -3,7 +3,7 @@ import { withReviewState } from '../review-state';
 
 import { COMMENT_PRESENTATION } from '../comment-presentation';
 
-import { COMMENT_TARGET_ATTR } from '@/lib/story/annotations/comment-target';
+import { COMMENT_TARGET_ATTR } from '@/lib/story-ui/comment-target';
 import { isTargetRange } from '@/lib/story/annotations/annotation-range';
 
 /**

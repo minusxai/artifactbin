@@ -16,7 +16,7 @@
  * Split out of anchor-entry so it can be tested without a document: what
  * matters here is the yielding, and that is pure timer and listener logic.
  */
-import type { ScrollAnchor } from '@/lib/story/reader/scroll-anchor';
+import type { ScrollAnchor } from '@/lib/story-ui/scroll-anchor';
 
 /** How long the position is held against a settling layout. */
 const SETTLE_MS = 4000;

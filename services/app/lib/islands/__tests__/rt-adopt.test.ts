@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { createIslandRuntime, getNextElement, hydrateIsland, insert, template } from '../rt';
 import { useIsland } from '../context';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 
 const flow: CompiledDataflow = { imports: [], mutations: [], queries: [], values: [{ name: 'region', kind: 'scalar', type: 'string', default: 'All' }] };
 

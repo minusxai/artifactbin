@@ -19,7 +19,7 @@
  *    `$` selections are in this same query string and are the reader's, not ours.
  *    So the pairs are re-emitted exactly as they arrived rather than round
  *    tripped through URLSearchParams, which re-encodes what it did not have to
- *    (`lib/story/data/url-values` learned this first and for the same reason).
+ *    (`lib/dataflow/url-values` learned this first and for the same reason).
  */
 
 const INTENTS = ['fork', 'comment', 'like', 'follow', 'join'] as const;

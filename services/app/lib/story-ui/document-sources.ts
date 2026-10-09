@@ -1,6 +1,7 @@
 /**
  * The third-party sources a document may load — one list for both of its policies: on its own origin
- * (./document-csp) and as the sandboxed `/raw` copy (./markup-csp). Named hosts, never `https:`.
+ * (lib/story/styles/document-csp) and as the sandboxed `/raw` copy (lib/story/styles/markup-csp). Named
+ * hosts, never `https:`. A reader-kit leaf in lib/story-ui: the interpreter asks it too (`needsFrameReferrer`).
  */
 /** The ES module CDNs an author script may import from (`import x from 'https://esm.sh/…'`). */
 export const MODULE_CDNS = ['https://esm.sh', 'https://cdn.jsdelivr.net', 'https://unpkg.com'] as const;

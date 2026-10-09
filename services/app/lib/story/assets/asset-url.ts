@@ -25,9 +25,9 @@
  * began measuring images.
  */
 import { sha256Hex } from '@artifactbin/utils/sha256';
-import { IMAGE_SIZES } from '@/lib/story/data/ref-data';
+import { IMAGE_SIZES } from '@/lib/dataflow/ref-data';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import {imageReferenceId} from './image-source';
+import {imageReferenceId} from '@/lib/dataflow/image-source';
 
 /**
  * What a `web_assets` row contributes to the markup: the box, the blur to show
@@ -139,7 +139,7 @@ function assetSrcSet(url: string, box: WebAssetBox): string | null {
 }
 
 /*
- * The `sizes` hint is lib/story/data/ref-data's IMAGE_SIZES: the same picture in the
+ * The `sizes` hint is lib/dataflow/ref-data's IMAGE_SIZES: the same picture in the
  * same column, whether its bytes came from an upload or from a URL. It is wrong
  * for a full-bleed image on a wide screen — which simply gets the full variant,
  * the one it would have had with no `srcset` at all — and right for the
@@ -290,7 +290,7 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, o
       if (!held) continue;
       setAttr(el, attr, assetUrlFor(url, held));
       /*
-       * The box and the blur, on the SAME rule lib/story/data/ref-data
+       * The box and the blur, on the SAME rule lib/dataflow/ref-data
        * `resolveRefProps` applies to a `ref:` image, and for the same reasons:
        * only a real <img> (never the <File> card), and only where the author
        * said nothing — they mean what they wrote.

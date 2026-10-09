@@ -2,7 +2,7 @@
 import { createRoot } from 'solid-js';
 import { createDataflowStore, type MutationAnswer } from '@/lib/story-runtime/store';
 import { bindPage } from '@/lib/story-runtime/page-bindings';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 import type { RunAnswer } from '@/lib/story-runtime/dataflow-core';
 
 // The author and bindings MUST use this same Solid graph, never a second bundled instance.

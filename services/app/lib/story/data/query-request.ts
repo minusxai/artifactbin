@@ -7,8 +7,8 @@
  */
 import { json } from '@/lib/http/http';
 import { MAX_QUERY_ROWS } from '@/lib/platform/config';
-import type { Scalar, Row } from './dataflow';
-import { parseLocalTables } from '../datasets/local-tables';
+import type { Scalar, Row } from '@/lib/dataflow/dataflow';
+import { parseLocalTables } from '@/lib/dataflow/local-tables';
 import { MAX_PEOPLE_IDS } from '@/lib/story-runtime/contract';
 
 export interface QueryRequest {
@@ -22,7 +22,7 @@ export interface QueryRequest {
   /**
    * Instead of a run: every row of one IMPORT the document declares, by its
    * name, for a reader's page that runs its queries itself
-   * (lib/story/data/placement). Answered only when this door's viewer may hold it.
+   * (lib/dataflow/placement). Answered only when this door's viewer may hold it.
    */
   hold?: string;
   /**

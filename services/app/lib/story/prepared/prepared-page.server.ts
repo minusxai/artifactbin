@@ -51,7 +51,7 @@ import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { lazyCodeOf, type LazyCode } from '../document/lazy-code';
 import { assetsPath, mutatePath, queryPath } from '../styles/markup-csp';
-import { readUrlValues } from '../data/url-values';
+import { readUrlValues } from '@/lib/dataflow/url-values';
 import { servedResultsFor } from './served-results.server';
 import type { StoryBaseCssRecipe } from '../styles/story-base-css';
 import type { ServedStoryRuntime } from './prepared-runtime';

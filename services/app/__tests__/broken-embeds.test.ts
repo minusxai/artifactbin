@@ -11,7 +11,7 @@
  * discovered by looking at the page.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { findBrokenEmbeds } from '@/lib/story/data/refs';
+import { findBrokenEmbeds } from '@/lib/dataflow/refs';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

@@ -1,10 +1,10 @@
 /**
- * READING A COMPILED DATAFLOW (lib/story/data/compiled-flow): which queries a run
+ * READING A COMPILED DATAFLOW (lib/dataflow/compiled-flow): which queries a run
  * needs, what a statement binds and by which SQL name, what a mutation reads
  * besides its target, and the one owner of result typing.
  */
 import { describe, expect, it } from 'vitest';
-import { bindParams, bindTypes, dataRefs, mutationParams, mutationReads, queriesReadingValues, selectQueries, typedResult } from '../data/compiled-flow';
+import { bindParams, bindTypes, dataRefs, mutationParams, mutationReads, queriesReadingValues, selectQueries, typedResult } from '../compiled-flow';
 import { compiledOf } from '@/test/helpers/compiled';
 
 const flow = await compiledOf(''

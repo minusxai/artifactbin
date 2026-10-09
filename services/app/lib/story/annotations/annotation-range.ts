@@ -1,4 +1,4 @@
-import { parseCommentTarget, type CommentTarget } from './comment-target';
+import { parseCommentTarget, type CommentTarget } from '@/lib/story-ui/comment-target';
 /**
  * WHAT A COMMENT WAS ABOUT, BESIDE THE NODE IT IS ON — the quote and the
  * anchor-relative range.

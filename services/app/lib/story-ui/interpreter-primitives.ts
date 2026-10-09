@@ -2,9 +2,9 @@
 import type { JsxAttribute, JsxElement, JsxNode } from '@/lib/jsx';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { immutableSet } from '@/lib/jsx/immutable-set';
-import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/story/data/dataflow';
+import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/dataflow/dataflow';
 import { substituteRow } from '@/lib/jsx/row-scope';
-import { needsFrameReferrer } from '@/lib/story/styles/document-sources';
+import { needsFrameReferrer } from './document-sources';
 import { AST_PATH_ATTR } from './ast-path';
 
 /** JSX attr names → React prop names for HTML tags (agents author HTML spellings). */

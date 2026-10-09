@@ -6,7 +6,7 @@
  * bidirectionally:
  *  - data refs must be datasets; recipe refs viz recipes; src refs images
  *  - vega-lite/vega encoding fields are checked against the dataset's columns
- *    (via the ported lib/viz/field-refs collector)
+ *    (via the ported lib/dataflow/field-refs collector)
  *  - recipe uses are checked slot-by-slot: every required slot bound, bound
  *    columns exist and match the slot's `accepts` kinds
  * Dependents warnings on dataset/viz refresh re-run the same checks.
@@ -14,9 +14,9 @@
 import { parseJsx, type JsxAttribute, type JsxNode, type JsxElement, type ValidationError } from '@/lib/jsx';
 import {REFERENCE_POSITIONS} from './reference-positions';
 import { urlListUrls } from '@/lib/jsx/url-attrs';
-import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from '@/lib/viz/field-refs';
+import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from './field-refs';
 import { IMPORT_TAG, QUERY_TAG, NOTIFY_TAG, parseNotifyDecl, carriesRef, parseImportDecl, parseQueryDecl, refName } from './dataflow';
-import type { DatasetColumn } from './data-tiers';
+import type { DatasetColumn } from './dataset-shape';
 import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
@@ -39,7 +39,6 @@ export interface ReferenceValidationState {id:string;version:number;sharingRevis
 export interface ResolvedRef {
   /** Server persistence witness, never an author-provided validation claim. */
   validationState?:ReferenceValidationState;
-  catalog?:import("@/lib/datasets/types").DatasetCatalog;
   query?: (sql:string,params:Record<string,import("./dataflow").Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>)=>Promise<import("./dataflow").TableResult>;
   id: string;
   format: string;
@@ -96,7 +95,7 @@ export function collectRefUses(source: string): RefUse[] | null {
     }
     // An <Import> names the dataset (or folder) its tables are read from, and
     // a <Query source=…> the connected database it runs inside
-    // (lib/story/data/dataflow.ts). Real refs: they resolve through the loader like
+    // (lib/dataflow/dataflow.ts). Real refs: they resolve through the loader like
     // any other and land in meta.refs (dependents warnings), but their rows go
     // through the engine, never onto the page. Which of them a <Mutation>
     // WRITES is the compiler's to say (lib/story/data/data-checks `writeRefusal`).

@@ -19,7 +19,7 @@ import { urlHash } from '@/lib/story/assets/asset-url';
 import { setAvatar } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
-import type { TableResult } from '@/lib/story/data/dataflow';
+import type { TableResult } from '@/lib/dataflow/dataflow';
 import { assembleArtifactFile } from '../assemble.server';
 import { packCompiledBrowserModule } from '../compiled-bundle.server';
 import { parseArtifactFile, type ArtifactFile } from '../file-format';

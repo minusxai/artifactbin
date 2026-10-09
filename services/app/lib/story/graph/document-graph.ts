@@ -12,7 +12,7 @@ import {parseJsx} from '../../jsx/parse';
 import {runtimeId} from '../../story-runtime/runtime-id';
 import {serializeJsx} from '../../jsx/serialize';
 import {graphSelectors} from './document-graph-selectors';
-import {collectRefUses} from '../data/refs';
+import {collectRefUses} from '@/lib/dataflow/refs';
 import {inertProse,PROSE_HTML_PARENTS} from './document-prose';
 import {encodeDocumentNodes,decodeDocumentNodes} from '../document/document-node-codec';
 

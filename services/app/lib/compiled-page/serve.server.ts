@@ -51,10 +51,10 @@ import { type ArtifactRow, type RoleActor } from '@/lib/artifacts/access';
 import type { ArchivedRender } from '@/lib/serving';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
-import type { Scalar } from '@/lib/story/data';
+import type { Scalar } from '@/lib/dataflow';
 import { recompilePage, type PreparedPage } from '@/lib/story/prepared/prepared-page.server';
 import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/prepared/served-results.server';
-import { readUrlValues } from '@/lib/story/data';
+import { readUrlValues } from '@/lib/dataflow';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT } from '@/lib/story/styles';
 import { assembleReaderPage } from './assembler';
@@ -318,7 +318,7 @@ const sorted = (record: Readonly<Record<string, unknown>>): Array<[string, unkno
 
 interface StoryInput {
   values: Record<string, Scalar>;
-  state?: import('@/lib/story/data/dataflow').DataflowState;
+  state?: import('@/lib/dataflow/dataflow').DataflowState;
   assetsUrl?: string;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;

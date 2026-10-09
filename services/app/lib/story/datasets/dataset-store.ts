@@ -42,7 +42,7 @@ export async function loadDatasetRows(row: { meta: unknown }): Promise<Record<st
 
 /**
  * How many rows a stored object holds and how many bytes it serializes to —
- * the two things the hold cap is judged by (lib/story/data/placement). Remembered
+ * the two things the hold cap is judged by (lib/dataflow/placement). Remembered
  * by key: objects are content-addressed, so a key's answer never changes, and
  * a page render asking whether its reader may hold a dataset pays one parse
  * per dataset version per process, not one per render. An object past

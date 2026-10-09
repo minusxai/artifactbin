@@ -47,7 +47,7 @@ import type { DocumentGraph } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { editBlock } from '@/lib/editor-v2/block-edit';
-import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story/reader/edit-bar';
+import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story-ui/edit-bar';
 import { storyUpdateParts, storyUpdatePartsShared } from '@/lib/story/document/update-parts';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
 import {
@@ -61,7 +61,7 @@ import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
 import { tableChoices } from '@/lib/story/data/table-catalog';
 import { queryCells, updateQuerySqlInJsx } from '@/lib/story/data/query-notebook';
 import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
-import type { DataflowState } from '@/lib/story/data/dataflow';
+import type { DataflowState } from '@/lib/dataflow/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { ArtifactVersionSnapshot } from '@/lib/artifact-backend/types';

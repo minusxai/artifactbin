@@ -1,7 +1,7 @@
 /**
  * WHERE EACH NODE RUNS — in the reader's browser, on SQLite over data the
  * page holds, or on the server exactly as before. Decided per node from the
- * compiled graph (lib/story/data/compiled-dataflow `reads`) and one serve-time fact
+ * compiled graph (lib/dataflow/compiled-dataflow `reads`) and one serve-time fact
  * the island carries: the imports THIS reader may hold in full
  * (StoryIslandDataflow.hold, computed by lib/artifacts holdableImportsFor).
  *

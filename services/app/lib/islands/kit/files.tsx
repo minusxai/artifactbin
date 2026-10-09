@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { For, Show } from 'solid-js';
-import { refName, type Row } from '@/lib/story/data/dataflow';
+import { refName, type Row } from '@/lib/dataflow/dataflow';
 import { sparklineSvg } from '@/lib/viz/spark-markup';
 import { useIsland } from '../context';
 import { fileGlyphName } from '@/lib/story-ui/file-glyphs';

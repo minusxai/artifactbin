@@ -15,7 +15,7 @@ import { islandDocumentOf } from '../handover';
 import { morphStory, MorphRefused, type MorphOptions } from '../morph/engine';
 import { updateCompiledStory } from '../live-update';
 import { persistReaderMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 
 const flow: CompiledDataflow = { imports: [], mutations: [], queries: [], values: [{ name: 'region', kind: 'scalar', type: 'string', default: 'All' }] };
 const moreFlow: CompiledDataflow = { ...flow, values: [...flow.values, { name: 'year', kind: 'scalar', type: 'number', default: 2026 }] };

@@ -12,8 +12,8 @@ import {localInputPath,localInputReferences,readLocalDataset} from './preview/lo
 import {previewAnnotations} from './preview/annotations';
 import {previewGraph,referenceIds} from './preview/graph';
 import {fileContentType} from '../../app/lib/story/assets/file-types';
-import {collectRefUses} from '../../app/lib/story/data/refs';
-import {imageReferenceId} from '../../app/lib/story/assets/image-source';
+import {collectRefUses} from '../../app/lib/dataflow/refs';
+import {imageReferenceId} from '../../app/lib/dataflow/image-source';
 import {dataflowOf,splitHelmet} from '../../app/lib/story/document/helmet';
 import {parseJsx,type JsxNode} from '../../app/lib/jsx';
 import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
@@ -21,14 +21,14 @@ import {compileLocal,runLocal} from './local-dataflow';
 import {prepareStoryRuntime} from '../../app/lib/story/prepared/prepare-runtime.server';
 import {compileStoryCss} from '../../app/lib/data/story/story-css.server';
 import {resolveStoredStoryDesign} from '../../app/lib/data/story/story-themes';
-import type {RefDataMap} from '../../app/lib/story/data/ref-data';
+import type {RefDataMap} from '../../app/lib/dataflow/ref-data';
 import {withStoredCarriers} from '../../app/lib/compiled-page/carriers';
 import {compileDocument,renderStoryHtml,compilerBuild} from './preview/compiled';
 import {offlineFileParts} from '../../app/lib/offline/bundle.server';
 import {renderArtifactFileHtml} from '../../app/lib/offline/file-html';
 import {sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
 import type {StoryIslandData} from '../../app/lib/story-runtime/contract';
-import type {ImportTables} from '../../app/lib/story/data/compiled-flow';
+import type {ImportTables} from '../../app/lib/dataflow/compiled-flow';
 import {DOCUMENT_UI_FONT_CSS} from '../../app/lib/serving/app-fonts';
 import {withoutUnusedFaces} from '../../app/lib/offline/font-faces';
 

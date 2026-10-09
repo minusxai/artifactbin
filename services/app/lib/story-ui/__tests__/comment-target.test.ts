@@ -1,6 +1,6 @@
-import { parseAnnotationRange } from '../annotations/annotation-range';
+import { parseAnnotationRange } from '@/lib/story/annotations/annotation-range';
 import { describe, expect, it } from 'vitest';
-import { parseCommentTarget } from '../annotations/comment-target';
+import { parseCommentTarget } from '../comment-target';
 
 describe('durable comment refinements', () => {
   it('preserves typed table keys and repeat scopes', () => {

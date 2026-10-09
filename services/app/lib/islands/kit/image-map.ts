@@ -1,5 +1,5 @@
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
-import { imageReferenceId } from '@/lib/story/assets/image-source';
+import { imageReferenceId } from '@/lib/dataflow/image-source';
 
 /** Browser-only mapping for image selections; every request stays behind this document's asset door. */
 export async function mapImage(value: string, row: boolean, endpoint: string | null, cache: Map<string, string>, signal: AbortSignal): Promise<string | null> {
