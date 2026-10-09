@@ -4,7 +4,7 @@
  * self-reported.
  */
 import { ARTIFACTBIN_AGENT_HEADER, identifyClient, type Harness } from '../platform/client-identity';
-import type { AnnotationAuthor } from './store';
+import type { AnnotationAuthor } from '@artifactbin/contracts';
 
 const AGENT_LABELS: Partial<Record<Harness, string>> = {
   chatgpt: 'ChatGPT',

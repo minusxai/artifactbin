@@ -26,7 +26,7 @@ import { getDb } from '@/lib/platform/db';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { servableDocument } from '@/lib/artifacts/servable';
 import { actorSubject, emit } from '@/lib/platform/events';
-import { ancestorsForMove, notifyParent, parentOf } from './folders';
+import { ancestorsForMove, notifyParent, parentOf } from '@/lib/artifacts/placement';
 
 /** The row and everything under it — a document matches only itself. */
 const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';

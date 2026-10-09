@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
-import { writeBrowserArtifact } from '@/lib/artifacts/browser-artifact-write';
+import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
 import type { FolderPage as FolderData } from '@/lib/workspace/folders';
 import type { ArtifactRole } from '@/lib/artifacts/share-roles';
 import { canEdit } from '@/lib/artifacts/share-roles';

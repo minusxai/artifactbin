@@ -1,9 +1,9 @@
 import {artifactState} from './state';
-import {respondToEdit,artifactToWire,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
+import {respondToEdit,artifactToWire,committedOpenAnnotations,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
 import { applyEditFor, getArtifactFor, getOwnedArtifactFor, isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
 import { writerFor } from './access';
 import type { TokenActor } from '@/lib/accounts/actors';
-import {resolveParent,isParentRefusal} from '../workspace/folders';
+import {resolveParent,isParentRefusal} from './placement';
 import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
 import {json} from '../http/http';
 import {validateDatasetPolicyForRow} from '../datasets/policy/validation';
@@ -41,5 +41,5 @@ export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Rec
  const row=await setMetadataFor(actor,id,patch,{...expected,expectedPolicyRevision:body.expectedPolicyRevision as number|undefined,allowEditor:!governs,dryRun});
  if(!row)return json({error:'not_found'},404);
  if(isVersionConflict(row))return json({error:row.reason??'version_conflict',currentState:row.currentState,currentVersion:row.currentVersion},409);
- return dryRun?json({valid:true,dry_run:true,state:artifactState(current),commit_checks:['authorization','observed_state']}):json(await artifactToWire(row,base));
+ return dryRun?json({valid:true,dry_run:true,state:artifactState(current),commit_checks:['authorization','observed_state']}):json(await artifactToWire(row,base,committedOpenAnnotations(row)));
 }

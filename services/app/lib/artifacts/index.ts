@@ -1,7 +1,6 @@
 /** The artifacts module's interface: only what other modules import. */
 export { canReadArtifact, editorScope, effectiveRole, isOwner, linkRoleOf, roleFor } from './access';
 export type { ArtifactRow, Scope, Visibility } from './access';
-export { restoreBrowserArtifact, writeBrowserArtifact } from './browser-artifact-write';
 export { can, capabilityGuard, capabilityRefusal } from './capabilities';
 export type { CapabilityActor } from './capabilities';
 export { CreationReplay } from './creation-ledger';
@@ -33,4 +32,4 @@ export { artifactState } from './state';
 export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, commitNormalizedMarkup, committedHeadsSettled, createArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, setArtifactQuotaForTests, setMetadataFor, versionToWire } from './store';
 export type { ArtifactSummary, EditOutcome } from './store';
 export { recordArtifactView } from './view-admission';
-export { artifactSummaryToWire, artifactToWireWithAnnotations, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, respondToAnnotationAction, respondToEdit } from './wire';
+export { artifactSummaryToWire, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, respondToEdit } from './wire';

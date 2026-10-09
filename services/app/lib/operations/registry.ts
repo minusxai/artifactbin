@@ -4,7 +4,7 @@ import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
 import type {MutationReceipt} from '@/lib/artifacts';
-import {readArtifactSnapshot} from '@/lib/artifacts/read-access';
+import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction} from '@/lib/annotations';
 import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/datasets/policy/http';
 import {updateMetadataFromBody} from '@/lib/artifacts/metadata-wire';
 import {decodePage, encodeCursor} from '@/lib/http/pagination';
@@ -26,14 +26,14 @@ import { canReadArtifact } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
 import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/story/publish';
-import { isParentRefusal, resolveParent } from '@/lib/workspace/folders';
+import { isParentRefusal, resolveParent } from '@/lib/artifacts/placement';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
 import { trackEvent } from '@/lib/platform/analytics';
 import { exportImageResponse } from '@/lib/export/exporter';
-import type { AnnotationAuthor } from '@/lib/annotations';
+import type { AnnotationAuthor } from '@artifactbin/contracts';
 import {
-  artifactSummaryToWire, artifactToWire, createdArtifactWire, parseParentField, parseVisibilityValue,
-  parseExpectedVersion, respondToAnnotationAction, respondToEdit, respondToMutate,
+  artifactSummaryToWire, createdArtifactWire, parseParentField, parseVisibilityValue,
+  parseExpectedVersion, respondToEdit, respondToMutate,
 } from '@/lib/artifacts/wire';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
@@ -410,7 +410,7 @@ const revertArtifactOp: Operation = {
       return reply({ error: 'version_not_archived' }, 409);
     }
     if (!row) return reply({ error: 'not_found' }, 404);
-    return reply(await artifactToWire(row,ctx.base));
+    return reply(await artifactWireFor(row,ctx.base));
   },
 };
 
