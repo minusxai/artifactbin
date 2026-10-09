@@ -55,6 +55,8 @@ export interface ArtifactLiveEvent {
   by: string | null;
   format: string;
   title: string | null;
+  /** Derived by the server so readers can follow heading edits without loading source parsers. */
+  heading?: string | null;
   /** markup source (the document tier) — null for other tiers. */
   source: string | null;
   /**

@@ -11,12 +11,11 @@
 
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
+import { displayTitle as displayHeadingTitle } from './display-title';
+export { UNTITLED } from './display-title';
 
 /** Longer than this is a paragraph, not a title — the heading text is truncated. */
 const MAX_TITLE = 120;
-
-/** Last resort, when a document has neither a title nor a heading to borrow. */
-export const UNTITLED = 'Untitled';
 
 /**
  * Headings in DOCUMENT order, not level order: the first one is the title
@@ -64,7 +63,7 @@ export function firstHeadingTitle(source: string | null | undefined): string | n
  * carries it instead of the source it came from (lib/artifact-page).
  */
 export function displayTitle(row: { title?: string | null; source?: string | null; heading?: string | null }): string {
-  return row.title?.trim() || (row.source != null ? firstHeadingTitle(row.source) : row.heading) || UNTITLED;
+  return displayHeadingTitle({ title: row.title, heading: row.title?.trim() ? null : row.source != null ? firstHeadingTitle(row.source) : row.heading });
 }
 
 /**

@@ -36,7 +36,7 @@ import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { STORY_DATA_HOOK, STORY_URL_VALUES_MESSAGE, type StoryUrlValuesMessage } from '@/lib/story-runtime/contract';
-import { frameAppOrigin } from '@/lib/story-runtime/frame-bridge/door';
+import { frameAppOrigin } from '@/lib/story-runtime/frame-bridge/origin';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';

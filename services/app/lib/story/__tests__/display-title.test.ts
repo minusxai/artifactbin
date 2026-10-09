@@ -1,4 +1,5 @@
 import { displayTitle, firstHeadingTitle, UNTITLED } from '../../document/title';
+import { displayTitle as displayHeadingTitle } from '../../document/display-title';
 
 describe('firstHeadingTitle', () => {
   it('reads the first heading of a story-JSX source', () => {
@@ -45,6 +46,11 @@ describe('firstHeadingTitle', () => {
 });
 
 describe('displayTitle', () => {
+  it('uses served metadata in the reader without needing the source', () => {
+    expect(displayHeadingTitle({ title: 'Named', heading: 'Heading' })).toBe('Named');
+    expect(displayHeadingTitle({ title: ' ', heading: 'Markdown heading' })).toBe('Markdown heading');
+    expect(displayHeadingTitle({ title: '' })).toBe(UNTITLED);
+  });
   it('lets an explicit title win over the heading', () => {
     expect(displayTitle({ title: 'Named by hand', source: '<h1>Heading</h1>' })).toBe('Named by hand');
   });

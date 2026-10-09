@@ -431,6 +431,10 @@ try {
   await stored(s => s.includes('[x] Open task'), 'Markdown checklist toggles persist');
   await doc().getByText('Next task', { exact: true }).click();
   await page.keyboard.press('End');
+  // The checkbox click focuses its item. Wait for the native caret and Lexical's
+  // selectionchange turn to reach the next label before sending its Tab command.
+  await waitInDoc(() => getSelection()?.anchorNode?.parentElement?.closest('li')?.textContent === 'Next task');
+  await inDoc(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.keyboard.press('Tab');
   await waitInDoc(() => document.querySelector('#features li li')?.textContent === 'Next task');
   await stored(s => /\n +[-*] \[ \] Next task/.test(s), 'Tab persists nested Markdown checklist items');
