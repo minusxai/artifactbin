@@ -44,7 +44,8 @@ drawing leads. Pick ONE composition and build that. Publish with
   system's hand; label mock controls as part of the drawing. Wide drawings
   get a bounded `overflow-x-auto` region. If the user wants to click through
   a flow and review its states, build an interactive `template: app` prototype
-  and register [saved comment views](review-state.md). Static drawings need no registration.
+  whose screens, tabs and dialogs native comments restore
+  ([saved comment views](review-state.md)). Static drawings need nothing.
 - The ledger is a table: owner, dependencies, status, acceptance. Completed
   task labels are struck (`<s>`), never deleted; no checkboxes. Mark work
   complete only when the user reports it or you verified it; persist

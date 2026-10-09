@@ -252,7 +252,7 @@ describe('the annotation composer', () => {
   });
 
   it('keeps the original view context across geometry updates and sends it with the native comment', async () => {
-    const viewState = { v: 1 as const, components: { screen: 'checkout', dialog: false } };
+    const viewState = { v: 2 as const, state: { $: { screen: 'checkout' }, 'aBcD:open': false } };
     const view = layer({ railOpen: true, initialSelection: TEXT({ viewState }) });
     await flush();
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ nodeId: 'node-1', rect: { x: 9, y: 10, width: 200, height: 40 } }) });

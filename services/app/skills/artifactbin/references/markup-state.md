@@ -11,10 +11,9 @@ Queries derive the view. Markup conditions (`{$editing && …}`, `{$step > 1 ?
 … : …}`) read declared scalars only; anything computed belongs in the
 [script](markup-scripts.md).
 
-Custom scripts can also use ordinary Solid local state. For interactive
-wireframes and design reviews, explicitly register the state to restore when
-a native comment opens: [saved comment views](review-state.md). Values are
-optional and are not captured automatically.
+Custom scripts can also use ordinary Solid local state. A native comment
+saves the Values the link carries, kit view state and named script signals,
+and restores them when it opens: [saved comment views](review-state.md).
 
 Text fields: `<Input label="Title" value="$title" />`
 (`type="text|number|email|url|search|password"`, `placeholder`, `min`, `max`,

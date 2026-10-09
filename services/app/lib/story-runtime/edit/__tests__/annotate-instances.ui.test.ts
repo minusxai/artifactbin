@@ -1,4 +1,3 @@
-import { reviewStateFor } from '@/lib/story-runtime/review-state';
 /**
  * COMMENTING ON A RUNTIME INSTANCE: the exact typed row behind a cell, and an
  * ordinary area refinement in the geometry reports.
@@ -7,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { STORY_SELECTION_MESSAGE, type StoryAnnotationsMessage } from '@/lib/story-runtime/contract';
 import { disposeAnnotateSession, env, installAnnotateSession, layouts, rectOf, state } from '@/test/helpers/annotate-session';
+import { registerCommentState } from '@/lib/story-runtime/comment-state';
+import { pendingCommentState } from '@/lib/story-runtime/comment-state-io';
 
 beforeEach(installAnnotateSession);
 afterEach(disposeAnnotateSession);
@@ -40,24 +41,27 @@ it('retains ordinary area refinement in geometry reports for the same owner', ()
 });
 
 
-it('captures local state on selection and restores it before highlighting, once per opened thread', () => {
+it('captures comment state on selection and restores it before highlighting, once per opened thread, pending until the thread closes', () => {
   const parsed = parseJsxOrThrow('<p id="payment" />'); env.session.setNodes(parsed.nodes);
   document.body.innerHTML = '<p id="payment" data-mx-ast="0">Payment declined</p>';
   const element = document.getElementById('payment')!;
   rectOf(element, { x: 10, y: 20, width: 100, height: 30 });
   let screen = 'payment'; const restore = vi.fn(value => { screen = String(value); });
-  const unregister = reviewStateFor(document).register({ id: 'screen', get: () => screen, restore });
+  const unregister = registerCommentState(document, 'screen', { get: () => screen, set: restore });
   try {
     env.session.update({ ...state('on'), pins: [] }); env.session.select('0');
     const selection = env.posted.filter(message => message.type === STORY_SELECTION_MESSAGE).at(-1)?.selection as { viewState?: unknown };
-    expect(selection.viewState).toEqual({ v: 1, components: { screen: 'payment' } });
+    expect(selection.viewState).toEqual({ v: 2, state: { screen: 'payment' } });
     screen = 'plans';
     const opened = { ...state('on'), openId: 'saved', pins: [{ id: 'saved', path: '0', key: 'payment', nodeId: 'payment', viewState: selection.viewState }] } as StoryAnnotationsMessage;
     env.session.update(opened);
     expect(screen).toBe('payment'); expect(element).toHaveAttribute('data-mx-annotation-open');
     screen = 'plans'; env.session.update(opened);
     expect(screen).toBe('plans'); expect(restore).toHaveBeenCalledTimes(1);
-    env.session.update({ ...opened, openId: null }); env.session.update(opened);
+    expect(pendingCommentState(document, 'screen')).toBe('payment');
+    env.session.update({ ...opened, openId: null });
+    expect(pendingCommentState(document, 'screen')).toBeUndefined();
+    env.session.update(opened);
     expect(screen).toBe('payment'); expect(restore).toHaveBeenCalledTimes(2);
     screen = 'plans'; env.session.update({ ...opened, viewStateRequest: 1 });
     expect(screen).toBe('payment'); expect(restore).toHaveBeenCalledTimes(3);

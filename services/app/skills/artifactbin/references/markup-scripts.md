@@ -81,8 +81,8 @@ In Helmet script text, split `</script` as `'</scr' + 'ipt'`. The body is a JS t
 
 | Specifier | Gives |
 | --- | --- |
-| `page` | `signal`, `query`, `mutation` (below); [dataset attachments](markup-upload.md); [`reviewState`](review-state.md); `proxy` (Other hosts) |
-| `solid-js` | `createSignal`, `createEffect`, `createMemo`, `createRoot`, `batch`, `untrack`, `on`, `onMount`, `onCleanup`, `For`, `Show`, `Switch`, `Match`, `mergeProps`, `splitProps` |
+| `page` | `signal`, `query`, `mutation` (below); [dataset attachments](markup-upload.md); `proxy` (Other hosts) |
+| `solid-js` | `createSignal` (`{ name }` makes it [comment state](review-state.md)), `createEffect`, `createMemo`, `createRoot`, `batch`, `untrack`, `on`, `onMount`, `onCleanup`, `For`, `Show`, `Switch`, `Match`, `mergeProps`, `splitProps` |
 | `solid-js/web` | `render`, and what JSX compiles to |
 | `solid-js/store` | `createStore`, `reconcile` |
 | any other bare name | that npm package from `https://esm.sh/<name>`, subpaths too |

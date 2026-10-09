@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createContext, createEffect, createRenderEffect, createSignal, createUniqueId, onCleanup, onMount, Show, splitProps, useContext, type JSX } from 'solid-js';
 import { collapsibleStyle } from './collapsible-style';
+import { commentSignal, commentStateKey } from '../comment-state';
 import { Portal, isServer } from 'solid-js/web';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
@@ -11,12 +12,13 @@ import { ARROW_ORIGIN, ARROW_TRANSFORM, OPPOSITE, createTooltipTiming } from './
 
 type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string; panelId: () => string; setPanelId: (id: string) => void };
 const CollapsibleContext = createContext<State>(); const PopoverContext = createContext<PopupState>();
-function makeState(props: { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void }): State {
-  const [local, setLocal] = createSignal(!!props.defaultOpen); const contentId = createUniqueId(); const [panelId, setPanelId] = createSignal(contentId);
+function makeState(props: { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void }, key: string | null = null): State {
+  const [local, setLocal] = commentSignal(key, !!props.defaultOpen); const contentId = createUniqueId(); const [panelId, setPanelId] = createSignal(contentId);
   return { open: () => props.open ?? local(), setOpen: value => { setLocal(value); props.onOpenChange?.(value); }, contentId, panelId, setPanelId };
 }
 export function Collapsible(props: JSX.HTMLAttributes<HTMLDivElement> & { open?: boolean; defaultOpen?: boolean; disabled?: boolean; onOpenChange?: (value: boolean) => void }) {
-  const ctx = makeState(props); const [localProps, rest] = splitProps(props, ['open', 'defaultOpen', 'disabled', 'onOpenChange', 'children']);
+  // Uncontrolled, open/closed is comment state under this element's node id.
+  const ctx = makeState(props, props.open === undefined ? commentStateKey('open', props.id) : null); const [localProps, rest] = splitProps(props, ['open', 'defaultOpen', 'disabled', 'onOpenChange', 'children']);
   return <CollapsibleContext.Provider value={ctx}><div data-slot="collapsible" data-state={ctx.open() ? 'open' : 'closed'} {...rest}>{localProps.children}</div></CollapsibleContext.Provider>;
 }
 export function CollapsibleTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
