@@ -15,7 +15,7 @@
  * scripts/build-server-reader.mjs to lib/build-assets/lucide-icons.json): the icon
  * packages are browser dependencies and the production server does not install them.
  * Read lazily, on the first document that draws an icon. Guarded by
- * lib/story/__tests__/icon-glyphs.test.tsx. */
+ * lib/story-ui/__tests__/icon-glyphs.test.ts. */
 import { escapeAttr } from '@artifactbin/utils/escape';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

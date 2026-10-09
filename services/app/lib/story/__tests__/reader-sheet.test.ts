@@ -4,7 +4,7 @@
  * themes' blocks — every kept rule byte-identical and in the full sheet's order.
  */
 import { describe, expect, it } from 'vitest';
-import * as cssTree from '../styles/css-parser';
+import * as cssTree from '@/lib/mermaid-images/css-parser';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { storyThemeCss } from '@/lib/data/story/story-themes';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';

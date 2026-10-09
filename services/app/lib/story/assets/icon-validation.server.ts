@@ -1,11 +1,11 @@
 /**
  * Publish-time icon policy. Keep the full Lucide map on the server (the build's
- * lib/build-assets/lucide-icons.json, lib/story/assets/icon-glyphs), outside
+ * lib/build-assets/lucide-icons.json, lib/story-ui/icon-glyphs.server), outside
  * local-validation (also bundled into the CLI) and the reader runtime.
  * Rendering stored documents still uses its fallback for legacy invalid names.
  */
 import type { JsxNode, ValidationError } from '@/lib/jsx';
-import { isLucideIcon } from './icon-glyphs';
+import { isLucideIcon } from '@/lib/story-ui/icon-glyphs.server';
 
 /** Check the same map and normalization as the server glyph resolver. */
 export function validateIconNames(nodes: JsxNode[]): ValidationError[] {

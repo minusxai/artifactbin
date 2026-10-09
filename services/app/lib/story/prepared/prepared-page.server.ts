@@ -6,7 +6,7 @@
  * request. Everything in that work that belongs to the VERSION is done once
  * here and stored (app.prepared_pages):
  *
- *   - the isolated stylesheet (exactly what lib/story/styles/inline-css produces) and
+ *   - the isolated stylesheet (exactly what lib/compiled-page/styles/inline-css produces) and
  *     the node tree with the style values that policy rewrote (style-overrides);
  *   - glyphs, fonts, the resolved colour mode, the lazy-code manifest, the
  *     declared dataflow and the pinned compiled page.
@@ -44,16 +44,16 @@ import { lookupWebAssets } from '../assets/web-assets';
 import { collectExternalAssetUrls } from '../../document/external-images';
 import { storedCompiledDataflow } from '@/lib/document/server';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';
-import { inlineStoryCss, inlineStoryNodes } from '../styles/inline-css';
-import { styleOverrides, type StyleOverride } from '../styles/style-overrides';
+import { inlineStoryCss, inlineStoryNodes } from '@/lib/compiled-page/styles/inline-css';
+import { styleOverrides, type StyleOverride } from '@/lib/compiled-page/styles/style-overrides';
 import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { lazyCodeOf, type LazyCode } from '../../document/lazy-code';
-import { assetsPath, mutatePath, queryPath } from '../styles/markup-csp';
+import { assetsPath, mutatePath, queryPath } from '@/lib/compiled-page/styles/markup-csp';
 import { readUrlValues } from '@/lib/dataflow/url-values';
 import { servedResultsFor } from './served-results.server';
-import type { StoryBaseCssRecipe } from '../styles/story-base-css';
+import type { StoryBaseCssRecipe } from '@/lib/compiled-page/styles/story-base-css';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
@@ -189,7 +189,7 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
     // which every tool that reads artifacts loads (the CLI's teaching build among them). A process
     // that does not prepare a page never loads any of it. The snapshot store
     // imports this module, so its access helper is reached the same way (no import cycle at load).
-    const [{ compilePage }, { anonymousAccessFacts }] = await Promise.all([import('@/lib/compiled-page/compiler'), import('@/lib/compiled-page/snapshots.server')]);
+    const [{ compilePage }, { anonymousAccessFacts }] = await Promise.all([import('@/lib/compiled-page/compiler'), import('./snapshots.server')]);
     const flow = page.declared?.flow ?? null;
     const input = {
       nodes: page.data.nodes, colorMode: page.data.colorMode, template: page.data.template ?? null, chrome: page.data.chrome !== false,

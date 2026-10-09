@@ -23,13 +23,13 @@ import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/document/helmet';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
-import { authorModuleNames, buildAuthorModule, type AuthorModule } from './author-module.server';
+import { authorModuleNames, buildAuthorModule, type AuthorModule } from '@/lib/author-script/author-module.server';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../../http/http';
 import { type ContentInputCtx, type StoredContent } from './input';
 import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
-import { documentFonts, invalidFontFamilies } from '../styles/document-fonts';
+import { documentFonts, invalidFontFamilies } from '@/lib/compiled-page/styles/document-fonts';
 import { cspExtensionsOf } from '../../document/csp-extensions';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '@/lib/document/server';
@@ -100,7 +100,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
 
   // FONTS the document asks for (Helmet <meta name="font-display" …>): only the NAME is checked here,
   // because it lands in a stylesheet. Nothing is fetched or stored: serving emits the Google Fonts
-  // `@import` from the meta (lib/story/styles/document-fonts), and a bundled family is served from this origin.
+  // `@import` from the meta (lib/compiled-page/styles/document-fonts), and a bundled family is served from this origin.
   const fonts = documentFonts(split.content);
   const badFamilies = invalidFontFamilies(fonts);
   if (badFamilies.length > 0) {

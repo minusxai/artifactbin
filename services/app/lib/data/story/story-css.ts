@@ -6,7 +6,7 @@
  * persisted on the content as `compiledCss` — a SERVER-MANAGED field: it is not part of the
  * authored StoryContent schema, and is recomputed on every save. At render time the document
  * builder emits it into the document <head> as `<style data-mx-tw>`
- * (lib/story/styles/document-styles.ts).
+ * (lib/compiled-page/styles/document-styles.ts).
  */
 // Both spellings: `class` and `className` (JSX source).
 const CLASS_ATTR_RE = /\bclass(?:Name)?\s*=\s*(?:"([^"]*)"|'([^']*)')/g;

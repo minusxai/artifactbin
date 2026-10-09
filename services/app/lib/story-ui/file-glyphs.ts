@@ -3,7 +3,7 @@
  *
  * `<Files>` picks a row's icon from its FORMAT, and the
  * SERVER resolves the glyphs a document needs before the document is served
- * (lib/story/assets/icon-glyphs): the icon set never reaches the reader's bundle, so a
+ * (lib/story-ui/icon-glyphs.server): the icon set never reaches the reader's bundle, so a
  * glyph nobody resolved draws NOTHING. A folder's whole document is
  * `<Files data="$children" />` and names no `<Icon>` at all, so the scan has to
  * learn this list — and it has to be the SAME list the component then asks for,

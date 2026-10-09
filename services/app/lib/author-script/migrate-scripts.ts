@@ -1,6 +1,6 @@
 /**
  * THE SCRIPT MIGRATION: a document written for the retired script contracts, rewritten for the Solid one
- * (lib/story/document/author-module.server, run by lib/islands/page-runtime). `scripts/migrate-scripts.mjs` is its
+ * (lib/author-script/author-module.server, run by lib/islands/page-runtime). `scripts/migrate-scripts.mjs` is its
  * command line; this module is pure text in, text out, and runs no author code.
  *
  * What it rewrites:
@@ -31,7 +31,7 @@ import { parseSync, traverse, type NodePath, type types as t } from '@babel/core
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { parseJsx } from '@/lib/jsx/parse';
 import type { JsxElement, JsxNode } from '@/lib/jsx/types';
-import { splitHelmet, type HelmetContent } from '../../document/helmet';
+import { splitHelmet, type HelmetContent } from '@/lib/document/helmet';
 
 export interface DocumentMigration {
   source: string;

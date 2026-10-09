@@ -3,13 +3,13 @@ import type { PreparedStoryRuntime } from './prepared-runtime';
 import { storyBodyFor } from '../../document/body';
 import { assetLookupFrom } from '../../document/asset-url';
 import { EMPTY_HELMET_CONTENT, type HelmetContent } from '../../document/helmet';
-import { authorModuleNames, buildAuthorModule } from '../document/author-module.server';
+import { authorModuleNames, buildAuthorModule } from '@/lib/author-script/author-module.server';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
-import { glyphsForNodes } from '../assets/icon-glyphs';
-import { documentFonts } from '../styles/document-fonts';
-import { storyBaseCss, type StoryBaseCssRecipe } from '../styles/story-base-css';
+import { glyphsForNodes } from '@/lib/story-ui/icon-glyphs.server';
+import { documentFonts } from '@/lib/compiled-page/styles/document-fonts';
+import { storyBaseCss, type StoryBaseCssRecipe } from '@/lib/compiled-page/styles/story-base-css';
 import { storySystemSheetCss } from '@/lib/data/story/story-system-sheets';
-import { firstScreenFonts } from '../styles/first-screen-fonts';
+import { firstScreenFonts } from '@/lib/compiled-page/styles/first-screen-fonts';
 import type { StoryIslandData, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import { mermaidImagesFor, type MermaidImageLookup } from '@/lib/mermaid-images/store';
 import type { WebAssetBox } from '../../document/asset-url';
@@ -76,7 +76,7 @@ export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData
 }
 
 /** One parse, glyph resolution and font lookup shared by raw/export and SPA. */
-/** The Helmet script as the module the page runs (lib/story/document/author-module.server); a draft whose script does not build carries none. */
+/** The Helmet script as the module the page runs (lib/author-script/author-module.server); a draft whose script does not build carries none. */
 async function authorModuleCode(helmet: HelmetContent): Promise<string | null> {
   if (!helmet.script) return null;
   const built = await buildAuthorModule(helmet.script, authorModuleNames(helmet));
@@ -106,7 +106,7 @@ export async function prepareStoryParts(input: PrepareStoryInput) {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,
     authorScript: await authorModuleCode(helmet),
     theme: input.theme, base: baseRecipe, title,
-    // The faces this document's first screen paints (lib/story/styles/first-screen-fonts), one per file.
+    // The faces this document's first screen paints (lib/compiled-page/styles/first-screen-fonts), one per file.
     fontPreloads: firstScreenFonts({ theme: input.theme, nodes: split?.body ?? [], docFonts }).map(face => face.url),
   };
   return { runtime, split, helmet, mode, title, glyphs, docFonts, baseRecipe };

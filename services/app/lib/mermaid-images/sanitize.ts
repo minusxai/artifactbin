@@ -21,7 +21,7 @@
  * fragment; a stylesheet at-rule other than `@keyframes`/`@media`, or one that
  * does not parse.
  */
-import { parse, walk } from '@/lib/story/styles/css-parser';
+import { parse, walk } from '@/lib/mermaid-images/css-parser';
 import { MERMAID_BUNDLED_FAMILIES, MERMAID_TEXT_RENDERING } from './font-block';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

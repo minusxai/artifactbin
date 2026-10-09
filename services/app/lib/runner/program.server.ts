@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import type * as Esbuild from 'esbuild';
 import { transformAsync, type PluginObj } from '@babel/core';
-import { buildAuthorModule, type AuthorModuleNames } from '@/lib/story/document/author-module.server';
+import { buildAuthorModule, type AuthorModuleNames } from '@/lib/author-script/author-module.server';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 
 const SOLID = ['batch', 'createEffect', 'createMemo', 'createRoot', 'createSignal', 'on', 'onCleanup', 'onMount', 'untrack'];

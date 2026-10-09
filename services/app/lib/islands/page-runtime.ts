@@ -10,13 +10,13 @@ import { reviewStateFor, type ReviewStateRegistration } from '@/lib/story-runtim
  *    rejects with the server's message. One store subscription pushes every change into the signals in one `batch`.
  *  - `proxy(url)` (`import { proxy } from 'page'`): the document's own `/a/<id>/fetch?url=` door for an https URL, which
  *    the server fetches for the script when the document declares the host (`<meta name="csp-connect">`) and the reader
- *    allowed it — a document's policy connects only to its own origin and the module CDNs (lib/story/styles/document-csp).
+ *    allowed it — a document's policy connects only to its own origin and the module CDNs (lib/compiled-page/styles/document-csp).
  *  - `exposePage(win, store)`: the same bindings as `window.page` (`get`, `set`, `ready`, `mutation`) for browser sessions.
- *  - `startAuthorModule(...)`: loads the version's module (built at publish, lib/story/document/author-module.server)
+ *  - `startAuthorModule(...)`: loads the version's module (built at publish, lib/author-script/author-module.server)
  *    with its `solid-js` imports pointed at this build's chunks, hands it the bindings through the `page` module's
  *    global, and mounts every component it exports where the markup placed one (`data-mx-mount`) with Solid's `render`.
  *
- * Solid is the island build's one instance (lib/islands/vendor, contract AUTHOR_VENDOR_EXPORTS): the script, this
+ * Solid is the island build's one instance (lib/islands/vendor, lib/author-script/contract AUTHOR_VENDOR_EXPORTS): the script, this
  * runtime and the kit share one reactive graph.
  */
 import { batch, getOwner, onCleanup, untrack, type JSX } from 'solid-js';
@@ -24,7 +24,7 @@ import { createComponent, render } from 'solid-js/web';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/dataflow/dataflow';
-import { PAGE_GLOBAL } from '@/lib/story-runtime/contract';
+import { PAGE_GLOBAL } from '@/lib/author-script/contract';
 import { bindPage, type PageBindings, type MutationFn } from '@/lib/story-runtime/page-bindings';
 export { bindPage, type PageBindings, type MutationFn, type QueryAccessor, type ValueSetter } from '@/lib/story-runtime/page-bindings';
 const bareName = (ref: string): string => (typeof ref === 'string' && ref.startsWith('$') ? ref.slice(1) : String(ref));

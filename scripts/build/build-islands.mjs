@@ -46,7 +46,7 @@ const SQLITE_WASM = path.join(ROOT, 'node_modules/@sqlite.org/sqlite-wasm/dist/s
 const escapeAttribute = (value) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /**
  * The Icon port fetches this only when query rows name a glyph absent from the page's small inline map.
- * Every lucide glyph (aliases included, lucide-static's data) as lib/story/assets/icon-glyphs resolves one: the
+ * Every lucide glyph (aliases included, lucide-static's data) as lib/story-ui/icon-glyphs.server resolves one: the
  * glyph's classes and its inner markup, as lucide's own component draws them.
  */
 function glyphCatalog() {
@@ -63,7 +63,7 @@ function glyphCatalog() {
 /** The contract's constants, read from the TypeScript so there is one table (both files import only types). */
 function readContracts() {
   const out = esbuild.buildSync({
-    stdin: { contents: "export { KIT_FAMILIES, AUTHOR_VENDOR_EXPORTS } from './lib/islands/contract'; export { ISLANDS_PATH } from './lib/compiled-page/contract';", resolveDir: APP, loader: 'ts' },
+    stdin: { contents: "export { KIT_FAMILIES } from './lib/islands/contract'; export { AUTHOR_VENDOR_EXPORTS } from './lib/author-script/contract'; export { ISLANDS_PATH } from './lib/compiled-page/contract';", resolveDir: APP, loader: 'ts' },
     bundle: true, format: 'cjs', platform: 'node', write: false, logLevel: 'silent', alias: { '@': APP },
   });
   const module = { exports: {} };
@@ -92,7 +92,7 @@ const ENTRIES = [
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
   // The author script's runtime (lib/islands/page-runtime): the declared names as Solid signals over the page's store,
   // and the mounts for the components the script exports. The script's `solid-js`, `solid-js/web` and `solid-js/store`
-  // are entries of THIS graph (lib/islands/vendor, contract AUTHOR_VENDOR_EXPORTS), so its imports (rewritten to these
+  // are entries of THIS graph (lib/islands/vendor, lib/author-script/contract AUTHOR_VENDOR_EXPORTS), so its imports (rewritten to these
   // URLs when it loads), the runtime and every kit island share one Solid: one reactive graph.
   { specifier: '@mx/page-runtime', name: 'page-runtime', file: () => islandModule('page-runtime') },
   { specifier: 'solid-js', name: 'solid', file: () => islandModule('vendor/solid') },
@@ -316,12 +316,12 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   }
   const twice = [...solidKinds.values()].find((files) => files.length > 1);
   if (twice) throw new Error(`build-islands: two copies of Solid reached the island graph (${twice.join(', ')})`);
-  // The author vendor chunks export exactly the curated names the publish build allows (contract AUTHOR_VENDOR_EXPORTS).
+  // The author vendor chunks export exactly the curated names the publish build allows (lib/author-script/contract AUTHOR_VENDOR_EXPORTS).
   for (const [specifier, names] of Object.entries(AUTHOR_VENDOR_EXPORTS)) {
     const entry = ENTRIES.find((e) => e.specifier === specifier);
     const output = Object.values(result.metafile.outputs).find((o) => o.entryPoint === toPosix(path.relative(ROOT, entry.file())));
     const exported = [...(output?.exports ?? [])].sort();
-    if (exported.join() !== [...names].sort().join()) throw new Error(`build-islands: the ${specifier} vendor chunk exports ${exported.join(', ')}; contract AUTHOR_VENDOR_EXPORTS names ${[...names].sort().join(', ')}`);
+    if (exported.join() !== [...names].sort().join()) throw new Error(`build-islands: the ${specifier} vendor chunk exports ${exported.join(', ')}; lib/author-script/contract AUTHOR_VENDOR_EXPORTS names ${[...names].sort().join(', ')}`);
   }
 
   // Rename every output to `<name>-<sha256(bytes)[0..16]>.js`. esbuild's own [hash] already folds in the

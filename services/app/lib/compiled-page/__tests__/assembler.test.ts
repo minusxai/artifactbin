@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { assembleReaderPage } from '../assembler';
-import { documentStyleSheets } from '@/lib/story/styles/document-styles';
+import { documentStyleSheets } from '@/lib/compiled-page/styles/document-styles';
 import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
 
 const build = { id: 'b'.repeat(16), manifest: { 'solid-js': '/islands/solid-1111aaaa.js', 'solid-js/web': '/islands/web-2222bbbb.js', 'solid-js/store': '/islands/store-3333cccc.js', '@mx/rt': '/islands/rt-4444dddd.js', '@mx/boot': '/islands/boot-5555eeee.js', '@mx/deck': '/islands/deck-6666ffff.js' } };

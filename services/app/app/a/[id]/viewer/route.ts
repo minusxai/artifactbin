@@ -3,7 +3,7 @@ import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
 import { sessionActor } from '@/lib/accounts';
 import { planOf } from '@/lib/compiled-page/plan';
-import { anonymousAccessFacts } from '@/lib/compiled-page/snapshots.server';
+import { anonymousAccessFacts } from '@/lib/story/prepared';
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import { readUrlValues } from '@/lib/dataflow';
@@ -73,7 +73,7 @@ async function overlayFor(artifact: ArtifactRow, viewer: RoleActor, search: stri
   const flow = artifact.format === 'markup' ? await compiledForRow(artifact) : null;
   if (!flow) return { viewer: await viewerIdentityFor(artifact, viewer.userId), results: EMPTY, hold: [] };
 
-  // The plan the guest snapshot is keyed by (lib/compiled-page/snapshots.server): the same facts, the same split.
+  // The plan the guest snapshot is keyed by (lib/story/prepared/snapshots.server): the same facts, the same split.
   const plan = planOf(flow, await anonymousAccessFacts(artifact, flow));
   const names = plan.queries.filter((q) => q.scope === 'viewer').map((q) => q.name);
   const [identity, hold, results] = await Promise.all([

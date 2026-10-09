@@ -29,7 +29,7 @@ import { STORY_SVG_TAGS } from '@/lib/jsx/component-names';
 import { isScriptComponent, MOUNT_ATTR } from './script-mount';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
-import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
+import { buildGlyphMap } from '@/lib/story-ui/icon-glyphs.server';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { parseRowRef } from '@/lib/jsx/row-scope';
 import type { JsxElement, JsxNode } from '@/lib/jsx';

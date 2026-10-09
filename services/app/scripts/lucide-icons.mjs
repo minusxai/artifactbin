@@ -1,6 +1,6 @@
 /**
  * Lucide's icon path data, read from the pinned package's icon modules at BUILD time
- * (lib/story/assets/icon-glyphs reads the result from lib/build-assets at run time). The icon
+ * (lib/story-ui/icon-glyphs.server reads the result from lib/build-assets at run time). The icon
  * packages are browser dependencies: the production server does not install them.
  *
  * Read from lucide-static, not lucide-react: this build script must not depend on a

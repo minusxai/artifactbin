@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { compilePage } from '../compiler';
-import { loadCompilerBuild } from '../build.server';
+import { compilePage } from '@/lib/compiled-page/compiler';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { doorsFor } from '../serve.server';
 import { wantsViewerOverlay } from '@/lib/islands/viewer';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
@@ -8,7 +8,7 @@ import { compileDataflow, prepareCompile } from '@/lib/dataflow/compile-dataflow
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { parseJsx } from '@/lib/jsx';
 import type { IslandPageData } from '@/lib/islands/contract';
-import type { CompileInput } from '../contract';
+import type { CompileInput } from '@/lib/compiled-page/contract';
 
 async function inputOf(source: string): Promise<CompileInput> {
   const parsed = parseJsx(source);

@@ -22,7 +22,7 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { COMPILED_PARITY_FIXTURES } from '../../../../../scripts/fixtures/compiled-parity/index.mjs';
-import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
+import { buildGlyphMap } from '@/lib/story-ui/icon-glyphs.server';
 import { loadSsrModule } from '../bundle.server';
 import { createModuleStore } from '../modules.server';
 

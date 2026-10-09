@@ -53,24 +53,25 @@ import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { Scalar } from '@/lib/dataflow';
-import { recompilePage, type PreparedPage } from '@/lib/story/prepared/prepared-page.server';
-import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/prepared/served-results.server';
+import { recompilePage, type PreparedPage } from './prepared-page.server';
+import { SERVED_RESULTS_BUDGET_MS, tokenOf } from './served-results.server';
 import { readUrlValues } from '@/lib/dataflow';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT } from '@/lib/story/styles';
-import { assembleReaderPage } from './assembler';
-import { withStoredCarriers } from './carriers';
-import { loadCompilerBuild } from './build.server';
-import { unresolvedSpecifiers } from './runtime-binding';
-import { retainedBuild } from './shared-builds.server';
+import { DOMAIN_FOOTER_CSS } from '@/lib/compiled-page/styles';
+import { DOMAIN_FOOTER_TEXT } from '@artifactbin/contracts/domain-footer';
+import { assembleReaderPage } from '@/lib/compiled-page/assembler';
+import { withStoredCarriers } from '@/lib/compiled-page/carriers';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { unresolvedSpecifiers } from '@/lib/compiled-page/runtime-binding';
+import { retainedBuild } from '@/lib/compiled-page/shared-builds.server';
 
 import {
   COMPILE_INLINE_BUDGET_MS, isCompileFailure, SNAPSHOT_MAX_AGE_MS,
   MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT,
   type AssembleHead, type AssembleInput, type AssembleOverlay, type CompiledPage, type CompilerBuild, type DataSnapshot,
   type ReaderFallbackReason, type SnapshotKey, type StoredCompile,
-} from './contract';
-import { planOf } from './plan';
+} from '@/lib/compiled-page/contract';
+import { planOf } from '@/lib/compiled-page/plan';
 import { anonymousAccessFacts, snapshotKeyFor, snapshotStore } from './snapshots.server';
 
 /** What one admitted request decides about its compiled render. Nothing here is stored. */
@@ -361,7 +362,7 @@ export async function storyOf(compiled: CompiledPage, input: StoryInput): Promis
   // Loaded on the first compiled read, not at the top: the SSR loader carries Babel and Solid's
   // server build, which a process without a usable compiled page never needs
   // (the same boundary prepared-page.server keeps for the compiler).
-  const { loadSsrModule } = await import('./bundle.server');
+  const { loadSsrModule } = await import('@/lib/compiled-page/bundle.server');
   const live = (() => { try { return loadCompilerBuild().ssr?.url; } catch { return undefined; } })();
   const module = await loadSsrModule(compiled.ssr, undefined, undefined, half && half.url !== live ? half : undefined);
   const rendered = module.render({ values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
@@ -398,7 +399,7 @@ const classOf = (node: Located): string | undefined => node.attrs?.find((a) => a
 /** The deck's framework-free behaviour chunk (the compiler's `DECK_BEHAVIOR`). */
 const DECK_BEHAVIOR = '@mx/deck';
 
-/** A DOMAIN POST's one line of attribution (its style: lib/story/styles/document-styles DOMAIN_FOOTER_CSS). */
+/** A DOMAIN POST's one line of attribution (its style: lib/compiled-page/styles/document-styles DOMAIN_FOOTER_CSS). */
 export const domainFooter = (href: string): { html: string; css: string } => ({
   html: `<footer data-mx-domain-footer="">${DOMAIN_FOOTER_TEXT} <a href="${escapeHtml(href)}" rel="noopener">artifactbin</a></footer>`,
   css: DOMAIN_FOOTER_CSS,

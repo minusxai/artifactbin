@@ -26,7 +26,7 @@
  * __tests__/raw-document.test.ts.
  */
 import { BASEMAP_PATH } from '@artifactbin/contracts';
-import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
+import { storyFragmentPath } from '../story-fragment';
 import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from '@/lib/story-ui/document-sources';
 import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/document/csp-extensions';
 /** Where each kind of subresource may come from — content-independent. */

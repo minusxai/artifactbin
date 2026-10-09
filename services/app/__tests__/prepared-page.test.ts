@@ -19,17 +19,17 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
 import { drainPreparedPageWarmups, enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { applyStyleOverrides } from '@/lib/story/styles/style-overrides';
-import { inlineStoryCss as realInlineStoryCss, inlineStoryNodes as realInlineStoryNodes } from '@/lib/story/styles/inline-css';
+import { applyStyleOverrides } from '@/lib/compiled-page/styles/style-overrides';
+import { inlineStoryCss as realInlineStoryCss, inlineStoryNodes as realInlineStoryNodes } from '@/lib/compiled-page/styles/inline-css';
 import { prepareStoryRuntime } from '@/lib/story/prepared/prepare-runtime.server';
-import { storyBaseCss } from '@/lib/story/styles/story-base-css';
+import { storyBaseCss } from '@/lib/compiled-page/styles/story-base-css';
 import { readerStorySheet } from '@/lib/story/prepared/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
 import { ISLAND_DATA_ID, DOCUMENT_MODULE_PATH, type CompiledPage, type StoredCompile, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { readFileSync } from 'node:fs';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import { compiledPageFailures } from '@/lib/compiled-page/serve.server';
+import { compiledPageFailures } from '@/lib/story/prepared/serve.server';
 import path from 'node:path';
 import { createDocumentGraph } from '@/lib/document/document-graph';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
@@ -39,8 +39,8 @@ vi.mock('@/lib/jsx/parse', async (original) => {
   const actual = await original<typeof import('@/lib/jsx/parse')>();
   return { ...actual, parseJsx: (...args: Parameters<typeof actual.parseJsx>) => { spies.parse++; return actual.parseJsx(...args); } };
 });
-vi.mock('@/lib/story/styles/inline-css', async (original) => {
-  const actual = await original<typeof import('@/lib/story/styles/inline-css')>();
+vi.mock('@/lib/compiled-page/styles/inline-css', async (original) => {
+  const actual = await original<typeof import('@/lib/compiled-page/styles/inline-css')>();
   return {
     ...actual,
     inlineStoryCss: (...args: Parameters<typeof actual.inlineStoryCss>) => { spies.css++; return actual.inlineStoryCss(...args); },
@@ -374,7 +374,7 @@ describe('the compile beside the prepared page', () => {
 
 // Merged from compiled-fallback-policy.test.ts.
 /**
- * THE FAILURE CONTRACT (docs/phase2-architecture.md §6; lib/compiled-page/serve.server). With no other
+ * THE FAILURE CONTRACT (docs/phase2-architecture.md §6; lib/story/prepared/serve.server). With no other
  * renderer left, a missing compile or one below a hand-raised compatibility minimum is compiled inline and
  * waited for; a compile from another build is served.
  * The inline budget only decides whether that is logged as

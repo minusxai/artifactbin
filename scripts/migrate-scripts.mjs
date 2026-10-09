@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * MIGRATE A DOCUMENT'S SCRIPT TO THE SOLID CONTRACT. The rewrite itself is
- * services/app/lib/story/document/migrate-scripts.ts (its header lists every rule); this is its command line.
+ * services/app/lib/author-script/migrate-scripts.ts (its header lists every rule); this is its command line.
  *
  *   node scripts/migrate-scripts.mjs [--write] [--print] <file.jsx | directory> ...
  *
@@ -33,7 +33,7 @@ if (!targets.length) {
   process.exit(2);
 }
 
-const { migrateDocumentScripts } = await tsImport('../services/app/lib/story/document/migrate-scripts.ts', import.meta.url);
+const { migrateDocumentScripts } = await tsImport('../services/app/lib/author-script/migrate-scripts.ts', import.meta.url);
 
 const files = [];
 const collect = (target) => {

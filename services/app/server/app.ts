@@ -49,7 +49,7 @@ import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { enableSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
+import { enableSnapshotRevalidations } from '@/lib/story/prepared';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
 import zlib from 'node:zlib';
@@ -61,7 +61,7 @@ import { linkedStylesheets } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
-import { fontPreloadTags } from '@/lib/story/styles';
+import { fontPreloadTags } from '@/lib/compiled-page/styles';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
@@ -311,7 +311,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   });
   // A serving process prepares each new head for its readers after the write commits (lib/story/prepared/prepared-page.server).
   enablePreparedPageWarmups();
-  // …and revalidates the guest snapshots a write made stale (lib/compiled-page/snapshots.server).
+  // …and revalidates the guest snapshots a write made stale (lib/story/prepared/snapshots.server).
   enableSnapshotRevalidations();
   // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
   // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).

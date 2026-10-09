@@ -123,7 +123,7 @@ export interface StoryIslandData {
   template?: string | null;
   /**
    * The `<Icon>` glyphs this document uses, resolved server-side
-   * (lib/story/assets/icon-glyphs). A separate channel from the AST on purpose: the
+   * (lib/story-ui/icon-glyphs.server). A separate channel from the AST on purpose: the
    * glyph is injected as raw markup, so a map an author could write into would
    * be an injection hole. Absent for a document that draws no icons.
    */
@@ -897,9 +897,6 @@ export function isEditParentMessage(data: unknown): data is StoryEditParentMessa
   const d = data as { type?: unknown };
   return typeof d.type === 'string' && EDIT_PARENT_TYPES.has(d.type);
 }
-
-/** The global the generated `page` module reads at import (lib/islands/page-runtime sets it; story/document/author-module.server emits the read). */
-export const PAGE_GLOBAL = '__mxPageBindings';
 
 /** What `mutationUnavailable` answers while a write's access check is in flight; the store and the island kit share this one string. */
 export const ACCESS_PENDING = 'Checking edit access…';

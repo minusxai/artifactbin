@@ -7,7 +7,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { markupCsp } from '@/lib/story/styles/markup-csp';
+import { markupCsp } from '@/lib/compiled-page/styles/markup-csp';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 
 const BASE = 'http://localhost:3000';

@@ -24,7 +24,7 @@ import { compiledForRow, getArtifactById } from '@/lib/artifacts';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { planOf } from '@/lib/compiled-page/plan';
 import { updateSharingFor } from '@/lib/artifacts';
-import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/compiled-page/snapshots.server';
+import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/story/prepared/snapshots.server';
 import { SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS } from '@/lib/compiled-page/contract';
 
 const harness = useAppHarness();

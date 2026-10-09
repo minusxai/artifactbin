@@ -1,12 +1,11 @@
 /**
- * THE AUTHOR MODULE BUILD (lib/story/document/author-module.server): the generated `page` module exports the three
+ * THE AUTHOR MODULE BUILD (lib/author-script/author-module.server): the generated `page` module exports the three
  * binders, Solid JSX is compiled at publish over the island build's `solid-js/web`, and every `page` binding is checked
  * against the Helmet's declarations, by name and by kind, before anything is served.
  */
 import { describe, expect, it } from 'vitest';
-import { buildAuthorModule, pageModuleSource } from '../document/author-module.server';
-import { PAGE_GLOBAL } from '@/lib/story-runtime/contract';
-import { AUTHOR_VENDOR_EXPORTS } from '@/lib/islands/contract';
+import { buildAuthorModule, pageModuleSource } from '../author-module.server';
+import { AUTHOR_VENDOR_EXPORTS, PAGE_GLOBAL } from '@/lib/author-script/contract';
 
 const NAMES = { values: ['region'], tables: ['sales'], queries: ['monthly'], mutations: ['rename'] };
 const built = async (script: string) => {

@@ -18,8 +18,8 @@
  *    hashes them, so a changed system recompiles stale rows. The theme module reaches the browser
  *    (the editor's picker, the offline file), and this registry with it.
  *  - FONTS AND CLASSES (./story-system-sheets, story-system-sheets.json: half a megabyte in all) ride
- *    the document's base sheet (lib/story/styles/story-base-css, via the recipe prepare-runtime
- *    fills) and the standalone document's style tags (lib/story/styles/document-styles): per
+ *    the document's base sheet (lib/compiled-page/styles/story-base-css, via the recipe prepare-runtime
+ *    fills) and the standalone document's style tags (lib/compiled-page/styles/document-styles): per
  *    document, never stored, so thirteen systems do not sit in every compiled sheet, and never in
  *    the browser bundle, which rebuilds the base sheet from the recipe's TEXT. Classes are scoped
  *    `:where(:root[data-theme="x"]) .t-label`, at one class of specificity, so an authored rule for

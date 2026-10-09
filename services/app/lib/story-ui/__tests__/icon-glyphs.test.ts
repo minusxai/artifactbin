@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { iconGlyphKey } from '@/lib/story-ui/icon-contract';
 import { FILE_GLYPH_NAMES } from '@/lib/story-ui/file-glyphs';
-import { buildGlyphMap, scanIcons, glyphsForNodes } from '@/lib/story/assets/icon-glyphs';
+import { buildGlyphMap, scanIcons, glyphsForNodes } from '@/lib/story-ui/icon-glyphs.server';
 import { parseJsx } from '@/lib/jsx';
 import { readFileSync } from 'node:fs';
 
@@ -66,7 +66,7 @@ describe('icon glyphs', () => {
 
 describe('the server reads icon data from the build, never from the icon packages', () => {
   it('loads no icon package at run time (the production server does not install them)', () => {
-    const source = readFileSync(new URL('../assets/icon-glyphs.ts', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../icon-glyphs.server.ts', import.meta.url), 'utf8');
     expect(source).not.toMatch(/lucide-(react|solid)/);
     expect(source).not.toMatch(/createRequire|require\.resolve/);
     expect(source).toContain('lib/build-assets/lucide-icons.json');

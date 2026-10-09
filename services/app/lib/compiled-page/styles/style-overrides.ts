@@ -1,5 +1,5 @@
 /**
- * THE INLINE READER'S NODE POLICY, AS DATA (lib/story/styles/inline-css isolateStoryNodes).
+ * THE INLINE READER'S NODE POLICY, AS DATA (lib/compiled-page/styles/inline-css isolateStoryNodes).
  *
  * The server applies the CSS policy to a document's static inline style values
  * (and its font-family aliases) once per version. Almost every node comes out

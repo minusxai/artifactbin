@@ -19,7 +19,7 @@ where the author script runs in [serving and security](../../../../docs/serving-
   layer also sanitizes.
 - The final model: each document is served on its own origin, framed by the app page, and calls its
   own data doors directly under the document CSP (plus the hosts its Helmet declares and its reader
-  allowed). Its Helmet script is a Solid module built at publish (`lib/story/document/author-module.server`)
+  allowed). Its Helmet script is a Solid module built at publish (`lib/author-script/author-module.server`)
   and run in the document by `lib/islands/page-runtime`; it binds declared names with `signal`, `query`
   and `mutation` from `page`, and an exported component mounts at a markup tag (`data-mx-mount`) over
   its fallback, which edit mode shows read-only. There is no author frame, `mx` bridge or managed `<Iframe>`.

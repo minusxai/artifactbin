@@ -449,7 +449,7 @@ const CODES: Table = {
 
 // RETIRED TABLE — `webfonts`, the family → copied-faces index of the retired
 // font-copying pipeline. A document's font metas now emit a Google Fonts
-// `@import` (lib/story/styles/document-fonts); nothing reads or writes it. Boot
+// `@import` (lib/compiled-page/styles/document-fonts); nothing reads or writes it. Boot
 // DDL is additive-only, so an older database keeps the table; a fresh one never creates it.
 
 /**
@@ -607,7 +607,7 @@ const PREPARED_PAGES: Table = {
 };
 
 /**
- * GUEST SNAPSHOTS (lib/compiled-page/snapshots.server) — a document version's
+ * GUEST SNAPSHOTS (lib/story/prepared/snapshots.server) — a document version's
  * SHARED queries answered for the anonymous reader, keyed by the version slot,
  * a digest of its data plan and a digest of the inputs those queries read.
  * Freshness is decided on read by comparing `marks` (each dataset's mark taken
