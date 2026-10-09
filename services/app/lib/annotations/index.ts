@@ -10,3 +10,5 @@ export { hasReplyText, remoteWorkLabel, replyMentionPrefix } from './remote-repl
 export { actOnAnnotationFor, countOpenAnnotations, createAnnotationFor, deleteAnnotationFor, listAnnotationPageFor, listAnnotationsFor } from './store';
 export type { AnnotationWire, CreateAnnotationInput } from './store';
 export { artifactToWireWithAnnotations, artifactWireFor, readArtifactSnapshot, respondToAnnotationAction } from './wire';
+
+export { readCommentChangesFor, InvalidCommentCursor } from './changes';
