@@ -7,8 +7,8 @@
 export const BASEMAP_UPSTREAM = 'https://tiles.openfreemap.org';
 /** Where the proxy answers; also admitted by the document CSP's connect-src. */
 export const BASEMAP_PATH = '/basemap/';
-/** MapLibre's CSP-build worker, served same-origin: a blob: worker is refused. */
-export const BASEMAP_WORKER_URL = `${BASEMAP_PATH}worker.js`;
+/** MapLibre's module worker, served same-origin: a blob: worker is refused. */
+export const BASEMAP_WORKER_URL = `${BASEMAP_PATH}worker.mjs`;
 
 /** The two OpenFreeMap styles a map uses: light ("positron") and dark. */
 const STYLES = { light: 'positron', dark: 'dark' } as const;

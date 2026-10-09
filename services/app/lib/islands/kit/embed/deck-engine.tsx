@@ -7,14 +7,13 @@
  * tooltip record come from the shared framework-free half (lib/viz/deck-engine-core); this file is the
  * view — deck.gl's `Deck` in the same wrapper DOM @deck.gl/react's `DeckGL` draws, or, with a basemap,
  * MapLibre with deck drawing into its GL context (interleaved), in the container react-maplibre's `Map`
- * draws.
+ * draws. MapLibre needs WebGL2; without it the map keeps the deck-only view and says why.
  */
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { Deck } from '@deck.gl/core';
-import { MapboxOverlay } from '@deck.gl/mapbox';
-// @ts-expect-error The CSP build ships no typings of its own; it is the default build's twin.
-import maplibregl from 'maplibre-gl/dist/maplibre-gl-csp';
+import { MapLibreOverlay } from '@deck.gl/maplibre';
+import * as maplibregl from 'maplibre-gl';
 import { loadGeoFeatures } from '@/lib/viz/geo-assets';
 import { basemapStyleUrl, basemapTransformRequest, BASEMAP_WORKER_URL } from '@/lib/serving/basemap';
 import { createVegaTooltipHandler, hideVegaTooltip } from '@/lib/viz/vega-tooltip-handler';
@@ -23,8 +22,11 @@ import {
   type ColorScale, type Feature, type MapViewState, type PickingInfo, type Row,
 } from '@/lib/viz/deck-engine-core';
 
-// MapLibre may not spawn a blob: worker under the document CSP; it loads a same-origin script.
+// MapLibre may not spawn a blob: worker under the document CSP; it starts this same-origin module worker.
 maplibregl.setWorkerUrl(BASEMAP_WORKER_URL);
+
+/** Shown in the attribution's place when the street map cannot draw. */
+export const BASEMAP_UNAVAILABLE = 'Street map unavailable: this browser has no WebGL2.';
 
 export interface DeckEngineProps {
   rows: () => readonly Row[];
@@ -63,20 +65,30 @@ function DeckView(props: ViewProps) {
   );
 }
 
-/** MapLibre with deck in its GL context: react-maplibre Map's container (`position:relative`, then `[mapboxgl-children]`). */
-function BaseMapView(props: ViewProps & { style: 'light' | 'dark'; title: string }) {
+/**
+ * MapLibre with deck in its GL context: react-maplibre Map's container (`position:relative`, then `[mapboxgl-children]`).
+ * A browser without WebGL2 cannot draw MapLibre at all; `unavailable` hands the box back to the deck-only view.
+ */
+function BaseMapView(props: ViewProps & { style: 'light' | 'dark'; title: string; unavailable: () => void }) {
   let container!: HTMLDivElement;
   const [mounted, setMounted] = createSignal(false);
   onMount(() => {
     const at = props.view();
-    const map = new maplibregl.Map({
-      container, style: basemapStyleUrl(props.style), center: [at.longitude, at.latitude], zoom: at.zoom, pitch: at.pitch, bearing: at.bearing,
-      attributionControl: false,
-      // MapLibre names its canvas region "Map"; a document with several maps needs each one's own name.
-      locale: { 'Map.Title': props.title },
-      transformRequest: basemapTransformRequest,
-    });
-    const overlay = new MapboxOverlay({ interleaved: true, layers: [] });
+    let map: maplibregl.Map;
+    try {
+      map = new maplibregl.Map({
+        container, style: basemapStyleUrl(props.style), center: [at.longitude, at.latitude], zoom: at.zoom, pitch: at.pitch, bearing: at.bearing,
+        attributionControl: false,
+        // MapLibre names its canvas region "Map"; a document with several maps needs each one's own name.
+        locale: { 'Map.Title': props.title },
+        transformRequest: basemapTransformRequest,
+      });
+    } catch (error) {
+      if (!(error instanceof maplibregl.GPUInitializationError)) throw error;
+      props.unavailable();
+      return;
+    }
+    const overlay = new MapLibreOverlay({ interleaved: true, layers: [] });
     map.addControl(overlay);
     let syncing = false;
     map.on('move', (event: { originalEvent?: unknown }) => {
@@ -193,15 +205,18 @@ function DeckContent(props: DeckEngineProps & { box: HTMLElement }) {
     createVegaTooltipHandler(box, props.colorMode)(null as never, event.srcEvent as MouseEvent, null as never, record);
   };
 
-  const style = basemapStyleOf(props.basemap ?? 'auto', props.colorMode);
+  const wanted = basemapStyleOf(props.basemap ?? 'auto', props.colorMode);
+  // Set when MapLibre finds no WebGL2: the map draws without its streets and says so where the credit was.
+  const [noBasemap, setNoBasemap] = createSignal(false);
+  const style = () => (noBasemap() ? null : wanted);
   const title = props.title ?? 'Map';
   const layers = () => built().map((b) => b.layer);
   return <>
-    {style
-      ? <BaseMapView style={style} title={title} layers={layers} view={view} move={move} onHover={onHover} />
-      : <DeckView layers={layers} view={view} move={move} onHover={onHover} />}
+    <Show when={style()} fallback={<DeckView layers={layers} view={view} move={move} onHover={onHover} />}>{(basemap) => (
+      <BaseMapView style={basemap()} title={title} layers={layers} view={view} move={move} onHover={onHover} unavailable={() => setNoBasemap(true)} />
+    )}</Show>
     <MapControls zoomIn={() => zoomBy(1)} zoomOut={() => zoomBy(-1)} reset={reset} />
     <Show when={(props.legend ?? true) && scales().length > 0}><MapLegend scales={scales()} /></Show>
-    {style ? <p class={MAP_CLASSES.attribution}>{ATTRIBUTION}</p> : null}
+    {wanted ? <p class={MAP_CLASSES.attribution}>{noBasemap() ? BASEMAP_UNAVAILABLE : ATTRIBUTION}</p> : null}
   </>;
 }

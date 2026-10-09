@@ -198,13 +198,13 @@ function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; con
     // `connect`: the pages apex, which sign-out asks to end the pages session (lib/accounts/browser-session).
     ['connect-src', "'self'", 'blob:', ...connect].join(' '),
     "manifest-src 'self'", ['frame-src', "'self'", ...frames].join(' '), "frame-ancestors 'self'",
-    // No feature starts a worker today (the source editor runs none). This is
-    // here because the failure would be silent and remote: `worker-src` has no
-    // default of its own, falling back through `child-src` to `default-src
-    // 'none'`, so the first feature that wants a worker would be refused by a
-    // directive nobody wrote. Vite emits workers as same-origin assets, so
-    // `'self'` is the whole permission — NOT `blob:`, which would reopen
-    // script-from-a-string.
+    // `worker-src` has no default of its own: it falls back through `child-src`
+    // to `default-src 'none'`, so a worker would be refused by a directive nobody
+    // wrote, silently. The one worker the product starts — MapLibre's, for a
+    // `<DeckGL>` street basemap — is a same-origin module script
+    // (/basemap/worker.mjs, app/basemap), and Vite emits workers as same-origin
+    // assets, so `'self'` is the whole permission — NOT `blob:`, which would
+    // reopen script-from-a-string.
     "worker-src 'self'",
     "form-action 'self'", "object-src 'none'", "base-uri 'self'",
   ].join('; ');
