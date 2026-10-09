@@ -46,7 +46,7 @@ import { FeatureGate } from '../components/FeatureGate';
 import { createIsPhoneViewport } from '../components/MobileSheet';
 import { Tooltip } from '../components/Tooltip';
 import { createForegroundComposer } from '../components/TrustedUi';
-import { positionedComposer } from './AnnotationComposerPosition';
+import { beginComposerPointerDrag, clampComposerPosition, positionedComposer, type ComposerPoint } from './AnnotationComposerPosition';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';
 import { RailChrome } from './AnnotationRail';
 import { AnnotationThread } from './AnnotationThread';
@@ -174,6 +174,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   let threadsRoot: HTMLDivElement | undefined;
   let chromeAnchor: HTMLStyleElement | undefined;
   const [selection, setSelection] = createSignal<StoryEditSelection | null>(null);
+  const [manualComposerPoint, setManualComposerPoint] = createSignal<ComposerPoint | null>(null);
+  const [composerMoveAnnouncement, setComposerMoveAnnouncement] = createSignal('');
+  let stopComposerDrag: (() => void) | undefined;
   /** Select keeps native text selection and outlines blocks; Screenshot draws an area. Page state, never the URL. */
   const [pick, setPick] = createSignal<'block' | 'area' | null>(null);
   // Picking is suspended while its composer is open; finishing the draft resumes it.
@@ -686,10 +689,69 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       ? { left: measured.left, top: measured.top, width: Math.max(0, measured.width - railWidth()) }
       : { left: 0, top: topOffset(), width: width - railWidth() };
   });
+  let composerElement: HTMLElement | undefined;
+  let composerTarget: string | null = null;
+  createEffect(on(selection, (current) => {
+    const next = current ? JSON.stringify([current.nodeId ?? null, current.path, current.kind, current.quote ?? null, current.range ?? null]) : null;
+    if (next !== composerTarget) {
+      stopComposerDrag?.();
+      stopComposerDrag = undefined;
+      setManualComposerPoint(null);
+      setComposerMoveAnnouncement('');
+      composerTarget = next;
+    }
+  }));
+  createEffect(() => {
+    if (!selection() || pick()) {
+      stopComposerDrag?.();
+      stopComposerDrag = undefined;
+    }
+  });
   const composerPosition = createMemo(() => {
     const current = selection();
-    return current ? positionedComposer(current, frameRect(), viewport().width, viewport().height, capture.required()) : null;
+    if (!current) return null;
+    const frame = frameRect();
+    const view = viewport();
+    const screenshot = capture.required();
+    const base = positionedComposer(current, frame, view.width, view.height, screenshot);
+    const moved = manualComposerPoint();
+    if (!moved) return base;
+    const minTop = Math.min(Math.max(frame.top, screenshot ? APP_BAR_H : 0) + VIEW_COMMENT_INSET, Math.max(VIEW_COMMENT_INSET, view.height - VIEW_COMMENT_INSET));
+    const naturalHeight = composerElement?.scrollHeight || composerElement?.getBoundingClientRect().height || (screenshot ? 720 : 236);
+    const reachableHeight = Math.min(naturalHeight, Math.max(0, view.height - minTop - VIEW_COMMENT_INSET));
+    return { ...base, ...clampComposerPosition({ ...base, ...moved }, view.width, view.height, reachableHeight, minTop, VIEW_COMMENT_INSET) };
   });
+  const placeComposer = (point: ComposerPoint) => {
+    const current = composerPosition();
+    if (!current) return;
+    const frame = frameRect(), view = viewport(), screenshot = capture.required();
+    const minTop = Math.min(Math.max(frame.top, screenshot ? APP_BAR_H : 0) + VIEW_COMMENT_INSET, Math.max(VIEW_COMMENT_INSET, view.height - VIEW_COMMENT_INSET));
+    const naturalHeight = composerElement?.scrollHeight || composerElement?.getBoundingClientRect().height || (screenshot ? 720 : 236);
+    const reachableHeight = Math.min(naturalHeight, Math.max(0, view.height - minTop - VIEW_COMMENT_INSET));
+    setManualComposerPoint(clampComposerPosition({ ...current, ...point }, view.width, view.height, reachableHeight, minTop, VIEW_COMMENT_INSET));
+  };
+  const startComposerDrag = (event: PointerEvent) => {
+    const current = composerPosition();
+    if (!current) return;
+    stopComposerDrag?.();
+    stopComposerDrag = beginComposerPointerDrag(event, current, placeComposer, event.currentTarget as HTMLElement);
+  };
+  onCleanup(() => stopComposerDrag?.());
+  const moveComposerByKey = (event: KeyboardEvent) => {
+    const step = event.shiftKey ? 32 : 12;
+    const delta = event.key === 'ArrowLeft' ? { left: -step, top: 0 }
+      : event.key === 'ArrowRight' ? { left: step, top: 0 }
+      : event.key === 'ArrowUp' ? { left: 0, top: -step }
+      : event.key === 'ArrowDown' ? { left: 0, top: step }
+      : null;
+    if (!delta) return;
+    const current = composerPosition();
+    if (!current) return;
+    event.preventDefault();
+    placeComposer({ left: current.left + delta.left, top: current.top + delta.top });
+    const next = composerPosition();
+    if (next) setComposerMoveAnnouncement(`Comment box moved to ${Math.round(next.left)}, ${Math.round(next.top)} pixels.`);
+  };
 
   const openIds = createMemo(() => annotations().map((row) => row.id), undefined, { equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]) });
   const resolvedIds = createMemo(() => (resolvedList() ?? []).map((row) => row.id), undefined, { equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]) });
@@ -772,11 +834,15 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
       {/* Drafts belong to the thing being discussed; the saved conversation moves to the rail. */}
       <Show when={selection() && composerPosition() && !pick()}>
-        <section data-capture-chrome role="dialog" aria-label="Annotation composer" class={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
+        <section ref={(element) => { composerElement = element; }} data-capture-chrome role="dialog" aria-label="Annotation composer" class={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
           style={{ left: `${composerPosition()!.left}px`, top: `${composerPosition()!.top}px`, width: `${composerPosition()!.width}px`, 'max-height': `calc(100vh - ${composerPosition()!.top + VIEW_COMMENT_INSET}px)` }}>
           <div class="flex items-center gap-2 border-b border-edge px-3 py-2.5">
             <span class="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-accent"><MessageSquare size={12} strokeWidth={1.8} /></span>
             <span class="text-xs font-semibold text-fg">Add comment</span>
+            <button type="button" aria-label="Move comment box" aria-describedby="annotation-composer-move-hint" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" onPointerDown={startComposerDrag} onKeyDown={moveComposerByKey}
+              class="inline-flex h-7 w-7 cursor-move touch-none select-none items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg focus-visible:outline-2 focus-visible:outline-accent">⠿</button>
+            <span id="annotation-composer-move-hint" class="sr-only" aria-live="polite">Use the arrow keys to move the comment box. Hold Shift to move farther.</span>
+            <span class="sr-only" aria-live="polite">{composerMoveAnnouncement()}</span>
             <button type="button" aria-label="Close annotation composer" onClick={cancelCompose}
               class="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"><X size={14} strokeWidth={1.8} /></button>
           </div>

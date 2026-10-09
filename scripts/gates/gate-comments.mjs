@@ -133,6 +133,24 @@ async function ownerLeg(browser, { id, token }) {
 
     // Write it from the composer the bubble opened.
     await page.locator('[aria-label="Annotation comment"]').fill('this number looks wrong — check the Q3 sheet');
+    const composer = page.getByRole('dialog', { name: 'Annotation composer' });
+    const moveHandle = composer.getByRole('button', { name: 'Move comment box' });
+    const initialComposerBox = await composer.boundingBox();
+    const handleBox = await moveHandle.boundingBox();
+    if (!initialComposerBox || !handleBox) throw new Error('Composer and move handle must be visible');
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    // Keep moving after the pointer leaves app chrome and crosses the opaque document iframe.
+    await page.mouse.move(160, 220, { steps: 12 });
+    await page.mouse.move(240, 300, { steps: 8 });
+    await page.mouse.up();
+    const movedComposerBox = await composer.boundingBox();
+    const expectedComposerLeft = Math.max(12, initialComposerBox.x + 240 - (handleBox.x + handleBox.width / 2));
+    check(!!movedComposerBox && Math.abs(movedComposerBox.x - expectedComposerLeft) < 2,
+      'the comment composer can be dragged across document frame content');
+    check((await page.locator('[aria-label="Annotation comment"]').textContent()) === 'this number looks wrong — check the Q3 sheet'
+      && await frame.locator('#figure[data-mx-annotate-selected]').count() === 1,
+      'moving the composer preserves its draft and selected words');
     await page.locator('[aria-label="Save annotation"]').click();
 
     // Saving tints the commented node (the Docs highlight).
