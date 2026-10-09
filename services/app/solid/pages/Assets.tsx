@@ -9,7 +9,7 @@ import ChevronRight from 'lucide-solid/icons/chevron-right';
 import Globe from 'lucide-solid/icons/globe';
 import Search from 'lucide-solid/icons/search';
 import type { AssetSelection, WorkspaceAssets } from '@/lib/workspace/inventory';
-import { displayTitle } from '@/lib/document/title';
+import { displayTitle } from '@/lib/document/display-title';
 import type { ShelfRow } from '@/lib/workspace/shelf';
 import { MicroLabel, PANEL, FormatBadge, timeAgo } from '../components/ui';
 import { RowActions } from '../components/Shelf';

@@ -422,6 +422,12 @@ interface StoryEditReadyMessage { type: typeof STORY_EDIT_READY_MESSAGE; nonce: 
  * the same sanitizing write-back the canvas used (lib/data/story/jsx-edit).
  */
 export const STORY_INLINE_MESSAGE = 'mx:inline';
+export const STORY_MARKDOWN_BLOCK_MESSAGE = 'mx:markdown-block';
+export type MarkdownBlockKind = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'bullet' | 'number' | 'code' | 'check' | 'hr' | 'table';
+export type MarkdownTableAction = 'row-before' | 'row-after' | 'column-before' | 'column-after' | 'delete-row' | 'delete-column' | 'delete-table';
+export const STORY_MARKDOWN_TABLE_MESSAGE = 'mx:markdown-table';
+interface StoryMarkdownTableMessage { type: typeof STORY_MARKDOWN_TABLE_MESSAGE; action: MarkdownTableAction }
+interface StoryMarkdownBlockMessage { type: typeof STORY_MARKDOWN_BLOCK_MESSAGE; block: MarkdownBlockKind }
 interface StoryInlineMessage {type:typeof STORY_INLINE_MESSAGE;tag:'strong'|'em'|'u'}
 export const STORY_PASTE_MESSAGE = 'mx:paste';
 interface StoryPasteMessage {type:typeof STORY_PASTE_MESSAGE;value:string;kind:'markdown'|'text'}
@@ -466,7 +472,9 @@ export interface StoryEditSelection {
   /** Unclipped drag in this document viewport, separate from the node-relative anchor. */
   captureRect?: StoryEditRect;
   /** The prose engine owns formatting transactions and their source write-back. */
-  editor?: 'prose';
+  editor?: 'prose' | 'markdown';
+  /** Lexical block at the caret, or mixed when the range spans different block styles. */
+  markdownBlock?: MarkdownBlockKind | 'mixed';
   customHeight?:boolean;
   inline?:Record<'strong'|'em'|'u',boolean|'mixed'>;
   /** Prose only: where the caret or selected words are, so link chrome can sit beside them. */
@@ -644,6 +652,8 @@ interface StorySelectMessage {
    * document is still rendering), so wait briefly for it, then scroll it into view.
    */
   reveal?: boolean;
+  /** Start typing in a just-inserted rich-text region once its editor mounts. */
+  focusText?: boolean;
   /** With `reveal`: the id of the node meant — until the re-render lands, an OLD node sits at that path. */
   nodeId?: string;
 }
@@ -868,7 +878,7 @@ type StoryEditFrameMessage =
   | StoryImageDropMessage | StoryImageReplaceMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage
   | StoryEditFlushMessage | StoryCommentKeyMessage | StoryLinkKeyMessage | StoryOpenScriptMessage;
 export type StoryEditParentMessage =
-  | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StoryFocusTextMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
+  | StoryMarkdownTableMessage | StoryMarkdownBlockMessage | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StoryFocusTextMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
   | StoryAnnotationsMessage | StorySelectionActionsMessage;
 
 const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
@@ -881,6 +891,7 @@ const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
   STORY_OPEN_SCRIPT_MESSAGE,
 ]);
 const EDIT_PARENT_TYPES: ReadonlySet<string> = new Set([
+  STORY_MARKDOWN_BLOCK_MESSAGE, STORY_MARKDOWN_TABLE_MESSAGE,
   STORY_INLINE_MESSAGE, STORY_PASTE_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_FOCUS_TEXT_MESSAGE, STORY_SELECT_MESSAGE,
   STORY_SPOTLIGHT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE,
 ]);

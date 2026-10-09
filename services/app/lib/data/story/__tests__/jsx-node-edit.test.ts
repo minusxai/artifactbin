@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  freshNodeId, imageAltInJsx, imageTargetInJsx, insertImageInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx,
+  freshNodeId, imageAltInJsx, imageTargetInJsx, insertImageInJsx, nodeTargetInJsx, placeImageInJsx, placeMarkdownInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx,
   setImageAltInJsx,
 } from '@/lib/data/story/jsx-edit';
 import { parseJsx } from '@/lib/jsx';
@@ -301,5 +301,23 @@ describe('an inserted image\'s id', () => {
     expect(id).toBe('Cc12');
     expect(taken).not.toContain(id);
     expect(freshNodeId('<div />')).toMatch(/^[A-Za-z][A-Za-z0-9]{3}$/);
+  });
+});
+
+describe('placeMarkdownInJsx', () => {
+  it('places an empty region after the selected Markdown, preserving the original content', () => {
+    const source = '<article><Markdown id="Old1">{`Existing prose`}</Markdown><p>Following text</p></article>';
+    const placed = placeMarkdownInJsx(source, 'New1', { path: '0.0', nodeId: 'Old1' });
+    expect(placed).toEqual({ source: '<article><Markdown id="Old1">{`Existing prose`}</Markdown><Markdown id="New1">{``}</Markdown><p>Following text</p></article>', path: '0.1' });
+    expectValidStoryJsx(placed.source);
+  });
+  it('appends inside a layout container, or after plain prose when none exists', () => {
+    expect(placeMarkdownInJsx('<article><h1>Title</h1></article>', 'New1').path).toBe('0.1');
+    expect(placeMarkdownInJsx('<p>Text</p>', 'New1')).toEqual({ source: '<p>Text</p><Markdown id="New1">{``}</Markdown>', path: '1' });
+  });
+  it('keeps Markdown outside tables and places it inside the selected grid cell', () => {
+    const table = '<article><table><tbody><tr><td>Cell</td></tr></tbody></table></article>';
+    expect(placeMarkdownInJsx(table, 'New1', { path: '0.0.0.0.0' }).path).toBe('0.1');
+    expect(placeMarkdownInJsx('<Grid><GridItem><p>Cell</p></GridItem></Grid>', 'New1', { path: '0.0' }).path).toBe('0.0.1');
   });
 });

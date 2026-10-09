@@ -15,16 +15,24 @@ export async function installedPackage(name,from){
  }
 }
 
-export async function copyInstalledPackage(name,from,target){
- const source=await installedPackage(name,from),directory=join(target,'node_modules',name);
+export async function copyInstalledPackage(name,from,target,shared=target){
+ const source=await installedPackage(name,from);
+ const pkg=JSON.parse(await readFile(join(source,'package.json'),'utf8'));
+ // Hoist matching versions inside the fixture so shared dependency graphs are
+ // copied once; retain nested packages when an installed version conflicts.
+ let directory=join(shared,'node_modules',name);
+ try{
+  const existing=JSON.parse(await readFile(join(directory,'package.json'),'utf8'));
+  if(existing.version===pkg.version)return resolve(directory);
+  directory=join(target,'node_modules',name);
+ }catch{}
  try{await access(join(directory,'package.json'));return resolve(directory);}catch{}
  await mkdir(dirname(directory),{recursive:true});
  await cp(source,directory,{recursive:true,filter:path=>!path.startsWith(join(source,'node_modules'))});
- const pkg=JSON.parse(await readFile(join(directory,'package.json'),'utf8'));
- for(const dependency of Object.keys(pkg.dependencies??{}))await copyInstalledPackage(dependency,source,directory);
+ for(const dependency of Object.keys(pkg.dependencies??{}))await copyInstalledPackage(dependency,source,directory,shared);
  for(const dependency of Object.keys(pkg.optionalDependencies??{})){
   let available;try{available=await installedPackage(dependency,source);}catch{continue;}
-  if(available)await copyInstalledPackage(dependency,source,directory);
+  if(available)await copyInstalledPackage(dependency,source,directory,shared);
  }
  return resolve(directory);
 }

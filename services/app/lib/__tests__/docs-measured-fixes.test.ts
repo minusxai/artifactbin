@@ -36,9 +36,11 @@ const BASE = 'https://example.test';
 describe('the deck FRAME: the brief routes to it, the template file carries it', () => {
   it('the brief tells a genre author to read the template file BEFORE writing, naming the cost of skipping', () => {
     const sheet = buildQuickSheet(BASE);
-    expect(sheet).toMatch(/Before writing[^\n]*read/i);
+    const readTemplate = sheet.indexOf('Read `afbin help <page type>`');
+    expect(readTemplate).toBeGreaterThanOrEqual(0);
+    expect(readTemplate).toBeLessThan(sheet.indexOf('## Example'));
     expect(sheet).toContain('references/templates-<name>.md');
-    expect(sheet).toMatch(/flush to the\s+viewport edge/);
+    expect(sheet).toContain('Keep content away from viewport edges.');
   });
   it('templates-deck.md says <Helmet> sits first at top level, never inside <SlideDeck>', () => {
     const deck = buildTemplateDoc(BASE, 'deck')!;

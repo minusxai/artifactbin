@@ -31,11 +31,10 @@ describe('the installed short skill',()=>{
   * its own transcript and cannot check "early". The tests follow: they assert the NUMBER and the
   * CONTENT of that first push, not the encouragement.
   *
-  * The second bullet splits the work: markup carries content, data and layout, and the Helmet
-  * script (Solid, any npm library) carries behaviour, its exported components mounted
-  * by name. Both are asserted on the BULLET, not the page, so a stray sentence elsewhere cannot
-  * satisfy them, and on the shipped `teaching.json` too — the generated bundle is the copy the CLI
-  * actually hands an agent.
+  * The opening defines markup as HTML and kit JSX; the Helmet script bullet
+  * assigns behaviour to Solid/npm and mounts exported components by name. The
+  * behaviour rule is asserted on that bullet and in shipped `teaching.json`,
+  * the generated bundle the CLI actually hands an agent.
   */
  it('counts the first push — six calls, a designed opening — then fills the rest, and markup for content, the script for behaviour',()=>{
   const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
@@ -63,9 +62,10 @@ describe('the installed short skill',()=>{
   expect(fewTurns).not.toMatch(/Skip[^.]*exporting/);
   expect(fewTurns).not.toContain('write the whole document');
   expect(fewTurns.length).toBeLessThan(600);
-  const native=bullet('- The kit covers content, layout');
+  const native=bullet('- Use Helmet `<script>`');
   expect(native).toBeDefined();
-  for(const text of ['content, layout, data, charts, tables, controls and motion','Helmet `<script>`','(Solid, npm)','for behaviour','exported components mount by name'])expect(native).toContain(text);
+  expect(sheet.slice(0,sheet.indexOf('npm CLI:'))).toContain('self-contained HTML and kit JSX');
+  for(const text of ['Helmet `<script>`','(Solid, npm)','for behaviour','exported components mount by name'])expect(native).toContain(text);
   // The managed frame is gone: the brief must not send an agent to it.
   expect(sheet).not.toContain('<Iframe>');
   // The bundle the CLI ships carries the same two bullets: a copy edit without

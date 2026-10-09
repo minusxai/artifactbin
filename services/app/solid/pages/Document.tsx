@@ -5,7 +5,7 @@ import { createEffect, createMemo, createSignal, lazy, on, onCleanup, onMount, S
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
-import { displayTitle } from '@/lib/document/title';
+import { displayTitle } from '@/lib/document/display-title';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared/prepared-runtime';
@@ -348,7 +348,7 @@ export function DocumentPage(): JSX.Element {
     const frame = live();
     const title = editorTitle();
     if (title !== null && (editing() || !frame || frame.version <= editorTitleBaseVersion())) {
-      return displayTitle({ title, source: editorSeed()?.markup, heading: page?.surface?.heading });
+      return displayTitle({ title });
     }
     return displayTitle(frame ?? page?.surface ?? {});
   };

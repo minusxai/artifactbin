@@ -20,6 +20,7 @@
  */
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { hasSlideRail } from './slides';
+import { markdownContent, markdownSource } from '@/lib/markdown/content';
 
 /** Fewer sections than this is a page; a rail beside it would be furniture. */
 export const MIN_OUTLINE_SECTIONS = 3;
@@ -49,6 +50,12 @@ export function discoverOutline(nodes: JsxNode[], includeTitle = false): Outline
       if (!isElement(n)) return;
       const path = prefix ? `${prefix}.${i}` : String(i);
       if (n.isComponent && n.tag === 'Slide') return;
+      if (n.tag === 'Markdown') {
+        markdownContent(markdownSource(n) ?? '').headings.forEach((heading, index) => {
+          if (heading.level !== 1 || includeTitle) out.push({ ...heading, path: `${path}:md:${index}` });
+        });
+        return;
+      }
       if (!n.isComponent) {
         const tag = n.tag.toLowerCase();
         if (tag === 'h2' || tag === 'h3' || (includeTitle && tag === 'h1')) {

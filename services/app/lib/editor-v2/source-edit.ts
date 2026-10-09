@@ -7,12 +7,31 @@ import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { isProseTree } from './model';
 import { sourceChanges } from '@/lib/document/source-changes';
 import { rebaseEditBatch } from '@/lib/document/edit-batch';
+import { markdownSource } from '@/lib/markdown/content';
 
 export function replaceProseRegion(source: string, path: string, expected: string, replacement: string): string {
   // Cached, incremental parsing keeps typing proportional to the changed block. An exact byte
   // match must also be an actual prose sibling range: comments and expression strings can contain
   // the old JSX after a collaborator has deleted its real target.
   const parsed = parseJsxShared(source), old = parseJsx(expected), next = parseJsx(replacement);
+  if (parsed.ok && old.ok && next.ok && old.nodes.length === 1 && old.nodes[0].type === 'element' && old.nodes[0].tag === 'Markdown') {
+    const previous = old.nodes[0], updated = next.nodes[0];
+    if (next.nodes.length !== 1 || updated?.type !== 'element' || updated.tag !== 'Markdown'
+      || markdownSource(updated) === null || validateJsx([updated], { components: ['Markdown'] }).length) return source;
+    const attrs = (node: typeof previous) => JSON.stringify(node.attributes.map(a => [a.name, a.value]));
+    if (attrs(previous) !== attrs(updated)) return source; // This channel changes only Markdown content.
+    const id = previous.attributes.find(a => a.name === 'id')?.value;
+    if (!id?.static || typeof id.json !== 'string') return source;
+    const candidates: typeof previous[] = [];
+    const walk = (nodes: JsxNode[]) => { for (const node of nodes) if (node.type === 'element') {
+      if (node.tag === 'Markdown' && node.attributes.some(a => a.name === 'id' && a.value.static && a.value.json === id.json)) candidates.push(node);
+      else walk(node.children);
+    } };
+    walk(parsed.nodes);
+    if (candidates.length !== 1 || markdownSource(candidates[0]) !== markdownSource(previous)) return source;
+    const target = candidates[0];
+    return source.slice(0, target.start) + serializeJsx([{ ...target, children: updated.children }]) + source.slice(target.end);
+  }
   if (!parsed.ok || !old.ok || !next.ok || !old.nodes.length || !next.nodes.every(isProseTree)) return source;
   if (validateJsx(next.nodes, { components: [] }).length) return source;
   const at = expected && /\bid=["{]/.test(expected) ? source.indexOf(expected) : -1;

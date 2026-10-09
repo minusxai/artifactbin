@@ -115,6 +115,9 @@ describe('buildIslands', () => {
     // boot grew by the page runtime's loader (lib/islands/page-runtime: the vendor map and the module import).
     // The framed document's runtime now also relays its URL values and app-path links to the app page.
     expect(bytes).toBeLessThanOrEqual(29_500);
+    for (const url of closure([manifest['@mx/rt'], manifest['@mx/boot']])) {
+      expect(readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).not.toContain('mx:markdown-block');
+    }
   });
 
   it('keeps comment target and saved-view parsing, event contracts and runtime class merging out of rt+boot', () => {
@@ -127,6 +130,7 @@ describe('buildIslands', () => {
       expect(all.some((input) => input.endsWith(name)), `${name} is in the build at all`).toBe(true);
       expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
     }
+    expect(modules.some(input => input.endsWith('story-runtime/frame-bridge/door.ts')), 'rt+boot needs the app origin, not the editor attachment door').toBe(false);
     // The compiled reader merges classes at compile time: no reader runtime chunk carries a class merger.
     for (const pkg of ['tailwind-merge', 'class-variance-authority', 'clsx']) {
       expect(modules.some((input) => input.includes(`node_modules/${pkg}/`)), pkg).toBe(false);

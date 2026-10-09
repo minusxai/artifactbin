@@ -7,6 +7,7 @@
  * wraps the toolbar in `ArtifactBackendProvider`; this Solid toolbar takes `backend` as a prop instead
  * (see the DEVIATION note in StoryFormatToolbar.tsx), so the wrapper is replaced with a direct prop.
  */
+import { createSignal } from 'solid-js';
 import { screen, fireEvent } from '@testing-library/dom';
 import { expect, it, vi } from 'vitest';
 import { render } from '@/solid/__tests__/helpers';
@@ -145,4 +146,41 @@ it('disables Mention person with the reason when mentions are unavailable', () =
   const mention = screen.getByRole('button', { name: 'Mention person' });
   expect(mention).toBeDisabled();
   expect(mention).toHaveAccessibleDescription('Not available in a downloaded file.');
+});
+
+it('uses the shared block dropdown and follows the current Markdown selection', () => {
+  const [block, setBlock] = createSignal<'h2' | 'paragraph'>('h2');
+  const onMarkdownBlock = vi.fn();
+  render(() => <StoryFormatToolbar
+    selection={{ kind: 'text', editor: 'markdown', tag: 'Markdown', markdownBlock: block(), path: '0.1', rect: { x: 0, y: 0, width: 100, height: 40 }, className: '', style: '', ancestors: [] }}
+    onMarkdownBlock={onMarkdownBlock} onApply={vi.fn()} onApplyLink={vi.fn()} onSelect={vi.fn()} onDelete={vi.fn()} />);
+  const trigger = screen.getByRole('button', { name: 'Markdown block style' });
+  expect(trigger).toHaveTextContent('Heading 2');
+  fireEvent.click(trigger);
+  expect(screen.getByRole('option', { name: 'Heading 2' })).toHaveAttribute('aria-selected', 'true');
+  fireEvent.click(screen.getByRole('option', { name: 'Quote' }));
+  expect(onMarkdownBlock).toHaveBeenCalledWith('quote');
+  expect(screen.queryByRole('listbox')).toBeNull();
+  setBlock('paragraph');
+  expect(screen.getByRole('button', { name: 'Markdown block style' })).toHaveTextContent('Paragraph');
+});
+
+
+it('offers Markdown tables, checklists and dividers and routes table commands', () => {
+  const [block, setBlock] = createSignal<'paragraph' | 'table'>('paragraph');
+  const onMarkdownBlock = vi.fn(), onMarkdownTable = vi.fn();
+  render(() => <StoryFormatToolbar
+    selection={{ kind: 'text', editor: 'markdown', tag: 'Markdown', markdownBlock: block(), path: '0.1', rect: { x: 0, y: 0, width: 100, height: 40 }, className: '', style: '', ancestors: [] }}
+    onMarkdownBlock={onMarkdownBlock} onMarkdownTable={onMarkdownTable} onApply={vi.fn()} onApplyLink={vi.fn()} onSelect={vi.fn()} onDelete={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Markdown block style' }));
+  expect(screen.getByRole('option', { name: 'Checklist' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Horizontal rule' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('option', { name: 'Table' }));
+  expect(onMarkdownBlock).toHaveBeenCalledWith('table');
+  setBlock('table');
+  expect(screen.getByRole('button', { name: 'Markdown block style' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Add row below' }));
+  expect(onMarkdownTable).toHaveBeenCalledWith('row-after');
+  fireEvent.click(screen.getByRole('button', { name: 'Delete column' }));
+  expect(onMarkdownTable).toHaveBeenCalledWith('delete-column');
 });

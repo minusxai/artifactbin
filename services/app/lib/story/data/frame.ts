@@ -25,6 +25,7 @@ import { storyUpdateParts } from '../../document/update-parts';
 import { assetLookupFrom } from '../../document/asset-url';
 import { webAssetsForSource } from '../assets/web-assets';
 import { servableDocument } from '@/lib/artifacts/servable';
+import { firstHeadingTitle } from '../../document/title';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
@@ -79,6 +80,7 @@ async function build(stored: ArtifactRow): Promise<LiveFrame> {
     by: await authorHandle(row),
     format: row.format,
     title: row.title,
+    heading: row.format === 'markup' ? firstHeadingTitle(row.source) : null,
     source: row.format === 'markup' ? row.source : null,
     dataPreview:
       row.format === 'dataset' ? JSON.stringify(await loadDatasetRows(row))

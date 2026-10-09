@@ -60,6 +60,18 @@ async function publicDoc() {
 }
 
 describe('GET /a/<id>/events/frame', () => {
+  it('derives Markdown headings on every version for parser-free live readers', async () => {
+    const t = await mintToken('heading');
+    const markup = (heading: string) => `<Markdown id="body">{${JSON.stringify(`# ${heading}\n\nDetails`)}}</Markdown>`;
+    const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: markup('First heading'), visibility: 'public' }, t.token))).json();
+    const first = await (await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).json();
+    expect(first).toMatchObject({ heading: 'First heading', version: 1 });
+    const edit = await editsRoute(jreq(`/api/artifacts/${doc.id}/edits`, 'POST', await observedSourceBody(doc.id, markup('Updated heading')), t.token), params(doc.id));
+    expect(edit.status).toBe(200);
+    const next = await (await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).json();
+    expect(next).toMatchObject({ heading: 'Updated heading', version: 2 });
+  });
+
   it('answers the COMPLETE frame: nodes, CSS (always), author CSS, design, the declarations signature — and never dataflow rows', async () => {
     const { doc, ds } = await publicDoc();
     const res = await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id));

@@ -247,6 +247,15 @@ function resolveAddress(anchor: Element, address: RelAddress): Element | null {
  * the person selected it.
  */
 export function describeRange(range: Range, anchor: Element): { quote: string; range: AnnotationTextRange } | null {
+  // Markdown's generated paragraphs/spans have no source identity. One visible-text coordinate
+  // system survives Lexical's spans, Markdown serialization, and compiled reading HTML.
+  if (anchor.hasAttribute('data-mx-markdown') && anchor.contains(range.commonAncestorContainer)) {
+    const canon = canonicalOf(anchor);
+    const start = indexOfBoundary(canon, range.startContainer, range.startOffset);
+    const end = indexOfBoundary(canon, range.endContainer, range.endOffset);
+    const text = canon.text.slice(start, end);
+    return { quote: canonicalQuote(text), range: { v: 1, parts: text.trim() ? [{ rel: '', start, end, text }] : [] } };
+  }
   const parts: AnnotationRangePart[] = [];
   let quote = '';
   let previousBlock: Element | null = null;

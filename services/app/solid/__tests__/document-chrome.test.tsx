@@ -12,6 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import type { ArtifactLiveEvent } from '@/lib/story/realtime/live';
 import type { FramedStory } from '../document/create-framed-story';
+import * as liveEdits from '../editor/create-live-edits';
 
 let mockRole = 'commenter';
 let mockKind = 'account';
@@ -323,7 +324,15 @@ it('shares the current editor title without requiring a page reload', async () =
   expect(trusted().getByRole('heading', { name: 'Share “Untitled”' })).toBeInTheDocument();
 });
 
-it('uses the heading fallback in embedded sharing and adopts later reader metadata', async () => {
+it.each(['', '   '])('uses the heading fallback for a blank explicit title (%j) in embedded sharing and adopts later reader metadata', async (blankTitle) => {
+  const queued: liveEdits.PendingChange[] = [];
+  const createLiveEdits = liveEdits.createLiveEdits;
+  vi.spyOn(liveEdits, 'createLiveEdits').mockImplementation((options) => {
+    const live = createLiveEdits(options);
+    const queue = live.queue;
+    live.queue = (change) => { queued.push(change); queue(change); };
+    return live;
+  });
   mockRole = 'owner'; mockTitle = 'Old explicit name';
   const [frame, setFrame] = createSignal<ArtifactLiveEvent | null>(null);
   mockLive = frame;
@@ -335,18 +344,19 @@ it('uses the heading fallback in embedded sharing and adopts later reader metada
   mount('/a/doc#edit');
   await vi.dynamicImportSettled();
   const title = await screen.findByRole('textbox', { name: 'Title' });
-  fireEvent.input(title, { target: { value: '' } });
+  fireEvent.input(title, { target: { value: blankTitle } });
+  expect(queued.at(-1)?.title).toBe(blankTitle);
   fireEvent.click(trusted(1).getByRole('tab', { name: 'Show sharing' }));
   expect(trusted(1).getByRole('heading', { name: 'Share “Heading fallback”' })).toBeInTheDocument();
   fireEvent.input(title, { target: { value: 'Session name' } });
   expect(trusted(1).getByRole('heading', { name: 'Share “Session name”' })).toBeInTheDocument();
-  setFrame({ version: 5, title: 'Remote name', source: '<h2 id="heading">Remote heading</h2>' } as ArtifactLiveEvent);
+  setFrame({ version: 5, title: 'Remote name', heading: 'Remote heading', source: '<h2 id="heading">Remote heading</h2>' } as ArtifactLiveEvent);
   expect(trusted(1).getByRole('heading', { name: 'Share “Session name”' })).toBeInTheDocument();
   fireEvent.click(trusted(1).getByRole('button', { name: 'Exit edit mode' }));
   await waitFor(() => expect(screen.getByText('Remote name', { selector: '[data-mx-document-title]' })).toBeInTheDocument(), { timeout: 5000 });
   fireEvent.click(screen.getByRole('button', { name: 'Share' }));
   expect(trusted().getByRole('heading', { name: 'Share “Remote name”' })).toBeInTheDocument();
-  setFrame({ version: 6, title: null, source: '<h2 id="heading">Later remote heading</h2>' } as ArtifactLiveEvent);
+  setFrame({ version: 6, title: null, heading: 'Later remote heading', source: '<h2 id="heading">Later remote heading</h2>' } as ArtifactLiveEvent);
   expect(trusted().getByRole('heading', { name: 'Share “Later remote heading”' })).toBeInTheDocument();
 });
 

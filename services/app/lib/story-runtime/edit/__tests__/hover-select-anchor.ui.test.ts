@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { $getSelection, $isRangeSelection } from 'lexical';
+import { mountMarkdownEditor } from '@/lib/markdown/editor';
 import { createHoverSelect } from '../hover-select';
 
 afterEach(() => { document.body.replaceChildren(); });
@@ -28,4 +30,19 @@ it('reports the block whose whole contents are selected, not its container', () 
   document.dispatchEvent(new Event('selectionchange'));
   expect(post.mock.calls.map(([message]) => message.selection).filter(Boolean).at(-1)).toMatchObject({ path: '0.3', tag: 'p' });
   hover.dispose();
+});
+
+it('starts a text selection in a newly inserted Markdown region when requested', async () => {
+  const nodes = parseJsxOrThrow('<Markdown id="New1">{""}</Markdown>').nodes;
+  const root = document.createElement('div');
+  root.innerHTML = '<div id="New1" data-mx-ast="0" data-mx-markdown></div>';
+  document.body.append(root);
+  const el = root.firstElementChild as HTMLElement;
+  const editor = mountMarkdownEditor(el, { source: '', onChange() {} });
+  const hover = createHoverSelect({ win: window, root, nodes: () => nodes, views: { all: new Set(), last: null }, activePath: () => null, commitActive() {}, post() {} });
+  hover.select({ type: 'mx:select', path: '0', nodeId: 'New1', reveal: true, focusText: true });
+  await vi.waitFor(() => expect(editor.editor.getEditorState().read(() => $isRangeSelection($getSelection()))).toBe(true));
+  expect(hover.blockMode()).toBe(false);
+  expect(hover.selectedPath()).toBe('0');
+  hover.dispose(); editor.destroy();
 });

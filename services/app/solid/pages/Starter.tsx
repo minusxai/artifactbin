@@ -19,7 +19,7 @@ import type { Visibility } from '@/lib/artifacts/access';
 import { isStartPlaceholder } from '@/lib/serving/start-placeholder';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
-import { displayTitle } from '@/lib/document/title';
+import { displayTitle } from '@/lib/document/display-title';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { initialViewWasReported } from '@/solid/lib/artifact-view-report';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
@@ -117,7 +117,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     reloading = true;
     reloadKeepingPlace(window);
   });
-  const title = () => displayTitle({ title: live()?.title ?? surface.title, heading: surface.heading ?? null });
+  const title = () => displayTitle(live() ?? surface);
   const chooseMode = (next: 'light' | 'dark') => { chooseTheme(next); setMode(next); };
 
   return <>

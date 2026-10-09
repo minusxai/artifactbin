@@ -19,12 +19,18 @@
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 
 const OUTLINE_TARGET_ATTR = 'data-mx-target';
+function headingAt(root: Document | HTMLElement, address: string | null): HTMLElement | null {
+  if (!address) return null;
+  const [path, index] = address.split(':md:');
+  const selector = `.mx-doc [${AST_PATH_ATTR}="${CSS.escape(path)}"]`;
+  return root.querySelector<HTMLElement>(index === undefined ? selector : `${selector} [data-mx-markdown-heading="${CSS.escape(index)}"]`);
+}
 
 /** The rail's rows, and each one's heading in the DOCUMENT (never the rail's own text). */
 function pairs(doc: Document | HTMLElement): Array<{ row: HTMLElement; heading: HTMLElement | null }> {
   return [...doc.querySelectorAll<HTMLElement>(`.mx-outline-row[${OUTLINE_TARGET_ATTR}]`)].map((row) => ({
     row,
-    heading: doc.querySelector<HTMLElement>(`.mx-doc [${AST_PATH_ATTR}="${row.getAttribute(OUTLINE_TARGET_ATTR)}"]`),
+    heading: headingAt(doc, row.getAttribute(OUTLINE_TARGET_ATTR)),
   }));
 }
 
@@ -36,7 +42,7 @@ export function wireOutline(doc: Document, root: Document | HTMLElement = doc): 
   const onClick = (e: MouseEvent) => {
     const row = (e.target as Element | null)?.closest?.(`.mx-outline-row[${OUTLINE_TARGET_ATTR}]`) as HTMLElement | null;
     if (!row || !root.contains(row)) return;
-    const heading = root.querySelector<HTMLElement>(`.mx-doc [${AST_PATH_ATTR}="${row.getAttribute(OUTLINE_TARGET_ATTR)}"]`);
+    const heading = headingAt(root, row.getAttribute(OUTLINE_TARGET_ATTR));
     heading?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 

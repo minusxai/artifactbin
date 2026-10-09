@@ -7,6 +7,21 @@ const doc = (name: string) => renderDoc(`artifactbin/references/${name}.md`, 'ht
 const blocks = (text: string, language: string) => [...text.matchAll(new RegExp('```' + language + '\\n([\\s\\S]*?)```', 'g'))].map(match => match[1]);
 
 describe('feedback authoring examples', () => {
+  it('teaches continuous Markdown prose on every page type while preserving HTML design freedom', () => {
+    for (const general of [renderDoc('artifactbin/SKILL.md', 'https://example.test'), doc('markup')]) {
+      expect(general).toContain('Use `<Markdown>` for long prose on any page type');
+      expect(general).toContain('headings, paragraphs and lists together');
+      expect(general).toContain('HTML for individually designed text');
+    }
+    const guide = doc('templates-doc');
+    expect(guide).toContain('<Markdown>');
+    expect(guide).toContain('not around each paragraph');
+    const example = blocks(guide, 'jsx')[0];
+    expect(example).toContain('<Markdown id="body">');
+    expect(validateMarkupStructure(example).errors).toEqual([]);
+    expect(doc('markup')).toContain('[Markdown](templates-doc.md)');
+    expect(doc('templates-doc')).toContain('individually designed text');
+  });
   it('teaches context as a linked Doc with independent permissions and editing', () => {
     const markup = [doc('markup'), doc('templates-doc')].join('\n');
     expect(markup).toContain('<Context src="ref:<documentId>" />');

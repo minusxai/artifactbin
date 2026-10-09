@@ -15,6 +15,10 @@ describe('the unconditional controls', () => {
 });
 
 describe('what varies, by kind', () => {
+  it('offers Markdown text commands separately from whole-region styling', () => {
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'Markdown', mode: 'typing' })).toEqual({ text: true, format: false, color: false, link: true, image: false });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'Markdown', mode: 'block' })).toEqual({ text: false, format: true, color: false, link: false, image: false });
+  });
   it('a component gets no class algebra — its classes are render output', () => {
     for (const tag of ['Question', 'Number', 'GridItem', 'Card']) {
       expect(selectionToolbarPlan({ kind: 'embed', tag })).toEqual({ text: false, format: false, color: false, link: false, image: false });

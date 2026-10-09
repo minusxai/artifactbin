@@ -1,4 +1,5 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
+import { markdownContent, markdownSource } from '@/lib/markdown/content';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {recordEvent} from '../notifications/events';
 import {commentMentions} from './saved-mentions';
@@ -232,7 +233,7 @@ const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => {
  */
 function canonicalTextOf(node: JsxNode): string {
   const raw = (n: JsxNode): string =>
-    n.type === 'text' ? n.value : n.type === 'element' ? n.children.map(raw).join('') : '';
+    n.type === 'text' ? n.value : n.type === 'element' ? n.tag === 'Markdown' ? markdownContent(markdownSource(n) ?? '').text : n.children.map(raw).join('') : '';
   return canonicalText(raw(node));
 }
 

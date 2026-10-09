@@ -1,4 +1,4 @@
-/** Link marks: the link at the caret, setting or removing one, and the typing that makes one (a URL, `[text](url)`, a paste). */
+/** Link marks: the link at the caret, setting or removing one, and the typing that makes one (a URL or a paste). */
 import { TextSelection, type EditorState, type Transaction } from 'prosemirror-state';
 import type { Mark, ResolvedPos } from 'prosemirror-model';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
@@ -105,7 +105,7 @@ const plainText = (state: EditorState, from: number, to: number) => {
 
 /** Typed addresses: `https://…` or `www.…`, without the punctuation that usually ends a sentence after one. */
 export const TYPED_URL = /(?:^|[\s(])((?:https?:\/\/|www\.)[^\s<>()\ufffc]*[^\s<>().,;:!?'"\ufffc])$/i;
-export const TYPED_MARKDOWN_LINK = /\[([^[\]\n\ufffc]+)\]\(([^()\s\ufffc]+)\)$/;
+
 
 /** The address just finished at `end` (a space or Enter follows it), linked. */
 export function autolink(state: EditorState, end = state.selection.from): Transaction | null {
@@ -118,20 +118,6 @@ export function autolink(state: EditorState, end = state.selection.from): Transa
   const start = end - match[1]!.length;
   if (!plainText(state, start, end)) return null;
   return state.tr.addMark(start, end, linkMark(href));
-}
-
-/** `[text](url)` just closed at the caret becomes linked text. */
-export function markdownLink(state: EditorState): Transaction | null {
-  const { $from, empty } = state.selection;
-  if (!empty || !linkable($from)) return null;
-  const match = TYPED_MARKDOWN_LINK.exec($from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc'));
-  const href = match && normalizeLinkHref(match[2]!);
-  if (!match || !href) return null;
-  const start = $from.pos - match[0].length;
-  if (!plainText(state, start, $from.pos)) return null;
-  const marks = (state.doc.nodeAt(start)?.marks ?? []).filter(m => !isLink(m));
-  const tr = state.tr.replaceWith(start, $from.pos, editorSchema.text(match[1]!, [...marks, linkMark(href)]));
-  return tr.setSelection(TextSelection.create(tr.doc, start + match[1]!.length)).setStoredMarks([]);
 }
 
 /** A pasted lone address links the selected words, or arrives as a link itself. */
