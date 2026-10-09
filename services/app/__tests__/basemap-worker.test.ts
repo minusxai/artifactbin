@@ -7,13 +7,13 @@
  * time. This test makes the package unresolvable to prove it.
  *
  * The route is never an open proxy: besides the worker it forwards only
- * lib/serving/basemap's allowlist, and serves no other build file.
+ * lib/viz/basemap's allowlist, and serves no other build file.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BASEMAP_PATH } from '@artifactbin/contracts';
-import { BASEMAP_WORKER_URL } from '@/lib/serving/basemap';
+import { BASEMAP_WORKER_URL } from '@/lib/viz/basemap';
 
 vi.mock('node:module', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:module')>();

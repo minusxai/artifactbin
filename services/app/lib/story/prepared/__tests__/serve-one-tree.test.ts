@@ -3,7 +3,8 @@ import { parseJsx } from '@/lib/jsx';
 import { compilePage } from '@/lib/compiled-page/compiler';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { storyOf, withoutDeckChrome } from '../serve.server';
-import { LITERALS_ATTR, splitCarriers } from '@/lib/compiled-page/carriers';
+import { splitCarriers } from '@/lib/compiled-page/carriers';
+import { LITERALS_ATTR } from '@/lib/story-runtime/contract';
 
 describe('one-tree snapshot SSR', () => {
   it('hides bare deck controls without removing the compiled hydration tree or immutable carriers', () => {

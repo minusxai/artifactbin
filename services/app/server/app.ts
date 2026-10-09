@@ -17,7 +17,7 @@ import { loginRedirectTarget } from '@/lib/http';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {agentDiscovery,agentDiscoveryHead,withAgentDiscoveryTail} from '@/lib/serving';
+import {agentDiscovery,agentDiscoveryHead,withAgentDiscoveryTail} from '@/lib/compiled-page/agent-discovery';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
@@ -61,12 +61,13 @@ import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
 import { fontPreloadTags } from '@/lib/compiled-page/styles';
-import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { bindModule } from '@/lib/compiled-page/runtime-binding';
 import { archiveSharedBuild, retainedBuild, retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
+import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/story-runtime/contract';
 
 /**
  * The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's
@@ -399,7 +400,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
     // The agent pointer is injected here, on the request base, for EVERY shell
-    // — the static web/solid-app.html carries none, so there is one source (lib/agent-discovery).
+    // — the static web/solid-app.html carries none, so there is one source (lib/compiled-page/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const listing = listingPage(data);
     const fonted = withShellFonts(listing ? preloadListing(discovered, listing) : discovered);

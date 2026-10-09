@@ -10,12 +10,12 @@
  *
  * Serve, the assembler, the offline file and the morph engine read them back through this module only.
  * Stored pages are served unchanged, so the bytes written here are a stored contract: a change needs a
- * handover-contract bump and a backfill. Pure and browser-safe (the morph engine imports the attribute).
+ * handover-contract bump and a backfill. Pure and browser-safe. The literals attribute is a reader id
+ * (lib/story-runtime/contract), which the morph engine reads.
  */
 import { scriptJson } from '@artifactbin/utils/escape';
-import { ISLAND_DATA_ID } from './contract';
+import { ISLAND_DATA_ID, LITERALS_ATTR } from '@/lib/story-runtime/contract';
 
-export const LITERALS_ATTR = 'data-mx-island-literals';
 export const MODULE_DATA_ATTR = 'data-mx-module-data';
 
 const LITERALS_OPEN = `<script type="application/json" ${LITERALS_ATTR}=`;

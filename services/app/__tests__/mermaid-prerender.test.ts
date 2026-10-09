@@ -21,7 +21,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { services, setServices } from '@/lib/platform';
 import { verifyExportKey } from '@/lib/serving';
 import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
-import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/mermaid-images/harvester';
+import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/story/assets/mermaid-harvester';
 import { MERMAID_RENDER_ENGINE } from '@/lib/mermaid-images/engine';
 import { queueMermaidBackfill } from '@/lib/mermaid-images/store';
 import { documentEditBody } from './prepared-document';

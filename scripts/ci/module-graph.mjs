@@ -49,8 +49,8 @@ export const ISLANDS_BROWSER_IMPORTERS = [
   'services/app/lib/offline/solid-entry.tsx',
 ];
 export const ISLANDS_BROWSER_LEAVES = [
-  'chart', 'contract', 'island-controller', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
-  'live-update', 'module', 'morph/engine', 'rt', 'sqlite-engine', 'trusted-overlay-host', 'trusted-portal',
+  'chart', 'contract', 'file-display', 'island-controller', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
+  'live-update', 'module', 'morph/engine', 'person-face', 'rt', 'sqlite-engine', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 const ISLANDS_DIR = 'services/app/lib/islands';
 /**

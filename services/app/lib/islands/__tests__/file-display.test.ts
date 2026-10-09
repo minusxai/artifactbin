@@ -9,7 +9,7 @@
  * imported perfectly.
  */
 import { describe, expect, it } from 'vitest';
-import { fileNameFromUrl, formatFileSize } from '@/lib/workspace';
+import { fileNameFromUrl, formatFileSize } from '../file-display';
 
 describe('formatFileSize', () => {
   it('reads the way a file manager does — decimal units, one decimal under ten', () => {

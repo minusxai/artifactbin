@@ -17,7 +17,7 @@ import type { ArtifactRole } from '@/lib/artifacts/share-roles';
 import { canEdit as canEditRole, canGovern } from '@/lib/artifacts/share-roles';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
-import { formatFileSize } from '@/lib/workspace/file-display';
+import { formatFileSize } from '@/lib/islands/file-display';
 import { displayTitle } from '@/lib/document/display-title';
 import type { ReaderForkedFrom } from '@/lib/serving/fork-credit.server';
 import { createHttpBackend } from '@/lib/artifact-backend/http';

@@ -26,7 +26,7 @@ import { prepareStoryRuntime } from '@/lib/story/prepared/prepare-runtime.server
 import { storyBaseCss } from '@/lib/compiled-page/styles/story-base-css';
 import { readerStorySheet } from '@/lib/story/prepared/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
-import { ISLAND_DATA_ID, DOCUMENT_MODULE_PATH, type CompiledPage, type StoredCompile, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import { type CompiledPage, type StoredCompile, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { readFileSync } from 'node:fs';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -34,6 +34,7 @@ import { compiledPageFailures } from '@/lib/story/prepared/serve.server';
 import path from 'node:path';
 import { createDocumentGraph } from '@/lib/document/document-graph';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { ISLAND_DATA_ID, DOCUMENT_MODULE_PATH } from '@/lib/story-runtime/contract';
 
 const spies = vi.hoisted(() => ({ parse: 0, css: 0, nodes: 0, render: 0 }));
 vi.mock('@/lib/jsx/parse', async (original) => {

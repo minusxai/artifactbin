@@ -23,12 +23,9 @@ import type { Scalar } from '@/lib/dataflow/dataflow';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
-import type { ServedResults, StoryViewer } from '@/lib/story-runtime/contract';
+import type { DrawnChart, ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
-import type { AgentDiscovery } from '@/lib/serving';
-
-/** Live data widget contents belong to Solid, rather than the server-fragment morph. */
-export const LIVE_DATA_ATTR = 'data-mx-live';
+import type { AgentDiscovery } from './agent-discovery';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * How a response names its reader path
@@ -256,9 +253,6 @@ export const COMPILE_INLINE_BUDGET_MS = 300;
  * The module store
  * ──────────────────────────────────────────────────────────────────────────── */
 
-/** The route prefix per-document modules and speculation-rule files are served under. */
-export const ISLANDS_PATH = '/islands';
-export const DOCUMENT_MODULE_PATH = `${ISLANDS_PATH}/d`;
 /** `/islands/d/<sha>.js` — the sha is 16 hex chars; anything else is a 404, never a lookup. */
 export const DOCUMENT_MODULE_RE = /^[0-9a-f]{16}$/;
 
@@ -348,14 +342,6 @@ export interface SnapshotKey {
   inputsKey: string;
 }
 
-/** A `<Question>` drawn on the server, keyed by the question's node id (or path when it has none). */
-export interface DrawnChart {
-  svg: string;
-  /** The table it was drawn from and the digest of the rows, so a client re-draw can tell whether it is stale. */
-  table: string;
-  rows: string;
-}
-
 export interface DataSnapshot {
   key: SnapshotKey;
   /** The mark of every dataset in `DataPlan.datasets`, taken BEFORE the run (served-results.server marksOf shape). */
@@ -412,14 +398,6 @@ export interface SnapshotStore {
  * The viewer overlay (after paint)
  * ──────────────────────────────────────────────────────────────────────────── */
 
-/** `GET /a/:id/viewer?<$values>` — what only this reader decides, answered with the query door's admission (w3-viewer-writes). */
-export interface ViewerOverlay {
-  viewer: StoryViewer | null;
-  /** The `viewer`-scope queries' answers for this reader at these values. */
-  results: ServedResults;
-  /** The imports this reader may hold in full (StoryIslandDataflow.hold). */
-  hold: string[];
-}
 export const VIEWER_OVERLAY_PATH = (id: string): string => `/a/${id}/viewer`;
 /** The cookie-free hint the server sets at login so a guest page never fetches the overlay and a signed-in one shows placeholders, not guest content. */
 export const SIGNED_IN_HINT_ATTR = 'data-mx-signed-in';
@@ -543,17 +521,3 @@ export interface AssembledPage {
 export type AssembleReaderPage = (input: AssembleInput) => AssembledPage;
 export const SPECULATION_RULES_HEADER = 'Speculation-Rules';
 
-/** The element ids and attributes the assembled page and the runtime agree on. */
-export const ISLAND_DATA_ID = 'mx-story-data';
-/**
- * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
- * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
- * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
- * the attribute when it mounts (the served DOM then matches the former render), and
- * re-draws only when its table changes or the reader interacts (Vega loads then).
- */
-export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
-/** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */
-export const CHART_STATE_ATTR = 'data-mx-chart-state';
-/** Set on `<html>` when every island has hydrated (or at DOMContentLoaded on a page with no module): the lab's ready marker. */
-export const READER_READY_ATTR = 'data-mx-ready';

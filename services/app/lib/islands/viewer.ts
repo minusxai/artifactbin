@@ -22,7 +22,6 @@
  * Failure (§6): the islands keep the guest snapshot and the signed-in placeholder, and the request is
  * retried a few times with backoff; a 4xx is an answer (no access any more), not a failure to retry.
  */
-import type { ViewerOverlay } from '@/lib/compiled-page/contract';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 import type { Scalar } from '@/lib/dataflow/dataflow';
 import { selectQueries } from '@/lib/dataflow/compiled-flow';
@@ -30,6 +29,7 @@ import { writeUrlValues } from '@/lib/dataflow/url-values';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { IslandContext, IslandPageData, IslandViewer } from './contract';
+import type { ViewerOverlay } from '@/lib/story-runtime/contract';
 
 /** What boot hands the overlay: the runtime's viewer setter (an `overlay` IslandEvent follows each change). */
 export interface ViewerSeam {

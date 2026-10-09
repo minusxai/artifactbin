@@ -31,9 +31,9 @@ import { questionEnvelope } from '@/lib/viz/chart-envelope';
 import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
 import { createVegaView, planVega, resolveEnvelopeSpec } from '@/lib/viz/render-vega';
 import type { ServedResults } from '@/lib/story-runtime/contract';
-import type { DrawnChart } from './contract';
 import { DRAWING_CLASS } from '@/lib/islands';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
+import type { DrawnChart } from '@/lib/story-runtime/contract';
 
 /** The largest drawing served in the HTML; a chart that draws more (thousands of marks) is drawn by its island. */
 const MAX_DRAWING_BYTES = 512 * 1024;

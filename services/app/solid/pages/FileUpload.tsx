@@ -5,7 +5,7 @@ import { Check, Copy, FileUp } from 'lucide-solid';
 import AssetPageHeader from '../components/AssetPageHeader';
 import { FILE_ACTION as ACTION, FileViewer, extensionOf } from '../components/FileViewer';
 import { LINK } from '../components/ui';
-import { formatFileSize } from '@/lib/workspace/file-display';
+import { formatFileSize } from '@/lib/islands/file-display';
 import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@/lib/document/file-types';
 import { useSession } from '../lib/session';
 import { copyText } from '../lib/copy-text';

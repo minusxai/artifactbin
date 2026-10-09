@@ -31,7 +31,8 @@ import { createAppServer } from '@/server/app';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { services, setServices } from '@/lib/platform';
 import { SERVED_RESULTS_BUDGET_MS } from '@/lib/story/prepared/served-results.server';
-import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
 const sessionUser = { id: '', email: '' };
 

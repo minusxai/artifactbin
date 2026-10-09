@@ -24,9 +24,7 @@
  *
  * Anything it cannot do throws, and the caller reloads keeping the reader's place (../live-update).
  */
-import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR } from '@/lib/compiled-page/contract';
 import { storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-fragment';
-import { LITERALS_ATTR } from '@/lib/compiled-page/carriers';
 import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
 import { applyColorMode, readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
@@ -35,6 +33,7 @@ import { ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, S
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR, LITERALS_ATTR } from '@/lib/story-runtime/contract';
 
 const HK = 'data-hk';
 /** Sheets that belong to one version and may be absent from the next (lib/compiled-page/styles/document-styles, the assembler). */

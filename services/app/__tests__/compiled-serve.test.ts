@@ -19,7 +19,7 @@ import { artifactPageAnswer, pagesOriginFor, pagesSite, mintExportKey } from '@/
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER, type CompiledPage, ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
+import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER, type CompiledPage } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
@@ -32,6 +32,7 @@ import { STORY_BASE_SHEETS } from '@/lib/compiled-page/styles/story-base-css';
 import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-system-sheets';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
+import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
 const harness = useAppHarness();
 beforeEach(() => setSession(null));

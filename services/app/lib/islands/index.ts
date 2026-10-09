@@ -13,3 +13,5 @@ export { LIVE_DIRECT_ATTR, STORY_FRAMED_ATTR } from './contract';
 export { cn, FAMILIES, RECIPES } from './kit/recipes';
 export { peopleClasses } from './kit/recipes/people';
 export { DRAWING_CLASS } from './chart';
+export { fileNameFromUrl } from './file-display';
+export { personFaceBackground, personInitial } from './person-face';

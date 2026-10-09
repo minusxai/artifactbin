@@ -17,7 +17,7 @@
  *   opaque origin, so author JS cannot read the human UI's localStorage even
  *   though it is same-host. Verified live: reading localStorage throws.
  */
-import {agentDiscovery} from '@/lib/serving';
+import {agentDiscovery} from '@/lib/compiled-page/agent-discovery';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
 import { refusingUnservable } from '@/lib/artifacts/servable';
 import { canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';

@@ -2,7 +2,6 @@
 export { VIEW_SERIES_DAYS, dailyViewsByUser, eventsTablePresent, forkCountByUser, likeSummaryByUser, viewSeriesByUser } from './analytics';
 export { crumbsFor } from './breadcrumb';
 export { accountWorkspaceCoreFor, accountWorkspaceFor, accountWorkspaceInsightsFor } from './dashboard';
-export { fileNameFromUrl, formatFileSize } from './file-display';
 export { childrenTableFor } from './folders';
 export { formatJsxPreview } from './format-jsx-preview';
 export { workspaceAssetsFor } from './inventory';

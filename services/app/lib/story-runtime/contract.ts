@@ -206,6 +206,50 @@ export const QUERY_REQUEST_PARAM = 'q';
 
 /** DOM contract between the builder and the entry. */
 export const STORY_ROOT_ID = 'mx-story-root';
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The compiled reader page: what the assembler and compiler (lib/compiled-page) write
+ * and the islands (lib/islands) read
+ * ──────────────────────────────────────────────────────────────────────────── */
+/** The element ids and attributes the assembled page and the runtime agree on. */
+export const ISLAND_DATA_ID = 'mx-story-data';
+/**
+ * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
+ * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
+ * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
+ * the attribute when it mounts (the served DOM then matches the former render), and
+ * re-draws only when its table changes or the reader interacts (Vega loads then).
+ */
+export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
+/** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */
+export const CHART_STATE_ATTR = 'data-mx-chart-state';
+/** Set on `<html>` when every island has hydrated (or at DOMContentLoaded on a page with no module): the lab's ready marker. */
+export const READER_READY_ATTR = 'data-mx-ready';
+/** Live data widget contents belong to Solid, rather than the server-fragment morph. */
+export const LIVE_DATA_ATTR = 'data-mx-live';
+/** The string-literals carrier's attribute (lib/compiled-page/carriers); the module reads its literals by DOM lookup. */
+export const LITERALS_ATTR = 'data-mx-island-literals';
+/** The route prefix per-document modules and speculation-rule files are served under. */
+export const ISLANDS_PATH = '/islands';
+export const DOCUMENT_MODULE_PATH = `${ISLANDS_PATH}/d`;
+
+/** A `<Question>` drawn on the server, keyed by the question's node id (or path when it has none). */
+export interface DrawnChart {
+  svg: string;
+  /** The table it was drawn from and the digest of the rows, so a client re-draw can tell whether it is stale. */
+  table: string;
+  rows: string;
+}
+
+/** `GET /a/:id/viewer?<$values>` — what only this reader decides, answered with the query door's admission (w3-viewer-writes). */
+export interface ViewerOverlay {
+  viewer: StoryViewer | null;
+  /** The `viewer`-scope queries' answers for this reader at these values. */
+  results: ServedResults;
+  /** The imports this reader may hold in full (StoryIslandDataflow.hold). */
+  hold: string[];
+}
+
 /**
  * The QUERY RELAY — how a served document INSIDE A PARENT PAGE (the owner's
  * shell, the canvas, a capture) re-runs its queries after a value changes:

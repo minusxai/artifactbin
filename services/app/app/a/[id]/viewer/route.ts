@@ -4,12 +4,12 @@ import { json } from '@/lib/http';
 import { sessionActor } from '@/lib/accounts';
 import { planOf } from '@/lib/compiled-page/plan';
 import { anonymousAccessFacts } from '@/lib/story/prepared';
-import type { ViewerOverlay } from '@/lib/compiled-page/contract';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import { readUrlValues } from '@/lib/dataflow';
 import { LocalStateInputError } from '@/lib/dataflow';
 import { DatasetError } from '@/lib/datasets/errors';
 import { REVALIDATE_ACTOR_HEADER } from '@artifactbin/contracts';
+import type { ViewerOverlay } from '@/lib/story-runtime/contract';
 
 /**
  * GET /a/<id>/viewer?<$values> → ViewerOverlay (docs/phase2-architecture.md §4.2, §6)

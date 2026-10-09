@@ -17,12 +17,13 @@ export { createModuleStore, createSpeculationRulesStore } from '../compiled-page
 export { bindModuleCode } from '../compiled-page/runtime-binding';
 export { documentStyleSheets } from '../compiled-page/styles';
 export { withStoredCarriers } from '../compiled-page/carriers';
-export { ISLANDS_PATH, SPECULATION_RULES_HEADER } from '../compiled-page/contract';
+export { SPECULATION_RULES_HEADER } from '../compiled-page/contract';
 export type { CompileInput, CompiledPage, CompilerBuild } from '../compiled-page/contract';
 
 // ---- Story runtime: the prepared runtime, its island data and the document CSS.
 export { prepareStoryRuntime } from '../story/prepared/prepare-runtime.server';
 export type { PreparedStoryRuntime } from '../story/prepared/prepared-runtime';
+export { ISLANDS_PATH } from '../story-runtime/contract';
 export type { ServedResults, StoryIslandData } from '../story-runtime/contract';
 export { compileStoryCss } from '../data/story/story-css.server';
 

@@ -5,7 +5,7 @@ import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notificat
 export type {NotificationDelivery} from '@/lib/notifications';
 import {startAppBackgroundTasks} from '@/lib/runtime';
 import {startDomainRecheck} from '@/lib/serving';
-import {startMermaidHarvester} from '@/lib/mermaid-images/harvester';
+import {startMermaidHarvester} from '@/lib/story/assets/mermaid-harvester';
 import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/artifacts';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
 import {useSqlExtensions} from '@/lib/sql/extensions';

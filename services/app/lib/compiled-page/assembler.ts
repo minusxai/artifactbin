@@ -25,19 +25,19 @@
  * Head order: fonts first (they block text), then the page's own module
  * closure, then the styles.
  */
-import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/serving/agent-discovery';
+import { agentDiscoveryHead, agentDiscoveryTail } from './agent-discovery';
 import { LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands';
 import { AUTHOR_VENDOR_EXPORTS } from '@/lib/author-script/contract';
 import { renderOutlineRail } from '@/lib/story-runtime/outline-view';
-import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
+import { CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, STORY_ROOT_ID, type DrawnChart } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from './styles/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { documentRootAttributes } from './styles/document-root';
 import { DOCUMENT_ROOT_CSS } from './styles/document-styles';
 import {
-  CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER,
-  type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
+  SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER,
+  type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild,
 } from './contract';
 import { splitCarriers, withStoredCarriers } from './carriers';
 import { bindModuleRef } from './runtime-binding';
@@ -89,7 +89,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson({ ...islandData(input), ...(moduleData ? { moduleData } : {}) })}</script>` : '')
     + behaviorSrcs.map((src) => moduleScript(src)).join('')
     + (module ? moduleScript(module.url) : '')
-    // The pointer again as the page's LAST line, for a reader that keeps only the tail (lib/agent-discovery).
+    // The pointer again as the page's LAST line, for a reader that keeps only the tail (./agent-discovery).
     + (help ? agentDiscoveryTail(help) : '');
 
   const html =
