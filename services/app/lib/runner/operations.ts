@@ -5,7 +5,7 @@ import {getArtifactById,canReadArtifact,type ArtifactRow} from '../artifacts';
 import {dataflowForRow,runDocumentMutation} from '../artifacts/dataflow';
 import {durableMutation} from '../artifacts/mutation-receipt';
 import {adaptMutationOperationReply,mutationInitiator} from '../artifacts/mutation-operation';
-import {parseMutationRequest} from '../story/datasets/mutation-request';
+import {parseMutationRequest} from '@/lib/dataflow/mutation-request';
 import {json} from '../http';
 const scalar=z.union([z.string(),z.number().finite(),z.boolean(),z.null()]);
 const query=z.object({values:z.record(z.string(),scalar),only:z.array(z.string()),localTables:z.record(z.string(),z.array(z.record(z.string(),scalar))).optional()}).strict();

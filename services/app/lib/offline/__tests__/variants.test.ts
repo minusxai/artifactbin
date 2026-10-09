@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
-import type { Scalar } from '@/lib/story/data/dataflow';
+import type { Scalar } from '@/lib/dataflow/dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 import { precomputeVariants, valueDomains } from '../variants';
 import { artifactFile, flow } from './fixture';

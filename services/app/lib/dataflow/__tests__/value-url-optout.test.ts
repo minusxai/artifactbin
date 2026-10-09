@@ -7,8 +7,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { type JsxElement } from '@/lib/jsx';
-import { parseMutationDecl, parseValueDecl, validateDataflow, type Dataflow } from '@/lib/story/data/dataflow';
-import { readUrlValues, urlValueParams, writeUrlValues } from '@/lib/story/data/url-values';
+import { parseMutationDecl, parseValueDecl, validateDataflow, type Dataflow } from '@/lib/dataflow/dataflow';
+import { readUrlValues, urlValueParams, writeUrlValues } from '@/lib/dataflow/url-values';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const el = (source: string): JsxElement => parseJsxOrThrow(source).nodes[0] as JsxElement;

@@ -14,8 +14,8 @@ import { CatalogRows, DatasetExplorer, type CatalogPreview, type CatalogQuery } 
 import { DatasetWhitelist, type SourceDraft } from "../components/DatasetWhitelist";
 import { parseDatasetDefinition, serializeDatasetDefinition } from "@/lib/datasets/definition";
 import type { CatalogInput, DatasetCatalog, DatasetConnection, DiscoveredTable, NotebookCell } from "@/lib/datasets/types";
-import type { DatasetColumn } from "@/lib/story/datasets/dataset-shape";
-import type { Row } from "@/lib/story/data/dataflow";
+import type { DatasetColumn } from "@/lib/dataflow/dataset-shape";
+import type { Row } from "@/lib/dataflow/dataflow";
 import { useSession } from '../lib/session';
 import { apiRequest } from '../lib/api';
 type ModelDraft = {

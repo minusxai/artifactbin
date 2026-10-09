@@ -1,4 +1,4 @@
-import { COMMENT_OWNER_ATTR, COMMENT_TARGET_ATTR, parseCommentTarget } from '@/lib/story/annotations/comment-target';
+import { COMMENT_OWNER_ATTR, COMMENT_TARGET_ATTR, parseCommentTarget } from '@/lib/story-ui/comment-target';
 /**
  * WHAT THE USER SELECTED, DESCRIBED RATHER THAN REFERENCED.
  *

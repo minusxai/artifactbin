@@ -20,7 +20,7 @@
  */
 import { createEffect, createSignal, For, on, onCleanup, Show, type JSX } from 'solid-js';
 import type { BoundEmbed, QueryCell } from '@/lib/story/data/query-notebook';
-import type { TableResult } from '@/lib/story/data/dataflow';
+import type { TableResult } from '@/lib/dataflow/dataflow';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { formatCount } from '../../lib/format';

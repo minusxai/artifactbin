@@ -1,7 +1,7 @@
 /**
  * PRECOMPUTED FILTERS — how an offline file keeps a filter working for the
  * queries its own engine cannot run: a connected database, or data the
- * downloader may not hold (lib/story/data/placement). Queries over held data run
+ * downloader may not hold (lib/dataflow/placement). Queries over held data run
  * live in the file, and need none of this.
  *
  * At download the server finds every `<Value>` that some query reads, works out
@@ -15,11 +15,11 @@
  * database; lib/offline/assemble.server.ts wires `run` to dataflowRunsForRow
  * as the downloader (every combination of a batch in one engine call).
  */
-import { normalizeControlOptions } from '@/lib/story/data/control-options';
+import { normalizeControlOptions } from '@/lib/story-ui/control-options';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { coerceScalarInput, refName, REF_ATTRS, type DataflowState, type Scalar } from '@/lib/story/data/dataflow';
-import type { CompiledDataflow, CompiledValue } from '@/lib/story/data/compiled-dataflow';
-import { queriesReadingValues } from '@/lib/story/data/compiled-flow';
+import { coerceScalarInput, refName, REF_ATTRS, type DataflowState, type Scalar } from '@/lib/dataflow/dataflow';
+import type { CompiledDataflow, CompiledValue } from '@/lib/dataflow/compiled-dataflow';
+import { queriesReadingValues } from '@/lib/dataflow/compiled-flow';
 import type { ArtifactFileVariant } from './file-format';
 
 export interface VariantCaps {
@@ -80,7 +80,7 @@ const scalarKey = (v: Scalar): string => JSON.stringify(v);
 const dedupe = (xs: Scalar[]): Scalar[] => [...new Map(xs.map((x) => [scalarKey(x), x])).values()];
 
 /** The finite values one control offers, in the Value's own type; null when it can write anything. */
-function controlValues(domain: ControlDomain, decl: Pick<CompiledValue, "name" | "default"> & { type: import("@/lib/story/datasets/dataset-shape").ColumnType }, base: DataflowState): Scalar[] | null {
+function controlValues(domain: ControlDomain, decl: Pick<CompiledValue, "name" | "default"> & { type: import("@/lib/dataflow/dataset-shape").ColumnType }, base: DataflowState): Scalar[] | null {
   if (domain.kind === 'open') return null;
   const nullable = decl.default === null;
   if (domain.kind === 'boolean') return nullable ? [true, false, null] : [true, false];
@@ -100,7 +100,7 @@ function controlValues(domain: ControlDomain, decl: Pick<CompiledValue, "name" |
 /**
  * For every Value that at least one of `queries` reads (directly, or through a
  * query it references; every query unless named — the file passes the ones
- * that need the server, lib/story/data/placement): the finite list of values its bound controls can set, in
+ * that need the server, lib/dataflow/placement): the finite list of values its bound controls can set, in
  * the Value's own type — options from a literal list or a `$query` (resolved
  * against `base`), true/false for a Switch, plus null where the control can
  * clear ("All"). `null` for a Value no control makes finite (text, number,

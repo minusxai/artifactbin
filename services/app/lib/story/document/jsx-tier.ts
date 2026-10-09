@@ -33,7 +33,7 @@ import { cspExtensionsOf } from './csp-extensions';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '../data/parsed-artifact-metadata';
 import { buildLambdaModule } from '@/lib/runner/program.server';
-import { EMPTY_COMPILED_DATAFLOW } from '../data/compiled-dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/dataflow/compiled-dataflow';
 import { validateIconNames } from '../assets/icon-validation.server';
 
 /** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
@@ -142,7 +142,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   // bound to a query checked against that query's result columns. ONE module
   // (lib/story/data/data-checks) shared with the dataset-refresh warnings path.
   let refs: Array<{ id: string; kind: string }> = [];
-  let compiled: import('../data/compiled-dataflow').CompiledDataflow | null = null;
+  let compiled: import('@/lib/dataflow/compiled-dataflow').CompiledDataflow | null = null;
   if (ctx.loadRef) {
     const checked = await checkDocumentData(sanitized, ctx.loadRef);
     if (!checked.ok) return json({ error: checked.error, details: checked.details }, 400);

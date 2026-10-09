@@ -1,7 +1,7 @@
 /**
  * THE DOCUMENT COMPILER — the one place that understands SQL.
  *
- * Publishing turns a document's `<Helmet>` declarations (lib/story/data/dataflow
+ * Publishing turns a document's `<Helmet>` declarations (lib/dataflow/dataflow
  * `Dataflow`) into a `CompiledDataflow`: every query a typed function of the
  * values it binds, every mutation an action with a signature, and one graph of
  * what reads what — all taken from SQLite's own report while it prepares each
@@ -26,12 +26,11 @@ import { paramSqlName, type ColumnType, type DatasetColumn, type Scalar, type St
 import { loadSqlite, type Relation, type SqlExtensions, type SqliteEngine } from '@artifactbin/sql/core';
 import { isQueryFailure } from '@artifactbin/contracts';
 import type { JsxNode, ValidationError } from '@/lib/jsx';
-import { sqlExtensions } from '@/lib/sql/extensions';
 import { BUILTIN_TABLES, builtinInput, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
 import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledNotify, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
 import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
 import { analyzeRowScopes } from '@/lib/jsx/row-scope';
-import { datasetSqlParams } from '@/lib/datasets/sql';
+import { datasetSqlParams } from './sql-parameters';
 import { dateCastRefusal, editDistance, withSqliteHint } from './sqlite-hints';
 
 /** What an `<Import>` or `source=` names, as the loader found it. */
@@ -47,12 +46,22 @@ export interface ImportSource {
 }
 export type SchemaLoader = (ref: string) => Promise<ImportSource | null>;
 
+/**
+ * What the caller's composition adds to the SQL this compiler analyzes. The compiler never reads
+ * process state: the server passes its composition's functions (lib/sql/extensions `sqlExtensions()`),
+ * and a caller without a composition (the CLI, a test) passes nothing, which admits none — a
+ * <Mutation> calling one is refused, as it would be on a host that does not install them.
+ */
+export interface CompileOptions {
+  extensions?: SqlExtensions;
+}
+
 /** A Postgres query's shape, probed by `prepareCompile`, keyed by `postgresKey`. */
 type PostgresShape = { columns: DatasetColumn[]; params: string[] } | { error: string };
 
 export interface CompileContext {
   engine: SqliteEngine;
-  /** The composition's functions a <Mutation> may call (lib/sql/extensions); a <Query> never sees them. */
+  /** The composition's functions a <Mutation> may call (`CompileOptions.extensions`); a <Query> never sees them. */
   extensions: SqlExtensions;
   /** Every ref the declarations name → what it is, or null when it does not resolve. */
   sources: Record<string, ImportSource | null>;
@@ -150,7 +159,7 @@ const DATE_FUNCTIONS = new Set(['date', 'time', 'datetime', 'julianday', 'strfti
 const postgresKey = (q: Pick<QueryDecl, 'name' | 'sql'>): string => `${q.name}\0${q.sql}`;
 
 /** Load the engine and every artifact the declarations name. */
-export async function prepareCompile(flow: Dataflow, load: SchemaLoader): Promise<CompileContext> {
+export async function prepareCompile(flow: Dataflow, load: SchemaLoader, options: CompileOptions = {}): Promise<CompileContext> {
   const engine = await loadSqlite();
   const refs = [...new Set([...flow.imports.map((i) => i.ref), ...[...flow.queries, ...(flow.notifications ?? [])].flatMap((q) => (q.source ? [q.source] : [])), ...flow.values.flatMap((v) => (v.kind === 'scalar' && v.source ? [v.source] : []))])];
   const sources: CompileContext['sources'] = Object.fromEntries(await Promise.all(refs.map(async (ref) => [ref, await load(ref).catch(() => null)] as const)));
@@ -169,7 +178,7 @@ export async function prepareCompile(flow: Dataflow, load: SchemaLoader): Promis
     try { postgres[postgresKey(q)] = await source.probe(sql, defaults, bindTypes); }
     catch (error) { postgres[postgresKey(q)] = { error: error instanceof Error ? error.message : 'the query could not run' }; }
   }
-  return { engine, extensions: sqlExtensions(), sources, postgres };
+  return { engine, extensions: options.extensions ?? {}, sources, postgres };
 }
 
 const scalarTypes = (flow: Dataflow): Record<string, ColumnType> =>
@@ -627,8 +636,8 @@ function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors: Valid
   return { errors, contexts };
 }
 
-/** Compile a document with nothing but the loader in hand. */
-export async function compileWithLoader(flow: Dataflow, load: SchemaLoader, body?: JsxNode[]): Promise<CompileResult> {
-  return compileDataflow(flow, await prepareCompile(flow, load), body);
+/** Compile a document with nothing but the loader (and the caller's composition) in hand. */
+export async function compileWithLoader(flow: Dataflow, load: SchemaLoader, options: CompileOptions & { body?: JsxNode[] } = {}): Promise<CompileResult> {
+  return compileDataflow(flow, await prepareCompile(flow, load, options), options.body);
 }
 

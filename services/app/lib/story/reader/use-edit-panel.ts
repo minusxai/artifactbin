@@ -1,4 +1,4 @@
-import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from './edit-bar';
+import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 
 /**
  * The viewer's collapse choice for the edit panel. Per viewer, in this browser

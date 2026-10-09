@@ -1,4 +1,4 @@
-/** Convert a reader control's string to the declared scalar type. */
+/** Convert a reader control's string to the declared scalar type. In lib/dataflow: URL values (./url-values) coerce with it too. */
 import { normalizeTimestamp, isTimestamp } from '@artifactbin/utils/shape';
 import type { ColumnType } from '@artifactbin/contracts';
 import type { Scalar } from './dataflow';

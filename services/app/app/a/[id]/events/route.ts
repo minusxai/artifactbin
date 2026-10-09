@@ -63,7 +63,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * on that data would sit stale until someone reloaded. So this stream also
    * listens on each dataset the document reads or writes, and forwards a small
    * `data` frame naming it; the runtime re-runs exactly the queries that read
-   * it (lib/story/data/dataflow queriesReadingDatasets).
+   * it (lib/dataflow/dataflow queriesReadingDatasets).
    *
    * A separate SSE EVENT NAME, deliberately: the default `message` frame is
    * the whole document and is guarded by `editId`/`version` at both ends, and

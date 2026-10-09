@@ -2,8 +2,8 @@ import { deckColumns, GEOMETRY_COLUMN } from '@/lib/jsx/deck-spec';
 /**
  * The document's DATA checks — everything about a markup document's data that
  * can only be judged with the caller's artifacts in hand: refs resolve and are
- * the right kind (lib/story/data/refs.ts), the declarations COMPILE against the
- * real shapes of what they import (lib/story/data/compile-dataflow — which also
+ * the right kind (lib/dataflow/refs.ts), the declarations COMPILE against the
+ * real shapes of what they import (lib/dataflow/compile-dataflow — which also
  * checks the markup that binds them), every written dataset is the
  * publisher's to write and admits the write under its data policy, and every
  * chart bound to a query is checked against that query's RESULT columns —
@@ -13,15 +13,17 @@ import { deckColumns, GEOMETRY_COLUMN } from '@/lib/jsx/deck-spec';
  */
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { isQueryFailure, runMutation } from '@/lib/sql/engine';
+import { sqlExtensions } from '@/lib/sql/extensions';
 import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
-import { datasetSqlParams } from '@/lib/datasets/sql';
+import { datasetSqlParams } from '@/lib/dataflow/sql-parameters';
 import { importedTables } from '@/lib/datasets/catalog';
-import { refName, isEmptyDataflow } from './dataflow';
+import type { DatasetCatalog } from '@/lib/datasets/types';
+import { refName, isEmptyDataflow } from '@/lib/dataflow/dataflow';
 import { dataflowOf, splitHelmet } from '../document/helmet';
-import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader, type ResolvedRef } from './refs';
-import { compileDataflow, prepareCompile, type ImportSource, type SchemaLoader } from './compile-dataflow';
-import type { CompiledDataflow } from './compiled-dataflow';
-import { bindParams, bindTypes, importRef, mutationParams, mutationReads, valueTypes } from './compiled-flow';
+import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader, type ResolvedRef } from '@/lib/dataflow/refs';
+import { compileDataflow, prepareCompile, type ImportSource, type SchemaLoader } from '@/lib/dataflow/compile-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { bindParams, bindTypes, importRef, mutationParams, mutationReads, valueTypes } from '@/lib/dataflow/compiled-flow';
 import { getTemplate, VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
 import { normalize, type TopLevelSpec } from 'vega-lite';
 
@@ -29,8 +31,17 @@ type DataCheckResult =
   | { ok: true; refs: Array<{ id: string; kind: string }>; compiled: CompiledDataflow | null }
   | { ok: false; error: 'invalid_refs' | 'invalid_sql'; details: string[] };
 
+/**
+ * A reference as the server resolves it: the data language's `ResolvedRef` plus the dataset's catalog,
+ * which only these publish checks read (to compile an import against its tables). Kept here, above
+ * lib/dataflow, so the data language never depends on the dataset module.
+ */
+export type ServerRef = ResolvedRef & { catalog?: DatasetCatalog };
+/** What the server's ref loaders answer; one is also a dataflow `RefLoader`. */
+export type ServerRefLoader = (id: string) => Promise<ServerRef | null>;
+
 /** What an artifact is to the compiler: a dataset's tables, a folder's listing, or a database to run inside. */
-function schemaSourceOf(r: ResolvedRef | null): ImportSource | null {
+function schemaSourceOf(r: ServerRef | null): ImportSource | null {
   if (!r) return null;
   if (r.format === 'folder') return { kind: 'folder', tables: [{ name: 'rows', columns: r.columns ?? [] }] };
   if (r.format !== 'dataset') return null;
@@ -43,9 +54,9 @@ function schemaSourceOf(r: ResolvedRef | null): ImportSource | null {
 }
 
 /** The compiler's loader over a ref loader. */
-export const schemaLoaderFor = (load: RefLoader): SchemaLoader => async (ref) => schemaSourceOf(await load(ref));
+export const schemaLoaderFor = (load: ServerRefLoader): SchemaLoader => async (ref) => schemaSourceOf(await load(ref));
 
-export async function checkDocumentData(source: string, load: RefLoader): Promise<DataCheckResult> {
+export async function checkDocumentData(source: string, load: ServerRefLoader): Promise<DataCheckResult> {
   const checked = await validateRefs(source, load);
   if (!checked.ok) return { ok: false, error: 'invalid_refs', details: checked.details };
 
@@ -55,7 +66,7 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
   const flow = dataflowOf(split.content);
   if (isEmptyDataflow(flow)) return { ok: true, refs: checked.refs, compiled: null };
 
-  const compiled = compileDataflow(flow, await prepareCompile(flow, schemaLoaderFor(load)), split.body);
+  const compiled = compileDataflow(flow, await prepareCompile(flow, schemaLoaderFor(load), { extensions: sqlExtensions() }), split.body);
   if (!compiled.ok) return { ok: false, error: 'invalid_sql', details: compiled.errors.map((e) => e.message) };
   const writes = await admitWrites(compiled.compiled, load);
   // Who may write the dataset at all is a reference's question; what the policy admits is the statement's.
@@ -78,7 +89,7 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
  * be seen from here; a statement the policy never admits is the publisher's
  * 400, not every viewer's 403.
  */
-async function admitWrites(flow: CompiledDataflow, load: RefLoader): Promise<{ refs: string[]; sql: string[] }> {
+async function admitWrites(flow: CompiledDataflow, load: ServerRefLoader): Promise<{ refs: string[]; sql: string[] }> {
   const refs: string[] = [];
   const out: string[] = [];
   const types = valueTypes(flow);

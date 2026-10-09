@@ -1,6 +1,7 @@
 /**
  * The shared field-reference walker: one traversal powers encoding-field
- * validation against a result's columns.
+ * validation against a result's columns. Part of the data language (lib/dataflow):
+ * the reference checks (./refs) validate a chart's encodings against its query with it.
  */
 
 interface FieldRef {

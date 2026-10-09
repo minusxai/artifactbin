@@ -4,7 +4,7 @@ import { canReadArtifact, getArtifactById, runDocumentMutation } from '@/lib/art
 import { refusesCrossSite } from '@/lib/accounts';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { parseMutationRequest } from '@/lib/story/datasets';
+import { parseMutationRequest } from '@/lib/dataflow';
 import { requestOrSessionActor } from '@/lib/accounts';
 
 const CORS = {
@@ -13,7 +13,7 @@ const CORS = {
 };
 
 /**
- * A reader supplies a declared mutation name and its arguments (lib/story/datasets/mutation-request); SQL comes from the
+ * A reader supplies a declared mutation name and its arguments (lib/dataflow/mutation-request); SQL comes from the
  * stored document. Dataset edit permission belongs to the requesting actor,
  * independently of the document's role. Check it on every write.
  * Cookie credentials require same-site requests; bearers do not carry CSRF.

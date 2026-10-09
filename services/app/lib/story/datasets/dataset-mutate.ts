@@ -49,7 +49,7 @@ import { getDb } from '@/lib/platform/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
 import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow, type RoleActor } from '@/lib/artifacts/access';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
-import type {Scalar} from '../data/dataflow';
+import type {Scalar} from '@/lib/dataflow/dataflow';
 import { newEditId } from '../document/splice';
 import {mutationInvocation} from '@/lib/artifacts/mutation-invocation';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';

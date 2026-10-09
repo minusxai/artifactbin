@@ -35,13 +35,13 @@ import { AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, cou
 import { normalizeNodeIds } from '@/lib/story/document/node-ids';
 import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
-import type { Scalar } from '@/lib/story/data';
-import { parseMutationRequest } from '@/lib/story/datasets/mutation-request';
-import { bindParams, bindTypes, mutationTargetRef } from '@/lib/story/data/compiled-flow';
-import { platformValues, rowField } from '@/lib/story/data/builtins';
-import { rewriteBuiltinFields } from '@/lib/story/data/compile-dataflow';
+import type { Scalar } from '@/lib/dataflow';
+import { parseMutationRequest } from '@/lib/dataflow/mutation-request';
+import { bindParams, bindTypes, mutationTargetRef } from '@/lib/dataflow/compiled-flow';
+import { platformValues, rowField } from '@/lib/dataflow/builtins';
+import { rewriteBuiltinFields } from '@/lib/dataflow/compile-dataflow';
 import { datasetCreateFields } from '@/lib/story/datasets/dataset-usage';
-import { imageRawUrl, pdfRawUrl } from '@/lib/story/data/ref-data';
+import { imageRawUrl, pdfRawUrl } from '@/lib/dataflow/ref-data';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform/config';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http/http';
@@ -646,7 +646,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     ...(row.format === 'dataset' ? datasetCreateFields(row.id, meta.columns, meta.rowCount, meta as { totalRows?: number; truncated?: boolean }, row.access) : {}),
     ...(row.format === 'viz' ? { slots: meta.slots } : {}),
     // Where the BYTES are, for a caller that must render the image before it
-    // has re-read the document (lib/story/data/ref-data owns the shape, so this
+    // has re-read the document (lib/dataflow/ref-data owns the shape, so this
     // cannot drift from the render path).
     ...(row.format === 'image' ? { rawUrl: imageRawUrl(row.id, row.version) } : {}),
     // Same for a PDF, plus the two facts a <File> card shows: an agent that has

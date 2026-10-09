@@ -28,8 +28,8 @@ import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/serv
 import { acceptedMembers, dataflowForRow, dataflowRunsForRow, importsFingerprint, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ImportCache } from '@/lib/artifacts/dataflow';
 import { canReadArtifact, type ArtifactRow, type RoleActor, type TokenActor } from '@/lib/artifacts/access';
 import { getArtifactById, retainDownloadedVersion } from '@/lib/artifacts/store';
-import type { ImportTables } from '@/lib/story/data';
-import { placeDataflow } from '@/lib/story/data';
+import type { ImportTables } from '@/lib/dataflow';
+import { placeDataflow } from '@/lib/dataflow';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { getDb } from '@/lib/platform/db';
@@ -43,7 +43,7 @@ import { withStoredCarriers } from '@/lib/compiled-page/carriers';
 import { preparedPageFor } from '@/lib/story/prepared/prepared-page.server';
 import { objectStore } from '@/lib/object-store';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
-import type { DataflowState } from '@/lib/story/data';
+import type { DataflowState } from '@/lib/dataflow';
 import { loadImage } from '@/lib/story/assets/image-store';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { displayTitle } from '@/lib/story/document';
@@ -54,7 +54,7 @@ import { ARTIFACT_FILE_FORMAT, sourceDigest, type ArtifactFile } from './file-fo
 import { precomputeVariants, valueDomains, type VariantCaps } from './variants';
 import { DOCUMENT_UI_FONT_CSS } from '@/lib/serving/app-fonts';
 import { withoutUnusedFaces } from './font-faces';
-import type { CompiledDataflow } from '@/lib/story/data';
+import type { CompiledDataflow } from '@/lib/dataflow';
 import { createHash } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
 

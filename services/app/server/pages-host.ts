@@ -150,7 +150,7 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
       if (pathname === '/') return page(request, hostId);
       if (doorOf(pathname, hostId)) return door(c, next, hostId, origin);
       // The one exception: ANOTHER artifact's bytes a document embeds (`ref:` images and PDF cards,
-      // lib/story/data/ref-data `/a/<id>/raw?v=`), answered to nobody — what anyone with the link may fetch,
+      // lib/dataflow/ref-data `/a/<id>/raw?v=`), answered to nobody — what anyone with the link may fetch,
       // never with this document's reader.
       const embedded = /^\/a\/([^/]+)\/raw$/.exec(pathname)?.[1];
       if (embedded && embedded !== hostId && (request.method === 'GET' || request.method === 'HEAD')) {

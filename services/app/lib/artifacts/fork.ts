@@ -4,7 +4,7 @@ import { compiledForRow, refLoaderForActor, rowToResolvedRef } from './dataflow'
 import { artifactQuery } from './document';
 import { grantsOf, grantsPermitRead } from '../datasets/policy/grants';
 import { reserveArtifactIds } from './identities';
-import { collectRefUses } from '@/lib/story/data/refs';
+import { collectRefUses } from '@/lib/dataflow/refs';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '../platform/analytics';
@@ -14,8 +14,8 @@ import { getDb } from '../platform/db';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../story/document/input';
 import { json } from '../http/http';
-import { mutationTargetRef } from '@/lib/story/data/compiled-flow';
-import type { RefLoader } from '@/lib/story/data';
+import { mutationTargetRef } from '@/lib/dataflow/compiled-flow';
+import type { ServerRefLoader } from '@/lib/story/data/data-checks';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 
 /**
@@ -51,7 +51,7 @@ export interface ForkOverrides {
  * title would be a second write, rotating the `edit_id` the create reply just handed back.
  *
  * FORKING AN APP. A page that WRITES a dataset may only be published by someone who owns that
- * dataset (lib/story/data/refs `validateRefs`), so a fork that kept the original's `ref:` was refused
+ * dataset (lib/dataflow/refs `validateRefs`), so a fork that kept the original's `ref:` was refused
  * for everyone but its owner — an app could not be forked at all. So the fork COPIES each dataset
  * the page writes and cannot write as the forker, under the forker's account, and repoints every
  * `ref:` to the copy (`writtenDatasetForkPlan`). Datasets the page only READS keep their id: a read
@@ -91,7 +91,7 @@ export async function forkArtifact(
    */
   const unforkable = forkRefusal(source);
   if (unforkable) return unforkable;
-  // A copy is born marked current (lib/story/data/data-syntax): a retired stored shape is never copied into one.
+  // A copy is born marked current (lib/dataflow/data-syntax): a retired stored shape is never copied into one.
   const retired = unservable(source);
   if (retired) return retired.response();
   const copying = await writtenDatasetForkPlan(actor, source, owner);
@@ -278,7 +278,7 @@ async function forkInput(
   source: ArtifactRow,
   overrides: ForkOverrides,
   /** An APP fork: the repointed source and the loader that answers for its planned dataset copies. */
-  deep?: { source: string; loadRef: RefLoader },
+  deep?: { source: string; loadRef: ServerRefLoader },
 ): Promise<ArtifactInput | Response> {
   // Everything the copy keeps that is not the content itself, with the
   // forker's overrides winning. `link_role` is carried too, but through

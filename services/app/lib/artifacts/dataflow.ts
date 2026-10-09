@@ -6,7 +6,7 @@ import { JOIN_RELATIONS } from '../accounts/relation-state';
 import { grantContext, grantsOf, grantsPermitRead } from '../datasets/policy/grants';
 import { storedMediaReferences } from '../datasets/media-references';
 import { isQueryFailure, type PersonCard } from '@artifactbin/contracts';
-import type { DataflowState } from '@/lib/story/data';
+import type { DataflowState } from '@/lib/dataflow';
 import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
 import { SIGN_IN_REQUIRED } from '@/lib/story/reader/sign-in-required';
 import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from './capabilities';
@@ -19,34 +19,34 @@ import { DatasetError } from '@/lib/datasets/errors';
 import { getDb } from '../platform/db';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
-import { imageRawUrl, imageRefData, pdfRawUrl } from '../story/data/ref-data';
+import { imageRawUrl, imageRefData, pdfRawUrl } from '@/lib/dataflow/ref-data';
 import { displayTitle } from '../story/document/title';
 import { readCompiledDataflow } from '../story/data/parsed-artifact-metadata';
-import { EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar } from '@/lib/story/data/dataflow';
-import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/data/compiled-dataflow';
-import { compileWithLoader, type CompileResult } from '@/lib/story/data/compile-dataflow';
+import { EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar } from '@/lib/dataflow/dataflow';
+import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/dataflow/compiled-dataflow';
+import { compileWithLoader, type CompileResult } from '@/lib/dataflow/compile-dataflow';
 import { declarationsOf } from '@/lib/story/document/helmet';
 import type { ValidationError } from '@/lib/jsx';
-import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/data/compiled-flow';
-import { bindMutationRequest } from '@/lib/story/datasets/mutation-request';
-import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/story/data/placement';
-import { readerZone, VIEWER, VIEWER_ID } from '@/lib/story/data/builtins';
-import type { MutationRequest } from '@/lib/story/datasets';
+import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/dataflow/compiled-flow';
+import { bindMutationRequest } from '@/lib/dataflow/mutation-request';
+import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/dataflow/placement';
+import { readerZone, VIEWER, VIEWER_ID } from '@/lib/dataflow/builtins';
+import type { MutationRequest } from '@/lib/dataflow';
 import { schemaLoaderFor } from '@/lib/story/data/data-checks';
 import { mutationPolicy } from '@/lib/datasets/policy';
 import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
 import { runMutation } from '@/lib/sql/engine';
-import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/datasets/local-state';
-import { localTableOverrides } from '@/lib/story/datasets/local-tables';
+import { sqlExtensions } from '@/lib/sql/extensions';
+import { runLocalStateMutation, type LocalMutationResult } from '@/lib/dataflow/local-state';
+import { localTableOverrides } from '@/lib/dataflow/local-tables';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
 import { storedRowStats } from '@/lib/story/datasets/dataset-store';
 import { childrenTableFor, CHILDREN_COLUMNS } from '@/lib/workspace/folders';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
-import type { RefLoader, ResolvedRef } from '@/lib/story/data';
-import type { DatasetColumn } from '@/lib/story/data/data-tiers';
-import { checkDocumentData } from '@/lib/story/data/data-checks';
+import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import { checkDocumentData, type ServerRef, type ServerRefLoader } from '@/lib/story/data/data-checks';
 
-export function refLoaderForActor(actor: TokenActor): RefLoader {
+export function refLoaderForActor(actor: TokenActor): ServerRefLoader {
   return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId);
 }
 
@@ -57,7 +57,7 @@ function parsedDatasetPolicy(row: ArtifactRow): DatasetPolicy | undefined {
   try { return parseDatasetAccessPolicy(row.dataset_policy); } catch { return undefined; }
 }
 
-export function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
+export function rowToResolvedRef(row: ArtifactRow, owned = false): ServerRef {
   const meta = (row.meta ?? {}) as { columns?: DatasetColumn[] };
   const catalog = row.format === 'dataset' ? catalogOf(row) : null;
   return {
@@ -296,7 +296,7 @@ export async function refreshWarningsFor(actor: TokenActor, updated: ArtifactRow
   const dependents = await findDependentsFor(actor, updated.id);
   if (dependents.length === 0) return [];
   const base = refLoaderForActor(actor);
-  const load: RefLoader = async (id) => (id === updated.id ? rowToResolvedRef(updated) : base(id));
+  const load: ServerRefLoader = async (id) => (id === updated.id ? rowToResolvedRef(updated) : base(id));
   const warnings: Array<{ id: string; title: string | null; details: string[] }> = [];
   for (const dep of dependents) {
     if (!dep.source) continue;
@@ -473,7 +473,7 @@ async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state
 async function unrunnableDataflow(row: Pick<ArtifactRow, 'source' | 'token_id' | 'user_id'>, answer: (query: QueryDecl) => string): Promise<RanDataflow | null> {
   const declared = declarationsOf(row.source ?? '');
   if (!declared || isEmptyDataflow(declared)) return null;
-  const compiled = await compileWithLoader({ ...EMPTY_DATAFLOW, values: declared.values }, schemaLoaderFor(refLoaderForActor(writerFor(row))));
+  const compiled = await compileWithLoader({ ...EMPTY_DATAFLOW, values: declared.values }, schemaLoaderFor(refLoaderForActor(writerFor(row))), { extensions: sqlExtensions() });
   const flow = compiled.ok ? compiled.compiled : EMPTY_COMPILED_DATAFLOW;
   return { flow, state: { values: initialValues(flow), tables: initialTables(flow), errors: Object.fromEntries(declared.queries.map((q) => [q.name, answer(q)])) } };
 }
@@ -601,7 +601,7 @@ const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<Artifa
 
 /**
  * WHAT A READER MAY HOLD: every row of one import, for a page that runs the
- * queries over it itself (lib/story/data/placement) — or null.
+ * queries over it itself (lib/dataflow/placement) — or null.
  *
  * Two readers are asked about, and both must agree. The DOCUMENT must read the
  * import (the same resolver its runs use), and the VIEWER must be allowed the
@@ -735,13 +735,13 @@ export const isEmptyCompiled = (flow: CompiledDataflow): boolean =>
  */
 export async function runDocumentDataflow(
   source: string,
-  load: RefLoader,
+  load: ServerRefLoader,
   resolve: DatasetResolver,
   opts: DataflowRunOptions = {},
 ): Promise<RanDataflow | null> {
   const declared = declarationsOf(source);
   if (!declared || isEmptyDataflow(declared)) return null;
-  const compiled = await compileWithLoader(declared, schemaLoaderFor(load));
+  const compiled = await compileWithLoader(declared, schemaLoaderFor(load), { extensions: sqlExtensions() });
   // A draft that does not compile runs nothing, and says why under each declaration's own name.
   if (!compiled.ok) return { flow: EMPTY_COMPILED_DATAFLOW, state: { values: {}, tables: {}, errors: compileErrorsByName(compiled.errors) } };
   return runDeclaredDataflow(compiled.compiled, resolve, opts);
@@ -795,9 +795,9 @@ export async function referencedArtifactForRow(row: ArtifactRow, id: string): Pr
 export async function refDataForRow(
   row: ArtifactRow,
   opts: { capture?: boolean } = {},
-): Promise<import('@/lib/story/data/ref-data').RefDataMap> {
+): Promise<import('@/lib/dataflow/ref-data').RefDataMap> {
   const meta = row.meta as { refs?: Array<{ id: string; kind: string }> };
-  const out: import('@/lib/story/data/ref-data').RefDataMap = {};
+  const out: import('@/lib/dataflow/ref-data').RefDataMap = {};
   // A dataset a <Query> reads is a ref (ownership, dependents) but NOT page
   // data: its rows go through the engine (dataflowForRow) and only the query's
   // RESULT reaches the document.

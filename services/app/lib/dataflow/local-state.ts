@@ -1,6 +1,6 @@
 import { isQueryFailure, type ColumnType, type MutationInput, type Scalar, type SqlService } from '@artifactbin/contracts';
-import type { CompiledDataflow, CompiledMutation } from '../data/compiled-dataflow';
-import type { TableResult } from '../data/dataflow';
+import type { CompiledDataflow, CompiledMutation } from './compiled-dataflow';
+import type { TableResult } from './dataflow';
 import { checkedLocalRows } from './local-tables';
 
 export interface LocalMutationResult {

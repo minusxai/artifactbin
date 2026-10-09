@@ -1,5 +1,5 @@
 import { runtimeId } from './runtime-id';
-import type {ImageAssetAnswer} from '@/lib/story/data/ref-data';
+import type {ImageAssetAnswer} from '@/lib/dataflow/ref-data';
 /**
  * The document's DATA at runtime — one store per document, framework-free.
  *
@@ -28,14 +28,14 @@ import type {ImageAssetAnswer} from '@/lib/story/data/ref-data';
  * contract `useSyncExternalStore` needs, and what keeps a re-render from
  * cascading through every embed on every keystroke.
  */
-import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/data/dataflow';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
-import type { MutationRequest } from '@/lib/story/datasets/mutation-request';
-import { mutationRequestFor } from '@/lib/story/datasets/mutation-request-builder';
-import type { LocalMutationResult } from '@/lib/story/datasets/local-state';
-import { importRef, selectQueries, type ImportTables } from '@/lib/story/data/compiled-flow';
-import { localZone } from '@/lib/story/data/builtins';
-import { placeDataflow, type DataflowPlacement } from '@/lib/story/data/placement';
+import type { DataflowState, Row, Scalar, TableResult } from '@/lib/dataflow/dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import type { MutationRequest } from '@/lib/dataflow/mutation-request';
+import { mutationRequestFor } from '@/lib/dataflow/mutation-request-builder';
+import type { LocalMutationResult } from '@/lib/dataflow/local-state';
+import { importRef, selectQueries, type ImportTables } from '@/lib/dataflow/compiled-flow';
+import { localZone } from '@/lib/dataflow/builtins';
+import { placeDataflow, type DataflowPlacement } from '@/lib/dataflow/placement';
 import type { PersonCard } from '@artifactbin/contracts';
 import {
   ACCESS_FAILED, ACCESS_PENDING, accessUnavailable, accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople, versionsNow,
@@ -98,7 +98,7 @@ export interface QueryTransport {
    */
   people?(ids: string[]): Promise<Record<string, PersonCard>>;
   /**
-   * Perform a declared `<Mutation>` (lib/story/datasets/mutation-request: its name, its
+   * Perform a declared `<Mutation>` (lib/dataflow/mutation-request: its name, its
    * arguments, the row and value its control supplies). Resolves with the
    * dataset that changed (so the store knows what to re-run), rejects with the
    * server's message. Absent on a transport that cannot write (the editor's
@@ -178,7 +178,7 @@ export interface DataflowStore {
    */
   mutate(name: string, overrides?: Record<string, Scalar>, row?: Record<string, Scalar>): Promise<void>;
   /**
-   * The same write as the wire states it (lib/story/datasets/mutation-request): the island runtime's form and
+   * The same write as the wire states it (lib/dataflow/mutation-request): the island runtime's form and
    * what a retry re-issues. Its arguments are taken as given (`value` is the `_value` override). One
    * difference: a write whose check has not landed yet (ACCESS_PENDING) is SENT, and the server —
    * which decides every write anyway — answers; its refusal settles the write with its reason.
@@ -273,7 +273,7 @@ export interface CreateStoreOptions {
   /**
    * The page's own engine (lib/story-runtime/page-engine) and who is reading
    * (`$_me.id`). With it, every node the reader's holdings allow
-   * (StoryIslandDataflow.hold, lib/story/data/placement) runs in the page once the
+   * (StoryIslandDataflow.hold, lib/dataflow/placement) runs in the page once the
    * page holds what it reads, and only the rest goes through the transport.
    * Absent, everything goes through the transport, as it always has.
    */

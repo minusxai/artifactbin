@@ -5,15 +5,15 @@
  * every query and mutation names what it reads by kind.
  *
  * The core never reads SQL text; it asks this record what depends on what,
- * and the record is the compiled dataflow's own (lib/story/data/compiled-dataflow):
+ * and the record is the compiled dataflow's own (lib/dataflow/compiled-dataflow):
  * SQLite's analysis of every statement, taken at publish.
  */
-import type { ColumnType, DatasetColumn } from '@/lib/story/datasets/dataset-shape';
-import type { CompiledDataflow, CompiledReads } from '@/lib/story/data/compiled-dataflow';
-import { importRef, selectQueries } from '@/lib/story/data/compiled-flow';
-import type { DataflowPlacement } from '@/lib/story/data/placement';
-import { VIEWER } from '@/lib/story/data/builtins';
-import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
+import type { ColumnType, DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import type { CompiledDataflow, CompiledReads } from '@/lib/dataflow/compiled-dataflow';
+import { importRef, selectQueries } from '@/lib/dataflow/compiled-flow';
+import type { DataflowPlacement } from '@/lib/dataflow/placement';
+import { VIEWER } from '@/lib/dataflow/builtins';
+import type { DataflowState, Row, Scalar } from '@/lib/dataflow/dataflow';
 
 /** The source a membership change bumps; every query and every write check reads it. */
 const MEMBERS_SOURCE = '_members';

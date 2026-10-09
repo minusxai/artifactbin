@@ -12,7 +12,7 @@ import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 /**
  * Recipes and images only: a DATASET is never page data — it is read through a
  * <Query> and only the query's result reaches the document (the island's
- * `dataflow`, lib/story/data/dataflow.ts).
+ * `dataflow`, lib/dataflow/dataflow.ts).
  */
 type ResolvedRefData =
   | { kind: 'viz'; recipe: VizRecipeContent }

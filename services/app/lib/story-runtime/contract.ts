@@ -11,15 +11,15 @@ import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 import type { AnnotationRange } from '@/lib/story/annotations/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { RefDataMap } from '@/lib/story/data/ref-data';
-import type { DataflowState, Scalar } from '@/lib/story/data/dataflow';
+import type { RefDataMap } from '@/lib/dataflow/ref-data';
+import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import type { PersonCard } from '@artifactbin/contracts';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
-  /** The compiled declarations (lib/story/data/compiled-dataflow): what every query reads, every mutation's signature. */
-  flow: import('@/lib/story/data/compiled-dataflow').CompiledDataflow;
+  /** The compiled declarations (lib/dataflow/compiled-dataflow): what every query reads, every mutation's signature. */
+  flow: import('@/lib/dataflow/compiled-dataflow').CompiledDataflow;
   /**
    * The rows, when somebody has already run them. ABSENT is the reader's
    * normal case — paint first: the document arrives with its declarations and
@@ -54,7 +54,7 @@ export interface StoryIslandDataflow {
    * own rows, stored rather than connected, under the hold cap — decided for
    * the door this render's page queries through (lib/artifacts
    * holdableImports). The runtime places every query over them in the page
-   * (lib/story/data/placement); absent, everything runs on the server. A hint: the
+   * (lib/dataflow/placement); absent, everything runs on the server. A hint: the
    * door that answers the rows decides again.
    */
   hold?: string[];
@@ -87,7 +87,7 @@ export interface RanDataflow extends StoryIslandDataflow {
 /**
  * WHO IS READING — the one fact about the reader a document is told.
  *
- * `id` is `$_me.id` (lib/story/data/builtins), and `card` is the person the
+ * `id` is `$_me.id` (lib/dataflow/builtins), and `card` is the person the
  * SAME visibility rules already let a DataTable cell show
  * (lib/datasets/user-fields people): a display name, the public handle they
  * chose, and the address of their picture — never an email, never any other
@@ -137,7 +137,7 @@ export interface StoryIslandData {
   mermaidImages?: Record<string, StoredMermaidImage>;
   /**
    * The `<Value>`/`<Query>`/`<Mutation>` declarations and their render-time state
-   * (lib/story/data/dataflow.ts). Absent for a document that declares nothing.
+   * (lib/dataflow/dataflow.ts). Absent for a document that declares nothing.
    */
   dataflow?: StoryIslandDataflow;
   colorMode: 'light' | 'dark';
@@ -332,7 +332,7 @@ export const STORY_SCROLL_MESSAGE = 'mx:reader-scroll';
 export const STORY_FRAME_HASH_MESSAGE = 'mx:frame-hash';
 /**
  * A document framed on its own origin → the app page: the reader moved a `<Value>` the link carries, and this is
- * what the link should now say — the `$` params ONLY (lib/story/data/url-values `writeUrlValues('', …)`, `''` at
+ * what the link should now say — the `$` params ONLY (lib/dataflow/url-values `writeUrlValues('', …)`, `''` at
  * rest), never the frame's other params or hash. Posted by the document's link follower (lib/islands/url-sync,
  * debounced and compared there) to the app origin; the page's half of the bridge (frame-bridge/parent) takes it
  * only from its own frame's window and origin, and the page (solid/document/create-framed-story) puts exactly

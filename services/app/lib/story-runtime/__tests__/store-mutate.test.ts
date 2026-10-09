@@ -9,8 +9,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { ACCESS_PENDING, createDataflowStore, type QueryTransport,type StoreWriteEvent } from '@/lib/story-runtime/store';
-import type { DataflowState, Scalar } from '@/lib/story/data/dataflow';
-import type { MutationRequest } from '@/lib/story/datasets/mutation-request';
+import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';
+import type { MutationRequest } from '@/lib/dataflow/mutation-request';
 import { compiledOf } from '@/test/helpers/compiled';
 
 const SOURCES = {

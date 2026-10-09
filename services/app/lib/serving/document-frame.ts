@@ -12,7 +12,7 @@
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { STORY_FRAMED_ATTR } from '@/lib/islands/contract';
-import { APP_BAR_H } from '@/lib/story/reader/edit-bar';
+import { APP_BAR_H } from '@/lib/story-ui/edit-bar';
 
 /** What the app page needs to draw a document's frame and name the document in its head. */
 export interface DocumentFrame {

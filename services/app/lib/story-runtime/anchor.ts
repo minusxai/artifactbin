@@ -1,5 +1,5 @@
 /**
- * The served document's half of the reading position (lib/story/reader/scroll-anchor).
+ * The served document's half of the reading position (lib/story-ui/scroll-anchor).
  *
  * This document scrolls itself, inside a frame the page cannot see into — so
  * the page cannot read where the reader is, and asking would be too late
@@ -9,7 +9,7 @@
  *
  * The measuring is here; the geometry is in the pure module.
  */
-import { anchorAt, scrollTargetFor, type AnchorCandidate, type ScrollAnchor } from '@/lib/story/reader/scroll-anchor';
+import { anchorAt, scrollTargetFor, type AnchorCandidate, type ScrollAnchor } from '@/lib/story-ui/scroll-anchor';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 
 /** Every element the document can be anchored to, in page coordinates. */

@@ -1,6 +1,6 @@
 /**
  * A COMPILED DATAFLOW FOR A TEST, made the way publish makes one: the real
- * compiler (lib/story/data/compile-dataflow) over the Helmet children given, with
+ * compiler (lib/dataflow/compile-dataflow) over the Helmet children given, with
  * each imported artifact's shape supplied here instead of loaded. A test that
  * needs a store, a runtime or a server run starts from what the compiler
  * would have stored, never from a hand-built record.
@@ -8,8 +8,8 @@
 import type { DatasetColumn } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx';
 import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
-import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/data/compile-dataflow';
-import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/compile-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 
 /** An import's shape: its `rows` columns, or a full source (a folder, a catalog, a connected database). */
 export type TestSource = DatasetColumn[] | ImportSource;

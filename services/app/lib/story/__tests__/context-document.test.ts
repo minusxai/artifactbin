@@ -3,7 +3,7 @@ import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { serializeJsx } from '@/lib/jsx';
 import { splitHelmet } from '../document/helmet';
 import { validateMarkupStructure } from '../document/local-validation';
-import { collectRefUses, validateRefs } from '../data/refs';
+import { collectRefUses, validateRefs } from '@/lib/dataflow/refs';
 import { contextDocumentId, writeContextRef } from '../document/context';
 
 const source = '<Helmet><Context src="ref:abc123" /></Helmet><p id="body">Dashboard</p>';

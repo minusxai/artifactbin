@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { Show, createEffect, createSignal, onCleanup, splitProps, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
-import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/story/data/dataflow';
-import { VIEWER_ID } from '@/lib/story/data/builtins';
+import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/dataflow/dataflow';
+import { VIEWER_ID } from '@/lib/dataflow/builtins';
 import { refusalText } from '@/lib/story/reader/sign-in-required';
 import { MutationHint } from './disclosure';
 import { useIsland } from '../context';
@@ -10,7 +10,7 @@ import type { IslandContext } from '../contract';
 import type { RowScope } from '../rt';
 import { substituteRow } from '@/lib/jsx/row-scope';
 import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
-import { commentMetadata, instanceDomId } from '@/lib/story/data/repeat-identity';
+import { commentMetadata, instanceDomId } from '@/lib/story-ui/repeat-identity';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/icon-contract';
 
 import { createRowActions } from '@/lib/story-runtime/row-actions';
@@ -48,7 +48,7 @@ export function rowAttrs(attrs: Readonly<Record<string, unknown>>, row: Record<s
 }
 
 /**
- * lib/story/annotations/comment-target isCommentKey (the interpreter's validRowKey), restated: importing it from a kit
+ * lib/story-ui/comment-target isCommentKey (the interpreter's validRowKey), restated: importing it from a kit
  * family re-partitions the shared runtime's chunks (the island build splits by file), +170 B on rt+boot.
  * kit-writes.test pins the two equal.
  */

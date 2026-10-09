@@ -7,9 +7,9 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { DatasetColumn } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx';
-import { dataflowOf, splitHelmet } from '../document/helmet';
-import { compileDataflow, prepareCompile, rewriteBuiltinFields, type ImportSource } from '../data/compile-dataflow';
-import { validateMarkupStructure } from '../document/local-validation';
+import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
+import { compileDataflow, prepareCompile, rewriteBuiltinFields, type ImportSource } from '../compile-dataflow';
+import { validateMarkupStructure } from '@/lib/story/document/local-validation';
 
 const BOOKINGS: DatasetColumn[] = [
   { name: 'id', type: 'string' }, { name: 'day', type: 'date' }, { name: 'slot', type: 'string' },
@@ -43,7 +43,7 @@ const IMPORT = '<Import name="bookings" src="ref:BookRows1" />';
 
 describe('the booking golden', () => {
   it('compiles to the reviewed record', async () => {
-    const source = readFileSync(new URL('./fixtures/booking.jsx', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../story/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
     const result = await compile(source);
     if (!result.ok) throw new Error(result.errors.map((e) => e.message).join('\n'));
     await expect(`${JSON.stringify(result.compiled, null, 2)}\n`).toMatchFileSnapshot('./__snapshots__/booking.compiled.json');

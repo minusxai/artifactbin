@@ -23,7 +23,7 @@ import { batch, getOwner, onCleanup, untrack, type JSX } from 'solid-js';
 import { createComponent, render } from 'solid-js/web';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
-import type { Row, Scalar } from '@/lib/story/data/dataflow';
+import type { Row, Scalar } from '@/lib/dataflow/dataflow';
 import { PAGE_GLOBAL } from '@/lib/story-runtime/contract';
 import { bindPage, type PageBindings, type MutationFn } from '@/lib/story-runtime/page-bindings';
 export { bindPage, type PageBindings, type MutationFn, type QueryAccessor, type ValueSetter } from '@/lib/story-runtime/page-bindings';

@@ -3,10 +3,10 @@ import { executeCatalog } from '@/lib/datasets/execute';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { RoleActor } from '@/lib/artifacts';
-import type { CompiledDataflow } from '@/lib/story/data';
-import { importRef, selectQueries, type ImportTables } from '@/lib/story/data/compiled-flow';
+import type { CompiledDataflow } from '@/lib/dataflow';
+import { importRef, selectQueries, type ImportTables } from '@/lib/dataflow/compiled-flow';
 import { runDataflow, runDataflowMany, type RunDataflowOptions } from './run-dataflow';
-import type { Scalar } from '@/lib/story/data';
+import type { Scalar } from '@/lib/dataflow';
 export type DocumentQuerySource = { tables: ImportTables[string]; catalog?: DatasetCatalog };
 export type DocumentQuerySourceMode = 'import' | 'catalog' | 'verify';
 export interface DocumentQueryOptions extends RunDataflowOptions {

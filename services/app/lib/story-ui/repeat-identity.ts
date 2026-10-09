@@ -1,5 +1,6 @@
-import type { CommentKey, CommentTarget } from '../annotations/comment-target';
-import { COMMENT_OWNER_ATTR, COMMENT_TARGET_ATTR, parseCommentTarget } from '../annotations/comment-target';
+/** A reader-kit helper (lib/story-ui): the row key a keyed repeat stamps, and the comment target it carries. */
+import type { CommentKey, CommentTarget } from './comment-target';
+import { COMMENT_OWNER_ATTR, COMMENT_TARGET_ATTR, parseCommentTarget } from './comment-target';
 import { isCommentKey } from './row-key';
 export { keyedRowsError } from './row-key';
 

@@ -26,7 +26,7 @@ import { renderSparklineSvg } from '@/lib/viz/sparkline';
 // The TYPED column shape (@artifactbin/contracts), not dataset-usage's loose
 // one: these columns are registered into the engine, so their types are the
 // engine's vocabulary.
-import type { DatasetColumn } from '@/lib/story/datasets';
+import type { DatasetColumn } from '@/lib/dataflow';
 import type { ShelfRow } from './shelf';
 
 /**

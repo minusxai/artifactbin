@@ -1,5 +1,5 @@
 /** Dates and counts as the app shows them, in one place. Counts reuse the reader's default number format. */
-import { numberFormatter } from '@/lib/story/data/number-format';
+import { numberFormatter } from '@/lib/dataflow/number-format';
 
 const count = numberFormatter(undefined);
 

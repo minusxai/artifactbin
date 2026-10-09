@@ -5,8 +5,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { compileDatasetSql } from '../sql';
 import { discoverPostgres, queryPostgres } from '../postgres';
 import type { DatasetCatalog, PostgresConfig } from '../types';
-import type { Scalar } from '@/lib/story/data/dataflow';
-import type { DatasetColumn } from '@/lib/story/datasets/dataset-shape';
+import type { Scalar } from '@/lib/dataflow/dataflow';
+import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 
 vi.mock('@/lib/platform/config',async original=>({...await original<object>(),DATASET_ALLOW_PRIVATE_NETWORKS:true}));
 

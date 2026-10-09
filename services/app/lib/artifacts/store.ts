@@ -42,11 +42,11 @@ import type { StringEdit } from '../story/document/index';
 import { nodeIndex, stampNodeIds } from '../story/document/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } from '../story/data/parsed-artifact-metadata';
 import { warmPreparedPage } from '../story/prepared/prepared-page.server';
-import { DATA_SYNTAX_META } from '../story/data/data-syntax';
+import { DATA_SYNTAX_META } from '@/lib/dataflow/data-syntax';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from '@/lib/workspace/folders';
-import type { RefLoader, ResolvedRef } from '@/lib/story/data';
-import type { DatasetColumn } from '@/lib/story/data/data-tiers';
+import type { ServerRef, ServerRefLoader } from '@/lib/story/data/data-checks';
+import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 import { type ShareEntry, type ShareRole } from './share-roles';
 
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
@@ -165,7 +165,7 @@ export async function createArtifact(
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source).source };
   }
-  // A document is born in the current data syntax (lib/story/data/data-syntax).
+  // A document is born in the current data syntax (lib/dataflow/data-syntax).
   input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
   let sourceIds: string[] = [];
   if(input.format==='markup'&&input.source) {
@@ -961,10 +961,10 @@ export async function getLinkReadableArtifact(id: string): Promise<ArtifactRow |
 }
 
 /** Resolve a `ref:<id>`: the caller's own artifacts, then anything link-readable. */
-export function refLoaderFor(tokenId: string): RefLoader {
-  return async (id: string): Promise<ResolvedRef | null> => {
+export function refLoaderFor(tokenId: string): ServerRefLoader {
+  return async (id: string): Promise<ServerRef | null> => {
     // `owned` records WHICH branch answered: a read is happy either way, a
-    // <Mutation> is admitted only for the caller's own (lib/story/data/refs).
+    // <Mutation> is admitted only for the caller's own (lib/dataflow/refs).
     const own = await getArtifact(tokenId, id);
     const row = own ?? (await getLinkReadableArtifact(id));
     if (!row) return null;
@@ -973,8 +973,8 @@ export function refLoaderFor(tokenId: string): RefLoader {
 }
 
 /** Same, scoped by account (the session-authed /api/my routes) before the link-readable fallback. */
-export function refLoaderForUser(userId: string): RefLoader {
-  return async (id: string): Promise<ResolvedRef | null> => {
+export function refLoaderForUser(userId: string): ServerRefLoader {
+  return async (id: string): Promise<ServerRef | null> => {
     const own = await getArtifactFor({userId,tokenId:''}, id);
     const row = own ?? (await getLinkReadableArtifact(id));
     if (!row) return null;

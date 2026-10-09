@@ -13,8 +13,8 @@
  * reserves its space in one and not the other has nowhere to come from.
  */
 import { describe, expect, it } from 'vitest';
-import { IMAGE_SIZES, resolveRefProps } from '../data/ref-data';
-import type { RefDataMap } from '../data/ref-data';
+import { IMAGE_SIZES, resolveRefProps } from '../ref-data';
+import type { RefDataMap } from '../ref-data';
 
 const img = { isComponent: false, tag: 'img' };
 const sized: RefDataMap = { abc123: { kind: 'image', url: '/a/abc123/raw?v=2', width: 1200, height: 800 } };

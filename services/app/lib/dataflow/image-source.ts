@@ -1,7 +1,7 @@
 /** Image bindings resolve data, never executable expressions or unchecked URLs. */
 import {ARTIFACT_REFERENCE_PATTERN} from '@artifactbin/contracts';
 import {parseRowRef} from '@/lib/jsx/row-scope';
-import {resolveRefTemplate,type Scalar} from '../data/dataflow';
+import {resolveRefTemplate,type Scalar} from './dataflow';
 
 export function boundImageValue(template:string,values:Record<string,Scalar>,row?:Record<string,unknown>):string|null {
  const field=parseRowRef(template);

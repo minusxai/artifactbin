@@ -1,5 +1,5 @@
 /**
- * THE DATA-SYNTAX MARKER on the publish path (lib/story/data/data-syntax): every
+ * THE DATA-SYNTAX MARKER on the publish path (lib/dataflow/data-syntax): every
  * creation and every whole-document write carries `meta.dataSyntax = 2`; a
  * partial edit keeps whatever the document had, so an unmigrated document is
  * never marked as converted by an edit that validated only part of it.

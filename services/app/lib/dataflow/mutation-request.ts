@@ -12,10 +12,10 @@
  * is browser-safe; the parser answers the server's 400s.
  */
 import type { ColumnType, MutationNotificationBindings } from '@artifactbin/contracts';
-import { platformValues, rowField, type PlatformInputs } from '../data/builtins';
-import type { CompiledDataflow, CompiledMutation } from '../data/compiled-dataflow';
-import { bindParams, bindTypes, initialValues, mutationParams } from '../data/compiled-flow';
-import { DECL_NAME_RE, scalarMatches, type Row, type Scalar } from '../data/dataflow';
+import { platformValues, rowField, type PlatformInputs } from './builtins';
+import type { CompiledDataflow, CompiledMutation } from './compiled-dataflow';
+import { bindParams, bindTypes, initialValues, mutationParams } from './compiled-flow';
+import { DECL_NAME_RE, scalarMatches, type Row, type Scalar } from './dataflow';
 import { parseLocalTables } from './local-tables';
 
 export interface MutationRequest {

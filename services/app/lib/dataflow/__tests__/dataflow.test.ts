@@ -1,5 +1,5 @@
 /**
- * The declarations contract (lib/story/data/dataflow.ts): how `<Import>` /
+ * The declarations contract (lib/dataflow/dataflow.ts): how `<Import>` /
  * `<Value>` / `<Query>` are parsed, how `$name` references (and `set=` /
  * `args=` maps) are collected, and the publish-time rules over the MARKUP.
  * What the SQL reads is the compiler's (compile-dataflow.test.ts). Pure.
@@ -9,7 +9,7 @@ import { type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
   bindingMap, coerceScalarInput, collectRefNameUses, parseImportDecl, parseQueryDecl, parseValueDecl, refName, resolveBindings, rowBound, validateDataflow,
   type Dataflow, type ImportDecl, type QueryDecl, type ValueDecl,
-} from '@/lib/story/data/dataflow';
+} from '@/lib/dataflow/dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {

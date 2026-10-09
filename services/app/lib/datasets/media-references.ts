@@ -4,7 +4,7 @@
  */
 import {catalogFromMetadata} from './catalog-metadata';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
-import { imageReferenceId } from '@/lib/story/assets/image-source';
+import { imageReferenceId } from '@/lib/dataflow/image-source';
 
 export async function storedMediaReferences(row:{meta:unknown}):Promise<Set<string>> {
  const catalog=catalogFromMetadata(row.meta);

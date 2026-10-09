@@ -18,9 +18,9 @@
  *   links.ts            linkHintsOf            w1-planners
  */
 import type { JsxNode } from '@/lib/jsx';
-import type { CompiledDataflow, CompiledReads } from '@/lib/story/data/compiled-dataflow';
-import type { Scalar } from '@/lib/story/data/dataflow';
-import type { RefDataMap } from '@/lib/story/data/ref-data';
+import type { CompiledDataflow, CompiledReads } from '@/lib/dataflow/compiled-dataflow';
+import type { Scalar } from '@/lib/dataflow/dataflow';
+import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
@@ -237,7 +237,7 @@ export const isCompileFailure = (stored: StoredCompile): stored is CompileFailur
 export interface IslandRenderData {
   colorMode?: 'light' | 'dark';
   values: Record<string, Scalar>;
-  state?: import('@/lib/story/data/dataflow').DataflowState;
+  state?: import('@/lib/dataflow/dataflow').DataflowState;
   assetsUrl?: string;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
@@ -302,7 +302,7 @@ export interface PlannedMutation {
   name: string;
   /** The dataset artifact it writes, or null for a local table. */
   dataset: string | null;
-  /** `optimistic`: applied to a held copy before the server answers; `server`: waits for the server (lib/story/data/placement). */
+  /** `optimistic`: applied to a held copy before the server answers; `server`: waits for the server (lib/dataflow/placement). */
   placement: 'optimistic' | 'server';
 }
 
@@ -442,9 +442,9 @@ export const PRERENDER_LIMIT = 3;
 
 /** What one request decides, over the stored version. */
 export interface AssembleOverlay {
-  /** The reader's URL `$` values (lib/story/data/url-values), already parsed against the flow. */
+  /** The reader's URL `$` values (lib/dataflow/url-values), already parsed against the flow. */
   values: Record<string, Scalar>;
-  state?: import('@/lib/story/data/dataflow').DataflowState;
+  state?: import('@/lib/dataflow/dataflow').DataflowState;
   /** The version's stored Mermaid drawings for this surface (lib/mermaid-images), or none. */
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */

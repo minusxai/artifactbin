@@ -18,7 +18,7 @@
  *  - no attributes on `<Helmet>`, title or style; scripts may declare only type;
  *  - children: at most one each of `<title>`, `<style>`, browser `<script>` and `<script type="server">`, plus any
  *    number of `<meta>` (unique `name`s) and of the DATA declarations
- *    `<Import>` / `<Value>` / `<Query>` / `<Mutation>` (lib/story/data/dataflow.ts owns their shape and the
+ *    `<Import>` / `<Value>` / `<Query>` / `<Mutation>` (lib/dataflow/dataflow.ts owns their shape and the
  *    `$name` reference rules; the grammar here only admits them), and at most
  *    one `<Context src="ref:<documentId>" />` companion document;
  *  - `<meta>` carries `name` + `content` and NOTHING else: `http-equiv` is a
@@ -34,7 +34,7 @@
  */
 import { parseJsx, type JsxElement, type JsxNode, type ValidationError } from '@/lib/jsx';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
-import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseNotifyDecl, parseQueryDecl, parseValueDecl, type Dataflow, type ImportDecl, type MutationDecl, type NotifyDecl, type QueryDecl, type ValueDecl } from '../data/dataflow';
+import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseNotifyDecl, parseQueryDecl, parseValueDecl, type Dataflow, type ImportDecl, type MutationDecl, type NotifyDecl, type QueryDecl, type ValueDecl } from '@/lib/dataflow/dataflow';
 
 export const HELMET_TAG = 'Helmet';
 export const CONTEXT_TAG = 'Context';
@@ -56,13 +56,13 @@ export interface HelmetContent {
   serverScript?: string;
   /** `<meta name content>` pairs in authored order; names are unique. */
   meta: HelmetMeta[];
-  /** `<Import>` declarations in authored order (lib/story/data/dataflow.ts). */
+  /** `<Import>` declarations in authored order (lib/dataflow/dataflow.ts). */
   imports: ImportDecl[];
-  /** `<Value>` declarations in authored order (lib/story/data/dataflow.ts). */
+  /** `<Value>` declarations in authored order (lib/dataflow/dataflow.ts). */
   values: ValueDecl[];
-  /** `<Query>` declarations in authored order (lib/story/data/dataflow.ts). */
+  /** `<Query>` declarations in authored order (lib/dataflow/dataflow.ts). */
   queries: QueryDecl[];
-  /** `<Mutation>` declarations in authored order (lib/story/data/dataflow.ts). */
+  /** `<Mutation>` declarations in authored order (lib/dataflow/dataflow.ts). */
   mutations: MutationDecl[];
   notifications?: NotifyDecl[];
 }
@@ -87,7 +87,7 @@ export function declarationsOf(source: string): Dataflow | null {
 export const dataflowOf = (content: HelmetContent): Dataflow =>
   ({ imports: content.imports, values: content.values, queries: content.queries, mutations: content.mutations, ...(content.notifications?.length ? { notifications: content.notifications } : {}) });
 
-/** The DATA declarations a Helmet may repeat (lib/story/data/dataflow.ts owns their shapes). */
+/** The DATA declarations a Helmet may repeat (lib/dataflow/dataflow.ts owns their shapes). */
 const DATA_TAGS: Record<string, (el: JsxElement) => { ok: true; decl: ImportDecl | ValueDecl | QueryDecl | MutationDecl | NotifyDecl } | { ok: false; errors: ValidationError[] }> = {
   [IMPORT_TAG]: parseImportDecl,
   [VALUE_TAG]: parseValueDecl,
@@ -187,7 +187,7 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
       if (!contextRef(child)) errors.push({ message: '<Context> needs only src="ref:<documentId>" and no children: <Context src="ref:abc123" />', tag: child.tag, start: child.start, end: child.end });
       continue;
     }
-    // The DATA declarations (lib/story/data/dataflow.ts owns their shape; the
+    // The DATA declarations (lib/dataflow/dataflow.ts owns their shape; the
     // grammar here only knows they exist and repeat). Graph-level rules —
     // duplicate names, undeclared `$refs`, cycles — involve the body and run
     // in publishJsx's always-on pass, not here.

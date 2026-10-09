@@ -23,7 +23,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Grid', 'GridItem',
   // The bound-control kit: themed two-way
   // controls over Helmet `<Value>`s — the fancy siblings of the bindable
-  // native `input`/`select`/`textarea` (lib/story/data/dataflow.ts REF_ATTRS).
+  // native `input`/`select`/`textarea` (lib/dataflow/dataflow.ts REF_ATTRS).
   // `Input`/`Textarea` are the TEXT members: a bare `<input>` keeps binding,
   // but preflight leaves it without a border or padding, so a form written
   // from the native tags alone has no visual family at all.
@@ -45,7 +45,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
 /**
  * The tags whose `id` names a PERSON rather than an element — the seam
  * the compiler takes `id` out at, and the set lib/artifacts
- * `drawsPeople` and lib/story/data/dataflow REF_ATTRS answer for. Names only, so
+ * `drawsPeople` and lib/dataflow/dataflow REF_ATTRS answer for. Names only, so
  * server-side validation still pulls in no component code.
  */
 export const PERSON_TAGS: ReadonlySet<string> = new Set(['User', 'UserImage', 'UserHandle']);

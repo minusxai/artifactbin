@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateNumber, NUMBER_AGGS } from '../data/number-aggregation';
+import { aggregateNumber, NUMBER_AGGS } from '../number-aggregation';
 
 const rows = [{ v: 3 }, { v: 'x' }, { v: 1 }, { v: 10 }, { v: 4 }];
 

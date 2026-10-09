@@ -4,7 +4,7 @@ import { loadCompilerBuild } from '../build.server';
 import { doorsFor } from '../serve.server';
 import { wantsViewerOverlay } from '@/lib/islands/viewer';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
-import { compileDataflow, prepareCompile } from '@/lib/story/data/compile-dataflow';
+import { compileDataflow, prepareCompile } from '@/lib/dataflow/compile-dataflow';
 import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
 import { parseJsx } from '@/lib/jsx';
 import type { IslandPageData } from '@/lib/islands/contract';

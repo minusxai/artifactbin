@@ -15,7 +15,7 @@ import { buildDocumentModules, loadSsrModule } from '@/lib/compiled-page/bundle.
 import type { ModuleRef, ModuleStore } from '@/lib/compiled-page/contract';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
-import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/data/compile-dataflow';
+import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/compile-dataflow';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { bindModuleCode } from '@/lib/compiled-page/runtime-binding';
 

@@ -17,11 +17,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { declarationsOf } from '@/lib/story/document';
-import { compileWithLoader } from '@/lib/story/data';
+import { compileWithLoader } from '@/lib/dataflow/server';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { stampNodeIds } from '@/lib/story/document';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
-import type { DataflowState, TableResult } from '@/lib/story/data';
+import type { DataflowState, TableResult } from '@/lib/dataflow';
 import { ARTIFACT_FILE_FORMAT, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

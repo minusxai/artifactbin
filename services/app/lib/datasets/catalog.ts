@@ -13,7 +13,7 @@ import {resolveDatasetConnection} from './secrets';
 import {compileNotebookSql} from './notebook';
 import {queryPostgres} from './postgres';
 import {connectionShape} from './input';
-import type {DatasetColumn} from '@/lib/story/datasets';
+import type { DatasetColumn } from '@/lib/dataflow';
 import {catalogInputShape} from './input';
 import {catalogFromMetadata} from './catalog-metadata';
 const shape=catalogInputShape;

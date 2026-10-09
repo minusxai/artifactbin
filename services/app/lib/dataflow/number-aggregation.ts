@@ -1,4 +1,4 @@
-/** Shared by publishing, the renderer and the number inspector. */
+/** Shared by publishing, the renderer and the number inspector. In lib/dataflow because the reference checks (./refs) validate `agg` against it. */
 export const NUMBER_AGGS = ['first', 'last', 'sum', 'avg', 'median', 'min', 'max', 'count'] as const;
 export type NumberAgg = typeof NUMBER_AGGS[number];
 

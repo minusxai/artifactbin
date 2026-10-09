@@ -16,7 +16,7 @@ import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
  *
  * This module is PURE and knows the MARKUP half only. What the SQL reads,
  * binds and writes is SQLite's own report, taken by the compiler
- * (lib/story/data/compile-dataflow → CompiledDataflow); nothing here reads SQL text.
+ * (lib/dataflow/compile-dataflow → CompiledDataflow); nothing here reads SQL text.
  *
  * Reference grammar (deliberately narrow — the string stays inert data):
  *  - an attribute reference is the WHOLE value, `^\$[A-Za-z_]\w*$` (or a
@@ -27,7 +27,7 @@ import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
  */
 import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } from '@/lib/jsx';
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
-import { inferColumns, type ColumnType, type DatasetColumn } from '../datasets/dataset-shape';
+import { inferColumns, type ColumnType, type DatasetColumn } from './dataset-shape';
 import { reactiveNames, type ReactiveExpression } from '@/lib/jsx/reactive';
 import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { builtinInput, READ_ONLY_REF_ATTRS, reservedDeclarationName, VIEWER, VIEWER_ID } from './builtins';
@@ -244,7 +244,7 @@ export function templateRefNames(value: unknown): string[] {
 /**
  * Does this attribute value carry a reference at all — whole-attribute or
  * braced? The publish door asks it to tell a BINDING from an external URL
- * (lib/story/data/refs.ts), and the importer asks it to tell a literal URL it can
+ * (lib/dataflow/refs.ts), and the importer asks it to tell a literal URL it can
  * fetch now from a template only the browser can ever complete.
  */
 export const carriesRef = (value: unknown): boolean =>
@@ -325,7 +325,7 @@ export const REF_ATTRS: {
     // A person, and the two halves they are made of
     // — the face (user-image.tsx) and the handle (user-handle.tsx). `userId`
     // READS its reference and never writes it back, which is what lets the
-    // viewer's own `$_me.id` sit there (lib/story/data/builtins READ_ONLY_REF_ATTRS).
+    // viewer's own `$_me.id` sit there (lib/dataflow/builtins READ_ONLY_REF_ATTRS).
     User: { userId: 'scalar' },
     UserImage: { userId: 'scalar' },
     UserHandle: { userId: 'scalar' },
@@ -415,7 +415,7 @@ function checkName(el: JsxElement, tag: string, errors: ValidationError[]): stri
 /**
  * Does a value match a declared scalar type? The predicate the publish door
  * uses for `<Value default>`, EXPORTED because a URL-carried selection has to
- * be judged by exactly the same rule (lib/story/data/url-values) — a link that
+ * be judged by exactly the same rule (lib/dataflow/url-values) — a link that
  * would be refused as a default must not become a document's state.
  */
 export const scalarMatches = (v: unknown, t: ColumnType): boolean => {
@@ -443,7 +443,7 @@ const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'sou
  * inherits its type and `constraints` from — so a bound Value may write neither
  * `type` nor `constraints` itself, and `column` without `source` is an error).
  * `url={false}` (SCALAR only) keeps this Value out of the address in both
- * directions — lib/story/data/url-values.
+ * directions — lib/dataflow/url-values.
  */
 export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
   const tag = VALUE_TAG;
@@ -716,7 +716,7 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
  *  - a built-in bound where it would be written (built-ins are read-only),
  *    and the bare `$_me` (a row; its field is `$_me.id`);
  *  - `reset=` naming anything but a scalar Value.
- * What the SQL reads and binds is the compiler's (lib/story/data/compile-dataflow).
+ * What the SQL reads and binds is the compiler's (lib/dataflow/compile-dataflow).
  * [] = valid.
  */
 export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): ValidationError[] {

@@ -379,7 +379,7 @@ export function servesDocument(ownerId: string, row: Pick<ArtifactRow, 'user_id'
   return row.user_id === ownerId && row.visibility === 'public' && row.format === 'markup' && !row.deleted_at;
 }
 
-/** The ref kinds a post embeds by bytes (lib/story/data/ref-data): `<img src="ref:…">`, a `<File>` card, a PDF. */
+/** The ref kinds a post embeds by bytes (lib/dataflow/ref-data): `<img src="ref:…">`, a `<File>` card, a PDF. */
 const EMBEDDED_FORMATS = new Set(['image', 'file', 'pdf']);
 /** The owner's public, live markup documents, as the SQL both embed rules below scope to. */
 const OWNER_POSTS_SQL = `user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}`;

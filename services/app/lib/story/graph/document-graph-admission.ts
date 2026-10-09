@@ -13,7 +13,7 @@ import {applyOperationsToNodes,DocumentOperationError} from './document-operatio
 import {stampNodeIds} from '../document/node-ids';
 import {publishJsx} from '../document/jsx-tier';
 import {MAX_CONTENT_BYTES,type ContentInputCtx} from '../document/input';
-import type {ReferenceValidationState,ResolvedRef} from '../data/refs';
+import type {ReferenceValidationState,ResolvedRef} from '@/lib/dataflow/refs';
 
 export interface GraphBaseline {id:string;version:number;document:DocumentGraph;meta:Record<string,unknown>;reservedIds?:string[]}
 export interface GraphAdmissionPlan {

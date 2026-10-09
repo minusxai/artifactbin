@@ -6,7 +6,7 @@
  * indistinguishable from the scroll loss it replaced.
  */
 import { describe, expect, it } from 'vitest';
-import { anchorAt, scrollTargetFor, type AnchorCandidate } from '../reader/scroll-anchor';
+import { anchorAt, scrollTargetFor, type AnchorCandidate } from '../scroll-anchor';
 
 /** A document: a wrapper holding three paragraphs, as the interpreter stamps it. */
 const DOC: AnchorCandidate[] = [

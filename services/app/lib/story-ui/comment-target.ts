@@ -1,6 +1,6 @@
 /** Persistent refinements scoped to the annotation's independently validated source owner. */
-import { isCommentKey, type CommentKey } from '../data/row-key';
-export type { CommentKey } from '../data/row-key';
+import { isCommentKey, type CommentKey } from './row-key';
+export type { CommentKey } from './row-key';
 export type CommentTarget =
   | { kind: 'table'; rowKey: CommentKey; columnKey?: string; templateNodeId?: string }
   | { kind: 'repeat'; scopes: Array<{ nodeId: string; key: CommentKey }>; templateNodeId: string };

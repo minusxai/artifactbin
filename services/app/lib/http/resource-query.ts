@@ -1,5 +1,5 @@
 import {resolveToken} from '../accounts/tokens';
-import {validateQueryValues} from '../story/data/index';
+import {validateQueryValues} from '@/lib/dataflow';
 import {createHash} from 'node:crypto';
 import {readableArtifact} from '../artifacts/read-access';
 import {artifactState} from '../artifacts/state';

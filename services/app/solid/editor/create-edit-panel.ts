@@ -9,7 +9,7 @@
  * those from lib/story/reader/use-edit-panel directly, unchanged.
  */
 import { createSignal, onCleanup, onMount, type Accessor } from 'solid-js';
-import { isWideEditViewport } from '@/lib/story/reader/edit-bar';
+import { isWideEditViewport } from '@/lib/story-ui/edit-bar';
 
 export function createWideEditViewport(): Accessor<boolean> {
   const [wide, setWide] = createSignal(isWideEditViewport());

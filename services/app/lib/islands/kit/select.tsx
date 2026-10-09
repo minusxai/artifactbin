@@ -2,8 +2,8 @@
 /** Standalone kit picker. Multi-selection is a draft until dismissal/Done; Escape cancels. */
 import { createEffect, createMemo, createSignal, Show, untrack, type Component } from 'solid-js';
 import { useIsland } from '../context';
-import { refName } from '@/lib/story/data/dataflow';
-import { coerceScalarInput } from '@/lib/story/data/scalar-input';
+import { refName } from '@/lib/dataflow/dataflow';
+import { coerceScalarInput } from '@/lib/dataflow/scalar-input';
 import { TrustedOverlay } from './trusted-overlay';
 import { popupDismiss } from './popup-dismiss';
 import type { SelectPopupProps } from './select-popup';

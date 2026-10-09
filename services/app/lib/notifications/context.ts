@@ -1,9 +1,9 @@
 /** Retained, versioned compiled context. JSONB key ordering must not change its identity. */
 import {createHash} from 'node:crypto';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
-import type {CompiledDataflow,CompiledNotify} from '../story/data/index';
+import type {CompiledDataflow,CompiledNotify} from '@/lib/dataflow';
 import {parseCompiledDataflow} from '../story/data/parsed-artifact-metadata';
-import { selectQueries, importRef } from '../story/data/compiled-flow';
+import { selectQueries, importRef } from '@/lib/dataflow/compiled-flow';
 import {NotificationExecutionError} from './errors';
 function canonical(value:unknown):unknown {
  if(Array.isArray(value))return value.map(canonical);

@@ -12,7 +12,7 @@ import {hydrateArtifactDocument} from '../../artifacts/document';
 import {GRAPH_POLICY} from './document-graph';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
 import {newEditId} from '../document/splice';
-import {DATA_SYNTAX_META} from '../data/data-syntax';
+import {DATA_SYNTAX_META} from '@/lib/dataflow/data-syntax';
 import {TABLES} from '../../platform/schema';
 /**
  * The committed head WITHOUT its document: every artifacts column but `document`, built column by column. Not

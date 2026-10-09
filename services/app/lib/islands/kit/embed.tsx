@@ -6,7 +6,7 @@
  * stand-in with deck.gl (and MapLibre for a basemap), over the table `data` names.
  */
 import { createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { refName } from '@/lib/story/data/dataflow';
+import { refName } from '@/lib/dataflow/dataflow';
 import { deckGlHeight } from '@/lib/viz/deck-height';
 import { MAP_CLASSES } from '@/lib/viz/deck-chrome';
 import { useIsland } from '../context';

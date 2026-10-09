@@ -8,7 +8,7 @@ import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from '../remote/agents';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
 import {completeMutationReceipt,type MutationReceipt} from '../artifacts/mutation-receipt';
-import type { CommentTarget } from '@/lib/story/annotations';
+import type { CommentTarget } from '@/lib/story-ui/comment-target';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.

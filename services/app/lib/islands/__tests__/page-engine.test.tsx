@@ -19,7 +19,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { compiledOf } from '@/test/helpers/compiled';
 import type { PageEngine } from '@/lib/story-runtime/page-engine';
-import type { Row } from '@/lib/story/data/dataflow';
+import type { Row } from '@/lib/dataflow/dataflow';
 import { boot } from '../boot';
 import { useIsland } from '../context';
 import type { IslandDocument } from '../contract';

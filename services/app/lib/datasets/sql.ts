@@ -1,8 +1,9 @@
 import {normalizeTimestamp} from '@artifactbin/utils/shape';
 import { parse, toSql, type SelectStatement } from 'pgsql-ast-parser';
 import type { DatasetCatalog, DatasetNotebook } from './types';
-import type { Scalar } from '@/lib/story/data/dataflow';
-import type { DatasetColumn } from '@/lib/story/datasets/dataset-shape';
+import type { Scalar } from '@/lib/dataflow/dataflow';
+import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import { bindParameters } from '@/lib/dataflow/sql-parameters';
 
 const FUNCTIONS = new Set(`exists count sum avg min max bool_and bool_or every array_agg string_agg json_agg jsonb_agg json_object_agg jsonb_object_agg
   abs ceil ceiling floor round trunc mod power sqrt exp ln log sign greatest least coalesce nullif
@@ -25,64 +26,6 @@ type Node = Record<string, unknown>;
 // The parser/renderer retain escaped double quotes inside identifier AST names.
 const astName = (name: string): string => name.replaceAll('"', '""');
 const catalogName = (name: string): string => name.replaceAll('""', '"');
-
-/** Only lexical work happens here: comments/quoted tokens never become parameters.
- * Dollar strings are normalized because the parser supports them only in function bodies. */
-function bindParameters(sql: string, bind: (name: string) => string): string {
-  let result = '';
-  for (let i = 0; i < sql.length;) {
-    if (sql.startsWith('--', i)) {
-      const end = sql.indexOf('\n', i + 2); i = end < 0 ? sql.length : end; result += ' '; continue;
-    }
-    if (sql.startsWith('/*', i)) {
-      let depth = 1; i += 2;
-      while (i < sql.length && depth) {
-        if (sql.startsWith('/*', i)) { depth++; i += 2; }
-        else if (sql.startsWith('*/', i)) { depth--; i += 2; }
-        else i++;
-      }
-      if (depth) fail('unterminated comment'); result += ' '; continue;
-    }
-    if (sql[i] === "'" || sql[i] === '"') {
-      const start = i; const quote = sql[i++];
-      const escaped = quote === "'" && /[eE]/.test(sql[start - 1] ?? '') && (start < 2 || !/[\w$]/.test(sql[start - 2]));
-      let closed = false;
-      while (i < sql.length) {
-        if (escaped && sql[i] === '\\') { i += 2; continue; }
-        if (sql[i++] === quote) {
-          if (sql[i] === quote) { i++; continue; }
-          closed = true; break;
-        }
-      }
-      if (!closed) fail('unterminated quoted token'); result += sql.slice(start, i); continue;
-    }
-    if (sql[i] === '$') {
-      const delimiter = /^(\$[A-Za-z_][A-Za-z_0-9]*\$|\$\$)/.exec(sql.slice(i))?.[0];
-      if (delimiter) {
-        const end = sql.indexOf(delimiter, i + delimiter.length);
-        if (end < 0) fail('unterminated dollar string');
-        result += "'" + sql.slice(i + delimiter.length, end).replaceAll("'", "''") + "'";
-        i = end + delimiter.length; continue;
-      }
-      const name = /^\$([A-Za-z_][A-Za-z_0-9]*)/.exec(sql.slice(i));
-      if (!name) return fail('only named parameters are supported');
-      result += bind(name[1]); i += name[0].length; continue;
-    }
-    // The AST parser stores numeric literals as JS numbers. Preserve exact decimal
-    // and int8 literals as numeric casts before that conversion can round them.
-    const number = /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?/.exec(sql.slice(i));
-    if (number) {
-      const literal = number[0];
-      result += /^[0-9]+$/.test(literal) && Number.isSafeInteger(Number(literal)) ? literal : `('${literal}'::numeric)`;
-      i += literal.length; continue;
-    }
-    // Consume identifiers as a token: dollars inside an identifier are not binds.
-    const word = /^[A-Za-z_][A-Za-z_0-9$]*/.exec(sql.slice(i));
-    if (word) { result += word[0]; i += word[0].length; continue; }
-    result += sql[i++];
-  }
-  return result;
-}
 
 type Budget = { expanded: number; input: number; columns: number };
 const newBudget = (): Budget => ({ expanded: 0, input: 0, columns: 0 });
@@ -178,13 +121,6 @@ function notebookStatement(sources: DatasetCatalog, notebook: DatasetNotebook, c
     in: { type: 'select', columns: [{ expr: { type: 'ref', name: '*' } }], from: [{ type: 'table', name: { name: astName(cells[target].name) } }] },
   };
   return compileStatement(sources, composed, {}, undefined, budget).statement;
-}
-
-/** The `$name` parameters a dataset query binds, deduplicated in first-appearance order — read by the lexer that binds them. */
-export function datasetSqlParams(sql: string): string[] {
-  const names: string[] = [];
-  bindParameters(sql, (name) => { if (!names.includes(name)) names.push(name); return 'NULL'; });
-  return names;
 }
 
 /** Kept in this module so notebook composition shares the same AST validator;

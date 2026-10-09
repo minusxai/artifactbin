@@ -38,7 +38,7 @@ import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/document';
 import { appendCspExtensions, assetsPath, buildDocumentCsp, markupCsp, mutatePath, queryPath } from '@/lib/story/styles';
 import { pagesRequestOf } from '@/lib/serving/pages-origin';
-import { readUrlValues } from '@/lib/story/data';
+import { readUrlValues } from '@/lib/dataflow';
 import { displayTitle } from '@/lib/story/document';
 import { CARD_RENDER_GENERATION } from '@/lib/serving';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';

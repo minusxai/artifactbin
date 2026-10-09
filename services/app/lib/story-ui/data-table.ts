@@ -16,9 +16,9 @@
  * proportional bar behind a numeric cell; `colorScale` tints it (`sequential`
  * from the theme's chart color, `diverging` red↔green around zero).
  */
-import { numberFormatter } from './number-format';
-import type { DatasetColumn } from '../datasets/dataset-shape';
-import type { Row } from './dataflow';
+import { numberFormatter } from '@/lib/dataflow/number-format';
+import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import type { Row } from '@/lib/dataflow/dataflow';
 
 type SortDir = 'asc' | 'desc';
 export interface SortSpec { col: string; dir: SortDir }
@@ -178,7 +178,7 @@ export function formatCell(value: unknown, column: ResolvedColumn): string {
   if (value === null || value === undefined) return '';
   const n = numeric(value);
   if (n === null) return typeof value === 'object' ? JSON.stringify(value) : String(value);
-  // An invalid `fmt` falls back to the default format (lib/story/data/number-format) — never a throw.
+  // An invalid `fmt` falls back to the default format (lib/dataflow/number-format) — never a throw.
   return numberFormatter(column.fmt)(n);
 }
 

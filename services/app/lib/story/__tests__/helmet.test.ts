@@ -198,7 +198,7 @@ describe('hoistHelmet', () => {
   });
 });
 
-// ── data declarations: <Value> and <Query> (lib/story/data/dataflow.ts) ──────────
+// ── data declarations: <Value> and <Query> (lib/dataflow/dataflow.ts) ──────────
 
 const VALUE = '<Value name="region" type="string" />';
 const QUERY = '<Import name="sales_data" src="ref:abc123" /><Query name="sales">{`select * from sales_data.rows where region = $region`}</Query>';
@@ -240,7 +240,7 @@ describe('splitHelmet — data declarations', () => {
     const { content } = splitHelmet(nodes('<Helmet>' + QUERY + VALUE + '</Helmet><p>x</p>'));
     expect(content.values.map((v) => v.name)).toEqual(['region']);
     expect(content.queries.map((q) => q.name)).toEqual(['sales']);
-    // Parse only: what a statement binds and reads is the compiler's (lib/story/data/compile-dataflow).
+    // Parse only: what a statement binds and reads is the compiler's (lib/dataflow/compile-dataflow).
     expect(Object.keys(content.queries[0]!).sort()).toEqual(['end', 'name', 'sql', 'start']);
   });
 

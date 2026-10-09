@@ -1,7 +1,7 @@
 /** Session scope is the selected documents and their registered ID references. */
 import {readFile,realpath,lstat} from 'node:fs/promises';
 import {extname,join} from 'node:path';
-import {collectRefUses} from '../../../app/lib/story/data/refs';
+import {collectRefUses} from '../../../app/lib/dataflow/refs';
 import {parseJsx,type JsxNode} from '../../../app/lib/jsx';
 import {parseDocument} from '../document';
 import {confinedPath} from '../journal';
