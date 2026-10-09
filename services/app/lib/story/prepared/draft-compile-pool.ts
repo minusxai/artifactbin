@@ -8,10 +8,11 @@
  */
 import { Worker } from 'node:worker_threads';
 import type { PrepareStoryInput } from './prepare-runtime.server';
-import type { CompileInput, CompiledPage, CompilerBuild, DrawnChart } from '@/lib/compiled-page/contract';
+import type { CompileInput, CompiledPage, CompilerBuild } from '@/lib/compiled-page/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { SnapshotChartOptions } from '@/lib/compiled-page/charts.server';
+import type { DrawnChart } from '@/lib/story-runtime/contract';
 
 /** One job a thread runs: a draft preview, a version's compile, or a snapshot's drawn charts. */
 type PrepareJob =

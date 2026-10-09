@@ -6,7 +6,7 @@ import { captureInstallPrompt } from '@/lib/serving/pwa-install';
 import { render } from 'solid-js/web';
 import '@/solid/lib/heal-address';
 import { captureServedFrame } from '@/solid/lib/served-frame';
-import { configureTrustedUiFromShell } from '@/lib/serving/trusted-ui-styles';
+import { configureTrustedUiFromShell } from '@/lib/islands/trusted-ui-styles';
 import { App } from './App';
 
 captureInstallPrompt(window);

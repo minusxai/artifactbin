@@ -18,7 +18,7 @@ import { bindModuleCode } from '../runtime-binding';
 import { shapeOf, diffShapes, reactRender } from '@/lib/islands/__tests__/kit-parity';
 import { loadCompilerBuild } from '../build.server';
 import { malformedTagDocument, namedHazardsDocument, structureIndependent } from '../codegen-safety';
-import { CHART_SLOT_ATTR, type CompileInput } from '../contract';
+import type { CompileInput } from '../contract';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/compile-dataflow';
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
@@ -26,6 +26,7 @@ import type { Dataflow } from '@/lib/dataflow/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
+import { CHART_SLOT_ATTR } from '@/lib/story-runtime/contract';
 
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');

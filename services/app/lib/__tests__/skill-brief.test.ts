@@ -9,12 +9,12 @@ import { llmsText } from '@/lib/serving/agent-references.server';
  * blurb every discovery surface (the meta tag) repeats.
  */
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
-import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
-import { gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
+import { afbinInstallCommand, afbinWindowsInstallCommand, gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
 import { describe, it, expect } from 'vitest';
 import { skillExample, skillTree } from '../skills';
 import { buildQuickSheet } from '@/test/helpers/skill-docs';
-import { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead } from '@/lib/serving';
+import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/compiled-page/agent-discovery';
+import { agentBlurb } from '@/lib/serving';
 
 const BASE = 'https://artifactbin.dev';
 

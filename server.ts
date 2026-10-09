@@ -207,7 +207,7 @@ async function main(): Promise<void> {
    * above. Started here, by the root, never on import — publishing never waits
    * on it, and a browser that is down only means readers draw with the engine.
    */
-  const { startMermaidHarvester } = await import('@/lib/mermaid-images/harvester');
+  const { startMermaidHarvester } = await import('@/lib/story/assets/mermaid-harvester');
   const stopHarvester = startMermaidHarvester();
   // All process entry points start the same durable jobs/outbox lifecycle.
   // This import stays after env + service initialization, as do the other app imports.

@@ -69,12 +69,12 @@ import {
   type DataPlan,
   type DataSnapshot,
   type DatasetAccessFacts,
-  type DrawnChart,
   type SnapshotKey,
   type SnapshotRead,
   type SnapshotSlot,
   type SnapshotStore,
 } from '@/lib/compiled-page/contract';
+import type { DrawnChart } from '@/lib/story-runtime/contract';
 
 /**
  * The compiler build a snapshot records until the compiled page carries one

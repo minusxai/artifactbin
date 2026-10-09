@@ -15,7 +15,7 @@ import { Deck } from '@deck.gl/core';
 import { MapLibreOverlay } from '@deck.gl/maplibre';
 import * as maplibregl from 'maplibre-gl';
 import { loadGeoFeatures } from '@/lib/viz/geo-assets';
-import { basemapStyleUrl, basemapTransformRequest, BASEMAP_WORKER_URL } from '@/lib/serving/basemap';
+import { basemapStyleUrl, basemapTransformRequest, BASEMAP_WORKER_URL } from '@/lib/viz/basemap';
 import { createVegaTooltipHandler, hideVegaTooltip } from '@/lib/viz/vega-tooltip-handler';
 import {
   ATTRIBUTION, MAP_CLASSES, basemapStyleOf, boundaryKeyOf, buildLayers, compactNumber, extentOf, fittedView, layerSpecs, legendScales, paletteFor, rgbCss, tooltipRecord,

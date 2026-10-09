@@ -4,7 +4,7 @@
  * commented document the brief inlines), `llms.txt` (the served one-pager for
  * an agent with nothing installed) and `references/*.md`. The CLI's teaching
  * compiler renders the brief and the references into its bundle; the server
- * reads `llms.txt` at runtime through lib/agent-discovery.
+ * reads `llms.txt` at runtime through lib/serving/agent-discovery.
  */
 import {buildSkillTree,loadSkillSources,type SkillTree} from './tree';
 export * from './tree';

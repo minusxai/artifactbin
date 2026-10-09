@@ -19,13 +19,12 @@
  * A module script runs after the document is parsed, so every element it touches exists; it runs
  * before `boot` (the assembler writes behaviour scripts ahead of the per-document module).
  */
-import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { applyAnchor } from '@/lib/story-runtime/anchor';
 import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
 import { applyColorMode, persistReaderMode, readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
-import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryScrollMessage } from '@/lib/story-runtime/contract';
+import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryScrollMessage, ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 import { frameAppOrigin, openFrameDoor } from '@/lib/story-runtime/frame-bridge/door';
 import { followAppLinks } from '@/lib/story-runtime/frame-bridge/links';
 import { startIslandLive } from './live';

@@ -63,7 +63,7 @@ function glyphCatalog() {
 /** The contract's constants, read from the TypeScript so there is one table (both files import only types). */
 function readContracts() {
   const out = esbuild.buildSync({
-    stdin: { contents: "export { KIT_FAMILIES } from './lib/islands/contract'; export { AUTHOR_VENDOR_EXPORTS } from './lib/author-script/contract'; export { ISLANDS_PATH } from './lib/compiled-page/contract';", resolveDir: APP, loader: 'ts' },
+    stdin: { contents: "export { KIT_FAMILIES } from './lib/islands/contract'; export { AUTHOR_VENDOR_EXPORTS } from './lib/author-script/contract'; export { ISLANDS_PATH } from './lib/story-runtime/contract';", resolveDir: APP, loader: 'ts' },
     bundle: true, format: 'cjs', platform: 'node', write: false, logLevel: 'silent', alias: { '@': APP },
   });
   const module = { exports: {} };

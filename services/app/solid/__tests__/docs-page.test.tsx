@@ -5,9 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import GetStarted from '@/solid/components/GetStarted';
-import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
 import { App } from '@/solid/App';
-import { gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
+import { afbinInstallCommand, afbinWindowsInstallCommand, gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 it('serves the human tour with current templates, live design systems and a link to Getting started', async () => {

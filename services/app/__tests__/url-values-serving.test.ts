@@ -23,11 +23,11 @@ import {exportImage as exportRoute} from './export-helpers';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/platform';
-import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { mintExportKey } from '@/lib/serving';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
 useAppHarness();
 

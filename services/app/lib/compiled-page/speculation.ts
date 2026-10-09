@@ -10,7 +10,8 @@
  * disagree about which bytes a sha names.
  */
 import { createHash } from 'node:crypto';
-import { ISLANDS_PATH, PRERENDER_LIMIT, type LinkHints } from './contract';
+import { PRERENDER_LIMIT, type LinkHints } from './contract';
+import { ISLANDS_PATH } from '@/lib/story-runtime/contract';
 
 /** Where speculation-rule files are served (`/islands/s/<sha>.json`). */
 export const SPECULATION_RULES_PATH = `${ISLANDS_PATH}/s`;

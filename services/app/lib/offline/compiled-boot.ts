@@ -7,10 +7,10 @@ import type { JsxNode } from '@/lib/jsx';
 import { createIslandRuntime, hydrateIsland } from '@/lib/islands/rt';
 import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from '@/lib/islands/module';
 import { ISLANDS_READY_EVENT } from '@/lib/islands/contract';
-import { READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { createSnapshotTransport } from './snapshot-transport';
 import { snapshotStateFor, unranQueriesOf } from './snapshot-current';
 import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, sourceDigest, type ArtifactFile } from './file-format';
+import { READER_READY_ATTR } from '@/lib/story-runtime/contract';
 
 declare global {
   interface Window {

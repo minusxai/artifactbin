@@ -2,7 +2,8 @@
 /** Per-document module bytes, content-addressed in the object store (lib/compiled-page/modules.server; contract ModuleStore). */
 import { describe, expect, it } from 'vitest';
 import { createModuleStore } from '../modules.server';
-import { DOCUMENT_MODULE_PATH, DOCUMENT_MODULE_RE } from '../contract';
+import { DOCUMENT_MODULE_RE } from '../contract';
+import { DOCUMENT_MODULE_PATH } from '@/lib/story-runtime/contract';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 

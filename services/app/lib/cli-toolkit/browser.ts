@@ -40,7 +40,7 @@ export const loadDraftMorph = () => import('../islands/morph/engine');
 
 // ---- Trusted UI: the overlay portal and its styles.
 export { trustedPortalOf } from '../islands/trusted-portal';
-export { configureTrustedUiStyles } from '../serving/trusted-ui-styles';
+export { configureTrustedUiStyles } from '../islands/trusted-ui-styles';
 
 // ---- Document chrome (Solid): the page bar, viewport, comments and the in-place editor.
 export { TrustedUi } from '../../solid/components/TrustedUi';

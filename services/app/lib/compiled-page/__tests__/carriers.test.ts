@@ -9,10 +9,8 @@ import { compileDataflow, prepareCompile } from '@/lib/dataflow/compile-dataflow
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { compilePage } from '../compiler';
 import { loadCompilerBuild } from '../build.server';
-import {
-  LITERALS_ATTR, MODULE_DATA_ATTR, emitCarriers, literalsReadCode, splitCarriers, withModuleDataId, withStoredCarriers,
-} from '../carriers';
-import { ISLAND_DATA_ID } from '../contract';
+import { MODULE_DATA_ATTR, emitCarriers, literalsReadCode, splitCarriers, withModuleDataId, withStoredCarriers } from '../carriers';
+import { ISLAND_DATA_ID, LITERALS_ATTR } from '@/lib/story-runtime/contract';
 
 const KEY = 'aaaaaaaaaaaaaaaa';
 /** One carrier tag's JSON text: after its opener's `>`, before the closing tag. */

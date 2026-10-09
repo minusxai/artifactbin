@@ -9,8 +9,8 @@
  * is the page's only script and signals ready itself (`data-mx-ready`, `mx:ready`); with islands,
  * `boot` does (the data island is on the page exactly when an island module is).
  */
-import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLANDS_READY_EVENT } from './contract';
+import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/story-runtime/contract';
 
 /**
  * A rail miniature the compiler served inert (compiler RAIL_THUMB_ATTR, the same name): one that holds a button

@@ -16,12 +16,12 @@ import { storyBodyFor } from '@/lib/document';
 import { getArtifactById } from '@/lib/artifacts/store';
 import { servedRow } from '@/lib/artifacts/archived-version';
 import { emitHeadCommitted } from '@/lib/artifacts/after-commit';
-import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
-import { mermaidCodesOf } from './codes';
-import { sanitizeMermaidSvg, verifyEmbeddedMermaidSvg } from './sanitize';
-import { parseMermaidFaces, parseMermaidMetrics, type MermaidFaces } from './drawn';
-import { MermaidSubsetterUnavailable, embedMermaidFonts } from './fonts';
-import { CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, comparableSvg, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from './store';
+import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from '@/lib/mermaid-images/engine';
+import { mermaidCodesOf } from '@/lib/mermaid-images/codes';
+import { sanitizeMermaidSvg, verifyEmbeddedMermaidSvg } from '@/lib/mermaid-images/sanitize';
+import { parseMermaidFaces, parseMermaidMetrics, type MermaidFaces } from '@/lib/mermaid-images/drawn';
+import { MermaidSubsetterUnavailable, embedMermaidFonts } from '@/lib/mermaid-images/fonts';
+import { CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, comparableSvg, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from '@/lib/mermaid-images/store';
 
 type Mode = MermaidMode;
 type HarvestMap = MermaidHarvestMap;

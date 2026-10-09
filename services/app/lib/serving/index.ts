@@ -1,8 +1,7 @@
 /** The serving module's interface: only what other modules import. */
 export { agentContract } from './agent-contract';
 export { existingPaste } from './agent-copy';
-export type { AgentDiscovery } from './agent-discovery-tags';
-export { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, agentDiscoveryTail, withAgentDiscoveryTail } from './agent-discovery';
+export { agentBlurb } from './agent-discovery';
 export { COMPUTED_FIGURE_RULE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from './agent-guidance';
 export { APP_SHELL_FONT_PRELOADS } from './app-fonts';
 export { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/artifacts/archived-version';
@@ -11,7 +10,6 @@ export { artifactPageAnswer, artifactPageResponse } from './artifact-page';
 export type { ArtifactPageAnswer } from './artifact-page';
 export { artifactAppIcon, artifactManifest, artifactPwaEnabled, readableApp, withArtifactAppHead } from './artifact-pwa.server';
 export { artifactAppPath } from './artifact-pwa';
-export { BASEMAP_ALLOWED, BASEMAP_UPSTREAM } from './basemap';
 export { DOMAIN_HOME_CSP, linkedStylesheets, renderDomainHome } from './custom-domain-home';
 export type { ProfileListingData } from './custom-domain-home';
 export { attachDomain, canonicalDocumentUrl, customHostCandidate, domainHomepage, domainHomepageOptions, setDomainHomepage, domainOf, domainResolver, isServable, normalizeHostname, ownerForHost, recheckDomains, removeDomain, servesDocument, servesEmbeddedArtifact, servesWebAsset, setDomainResolver, startDomainRecheck, verifiedHostOf, verifyDomain } from './custom-domains';

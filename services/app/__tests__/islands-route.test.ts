@@ -10,8 +10,8 @@ import path from 'node:path';
 import { useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '@/server/app';
 import { createModuleStore, createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
-import { DOCUMENT_MODULE_PATH } from '@/lib/compiled-page/contract';
 import { speculationRulesOf } from '@/lib/compiled-page/speculation';
+import { DOCUMENT_MODULE_PATH } from '@/lib/story-runtime/contract';
 
 useAppHarness();
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });

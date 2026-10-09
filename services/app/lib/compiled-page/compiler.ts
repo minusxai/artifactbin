@@ -43,7 +43,7 @@ import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { cn, peopleClasses, RECIPES } from '@/lib/islands';
 import type { GeneratedSources } from './codegen-safety';
-import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
+import { EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
 import { planOf } from './plan';
 import { buildDocumentModules, loadKitServer, type KitServer } from './bundle.server';
@@ -52,6 +52,7 @@ import { MODULE_DATA_READ_CODE } from './carriers';
 import { reactAttrs } from './static-solid/attrs';
 import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, solidTextValue, solidTrimText, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
+import { CHART_SLOT_ATTR } from '@/lib/story-runtime/contract';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code

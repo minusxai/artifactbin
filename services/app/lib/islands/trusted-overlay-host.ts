@@ -6,7 +6,7 @@
  * cannot reach what is mounted inside. As an overlay the root is a manual popover in the top layer,
  * ordered by `layer` (selection < discussion < navigation < modal).
  */
-import { currentTrustedCss, installedStyles, openOverlay, overlays } from '@/lib/serving/trusted-ui-styles';
+import { currentTrustedCss, installedStyles, openOverlay, overlays } from './trusted-ui-styles';
 import { TRUSTED_LAYER_ATTR } from './trusted-portal';
 
 export type TrustedLayer = 'selection' | 'discussion' | 'navigation' | 'modal';

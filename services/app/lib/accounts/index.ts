@@ -7,7 +7,6 @@ export { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, cl
 export { mergeGuestUsers } from './guest-owner';
 export { membershipInbox, updateMembershipInbox } from './membership-inbox';
 export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates } from './membership';
-export { PERSON_FACE_LIGHTNESS, PERSON_FACE_SATURATION, personFaceBackground, personHue, personInitial } from './person-face';
 export { profileSocial } from './profile-social';
 export { confirmWelcome, profileWrites, syncProfile, welcomePending } from './profiles';
 export { backfillExplicitJoins, seedOwnerJoin, setRelationState } from './relation-state';

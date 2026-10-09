@@ -29,7 +29,7 @@
  */
 import { objectStore } from '@/lib/object-store';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
-import { fileNameFromUrl } from '@/lib/workspace';
+import { fileNameFromUrl } from '@/lib/islands';
 import { pdfFilename } from '@/lib/object-store/pdf-store';
 import { webAssetByHash } from '@/lib/story/assets/web-assets';
 
