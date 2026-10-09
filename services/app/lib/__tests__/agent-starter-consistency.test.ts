@@ -407,6 +407,12 @@ describe('shared instructions after missing credentials and before publishing cl
   expect(guide).toContain('Do not invent an email');
   expect(guide).toContain('Do not install the CLI');
  });
+ it('teaches the supported local CLI status read without promising live authentication',()=>{
+  const brief=buildQuickSheet(BASE);
+  expect(brief).toContain('`afbin status`');
+  expect(brief).toContain('last observed, no login');
+  expect(brief).toContain('`afbin auth status` is not a status command');
+ });
  it('keeps hosted root guidance within budget at production and custom origins',()=>{
   for(const origin of ['https://app.artifactbin.dev','https://artifacts.acme.example']) {
    const text=llmsText(origin);

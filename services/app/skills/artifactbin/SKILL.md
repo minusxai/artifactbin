@@ -12,6 +12,7 @@ Publish editable `.jsx`: YAML metadata, HTML and kit JSX with Tailwind `classNam
 Setup: [[ base ]]/getting-started.md. Reuse skill or extract [[ base ]]/skills/artifactbin.zip into harness skills; restart. Without files: [[ base ]]/llms.txt. Download ≠ loading.
 
 - Install CLI only when explicitly requested or needed for local preview/serve: [setup](references/npm-local.md).
+- Use `afbin status` for saved CLI account/workspace state (last observed, no login); `afbin auth status` is not a status command.
 - CLI chat/phone: ask email, `afbin auth --email <email>`, ask code, then `afbin auth --email <email> --otp <code>`. Automatic browser approval only on a shared desktop/request. Reuse origin-scoped credentials: `ARTIFACTBIN_HOME` or `~/.artifactbin`; [auth](references/http-auth.md). never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. For a new artifact: CLI workspace or HTTP [authoring](references/http-authoring.md). Share returned URL. [[ urlReplyRule ]]
 - Shared/friends/team/signup/vote/RSVP flows: read [apps](references/apps.md) BEFORE picking a data shape: accounts, never typed names.
