@@ -157,7 +157,10 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
    * document's first heading, following it as it is edited — so edit mode names the document as reading did.
    */
   const [title, setTitle] = createSignal<string | null>(art.title?.trim() ? art.title : null);
-  const shownTitle = () => title() ?? firstHeadingTitle(source()) ?? '';
+  const shownTitle = () => {
+    const explicit = title();
+    return explicit?.trim() ? explicit : firstHeadingTitle(source()) ?? '';
+  };
   createEffect(() => props.onTitleChange?.(shownTitle()));
   const [theme, setTheme] = createSignal<StoryDesignName | null>((art.theme as StoryDesignName) ?? null);
   const [colorMode, setColorMode] = createSignal<'light' | 'dark' | null>(art.colorMode === 'dark' ? 'dark' : art.colorMode === 'light' ? 'light' : null);
@@ -684,7 +687,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   </Show>;
   const titleEditor = () => (
     <input aria-label="Title" value={shownTitle()} placeholder="untitled"
-      onInput={(e) => { setTitle(e.currentTarget.value); queue({ title: e.currentTarget.value }); }}
+      onInput={(e) => { const value = e.currentTarget.value; setTitle(value); queue({ title: value }); }}
       style={{ width: `calc(${Math.max(9, Math.min(shownTitle().length + 2, 64))}ch + 14px)`, 'max-width': '100%' }}
       class="min-w-0 text-ellipsis rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none" />
   );
