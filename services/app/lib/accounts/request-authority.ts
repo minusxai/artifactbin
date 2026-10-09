@@ -12,7 +12,7 @@ export async function hostedAuthorization(owner:string|null|undefined,tokenId:st
  const credential=await hostedCredentialDescriptor(owner,tokenId);
  if(!credential)return {kind:'denied',code:'agent_credential_invalid',message:'The request credential is no longer available.'};
  if(!credential.scoped)return {kind:'ordinary'};
- if(!agent?.authorizeOperation)return credential.scoped?{kind:'denied',code:'agent_authority_unavailable',message:'Request authority is unavailable.'}:{kind:'ordinary'};
+ if(!agent?.authorizeOperation)return {kind:'denied',code:'agent_authority_unavailable',message:'Request authority is unavailable.'};
  let decision:HostedOperationAuthorization;
  try{decision=await agent.authorizeOperation(owner,tokenId,name,input as RunnerJson,credential);}catch{return {kind:'denied',code:'agent_authority_unavailable',message:'Request authority is unavailable.'};}
  if(!decision||!['allowed','denied','deferred'].includes(decision.kind)||(decision.kind==='denied'&&(typeof decision.code!=='string'||typeof decision.message!=='string'))||(decision.kind==='deferred'&&!('body' in decision)))return {kind:'denied',code:'agent_authority_invalid',message:'Request authority is unavailable.'};
@@ -29,5 +29,5 @@ export async function hostedRequestRefusal(owner:string|null|undefined,tokenId:s
 export async function hostedOperationCompleted(owner:string|null|undefined,tokenId:string|null|undefined,name:string,input:unknown,response:Response):Promise<void>{
  if(!owner||!tokenId||!response.ok||!response.headers.get('content-type')?.includes('application/json'))return;
  const agent=hostedRemoteAgent();const credential=await hostedCredentialDescriptor(owner,tokenId);
- if(agent?.operationCompleted&&credential)await agent.operationCompleted(owner,tokenId,name,input as RunnerJson,await response.clone().json() as RunnerJson,credential);
+ if(agent?.operationCompleted&&credential?.scoped)await agent.operationCompleted(owner,tokenId,name,input as RunnerJson,await response.clone().json() as RunnerJson,credential);
 }

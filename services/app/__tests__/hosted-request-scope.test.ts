@@ -88,3 +88,9 @@ it('marks only the server-owned scoped namespace on deployment initialization',a
  const records=(await db.query<{id:string;request_authority:boolean}>('SELECT id,request_authority FROM tokens WHERE id=ANY($1)',[[scoped.id,native.id]])).rows;
  expect(records.find(row=>row.id===scoped.id)?.request_authority).toBe(true);expect(records.find(row=>row.id===native.id)?.request_authority).toBe(false);
 });
+
+it('does not notify private authority for a successful ordinary creation',async()=>{
+ const {token,user}=await ownedThread(false);const completed=vi.fn(async()=>{throw Error('offline');});setHostedRemoteAgent({operationCompleted:completed} as unknown as HostedRemoteAgent);
+ const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="ordinary-created">Ordinary</p>'}}));expect(made.status).toBe(201);
+ const {hostedOperationCompleted}=await import('@/lib/accounts/request-authority');await hostedOperationCompleted(user.id,token.id,'create_artifact',{},made);expect(completed).not.toHaveBeenCalled();
+});
