@@ -63,7 +63,7 @@ test('foreground team process serves real login and excludes another database ow
   const mail=(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   const login=await post('/api/auth/sign-in/email-otp',{email,otp:mail.find(message=>message.to===email).otp});assert.equal(login.status,200);
   const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
-  const published=await post('/api/my/artifacts',{markup:'<Helmet><Value name="items" type="table" value={[{n:42}]} /><Query name="answer">{`select n from items`}</Query><script>{`import {query} from "page"; const answer=query("$answer"); export default async input => ({message: "Hello " + input.name, rows: await answer.ready})`}</script></Helmet><p>Hello lambda</p>',visibility:'private'},cookie);
+  const published=await post('/api/my/artifacts',{markup:'<Helmet><Value name="items" type="table" value={[{n:42}]} /><Query name="answer">{`select n from items`}</Query><script type="server">{`import {query} from "page"; const answer=query("$answer"); export default async input => ({message: "Hello " + input.name, rows: await answer.ready})`}</script></Helmet><p>Hello lambda</p>',visibility:'private'},cookie);
   assert.equal(published.status,201,await published.clone().text());const artifact=await published.json();
   const admitted=await post(`/api/artifacts/${artifact.id}/runs`,{requestId:'hello-1',input:{name:'OSS'}},cookie);
   assert.equal(admitted.status,202,await admitted.clone().text());const {runId}=await admitted.json();
