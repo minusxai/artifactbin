@@ -203,7 +203,6 @@
    "services/app/__tests__/deep-fork.test.ts": 4454,
    "services/app/__tests__/draft-preview.test.ts": 7743,
    "services/app/__tests__/events-dual-write.test.ts": 4759,
-   "services/app/__tests__/fork-operation.test.ts": 7219,
    "services/app/__tests__/fork.test.ts": 9654,
    "services/app/__tests__/image-upload.test.ts": 5530,
    "services/app/__tests__/live-events-open-race.test.ts": 2846,
