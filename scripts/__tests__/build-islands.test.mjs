@@ -110,7 +110,7 @@ describe('buildIslands', () => {
     const bytes = closure([manifest['@mx/rt'], manifest['@mx/boot']]).reduce((n, url) => n + files[url].br, 0);
     // Internal sub-budget. esbuild tree-shakes across the whole build but splits by file, so the Solid
     // helpers any kit family uses land in the shared chunk that rt's closure includes; they load on every
-    // interactive page anyway. The owner's target 2 (≤ 85 KB before ready on interactive pages) is the
+    // interactive page anyway. The owner's target 2 (≤ 90 KB before ready on interactive pages) is the
     // real check, in scripts/build/size-targets.mjs.
     // boot grew by the page runtime's loader (lib/islands/page-runtime: the vendor map and the module import).
     // The framed document's runtime now also relays its URL values and app-path links to the app page.
