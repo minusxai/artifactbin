@@ -405,7 +405,7 @@ export function DocumentPage(): JSX.Element {
         }} />
     </Show>
     <Show when={ready() && annotatable() && id}>
-      <AnnotationLayer id={id!} backend={backend ?? undefined} editId={editorPart()?.editId ?? page?.surface?.editId} runtimeRef={runtimeRef} sessionNonce={nonce()}
+      <AnnotationLayer id={id!} backend={backend ?? undefined} canDeleteAny={isOwner()} editId={editorPart()?.editId ?? page?.surface?.editId} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} showViewComments={annotatable()} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickOnOpen={!editing() || wide()} onAnnotationsChange={setAnnotationItems}

@@ -66,6 +66,8 @@ export interface AnnotationLayerProps {
   id: string;
   /** Every request the comments make; the page's surface backend when it has one. */
   backend?: ArtifactBackend;
+  /** The document owner may delete any comment; other viewers may delete their own. */
+  canDeleteAny?: boolean;
   editId?: string;
   runtimeRef?: DocumentRuntimeRef;
   sessionNonce?: string | null;
@@ -106,7 +108,8 @@ export interface AnnotationLayerProps {
 
 const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
 const CAPTURE_CHROME_CSS = ':host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}';
-const DELETE_CONFIRMATION = { title: 'Delete this comment?', description: 'This comment and its replies will be permanently deleted. This cannot be undone.', action: 'Delete comment', confirmLabel: 'Confirm delete comment' };
+const DELETE_THREAD_CONFIRMATION = { title: 'Delete this thread?', description: 'This thread and its replies will be permanently deleted. This cannot be undone.', action: 'Delete thread', confirmLabel: 'Confirm delete thread' };
+const DELETE_REPLY_CONFIRMATION = { title: 'Delete this comment?', description: 'This comment will be removed. The rest of the thread will stay.', action: 'Delete comment', confirmLabel: 'Confirm delete comment' };
 const linkedFrom = (search: string | undefined) => {
   if (search === undefined) return null;
   const query = new URLSearchParams(search);
@@ -188,7 +191,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal<string | null>(null);
-  const [deleting, setDeleting] = createSignal<string | null>(null);
+  const [deleting, setDeleting] = createSignal<{ id: string; thread: boolean } | null>(null);
   const [confirmBusy, setConfirmBusy] = createSignal(false);
   const [confirmError, setConfirmError] = createSignal<string | null>(null);
   const [viewport, setViewport] = createSignal({ width: innerWidth, height: innerHeight });
@@ -515,21 +518,37 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     try {
       await backend.deleteAnnotation(annId);
       batch(() => {
-        setAnnotations((prev) => prev.filter((row) => row.id !== annId));
-        setResolvedList((prev) => (prev ? prev.filter((row) => row.id !== annId) : prev));
+        const without = (rows: AnnotationWire[] | null) => rows?.flatMap((row) => {
+          if (row.id === annId) return [];
+          if (!row.thread.some((comment) => comment.id === annId)) return [row];
+          return [{ ...row, revision: (row.revision ?? 1) + 1, thread: row.thread.filter((comment) => comment.id !== annId) }];
+        }) ?? null;
+        setAnnotations((prev) => without(prev) ?? []);
+        setResolvedList((prev) => without(prev));
+        setRecentResolved((current) => {
+          const next = { ...current };
+          if (next[annId]) delete next[annId];
+          for (const [rootId, value] of Object.entries(next)) {
+            if (!value.row.thread.some((comment) => comment.id === annId)) continue;
+            const [row] = without([value.row]) ?? [];
+            if (row) next[rootId] = { ...value, row };
+            else delete next[rootId];
+          }
+          return next;
+        });
         setOpenId((current) => (current === annId ? null : current));
       });
     } finally { setBusy(false); }
   };
   const confirmDelete = async () => {
-    const annId = deleting();
-    if (!annId || confirmBusy()) return;
+    const pending = deleting();
+    if (!pending || confirmBusy()) return;
     setConfirmBusy(true); setConfirmError(null);
-    try { await remove(annId); setDeleting(null); }
+    try { await remove(pending.id); setDeleting(null); }
     catch (cause) { setConfirmError(cause instanceof Error ? cause.message : 'Could not complete this action. Try again.'); }
     finally { setConfirmBusy(false); }
   };
-  const askDelete = (annId: string) => { if (deleting()) return; setConfirmError(null); setDeleting(annId); };
+  const askDelete = (commentId: string, thread: boolean) => { if (deleting()) return; setConfirmError(null); setDeleting({ id: commentId, thread }); };
 
   const save = async () => {
     const subject = selection();
@@ -782,7 +801,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   const threadHandlers = (id: string, resolved: boolean) => ({
     onHover: hoverUi,
-    onDelete: () => askDelete(id),
+    onDelete: (commentId: string) => askDelete(commentId, commentId === id),
     onToggleFold: () => toggle('threads', id),
     onToggleComment: (commentId: string) => toggle('comments', commentId),
     ...(resolved ? {
@@ -908,7 +927,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             </Show>
             <For each={openIds()}>{(id) => (
               <Show when={openRow(id)}>{(row) => (
-                <AnnotationThread artifactId={props.id} backend={backend} a={row()} open={openId() === id} hovered={hoverId() === id} busy={busy()}
+                <AnnotationThread artifactId={props.id} backend={backend} a={row()} canDeleteAny={props.canDeleteAny} open={openId() === id} hovered={hoverId() === id} busy={busy()}
                   viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
                   isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, false)} />
               )}</Show>
@@ -920,7 +939,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             </div>
             <For each={resolvedIds()}>{(id) => (
               <Show when={resolvedRow(id)}>{(row) => (
-                <AnnotationThread artifactId={props.id} backend={backend} a={row()} open={openId() === id} resolved hovered={hoverId() === id} busy={busy()}
+                <AnnotationThread artifactId={props.id} backend={backend} a={row()} canDeleteAny={props.canDeleteAny} open={openId() === id} resolved hovered={hoverId() === id} busy={busy()}
                   viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
                   isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, true)} />
               )}</Show>
@@ -933,7 +952,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       </Show>
 
       <Show when={deleting()}>
-        <ConfirmDialog {...DELETE_CONFIRMATION} danger busy={confirmBusy()} error={confirmError()}
+        <ConfirmDialog {...(deleting()?.thread ? DELETE_THREAD_CONFIRMATION : DELETE_REPLY_CONFIRMATION)} danger busy={confirmBusy()} error={confirmError()}
           onCancel={() => { if (!confirmBusy()) setDeleting(null); }} onConfirm={() => void confirmDelete()} />
       </Show>
     </CommentsOffline.Provider>
