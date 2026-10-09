@@ -1,4 +1,4 @@
-import { deckColumns, GEOMETRY_COLUMN } from '@/lib/viz/deck-spec';
+import { deckColumns, GEOMETRY_COLUMN } from '@/lib/jsx/deck-spec';
 /**
  * The document's DATA checks — everything about a markup document's data that
  * can only be judged with the caller's artifacts in hand: refs resolve and are

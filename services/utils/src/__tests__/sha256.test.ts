@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { sha256Hex } from '@/lib/platform';
+import { sha256Hex } from '../sha256';
 
 const node = (s: string) => createHash('sha256').update(s).digest('hex');
 

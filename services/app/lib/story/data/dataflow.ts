@@ -165,7 +165,7 @@ export const DECL_NAME_RE = /^[A-Za-z_]\w*$/;
 /**
  * `"$sales"` → `"sales"`, `"$_me.id"` → `"_me.id"` (the one dotted name markup
  * binds); anything else → null. A row field (`$_row.day`) is the row scope's,
- * substituted before any binding reads it (lib/story/data/row-scope).
+ * substituted before any binding reads it (lib/jsx/row-scope).
  */
 export function refName(value: unknown): string | null {
   if (typeof value !== 'string') return null;

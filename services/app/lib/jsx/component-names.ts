@@ -1,6 +1,6 @@
 /**
- * Names-only contract for the story design system — importable by
- * server-side validation (lib/jsx) WITHOUT pulling the component sources in.
+ * Names-only contract for the story design system, owned by lib/jsx because its
+ * validator checks tags against it — importable WITHOUT pulling the component sources in.
  * The compiler's `KIT` table (lib/compiled-page/compiler.ts) maps these names to the real components.
  */
 

@@ -1,7 +1,7 @@
 // Browser engine boundary: imported lazily by Mermaid so prose and server
 // rendering do not load Mermaid's parser/layout engines.
 import mermaid from 'mermaid';
-import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
+import { mermaidSourceError } from '@/lib/jsx/mermaid-source';
 
 /** The document's theme, resolved to hex for Mermaid's colour math, plus the host's type. */
 export interface MermaidPalette {

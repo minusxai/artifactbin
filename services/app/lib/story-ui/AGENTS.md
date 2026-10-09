@@ -25,8 +25,8 @@ where the author script runs in [serving and security](../../../../docs/serving-
   its fallback, which edit mode shows read-only. There is no author frame, `mx` bridge or managed `<Iframe>`.
 - `lib/jsx/serialize.ts` must preserve entity escaping and static template-literal children: SQL and
   CSS containing quotes, angle brackets or braces must survive repeated edit/serialize/parse cycles.
-- Component names must agree between `component-names.ts`, the compiler's `KIT` table and JSX validation.
-  Keep the names module free of the kit so server validation does not pull in the rendering graph.
+- Component names must agree between `lib/jsx/component-names.ts`, the compiler's `KIT` table and JSX
+  validation. Keep the names module free of the kit so server validation does not pull in the rendering graph.
 - Preserve keys and node identity across updates, and never serialize generated `data-mx-*` or
   editing attributes as source.
 - Grid geometry belongs to `grid-layout.ts`; edit and view placement must use the same arithmetic.

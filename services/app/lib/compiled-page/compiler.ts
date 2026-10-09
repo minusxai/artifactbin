@@ -25,17 +25,17 @@
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
-import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_SVG_TAGS } from '@/lib/jsx/component-names';
 import { isScriptComponent, MOUNT_ATTR } from './script-mount';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
 import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
-import { parseRowRef } from '@/lib/story/data/row-scope';
+import { parseRowRef } from '@/lib/jsx/row-scope';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { collectRefNameUses, REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/data/dataflow';
 import { resolveRefProps } from '@/lib/story/data/ref-data';
-import { substituteRow } from '@/lib/story/data/row-scope';
+import { substituteRow } from '@/lib/jsx/row-scope';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';

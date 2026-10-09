@@ -5,7 +5,7 @@
  * expect).
  */
 import type { JsxNode } from '@/lib/jsx';
-import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
+import { mermaidSourceError } from '@/lib/jsx/mermaid-source';
 
 export function mermaidCodesOf(nodes: readonly JsxNode[]): string[] {
   const codes = new Set<string>();

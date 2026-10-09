@@ -24,7 +24,7 @@ import path from 'node:path';
 import nunjucks from 'nunjucks';
 import { STORY_THEMES } from '@/lib/data/story/story-themes';
 import { STORY_TEMPLATES } from '@/lib/data/story/story-templates';
-import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
 import { MAX_CONTENT_BYTES } from '@/lib/story/document/input';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';

@@ -8,10 +8,10 @@
 import { describe, expect, it } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
 import { collectRefNameUses, parseValueDecl, validateDataflow, type Dataflow } from '@/lib/story/data/dataflow';
-import { PERSON_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { PERSON_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
-import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { validateMarkupStructure } from '@/lib/story/document/local-validation';
 

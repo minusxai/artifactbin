@@ -22,7 +22,7 @@ export {canonicalizeMarkup} from './canonical-source';
 import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/document/helmet';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
-import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { authorModuleNames, buildAuthorModule, type AuthorModule } from './author-module.server';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';

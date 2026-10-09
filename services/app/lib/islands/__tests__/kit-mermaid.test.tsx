@@ -11,7 +11,7 @@ import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Mermaid } from '../kit/mermaid';
-import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
+import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import type { MermaidPalette } from '@/lib/mermaid-images/mermaid-render';
 
 const engine = vi.hoisted(() => ({ renderMermaid: vi.fn(async (_code: string, _palette: MermaidPalette) => ({ src: 'data:image/svg+xml,engine', type: 'flowchart-v2', width: 812.5, height: 90 })) }));

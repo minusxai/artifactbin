@@ -32,7 +32,7 @@ const buildTemplateDoc = (name: string, base: string) => renderDoc(`artifactbin/
 import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@/lib/serving';
 import { parseJsx } from '../jsx';
 import { validateJsx } from '../jsx/validate';
-import { STORY_HTML_TAGS } from '../story-ui/component-names';
+import { STORY_HTML_TAGS } from '../jsx/component-names';
 
 const SURFACES: Array<[string, string]> = [
   ['references/publishing*.md', buildSkillDoc(BASE)],

@@ -11,7 +11,7 @@
  * the harvest catches up. Pinned against the installed package and the render
  * module's bytes by lib/mermaid-images/__tests__/engine.test.ts.
  */
-import { mermaidDiagramKind } from '@/lib/story-ui/mermaid-source';
+import { mermaidDiagramKind } from '@/lib/jsx/mermaid-source';
 
 /**
  * Bump when lib/mermaid-images/mermaid-render changes what it draws (its test pins

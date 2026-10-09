@@ -5,9 +5,9 @@
  * scopes, registered components / allowed HTML tags, no event handlers, and no
  * dangerous URL schemes. Parsing alone does not enforce these constraints.
  */
-import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
-import { validateDeckMap } from '@/lib/viz/deck-spec';
-import { parseRowRef } from '@/lib/story/data/row-scope';
+import { mermaidSourceError } from './mermaid-source';
+import { validateDeckMap } from './deck-spec';
+import { parseRowRef } from './row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { immutableSet } from '@/lib/jsx/immutable-set';
 // Shared with the render-time gate in lib/story-ui/interpreter-primitives — see
@@ -15,8 +15,8 @@ import { immutableSet } from '@/lib/jsx/immutable-set';
 import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl, urlListUrls } from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';
 import { DENIED_JSX_ATTRS } from './denied-attrs';
-import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
-import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_COMPONENT_NAMES } from './story-components';
+import { STORY_SVG_TAGS } from './component-names';
 import type { JsxNode, JsxElement, ValidationError, ValidateOptions } from './types';
 
 // The retired legacy story design-system tags (<PageHeader>, <Eyebrow>, …). When one of

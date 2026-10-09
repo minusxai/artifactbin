@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx, validateJsxSource } from '../index';
-import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { stampNodeIds, nodeIndex } from '@/lib/story/document/node-ids';
 import { collectRefUses } from '@/lib/story/data/refs';
 import { collectRefNameUses, validateDataflow } from '@/lib/story/data/dataflow';

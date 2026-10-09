@@ -6,7 +6,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { HarvestedSvg, SvgHarvestRequest } from '@artifactbin/contracts';
-import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
+import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import { getDb } from '@/lib/platform/db';
 import { services } from '@/lib/platform/services';
 import { objectStore } from '@/lib/object-store';

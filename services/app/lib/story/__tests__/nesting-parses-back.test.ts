@@ -145,7 +145,7 @@ describe('the list of tags that break a paragraph is the parser\'s, not a guess'
   };
 
   it('rewrites for exactly the tags a paragraph cannot hold', async () => {
-    const { STORY_HTML_TAGS } = await import('@/lib/story-ui/component-names');
+    const { STORY_HTML_TAGS } = await import('@/lib/jsx/component-names');
     const wrong: string[] = [];
     let breakers = 0;
     for (const tag of STORY_HTML_TAGS) {

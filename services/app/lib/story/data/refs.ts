@@ -21,7 +21,7 @@ import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
-import {parseRowRef} from './row-scope';
+import {parseRowRef} from '@/lib/jsx/row-scope';
 
 interface RefUse {
   id: string;

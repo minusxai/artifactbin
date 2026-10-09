@@ -14,7 +14,7 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { services, setServices } from '@/lib/platform';
-import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
+import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import { runNextMermaidHarvest } from '@/lib/mermaid-images/harvester';
 import { verifyEmbeddedMermaidSvg } from '@/lib/mermaid-images/sanitize';
 

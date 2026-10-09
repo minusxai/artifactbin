@@ -21,7 +21,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
 import { controlOptions as optionsOf, type ControlOption as Option, refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/story/data/dataflow';
-import { substituteRow } from '@/lib/story/data/row-scope';
+import { substituteRow } from '@/lib/jsx/row-scope';
 import { VIEWER_ID } from '@/lib/story/data/builtins';
 import { refusalText } from '@/lib/story/reader/sign-in-required';
 import { commentMetadata, instanceDomId } from '@/lib/story/data/repeat-identity';

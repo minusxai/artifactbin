@@ -1,4 +1,11 @@
-import { sha256Hex } from '@/lib/platform/sha256';
+/**
+ * What a `<Mermaid code>` may say, decided from its source alone: the static
+ * validator (./validate) refuses a bad source at publish, the editor panel and
+ * the image pipeline (lib/mermaid-images) apply the same rules, and the reader kit
+ * keys a prerendered drawing by `mermaidImageKey`. Part of lib/jsx's one markup
+ * policy, so it imports nothing above it (the hash is `@artifactbin/utils/sha256`).
+ */
+import { sha256Hex } from '@artifactbin/utils/sha256';
 
 /** Shared publish/read boundary; Mermaid configuration is owned by the app. */
 const MERMAID_MAX_SOURCE = 20_000;
@@ -34,7 +41,7 @@ export interface MermaidDiagram {
  * Every diagram kind Mermaid 12.0.0 draws, in ITS detection order: the first
  * match wins, so `flowchart-elk` precedes `flowchart`, and C4 (whose regex is
  * anchored only on its first alternative) precedes nearly everything.
- * Pinned against the installed Mermaid by lib/story-ui/__tests__/mermaid-source
+ * Pinned against the installed Mermaid by lib/jsx/__tests__/mermaid-source
  * (detection) and scripts/__tests__ via the runtime build (modules, layouts).
  */
 export const MERMAID_DIAGRAMS: readonly MermaidDiagram[] = [

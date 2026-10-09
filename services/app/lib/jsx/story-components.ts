@@ -3,11 +3,11 @@
  *
  * These were a compile-to-static-HTML component set with their own class recipes.
  * Nothing renders them and nothing can publish them: the current vocabulary is
- * `JSX_STORY_COMPONENT_NAMES` (the kit registry in lib/story-ui plus the data
+ * `JSX_STORY_COMPONENT_NAMES` (./components: the kit's names plus the data
  * embeds), and an author reaching for one of these names gets an unknown-component
  * error from the static validator like any other unregistered tag.
  *
- * The list survives for exactly one reason, and it is a good one: `lib/jsx/validate.ts`
+ * The list lives in lib/jsx and survives for exactly one reason, and it is a good one: `./validate.ts`
  * checks unknown Capitalized tags against it so the error can say *"<Callout> is a
  * LEGACY story component that is no longer available — rebuild it with plain HTML tags
  * + Tailwind utilities, or use the registered components"* instead of a bare "unknown

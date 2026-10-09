@@ -11,7 +11,7 @@ import { parseJsx, validateJsx } from '@/lib/jsx';
 import { dataflowOf, splitHelmet, validateHelmet } from '@/lib/story/document/helmet';
 import { collectRefNameUses, validateDataflow } from '@/lib/story/data/dataflow';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
-import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const SRC = kitchenSinkMarkup({ dataset: 'ksdataset01', recipe: 'ksrecipe01', image: 'ksimage01', pdf: 'kspdf01' });

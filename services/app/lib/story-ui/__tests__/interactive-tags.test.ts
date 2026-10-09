@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
-import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { findExternalSubresources } from '@/lib/story/data/refs';
 
 const validate = (src: string) =>

@@ -2,9 +2,9 @@
 import {parseJsx,validateJsx,type ValidationError,type JsxNode} from '@/lib/jsx';
 import {syntaxErrorDetail} from '@/lib/jsx/syntax-error';
 import {JSX_STORY_COMPONENT_NAMES} from '@/lib/jsx/components';
-import {STORY_HTML_TAGS} from '@/lib/story-ui/component-names';
+import {STORY_HTML_TAGS} from '@/lib/jsx/component-names';
 import {dataflowOf,splitHelmet,validateHelmet,type HelmetSplit} from './helmet';
-import {analyzeRowScopes} from '../data/row-scope';
+import {analyzeRowScopes} from '@/lib/jsx/row-scope';
 import {collectRefNameUses,validateDataflow} from '../data/dataflow';
 import {findBrokenEmbeds} from '../data/refs';
 import {cspExtensionsOf} from './csp-extensions';

@@ -20,7 +20,7 @@
 import { expect } from 'vitest';
 import { parseJsx, validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
-import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import type { ParseResult } from '@/lib/jsx/types';
 
 /** The success branch: `{ ok: true; nodes: JsxNode[] }`. */

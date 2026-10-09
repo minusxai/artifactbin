@@ -3,9 +3,9 @@
  * FeatureCollection becomes one row per feature — its properties as columns, its
  * geometry as a JSON string in the `geometry` column — and is queried, joined
  * and filtered like any other rows. `<DeckGL>`'s GeoJsonLayer reads that column
- * back (lib/viz/deck-spec GEOMETRY_COLUMN). Pure: the CLI ingests with it.
+ * back (lib/jsx/deck-spec GEOMETRY_COLUMN). Pure: the CLI ingests with it.
  */
-import { GEOMETRY_COLUMN } from '@/lib/viz/deck-spec';
+import { GEOMETRY_COLUMN } from '@/lib/jsx/deck-spec';
 
 type Row = Record<string, unknown>;
 interface Feature { type: 'Feature'; properties: Row | null; geometry: unknown }

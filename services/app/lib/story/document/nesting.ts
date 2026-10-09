@@ -40,7 +40,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
  * Tags whose START tag closes an open `<p>` (HTML Standard, "in body"
  * insertion mode: each of these begins with "if the stack of open elements has
  * a p element in button scope, then close a p element"), restricted to the
- * story vocabulary (lib/story-ui/component-names STORY_HTML_TAGS).
+ * story vocabulary (lib/jsx/component-names STORY_HTML_TAGS).
  *
  * `li`/`dt`/`dd` are here for the same reason even though they are list
  * internals: their start tags close a p too.
@@ -75,7 +75,7 @@ const BUTTON_SCOPE: ReadonlySet<string> = new Set([
  * This is the breakout list intersected with CLOSES_OPEN_P (everything else on
  * it — `b`, `br`, `code`, `em`, `img`, `span`, … — never closes a paragraph
  * anyway). `<foreignObject>`, which would switch back to HTML, is not in the
- * story vocabulary (lib/story-ui/component-names).
+ * story vocabulary (lib/jsx/component-names).
  */
 const CLOSES_OPEN_P_IN_SVG: ReadonlySet<string> = new Set([
   'blockquote', 'dd', 'div', 'dl', 'dt', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
