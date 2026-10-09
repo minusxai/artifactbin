@@ -48,8 +48,7 @@ import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { enableSnapshotRevalidations } from '@/lib/story/prepared';
+import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/story/prepared';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
 import zlib from 'node:zlib';
@@ -309,8 +308,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
   });
-  // A serving process prepares each new head for its readers after the write commits (lib/story/prepared/prepared-page.server).
-  enablePreparedPageWarmups();
+  // A serving process answers committed writes (lib/artifacts/after-commit): each new head is prepared for its readers,
+  // and a dataset write invalidates the guest snapshots it feeds (lib/story/prepared/commit-hooks.server).
+  installStoryCommitHooks();
   // …and revalidates the guest snapshots a write made stale (lib/story/prepared/snapshots.server).
   enableSnapshotRevalidations();
   // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page

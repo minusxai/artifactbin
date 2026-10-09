@@ -33,7 +33,7 @@ import { readerZone, VIEWER, VIEWER_ID } from '@/lib/dataflow/builtins';
 import type { MutationRequest } from '@/lib/dataflow';
 import { schemaLoaderFor, type ServerRef, type ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { mutationPolicy } from '@/lib/datasets/policy';
-import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
+import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
 import { runMutation } from '@/lib/sql/engine';
 import { sqlExtensions } from '@/lib/sql/extensions';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/dataflow/local-state';

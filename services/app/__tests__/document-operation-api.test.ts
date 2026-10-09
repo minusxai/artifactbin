@@ -6,7 +6,8 @@ import {runInNewContext} from 'node:vm';
 import {createTeamApplication} from '../server/team-host';
 import {AUTH_SECRET} from '@/lib/platform';
 import * as preparedPages from '@/lib/story/prepared/prepared-page.server';
-import {enablePreparedPageWarmups,drainPreparedPageWarmups} from '@/lib/story/prepared/prepared-page.server';
+import {drainPreparedPageWarmups} from '@/lib/story/prepared/prepared-page.server';
+import {installStoryCommitHooks} from '@/lib/story/prepared/commit-hooks.server';
 import {drainSnapshotRevalidations} from '@/lib/story/prepared/snapshots.server';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {useAppHarness,request} from './harness';
@@ -33,7 +34,7 @@ async function prepare(row:ArtifactRow,actor:TokenActor,change:ClientDocumentCha
  return {edit_id:row.edit_id,document_update};
 }
 it('accepts a client-prepared composite through the real route with one permission/document/history query',async()=>{
- enablePreparedPageWarmups();
+ installStoryCommitHooks();
  const {token,id,row,actor}=await setup(),db=await getDb();
  const body=await prepare(row,actor,{operations:[{kind:'setAttribute',path:[0],name:'className',value:'p-4'},{kind:'insert',parent:[0],index:1,source:'<h2>Heading</h2>'},{kind:'move',path:[0,2],parent:[0],index:0},{kind:'setText',path:[0,0,0],value:'Moved β'}]});
  // Preparation belongs to the post-commit worker, not the measured permission/

@@ -33,7 +33,7 @@ import { artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, g
 import { findDependentsFor, refLoaderForActor, refreshWarningsFor, declarationsForRow, runDocumentMutation } from './dataflow';
 import { AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations/store';
 import { normalizeNodeIds } from '@/lib/document/node-ids';
-import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
+import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/dataflow';
 import { parseMutationRequest } from '@/lib/dataflow/mutation-request';

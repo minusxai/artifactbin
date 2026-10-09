@@ -41,7 +41,7 @@ import { newEditId } from '../document/splice';
 import type { StringEdit } from '../document';
 import { nodeIndex, stampNodeIds } from '../document/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } from '@/lib/document/server';
-import { warmPreparedPage } from '../story/prepared/prepared-page.server';
+import { emitHeadCommitted } from './after-commit';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/data-syntax';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from '@/lib/workspace/folders';
@@ -196,8 +196,8 @@ export async function createArtifact(
 /** What a creation says to the rest of the system, AFTER its transaction committed. */
 export async function afterCreated(row: ArtifactRow, userId: string | null): Promise<void> {
   void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
-  // The first reader of a new document finds it prepared (lib/story/prepared/prepared-page.server).
-  if (row.format === 'markup') warmPreparedPage(row.id);
+  // The first reader of a new document finds it prepared (story's listener, lib/story/prepared/commit-hooks.server).
+  if (row.format === 'markup') emitHeadCommitted(row.id);
   // Its diagrams are drawn to stored SVG in the background; nothing waits on it.
   void queueMermaidHarvest(row);
   // A child arriving wakes the folder it landed in, so an open listing
@@ -862,7 +862,7 @@ function settleCommittedHead(id: string, version: number): void {
       if (!head) return;
       const row = await storeCompiledRecord(db, head);
       await queueMermaidHarvest(row);
-      if (row.format === 'markup') warmPreparedPage(row.id, row);
+      if (row.format === 'markup') emitHeadCommitted(row.id, row);
     } catch (error) {
       console.warn('[edits] could not settle the committed head', id, version, (error as Error).message);
     }
@@ -933,7 +933,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     }
     const row=await storeCompiledRecord(db,committed.row);
     // After the commit, off the write's path: the new head is prepared for its readers, and its diagrams harvested.
-    if(row.format==='markup')warmPreparedPage(row.id);
+    if(row.format==='markup')emitHeadCommitted(row.id);
     void queueMermaidHarvest(row);
     return {applied:true,row};
   }
