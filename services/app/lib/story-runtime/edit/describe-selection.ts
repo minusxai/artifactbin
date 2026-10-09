@@ -16,7 +16,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 // latter pulled the validator and the component tables into this chunk (75 KB
 // gzipped to ask "is this a paragraph").
 import { crumbHint, isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
-import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
+import { AST_PATH_ATTR, SOURCE_NODE_ID_ATTR } from '@/lib/story-ui/ast-path';
 import { isComponentPart } from './edit-chrome';
 import type { StoryEditCrumb, StoryEditSelection } from '../contract';
 
@@ -63,7 +63,17 @@ export function ancestorCrumbs(el: Element, nodes: JsxNode[]): StoryEditCrumb[] 
 /** The kind `describeSelection` gives `el` (null: it describes none), without reading its geometry. */
 export function describedKind(el: Element, nodes: JsxNode[]): StoryEditSelection['kind'] | null {
   const path = el.getAttribute(AST_PATH_ATTR);
-  return (path && selectionKindAt(nodes, path)) || null;
+  if (!path || !sourceIdentityMatches(el, resolveJsxNodeAtPath(nodes, path))) return null;
+  return selectionKindAt(nodes, path);
+}
+
+function sourceIdentityMatches(el: Element, node: JsxNode | null): boolean {
+  const witness = el.getAttribute(SOURCE_NODE_ID_ATTR);
+  if (witness === null) return true;
+  if (!node || node.type !== 'element') return false;
+  const authoredId = node.attributes.find((attr) => attr.name.toLowerCase() === 'id');
+  const sourceId = authoredId?.value.static && typeof authoredId.value.json === 'string' ? authoredId.value.json : undefined;
+  return witness === sourceId;
 }
 
 /**
@@ -74,9 +84,11 @@ export function describedKind(el: Element, nodes: JsxNode[]): StoryEditSelection
 export function describeSelection(el: Element, nodes: JsxNode[]): StoryEditSelection | null {
   const path = el.getAttribute(AST_PATH_ATTR);
   if (!path) return null;
+  const sourceNode = resolveJsxNodeAtPath(nodes, path);
+  if (!sourceIdentityMatches(el, sourceNode)) return null;
   const kind = selectionKindAt(nodes, path);
   if (!kind) return null;
-  const node = resolveJsxNodeAtPath(nodes, path) as JsxElement;
+  const node = sourceNode as JsxElement;
   const authoredId = node.attributes.find((attr) => attr.name.toLowerCase() === 'id');
   const nodeId = authoredId?.value.static && typeof authoredId.value.json === 'string'
     ? authoredId.value.json

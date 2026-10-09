@@ -25,6 +25,7 @@
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
+import { SOURCE_NODE_ID_ATTR } from '@/lib/story-ui/ast-path';
 import { STORY_SVG_TAGS } from '@/lib/jsx/component-names';
 import { isScriptComponent, MOUNT_ATTR } from '@/lib/story-runtime/script-mount';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
@@ -596,7 +597,7 @@ export function generate(input: GenerateInput): Generated {
     const cls = meta.dom === 'identity' ? null : node.tag === 'Icon' ? cn(ICON_BASE_CLASS, typeof props.className === 'string' ? props.className : undefined) : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
     let dom: Props = { ...props };
     for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
-    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST || (node.tag === 'DataTable' && k.startsWith('data-'))));
+    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST || k === SOURCE_NODE_ID_ATTR || (node.tag === 'DataTable' && k.startsWith('data-'))));
     // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
     if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
     if (inGrid) api.inGridItem = true;
@@ -626,7 +627,12 @@ export function generate(input: GenerateInput): Generated {
     if (isScriptComponent(node)) return mountJsx(node, path, mode, ctx);
     if (node.isComponent) {
       const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
-      if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
+      if (!meta) {
+        unported.add(node.tag);
+        const id = node.attributes.find((a) => a.name.toLowerCase() === 'id')?.value;
+        const witness = id?.static && typeof id.json === 'string' && id.json ? ` data-mx-source-node-id={${lit(id.json)}}` : '';
+        return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}${witness}></div>`;
+      }
       useKit(node.tag, mode, ctx);
       const parts = kitParts(node, path, mode, ctx, meta);
       if (typeof parts === 'string') return parts;
@@ -682,7 +688,13 @@ export function generate(input: GenerateInput): Generated {
     if (ctx.preview) props = ctx.preview.rewrite(props);
     // A static wrapper with live descendants is already served. Its id may be minted
     // anew by an edit; leaving it to the DOM keeps the browser module reusable.
-    if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) delete props.id;
+    if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) {
+      delete props.id;
+      // The served skeleton owns this wrapper's stable identity. The browser module must not
+      // capture it, or a prose-only version change changes the reusable island module hash.
+      // Omitting it here also leaves the server-rendered witness in place during hydration.
+      delete props[SOURCE_NODE_ID_ATTR];
+    }
     const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
     const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
     const reactive = ctx.preview ? [] : node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));

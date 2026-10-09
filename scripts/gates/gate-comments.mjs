@@ -469,6 +469,7 @@ const run = async () => {
 
 const TABLE_SELECTION_DOC = '<Helmet><title>Selected table rows</title></Helmet>'
   + '<div data-design="tw" className="p-10"><h1>Two selected rows</h1>'
+  + '<p id="other-item">Item 10 report</p><h3 id="selected-heading">11. Resolve from the hover preview</h3>'
   + '<table id="selected-table"><tbody>'
   + '<tr><td id="row24-start">24</td><td>Deploy npm race</td></tr>'
   + '<tr><td>25</td><td id="row25-end">Ask reporter to retry</td></tr>'
@@ -484,6 +485,23 @@ async function tableSelectionLeg(browser, { id, token }) {
     const frame = documentLocator(page);
     await frame.locator('#row25-end').waitFor();
     const raw = await documentFrame(page);
+    check(await frame.locator('#selected-heading').getAttribute('data-mx-source-node-id') === 'selected-heading',
+      'the compiled heading carries its authored source identity independently of its position');
+    const headingPath = await frame.locator('#selected-heading').getAttribute('data-mx-ast');
+    await raw.evaluate(() => {
+      const heading = document.querySelector('#selected-heading');
+      heading.setAttribute('data-mx-ast', document.querySelector('#other-item').getAttribute('data-mx-ast'));
+      const range = document.createRange(); range.selectNodeContents(heading);
+      const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      heading.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    });
+    await page.waitForTimeout(300);
+    check(!await frame.getByRole('button', { name: 'Comment on selected text', exact: true }).isVisible(),
+      'a stale positional path cannot offer a comment against a different source identity');
+    await raw.evaluate(path => {
+      document.querySelector('#selected-heading').setAttribute('data-mx-ast', path);
+      window.getSelection().removeAllRanges();
+    }, headingPath);
     await until(async () => {
       await raw.evaluate(() => {
         const range = document.createRange();
