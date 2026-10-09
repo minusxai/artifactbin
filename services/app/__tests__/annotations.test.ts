@@ -72,7 +72,7 @@ const headEditId = async (token: string, id: string) => {
 describe('creating (browser door, owner only)', () => {
   it('persists optional review context through create and fresh list; old comments remain context-free', async () => {
     const { doc, actor } = await publish();
-    const view_state = { v: 1, components: { checkout: { screen: 'payment', error: false } } };
+    const view_state = { v: 2, state: { $: { screen: 'payment' }, 'aBcD:value': 'billing', 'eFgH:open': false } };
     const res = await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'Review this state', view_state });
     expect(res.status).toBe(201);
     expect((await res.json()).view_state).toEqual(view_state);
@@ -80,7 +80,7 @@ describe('creating (browser door, owner only)', () => {
     expect((await listed.json()).annotations[0].view_state).toEqual(view_state);
     const plain = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'Ordinary text' });
     expect((await plain.json()).view_state).toBeUndefined();
-    const bad = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 2, components: {} } });
+    const bad = await annotate(doc.id, actor, { node_id: 'intro', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 1, components: {} } });
     expect(bad.status).toBe(400);
   });
 

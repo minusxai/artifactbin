@@ -14,7 +14,7 @@ describe('the installed short skill',()=>{
    for(const text of [renderDoc(`artifactbin/references/${topic}.md`,'https://example.test'),bundled[`references/${topic}.md`]])expect(text,topic).toContain('(review-state.md)');
   }
   const guide=teaching.files['references/review-state.md'];
-  for(const text of ['reviewState','get: view','restore: saved => setView(saved)','false','Reload','current artifact','No registration'])expect(guide).toContain(text);
+  for(const text of ['createSignal',"{ name: 'checkout' }",'Nothing registers','false','Reload','current artifact','never saved'])expect(guide).toContain(text);
  });
  it('fits its reading budget and uses local guidance',()=>{
   expect(sheet).toContain('afbin help');
