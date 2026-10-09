@@ -8,7 +8,8 @@
  * authenticated, so a browser is by definition the caller and Origin is
  * present and unforgeable.
  */
-import { artifactToWireWithAnnotations, replaceArtifactFromRequest } from '@/lib/artifacts';
+import { artifactToWireWithAnnotations } from '@/lib/artifacts';
+import { replaceArtifactFromRequest } from '@/lib/story/publish';
 import { getEditableArtifactFor } from '@/lib/artifacts';
 import {updateMetadataFromBody} from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';

@@ -43,7 +43,6 @@ import { storedRowStats } from '@/lib/datasets/dataset-store';
 import { childrenTableFor, CHILDREN_COLUMNS } from '@/lib/workspace/folders';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import { checkDocumentData } from '@/lib/story/data/data-checks';
 
 export function refLoaderForActor(actor: TokenActor): ServerRefLoader {
   return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId);
@@ -283,29 +282,6 @@ async function findDependentsScoped(scope: Scope, refId: string): Promise<Artifa
 
 export function findDependentsFor(actor: TokenActor, refId: string): Promise<ArtifactRow[]> {
   return findDependentsScoped(ownerScope(actor), refId);
-}
-
-/**
- * After a dataset/viz refresh: re-run reference validation for every dependent
- * against the NEW content. Warnings, never blocks: a data refresh
- * can't be stopped by a stale chart.
- */
-export async function refreshWarningsFor(actor: TokenActor, updated: ArtifactRow): Promise<Array<{ id: string; title: string | null; details: string[] }>> {
-  if (updated.format !== 'dataset' && updated.format !== 'viz') return [];
-  const dependents = await findDependentsFor(actor, updated.id);
-  if (dependents.length === 0) return [];
-  const base = refLoaderForActor(actor);
-  const load: ServerRefLoader = async (id) => (id === updated.id ? rowToResolvedRef(updated) : base(id));
-  const warnings: Array<{ id: string; title: string | null; details: string[] }> = [];
-  for (const dep of dependents) {
-    if (!dep.source) continue;
-    // The SAME checks the publish door runs (refs, SQL dry run, chart bindings
-    // against query columns) — so "which dependents broke" is answered by the
-    // rule that admitted them.
-    const checked = await checkDocumentData(dep.source, load);
-    if (!checked.ok) warnings.push({ id: dep.id, title: dep.title, details: checked.details });
-  }
-  return warnings;
 }
 
 /**

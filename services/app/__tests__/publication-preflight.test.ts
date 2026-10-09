@@ -25,3 +25,14 @@ it('preflights the prepared operation dependencies without archiving a version o
  await edit(request(`/api/artifacts/${row.id}/edits`,{method:'POST',token:token.token,json:documentEditBody(base,{source:row.markup.replace('Alpha','Theirs')})}),{params:Promise.resolve({id:row.id})});
  const conflict=await run();expect(conflict.status).toBe(409);expect((await conflict.json()).error).toBe('doc_changed');
 });
+it('dry-runs a create and a replace through the publish requests without writing',async()=>{
+ const token=await mintToken('replace-preflight');const db=await harness.db();
+ const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));const row=await created.json();
+ const fresh=await preflight(request('/api/artifacts/preflight',{method:'POST',token:token.token,json:{input:{markup:'<p>Draft</p>'}}}));
+ expect(fresh.status).toBe(200);expect(await fresh.json()).toMatchObject({valid:true,dry_run:true,format:'markup',planned:{objects:0},commit_checks:['authorization','quota','references','observed_state']});
+ const replaced=await preflight(request('/api/artifacts/preflight',{method:'POST',token:token.token,json:{id:row.id,mode:'replace',input:{title:'Renamed',dataset:[{n:2}],expectedVersion:row.version,expectedState:row.state}}}));
+ expect(replaced.status).toBe(200);expect(await replaced.json()).toMatchObject({valid:true,dry_run:true,commit_checks:['authorization','quota','references','observed_state']});
+ expect((await db.query('SELECT id FROM artifacts')).rows).toHaveLength(1);
+ const stored=(await db.query<{version:number;title:string|null}>('SELECT version,title FROM artifacts WHERE id=$1',[row.id])).rows[0];
+ expect(stored.version).toBe(row.version);expect(stored.title).not.toBe('Renamed');
+});

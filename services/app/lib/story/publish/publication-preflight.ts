@@ -1,11 +1,12 @@
 /** Read-only validation against real artifact identities and existing permissions. */
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
-import {updateMetadataFromBody} from './metadata-wire';
-import {createArtifactFromBody,replaceArtifactWithBody,respondToEdit} from './wire';
-import { applyEditFor, getArtifactFor, getOwnedArtifactFor } from './store';
-import { findDependentsFor } from './dataflow';
-import { type TokenActor } from './access';
-import {json,baseUrl} from '../http/http';
+import {updateMetadataFromBody} from '@/lib/artifacts/metadata-wire';
+import {respondToEdit} from '@/lib/artifacts/wire';
+import {createArtifactFromBody,replaceArtifactWithBody} from './requests';
+import { applyEditFor, getArtifactFor, getOwnedArtifactFor } from '@/lib/artifacts/store';
+import { findDependentsFor } from '@/lib/artifacts/dataflow';
+import { type TokenActor } from '@/lib/artifacts/access';
+import {json,baseUrl} from '@/lib/http/http';
 export async function preflightPublication(request:Request,actor:TokenActor,body:Record<string,unknown>):Promise<Response>{
  const input=body.input;
  if(!input||typeof input!=='object'||Array.isArray(input))return json({error:'invalid_preflight',hint:'Send {input:{...publication fields},id?:artifact id}.'},400);
