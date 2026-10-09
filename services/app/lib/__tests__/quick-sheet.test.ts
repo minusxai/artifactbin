@@ -91,7 +91,7 @@ describe('the installed short skill',()=>{
  });
  it('teaches responsive containers, static JSX and appropriate chart primitives through the example',()=>{
   for(const term of ['@2xl:','phone width','static JSX','className','<Helmet>','CDN','custom CSS lives here','never hand-rolled <svg>'])expect(sheet).toContain(term);
-  // The example being inlined verbatim is skill-brief.test.ts's assertion — it pins
+  // The example being inlined verbatim is agent-starter-consistency.test.ts's assertion — it pins
   // the surrounding ```jsx fence too.
  });
  it('points to data, comments, history and recovery without another network reference',()=>{

@@ -5,15 +5,16 @@ import { describe, expect, it } from 'vitest';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract } from '@/lib/serving';
-import { existingPaste } from '@/lib/serving';
-import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
+import { agentBlurb, existingPaste } from '@/lib/serving';
+import { DEFAULT_SERVER } from '@artifactbin/contracts';
+import { afbinInstallCommand, afbinWindowsInstallCommand, gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
 import { publicGuideText, llmsText } from '@/lib/serving/agent-references.server';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
 import { renderSkill } from '@/lib/skills/render';
-import { agentDiscovery } from '@/lib/compiled-page/agent-discovery';
+import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/compiled-page/agent-discovery';
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
-import { renderTree, skillTree } from '@/lib/skills';
+import { renderTree, skillExample, skillTree } from '@/lib/skills';
 import { buildQuickSheet } from '@/test/helpers/skill-docs';
 import { createUser, mintToken } from '@/lib/accounts';
 import { POST as createCommentRoute, GET as listCommentsRoute } from '@/app/api/artifacts/[id]/annotations/route';
@@ -192,6 +193,100 @@ describe('what the brief and the contract teach next', () => {
   });
 });
 
+
+/**
+ * The brief (`skills/artifactbin/SKILL.md`) is the ONE file a harness reads on its own: its description is
+ * always in context, its body loads on trigger, and the references load only when the body sends the agent
+ * there. So the description must be the trigger, the body must carry the example verbatim, and both must fit
+ * the caps. The same folder holds `llms.txt`, whose first line is the blurb the discovery meta tag repeats.
+ * The single npm setup line on every surface is case (b) above.
+ */
+describe('the brief, llms.txt and the discovery head (merged from skill-brief.test.ts)', () => {
+  const PUBLIC = 'https://artifactbin.dev';
+  const brief = skillTree().get('artifactbin/SKILL.md')!;
+  const sheet = buildQuickSheet(PUBLIC);
+
+  it('its description is the trigger: links, the CLI and the tasks, within the harness cap', () => {
+    expect(brief.description.length).toBeLessThanOrEqual(1024);
+    for (const trigger of ['artifactbin.dev', 'afbin', 'publish', 'edit', 'comment', 'query', 'export', 'dashboard', 'deck', 'dataset']) {
+      expect(brief.description).toContain(trigger);
+    }
+    expect(brief.description).toMatch(/^Required for every artifactbin task/);
+  });
+
+  it('opens with what artifactbin and an artifact are, then the CLI loop, then the example, then the references', () => {
+    const at = (s: string) => { const i = sheet.indexOf(s); expect(i, s).toBeGreaterThanOrEqual(0); return i; };
+    const order = [at('Publish editable `.jsx`'), at('YAML metadata'), at('afbin pull'), at('## Example'), at('```jsx'), at('## Read next'), at('references/design.md')];
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it('inlines example.jsx verbatim inside its jsx fence', () => {
+    const example = skillExample();
+    expect(example).toMatch(/^---\n/);
+    expect(sheet).toContain('```jsx\n' + example.trimEnd() + '\n```');
+    expect(sheet).not.toContain('[[');
+  });
+
+  it('the example teaches the rules the prose no longer repeats', () => {
+    const example = skillExample();
+    for (const rule of ['static JSX', 'className', 'custom CSS lives here', '<Helmet>', '<Import name="sales"', 'sales.rows', 'ref:<id>', '$region', '"$monthly"', 'persistent id', 'never hand-rolled <svg>', '@2xl:', 'edit_id', 'visibility']) {
+      expect(example, rule).toContain(rule);
+    }
+  });
+
+  it('llms.txt opens with the blurb, and the meta tag names npm afbin, Windows and email HTTP help, under 150 characters', () => {
+    expect(llmsText(PUBLIC).split('\n')[0]).toBe(agentBlurb());
+    const help = agentDiscovery(PUBLIC);
+    expect(help.url).toBe(`${PUBLIC}/llms.txt`);
+    expect(help.instruction).toBe('afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.');
+    expect(help.instruction.length).toBeLessThanOrEqual(150);
+    // The blurb is still line 1 of the one-pager, still used elsewhere; the meta no longer repeats it.
+    expect(help.instruction).not.toContain(agentBlurb());
+  });
+
+  it('llms.txt links the one setup guide and the CLI without a second installer, on any spelling of the base', () => {
+    const text = llmsText(PUBLIC);
+    for (const line of [`${PUBLIC}/getting-started.md`, `${PUBLIC}/getting-started`, 'afbin help', `${PUBLIC}/a/<id>`, `${PUBLIC}/@<user>/<id>-<slug>`, 'afbin preview report.jsx', 'afbin help http-api', 'skill']) {
+      expect(text, line).toContain(line);
+    }
+    expect(text).not.toContain('[[');
+    expect(text).not.toContain('@afbin/cli@');
+    const guide = gettingStartedMarkdown(PUBLIC);
+    expect(guide).toContain(afbinInstallCommand(PUBLIC));
+    expect(guide).toContain(afbinWindowsInstallCommand(PUBLIC));
+    expect(guide).toContain('artifactbin skill');
+    // Case (b) pins the one npm line on the local base; the public base gets its own installer line.
+    expect(guide.split('npx --yes @afbin/cli@').length - 1).toBe(1);
+    for (const [, command] of guide.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command).toBe('setup');
+    // `afbin setup`, /raw, MCP and /docs/ are retired-surfaces.test.ts's row for the one-pager.
+    expect(llmsText(`${PUBLIC}/`)).toBe(text);
+  });
+
+  /** PUSH VALIDATES: the Getting started edit loop must not insert a redundant validate command before publishing. */
+  it('its command line ends at push, because push validates — no separate validate step', () => {
+    const edit = gettingStarted(DEFAULT_SERVER).sections.find(section => section.id === 'edit')!;
+    expect(edit).toBeDefined();
+    expect(edit.blocks.filter(block => block.kind === 'command').map(block => block.text)).toEqual([
+      "afbin pull 'ARTIFACT_URL' --output artifact.jsx", 'afbin preview artifact.jsx', 'afbin push artifact.jsx',
+    ]);
+    expect(edit.blocks.map(block => block.text).join('\n')).toContain('Push validates the file before publishing.');
+  });
+
+  it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
+    expect(AGENT_HELP_TITLE).toBe('Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API');
+    expect(agentDiscoveryHead(agentDiscovery('https://x.test/'))).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
+  });
+
+  it.each(['https://docs.example', 'http://127.0.0.1:5001/'])('npm setup selects self-hosted origins on Unix and Windows: %s', (base) => {
+    const host = base.replace(/\/$/, '');
+    expect(afbinInstallCommand(base)).toBe(`curl -fsSL '${host}/chat/install.sh' | sh`);
+    expect(afbinWindowsInstallCommand(base)).toBe(`Invoke-RestMethod '${host}/chat/install.ps1' | Invoke-Expression`);
+  });
+  it.each([DEFAULT_SERVER, `${DEFAULT_SERVER}/`])('npm setup keeps the public command simple: %s', (base) => {
+    expect(afbinInstallCommand(base)).toBe(`curl -fsSL '${DEFAULT_SERVER}/chat/install.sh' | sh`);
+    expect(afbinWindowsInstallCommand(base)).toBe(`Invoke-RestMethod '${DEFAULT_SERVER}/chat/install.ps1' | Invoke-Expression`);
+  });
+});
 
 describe('public HTTP authoring references', () => {
   it('renders the existing reference sources with working public links and no template markers', () => {

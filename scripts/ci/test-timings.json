@@ -346,7 +346,6 @@
    "services/app/lib/__tests__/shared-request.test.ts": 4,
    "services/app/lib/__tests__/shelf.test.ts": 7,
    "services/app/lib/__tests__/shutdown.test.ts": 80,
-   "services/app/lib/__tests__/skill-brief.test.ts": 10,
    "services/app/lib/__tests__/skill-tree.test.ts": 148,
    "services/app/lib/__tests__/story-asset-headers.test.ts": 50,
    "services/app/lib/__tests__/urls.test.ts": 9,
