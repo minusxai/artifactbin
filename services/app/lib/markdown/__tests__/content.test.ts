@@ -4,7 +4,7 @@ import { validateMarkupStructure } from '@/lib/document/local-validation';
 import { markdownContent, markdownSource } from '../content';
 import { generate } from '@/lib/compiled-page/compiler';
 import { discoverOutline } from '@/lib/story-runtime/outline';
-import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
+import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { displayTitle } from '@/lib/document/title';
 
 describe('Markdown source contract', () => {

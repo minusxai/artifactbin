@@ -8,8 +8,8 @@ vi.mock('../parse',async(original)=>{
 const {parseJsxShared,reparse}=await import('../parse-shared');
 const {parseJsx}=await import('../parse');
 const {sourceChanges}=await import('../../document/source-changes');
-const {sourceEdits}=await import('../../editor-v2/source-edits');
-const {SourceHistory}=await import('../../editor-v2/history');
+const {sourceEdits}=await import('../../editor-engine/source-edits');
+const {SourceHistory}=await import('../../editor-engine/history');
 
 const table=(n:number)=>`<table><tbody>${Array.from({length:40},(_,r)=>`<tr><td>t${n} r${r}</td><td>${r*n}</td></tr>`).join('')}</tbody></table>`;
 const before=`<div>\n<p id="first">First</p>\n<p id="second">Second paragraph</p>\n${Array.from({length:10},(_,n)=>table(n)).join('\n')}\n</div>`;

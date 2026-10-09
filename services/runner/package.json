@@ -5,7 +5,10 @@
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts",
-    "./local": "./src/local.ts"
+    "./local": "./src/local.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./scheduler": "./src/scheduler.ts",
+    "./schema": "./src/schema.ts"
   },
   "dependencies": {
     "@artifactbin/contracts": "*",

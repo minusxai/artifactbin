@@ -1,8 +1,8 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 /**
- * THE EDITOR ENGINE, end to end — the one editor there is (was gate-editor-v2).
+ * THE EDITOR ENGINE, end to end — the one editor there is.
  *
- * `services/app/lib/editor-v2` is the live engine: InPlaceEditor and the story
+ * `services/app/lib/editor-engine` is the live engine: InPlaceEditor and the story
  * runtime's edit session import it, so what this gate drives in a real browser
  * is what a reader gets when they press Edit. Sections 1-3 are the engine's own
  * acceptance (native input, block structure, reversible layout, composition,

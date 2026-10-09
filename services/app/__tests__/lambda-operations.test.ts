@@ -9,7 +9,7 @@ import {getArtifactById,dataflowForRow} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {setDatasetPolicy} from '@/lib/datasets/policy';
 import {lambdaOperation} from '@/lib/runner/operations';
-import {runnerIdentity} from '../../runner/src/capabilities';
+import {runnerIdentity} from '@artifactbin/runner/capabilities';
 import {defaultDatasetGrants,signActor,verifyActor} from '@artifactbin/utils';
 const harness=useAppHarness();
 it('proves default owner grants allow Lambda replay but deny anonymous declared writes',async()=>{

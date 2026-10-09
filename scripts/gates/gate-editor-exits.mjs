@@ -1,6 +1,6 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 /**
- * EVERY WAY OUT OF THE EDITOR — split out of gate-editor-v2.mjs (its section 5) so no gate shard
+ * EVERY WAY OUT OF THE EDITOR — split out of gate-editor-engine.mjs (its section 5) so no gate shard
  * waits on one two-minute script — and the way out on a PHONE (was gate-mobile's editor sections):
  * the editor bar is one non-wrapping flex row, so on a narrow screen it ran past the viewport and
  * `done`, the only way out and the thing that saves your work on the way, sat off-screen; the theme

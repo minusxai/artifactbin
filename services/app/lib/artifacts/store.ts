@@ -21,7 +21,7 @@ import { reserveCreation, completeCreation, type CreationOperation } from './cre
 import { artifactState } from './state';
 import { channelFor } from '../story/realtime/live';
 import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from '../document/annotation-edits';
-import type { AnnotationOperation } from '../editor-v2/annotation-map';
+import type { AnnotationOperation } from '../editor-engine/annotation-map';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { claimPendingDatasetSecret, resolveDatasetConnection } from '@/lib/datasets/secrets';
 import { DatasetError } from '@/lib/datasets/errors';
