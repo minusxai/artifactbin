@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scriptExportLocation } from '@/lib/story/document/script-export-location';
+import { scriptExportLocation } from '@/lib/document/script-export-location';
 
 const doc = [
   '<Helmet>',

@@ -2,7 +2,7 @@
  * remain the same DOM nodes and keep their runtime; saved files retain the original
  * code/HTML pair. This never compiles or executes author source. */
 import { parseJsx, serializeJsx, type JsxNode, type JsxElement } from '@/lib/jsx';
-import { storyBodyFor } from '@/lib/story/document/body';
+import { storyBodyFor } from '@/lib/document/body';
 import { rawBuildProps } from '@/lib/story-ui/interpreter-primitives';
 
 const identity = (node: JsxElement) => node.attributes.find((a) => a.name === 'id')?.value;

@@ -1,4 +1,4 @@
-import { runtimeId } from '@/lib/story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import {CaptureError, type CaptureRect, type CaptureSession, type CaptureStage} from './contract';
 
 interface CaptureTrack extends MediaStreamTrack {

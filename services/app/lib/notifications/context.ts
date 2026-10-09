@@ -2,7 +2,7 @@
 import {createHash} from 'node:crypto';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import type {CompiledDataflow,CompiledNotify} from '@/lib/dataflow';
-import {parseCompiledDataflow} from '../story/data/parsed-artifact-metadata';
+import {parseCompiledDataflow} from '@/lib/document/server';
 import { selectQueries, importRef } from '@/lib/dataflow/compiled-flow';
 import {NotificationExecutionError} from './errors';
 function canonical(value:unknown):unknown {

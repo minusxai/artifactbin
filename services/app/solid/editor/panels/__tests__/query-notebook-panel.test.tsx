@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { screen, within } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import QueryNotebookPanel from '../QueryNotebookPanel';
-import type { QueryCell } from '@/lib/story/data/query-notebook';
+import type { QueryCell } from '@/lib/document/query-notebook';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 
 const cell = (over: Partial<QueryCell> = {}): QueryCell => ({

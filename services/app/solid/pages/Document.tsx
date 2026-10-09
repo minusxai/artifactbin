@@ -5,7 +5,7 @@ import { createEffect, createMemo, createSignal, lazy, on, onCleanup, onMount, S
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
-import { displayTitle } from '@/lib/story/document/title';
+import { displayTitle } from '@/lib/document/title';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared/prepared-runtime';
@@ -20,7 +20,7 @@ import type { AnnotationWire } from '@/lib/annotations/store';
 import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/artifacts/share-roles';
 import { DocumentActions } from '../document/DocumentActions';
 import { CspConsentBar } from '../document/CspConsentBar';
-import type { CspRequest } from '@/lib/story/document/csp-extensions';
+import type { CspRequest } from '@/lib/document/csp-extensions';
 import { AnnotationLayer } from '../document/AnnotationLayer';
 import { SelectionActions } from '../document/SelectionActions';
 import { ForkConfirm } from '../document/ForkArtifact';

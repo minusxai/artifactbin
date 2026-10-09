@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import {createSignal,createEffect,onCleanup,Show,type JSX} from 'solid-js';
 import type {ProgramDefinition,RunSnapshot} from '@artifactbin/contracts';
-import {runtimeId as newRequestId} from '@/lib/story-runtime/runtime-id';
+import {runtimeId as newRequestId} from '@artifactbin/utils/runtime-id';
 import {pageDataChanged} from '@/solid/lib/page-data-events';
 import {apiRequest} from '../lib/api';
 import {runFailureMessage} from '../lib/run-failure-message';

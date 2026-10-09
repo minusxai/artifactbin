@@ -1,7 +1,7 @@
 /** Authenticated dataset attachment transport shared by page scripts and controls. */
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { ImageUploadContext } from './store';
-import { runtimeId } from './runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 
 const keys = new WeakMap<ImageUploadContext, WeakMap<File, Map<string, string>>>();
 

@@ -1,6 +1,6 @@
 import {isProgramFile,programFileDefinition} from './program-file';
 import {basename,extname} from 'node:path';
-import {assetFormatOf,fileContentType} from '../../app/lib/story/assets/file-types';
+import {assetFormatOf,fileContentType} from '../../app/lib/document/file-types';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {datasetFileRows,isDatasetFile} from './dataset-file';
 import {CliError} from './commands';

@@ -16,7 +16,7 @@ import {serializeJsx} from '../../../app/lib/jsx';
 import type {StoryController} from '../../../app/lib/story-runtime/contract';
 import {STORY_ANNOTATIONS_MESSAGE,STORY_EDIT_MODE_MESSAGE,STORY_SELECTION_ACTIONS_MESSAGE,STORY_SELECTION_ACTION_MESSAGE,STORY_SELECT_MESSAGE,isEditParentMessage,type StoryDocumentUpdate} from '../../../app/lib/story-runtime/contract';
 import {isStoryDocumentUpdate} from '../../../app/lib/story-runtime/document-update';
-import {runtimeId} from '../../../app/lib/story-runtime/runtime-id';
+import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {RuntimeChannel} from '../../../app/lib/story-runtime/pristine';
 import type {FrameEditSession} from '../../../app/lib/story-runtime/edit/session';
 import type {FrameSelectionActions} from '../../../app/lib/story-runtime/edit/selection-actions';
@@ -207,7 +207,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
      const nextRoot=next.querySelector<HTMLElement>('[data-mx-inline-story]');
      if(!nextRoot)throw new Error('draft preview carried no story');
      const baseline=lastDraftSource??sourceRef.current;
-     const {storyUpdateParts}=await import('../../../app/lib/story/document/update-parts');
+     const {storyUpdateParts}=await import('../../../app/lib/document/update-parts');
      const before=baseline?storyUpdateParts(baseline)?.nodes??nodes:nodes;
      const after=storyUpdateParts(source)?.nodes??command.nodes;
      pendingDraft={document:next,root:nextRoot,sheets:documentSheets(next),nodes:command.nodes,source,

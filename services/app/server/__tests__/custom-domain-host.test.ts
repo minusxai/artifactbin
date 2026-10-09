@@ -31,7 +31,7 @@ import { mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { objectKey, objectStore } from '@/lib/object-store';
-import { urlHash } from '@/lib/story/assets/asset-url';
+import { urlHash } from '@/lib/document/asset-url';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
 import { createAppServer } from '../app';
 

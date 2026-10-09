@@ -1,9 +1,9 @@
-import {isPersonMentionHref} from '../../annotations/person-mentions';
-import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../../validation/atlas-schemas';
-import {parseJsx} from '../../jsx/parse';
-import {canonicalText} from '../annotations/annotation-range';
-import type {JsxNode} from '../../jsx/types';
-import {parseAnnotationOperations} from '../annotations/annotation-edits';
+import {isPersonMentionHref} from './person-mentions';
+import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
+import {parseJsx} from '../jsx/parse';
+import {canonicalText} from './annotation-range';
+import type {JsxNode} from '../jsx/types';
+import {parseAnnotationOperations} from './annotation-edits';
 /** Trusted authoring boundary shared by browser and CLI. Pure and browser-safe:
  * validation/normalization happens before submission, not under a database lock.
  * The server independently retains authorization and atomic dependency checks. */
@@ -13,15 +13,15 @@ import {graphFromSource} from './document-graph-source';
 import {prepareGraphPatch} from './document-graph-patch';
 import {graphValidationScope} from './document-graph-scope';
 import {applyOperationsToNodes} from './document-operation';
-import {validateMarkupStructure} from '../document/local-validation';
-import {stampNodeIds,nodeIndex} from '../document/node-ids';
-import {canonicalizeMarkup} from '../document/canonical-source';
-import {repairJsxSource} from '../../jsx/repair';
-import {extractClassCandidates} from '../../data/story/story-css';
+import {validateMarkupStructure} from './local-validation';
+import {stampNodeIds,nodeIndex} from './node-ids';
+import {canonicalizeMarkup} from './canonical-source';
+import {repairJsxSource} from '../jsx/repair';
+import {extractClassCandidates} from '../data/story/story-css';
 export interface ClientDocumentSnapshot {document:DocumentGraph;version:number;meta:Record<string,unknown>;title?:string|null;description?:string|null}
 export interface ClientDocumentChange {source?:string;operations?:readonly DocumentOperation[];metadata?:DocumentUpdate['metadata'];whole?:boolean;annotationOps?:DocumentUpdate['annotationOps']}
 /** The whole preparation, pure and synchronous: the update, and the source whose authoring context it needs.
- * The browser runs it in a worker (document/document-prepare.worker), the CLI and tests in place. */
+ * The browser runs it in a worker (./document-prepare.worker), the CLI and tests in place. */
 export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientDocumentChange):{update:DocumentUpdate;context?:string} {
  const before=graphSource(base.document);
  let source=change.operations?graphSource(createDocumentGraph(applyOperationsToNodes(graphNodes(base.document),change.operations),base.version)):change.source??before;

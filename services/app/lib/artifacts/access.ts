@@ -1,5 +1,5 @@
 import { getArtifactById } from './store';
-import type { StoredDocument } from '../story/document/index';
+import type { StoredDocument } from '../document';
 import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from '../datasets/policy/grants';
 import { hasDocumentEditorAccess, type VerifiedAccount } from './document-policy';
 import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/accounts/user-kinds';

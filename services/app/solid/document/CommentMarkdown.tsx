@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { For, type JSX } from 'solid-js';
 import { parseMarkdownLite, plainText, type MdInline, type MdNode } from '@/lib/annotations/markdown-lite';
-import { isPersonMentionHref } from '@/lib/annotations/person-mentions';
+import { isPersonMentionHref } from '@/lib/document/person-mentions';
 import { isSessionMentionHref } from '@/lib/annotations/session-mentions';
 import { Tooltip } from '../components/Tooltip';
 import { agentNameColor } from '../lib/agent-identity';

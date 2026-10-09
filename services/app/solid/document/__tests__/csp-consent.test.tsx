@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CspConsentBar, cspAskSentence } from '../CspConsentBar';
-import { EMPTY_CSP_EXTENSIONS, type CspRequest } from '@/lib/story/document/csp-extensions';
+import { EMPTY_CSP_EXTENSIONS, type CspRequest } from '@/lib/document/csp-extensions';
 afterEach(() => vi.unstubAllGlobals());
 
 const DECLARED = { ...EMPTY_CSP_EXTENSIONS, connect: ['https://api.open-meteo.com', 'https://mine.example.com'], script: ['https://cdn.plot.ly'] };

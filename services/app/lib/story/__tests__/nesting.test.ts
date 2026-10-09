@@ -1,6 +1,6 @@
 /**
  * `fixHtmlNesting` — the AST half of "stored markup must survive being parsed
- * back". See lib/story/document/nesting.ts for the failure it prevents; the proof that
+ * back". See lib/document/nesting.ts for the failure it prevents; the proof that
  * it actually prevents it, over a real served document and a real HTML parser,
  * is nesting-parses-back.test.ts.
  *
@@ -11,9 +11,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
-import { fixHtmlNesting } from '@/lib/story/document/nesting';
+import { fixHtmlNesting } from '@/lib/document/nesting';
 import { canonicalizeMarkup } from '@/lib/story/document/jsx-tier';
-import { stampNodeIds } from '@/lib/story/document/node-ids';
+import { stampNodeIds } from '@/lib/document/node-ids';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const fix = (src: string): string => {

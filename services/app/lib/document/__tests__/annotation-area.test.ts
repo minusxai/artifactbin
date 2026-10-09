@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   areaTarget, boxFromRects, isAreaRange, parseAnnotationBox, parseAnnotationRange, rectFromBox,
-} from '../annotations/annotation-range';
+} from '../annotation-range';
 
 const SECTION = { x: 20, y: 100, width: 400, height: 200 };
 

@@ -1,10 +1,10 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import type {DocumentGraph} from '@artifactbin/contracts';
-import {createDocumentGraph,graphSource} from '../graph/document-graph';
-import {prepareClientDocumentUpdate} from '../graph/document-update-client';
-import {applyGraphPatch} from '../graph/document-graph-patch';
-import {createDocumentPreparer,type PrepareWorker} from '../document/document-authoring-client';
-import type {PrepareRequest,PrepareResponse,WorkerRequest} from '../document/document-prepare-protocol';
+import {createDocumentGraph,graphSource} from '../document-graph';
+import {prepareClientDocumentUpdate} from '../document-update-client';
+import {applyGraphPatch} from '../document-graph-patch';
+import {createDocumentPreparer,type PrepareWorker} from '../document-authoring-client';
+import type {PrepareRequest,PrepareResponse,WorkerRequest} from '../document-prepare-protocol';
 
 const source='<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>';
 const workerScope=globalThis as unknown as {onmessage:((event:MessageEvent<PrepareRequest>)=>void)|null;postMessage:(message:unknown)=>void};
@@ -18,7 +18,7 @@ async function inProcessWorker(sent:WorkerRequest[]):Promise<PrepareWorker> {
   queueMicrotask(()=>workerScope.onmessage!({data:copy} as unknown as MessageEvent<PrepareRequest>));
  }};
  workerScope.postMessage=(reply:unknown)=>{const copy=structuredClone(reply) as PrepareResponse;queueMicrotask(()=>worker.onmessage?.({data:copy} as MessageEvent<PrepareResponse>));};
- await import('../document/document-prepare.worker');
+ await import('../document-prepare.worker');
  return worker;
 }
 
@@ -83,7 +83,7 @@ it('advances the graph by an accepted patch in the worker: only the patch crosse
 });
 
 it('sends a large graph in parts, never whole, and prepares exactly as the page would',async()=>{
- const {GRAPH_PART}=await import('../document/document-authoring-client');
+ const {GRAPH_PART}=await import('../document-authoring-client');
  const sent:WorkerRequest[]=[];const worker=await inProcessWorker(sent);
  const prepare=createDocumentPreparer(()=>worker);
  const big=`<main id="root">${Array.from({length:GRAPH_PART+150},(_,i)=>`<p id="p${i}">Paragraph ${i} <b id="b${i}">bold</b></p>`).join('')}</main>`;
@@ -103,7 +103,7 @@ it('sends a large graph in parts, never whole, and prepares exactly as the page 
 });
 
 it('warms the worker ahead of the first save: the graph crosses and one preparation runs, so the save sends only its change',async()=>{
- const {GRAPH_PART}=await import('../document/document-authoring-client');
+ const {GRAPH_PART}=await import('../document-authoring-client');
  const sent:WorkerRequest[]=[];const worker=await inProcessWorker(sent);
  const prepare=createDocumentPreparer(()=>worker);
  const big=`<main id="root">${Array.from({length:GRAPH_PART+150},(_,i)=>`<p id="p${i}">Paragraph ${i}</p>`).join('')}</main>`;

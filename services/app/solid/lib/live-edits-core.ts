@@ -18,10 +18,10 @@
  * props proxy. The `initial*` fields are read once, at creation.
  */
 import type { DocumentGraph } from '@artifactbin/contracts';
-import { advanceBrowserDocument, prepareBrowserDocumentUpdate, preparesOffThread, warmBrowserPreparer } from '@/lib/story/document/document-authoring-client';
+import { advanceBrowserDocument, prepareBrowserDocumentUpdate, preparesOffThread, warmBrowserPreparer } from '@/lib/document/document-authoring-client';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
-import { rebaseEditBatch } from '@/lib/story/document/edit-batch';
+import { rebaseEditBatch } from '@/lib/document/edit-batch';
 import { sourceChanges } from '@/lib/editor-v2/history';
 import { sourceEdits } from '@/lib/editor-v2/source-edits';
 

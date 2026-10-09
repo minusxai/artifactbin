@@ -340,7 +340,7 @@ export const REF_ATTRS: {
      * reference (declared, of the right kind, or a named refusal at publish);
      * what differs is what happens with the value, which is a URL rather than a
      * number: whatever the browser ends up with is mapped to our own copy
-     * (lib/story/assets/asset-url runtimeAssetUrl) and imported on first view by the
+     * (lib/document/asset-url runtimeAssetUrl) and imported on first view by the
      * document's own asset endpoint, because publish cannot see a URL that does
      * not exist until a reader picks it.
      */

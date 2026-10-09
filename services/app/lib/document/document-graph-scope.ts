@@ -1,8 +1,8 @@
 /** Select the existing validator's input and the database dependencies consumed
  * by that input. This is planning data, never a publication certificate. */
-import type {JsxNode} from '../../jsx/types';
-import {serializeJsx} from '../../jsx/serialize';
-import {decodeDocumentNodes} from '../document/document-node-codec';
+import type {JsxNode} from '../jsx/types';
+import {serializeJsx} from '../jsx/serialize';
+import {decodeDocumentNodes} from './document-node-codec';
 import {GRAPH_ROOT,graphAncestors,graphNodes,type DocumentGraph,type GraphAstNode} from './document-graph';
 import {prepareGraphPatch,graphKeySelector,type GraphFacet} from './document-graph-patch';
 

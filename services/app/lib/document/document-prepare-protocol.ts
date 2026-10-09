@@ -1,5 +1,5 @@
 import type {DocumentGraph,DocumentUpdate,GraphPatch} from '@artifactbin/contracts';
-import type {ClientDocumentChange,ClientDocumentSnapshot} from '../graph/document-update-client';
+import type {ClientDocumentChange,ClientDocumentSnapshot} from './document-update-client';
 
 /**
  * One save preparation for the worker: the graph rides along only when it changed since the last request — whole

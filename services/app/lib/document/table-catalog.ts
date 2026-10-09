@@ -6,7 +6,7 @@
  * from source (+ state), never fetched — the shelf is the document itself.
  */
 import { parseJsxShared } from '@/lib/jsx/parse-shared';
-import { splitHelmet } from '../document/helmet';
+import { splitHelmet } from './helmet';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 import type { DataflowState } from '@/lib/dataflow/dataflow';
 

@@ -2,7 +2,7 @@
 import {createSignal,Show,onCleanup,type JSX} from 'solid-js';
 import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_MAX_BYTES,previewWorkspaceUrl,type PreviewConnectMessage} from '@artifactbin/contracts';
 import {PageBar,DocumentTitle} from './PageBar';
-import {runtimeId} from '../../lib/story-runtime/runtime-id';
+import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {FormPage,FORM_INPUT,FORM_PRIMARY_BUTTON,FORM_SECONDARY_BUTTON} from './FormControls';
 interface ConnectOffer {html:string;filename:string}
 interface ConnectInspection {title:string|null;comments:number;target:string;kind?:'local'|'update'|'copy';requiresAuth?:boolean;reason?:string}

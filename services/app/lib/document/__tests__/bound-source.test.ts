@@ -14,7 +14,7 @@ import {
   carriesRef, collectRefNameUses, isTemplateRefPosition, REF_ATTRS, resolveRefTemplate, templateRefNames,
   validateDataflow, type Dataflow, type Scalar,
 } from '@/lib/dataflow/dataflow';
-import { assetUrlFor, runtimeAssetUrl } from '@/lib/story/assets/asset-url';
+import { assetUrlFor, runtimeAssetUrl } from '@/lib/document/asset-url';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {

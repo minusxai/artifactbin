@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import {parseJsx} from '../../jsx/parse';
 import {serializeJsx} from '../../jsx/serialize';
-import {createDocumentGraph,graphNodes,graphSource,graphNodeAt,graphIntegrity} from '../graph/document-graph';
+import {createDocumentGraph,graphNodes,graphSource,graphNodeAt,graphIntegrity} from '../document-graph';
 const fixtures=[
  '<section id="root"><p id="a">A &amp; β 👩</p><p id="b">B</p></section>',
  '<><p id="a">First</p><img id="b" src="ref:image" /></>',

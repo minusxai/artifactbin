@@ -16,7 +16,7 @@ import { createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { cspExtensionsFor, cspRequestFor, TRUST_SESSION_COOKIE } from '@/lib/trust/document-trust';
-import { EMPTY_CSP_EXTENSIONS } from '@/lib/story/document/csp-extensions';
+import { EMPTY_CSP_EXTENSIONS } from '@/lib/document/csp-extensions';
 import type { Actor } from '@artifactbin/contracts';
 
 const harness = useAppHarness();

@@ -2,11 +2,11 @@
  * only stored JSONB↔public JSX conversion lives here. Never issue an
  * out-of-transaction query: callers always supply their own Queryable.
  */
-import { createDocumentGraph, type DocumentGraph } from '../story/graph/document-graph';
+import { createDocumentGraph, type DocumentGraph } from '../document/document-graph';
 import {currentStoryCss,storyCssCompileVersion} from '../data/story/story-css.server';
-import {finalizeArtifactMetadata} from '../story/data/parsed-artifact-metadata';
+import {finalizeArtifactMetadata} from '@/lib/document/server';
 import type {Queryable} from '@artifactbin/contracts';
-import { decodeDocument } from '../story/document/document-codec';
+import { decodeDocument } from '../document/document-codec';
 interface SourceRow {source?:string|null;document?:DocumentGraph|null}
 /** A markup source is stored as its graph alone; `preserveSource` keeps bytes a validated publish did not produce (a fork, an archive) exactly. */
 export function sourceStorage(format:string,source:string|null,certified=false,version=1):{source:string|null;document:string|null} {

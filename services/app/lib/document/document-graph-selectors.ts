@@ -3,7 +3,7 @@
  * SQL compares selected identity sets; revisions guard the selected node data.
  * SQL identifiers are conservative: extra dependencies only reject concurrency.
  */
-import type {JsxNode} from '../../jsx/types';
+import type {JsxNode} from '../jsx/types';
 import {collectRefNameUses} from '@/lib/dataflow/dataflow';
 export function graphSelectors(node:JsxNode):string[] {
  const selectors=new Set<string>();

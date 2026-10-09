@@ -1,5 +1,5 @@
 /** Local comments retain the same durable node and selection range as hosted annotations. */
-import type {AnnotationRange} from '../../../app/lib/story/annotations/annotation-range';
+import type {AnnotationRange} from '../../../app/lib/document/annotation-range';
 
 export interface PreviewComment {
  id:string;

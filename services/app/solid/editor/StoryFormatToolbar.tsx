@@ -49,7 +49,7 @@ import {
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { selectionToolbarPlan } from '@/lib/story/reader/selection-toolbar';
 import type { StoryEditSelection } from '@/lib/story-runtime/contract';
-import type { ComposableFormatEdit } from '@/lib/story/document/edit-compose';
+import type { ComposableFormatEdit } from '@/lib/document/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
 import { Tooltip } from '@/solid/components/Tooltip';
 import { nodeName } from '@/lib/story-ui/node-names';

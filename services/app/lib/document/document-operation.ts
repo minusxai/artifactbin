@@ -1,9 +1,9 @@
 /** Pure candidate construction, not publication admission. Every result must pass
  * the complete publisher before a server-owned certificate can reach SQL. */
 import {MAX_DOCUMENT_OPERATIONS,type DocumentOperation,type DocumentPath,type DocumentValue} from '@artifactbin/contracts';
-import {parseJsx} from '../../jsx/parse';
-import {serializeJsx} from '../../jsx/serialize';
-import type {JsxNode,JsxElement} from '../../jsx/types';
+import {parseJsx} from '../jsx/parse';
+import {serializeJsx} from '../jsx/serialize';
+import type {JsxNode,JsxElement} from '../jsx/types';
 
 export class DocumentOperationError extends Error {
  constructor(message:string,readonly operationIndex:number){super(message);this.name='DocumentOperationError';}

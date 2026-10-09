@@ -7,7 +7,7 @@
  * querying a document that no longer exists.
  */
 import { describe, expect, it } from 'vitest';
-import { storyUpdateParts } from '../document/update-parts';
+import { storyUpdateParts } from '../update-parts';
 
 const doc = (helmet: string, body: string) => `<Helmet>${helmet}</Helmet>${body}`;
 const VALUE = '<Value name="region" type="string" />';
@@ -99,7 +99,7 @@ describe('storyUpdateParts', () => {
 
 describe('the shared parts', () => {
   it('equal the parts of a fresh parse, before and after a typed change, and repeat for the same source', async () => {
-    const { storyUpdateParts, storyUpdatePartsShared } = await import('@/lib/story/document/update-parts');
+    const { storyUpdateParts, storyUpdatePartsShared } = await import('@/lib/document/update-parts');
     const source = '<Helmet><Query name="q">{`select 1 as a`}</Query></Helmet>\n<div id="r">\n<p id="a">Typed here</p>\n<p id="b">Then <img src="https://example.com/x.png" /></p>\n</div>';
     const typed = source.replace('Typed here', 'Typed here and more');
     const held = (url: string) => url.startsWith('https://example.com/');

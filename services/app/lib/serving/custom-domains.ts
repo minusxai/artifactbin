@@ -26,8 +26,8 @@ import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { canReadArtifact, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts/access';
-import { urlHash } from '@/lib/story/assets';
-import { collectExternalAssetUrls } from '@/lib/story/assets';
+import { urlHash } from '@/lib/document';
+import { collectExternalAssetUrls } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
 import { ownerUsername } from '@/lib/accounts/users';
@@ -459,7 +459,7 @@ export async function servesEmbeddedArtifact(ownerId: string, row: ArtifactRow):
 }
 
 /**
- * Our copy of a web image (`/assets/<sha of its url>`, lib/story/assets/asset-url)
+ * Our copy of a web image (`/assets/<sha of its url>`, lib/document/asset-url)
  * the host may serve: one of the owner's public documents names that URL —
  * the same URLs the serving path maps to our copies (webAssetsForSource).
  */

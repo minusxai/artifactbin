@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { declarationsOf } from '../document/helmet';
+import { declarationsOf } from './helmet';
 import { isEmptyDataflow, scalarMatches } from '@/lib/dataflow/dataflow';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import { compileWithLoader, type CompileResult, type SchemaLoader } from '@/lib/dataflow/compile-dataflow';
-import { sqlExtensions } from '@/lib/sql/extensions';
+import { compileWithLoader, type CompileOptions, type CompileResult, type SchemaLoader } from '@/lib/dataflow/compile-dataflow';
 
 /**
  * A MARKUP DOCUMENT'S COMPILED DATAFLOW, stored in `meta.parsedArtifact` beside
@@ -107,15 +106,16 @@ export function storedCompiledDataflow(meta: unknown, source: string): CompiledD
  * reach). A source that does not compile (publish refused it, or what it
  * imports has changed shape since) answers with the compiler's errors, which
  * every reader shows; EMPTY when it declares nothing; null when it does not
- * parse.
+ * parse. A recompile prepares <Mutation>s with the composition's SQL extensions,
+ * which the caller passes (`options.extensions`): this module never reads process state.
  */
-export async function readCompiledDataflow(meta: unknown, source: string, load: SchemaLoader): Promise<CompileResult | null> {
+export async function readCompiledDataflow(meta: unknown, source: string, load: SchemaLoader, options: CompileOptions = {}): Promise<CompileResult | null> {
   const stored = storedCompiledDataflow(meta, source);
   if (stored) return { ok: true, compiled: stored };
   const flow = declarationsOf(source);
   if (!flow) return null;
   if (isEmptyDataflow(flow)) return { ok: true, compiled: EMPTY_COMPILED_DATAFLOW };
-  return compileWithLoader(flow, load, { extensions: sqlExtensions() });
+  return compileWithLoader(flow, load, options);
 }
 
 /**

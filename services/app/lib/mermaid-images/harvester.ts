@@ -12,7 +12,7 @@ import { services } from '@/lib/platform/services';
 import { objectStore } from '@/lib/object-store';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
 import { mintExportKey } from '@/lib/serving/export-read-key';
-import { storyBodyFor } from '@/lib/story/document';
+import { storyBodyFor } from '@/lib/document';
 import { getArtifactById } from '@/lib/artifacts/store';
 import { servedRow } from '@/lib/serving/archived-version';
 import { warmPreparedPage } from '@/lib/story/prepared/prepared-page.server';

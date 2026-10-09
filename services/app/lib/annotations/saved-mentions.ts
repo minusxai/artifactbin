@@ -2,8 +2,8 @@ import {parseMarkdownLite,type MdNode,type MdInline} from './markdown-lite';
 import type {Queryable} from '@artifactbin/contracts';
 import type {ArtifactRow,RoleActor} from '@/lib/artifacts';
 import {invitePeople} from '../accounts/membership';
-import {isPersonMentionHref} from './person-mentions';
-import { nodeIndex } from '../story/document/node-ids';
+import {isPersonMentionHref} from '../document/person-mentions';
+import { nodeIndex } from '../document/node-ids';
 export async function commentMentions(tx:Queryable,row:ArtifactRow,actor:RoleActor,body:string,id:string){
  const ids:string[]=[];
  const inline=(nodes:MdInline[])=>{for(const n of nodes){if(n.kind==='link'&&isPersonMentionHref(n.href))ids.push(n.href.slice('/people/'.length));else if(n.kind==='strong'||n.kind==='em')inline(n.children);}};

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/story/document/helmet';
+import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/document/helmet';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {

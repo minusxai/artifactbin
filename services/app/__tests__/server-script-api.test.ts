@@ -11,7 +11,7 @@ import {POST as invoke} from '@/app/api/artifacts/[id]/runs/route';
 import {setServices} from '@/lib/platform/services';
 import {setLambdaProgramResolver} from '@/lib/runner';
 import {getArtifactById} from '@/lib/artifacts';
-import {prepareClientDocumentPublication} from '@/lib/story/graph/document-update-client';
+import {prepareClientDocumentPublication} from '@/lib/document/document-update-client';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
 
 useAppHarness();

@@ -13,8 +13,8 @@ import {previewAnnotations} from './preview/annotations';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE,registerLocalFiles,withLocalLock,recoverLocalFiles,migrateLocalDiscussion,saveLocalFile} from './local-workspace';
 import type {Workspace} from './workspace';
 import {digest} from './files';
-import {nodeIndex,stampNodeIds} from '../../app/lib/story/document/node-ids';
-import {canonicalQuote,canonicalText} from '../../app/lib/story/annotations/annotation-range';
+import {nodeIndex,stampNodeIds} from '../../app/lib/document/node-ids';
+import {canonicalQuote,canonicalText} from '../../app/lib/document/annotation-range';
 import type {JsxNode} from '../../app/lib/jsx';
 import {BackendRequestError} from '../../app/lib/artifact-backend/errors';
 

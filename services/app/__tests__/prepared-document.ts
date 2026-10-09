@@ -6,7 +6,7 @@ import {request} from './harness';
 import { getArtifactById, type EditInput } from '@/lib/artifacts/store';
 import { type ArtifactRow } from '@/lib/artifacts/access';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
-import {prepareClientDocumentUpdate,prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/story/graph/document-update-client';
+import {prepareClientDocumentUpdate,prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/document/document-update-client';
 export function documentEdit(row:ArtifactRow,change:ClientDocumentChange):EditInput {
  if(row.document?.kind!=='graph')throw new Error('Read the authoring snapshot before editing');
  return {baseEditId:row.edit_id,documentUpdate:prepareClientDocumentUpdate({...row,document:row.document},change)};

@@ -41,15 +41,15 @@ import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { lookupWebAssets } from '@/lib/serving/web-assets';
-import { collectExternalAssetUrls } from '../assets/external-images';
-import { storedCompiledDataflow } from '../data/parsed-artifact-metadata';
+import { collectExternalAssetUrls } from '../../document/external-images';
+import { storedCompiledDataflow } from '@/lib/document/server';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';
 import { inlineStoryCss, inlineStoryNodes } from '../styles/inline-css';
 import { styleOverrides, type StyleOverride } from '../styles/style-overrides';
 import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
-import { lazyCodeOf, type LazyCode } from '../document/lazy-code';
+import { lazyCodeOf, type LazyCode } from '../../document/lazy-code';
 import { assetsPath, mutatePath, queryPath } from '../styles/markup-csp';
 import { readUrlValues } from '@/lib/dataflow/url-values';
 import { servedResultsFor } from './served-results.server';
@@ -63,7 +63,7 @@ import { archiveSharedBuild } from '@/lib/compiled-page/shared-builds.server';
 import type { CompilerBuild, StoredCompile } from '@/lib/compiled-page/contract';
 import { MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
 import { prepareWorkers } from './prepare-workers.server';
-import { fixHtmlNesting } from '../document/nesting';
+import { fixHtmlNesting } from '../../document/nesting';
 
 /** Raise manually when older prepared pages cannot be read. */
 const PAGE_FORMAT = MIN_PAGE_FORMAT;

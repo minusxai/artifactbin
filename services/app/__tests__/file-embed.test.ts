@@ -20,7 +20,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import { assetUrlFor } from '@/lib/story/assets/asset-url';
+import { assetUrlFor } from '@/lib/document/asset-url';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { request, useAppHarness } from '@/__tests__/harness';

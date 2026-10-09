@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {createDocumentGraph} from '@/lib/story/graph/document-graph';
+import {createDocumentGraph} from '@/lib/document/document-graph';
 import {setDocumentEditorPolicy} from '@/lib/artifacts';
 import {Hono} from 'hono';
 import {createAuthHost} from '@artifactbin/auth';

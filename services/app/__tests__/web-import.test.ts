@@ -1,6 +1,6 @@
 import {documentPublicationWithResources} from './prepared-document';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
-import {prepareClientDocumentPublication} from '@/lib/story/graph/document-update-client';
+import {prepareClientDocumentPublication} from '@/lib/document/document-update-client';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Importing assets FROM THE WEB, through the real doors: ingest-and-own.
@@ -29,7 +29,7 @@ import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { assetUrlFor } from '@/lib/story/assets/asset-url';
+import { assetUrlFor } from '@/lib/document/asset-url';
 import { getDb } from '@/lib/platform';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);

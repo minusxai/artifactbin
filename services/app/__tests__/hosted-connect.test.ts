@@ -11,7 +11,7 @@ import {POST as inspect} from '@/app/connect/inspect/route';
 import {POST as apply} from '@/app/connect/import/route';
 import {GET as redirect} from '@/app/workspace/[id]/route';
 import {artifactFile} from '@/lib/offline/__tests__/fixture';
-import {prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';
+import {prepareClientDocumentUpdate} from '@/lib/document/document-update-client';
 import type {ArtifactFile} from '@/lib/offline/file-format';
 import {assembleArtifactFile} from '@/lib/offline/assemble.server';
 useAppHarness();

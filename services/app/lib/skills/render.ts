@@ -26,7 +26,7 @@ import { STORY_THEMES } from '@/lib/data/story/story-themes';
 import { STORY_TEMPLATES } from '@/lib/data/story/story-templates';
 import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
-import { MAX_CONTENT_BYTES } from '@/lib/story/document/input';
+import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
 import { COMPUTED_FIGURE_RULE, NATIVE_TABLE_AUTHORING_RULE, PHONE_AUTHORING_RULE, PROGRESSIVE_AUTHORING_RULE, URL_REPLY_RULE } from '@/lib/serving/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';

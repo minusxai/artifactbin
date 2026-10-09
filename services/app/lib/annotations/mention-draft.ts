@@ -1,4 +1,4 @@
-import {personMentions} from './person-mentions';
+import {personMentions} from '../document/person-mentions';
 import { sessionMentions } from './session-mentions';
 
 /** Keep session IDs in the wire value, while the textarea shows only @name. */

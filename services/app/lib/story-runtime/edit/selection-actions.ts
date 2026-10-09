@@ -4,7 +4,7 @@ import { withReviewState } from '../review-state';
 import { COMMENT_PRESENTATION } from '../comment-presentation';
 
 import { COMMENT_TARGET_ATTR } from '@/lib/story-ui/comment-target';
-import { isTargetRange } from '@/lib/story/annotations/annotation-range';
+import { isTargetRange } from '@/lib/document/annotation-range';
 
 /**
  * THE VIEW-MODE TEXT-SELECTION BUBBLE, inside the sandboxed document.

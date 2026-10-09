@@ -6,7 +6,7 @@ import {editorScope,type ArtifactRow,type TokenActor} from '../../artifacts/acce
 import {loadArtifactDocument} from '../../artifacts/document';
 import {getDb} from '../../platform/db';
 import {json} from '../../http/http';
-import {prepareClientDocumentPublication} from '../graph/document-update-client';
+import {prepareClientDocumentPublication} from '../../document/document-update-client';
 import {prepareDocumentAuthoringContext} from './document-authoring-context';
 
 export async function prepareDocumentSource(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{

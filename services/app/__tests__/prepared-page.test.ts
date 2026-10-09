@@ -31,7 +31,7 @@ import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { compiledPageFailures } from '@/lib/compiled-page/serve.server';
 import path from 'node:path';
-import { createDocumentGraph } from '@/lib/story/graph/document-graph';
+import { createDocumentGraph } from '@/lib/document/document-graph';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const spies = vi.hoisted(() => ({ parse: 0, css: 0, nodes: 0, render: 0 }));

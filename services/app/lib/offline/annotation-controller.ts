@@ -1,6 +1,6 @@
 /** Local comment capability over the existing compiled DOM. No transport, auth or document engine. */
 import type { JsxNode } from '@/lib/jsx';
-import { runtimeId } from '@/lib/story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import { createFrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
 import { isEditParentMessage, STORY_ANNOTATIONS_MESSAGE, STORY_SELECT_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryController, type StoryEditSelection } from '@/lib/story-runtime/contract';

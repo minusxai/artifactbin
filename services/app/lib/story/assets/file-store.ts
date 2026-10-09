@@ -6,7 +6,7 @@ import { MAX_FILE_BYTES } from '@/lib/platform/config';
 import { json } from '@/lib/http/http';
 import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
 import type { StoredContent } from '../document/input';
-import { fileContentType, FILE_EXTENSIONS } from './file-types';
+import { fileContentType, FILE_EXTENSIONS } from '../../document/file-types';
 
 interface FileMeta {
   objectKey: string;

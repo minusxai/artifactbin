@@ -9,8 +9,8 @@ import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
   EMPTY_DATAFLOW, MUTATION_TAG, collectRefNameUses, isEmptyDataflow, parseMutationDecl, validateDataflow, type Dataflow,
 } from '@/lib/dataflow/dataflow';
-import { dataflowOf, declaresLiveData, declaresMutations, splitHelmet, validateHelmet } from '@/lib/story/document/helmet';
-import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { dataflowOf, declaresLiveData, declaresMutations, splitHelmet, validateHelmet } from '@/lib/document/helmet';
+import { storyUpdateParts } from '@/lib/document/update-parts';
 
 const parse = (src: string): JsxNode[] => {
   const p = parseJsx(src);

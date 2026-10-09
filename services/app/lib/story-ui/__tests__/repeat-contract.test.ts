@@ -4,7 +4,7 @@ import { collectRefNameUses } from '@/lib/dataflow/dataflow';
 import { keyedRowsError, validRowKey } from '../repeat-identity';
 import { publishJsx } from '@/lib/story/document/jsx-tier';
 import { renderDoc } from '@/test/helpers/skill-docs';
-import { stampNodeIds } from '@/lib/story/document/node-ids';
+import { stampNodeIds } from '@/lib/document/node-ids';
 const source='<For id="orders" each={$orders} keyBy="order_id"><p id="customer">{$_row.customer}</p></For>';
 function nodes(source:string){const p=parseJsx(source);if(!p.ok)throw new Error(p.error);return p.nodes;}
 it('validates For as inert table dependency and preserves source identity through save/load',()=>{

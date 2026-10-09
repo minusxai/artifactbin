@@ -3,7 +3,7 @@
  * key bindings, node views, AST-path decorations, the guarded transaction pipeline, paste and
  * composition handling. lib/story-runtime/edit/FlowEditor.tsx adapts it with onMount + one effect.
  */
-import { runtimeId } from '@/lib/story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { DOMSerializer } from 'prosemirror-model';
 import { EditorState, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';

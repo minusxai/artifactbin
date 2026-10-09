@@ -24,7 +24,7 @@ import { COMMENT_TARGET_ATTR } from '@/lib/story-ui/comment-target';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
   canonicalQuote, findNearest, formatRel, parseRel, type AnnotationRangePart, type RelAddress, type AnnotationTextRange
-} from '@/lib/story/annotations/annotation-range';
+} from '@/lib/document/annotation-range';
 
 /**
  * The text-holding elements. A selection anchors on one of these and never on

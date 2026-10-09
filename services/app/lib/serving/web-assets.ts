@@ -7,7 +7,7 @@
  * the guard and caps every other open-web fetch in this app already goes
  * through (lib/web-ingest), made fit to read by the same optimiser every upload
  * runs (lib/images/optimise), stored content-addressed, and recorded in one row
- * per canonical URL. `lib/story/assets/asset-url` then points the SERVED document at
+ * per canonical URL. `lib/document/asset-url` then points the SERVED document at
  * `/assets/<url_hash>`, so a reader loads our copy, the document's
  * `img-src 'self'` is satisfied, and opening a document tells the upstream host
  * nothing.
@@ -29,9 +29,9 @@ import { MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_FILE_BYTES } from '@/lib/platform/c
 import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
-import { assetUrlFor, canonicalAssetUrl, urlHash } from '@/lib/story/assets/asset-url';
+import { assetUrlFor, canonicalAssetUrl, urlHash } from '@/lib/document/asset-url';
 import { docAssetImportRateLimited } from '@/lib/accounts/auth';
-import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
+import { collectExternalAssetUrls } from '@/lib/document/external-images';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { webIngestRateLimited } from '@/lib/accounts/auth';
 
@@ -287,7 +287,7 @@ export async function importForDocument(doc: DocumentAssetTarget, url: string, k
  * the url, not the bytes), which is what lets a stored document keep working
  * without a rewrite. The address is served `immutable`, so a reader who already
  * had it would keep the old picture; the row closes that: the mapping cuts a
- * `?v=` from `object_key` (lib/story/assets/asset-url), so repointing the row changes
+ * `?v=` from `object_key` (lib/document/asset-url), so repointing the row changes
  * the url every later render emits and every reader asks again exactly once.
  *
  * A URL nobody holds yet is simply imported, so a caller need not ask first.

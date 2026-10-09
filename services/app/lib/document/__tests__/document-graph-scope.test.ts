@@ -1,10 +1,10 @@
 import {expect,it} from 'vitest';
 import type {DocumentOperation} from '@artifactbin/contracts';
-import {createDocumentGraph,graphNodes,graphNodeAt} from '../graph/document-graph';
-import {applyOperationsToNodes} from '../graph/document-operation';
-import {graphValidationScope} from '../graph/document-graph-scope';
-import {graphSource} from '../graph/document-graph';
-import {validateMarkupStructure} from '../document/local-validation';
+import {createDocumentGraph,graphNodes,graphNodeAt} from '../document-graph';
+import {applyOperationsToNodes} from '../document-operation';
+import {graphValidationScope} from '../document-graph-scope';
+import {graphSource} from '../document-graph';
+import {validateMarkupStructure} from '../local-validation';
 const scope=(source:string,operations:DocumentOperation[])=>{
  const before=createDocumentGraph(source,1),after=createDocumentGraph(applyOperationsToNodes(graphNodes(before),operations),2);
  return {before,after,result:graphValidationScope(before,after)};

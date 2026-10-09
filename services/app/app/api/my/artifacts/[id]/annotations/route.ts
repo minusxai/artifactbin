@@ -16,7 +16,7 @@ import { notifyRemoteComment } from '@/lib/remote/mentions';
  */
 import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/route';
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
-import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/story/annotations';
+import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/document/annotations';
 import { browserActor } from '@/lib/accounts';
 import { capabilityGuard } from '@/lib/artifacts';
 import { json, readJson, unauthorized } from '@/lib/http';

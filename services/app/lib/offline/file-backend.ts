@@ -27,17 +27,17 @@ import { serializeJsx } from '@/lib/jsx/serialize';
 import type { JsxElement, JsxNode } from '@/lib/jsx/types';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from '@/lib/story-runtime/store';
-import { canonicalQuote, canonicalText } from '@/lib/story/annotations/annotation-range';
-import { isWebUrl } from '@/lib/story/assets/asset-url';
+import { canonicalQuote, canonicalText } from '@/lib/document/annotation-range';
+import { isWebUrl } from '@/lib/document/asset-url';
 import { EMPTY_DATAFLOW, isEmptyDataflow, type Dataflow, type DataflowState } from '@/lib/dataflow/dataflow';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import { declarationsOf } from '@/lib/story/document/helmet';
-import { createDocumentGraph, graphNodes, graphSource, type GraphAstNode } from '@/lib/story/graph/document-graph';
-import { applyGraphPatch } from '@/lib/story/graph/document-graph-patch';
-import { needsAuthoringContext, prepareClientDocumentReplacement } from '@/lib/story/graph/document-update-client';
-import { documentAfterOperation } from '@/lib/story/graph/document-update-history';
-import { sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
-import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { declarationsOf } from '@/lib/document/helmet';
+import { createDocumentGraph, graphNodes, graphSource, type GraphAstNode } from '@/lib/document/document-graph';
+import { applyGraphPatch } from '@/lib/document/document-graph-patch';
+import { needsAuthoringContext, prepareClientDocumentReplacement } from '@/lib/document/document-update-client';
+import { documentAfterOperation } from '@/lib/document/document-update-history';
+import { sourcePathToBodyPath } from '@/lib/document/edit-compose';
+import { storyUpdateParts } from '@/lib/document/update-parts';
 import {
   OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest, type ArtifactFile, type ArtifactFileEdit,
 } from './file-format';

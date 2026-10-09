@@ -15,7 +15,7 @@ import type { FrameEditSession } from '@/lib/story-runtime/edit/session';
 import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
 import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
-import { runtimeId } from '@/lib/story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
 import { updateCompiledStory } from '@/lib/islands/live-update';
@@ -219,7 +219,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
   /** This editor session's name for its drafts' order (`X-Draft-Sequence`), and how many it has sent. */
   const draftSession = runtimeId().replace(/[^\w-]/g, '').slice(0, 64) || 'editor';
   let draftsSent = 0;
-  let updateParts: typeof import('@/lib/story/document/update-parts') | null = null;
+  let updateParts: typeof import('@/lib/document/update-parts') | null = null;
   let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string | null; sequence: number } | null = null;
   const componentIds = (source: JsxNode[]): Map<string, string> => {
     const found = new Map<string, string>();
@@ -331,7 +331,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     // The page's SHARED parse (update-parts storyUpdatePartsShared): the draft's source was parsed at the hand-over
     // that sent it, and the source on screen at the one before, so neither is parsed whole again when the reply lands.
     const [{ disposeChangedDraftIslands, draftTreeKept, hydrateDraftIslands, loadDraftModule, morphDraftDom, syncDraftHead, versionModuleUrl }, { storyUpdatePartsShared: storyUpdateParts }] = await Promise.all([
-      import('@/lib/islands/morph/engine'), import('@/lib/story/document/update-parts'),
+      import('@/lib/islands/morph/engine'), import('@/lib/document/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
     // What stays is decided against the draft the page shows NOW. The served AST may carry resolved
@@ -568,7 +568,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         const stale = nodesVersion !== shownVersion();
         void Promise.all([
           import('@/lib/story-runtime/edit/session'), import('@/lib/story-runtime/edit/dom-mounter'),
-          stale ? import('@/lib/story/document/update-parts') : null, stale ? import('@/lib/story/assets/asset-url') : null,
+          stale ? import('@/lib/document/update-parts') : null, stale ? import('@/lib/document/asset-url') : null,
         ]).then(async ([{ createFrameEditSession }, { mountCompiledEditRegions }, parts, assets]) => {
           if (disposed || !editRequested) return;
           // A newer version is on screen than `nodes` describe (the live stream drew it): the editor opens on the
@@ -670,7 +670,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         // remote document), the editor takes it in place. Only when the tree says otherwise (a component, a block
         // ahead of one, a query) is it compiled and drawn.
         // The shared parse: the editor that sent this draft parsed the same source a moment ago (lib/jsx/parse-shared).
-        const local = ({ storyUpdatePartsShared }: typeof import('@/lib/story/document/update-parts')) => {
+        const local = ({ storyUpdatePartsShared }: typeof import('@/lib/document/update-parts')) => {
           if (disposed || sequence !== draftSequence) return;
           const parts = storyUpdatePartsShared(source);
           if (parts && reconcileLocal(parts.nodes, source, partsKey(parts), command.nodes, storyUpdatePartsShared)) { pendingDraft = null; return; }
@@ -678,7 +678,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         };
         // Once loaded, synchronously: an undo's caret, restored right after its source, lands on the adopted prose.
         if (updateParts) { local(updateParts); return; }
-        void import('@/lib/story/document/update-parts').then((module) => { updateParts = module; local(module); })
+        void import('@/lib/document/update-parts').then((module) => { updateParts = module; local(module); })
           .catch((error: unknown) => { if (!disposed) console.error('Failed to reconcile editor draft', error); });
         return;
       }

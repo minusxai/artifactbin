@@ -2,8 +2,8 @@ import {DEFAULT_UPLOAD_MAX_BYTES,type DatasetUploadResult} from '@artifactbin/co
 import {randomUUID} from 'node:crypto';
 import {readFile,stat} from 'node:fs/promises';
 import {basename,resolve} from 'node:path';
-import {fileContentType} from '../../app/lib/story/assets/file-types';
-import {declarationsOf} from '../../app/lib/story/document/helmet';
+import {fileContentType} from '../../app/lib/document/file-types';
+import {declarationsOf} from '../../app/lib/document/helmet';
 import {CliError,type ParsedCommand} from './commands';
 import {artifactReference} from './read-commands';
 import type {HttpClient} from './http';

@@ -1,13 +1,19 @@
-import type {DocumentGraph,DocumentUpdate,GraphPatch} from '@artifactbin/contracts';
-import type {ArtifactBackend} from '@/lib/artifact-backend/types';
+import type {DocumentGraph,DocumentResourcePreparation,DocumentUpdate,GraphPatch} from '@artifactbin/contracts';
 /** Browser transport for authoring inputs; ordinary prose and attribute edits
  * do not call it. The document itself is committed only by /edits. */
-import {prepareClientDocument,attachAuthoringContext,type ClientDocumentSnapshot,type ClientDocumentChange} from '../graph/document-update-client';
-import {advanceGraph} from '../graph/document-graph-patch';
-import {graphSource} from '../graph/document-graph';
+import {prepareClientDocument,attachAuthoringContext,type ClientDocumentSnapshot,type ClientDocumentChange} from './document-update-client';
+import {advanceGraph} from './document-graph-patch';
+import {graphSource} from './document-graph';
 import type {WorkerRequest,PrepareResponse} from './document-prepare-protocol';
 
 type Prepared={update:DocumentUpdate;context?:string};
+/**
+ * The one server call a save may need: the authoring context (dataset bindings) for a source, POST /prepare.
+ * A port, so this model never imports the artifact backend; `ArtifactBackend` satisfies it structurally.
+ */
+export interface DocumentPreparePort {
+ prepare(source:string):Promise<DocumentResourcePreparation>;
+}
 /** Graph nodes per message when a large graph crosses to the worker (one page-thread task each). */
 export const GRAPH_PART=200;
 /** The slice of a dedicated worker the preparer uses, so tests can hand it an in-process one. */
@@ -123,6 +129,6 @@ export function preparesOffThread():boolean{
 export function warmBrowserPreparer(base:ClientDocumentSnapshot):Promise<void>{
  return prepareInWorker.warm(base);
 }
-export async function prepareBrowserDocumentUpdate(backend:Pick<ArtifactBackend,'prepare'>,base:ClientDocumentSnapshot,change:ClientDocumentChange){
+export async function prepareBrowserDocumentUpdate(backend:DocumentPreparePort,base:ClientDocumentSnapshot,change:ClientDocumentChange){
  return attachAuthoringContext(await prepareInWorker(base,change),source=>backend.prepare(source));
 }

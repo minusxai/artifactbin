@@ -1,10 +1,10 @@
 /** The Helmet `csp-*` metas: what parses, what is refused (with the value and a span), and the header append. */
 import { describe, expect, it } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '../document/helmet';
-import { coversCspExtensions, cspExtensionsOf, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../document/csp-extensions';
-import { validateMarkupStructure } from '../document/local-validation';
-import { prepareJsx } from '../document/jsx-tier';
+import { splitHelmet } from '../helmet';
+import { coversCspExtensions, cspExtensionsOf, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../csp-extensions';
+import { validateMarkupStructure } from '../local-validation';
+import { prepareJsx } from '../../story/document/jsx-tier';
 import { buildDocumentCsp } from '@/lib/story/styles/document-csp';
 import { appendCspExtensions } from '@/lib/story/styles/markup-csp';
 

@@ -32,7 +32,7 @@ import {AnnotationLayer} from '../../../app/solid/document/AnnotationLayer';
 import {createPreviewBackend} from './backend';
 import {createPreviewEditController} from './edit-controller';
 import {parseJsx} from '../../../app/lib/jsx';
-import {splitHelmet} from '../../../app/lib/story/document/helmet';
+import {splitHelmet} from '../../../app/lib/document/helmet';
 import {STORY_DOCUMENT_MESSAGE, STORY_ROOT_ID, type StoryController} from '../../../app/lib/story-runtime/contract';
 import type {PreviewDocument} from './types';
 

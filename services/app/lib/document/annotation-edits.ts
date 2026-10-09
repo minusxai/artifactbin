@@ -1,8 +1,10 @@
 /** Annotation side effects are conditional relations, committed beside source, never inside it. */
-import { nodeIndex } from '../document/node-ids';
+import { nodeIndex } from './node-ids';
 import { canonicalText, parseAnnotationRange } from './annotation-range';
 import type { JsxNode } from '@/lib/jsx';
-import type { AnnotationOperation } from '@/lib/editor-v2/annotation-map';
+import type { DocumentAnnotationOperation as AnnotationOperation } from '@artifactbin/contracts';
+/** One edit's annotation operation (the wire's `DocumentAnnotationOperation`), named here; lib/editor-v2 imports it downward. */
+export type { AnnotationOperation };
 interface AnnotationRelation {
   anchor: string;
   range: string | null;

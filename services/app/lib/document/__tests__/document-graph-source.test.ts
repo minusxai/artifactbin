@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
-import {createDocumentGraph,graphIntegrity,graphNodeAt,graphSource} from '../graph/document-graph';
-import {graphFromSource} from '../graph/document-graph-source';
-import {applyGraphPatch,prepareGraphPatch} from '../graph/document-graph-patch';
+import {createDocumentGraph,graphIntegrity,graphNodeAt,graphSource} from '../document-graph';
+import {graphFromSource} from '../document-graph-source';
+import {applyGraphPatch,prepareGraphPatch} from '../document-graph-patch';
 it.each([
  "\n{/* original comment */}<><p id='a' title = 'Hello'>A &amp; B</p></>\n",
  '<div>{/* gap */}<p data-options={{ x: 1, y: "two" }}>Text</p>{/* trailing */}</div>',

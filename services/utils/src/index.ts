@@ -20,6 +20,7 @@ export * from './dataset-policy';
 export * from './dataset-grants';
 export {parseSharingEntries} from './sharing';
 export { sha256Hex } from './sha256';
+export { runtimeId } from './runtime-id';
 export {artifactIdFromSegment,artifactIdFromPath,artifactIdFromPathPrefix,artifactFileName,titleSlug} from './artifact-reference';
 
 export { isBuildAssetPath, buildAssetRequest, buildAssetResponse } from './build-assets';

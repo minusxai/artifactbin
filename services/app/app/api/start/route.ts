@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   const row = await createArtifact(tokenId, ownerId, {
     ...parsed,
     // NULL, not 'Untitled': unnamed must stay distinguishable from named-that,
-    // because an unnamed document follows its own heading (lib/story/document/title.ts)
+    // because an unnamed document follows its own heading (lib/document/title.ts)
     // and an explicit title never does.
     title: null,
     description: null,

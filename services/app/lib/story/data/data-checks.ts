@@ -19,7 +19,7 @@ import { datasetSqlParams } from '@/lib/dataflow/sql-parameters';
 import { importedTables } from '@/lib/datasets/catalog';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { refName, isEmptyDataflow } from '@/lib/dataflow/dataflow';
-import { dataflowOf, splitHelmet } from '../document/helmet';
+import { dataflowOf, splitHelmet } from '../../document/helmet';
 import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader, type ResolvedRef } from '@/lib/dataflow/refs';
 import { compileDataflow, prepareCompile, type ImportSource, type SchemaLoader } from '@/lib/dataflow/compile-dataflow';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';

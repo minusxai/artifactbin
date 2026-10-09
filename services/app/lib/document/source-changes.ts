@@ -1,5 +1,5 @@
-import {type JsxNode} from '../../jsx';
-import {parseJsxShared as parseJsx} from '../../jsx/parse-shared';
+import {type JsxNode} from '../jsx';
+import {parseJsxShared as parseJsx} from '../jsx/parse-shared';
 import type {BatchChange} from './edit-batch';
 import {applySplice,deriveSpliceByDiff,normalizeSplice,touchedSpanFor} from './splice';
 

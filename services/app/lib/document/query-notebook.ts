@@ -2,7 +2,7 @@
  * THE QUERY NOTEBOOK — every `<Query>` a document declares, read as cells.
  *
  * A lens over the source and the editor's dataflow state, the way
- * lib/story/data/table-catalog lists tables for the binding pickers: pure, derived
+ * lib/document/table-catalog lists tables for the binding pickers: pure, derived
  * from the document, never fetched. Each cell pairs one declaration with what
  * the last run made of it — rows, the engine's refusal, or nothing yet — and
  * with what in the body reads it, so the editor can show SQL, answer and the
@@ -12,8 +12,8 @@
  */
 import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { parseJsxShared } from '@/lib/jsx/parse-shared';
-import { HELMET_TAG, splitHelmet } from '../document/helmet';
-import { helmetOffset } from '../document/edit-compose';
+import { HELMET_TAG, splitHelmet } from './helmet';
+import { helmetOffset } from './edit-compose';
 import { QUERY_TAG, refName, type DataflowState, type QueryDecl, type TableResult } from '@/lib/dataflow/dataflow';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 
@@ -53,7 +53,7 @@ const staticString = (el: JsxElement, name: string): string | null => {
 /**
  * Every element bound to a declared name, keyed by that name. Paths are BODY
  * paths: the Helmet is hoisted out of the rendered tree, so a top-level index
- * shifts by one when the source opens with it (lib/story/document/edit-compose).
+ * shifts by one when the source opens with it (lib/document/edit-compose).
  */
 function boundByName(nodes: JsxNode[]): Map<string, BoundEmbed[]> {
   const out = new Map<string, BoundEmbed[]>();

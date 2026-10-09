@@ -6,7 +6,7 @@ import type { EditorView } from 'prosemirror-view';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, waitFor } from '@testing-library/dom';
 import { screen, trustedText, trustedQuery } from './trusted-screen';
-import { storyBodyFor } from '@/lib/story/document/body';
+import { storyBodyFor } from '@/lib/document/body';
 import { CHANGED_OUTSIDE } from '@/lib/offline/file-backend';
 import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';

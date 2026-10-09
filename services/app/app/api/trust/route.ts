@@ -27,7 +27,7 @@ import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifa
 import { refusesCrossSite, sessionActor, type RequestActor } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { subtractCspExtensions } from '@/lib/story/document/csp-extensions';
+import { subtractCspExtensions } from '@/lib/document/csp-extensions';
 import {
   allowDocument, cspRequestFor, denyDocument, extensionsHash, hostsPublishedBy, revokeTrust, sessionTrustCookie, type TrustViewer,
 } from '@/lib/trust/document-trust';

@@ -8,7 +8,7 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } f
 import ArrowUpRight from 'lucide-solid/icons/arrow-up-right';
 import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend, MemberPerson } from '@/lib/artifact-backend/types';
-import { personMention } from '@/lib/annotations/person-mentions';
+import { personMention } from '@/lib/document/person-mentions';
 import { remoteMention } from '@/lib/annotations/remote-reply';
 import { type RemoteSessionInfo } from '../../../contracts/src/remote';
 import { agentNameColor } from '../lib/agent-identity';

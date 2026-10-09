@@ -1,5 +1,5 @@
 import {documentEditBody} from './prepared-document';
-import {createDocumentGraph} from '@/lib/story/graph/document-graph';
+import {createDocumentGraph} from '@/lib/document/document-graph';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {setDocumentEditorPolicy} from '@/lib/artifacts';
 import type {Actor} from '@artifactbin/contracts';

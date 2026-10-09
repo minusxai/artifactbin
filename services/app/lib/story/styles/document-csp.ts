@@ -14,14 +14,14 @@
  *  - frames: the default players (`FRAME_HOSTS`) and any host the document declares with `csp-frame`;
  *  - `frame-ancestors`: the app alone.
  *
- * `extensions` are the https origins a document declares in its Helmet (`csp-*` metas, lib/story/document/csp-extensions)
+ * `extensions` are the https origins a document declares in its Helmet (`csp-*` metas, lib/document/csp-extensions)
  * that this reader trusts (lib/trust/document-trust `cspExtensionsFor`), appended per directive — except `connect`: a
  * declared host is reached through the document's `/fetch` door. Each is re-checked with the publish grammar
  * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
 import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from '@/lib/story-ui/document-sources';
-import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/story/document/csp-extensions';
+import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/document/csp-extensions';
 
 export interface DocumentCspInput {
   /** The document's own origin (`https://<hex>.<pages host>`). */

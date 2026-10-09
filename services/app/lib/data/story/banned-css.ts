@@ -84,7 +84,7 @@ function maskEntities(s: string): { masked: string; restore: (seg: string) => st
  * `@font-face { src: url(https://…) }` survives the strip. Stripping it would
  * let a publish answer 201 while the document quietly lost its typeface. Such a
  * URL is IMPORTED at publish (lib/web-assets) and the SERVED stylesheet is
- * rewritten to our own origin (lib/story/assets/asset-url mapExternalCssUrls), so
+ * rewritten to our own origin (lib/document/asset-url mapExternalCssUrls), so
  * nothing a reader loads ever names the upstream host — which is the whole
  * reason the ban exists.
  *

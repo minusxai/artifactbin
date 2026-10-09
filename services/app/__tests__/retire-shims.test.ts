@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { getArtifactById } from '@/lib/artifacts';
-import { createDocumentGraph } from '@/lib/story/graph/document-graph';
+import { createDocumentGraph } from '@/lib/document/document-graph';
 import { useAppHarness } from './harness';
 import { formatReport } from '../../../scripts/migrate/retire-shims/common';
 import { retireAnchorAttributes, run as retireAnchors } from '../../../scripts/migrate/retire-shims/legacy-anchors';

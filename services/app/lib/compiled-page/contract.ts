@@ -23,7 +23,8 @@ import type { Scalar } from '@/lib/dataflow/dataflow';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
-import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
+import type { ServedResults, StoryViewer } from '@/lib/story-runtime/contract';
+import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { AgentDiscovery } from '@/lib/serving';
 
 /** Live data widget contents belong to Solid, rather than the server-fragment morph. */

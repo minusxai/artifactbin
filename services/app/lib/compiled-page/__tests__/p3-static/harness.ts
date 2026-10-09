@@ -8,7 +8,7 @@ import { loadCompilerBuild } from '../../build.server';
 import type { CompileInput } from '../../contract';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/compile-dataflow';
-import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
+import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import type { Dataflow } from '@/lib/dataflow/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';

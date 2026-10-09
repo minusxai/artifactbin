@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadata';
+import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from '@/lib/document/parsed-artifact-metadata';
 import { compiledSource } from '@/test/helpers/compiled';
 
 const source='<Helmet><Value name="ui" type="table" value={[{view:"table",open:false}]} /><Value name="choice" type="number" default={1}/><Query name="a">{`select * from ui`}</Query><Mutation name="change" reset="choice">{`update ui set open=true`}</Mutation></Helmet><p>Hello</p>';

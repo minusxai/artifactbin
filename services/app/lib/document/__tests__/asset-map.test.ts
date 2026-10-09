@@ -2,7 +2,7 @@
  * The serve-time asset mapping must reach ALL THREE renderings of one document:
  * the SSR string, the island the client hydrates from, and the live frame an
  * open reader adopts. Those disagreeing is the whole risk, and the two callers
- * that build them go through one `storyBodyFor` (lib/story/document/body).
+ * that build them go through one `storyBodyFor` (lib/document/body).
  *
  * The renderings are compared with a ROW MAP rather than a predicate, and that
  * is not cosmetic: everything a row carries — the versioned address, the box,
@@ -13,8 +13,8 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { compiledDocument, type DocumentCase } from '@/lib/compiled-page/__tests__/document-helper';
-import { storyUpdateParts } from '@/lib/story/document/update-parts';
-import { assetLookupFrom, assetUrlFor, mapExternalImageSources, type WebAssetBox } from '@/lib/story/assets/asset-url';
+import { storyUpdateParts } from '@/lib/document/update-parts';
+import { assetLookupFrom, assetUrlFor, mapExternalImageSources, type WebAssetBox } from '@/lib/document/asset-url';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const URL_A = 'https://picsum.photos/id/237/300/200';

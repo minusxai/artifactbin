@@ -1,11 +1,11 @@
 /** Source/engine adapter. Only this module knows both static JSX and ProseMirror. */
-import { runtimeId } from '@/lib/story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { Schema, Fragment, Slice, type Node as EditorNode, type Mark, type NodeSpec } from 'prosemirror-model';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Root } from 'mdast';
 import { validateClipboardAst } from './clipboard-ast';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
-import { fixHtmlNesting } from '@/lib/story/document/nesting';
+import { fixHtmlNesting } from '@/lib/document/nesting';
 import type { JsxNode, JsxElement, JsxAttribute } from '@/lib/jsx';
 
 const metadata = {

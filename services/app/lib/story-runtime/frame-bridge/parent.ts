@@ -24,7 +24,7 @@
  *    script moves every value anyway), as a bounded query string with no hash — the page keeps only its `$` pairs.
  */
 import type { JsxNode } from '@/lib/jsx/types';
-import { runtimeId } from '@/lib/story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
 import type { IslandStoryController } from '@/lib/story-runtime/island-controller';
 import {

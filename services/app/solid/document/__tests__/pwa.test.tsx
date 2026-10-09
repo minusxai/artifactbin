@@ -5,7 +5,7 @@ import { fireEvent, render } from '../../__tests__/helpers';
 import { InstallArtifact, InstallArtifactLink } from '../InstallArtifact';
 import { captureInstallPrompt, currentInstall } from '@/lib/serving/pwa-install';
 import { PwaSettingsPanel, PwaSharingSetting } from '../../editor/PwaSettingsPanel';
-import { readPwaSettings } from '@/lib/story/reader/pwa-settings';
+import { readPwaSettings } from '@/lib/document/pwa-settings';
 
 afterEach(() => window.history.replaceState(null, '', '/'));
 it('links to a clean stable install page and prompts only on click', async () => {

@@ -1,5 +1,5 @@
 /** A portable file hands a copy to a user-selected preview server without granting it network access. */
-import {runtimeId} from '../story-runtime/runtime-id';
+import {runtimeId} from '@artifactbin/utils/runtime-id';
 import { normalizeOrigin, previewWorkspaceUrl, PREVIEW_CONNECT_CHANNEL, PREVIEW_CONNECT_PATH, PREVIEW_CONNECT_MAX_BYTES, type PreviewConnectMessage } from '@artifactbin/contracts';
 
 export function previewServerOrigin(value: string): string {

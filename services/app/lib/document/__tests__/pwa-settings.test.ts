@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { readPwaSettings, writePwaSettings } from '../reader/pwa-settings';
+import { readPwaSettings, writePwaSettings } from '../pwa-settings';
 import { parseJsx } from '@/lib/jsx';
 import { collectRefUses } from '@/lib/dataflow/refs';
 

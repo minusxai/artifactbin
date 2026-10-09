@@ -36,6 +36,7 @@ export * from './membership';
 export * from './document-operation';
 
 export * from './document-update';
+export type { StoredMermaidImage } from './mermaid-image';
 
 export * from './mutation-notifications';
 

@@ -1,10 +1,10 @@
 /** SQL lowering for internal graph patches. The writer accepts only publication
  * admissions; clients cannot submit these SQL paths, fragments or revision sets.
  */
-import {GRAPH_POLICY,GRAPH_ROOT} from './document-graph';
-import type {GraphPatch} from './document-graph-patch';
-import {documentPatchStepSql} from './document-patch';
-import {MAX_CONTENT_BYTES} from '../document/input';
+import {GRAPH_POLICY,GRAPH_ROOT} from '../../document/document-graph';
+import type {GraphPatch} from '../../document/document-graph-patch';
+import {documentPatchStepSql} from '../../document/document-patch';
+import {MAX_CONTENT_BYTES} from '../../document/limits';
 
 export function graphPatchSql(document:string,version:string,patch:GraphPatch,initial:unknown[]):{expression:string;guard:string;integrity:(next:string)=>string;params:unknown[]} {
   const params=[...initial];

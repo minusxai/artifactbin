@@ -2,7 +2,7 @@ import {accountMismatch} from './account-diagnostic';
 /** Local discussions publish through the existing durable mutation journal. */
 import {readFile} from 'node:fs/promises';
 import type {AnnotationWire,AnnotationCommentWire} from '../../app/lib/annotations/store';
-import {nodeIndex} from '../../app/lib/story/document/node-ids';
+import {nodeIndex} from '../../app/lib/document/node-ids';
 import {CliError} from './errors';
 import {digest} from './files';
 import {confinedPath} from './journal';

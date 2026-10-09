@@ -29,7 +29,7 @@ import { COMMENT_TARGET_ATTR, COMMENT_OWNER_ATTR, parseCommentTarget } from '@/l
  *
  * THE DRAWN AREA is the pick's second mode (`pick: 'area'`): a rubber band
  * over the document, whose anchor is the lowest common ancestor of the blocks
- * it touched (lib/story/annotations/annotation-range `areaTarget`) and whose box rides
+ * it touched (lib/document/annotation-range `areaTarget`) and whose box rides
  * the same `mx:selection` as an area RANGE — fractions of the anchor, so it
  * survives a reflow. A saved area thread is painted back as an overlay box
  * where a text thread has its highlight, and its layout report is the box.
@@ -53,7 +53,7 @@ import { resolveParts } from './selection-range';
 import {
   ANNOTATION_AREA_MIN_PX, areaTarget, boxFromRects, isAreaRange, isTargetRange, refinementRange, rectFromBox,
   type AnnotationBox, type AnnotationRect,
-} from '@/lib/story/annotations/annotation-range';
+} from '@/lib/document/annotation-range';
 
 /** Marks every node carrying an open annotation, in every mode the layer is on for. */
 const ANNOTATED_ATTR = 'data-mx-annotated';

@@ -37,7 +37,7 @@ export interface DataTableColumnSpec {
   width?: number;
   /**
    * What the cell HOLDS, when it is not text. `image` renders the cell's URL
-   * as an `<img>` served from our own copy of it (lib/story/assets/asset-url,
+   * as an `<img>` served from our own copy of it (lib/document/asset-url,
    * imported on first view through the document's asset endpoint).
    *
    * Declared rather than sniffed, deliberately: a column of URLs is a column of
