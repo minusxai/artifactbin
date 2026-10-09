@@ -24,13 +24,16 @@ import { compiledForRow, getArtifactById } from '@/lib/artifacts';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { planOf } from '@/lib/compiled-page/plan';
 import { updateSharingFor } from '@/lib/artifacts';
+import { installStoryCommitHooks } from '@/lib/story/prepared/commit-hooks.server';
 import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/story/prepared/snapshots.server';
 import { SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS } from '@/lib/compiled-page/contract';
 
 const harness = useAppHarness();
 beforeEach(() => setSession(null));
-// A serving process turns background revalidation on at its composition root; this file is one.
+// A serving process turns background revalidation on, and installs story's after-commit listeners (a dataset
+// write invalidates its snapshots), at its composition root; this file is one.
 enableSnapshotRevalidations();
+installStoryCommitHooks();
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');

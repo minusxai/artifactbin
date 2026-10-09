@@ -18,7 +18,8 @@ import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
-import { drainPreparedPageWarmups, enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { installStoryCommitHooks } from '@/lib/story/prepared/commit-hooks.server';
 import { applyStyleOverrides } from '@/lib/compiled-page/styles/style-overrides';
 import { inlineStoryCss as realInlineStoryCss, inlineStoryNodes as realInlineStoryNodes } from '@/lib/compiled-page/styles/inline-css';
 import { prepareStoryRuntime } from '@/lib/story/prepared/prepare-runtime.server';
@@ -318,8 +319,8 @@ describe('the compile beside the prepared page', () => {
   const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
   const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
 
-  // Publish warms the head's prepared page after commit (warmPreparedPage), as the server does.
-  beforeAll(() => enablePreparedPageWarmups());
+  // Publish warms the head's prepared page after commit (story's after-commit listener), as the server does.
+  beforeAll(() => installStoryCommitHooks());
   const WAS_UNPORTED = '<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>';
 
   async function publish(markup: string): Promise<string> {

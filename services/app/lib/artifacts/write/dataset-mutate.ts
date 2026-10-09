@@ -42,6 +42,8 @@ import {paramSqlName} from '@artifactbin/contracts';
  * is archived into `artifact_versions` on the same coalescing rule text edits
  * use (so `revert` works on data), and the row's own channel is NOTIFYed, so
  * every open document reading this dataset re-queries (lib/story/realtime/live).
+ * It lives in the artifacts write path: SQL on artifact tables plus receipts, emitting its
+ * after-commit event (../after-commit) for whatever else must follow a committed write.
  */
 import { trackEvent } from '@/lib/platform/analytics';
 import { MAX_QUERY_ROWS } from '@/lib/platform/config';
@@ -53,7 +55,7 @@ import type {Scalar} from '@/lib/dataflow/dataflow';
 import { newEditId } from '../../document/splice';
 import {mutationInvocation} from '@/lib/artifacts/mutation-invocation';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
-import { snapshotStore } from '../prepared/snapshots.server';
+import { emitDatasetCommitted } from '../after-commit';
 
 /** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
 const WRITE_SNAPSHOT_WINDOW_MS = 120_000;
@@ -269,10 +271,10 @@ export async function mutateDataset(
     const row = updated.rows[0];
     if (row) {
       void trackEvent('mutate', row.id, { userId: row.user_id });
-      // Committed: flag the guest snapshots that read this dataset and queue their heads' revalidation
-      // (lib/story/prepared/snapshots.server). Beside the NOTIFY, never awaited, never failing the write —
-      // freshness is decided on read by the marks, this only lets a head revalidate before anyone asks.
-      void snapshotStore.invalidate(row.id).catch((error) => console.warn('[snapshots] invalidate failed', row.id, error));
+      // Committed: story's listener flags the guest snapshots that read this dataset and queues their heads'
+      // revalidation (lib/story/prepared/commit-hooks.server). Beside the NOTIFY, never awaited, never failing
+      // the write — freshness is decided on read by the marks, this only lets a head revalidate before anyone asks.
+      emitDatasetCommitted(row.id);
       return { row, affected: out.affected, rowCount: out.rows.length,...(mutationRunId?{mutationRunId}:{}) };
     }
     // Lost the CAS. Re-run against what landed — see the module doc: for DML

@@ -15,7 +15,7 @@ import { mintExportKey } from '@/lib/serving/export-read-key';
 import { storyBodyFor } from '@/lib/document';
 import { getArtifactById } from '@/lib/artifacts/store';
 import { servedRow } from '@/lib/artifacts/archived-version';
-import { warmPreparedPage } from '@/lib/story/prepared/prepared-page.server';
+import { emitHeadCommitted } from '@/lib/artifacts/after-commit';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
 import { sanitizeMermaidSvg, verifyEmbeddedMermaidSvg } from './sanitize';
@@ -180,12 +180,10 @@ export async function runNextMermaidHarvest(): Promise<boolean> {
   try {
     const images = await harvestVersion(claimed.artifact_id, claimed.version);
     await settle(images === null ? 'superseded' : 'done', images);
-    // The version's prepared reader page (lib/story/prepared/prepared-page.server) holds a render made
-    // before these drawings existed: drop it, and prepare the head again with them.
-    if (images?.inline && Object.keys(images.inline).length) {
-      await db.query("DELETE FROM prepared_pages WHERE artifact_id=$1 AND slot='head'", [claimed.artifact_id]);
-      warmPreparedPage(claimed.artifact_id);
-    }
+    // The version's prepared reader page holds a render made before these drawings existed: the head's
+    // rendering changed, and story's listener (lib/story/prepared/commit-hooks.server) drops that page and
+    // prepares the head again with them.
+    if (images?.inline && Object.keys(images.inline).length) emitHeadCommitted(claimed.artifact_id, undefined, { renderingChanged: true });
   } catch (error) {
     // No browser to harvest with is not this version's failure: it waits, uncounted, for one.
     const unavailable = error instanceof HarvestUnavailable;

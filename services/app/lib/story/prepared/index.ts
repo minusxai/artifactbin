@@ -7,3 +7,4 @@ export { preparedPageFor, recompilePage, servedPage, warmPreparedPage, type Prep
 export { marksOf, SERVED_RESULTS_BUDGET_MS, tokenOf } from './served-results.server';
 export { compiledPageFor, domainFooter, type CompiledReaderAnswer, type CompiledReaderRequest } from './serve.server';
 export { anonymousAccessFacts, enableSnapshotRevalidations, snapshotStore } from './snapshots.server';
+export { installStoryCommitHooks } from './commit-hooks.server';
