@@ -70,7 +70,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  })()};
 }
 /** Explicit URL wins over a deployment factory. Missing authentication never falls back locally. */
-function externalHostedAgent(url:string,secret:string|undefined):Awaited<ReturnType<NonNullable<AppHostOptions['hostedAgent']>>>{
+export function externalHostedAgent(url:string,secret:string|undefined):Awaited<ReturnType<NonNullable<AppHostOptions['hostedAgent']>>>{
  if(!secret)throw Error('CONTRACT__ACTOR_SECRET required for remote hosted agent');
  const agent=hostedAgentClient(url,hostedAgentTransport(url,secret),hostedAgentDeliveryTransport(url,secret));
  return {agent,tick:externalHostedComments(agent,secret)};
