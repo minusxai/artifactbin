@@ -26,7 +26,7 @@
  * closure, then the styles.
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/serving/agent-discovery';
-import { LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands/contract';
+import { LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands';
 import { AUTHOR_VENDOR_EXPORTS } from '@/lib/author-script/contract';
 import { renderOutlineRail } from '@/lib/story-runtime/outline-view';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';

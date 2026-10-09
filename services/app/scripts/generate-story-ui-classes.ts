@@ -16,7 +16,7 @@ import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from '
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
-import { FAMILIES } from '../lib/islands/kit/recipes';
+import { FAMILIES } from '../lib/islands';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 /** The story kit: the compiled page's components and their class recipes. */
