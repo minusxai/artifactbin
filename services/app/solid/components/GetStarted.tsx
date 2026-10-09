@@ -20,7 +20,7 @@ export default function GetStarted(props: { heading?: boolean; frame?: boolean }
   const [windows, setWindows] = createSignal(false);
   onMount(() => { setOrigin(window.location.origin); setWindows(/^Win/i.test(window.navigator.platform)); });
   const installOrigin = () => origin() || DEFAULT_SERVER;
-  const install = () => gettingStarted(installOrigin()).sections[0]!;
+  const install = () => gettingStarted(installOrigin()).sections.find(section => section.id === 'install')!;
   const command = (language: 'sh' | 'powershell') => install().blocks.find(block => block.kind === 'command' && block.language === language)!.text;
   const unix = <CopyBlock class="mt-2" text={command('sh')} label="Copy the CLI install command" />;
   const windowsInstructions = <><p class="mt-2 text-xs text-muted">Windows · PowerShell</p><CopyBlock class="mt-2" text={command('powershell')} label="Copy the Windows CLI install command" /></>;
