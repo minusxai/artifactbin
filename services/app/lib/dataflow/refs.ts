@@ -98,7 +98,7 @@ export function collectRefUses(source: string): RefUse[] | null {
     // (lib/dataflow/dataflow.ts). Real refs: they resolve through the loader like
     // any other and land in meta.refs (dependents warnings), but their rows go
     // through the engine, never onto the page. Which of them a <Mutation>
-    // WRITES is the compiler's to say (lib/story/data/data-checks `writeRefusal`).
+    // WRITES is the compiler's to say (lib/publish/data/data-checks `writeRefusal`).
     if (el.isComponent && tag === IMPORT_TAG) {
       const i = parseImportDecl(el);
       if (i.ok) uses.push({ id: i.decl.ref, kind: 'dataset', via: 'sql' });

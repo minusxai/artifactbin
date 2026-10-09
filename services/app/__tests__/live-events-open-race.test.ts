@@ -41,7 +41,7 @@ import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
+import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';
 

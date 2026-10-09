@@ -6,7 +6,7 @@ import type { TokenActor } from '@/lib/accounts/actors';
 import {UnservableDocument} from '../artifacts/servable';
 import {actOnAnnotationFor,createAnnotationFor,listAnnotationsFor,type AnnotationWire} from '../annotations';
 import {baseUrl,json} from '../http';
-import {createArtifactFromBody,prepareDocumentAuthoringContext} from '@/lib/story/publish';
+import {createArtifactFromBody,prepareDocumentAuthoringContext} from '@/lib/publish/publish';
 import {readFileOffer} from './offer';
 import {prepareHostedFileUpdate,prepareHostedFilePublication} from './hosted-connect';
 import {validateFileComments} from './comment-validation';

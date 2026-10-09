@@ -2,7 +2,7 @@
  * The kitchen-sink document: ONE markup doc that
  * instantiates every component in the story registry — the visual regression
  * page, the living component gallery, and the capture/CSP gate subject. The
- * drift test (lib/story/__tests__/kitchen-sink.test.ts) fails the moment a
+ * drift test (lib/publish/__tests__/kitchen-sink.test.ts) fails the moment a
  * registry component is missing here, the same pattern as the registry-names
  * drift gate.
  *

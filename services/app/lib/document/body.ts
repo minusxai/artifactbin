@@ -4,7 +4,7 @@
  *
  * There are three renderings of one document: the SSR string, the island the
  * client hydrates from, and the live frame an open reader adopts. The first two
- * are built by `lib/story/document` and the third by
+ * are built by `lib/publish/document` and the third by
  * `lib/document/update-parts.ts`. A second copy of a transform whose whole job is
  * to make those renderings identical is how they drift: a pass that landed in
  * one of them and not the other would show a reader watching an agent write a

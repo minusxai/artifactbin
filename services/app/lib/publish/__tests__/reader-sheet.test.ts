@@ -1,5 +1,5 @@
 /**
- * THE READER'S SHEET (lib/story/prepared/reader-sheet.server): a version's compiled
+ * THE READER'S SHEET (lib/publish/prepared/reader-sheet.server): a version's compiled
  * sheet minus the union recipes its story can never render and the other
  * themes' blocks — every kept rule byte-identical and in the full sheet's order.
  */

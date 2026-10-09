@@ -28,7 +28,7 @@ export interface PreparedStoryRuntime {
 }
 
 /**
- * THE READER PAGE'S RUNTIME (app/api/page/artifact/[id], lib/story/prepared/prepared-page.server):
+ * THE READER PAGE'S RUNTIME (app/api/page/artifact/[id], lib/publish/prepared/prepared-page.server):
  * the document with its stylesheet ALREADY put under the inline CSS policy on
  * the server, once per version. The reader renders it as it is — no CSS parser
  * in its bundle, no second copy of the sheet.

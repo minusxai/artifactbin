@@ -15,7 +15,7 @@ import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { services, setServices } from '@/lib/platform';
 import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
-import { runNextMermaidHarvest } from '@/lib/story/assets/mermaid-harvester';
+import { runNextMermaidHarvest } from '@/lib/publish/assets/mermaid-harvester';
 import { verifyEmbeddedMermaidSvg } from '@/lib/mermaid-images/sanitize';
 
 // The package is there in name only: importing it throws, as a missing or broken install would.

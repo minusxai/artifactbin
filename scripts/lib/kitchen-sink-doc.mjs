@@ -1,7 +1,7 @@
 /**
  * THE KITCHEN SINK as a published document, for gates: its three data refs
  * (a dataset, a viz recipe, an image) and a PDF, then the markup built from
- * the SOURCE OF TRUTH, lib/story/fixtures/kitchen-sink.ts — the registry drift gate's
+ * the SOURCE OF TRUTH, lib/publish/fixtures/kitchen-sink.ts — the registry drift gate's
  * definition of "every component".
  *
  * `publish(body) → { id }` is the caller's door (a bearer `POST /api/artifacts`,
@@ -53,7 +53,7 @@ export async function kitchenSinkMarkup(publish) {
   // From the MODULE, not from slicing its source: a hand-rolled unescape of its
   // template literal breaks the moment a nested backtick appears.
   return execFileSync('npx', ['tsx', '-e',
-    `import { kitchenSinkMarkup } from './services/app/lib/story/fixtures/kitchen-sink.ts';` +
+    `import { kitchenSinkMarkup } from './services/app/lib/publish/fixtures/kitchen-sink.ts';` +
     `process.stdout.write(kitchenSinkMarkup(${JSON.stringify({ dataset: dataset.id, recipe: recipe.id, image: image.id, pdf: pdf.id })}));`,
   ], { encoding: 'utf8', cwd: new URL('../..', import.meta.url).pathname });
 }

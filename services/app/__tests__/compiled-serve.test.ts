@@ -21,16 +21,16 @@ import { mintExportKey } from '@/lib/platform';
 import { pagesOriginFor, pagesSite } from '@/lib/http/pages-origin';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER, type CompiledPage } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { drainCompiledUpgrades, storyOf } from '@/lib/story/prepared/serve.server';
+import { drainCompiledUpgrades, storyOf } from '@/lib/publish/prepared/serve.server';
 import { objectStore } from '@/lib/object-store';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { backfillCompiledPages, matchesBackfillFilters, type BackfillOptions, type BackfillSelector } from '@/lib/compiled-page/backfill.server';
-import { preparedCssVersion, stylesheetVersion } from '@/lib/story/prepared/css-version.server';
+import { preparedCssVersion, stylesheetVersion } from '@/lib/publish/prepared/css-version.server';
 import { STORY_BASE_SHEETS } from '@/lib/compiled-page/styles/story-base-css';
 import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-system-sheets';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
@@ -701,7 +701,7 @@ describe('the compiled page behaves like today', () => {
 // Merged from compiled-page-engine.test.ts.
 /**
  * THE COMPILED PAGE CARRIES ITS ENGINE'S TWO FACTS (w3-page-engine; lib/islands/contract IslandPageData
- * `hold` and `sqliteWasm`), decided as today's reader decides them (lib/story/prepare-runtime readerIslandData):
+ * `hold` and `sqliteWasm`), decided as today's reader decides them (lib/publish/prepare-runtime readerIslandData):
  *
  * - `hold`: the imports this page may hold in full, for the door the page queries through
  *   (lib/artifacts holdableImports) — the app page's reader (a guest, or the signed-in account that owns

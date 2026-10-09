@@ -199,7 +199,7 @@ export type IslandHost = HTMLElement & { [ISLAND_DOCUMENT_KEY]?: IslandDocument 
 
 /** The story element the islands live in (the assembler's `inlineStoryElement`). */
 export const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
-/** The document's live identity on `<body>` (lib/story/document's convention, read as anchor-entry reads it). */
+/** The document's live identity on `<body>` (lib/publish/document's convention, read as anchor-entry reads it). */
 export const LIVE_ID_ATTR = 'data-mx-live-id';
 /** The version the page shows, on `<body>` beside `LIVE_ID_ATTR`. */
 export const LIVE_EDIT_ATTR = 'data-mx-live-edit';

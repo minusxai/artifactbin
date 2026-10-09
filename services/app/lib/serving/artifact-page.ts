@@ -13,7 +13,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * the document's frame — the document itself is only ever rendered on its own
  * origin (lib/http/pages-origin, app/a/[id]/raw), never inside the app page.
  *
- * A DOCUMENT is served from its prepared page (lib/story/prepared/prepared-page.server):
+ * A DOCUMENT is served from its prepared page (lib/publish/prepared/prepared-page.server):
  * the reader payload carries no source, no document graph and no raw
  * stylesheet. An owner or editor fetches those on the EDITOR door
  * (`?part=editor`) — prefetched on idle, so entering edit mode stays instant.
@@ -40,7 +40,7 @@ import { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, session
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import { canAnnotate, canEdit } from '@/lib/artifacts/share-roles';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { preparedPageFor, servedPage } from '@/lib/story/prepared/prepared-page.server';
+import { preparedPageFor, servedPage } from '@/lib/publish/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { firstHeadingTitle } from '@/lib/document/head';
 import type { ArtifactRow } from '@/lib/artifacts';
@@ -194,7 +194,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
 
   // Everything below reads THIS row: the artifact wearing that version's bytes
   // when one was asked for, the artifact itself otherwise. A document's comes
-  // with its prepared page (lib/story/prepared/prepared-page.server) — a stored entry on
+  // with its prepared page (lib/publish/prepared/prepared-page.server) — a stored entry on
   // a hit, a compile on a miss — while the reads that need neither run beside it.
   const viewerId = actor.viewer?.userId ?? null;
   // Independent reads begin only after ACL admission. These values belong to

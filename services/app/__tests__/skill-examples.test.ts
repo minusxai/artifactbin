@@ -79,7 +79,7 @@ const PLACEHOLDERS: Record<string, Placeholder> = {
 };
 
 const BASE = 'https://artifactbin.example';
-const GOLDEN = readFileSync(new URL('../lib/story/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
+const GOLDEN = readFileSync(new URL('../lib/publish/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
 const docs = renderTree(skillTree(), BASE).filter(({ file }) => file.path.startsWith('artifactbin/'));
 const jsxBlocks = (text: string) => [...text.matchAll(/```jsx\n([\s\S]*?)```/g)].map((m) => m[1]!);
 /** A document's YAML fence is the CLI's to send as metadata; the create door takes the body. */

@@ -7,7 +7,7 @@ import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { GET as editSheet, POST as preview } from '@/app/a/[id]/draft-preview/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { documentPublicationBody } from './prepared-document';
-import { renderDraftPreview } from '@/lib/story/prepared/draft-preview.server';
+import { renderDraftPreview } from '@/lib/publish/prepared/draft-preview.server';
 import { compiledDocument } from '@/lib/compiled-page/__tests__/document-helper';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
@@ -18,8 +18,8 @@ const spin = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4
 // The draft compile stands in for a heavy one only in the burst test below (merged from draft-preview-load.test.ts);
 // every other test here renders through the real one.
 const compiles = vi.hoisted(() => ({ count: 0, heavy: false }));
-vi.mock('@/lib/story/prepared/draft-preview.server', async (original) => {
-  const actual = await original<typeof import('@/lib/story/prepared/draft-preview.server')>();
+vi.mock('@/lib/publish/prepared/draft-preview.server', async (original) => {
+  const actual = await original<typeof import('@/lib/publish/prepared/draft-preview.server')>();
   return {
     ...actual,
     renderDraftPreview: async (input: Parameters<typeof actual.renderDraftPreview>[0]) => {
@@ -147,7 +147,7 @@ describe('the editor draft preview door', () => {
   });
 });
 
-// Merged from lib/story/__tests__/draft-preview.test.ts: the draft render itself, against the reader's.
+// Merged from lib/publish/__tests__/draft-preview.test.ts: the draft render itself, against the reader's.
 describe('the compiled draft render', () => {
   it('renders the same compiled story and AST anchors as the reader', async () => {
     const input = {

@@ -14,7 +14,7 @@ import { pagesSite } from '@/lib/http/pages-origin';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { mintExportKey } from '@/lib/platform';
 import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 
 const harness = useAppHarness();
 beforeEach(() => setSession(null));

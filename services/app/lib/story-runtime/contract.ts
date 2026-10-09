@@ -40,7 +40,7 @@ export interface StoryIslandDataflow {
   values?: Record<string, Scalar>;
   /**
    * THE FIRST RESULTS, run by the server for THIS request
-   * (lib/story/prepared/served-results.server): the answers the query route would give
+   * (lib/publish/prepared/served-results.server): the answers the query route would give
    * this reader for the values the page starts from — defaults and the URL's
    * `values` — for the queries it could answer inside its budget. A query
    * named here (in `tables` or `errors`) starts current, so the page paints
@@ -558,7 +558,7 @@ export interface StoryEditSelection {
    * The words actually selected, canonical — present only when there IS a text
    * selection, which is why both of these are optional: the same struct rides
    * every caret move in an edit session, where nothing is selected at all.
-   * A comment stores them beside its anchor (lib/story/annotations/annotation-range).
+   * A comment stores them beside its anchor (lib/publish/annotations/annotation-range).
    */
   quote?: string;
   /** Where those words are, addressed RELATIVE to `path` — never an absolute body path. */
@@ -792,7 +792,7 @@ export interface StoryAnnotationsMessage {
    * `block` — the selectable node under the pointer carries an outline and a
    * click takes it; `area` — a dragged rectangle, whose anchor is the lowest
    * common ancestor of the blocks it touched and whose box rides the
-   * selection as an area range (lib/story/annotations/annotation-range). Either answers
+   * selection as an area range (lib/publish/annotations/annotation-range). Either answers
    * with `mx:selection` — the same report the breadcrumb widening uses — or a
    * null selection on escape. Null/absent is off. One-shot: the page clears
    * it the moment a selection arrives.
@@ -970,7 +970,7 @@ export const ACCESS_PENDING = 'Checking edit access…';
 /**
  * THE LIVE STREAM'S WIRE — what app/a/[id]/events sends and the reader's live
  * store (solid/editor/create-live-artifact, lib/artifact-backend) reads. The
- * subscription that wakes the stream (lib/story/realtime/live) only says "go
+ * subscription that wakes the stream (lib/publish/realtime/live) only says "go
  * look"; these are the frames the route then writes, declared here with the
  * rest of the reader wire so neither a route handler nor the server's story
  * module is where a reader has to import a shape from.

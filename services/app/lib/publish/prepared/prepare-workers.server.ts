@@ -1,7 +1,7 @@
 /**
  * THE PROCESS'S PREPARE THREADS (./draft-compile-pool.ts): one bounded pool for every CPU-bound
  * document job — an editor draft's preview (./draft-compile.server.ts), a version's page compile
- * (./prepared-page.server.ts) and a guest snapshot's drawn charts (lib/story/prepared/snapshots.server).
+ * (./prepared-page.server.ts) and a guest snapshot's drawn charts (lib/publish/prepared/snapshots.server).
  * Started from the worker's entry when this process carries it: the bundled `draft-compile-worker.mjs`
  * beside the server bundle, or — in development — the TypeScript source under tsx. Without it (tests,
  * a bundle that did not emit the entry) `prepareWorkers()` is null and callers run the work in-process.

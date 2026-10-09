@@ -138,7 +138,7 @@ export async function queueMermaidHarvest(row: { id: string; version: number; fo
   }
 }
 
-/** The running harvester's wake-up (lib/story/assets/mermaid-harvester), when this process runs one. */
+/** The running harvester's wake-up (lib/publish/assets/mermaid-harvester), when this process runs one. */
 let wake: (() => void) | null = null;
 export function onMermaidHarvestQueued(listener: (() => void) | null): void { wake = listener; }
 

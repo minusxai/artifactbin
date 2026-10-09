@@ -21,8 +21,8 @@ export { SPECULATION_RULES_HEADER } from '../compiled-page/contract';
 export type { CompileInput, CompiledPage, CompilerBuild } from '../compiled-page/contract';
 
 // ---- Story runtime: the prepared runtime, its island data and the document CSS.
-export { prepareStoryRuntime } from '../story/prepared/prepare-runtime.server';
-export type { PreparedStoryRuntime } from '../story/prepared/prepared-runtime';
+export { prepareStoryRuntime } from '../publish/prepared/prepare-runtime.server';
+export type { PreparedStoryRuntime } from '../publish/prepared/prepared-runtime';
 export { ISLANDS_PATH } from '../story-runtime/contract';
 export type { ServedResults, StoryIslandData } from '../story-runtime/contract';
 export { compileStoryCss } from '../data/story/story-css.server';
@@ -36,7 +36,7 @@ export { withoutUnusedFaces } from '../offline/font-faces';
 export { DOCUMENT_UI_FONT_CSS } from '../serving/app-fonts';
 export { CARD_HEIGHT, CARD_WIDTH } from '@artifactbin/contracts';
 export { scriptModuleOrigins, scriptRenderAllowance } from '../export/script-origins';
-export { renderSocialPreviewImage } from '../story/assets/social-preview-image.server';
+export { renderSocialPreviewImage } from '../publish/assets/social-preview-image.server';
 
 // ---- Team host: server configuration, services and accounts the team application composes.
 export { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } from '../platform/config';

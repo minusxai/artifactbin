@@ -114,7 +114,7 @@ interface ReaderContext {
   /** A CAPTURE's colour (`color=`, under a verified export key); a reader gets the version's. */
   colorMode?: 'light' | 'dark' | null;
   /**
-   * Serve this request's first results (lib/story/prepared/served-results.server),
+   * Serve this request's first results (lib/publish/prepared/served-results.server),
    * admitted as the page's query door admits this viewer. Absent: the page
    * fetches its own rows, as the stored anonymous render always does.
    */
@@ -226,7 +226,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: Retu
   });
   const { runtime } = parts;
   const nodes = runtime.data.nodes;
-  // The reader's copy of the sheet: only what this story can match (lib/story/prepared/reader-sheet.server).
+  // The reader's copy of the sheet: only what this story can match (lib/publish/prepared/reader-sheet.server).
   const sheet = { ...runtime, compiledCss: readerStorySheet(compiledCss, { source, nodes, theme: design.theme }) };
   const css = inlineStoryCss(sheet);
   const overrides = styleOverrides(nodes, inlineStoryNodes(nodes, sheet));

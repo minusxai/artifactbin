@@ -28,7 +28,7 @@ import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/rou
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
 import { trackEvent, mintExportKey } from '@/lib/platform';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
-import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
+import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';

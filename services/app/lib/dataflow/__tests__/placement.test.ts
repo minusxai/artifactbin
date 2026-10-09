@@ -84,7 +84,7 @@ describe('placeDataflow', () => {
   });
 
   it('the golden booking document: a day click and a booking never leave the page when the reader holds its bookings', async () => {
-    const source = readFileSync(path.join(import.meta.dirname, '../../story/__tests__/fixtures/booking.jsx'), 'utf8');
+    const source = readFileSync(path.join(import.meta.dirname, '../../publish/__tests__/fixtures/booking.jsx'), 'utf8');
     const flow = await compiledSource(source, {
       BookRows1: [
         { name: 'id', type: 'string' }, { name: 'day', type: 'date' }, { name: 'slot', type: 'string' },

@@ -6,14 +6,14 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { canEdit } from '@/lib/artifacts';
-import { compileDraft, draftCompileGate } from '@/lib/story/prepared/draft-compile.server';
+import { compileDraft, draftCompileGate } from '@/lib/publish/prepared/draft-compile.server';
 import { refusesCrossSite, requestOrSessionActor } from '@/lib/accounts';
 import { STORY_DESIGN_NAMES, type StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { collectExternalAssetUrls } from '@/lib/document';
-import { lookupWebAssets } from '@/lib/story/assets/web-assets';
+import { lookupWebAssets } from '@/lib/publish/assets/web-assets';
 import { createHash } from 'node:crypto';
 import { collectRefUses } from '@/lib/dataflow/server';
-import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
 import { inlineStoryCss } from '@/lib/compiled-page/styles/inline-css';
 
 const MAX_SOURCE_LENGTH = 1024 * 1024;
@@ -39,7 +39,7 @@ function draftTicket(request: Request, gate: ReturnType<typeof draftCompileGate>
 
 /**
  * GET: the stylesheet a draft of the saved head compiles with — the whole sheet (every recipe and theme), where
- * the served page carries only the reader's cut (lib/story/prepared/reader-sheet.server). The editor writes it
+ * the served page carries only the reader's cut (lib/publish/prepared/reader-sheet.server). The editor writes it
  * once on entering edit mode, before typing, so the first compile reply swaps no sheet (a sheet swap restyles the
  * whole page, inside that reply's draw).
  */

@@ -181,7 +181,7 @@ export async function runNextMermaidHarvest(): Promise<boolean> {
     const images = await harvestVersion(claimed.artifact_id, claimed.version);
     await settle(images === null ? 'superseded' : 'done', images);
     // The version's prepared reader page holds a render made before these drawings existed: the head's
-    // rendering changed, and story's listener (lib/story/prepared/commit-hooks.server) drops that page and
+    // rendering changed, and story's listener (lib/publish/prepared/commit-hooks.server) drops that page and
     // prepares the head again with them.
     if (images?.inline && Object.keys(images.inline).length) emitHeadCommitted(claimed.artifact_id, undefined, { renderingChanged: true });
   } catch (error) {

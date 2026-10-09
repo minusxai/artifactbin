@@ -51,7 +51,7 @@ export type ReaderIslandInput = Pick<PrepareStoryInput, 'refData' | 'dataflow' |
  * The island fields a REQUEST decides (who reads, their `$` values and what
  * they may hold, the other artifacts the document embeds) — never the
  * document's own parse. One writer, so the served page's per-viewer overlay
- * (lib/story/prepared/prepared-page.server) is exactly what the whole preparation writes.
+ * (lib/publish/prepared/prepared-page.server) is exactly what the whole preparation writes.
  */
 export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData, 'nodes' | 'colorMode' | 'template' | 'chrome' | 'glyphs'> {
   const sqliteWasm = input.dataflow?.hold ? loadCompilerBuild().sqliteWasm : undefined;

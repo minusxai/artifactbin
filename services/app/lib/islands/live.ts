@@ -4,7 +4,7 @@
  *
  * It picks up where the page's SNAPSHOT left off. A guest snapshot may be minutes old when it is
  * served (stale-but-young, revalidating), so the page opens its stream with `?since=` — the
- * snapshot's marks (lib/story/prepared/served-results.server `tokenOf`) — and the stream sends the ordinary
+ * snapshot's marks (lib/publish/prepared/served-results.server `tokenOf`) — and the stream sends the ordinary
  * `data` frame at once for every dataset whose mark has moved since. The page then re-runs exactly
  * the queries that read it: a stale snapshot refreshes when the stream connects, not on the next
  * write.

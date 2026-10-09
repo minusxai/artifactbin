@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import { fixHtmlNesting } from '@/lib/document/nesting';
-import { canonicalizeMarkup } from '@/lib/story/document/jsx-tier';
+import { canonicalizeMarkup } from '@/lib/publish/document/jsx-tier';
 import { stampNodeIds } from '@/lib/document/node-ids';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 

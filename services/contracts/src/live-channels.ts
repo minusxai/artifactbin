@@ -2,7 +2,7 @@
  * THE LIVE CHANNEL NAMES — the Postgres LISTEN/NOTIFY channel a document's
  * wakeups ride on, and the separate one for its annotations (a comment must not
  * wake every reader's document catch-up). One formula, used by the listener
- * (lib/story/realtime/live), the events authorizer and every TypeScript
+ * (lib/publish/realtime/live), the events authorizer and every TypeScript
  * pg_notify. Writes that notify from inside SQL spell the same formula as
  * `'artifact_' || lower(id)`; services/app/__tests__/live-channels.test.ts holds
  * the two to one answer.

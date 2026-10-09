@@ -8,7 +8,7 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {POST as forkRoute} from '@/app/api/my/artifacts/[id]/fork/route';
 import {POST as tables} from '@/app/a/[id]/tables/route';
 import {type ArtifactRow} from '@/lib/artifacts';
-import {forkDatasetPreview} from '@/lib/story/publish';
+import {forkDatasetPreview} from '@/lib/publish/publish';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';

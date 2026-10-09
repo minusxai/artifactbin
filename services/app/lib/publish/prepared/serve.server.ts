@@ -109,7 +109,7 @@ export interface CompiledReaderRequest {
   capture?: boolean;
   /** A capture's verified image import door without opening a query door. */
   assetsUrl?: string;
-  /** A domain post's attribution line (lib/story/document's bare footer), after the story. */
+  /** A domain post's attribution line (lib/publish/document's bare footer), after the story. */
   footer?: { html: string; css: string } | null;
   /** A document served by itself: the standalone stylesheets, byte for byte (AssembleInput.sheets). */
   sheets?: AssembleInput['sheets'];

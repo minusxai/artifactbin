@@ -1,6 +1,6 @@
 /**
  * THE READER'S SHEET — a version's compiled stylesheet with what its story
- * can never match taken out, for the prepared page (lib/story/prepared/prepared-page.server).
+ * can never match taken out, for the prepared page (lib/publish/prepared/prepared-page.server).
  *
  * Every compiled document sheet carries the recipe union (every kit
  * component's utilities and the typography toolbar's palette) and every

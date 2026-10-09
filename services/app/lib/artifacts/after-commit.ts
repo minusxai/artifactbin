@@ -1,8 +1,8 @@
 /**
  * AFTER-COMMIT HOOKS: what a committed write tells the rest of the system, without lib/artifacts
  * knowing who listens. A head commit (a creation, an edit, a re-rendering) and a dataset write each
- * emit one event; lib/story registers the listeners that warm the new head's prepared page and
- * invalidate the guest snapshots a dataset feeds (lib/story/prepared/commit-hooks.server
+ * emit one event; lib/publish registers the listeners that warm the new head's prepared page and
+ * invalidate the guest snapshots a dataset feeds (lib/publish/prepared/commit-hooks.server
  * installStoryCommitHooks, called by the serving composition). Nothing registered means nothing runs:
  * a script or a unit test that writes gets no background work behind its back.
  *

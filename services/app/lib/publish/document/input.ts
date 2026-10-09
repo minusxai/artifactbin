@@ -21,8 +21,8 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 import { json } from '../../http/http';
 import { publishJsx } from './jsx-tier';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
-import { ingestImageFromUrl } from '@/lib/story/ingest/image';
-import { ingestPdfFromUrl } from '@/lib/story/ingest/pdf';
+import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
+import { ingestPdfFromUrl } from '@/lib/publish/ingest/pdf';
 import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '@/lib/datasets/data-tiers';
 import { publishFile } from '@/lib/datasets/file-store';
 

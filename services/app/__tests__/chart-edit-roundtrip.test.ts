@@ -31,7 +31,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
-import { canonicalizeMarkup } from '@/lib/story/document/jsx-tier';
+import { canonicalizeMarkup } from '@/lib/publish/document/jsx-tier';
 import { readQuestionChart, updateQuestionChartInJsx } from '@/lib/data/story/story-viz';
 import { request } from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';

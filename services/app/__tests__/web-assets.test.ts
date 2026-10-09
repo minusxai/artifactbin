@@ -26,7 +26,7 @@ import { createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { setAssetByteQuotaForTests } from '@/lib/artifacts/asset-quota';
-import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/story/assets/web-assets';
+import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/publish/assets/web-assets';
 import { assetBytesForToken } from '@/lib/artifacts/asset-quota';
 import { assetUrlFor } from '@/lib/document/asset-url';
 import { webIngestRateLimited } from '@/lib/accounts';

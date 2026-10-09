@@ -76,12 +76,12 @@ await esbuild.build({
   logLevel: 'warning',
 });
 /*
- * THE EDITOR'S DRAFT-COMPILE THREADS: services/app/lib/story/prepared/draft-compile.server starts
+ * THE EDITOR'S DRAFT-COMPILE THREADS: services/app/lib/publish/prepared/draft-compile.server starts
  * `draft-compile-worker.mjs` from beside the bundle that holds it; without the file it compiles drafts
  * on the request thread.
  */
 await esbuild.build({
-  entryPoints: [fileURLToPath(new URL('../../services/app/lib/story/prepared/draft-compile-worker.ts', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../../services/app/lib/publish/prepared/draft-compile-worker.ts', import.meta.url))],
   bundle: true, platform: 'node', format: 'esm', target: 'node22',
   outfile: join(dirname(out), 'draft-compile-worker.mjs'),
   external: [...EXTERNALS, ...BUNDLE_ONLY_EXTERNALS],

@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { loadCompilerBuild } from '../../build.server';
 import type { CompileInput } from '../../contract';
-import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
 import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/compile-dataflow';
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import type { Dataflow } from '@/lib/dataflow/dataflow';

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import esbuild from 'esbuild';
 
-const ENTRY = 'services/app/lib/story/prepared/prepared-page.server.ts';
+const ENTRY = 'services/app/lib/publish/prepared/prepared-page.server.ts';
 
 export async function preparationInputs(repoRoot) {
   const appRoot = path.join(repoRoot, 'services/app');

@@ -9,7 +9,7 @@ import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { readableArtifact, changeMembership } from '@/lib/artifacts';
 import { getArtifactById, dataflowForRow } from '@/lib/artifacts';
-import { forkArtifact } from '@/lib/story/publish';
+import { forkArtifact } from '@/lib/publish/publish';
 useAppHarness();
 it('allows a recipient through a saved owner artifact only after approval',async()=>{
  const owner=await createUser({email:'mxmx_test_grants_owner@example.com'}),bob=await createUser({email:'mxmx_test_grants_bob@example.com'});

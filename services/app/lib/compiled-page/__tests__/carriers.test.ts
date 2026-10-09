@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
 import { compileDataflow, prepareCompile } from '@/lib/dataflow/compile-dataflow';
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { compilePage } from '../compiler';
