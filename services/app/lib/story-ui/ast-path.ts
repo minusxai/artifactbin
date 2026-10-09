@@ -9,3 +9,6 @@
  * single string constant.
  */
 export const AST_PATH_ATTR = 'data-mx-ast';
+
+/** The authored source ID represented by a rendered node, distinct from its runtime DOM `id`. */
+export const SOURCE_NODE_ID_ATTR = 'data-mx-source-node-id';

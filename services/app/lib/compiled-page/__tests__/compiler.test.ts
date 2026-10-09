@@ -64,6 +64,25 @@ describe('compilePage', () => {
     expect(page.unported).toEqual([]);
   });
 
+  it('emits the authored source identity beside the AST path in served HTML', async () => {
+    const page = await compilePage(await inputOf('<div id="report"><h2 id="bug-11-heading">Resolve from the preview</h2></div>'), loadCompilerBuild());
+    const heading = dom(page.html).querySelector('h2')!;
+    expect(heading.getAttribute('data-mx-ast')).toBe('0.0');
+    expect(heading.getAttribute('data-mx-source-node-id')).toBe('bug-11-heading');
+  });
+
+  it('keeps a keyed repeat owner and its item source identity through runtime DOM IDs', async () => {
+    const source = '<Helmet><Value name="rows" type="table" value={[{"id":42,"name":"Ada"}]} /></Helmet>'
+      + '<For id="orders" each={$rows} keyBy="id"><p id="row-template">{$_row.name}</p></For>';
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const html = dom(page.html);
+    const owner = html.querySelector('#orders')!;
+    const item = html.querySelector('p')!;
+    expect(owner.getAttribute('data-mx-source-node-id')).toBe('orders');
+    expect(item.getAttribute('data-mx-source-node-id')).toBe('row-template');
+    expect(item.id).toMatch(/^mx-instance-/);
+  });
+
   it('compiles FileUpload as a separate island family', async () => {
     const input = await inputOf('<Helmet><Import name="attachments" src="ref:SALES1" /><Value name="refs" type="string" default="[]" url={false}/><Value name="uploading" type="boolean" default={false} url={false}/></Helmet><FileUpload dataset="attachments" value="$refs" busy="$uploading" multiple label="Screenshots" maxFiles={5} />');
     const page = await compilePage(input, loadCompilerBuild());
@@ -451,6 +470,7 @@ describe('codegen safety', () => {
 const columnParity = (html: string, source: string, drop: string[] = []): string[] => {
   const column = dom(html).querySelector('.mx-doc')!;
   const react = new JSDOM(`<div>${reactRender(source)}</div>`).window.document.body.firstElementChild!;
+  for (const root of [column, react]) for (const el of root.querySelectorAll('[data-mx-source-node-id]')) el.removeAttribute('data-mx-source-node-id');
   for (const root of [column, react]) for (const id of drop) root.querySelector(`#${id}`)?.remove();
   return diffShapes(shapeOf(react), shapeOf(column));
 };

@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { $getSelection, $isRangeSelection } from 'lexical';
 import { mountMarkdownEditor } from '@/lib/markdown/editor';
+import { STORY_SELECTION_MESSAGE } from '@/lib/story-runtime/contract';
 import { createHoverSelect } from '../hover-select';
 
 afterEach(() => { document.body.replaceChildren(); });
@@ -45,4 +46,35 @@ it('starts a text selection in a newly inserted Markdown region when requested',
   expect(hover.blockMode()).toBe(false);
   expect(hover.selectedPath()).toBe('0');
   hover.dispose(); editor.destroy();
+});
+
+it('does not capture a click selection from stale rendered identity at a reused AST path', () => {
+  const nodes = parseJsxOrThrow('<div><p id="bug-10-report">Item 10 report</p><h3 id="bug-11-heading">11. Resolve from the hover preview</h3></div>').nodes;
+  const root = document.createElement('div');
+  root.innerHTML = '<div data-mx-ast="0"><h3 data-mx-ast="0.0" data-mx-source-node-id="bug-11-heading">11. Resolve from the hover preview</h3></div>';
+  document.body.append(root);
+  const post = vi.fn();
+  const hover = createHoverSelect({ win: window, root, nodes: () => nodes, views: { all: new Set(), last: null }, activePath: () => null, commitActive() {}, post });
+  root.querySelector('h3')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  expect(post).not.toHaveBeenCalled();
+  hover.dispose();
+});
+
+it('does not attach a selected quote or source path from stale rendered identity', () => {
+  const nodes = parseJsxOrThrow('<div><p id="bug-10-report">Item 10 report</p><h3 id="bug-11-heading">11. Resolve from the hover preview</h3></div>').nodes;
+  const root = document.createElement('div');
+  root.innerHTML = '<div data-mx-ast="0"><div class="ProseMirror" contenteditable="true">'
+    + '<h3 data-mx-ast="0.0" data-mx-source-node-id="bug-11-heading">11. Resolve from the hover preview</h3></div></div>';
+  document.body.append(root);
+  const post = vi.fn();
+  const hover = createHoverSelect({ win: window, root, nodes: () => nodes, views: { all: new Set(), last: null }, activePath: () => null, commitActive() {}, post });
+  const heading = root.querySelector('h3')!;
+  const range = document.createRange();
+  range.selectNodeContents(heading);
+  getSelection()!.removeAllRanges(); getSelection()!.addRange(range);
+  document.dispatchEvent(new Event('selectionchange'));
+  const selections = post.mock.calls.map(([message]) => message).filter((message) => message.type === STORY_SELECTION_MESSAGE && message.selection);
+  expect(selections).toEqual([]);
+  getSelection()!.removeAllRanges();
+  hover.dispose();
 });
