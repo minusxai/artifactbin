@@ -184,8 +184,8 @@ async function build() {
   ]);
   const packagesIn = (result, re) => Object.keys(result.metafile.inputs).filter((key) => re.test(key));
   results.forEach((result, i) => {
-    const leaked = packagesIn(result, /node_modules\/(@codemirror|@lezer|prettier)\//);
-    if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle CodeMirror or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
+    const leaked = packagesIn(result, /node_modules\/(?:@codemirror|@lezer|prettier)\//);
+    if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle CodeMirror, Lezer, or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
   });
   const reactInSolid = packagesIn(results[KINDS.indexOf('solid')], /node_modules\/(react|react-dom|scheduler)\//);
   if (reactInSolid.length) {

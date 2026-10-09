@@ -83,6 +83,7 @@
     "pg": "8.17.1",
     "pg-cursor": "2.22.0",
     "pgsql-ast-parser": "12.0.2",
+    "prismjs": "1.30.0",
     "prosemirror-commands": "1.7.2",
     "prosemirror-keymap": "1.2.3",
     "prosemirror-model": "1.25.11",
