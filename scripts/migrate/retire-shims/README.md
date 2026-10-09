@@ -15,18 +15,15 @@ versions without `meta.dataSyntax: 2`, and for one archived version whose stored
 parse. Restore any of them from the dump if it is needed. 137 archived versions still carry
 `data-annotation-anchor`; there it is an inert attribute.
 
-Two scripts remain. Each reports first and writes only with `--apply` (`common.ts`; the target is
+One script remains. It reports first and writes only with `--apply` (`common.ts`; the target is
 printed without credentials):
 
 ```sh
 DATABASE_URL=<url> npx tsx scripts/migrate/retire-shims/legacy-anchors.ts [--apply] [--detach-orphaned-anchors] --live-objects
-DATABASE_URL=<url> npx tsx scripts/migrate/retire-shims/bare-scripts.ts
 ```
 
 | script | what it does | left on production |
 |---|---|---|
 | `legacy-anchors.ts` | Republishes a live document still carrying `data-annotation-anchor` without it (a free legacy key becomes its element's `id`; comments on other keys are repointed in the same transaction). With `--detach-orphaned-anchors`, a comment whose key names no node is detached (`anchor_key` NULL) instead of blocking the document. A second run is a no-op. | hAoPxJ (anchor a40hykrmo), slGJqK (anchor a54jnhj8s): run with `--detach-orphaned-anchors` |
-| `bare-scripts.ts` | Report only. Lists live documents whose Lambda handler is a bare `<script>` (`used`), by the runner's own predicate; a row whose stored document does not decode is listed as unreadable rather than crashing the report. | unknown: the first run crashed on an undecodable graph; run again |
 
-The bare-script branch in `lib/runner/resolve.ts` stays until `bare-scripts.ts` reports `used` 0.
 Tests: `services/app/__tests__/retire-shims.test.ts`.
