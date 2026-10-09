@@ -12,7 +12,7 @@ export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 /**
  * EVERY REQUEST KEY THAT CARRIES CONTENT, named once. The content parser
  * (lib/story/document/input `parseContentInput`) counts them to enforce
- * "exactly one", and the replace door (lib/artifacts/wire) reads the same list
+ * "exactly one", and the replace door (lib/story/publish/requests) reads the same list
  * to refuse content on a folder — a second spelling there would go stale the
  * first time a tier is added and let that tier through the one door that must
  * not take it.
