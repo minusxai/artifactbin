@@ -40,7 +40,7 @@ export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VER
  * ids) are refused per drawing by the harvest itself, which draws twice, and
  * drawings with HTML labels by the sanitizer.
  */
-export const MERMAID_PRERENDER_EXCLUDED_KINDS: ReadonlySet<string> = new Set(['gantt', 'cynefin', 'c4', 'usecase', 'railroad', 'railroad-ebnf', 'railroad-abnf', 'railroad-peg']);
+const MERMAID_PRERENDER_EXCLUDED_KINDS: ReadonlySet<string> = new Set(['gantt', 'cynefin', 'c4', 'usecase', 'railroad', 'railroad-ebnf', 'railroad-abnf', 'railroad-peg']);
 
 /** A code the harvest may store a drawing for: one the kit draws, of a kind that is not excluded. */
 export function mermaidPrerenderable(code: string): boolean {

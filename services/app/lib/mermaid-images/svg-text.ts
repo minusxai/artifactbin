@@ -25,11 +25,11 @@ export interface FontFile { url: string; weight: string; unicodeRange?: string |
 export interface FontPlanEntry { family: string; url: string; variable: boolean; weights: number[]; unicodeRange: string | null; characters: string }
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-export const decodeEntities = (text: string): string => text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name: string) =>
+const decodeEntities = (text: string): string => text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name: string) =>
   name[0] === '#' ? String.fromCodePoint(name[1] === 'x' || name[1] === 'X' ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1))) : ENTITIES[name] ?? entity);
 
 /** The drawing's rendered text: in edge labels (the edge-label face) and everywhere else (the label face). */
-export function textOf(svg: string): { label: string; edge: string } {
+function textOf(svg: string): { label: string; edge: string } {
   const text = { label: '', edge: '' };
   const stack: Array<{ edge: boolean; hidden: boolean }> = [];
   for (const match of svg.matchAll(/<(\/?)([\w:-]+)([^>]*?)(\/?)>|([^<]+)/g)) {
@@ -49,7 +49,7 @@ export function textOf(svg: string): { label: string; edge: string } {
 const unquote = (family: string) => family.trim().replace(/^["']|["']$/g, '');
 
 /** The first family of every font stack the drawing declares (its own CSS and attributes). */
-export function namedFamilies(svg: string): Set<string> {
+function namedFamilies(svg: string): Set<string> {
   const named = new Set<string>();
   // `font-family` itself, never a custom property that ends in it (Mermaid's own `--mermaid-font-family`).
   for (const match of svg.matchAll(/(?<![\w-])font-family\s*(?::|=\s*")\s*([^;}"]*(?:&quot;|"[^"]*")?[^;}"]*)/gi)) {
@@ -61,7 +61,7 @@ export function namedFamilies(svg: string): Set<string> {
 
 const WEIGHTS: Record<string, number> = { normal: 400, bold: 700, bolder: 700, lighter: 300 };
 /** The weights the drawing's text is set in: 400, and whatever bold it asks for. */
-export function weightsOf(svg: string): number[] {
+function weightsOf(svg: string): number[] {
   const weights = new Set([400]);
   for (const match of svg.matchAll(/font-weight\s*[:=]\s*"?\s*([a-z]+|\d{3})/gi)) {
     const weight = WEIGHTS[match[1]!.toLowerCase()] ?? Number(match[1]);
@@ -70,7 +70,7 @@ export function weightsOf(svg: string): number[] {
   return [...weights].sort((a, b) => a - b);
 }
 
-export function inUnicodeRange(range: string | null | undefined, point: number): boolean {
+function inUnicodeRange(range: string | null | undefined, point: number): boolean {
   return (range || 'U+0-10FFFF').split(',').some((part) => {
     const match = /^\s*U\+([0-9a-f?]+)(?:-([0-9a-f]+))?\s*$/i.exec(part);
     if (!match) return false;
@@ -81,7 +81,7 @@ export function inUnicodeRange(range: string | null | undefined, point: number):
 }
 
 /** The family Mermaid sets on the drawing's root rule (`#<id>{font-family:…}`), or null (wardley sets none). */
-export function rootFamily(svg: string): string | null {
+function rootFamily(svg: string): string | null {
   const id = /^<svg\b[^>]*\bid="([\w-]+)"/.exec(svg)?.[1];
   if (!id) return null;
   const rule = `#${id}{font-family:`;

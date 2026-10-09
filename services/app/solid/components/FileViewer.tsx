@@ -22,7 +22,7 @@ const KIND_BY_EXTENSION: Record<string, FileKind> = {
   txt: 'text', csv: 'text', json: 'text',
   woff: 'font', woff2: 'font', ttf: 'font', otf: 'font', glb: 'model',
 };
-export const TEXT_PREVIEW_BYTES = 8_000;
+const TEXT_PREVIEW_BYTES = 8_000;
 export const FILE_ACTION = 'inline-flex cursor-pointer items-center gap-1.5 rounded-[4px] border px-3 py-1.5 font-mono text-xs no-underline transition-colors';
 export const extensionOf = (name: string) => { const dot = name.lastIndexOf('.'); return dot <= 0 ? '' : name.slice(dot + 1).toLowerCase(); };
 export const fileKindOf = (name: string): FileKind => KIND_BY_EXTENSION[extensionOf(name)] ?? 'other';

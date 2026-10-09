@@ -59,12 +59,12 @@ import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, so
 const LS = String.fromCharCode(0x2028);
 const PS = String.fromCharCode(0x2029);
 /** A JS string literal for ANY author-derived text: JSON, plus the characters JSON leaves raw that matter in HTML/JS. */
-export const lit = (value: unknown): string => JSON.stringify(String(value)).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replaceAll(LS, '\\u2028').replaceAll(PS, '\\u2029');
+const lit = (value: unknown): string => JSON.stringify(String(value)).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replaceAll(LS, '\\u2028').replaceAll(PS, '\\u2029');
 const TAG = /^[a-z][a-z0-9-]*$/i;
 const ATTR = /^[a-zA-Z_:][-a-zA-Z0-9_:.]*$/;
 const IDENT = /^[A-Za-z_$][\w$]*$/;
-export const safeTag = (tag: string): string => { if (!TAG.test(tag)) throw new Error(`compile: refused tag name ${JSON.stringify(tag)}`); return tag; };
-export const safeAttr = (name: string): string => { if (!ATTR.test(name)) throw new Error(`compile: refused attribute name ${JSON.stringify(name)}`); return name; };
+const safeTag = (tag: string): string => { if (!TAG.test(tag)) throw new Error(`compile: refused tag name ${JSON.stringify(tag)}`); return tag; };
+const safeAttr = (name: string): string => { if (!ATTR.test(name)) throw new Error(`compile: refused attribute name ${JSON.stringify(name)}`); return name; };
 const safeProp = (name: string): string => { if (!IDENT.test(name)) throw new Error(`compile: refused prop name ${JSON.stringify(name)}`); return name; };
 
 const VOID = /^(area|base|br|col|embed|hr|img|input|link|meta|source|track|wbr)$/;
@@ -198,9 +198,8 @@ const isElement = (node: JsxNode): node is JsxElement => node.type === 'element'
  * server-rendered fallback, and the page runtime renders the component into it (lib/islands/page-runtime). The
  * predicate and the attribute live in ./script-mount, which the editor reads too.
  */
-export { isScriptComponent, MOUNT_ATTR };
 /** The mount's props (literal JSON), its bindings (prop → declared name) and the DOM attributes the node keeps. */
-export function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: Record<string, string>; id?: string; cls?: string } {
+function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: Record<string, string>; id?: string; cls?: string } {
   const props: Record<string, unknown> = {};
   const bind: Record<string, string> = {};
   let id: string | undefined, cls: string | undefined;

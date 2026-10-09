@@ -30,9 +30,9 @@ import { canAuthenticateUser } from './user-kinds';
 /** The cookie the documents' doors read the reader from (`Domain=.<pages host>`, HttpOnly). */
 export const PAGES_COOKIE = 'afbin_pages';
 /** How long a ticket is good for: the frame loads it at once. */
-export const PAGES_TICKET_TTL_MS = 60_000;
+const PAGES_TICKET_TTL_MS = 60_000;
 /** How long a pages session lives; every framed load mints a fresh one. */
-export const PAGES_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const PAGES_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const TICKET_KIND = 'pages_ticket';
 
 interface ActorSnapshot { credential: 'session' | 'agent-cookie' | 'none'; userId: string | null; tokenId: string | null; email: string | null; emailVerified: boolean | null }

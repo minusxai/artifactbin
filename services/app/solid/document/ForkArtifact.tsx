@@ -6,7 +6,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Tooltip } from '../components/Tooltip';
 
 type Dataset = { id: string; title: string | null };
-export function copiedDatasetsNote(datasets: Dataset[]): string | null {
+function copiedDatasetsNote(datasets: Dataset[]): string | null {
   const first = datasets[0];
   if (!first) return null;
   return datasets.length === 1 ? `Its dataset “${first.title ?? first.id}” will be copied too` : `Its ${datasets.length} datasets will be copied too`;

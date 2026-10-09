@@ -26,7 +26,7 @@ import type { MermaidFaces } from './drawn';
 import { MERMAID_TEXT_RENDERING, bundledFontFiles } from './font-block';
 import { planFontFiles, type FontPlanEntry } from './svg-text';
 
-export { MERMAID_BUNDLED_FAMILIES, MERMAID_FONT_BLOCK, MERMAID_TEXT_RENDERING } from './font-block';
+export { MERMAID_FONT_BLOCK } from './font-block';
 
 /** The subsetter's WebAssembly (harfbuzzjs, wawoff2) could not be loaded: nothing can be embedded now. */
 export class MermaidSubsetterUnavailable extends Error {}

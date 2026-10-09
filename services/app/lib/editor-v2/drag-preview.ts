@@ -6,7 +6,7 @@
  * slot is found: a pointer that wanders out of the parent SNAPS to the nearest
  * sibling slot instead of reading as an error. Only a block with genuinely
  * nowhere to go turns the label red, with the reason. */
-export interface DragLabels {
+interface DragLabels {
   /** What the block is called (the toolbar's node name). */
   label: string;
   /** What its parent is called, for "Can only move within this …". */

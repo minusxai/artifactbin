@@ -14,7 +14,7 @@ const variants=['original','preview','thumbnail'] as const;
 type Variant=typeof variants[number];
 const key=(id:string,variant:Variant)=>`comment-images/${id}/${variant}.webp`;
 const owned=(row:ImageRow,actor:TokenActor)=>actor.userId ? row.user_id===actor.userId : row.user_id===null && row.token_id===actor.tokenId;
-export function validCommentImage(value:unknown):value is CommentImageMetadata {
+function validCommentImage(value:unknown):value is CommentImageMetadata {
  if(!value || typeof value!=='object')return false;
  const m=value as CommentImageMetadata;
  const positive=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)&&v>0;
@@ -25,7 +25,7 @@ export function validCommentImage(value:unknown):value is CommentImageMetadata {
  let count=0;
  return m.strokes.every(s=>s&&/^#[0-9a-f]{6}$/i.test(s.color)&&positive(s.width)&&s.width<=128&&Array.isArray(s.points)&&s.points.length>0&&(count+=s.points.length)<=LIMITS.points&&s.points.every(p=>Array.isArray(p)&&p.length===2&&Number.isFinite(p[0])&&Number.isFinite(p[1])&&p[0]>=0&&p[0]<=m.width&&p[1]>=0&&p[1]<=m.height));
 }
-export const commentImageWire=(row:ImageRow):CommentImageWire=>{
+const commentImageWire=(row:ImageRow):CommentImageWire=>{
  const url=`/api/my/artifacts/${row.artifact_id}/comment-images/${row.id}`;
  return {id:row.id,width:row.metadata.width,height:row.metadata.height,capturedEditId:row.metadata.capturedEditId,capturedAt:row.metadata.capturedAt,originalUrl:`${url}?variant=original`,previewUrl:`${url}?variant=preview`,thumbnailUrl:`${url}?variant=thumbnail`};
 };

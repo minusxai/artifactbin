@@ -16,7 +16,7 @@ import { renderDraftPreview } from './draft-preview.server';
 import type { PrepareStoryInput } from './prepare-runtime.server';
 
 /** How long an eligible draft may wait for a compile slot before it is answered busy. */
-export const DRAFT_COMPILE_WAIT_MS = 2_000;
+const DRAFT_COMPILE_WAIT_MS = 2_000;
 /** Compiles running at once across every session when they run on worker threads. */
 const MAX_WORKER_COMPILES = 3;
 

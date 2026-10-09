@@ -33,7 +33,7 @@ const CONTEXT = 60;
  * how many braces short. Scanning for it is unambiguous: strings and template
  * literals are skipped, so a `}` inside SQL or a label cannot be miscounted.
  */
-export function unclosedExpression(source: string): { attr: string; line: number; missing: number } | null {
+function unclosedExpression(source: string): { attr: string; line: number; missing: number } | null {
   let best: { attr: string; line: number; missing: number } | null = null;
   for (const m of source.matchAll(/([A-Za-z_][\w-]*)=\{/g)) {
     const open = m.index! + m[0].length - 1;

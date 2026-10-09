@@ -1,6 +1,6 @@
 import { afbinInstallCommand, afbinServerFlag, afbinWindowsInstallCommand } from './agent-discovery-tags';
 
-export type GuideBlock =
+type GuideBlock =
   | { kind: 'text'; text: string }
   | { kind: 'command'; label: string; language: 'sh' | 'powershell'; text: string };
 

@@ -14,7 +14,7 @@ import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { SnapshotChartOptions } from '@/lib/compiled-page/charts.server';
 
 /** One job a thread runs: a draft preview, a version's compile, or a snapshot's drawn charts. */
-export type PrepareJob =
+type PrepareJob =
   | { kind?: 'draft'; input: PrepareStoryInput }
   | { kind: 'compile'; input: CompileInput; build: CompilerBuild }
   | { kind: 'charts'; nodes: JsxNode[]; results: Pick<ServedResults, 'tables' | 'errors'>; options: SnapshotChartOptions };

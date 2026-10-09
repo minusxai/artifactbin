@@ -3,4 +3,3 @@ export { DOCUMENT_ROOT_CSS, DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT, documentStyle
 export { fontPreloadTags } from './first-screen-fonts';
 export { appendCspExtensions, assetsPath, markupCsp, mutatePath, queryPath } from './markup-csp';
 export { buildDocumentCsp } from './document-csp';
-export type { DocumentCspInput } from './document-csp';

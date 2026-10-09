@@ -61,7 +61,7 @@ const MAX_INSET = 200;
  * padding that keeps a caret scrolled into view clear of the bar) and the document scrolled to exactly that much
  * further IN THE SAME TASK, so what the reader sees does not move. 0 gives the space back the same way.
  */
-export function createTopInset(win: Window): { set(px: number): void } {
+function createTopInset(win: Window): { set(px: number): void } {
   let inset = 0;
   let base: { paddingTop: string; scrollPaddingTop: string; padding: number } | null = null;
   return {
@@ -92,7 +92,7 @@ export function createTopInset(win: Window): { set(px: number): void } {
 const isUndoKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && !event.altKey && ['z', 'y'].includes(event.key.toLowerCase());
 const isCommentKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && event.altKey && (event.key.toLowerCase() === 'm' || event.code === 'KeyM');
 /** ⌘K / Ctrl-K, as every document editor binds "insert link". */
-export const isLinkKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key.toLowerCase() === 'k' || event.code === 'KeyK');
+const isLinkKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key.toLowerCase() === 'k' || event.code === 'KeyK');
 
 export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions): FrameBridgeSession {
   const doc = win.document;

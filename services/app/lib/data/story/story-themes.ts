@@ -34,7 +34,7 @@ import type { StoryThemeName, StoryDesignName } from '@/lib/validation/story-the
 import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
 import { STORY_SYSTEMS, getStorySystem } from './story-systems';
 
-export type { StoryThemeName, StoryDesignName };
+export type { StoryDesignName };
 export { STORY_THEME_NAMES };
 
 interface StoryThemeFonts {

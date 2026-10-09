@@ -46,7 +46,7 @@ export function moveInto(host: HTMLElement, story: HTMLElement): void {
  * chart stays drawn, and the editor's first draft keeps the running tree when it keeps every component in it (the
  * morph engine's `draftTreeKept`), exactly as every later draft does.
  */
-export function pauseIslandsForEditing(islands: IslandDocument | null): void {
+function pauseIslandsForEditing(islands: IslandDocument | null): void {
   islands?.setMode('edit');
 }
 
@@ -723,4 +723,4 @@ export function createIslandController({ win, root, islands, nodes: served, port
   return controller;
 }
 
-export const docSheet = (doc: Document): HTMLStyleElement | null => doc.querySelector('style[data-mx-story-css]');
+const docSheet = (doc: Document): HTMLStyleElement | null => doc.querySelector('style[data-mx-story-css]');

@@ -28,7 +28,7 @@ const listensLocally=(host:string)=>host==='::1'||isLocalDevelopmentHost(host);
  * `pages.<its hostname>`, a subdomain and so same site by construction. An IP address has no subdomain
  * to derive, so it has to name one.
  */
-export function teamPagesHost(publicUrl:URL,configured:string|undefined):string{
+function teamPagesHost(publicUrl:URL,configured:string|undefined):string{
  if(configured?.trim())return configured.trim();
  const name=publicUrl.hostname.toLowerCase().replace(/\.$/,'');
  if(usesDevOutbox(publicUrl.origin))return 'lvh.me';

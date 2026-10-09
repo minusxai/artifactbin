@@ -25,7 +25,7 @@ export const LIVE_KEEPALIVE_MS = 15_000;
 export const LIVE_SILENCE_MS = 45_000;
 /** Silence after which a page coming back (visible, online) reopens rather than trusting the stream. */
 export const LIVE_STALE_MS = 20_000;
-export const LIVE_BACKOFF_MS = 1_000;
+const LIVE_BACKOFF_MS = 1_000;
 export const LIVE_BACKOFF_MAX_MS = 30_000;
 
 /** The wait before retry `attempt` (0-based): exponential to the cap, then "equal jitter" (half fixed, half random). */

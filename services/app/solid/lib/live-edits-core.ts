@@ -26,9 +26,9 @@ import { sourceChanges } from '@/lib/editor-v2/history';
 import { sourceEdits } from '@/lib/editor-v2/source-edits';
 
 /** How long a burst of typing coalesces before it is persisted. */
-export const FLUSH_DEBOUNCE_MS = 500;
+const FLUSH_DEBOUNCE_MS = 500;
 /** How long after editing starts the save worker is warmed (the graph posted, one preparation run): after the editors mount. */
-export const WARM_PREPARER_MS = 1500;
+const WARM_PREPARER_MS = 1500;
 /** How often a wait for the editor to go idle looks again. */
 const IDLE_POLL_MS = 100;
 

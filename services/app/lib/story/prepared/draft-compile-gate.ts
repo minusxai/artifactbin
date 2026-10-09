@@ -14,10 +14,10 @@
  * Nothing here knows HTTP; the route maps `superseded` and `busy` to responses.
  */
 
-export type GateResult<T> = { ok: true; value: T } | { ok: false; reason: 'superseded' | 'busy' };
+type GateResult<T> = { ok: true; value: T } | { ok: false; reason: 'superseded' | 'busy' };
 
 /** One draft's place in its session's order of arrival. */
-export interface DraftTicket { readonly session: string; readonly seq: number; readonly waitMs?: number }
+interface DraftTicket { readonly session: string; readonly seq: number; readonly waitMs?: number }
 
 export interface DraftCompileGate {
   /**

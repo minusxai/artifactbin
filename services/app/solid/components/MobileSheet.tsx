@@ -31,13 +31,6 @@ let openSheets = 0;
 const sheetListeners = new Set<(open: boolean) => void>();
 const announceSheets = () => { for (const listener of sheetListeners) listener(openSheets > 0); };
 
-/** Follow whether any sheet is open; called at once with the current answer. */
-export function subscribeSheets(listener: (open: boolean) => void): () => void {
-  sheetListeners.add(listener);
-  listener(openSheets > 0);
-  return () => { sheetListeners.delete(listener); };
-}
-
 const SWIPE_CLOSE_PX = 64;
 
 export default function MobileSheet(props: {

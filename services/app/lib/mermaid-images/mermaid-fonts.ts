@@ -63,7 +63,7 @@ export function pageFontFaces(doc: Document = document): PageFontFace[] {
 
 /** The file as a `data:` URL, read once per page (from the HTTP cache: the page loaded it). */
 const loaded = new Map<string, Promise<string>>();
-export function pageFontData(url: string): Promise<string> {
+function pageFontData(url: string): Promise<string> {
   let found = loaded.get(url);
   if (!found) {
     // As the page's @font-face loaded it — CORS, no credentials — so the HTTP cache answers (measured in

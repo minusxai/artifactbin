@@ -11,7 +11,7 @@ export function mermaidSourceError(code: unknown): string | null {
 }
 
 /** A layout engine Mermaid loads on demand (its `registerDefaultLayoutLoaders`). */
-export type MermaidLayout = 'elk' | 'cose-bilkent' | 'swimlane' | 'dagre';
+type MermaidLayout = 'elk' | 'cose-bilkent' | 'swimlane' | 'dagre';
 
 export interface MermaidDiagram {
   /** The kit's name for the kind: what a manifest keys a kind's code by. */

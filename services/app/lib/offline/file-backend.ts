@@ -60,7 +60,7 @@ export const OFFLINE_REASONS: Record<BackendFeature, string> = {
 export const LOCAL_DELETE_ONLY = 'Only comments made in this file can be deleted here.';
 
 /** Who wrote a journal entry or a comment when nobody picked a name. */
-export const UNNAMED_AUTHOR = 'Someone';
+const UNNAMED_AUTHOR = 'Someone';
 
 export interface FileBackendHooks {
   /** Every new state of the file: an edit, a comment, a reply, a status change. */

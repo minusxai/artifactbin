@@ -47,7 +47,7 @@ export const DECK_LAYERS: Record<string, readonly string[]> = {
 };
 
 /** `<DeckGL basemap>`: a street basemap under the layers, or none (boundaries alone). */
-export const DECK_BASEMAPS = ['auto', 'light', 'dark', 'none'] as const;
+const DECK_BASEMAPS = ['auto', 'light', 'dark', 'none'] as const;
 const VIEW_KEYS = ['longitude', 'latitude', 'zoom', 'pitch', 'bearing'];
 /**
  * Layer `data`: omitted (the component's query rows) or an allowlisted bundled
@@ -55,7 +55,7 @@ const VIEW_KEYS = ['longitude', 'latitude', 'zoom', 'pitch', 'bearing'];
  * makes one row per feature with a `geometry` column), read through a Query
  * like any other rows — so a GeoJsonLayer without `data` draws that column.
  */
-export const BOUNDARY_PREFIX = 'boundary:';
+const BOUNDARY_PREFIX = 'boundary:';
 /** The column a GeoJsonLayer reads feature geometry from when it draws query rows. */
 export const GEOMETRY_COLUMN = 'geometry';
 

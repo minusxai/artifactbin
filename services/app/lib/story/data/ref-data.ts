@@ -78,7 +78,7 @@ export function imageRefData(row:{id:string;version:number;meta:unknown},capture
 export const imageRawUrl = (id: string, version: number): string => `/a/${id}/raw?v=${version}`;
 
 /** Where the narrow copy of the same image artifact lives: the same bytes, `?w=` apart. */
-export const imageVariantUrl = (id: string, version: number, width: number): string =>
+const imageVariantUrl = (id: string, version: number, width: number): string =>
   `${imageRawUrl(id, version)}&w=${width}`;
 
 /**

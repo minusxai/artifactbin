@@ -10,7 +10,7 @@ import { createContext, createEffect, createSignal, on, onCleanup, useContext, t
 import { createPageDataStore, type PageDataStore } from '@/solid/lib/page-data-store';
 import { PAGE_DATA_CHANGED, PROFILE_CHANGED, REFRESH_EVENT } from '@/solid/lib/page-data-events';
 
-export interface SessionState {
+interface SessionState {
   user: { id: string; email: string | null; username: string | null; image: string | null } | null;
   kind: 'account' | 'none';
   onboarded: boolean;
@@ -26,7 +26,7 @@ export interface SessionContext {
 const Ctx = createContext<SessionContext>({ session: () => null, reload: () => {}, pages: null, sessionError: () => null });
 
 /** `window.addEventListener` for the owner's lifetime. */
-export function listen(type: string, handler: () => void): void {
+function listen(type: string, handler: () => void): void {
   window.addEventListener(type, handler);
   onCleanup(() => window.removeEventListener(type, handler));
 }

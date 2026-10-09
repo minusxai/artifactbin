@@ -29,7 +29,7 @@ import type { VizResultColumn } from './types';
 /** Column kinds a slot may accept (drives drop-zone hints and dummy synthesis). */
 type VizRecipeAccepts = VizRecipeBinding['accepts'][number];
 
-export type { VizRecipeBinding, VizRecipeContent };
+export type { VizRecipeContent };
 
 type FileRecipeMaterializeResult =
   | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' }

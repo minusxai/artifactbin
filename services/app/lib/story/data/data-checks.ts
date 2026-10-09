@@ -30,7 +30,7 @@ type DataCheckResult =
   | { ok: false; error: 'invalid_refs' | 'invalid_sql'; details: string[] };
 
 /** What an artifact is to the compiler: a dataset's tables, a folder's listing, or a database to run inside. */
-export function schemaSourceOf(r: ResolvedRef | null): ImportSource | null {
+function schemaSourceOf(r: ResolvedRef | null): ImportSource | null {
   if (!r) return null;
   if (r.format === 'folder') return { kind: 'folder', tables: [{ name: 'rows', columns: r.columns ?? [] }] };
   if (r.format !== 'dataset') return null;

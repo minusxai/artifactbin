@@ -32,7 +32,7 @@ import { getDb } from '@/lib/platform/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
 import { ownerUsername } from '@/lib/accounts/users';
 
-export type DomainStatus = 'pending' | 'verified';
+type DomainStatus = 'pending' | 'verified';
 /** One CAA property, as `tag value` (`issue letsencrypt.org`). `critical` is the issuer-critical flag. */
 export interface CaaRecord { tag: string; value: string; critical?: boolean }
 /** The three DNS questions verification asks. Every method answers `[]` for a name with no such records. */
@@ -62,11 +62,11 @@ export type AttachRefusal = 'disabled' | 'invalid_hostname' | 'taken' | 'limit';
 export type VerifyRefusal = 'disabled' | 'not_found' | 'taken' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
 
 /** The TXT record's label; the name we ask for is `_artifactbin.<hostname>`. */
-export const TXT_LABEL = '_artifactbin';
+const TXT_LABEL = '_artifactbin';
 /** How long a verified domain's TXT may be missing before the re-check detaches it. */
-export const DETACH_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+const DETACH_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 /** How often the app server re-checks verified domains. */
-export const RECHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const RECHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** The CA whose certificates the custom-domain edge issues. */
 const OUR_CA = 'letsencrypt.org';
 
@@ -332,7 +332,7 @@ export async function recheckDomains(resolver: DomainResolver, now: Date = new D
  * Node's own resolver, bounded: a lookup that hangs must not hang a Verify
  * press. Every "no such record" shape answers `[]`.
  */
-export function defaultDomainResolver(): DomainResolver {
+function defaultDomainResolver(): DomainResolver {
   const resolver = new Resolver({ timeout: 5000, tries: 2 });
   const none = <T>(promise: Promise<T[]>): Promise<T[]> => promise.catch(() => []);
   return {
@@ -470,7 +470,7 @@ export async function servesWebAsset(ownerId: string, hash: string): Promise<boo
 }
 
 /** The canonical address of a post: on the custom host, over HTTPS (the edge serves nothing else). */
-export function domainPostUrl(hostname: string, row: Pick<ArtifactRow, 'id' | 'title'>): string {
+function domainPostUrl(hostname: string, row: Pick<ArtifactRow, 'id' | 'title'>): string {
   return `https://${hostname}${domainPostPath(row)}`;
 }
 

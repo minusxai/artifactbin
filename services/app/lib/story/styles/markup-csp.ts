@@ -73,7 +73,7 @@ const BEHAVIOUR_DIRECTIVES = [
 
 /** The path the document may fetch: its own query endpoint. */
 export const queryPath = (id: string): string => `/a/${id}/query`;
-export const resolvePath = (id: string): string => `/a/${id}/resolve`;
+const resolvePath = (id: string): string => `/a/${id}/resolve`;
 
 /**
  * …and the one it may LISTEN on: its own live stream, so a reader sees their

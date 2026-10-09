@@ -1,6 +1,6 @@
 import type { RemoteSessionInfo } from '../../../contracts/src/remote';
-export const MANAGED_RESTART_BUDGET_MS = 8 * 60_000;
-export const MANAGED_START_REQUEST_TIMEOUT_MS = 30_000;
+const MANAGED_RESTART_BUDGET_MS = 8 * 60_000;
+const MANAGED_START_REQUEST_TIMEOUT_MS = 30_000;
 const MAX_RETRY_DELAY_MS = 15_000;
 
 type StartResponse = { ok: boolean; status: number; headers: Headers; json(): Promise<unknown> };

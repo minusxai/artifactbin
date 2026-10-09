@@ -40,7 +40,7 @@ export interface CapabilityActor {
 }
 
 /** A user target (follow) rather than a document one. */
-export interface UserTarget { userId: string }
+interface UserTarget { userId: string }
 
 export type CapabilityTarget = ArtifactRow | UserTarget;
 
@@ -115,8 +115,8 @@ export async function can(actor: CapabilityActor, capability: Capability, target
 }
 
 /** The machine-readable halves of the two refusals a capability check produces. */
-export const SIGN_IN_REQUIRED_ERROR = 'sign_in_required';
-export const SANDBOX_ONLY_ERROR = 'sandbox_only';
+const SIGN_IN_REQUIRED_ERROR = 'sign_in_required';
+const SANDBOX_ONLY_ERROR = 'sandbox_only';
 
 export interface CapabilityRefusal { status: number; body: { error: string; hint?: string; message?: string } }
 

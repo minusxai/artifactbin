@@ -63,7 +63,7 @@ export interface ArchivedRender {
  * must be the SAME 404. A lenient `Number()` would answer `?version=1e3` and
  * `?version=+1` differently from the archive's own numbering.
  */
-export function versionAsked(url: string): number | 'none' | 'invalid' {
+function versionAsked(url: string): number | 'none' | 'invalid' {
   const raw = new URL(url).searchParams.get(VERSION_PARAM);
   if (raw === null) return 'none';
   return /^[1-9][0-9]{0,9}$/.test(raw) ? Number(raw) : 'invalid';

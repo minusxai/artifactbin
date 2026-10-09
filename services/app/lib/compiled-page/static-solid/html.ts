@@ -14,7 +14,7 @@
  * a component, a namespaced or camelCased attribute name, a fragment — keeps its JSX (`static-html.test.ts`
  * holds the two equal over the corpora).
  */
-export const SOLID_BOOLEAN = new Set(['allowfullscreen', 'async', 'alpha', 'autofocus', 'autoplay', 'checked', 'controls', 'default', 'disabled', 'formnovalidate', 'hidden', 'indeterminate', 'inert', 'ismap', 'loop', 'multiple', 'muted', 'nomodule', 'novalidate', 'open', 'playsinline', 'readonly', 'required', 'reversed', 'seamless', 'selected', 'adauctionheaders', 'browsingtopics', 'credentialless', 'defaultchecked', 'defaultmuted', 'defaultselected', 'defer', 'disablepictureinpicture', 'disableremoteplayback', 'preservespitch', 'shadowrootclonable', 'shadowrootcustomelementregistry', 'shadowrootdelegatesfocus', 'shadowrootserializable', 'sharedstoragewritable']);
+const SOLID_BOOLEAN = new Set(['allowfullscreen', 'async', 'alpha', 'autofocus', 'autoplay', 'checked', 'controls', 'default', 'disabled', 'formnovalidate', 'hidden', 'indeterminate', 'inert', 'ismap', 'loop', 'multiple', 'muted', 'nomodule', 'novalidate', 'open', 'playsinline', 'readonly', 'required', 'reversed', 'seamless', 'selected', 'adauctionheaders', 'browsingtopics', 'credentialless', 'defaultchecked', 'defaultmuted', 'defaultselected', 'defer', 'disablepictureinpicture', 'disableremoteplayback', 'preservespitch', 'shadowrootclonable', 'shadowrootcustomelementregistry', 'shadowrootdelegatesfocus', 'shadowrootserializable', 'sharedstoragewritable']);
 /** Tags whose Solid server template differs from a plain element's (or that the generator never closes as Solid does). */
 export const SOLID_SPECIAL_TAGS = new Set(['head', 'param', 'keygen', 'menuitem']);
 /** Attribute names Solid does not write as a plain attribute. */

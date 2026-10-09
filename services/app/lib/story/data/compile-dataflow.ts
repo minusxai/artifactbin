@@ -147,7 +147,7 @@ const DATE_FUNCTIONS = new Set(['date', 'time', 'datetime', 'julianday', 'strfti
 
 // ── the context: everything asynchronous, up front ────────────────────────
 
-export const postgresKey = (q: Pick<QueryDecl, 'name' | 'sql'>): string => `${q.name}\0${q.sql}`;
+const postgresKey = (q: Pick<QueryDecl, 'name' | 'sql'>): string => `${q.name}\0${q.sql}`;
 
 /** Load the engine and every artifact the declarations name. */
 export async function prepareCompile(flow: Dataflow, load: SchemaLoader): Promise<CompileContext> {
@@ -545,7 +545,7 @@ function typeFromDryRun(ctx: CompileContext, queries: CompiledQuery[], imports: 
  * `$_value`); every `args=` names real arguments; every `set=` sets declared
  * scalar Values to values of their type; row fields exist in their table.
  */
-export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors: ValidationError[]; contexts: Record<string, Pick<CompiledMutation, 'rowTypes' | 'valueType'>> } {
+function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors: ValidationError[]; contexts: Record<string, Pick<CompiledMutation, 'rowTypes' | 'valueType'>> } {
   const errors: ValidationError[] = [];
   /** The mutations some control runs. */
   const ran = new Set<string>();

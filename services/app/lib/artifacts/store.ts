@@ -878,7 +878,7 @@ export function committedHeadsSettled(): Promise<void> {
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
 
 /** One logged commit's patch, admitted at `version - 1` (lib/story/graph advanceGraph replays it). */
-export interface RemotePatch { version: number; patch: GraphPatch }
+interface RemotePatch { version: number; patch: GraphPatch }
 /** Beyond this many versions between, the editor reads the head instead. */
 const MAX_REMOTE_PATCHES = 50;
 

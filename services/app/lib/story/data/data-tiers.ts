@@ -27,7 +27,7 @@ import { sniffAssetType } from '@/lib/web-ingest/sniff';
 import type { StoredContent } from '../document/input';
 import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
 
-export type { ColumnType, DatasetColumn } from '../datasets/dataset-shape';
+export type { DatasetColumn } from '../datasets/dataset-shape';
 import { inferColumns } from '../datasets/dataset-shape';
 import type { ColumnType, DatasetColumn } from '../datasets/dataset-shape';
 

@@ -241,7 +241,7 @@ const variantsMemo = new Map<string, Promise<Variants>>();
  */
 const VARIANTS_FORMAT = 2;
 /** Where computed variants persist, by key: an object-store prefix no route serves (they hold query results). */
-export const OFFLINE_VARIANTS_PREFIX = 'offline-variants';
+const OFFLINE_VARIANTS_PREFIX = 'offline-variants';
 
 /**
  * What the variants are a function of: the document version served, the downloader's scope, the

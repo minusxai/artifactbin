@@ -3,7 +3,7 @@ import {autoUpdatePolicy,autoUpdateStateEnv,readClientDefaults} from './config';
 import {CLI_VERSION} from './version';
 import {compareVersions,validVersion} from './version-order';
 import {HOME_SCOPE,State,withLock} from './state';
-export const AUTO_UPDATE_INTERVAL_MS=60*60*1000;
+const AUTO_UPDATE_INTERVAL_MS=60*60*1000;
 const NPM_TIMEOUT_MS=120_000;
 export interface AutoUpdateOptions {
  home:string;env?:NodeJS.ProcessEnv;entry?:string;platform?:string;npm?:NpmRunner;

@@ -71,7 +71,7 @@ export interface ImportDecl extends Span {
   ref: string;
 }
 
-export interface ScalarValueDecl extends Span {
+interface ScalarValueDecl extends Span {
   kind: 'scalar';
   name: string;
   type: ColumnType;
@@ -181,7 +181,7 @@ export function refName(value: unknown): string | null {
  */
 export type BindingSource = { ref: string } | { literal: Scalar };
 
-export function bindingSource(json: unknown): BindingSource | null {
+function bindingSource(json: unknown): BindingSource | null {
   if (typeof json === 'string') { const m = REF_NAME_RE.exec(json); return m ? { ref: m[1] } : { literal: json }; }
   if (json === null || typeof json === 'boolean' || (typeof json === 'number' && Number.isFinite(json))) return { literal: json };
   return null;

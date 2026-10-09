@@ -29,12 +29,12 @@ import type { HelmetContent } from './helmet';
 
 /** Where a bare npm specifier resolves (`three` → `https://esm.sh/three`): the module host every script may load from. */
 export const ESM_CDN_ORIGIN = 'https://esm.sh';
-export const PAGE_SPECIFIER = 'page';
+const PAGE_SPECIFIER = 'page';
 /** The `page` exports that bind one declared name of their kind (`signal('$region')`). */
-export const PAGE_BINDERS = ['signal', 'query', 'mutation'] as const;
+const PAGE_BINDERS = ['signal', 'query', 'mutation'] as const;
 type PageExport = (typeof PAGE_BINDERS)[number];
 /** Everything `page` exports: the binders, and `proxy(url)` (lib/islands/page-runtime pageProxyUrl), which takes any https URL. */
-export const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy', 'reviewState', 'upload', 'fileUrl', 'uploadImage', 'imageUrl'] as const;
+const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy', 'reviewState', 'upload', 'fileUrl', 'uploadImage', 'imageUrl'] as const;
 
 /** The declared names by kind: `values` are scalar Values; `tables` are table Values (rows, like a Query). */
 export interface AuthorModuleNames { values: string[]; tables?: string[]; queries: string[]; mutations: string[] }

@@ -6,7 +6,7 @@ import { editorSchema } from './model';
 
 const isLink = (mark: Mark) => mark.type === editorSchema.marks.inline && mark.attrs.tag === 'a';
 
-export function linkMark(href: string): Mark {
+function linkMark(href: string): Mark {
   return editorSchema.marks.inline.create({
     tag: 'a',
     source: {

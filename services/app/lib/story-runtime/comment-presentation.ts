@@ -64,4 +64,3 @@ export const COMMENT_PRESENTATION = {
   open: { background: 'rgba(245, 158, 11, 0.26)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
 },
 };
-export type CommentPresentation = typeof COMMENT_PRESENTATION;

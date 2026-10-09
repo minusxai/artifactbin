@@ -56,12 +56,12 @@ export const CSP_DIRECTIVES: readonly CspDirective[] = ['connect', 'script', 'st
 export const EMPTY_CSP_EXTENSIONS: CspExtensions = Object.freeze({ connect: [], script: [], style: [], img: [], frame: [], media: [] }) as CspExtensions;
 /** A fresh, mutable empty set. */
 export const emptyCspExtensions = (): CspExtensions => ({ connect: [], script: [], style: [], img: [], frame: [], media: [] });
-export const MAX_CSP_ORIGINS_PER_DIRECTIVE = 10;
+const MAX_CSP_ORIGINS_PER_DIRECTIVE = 10;
 
 const META_PREFIX = 'csp-';
 const metaName = (directive: CspDirective): string => `${META_PREFIX}${directive}`;
 
-export interface CspExtensionError extends ValidationError {
+interface CspExtensionError extends ValidationError {
   /** The offending value as written (one origin, or the whole content for a directive-level fault). */
   value: string;
 }

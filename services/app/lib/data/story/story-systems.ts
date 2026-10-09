@@ -29,7 +29,6 @@ import systems from './story-systems.json';
 import { STORY_SYSTEM_NAMES, type StorySystemName } from '@/lib/validation/story-system-names';
 
 export { STORY_SYSTEM_NAMES };
-export type { StorySystemName };
 
 export interface StorySystem {
   name: StorySystemName;

@@ -286,9 +286,6 @@ function callRequest(name: string, overrides: Record<string, Scalar> | undefined
   return { mutation: name, args, ...(row ? { row } : {}), ...(overrides && Object.hasOwn(overrides, '_value') ? { value: _value ?? null } : {}) };
 }
 
-/** Empty declarations + state, for a document that declares nothing. */
-export const EMPTY_STATE: DataflowState = { values: {}, tables: {}, errors: {} };
-
 export function createDataflowStore(
   /*
    * `values` is the THIRD island field — values WITHOUT rows.

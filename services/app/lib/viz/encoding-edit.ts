@@ -69,7 +69,7 @@ export function annotationSplit(
 }
 
 /** The editable UNIT of a spec — itself, or the base layer of an annotated spec. */
-export const unitOf = (spec: Record<string, unknown>): Record<string, unknown> | null =>
+const unitOf = (spec: Record<string, unknown>): Record<string, unknown> | null =>
   annotationSplit(spec)?.unit ?? null;
 
 /** unitOf with a pass-through fallback (edit helpers operate on whatever is there). */

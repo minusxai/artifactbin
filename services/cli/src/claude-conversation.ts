@@ -6,7 +6,7 @@ import {REMOTE_NAME} from '../../contracts/src/remote';
 
 export interface ClaudeConversationPlan {args:string[];sessionId?:string}
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export function validClaudeSessionId(value:unknown):value is string{return typeof value==='string'&&UUID.test(value);}
+function validClaudeSessionId(value:unknown):value is string{return typeof value==='string'&&UUID.test(value);}
 const SAFE_VALUE_FLAGS=new Map([['--model',/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/],['-m',/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/],['--fallback-model',/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/],['--permission-mode',/^(?:default|acceptEdits|plan|dontAsk|bypassPermissions)$/],['--output-format',/^(?:text|json|stream-json)$/],['--effort',/^(?:low|medium|high|max)$/],['--max-turns',/^[1-9][0-9]{0,5}$/]]);
 const SAFE_BOOLEAN_FLAGS=new Set(['--chrome','--dangerously-skip-permissions','--verbose']);
 function safeClaudeConversationArgs(args:readonly string[]):boolean{
@@ -34,7 +34,7 @@ export function planClaudeConversation(args:readonly string[],newId:string,resum
 export interface ClaudeConversationRecord {sessionId:string;command:string;args:string[];cwd:string;claudeConfigDir:string;claudeConfigDirExplicit?:boolean;name?:string}
 export interface ClaudeConversationReservation {key:string;token:string}
 const RESERVATION_TTL_MS=60_000;
-export const claudeConversationKey=(server:string,relayId:string)=>`${server}/${relayId}`;
+const claudeConversationKey=(server:string,relayId:string)=>`${server}/${relayId}`;
 export function saveClaudeConversation(state:State,server:string,relayId:string,value:ClaudeConversationRecord):void{
  if(!validClaudeSessionId(value.sessionId)||typeof value.cwd!=='string'||!isAbsolute(value.cwd)||typeof value.claudeConfigDir!=='string'||!isAbsolute(value.claudeConfigDir)||typeof value.claudeConfigDirExplicit!=='boolean'||typeof value.name!=='string'||!REMOTE_NAME.test(value.name)||!Array.isArray(value.args)||value.args.some(arg=>typeof arg!=='string')||typeof value.command!=='string'||basename(value.command).replace(/\.exe$/i,'')!=='claude')throw new Error('Invalid Claude conversation restart record.');
  assertSafeClaudeConversationArgs(value.args);

@@ -66,7 +66,7 @@ export const HOSTILE_STRINGS: readonly string[] = [
 export const BENIGN_STRINGS: readonly string[] = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 
 /** Byte sequences that must never appear raw in a generated module. */
-export const FORBIDDEN_IN_MODULE: readonly string[] = ['</script', LS, PS, 'onerror=alert(1)>'];
+const FORBIDDEN_IN_MODULE: readonly string[] = ['</script', LS, PS, 'onerror=alert(1)>'];
 
 const text = (value: string): JsxNode => ({ type: 'text', value, start: 0, end: 0 });
 const literal = (json: unknown) => ({ static: true as const, json });

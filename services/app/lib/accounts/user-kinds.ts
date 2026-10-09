@@ -54,7 +54,7 @@ export async function isLinkOnlyActor(userId: string | null | undefined, query?:
  * statement and `lib/capabilities` cannot disagree about what "inside the
  * sandbox" means. `artifacts` is the outer statement's table.
  */
-export const SANDBOX_ROW_SQL =
+const SANDBOX_ROW_SQL =
   "EXISTS (SELECT 1 FROM users owner_user WHERE owner_user.id = artifacts.user_id AND owner_user.kind = 'testuser')";
 
 /**

@@ -87,7 +87,7 @@ export function anchorIndex(source: string): Map<string, AnchorEntry> {
 }
 
 /** The longest snippet a thread keeps of its anchor's markup. */
-export const ANNOTATION_SNIPPET_MAX = 200;
+const ANNOTATION_SNIPPET_MAX = 200;
 
 /** Markup slice → plain text: tags out, whitespace collapsed, capped. */
 export const snippetOf = (markup: string): string =>

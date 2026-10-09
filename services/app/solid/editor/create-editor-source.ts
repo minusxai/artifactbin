@@ -18,9 +18,9 @@ import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import { SourceHistory, type HistoryResult } from '@/lib/editor-v2/history';
 import type { PendingChange } from './create-live-edits';
 
-export type HistoryOutcome = HistoryResult | { ok: false; reason: 'unavailable'; message: string };
+type HistoryOutcome = HistoryResult | { ok: false; reason: 'unavailable'; message: string };
 
-export interface EditorSourceApply {
+interface EditorSourceApply {
   /** `local`: typed or composed in place. `structural`: a panel, a menu or a key rewrote the tree. */
   origin: 'local' | 'structural';
   /** Consecutive applies in one group within 750 ms are one undo step. */
@@ -60,7 +60,7 @@ export interface EditorSourceOptions {
 }
 
 /** How long typing rests before the `source` signal follows it. */
-export const SOURCE_REST_MS = 600;
+const SOURCE_REST_MS = 600;
 
 export function createEditorSource(o: EditorSourceOptions): EditorSource {
   let current = o.initial;

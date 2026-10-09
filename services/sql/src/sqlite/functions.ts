@@ -519,7 +519,7 @@ const IMPLEMENTATIONS: Record<string, Scalar | Aggregate> = {
 };
 
 /** One registration: a manifest function at one of its arities. */
-export interface LibraryFunction { name: string; arity: number; kind: SqlFunctionSpec['kind'] }
+interface LibraryFunction { name: string; arity: number; kind: SqlFunctionSpec['kind'] }
 
 export const LIBRARY: readonly LibraryFunction[] = SQL_FUNCTIONS.flatMap((spec) => spec.arity.map((arity) => ({ name: spec.name, arity, kind: spec.kind })));
 export const LIBRARY_NAMES: ReadonlySet<string> = new Set(SQL_FUNCTIONS.map((f) => f.name));

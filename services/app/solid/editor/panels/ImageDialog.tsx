@@ -29,7 +29,7 @@ export type { ChosenImage, ImageChoice };
 /** What the upload door takes (lib/story/data/data-tiers). */
 export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml';
 const LIMIT_MB = Math.round(DEFAULT_UPLOAD_MAX_BYTES / 1_000_000);
-export const IMAGE_HINT = `PNG, JPEG, WebP, GIF or SVG · up to ${LIMIT_MB} MB`;
+const IMAGE_HINT = `PNG, JPEG, WebP, GIF or SVG · up to ${LIMIT_MB} MB`;
 
 /** An artifact id as the upload door mints it — the only thing a preview is built from. */
 const IMAGE_ID = /^[A-Za-z0-9]{6,12}$/;

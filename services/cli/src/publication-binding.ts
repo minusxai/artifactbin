@@ -19,7 +19,7 @@ import {readConflicts,persistConflict,clearConflict} from './conflict-state';
 import {withDeliveryObserver} from './delivery-observer';
 import type {HttpClient} from './http';
 import type {State} from './state';
-export interface PublicationInput {localId?:string;bytes:string;hash:string;ids?:Record<string,string>}
+interface PublicationInput {localId?:string;bytes:string;hash:string;ids?:Record<string,string>}
 export interface PublicationManifest {format:1;server:string;account:string;root:string;inputs:Record<string,PublicationInput>;ids:Record<string,string>}
 interface Bound {path:string;localId:string;tracked:TrackedFile;bytes:Buffer;source?:ResourceSource}
 interface Finalization {checksum:string;server:string;account:string;path:string;frozen:string;accepted:string;entry:TrackedFile;source?:ResourceSource}

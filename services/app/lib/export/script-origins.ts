@@ -34,7 +34,7 @@ export function scriptModuleOrigins(source: string): string[] {
 }
 
 /** How long a script document's components get to replace their fallback before the shot is taken anyway. */
-export const MOUNT_WAIT_MS = 5_000;
+const MOUNT_WAIT_MS = 5_000;
 
 /**
  * What a render of a script document asks of the browser beyond its own origin: the module hosts `origins` names

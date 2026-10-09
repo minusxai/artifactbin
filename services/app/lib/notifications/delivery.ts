@@ -1,5 +1,5 @@
 /** Optional deployment email capability. OSS owns authentication and notification eligibility. */
-export interface NotificationEmailPreferences {invitations:boolean;comments:boolean;activity:boolean}
+interface NotificationEmailPreferences {invitations:boolean;comments:boolean;activity:boolean}
 export interface NotificationDelivery {
  preferences(userId:string):Promise<NotificationEmailPreferences>;
  updatePreferences(userId:string,preferences:NotificationEmailPreferences):Promise<NotificationEmailPreferences>;

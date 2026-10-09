@@ -127,14 +127,6 @@ export type CompiledReaderAnswer =
   /** The compiled page could not be made; the route answers 500 (there is no other renderer). */
   | { mode: 'failed'; reason: ReaderFallbackReason; status: 500 };
 
-/** Thrown by a page that has no other way to answer a `failed` read (lib/artifact-page): the server answers 500. */
-export class CompiledPageFailed extends Error {
-  constructor(readonly artifactId: string, readonly reason: ReaderFallbackReason) {
-    super(`compiled page ${artifactId} could not be rendered (${reason})`);
-    this.name = 'CompiledPageFailed';
-  }
-}
-
 let failures = 0;
 /** How many reads this process answered 500 because the compiled page could not be made (it must stay at zero). */
 export const compiledPageFailures = (): number => failures;

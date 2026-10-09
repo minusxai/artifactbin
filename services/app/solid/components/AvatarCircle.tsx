@@ -11,7 +11,7 @@ const REFUSALS: Record<string, string> = {
   image_too_large: `that picture is over ${DEFAULT_UPLOAD_MAX_BYTES / 1_000_000} MB — pick a smaller one`,
   image_unreadable: 'that picture could not be read — try exporting it again',
 };
-export const AVATAR_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/avif';
+const AVATAR_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/avif';
 
 export function AvatarCircle(props: { image: string | null; initial: string; userId: string; compact?: boolean; onChange: (image: string | null) => void; onRemove?: () => void }): JSX.Element {
   let picker!: HTMLInputElement;

@@ -26,7 +26,7 @@ const ROLE_OPTIONS = SHARE_ROLES.map((role) => ({ value: role, label: SHARE_ROLE
 const VISIBILITY_TIPS = { public: 'anyone with the link · listed on your profile', unlisted: 'anyone with the link · not listed anywhere', private: 'only you and invited emails' } as const;
 
 /** The sharing verdict's icon, from the same nodes the served rail draws (lib/visibility-icons). */
-export function VisibilityIcon(props: { icon: SharingIcon; size: number; class?: string }): JSX.Element {
+function VisibilityIcon(props: { icon: SharingIcon; size: number; class?: string }): JSX.Element {
   return <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class={props.class}
     innerHTML={VISIBILITY_ICON_NODES[props.icon].map(([tag, attributes]) => `<${tag} ${Object.entries(attributes).filter(([name]) => name !== 'key').map(([name, value]) => `${name}="${String(value)}"`).join(' ')}/>`).join('')} />;
 }
