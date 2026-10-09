@@ -6,7 +6,7 @@ import {POST as publish} from '@/app/api/artifacts/route';
 import {GET as anonymousQuery} from '@/app/a/[id]/query/route';
 import {POST as readerMutate} from '@/app/a/[id]/mutate/route';
 import {getArtifactById,dataflowForRow} from '@/lib/artifacts';
-import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {setDatasetPolicy} from '@/lib/datasets/policy';
 import {lambdaOperation} from '@/lib/runner/operations';
 import {runnerIdentity} from '../../runner/src/capabilities';

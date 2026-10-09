@@ -4,7 +4,7 @@ import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';
 import {createDocumentGraph,graphNodes,graphSource,type DocumentGraph} from '@/lib/document/document-graph';
 import {prepareGraphPatch,applyGraphPatch,type GraphPatch} from '@/lib/document/document-graph-patch';
-import {graphPatchSql,graphSourceSql,graphReferencesSql} from '@/lib/story/graph/document-graph-sql';
+import {graphPatchSql,graphSourceSql,graphReferencesSql} from '@/lib/artifacts/write/document-graph-sql';
 import {applyOperationsToNodes} from '@/lib/document/document-operation';
 useAppHarness();
 async function setup(){

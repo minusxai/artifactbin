@@ -4,7 +4,7 @@
 graph (codec, node ids, graph patches), the editing algebra (splices, edit batches, source changes,
 prepared updates), the `<Helmet>` head (declarations, title, PWA, CSP, social preview), comment
 ranges, asset URLs and the stored compiled-dataflow record. It has no I/O; the write path (SQL on
-artifact tables) and the publish pipeline stay in `lib/story`.
+artifact tables) is `lib/artifacts/write` and the publish pipeline stays in `lib/story`.
 
 - It sits below the recorded cycle and imports only itself, `lib/dataflow`, `lib/jsx`, `lib/data`,
   `lib/story-ui`, `lib/validation`, `@artifactbin/contracts` and `@artifactbin/utils`. `npm run validate`

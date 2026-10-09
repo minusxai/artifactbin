@@ -27,7 +27,8 @@ import { authorModuleNames, buildAuthorModule, type AuthorModule } from '@/lib/a
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../../http/http';
-import { type ContentInputCtx, type StoredContent } from './input';
+import { type ContentInputCtx } from './input';
+import type { StoredContent } from '@/lib/document/stored-content';
 import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
 import { documentFonts, invalidFontFamilies } from '@/lib/compiled-page/styles/document-fonts';
 import { cspExtensionsOf } from '../../document/csp-extensions';

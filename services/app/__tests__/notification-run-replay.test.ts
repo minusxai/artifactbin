@@ -13,7 +13,7 @@ import {readerIslandData} from '@/lib/story/prepared/prepare-runtime.server';
 import {getDb} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {services,setServices} from '@/lib/platform';
-import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {newEditId} from '@/lib/document/splice';
 
 useAppHarness();

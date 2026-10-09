@@ -14,7 +14,7 @@ import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
 import { GET as read, PUT as replace, PATCH as metadata, PATCH as patch } from '@/app/api/artifacts/[id]/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { GET as versions } from '@/app/api/artifacts/[id]/versions/route';
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { getArtifactById } from '@/lib/artifacts';
 import { POST as queryRead } from '@/app/api/artifacts/[id]/query/route';
 import { writeFile, readFile } from 'node:fs/promises';

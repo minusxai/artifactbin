@@ -1,4 +1,4 @@
-import type {ContentObjects} from '../prepared/prepared-objects';
+import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 /**
  * Shared request-body → stored-content translation for POST and PUT. A body
  * carries exactly ONE content field:
@@ -21,13 +21,12 @@ import type {ContentObjects} from '../prepared/prepared-objects';
 import { json } from '../../http/http';
 import { publishJsx } from './jsx-tier';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
-import { ingestImageFromUrl } from '@/lib/web-ingest/image';
-import { ingestPdfFromUrl } from '@/lib/web-ingest/pdf';
-import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '../data/data-tiers';
-import { publishFile } from '../assets/file-store';
+import { ingestImageFromUrl } from '@/lib/story/ingest/image';
+import { ingestPdfFromUrl } from '@/lib/story/ingest/pdf';
+import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '@/lib/datasets/data-tiers';
+import { publishFile } from '@/lib/datasets/file-store';
 import {parseProgramDefinition} from '../../runner/program';
 import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
-import type { ArtifactFormat } from '@artifactbin/contracts';
 
 
 /**
@@ -56,20 +55,7 @@ export const CONTENT_FIELDS = [...TEXT_CONTENT_FIELDS, ...DATA_CONTENT_FIELDS] a
 
 import type { SourceRepair } from '@/lib/jsx/repair';
 
-export interface StoredContent {
-  format: ArtifactFormat;
-  source: string | null; // markup source for round-trip editing
-  meta: Record<string, unknown>;
-  /** Title derived from the source's first heading — used only when the body has no title. */
-  derivedTitle: string | null;
-  /**
-   * Changes the door made to the source on the way in (lib/jsx/repair) — today
-   * only the shell-escaped backtick. Present ONLY when something was changed,
-   * and present is the point: the door is allowed to repair an agent's markup
-   * exactly because it names what it did, rather than rewriting SQL in silence.
-   */
-  repairs?: SourceRepair[];
-}
+import type { StoredContent } from '@/lib/document/stored-content';
 
 function tooLarge(value: string): Response | null {
   if (Buffer.byteLength(value, 'utf8') > MAX_CONTENT_BYTES) {

@@ -14,17 +14,17 @@ import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
  * naming the token.
  */
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
-import type {ContentObjects} from '../prepared/prepared-objects';
-import { json } from '../../http/http';
+import type {ContentObjects} from '@/lib/object-store/prepared-objects';
+import { json } from '@/lib/http/http';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
-import { storeDatasetRows } from '../datasets/dataset-store';
-import { storeImage, IMAGE_CONTENT_TYPES, type ImageMeta } from '../assets/image-store';
-import { uploadedSha256 } from '../assets/file-store';
+import { storeDatasetRows } from './dataset-store';
+import { storeImage, IMAGE_CONTENT_TYPES, type ImageMeta } from '@/lib/story/assets/image-store';
+import { uploadedSha256 } from './file-store';
 import { sniffImageType } from '@/lib/web-ingest/sniff';
 import { optimiseImage } from '@/lib/images/optimise';
-import { PDF_CONTENT_TYPE, pdfPageCount, storePdf, type PdfMeta } from '../assets/pdf-store';
+import { PDF_CONTENT_TYPE, pdfPageCount, storePdf, type PdfMeta } from '@/lib/object-store/pdf-store';
 import { sniffAssetType } from '@/lib/web-ingest/sniff';
-import type { StoredContent } from '../document/input';
+import type { StoredContent } from '@/lib/document/stored-content';
 import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
 
 import { inferColumns, type ColumnType, type DatasetColumn } from '@/lib/dataflow/dataset-shape';
@@ -103,7 +103,7 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
     catch(error){return json({error:'invalid_dataset',details:[error instanceof Error?error.message:'Invalid timestamp']},400);}
   }
   // The rows go to the object store; the row keeps a reference. See
-  // lib/story/datasets/dataset-store.ts for why a 27 MB blob cannot live in a column.
+  // lib/datasets/dataset-store.ts for why a 27 MB blob cannot live in a column.
   const located = await storeDatasetRows(flat, objects);
   return {
     format: 'dataset',
@@ -265,7 +265,7 @@ const PDF_DATA_URL_RE = /^data:application\/pdf;base64,([A-Za-z0-9+/=]*)$/;
  * sniff is the whole of what stops us handing a browser one type under
  * another's name.
  *
- * Unlike an image, nothing is re-encoded or resized: see lib/story/assets/pdf-store.
+ * Unlike an image, nothing is re-encoded or resized: see lib/object-store/pdf-store.
  */
 export async function storePdfContent(buffer: Buffer, objects?: ContentObjects): Promise<StoredContent | Response> {
   if (buffer.length === 0) return json({ error: 'invalid_pdf', details: ['the pdf is empty'] }, 400);
@@ -282,7 +282,7 @@ export async function storePdfContent(buffer: Buffer, objects?: ContentObjects):
     // follow, so publication preflight asks one question of all three tiers.
     sha256: uploadedSha256(buffer),
     // Only when the file says so in the clear — a <File> card shows a page
-    // count it was told and never one it invented (lib/story/assets/pdf-store).
+    // count it was told and never one it invented (lib/object-store/pdf-store).
     ...(() => { const pages = pdfPageCount(buffer); return pages ? { pages } : {}; })(),
   };
   return { format: 'pdf', source: null, meta: { ...meta }, derivedTitle: null };

@@ -19,7 +19,7 @@ import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { authorHandle } from '@/lib/accounts/users';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { loadDatasetRows } from '../datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import type { ArtifactLiveEvent } from '../realtime/live';
 import { storyUpdateParts } from '../../document/update-parts';
 import { assetLookupFrom } from '../../document/asset-url';

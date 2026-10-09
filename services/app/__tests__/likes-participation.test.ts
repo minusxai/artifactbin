@@ -6,7 +6,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {count,has,link} from '@/lib/accounts';
 import {accountProfile} from '@/lib/accounts';
-import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {request,useAppHarness} from './harness';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});

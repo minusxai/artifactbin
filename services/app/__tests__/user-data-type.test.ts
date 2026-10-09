@@ -10,7 +10,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,dataflowForRow,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
-import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken, createUser} from '@/lib/accounts';
 import {people} from '@/lib/datasets/user-fields';

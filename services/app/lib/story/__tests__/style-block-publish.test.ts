@@ -14,7 +14,7 @@
  * classes always beat authored CSS — the instructable cascade contract.
  */
 import { publishJsx } from '../document/jsx-tier';
-import type { StoredContent } from '../document/input';
+import type { StoredContent } from '@/lib/document/stored-content';
 
 const publish = async (markup: string) =>
   publishJsx({}, markup) as Promise<StoredContent | Response>;

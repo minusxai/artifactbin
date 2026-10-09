@@ -18,7 +18,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * stylesheet. An owner or editor fetches those on the EDITOR door
  * (`?part=editor`) — prefetched on idle, so entering edit mode stays instant.
  */
-import { archivedVersionFor, servedRow } from './archived-version';
+import { archivedVersionFor, servedRow } from '@/lib/artifacts/archived-version';
 import { UnservableDocument } from '@/lib/artifacts/servable';
 import { countOpenAnnotations } from '@/lib/annotations/store';
 import { canReadArtifact } from '@/lib/artifacts/access';
@@ -31,7 +31,7 @@ import { baseUrl, json } from '@/lib/http/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform/ids';
 import { count, has } from '@/lib/accounts/relations';
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { ARTIFACT_FORMATS, type ArtifactFormat } from '@artifactbin/contracts';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { getUserById, ownerUsername } from '@/lib/accounts/users';

@@ -39,7 +39,7 @@ import { sqlExtensions } from '@/lib/sql/extensions';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/dataflow/local-state';
 import { localTableOverrides } from '@/lib/dataflow/local-tables';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
-import { storedRowStats } from '@/lib/story/datasets/dataset-store';
+import { storedRowStats } from '@/lib/datasets/dataset-store';
 import { childrenTableFor, CHILDREN_COLUMNS } from '@/lib/workspace/folders';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';

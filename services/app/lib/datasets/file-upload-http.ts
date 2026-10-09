@@ -2,7 +2,7 @@
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/accounts';
 import { DatasetError } from './errors';
 import { uploadDatasetFile, readDatasetFile } from './feedback-images';
-import { readFileUpload } from '@/lib/story/assets/file-store';
+import { readFileUpload } from '@/lib/datasets/file-store';
 import { json } from '@/lib/http';
 
 const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Referrer-Policy':'no-referrer','Vary':'Origin'};

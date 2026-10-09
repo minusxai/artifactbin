@@ -21,7 +21,7 @@ import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { artifactQuotaExceeded, getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
 import { backfillUserKinds, createTestUser, listTestUsers, sweepTestUsers, TESTUSER_LABEL } from '@/lib/accounts';
 import { noteTestUserSession, testUserSessionCount } from '@/lib/accounts';
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { resolveTokenById } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';

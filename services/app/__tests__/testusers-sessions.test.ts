@@ -27,7 +27,7 @@ import { observedRequest } from '@/__tests__/conditional-request';
 import { viewersWritePolicy } from '@artifactbin/utils';
 import { accountProfile } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { getDb } from '@/lib/platform';
 import { createTestUser } from '@/lib/accounts';

@@ -33,7 +33,7 @@ vi.mock('@/lib/artifacts/dataflow',()=>({dataflowForRow:async()=>({flow:{imports
 vi.mock('@/lib/artifacts/access',()=>({canReadArtifact:async()=>true}));
 vi.mock('@/lib/datasets/catalog',()=>({catalogOf:(row:any)=>row.format==='dataset'?{kind:'stored'}:null}));
 vi.mock('@/lib/datasets/policy/grants',()=>({grantsOf:(row:any)=>row.dataset_policy??null,grantContext:async()=>({caller:{userId:'reporter',tokenId:null},owner:{userId:'owner',tokenId:null},artifact:{id:'doc123',owner:{userId:'owner',tokenId:null}}}),grantsPermitRead:async()=>state.readAllowed,readThrough:async()=>state.readAllowed}));
-vi.mock('@/lib/story/data/data-tiers',()=>({storeImageContent:async(bytes:Buffer,type:string)=>({format:'image',meta:{objectKey:'image/object',bytes:bytes.length,contentType:type}})}));
+vi.mock('@/lib/datasets/data-tiers',()=>({storeImageContent:async(bytes:Buffer,type:string)=>({format:'image',meta:{objectKey:'image/object',bytes:bytes.length,contentType:type}})}));
 vi.mock('@/lib/object-store',()=>({objectKey:()=> 'file/object',objectStore:()=>({put:state.put,get:state.get})}));
 
 import { readDatasetImage,readDatasetFile,uploadDatasetImage,uploadDatasetFile } from '../feedback-images';

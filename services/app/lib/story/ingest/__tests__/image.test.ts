@@ -6,7 +6,7 @@
  * Responses, and provenance (the source URL) rides the meta.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { setWebIngestPolicyForTests } from '../fetch';
+import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { ingestImageFromUrl } from '../image';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 

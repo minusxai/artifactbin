@@ -7,13 +7,13 @@ import { catalogOf } from '@/lib/datasets/catalog';
 import { grantsOf, grantContext, grantsPermitRead, readThrough, type GrantDocument } from '@/lib/datasets/policy/grants';
 import { DatasetError } from '@/lib/datasets/errors';
 import { imageInsertAllowed } from './image-upload-policy';
-import { storeImageContent } from '@/lib/story/data/data-tiers';
+import { storeImageContent } from '@/lib/datasets/data-tiers';
 import { objectStore } from '@/lib/object-store';
 import { IMAGE_CONTENT_TYPES } from '@/lib/story/assets/image-store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import { assetFormatOf, fileContentType } from '@/lib/document/file-types';
 import { MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform/config';
-import { uploadedSha256, storeFileContent } from '@/lib/story/assets/file-store';
+import { uploadedSha256, storeFileContent } from '@/lib/datasets/file-store';
 
 const MAX_DATASET_FILES = 1000;
 const MAX_DATASET_FILE_BYTES = 500_000_000;

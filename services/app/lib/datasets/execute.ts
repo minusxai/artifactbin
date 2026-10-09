@@ -1,4 +1,4 @@
-import type {ContentObjects} from '@/lib/story/prepared';
+import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 import {createHash} from 'node:crypto';
 import {runQueries,isQueryFailure} from '@/lib/sql/engine';
 import type { Scalar, TableResult } from '@/lib/dataflow';

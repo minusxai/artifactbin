@@ -1,16 +1,16 @@
-import type {ContentObjects} from '@/lib/story/prepared';
+import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 /**
  * URL → stored PDF content: the guarded fetcher composed with the SAME
- * storePdfContent the upload door runs, exactly as lib/web-ingest/image.ts
+ * storePdfContent the upload door runs, exactly as lib/story/ingest/image.ts
  * composes storeImageContent — so the cap, the sniff and the stored shape are
  * one implementation rather than two that agree today.
  */
 import { MAX_PDF_BYTES } from '@/lib/platform/config';
 import { json } from '@/lib/http/http';
-import { storePdfContent } from '@/lib/story/data/data-tiers';
-import type { StoredContent } from '@/lib/story/document/input';
-import { fetchWebResource } from './fetch';
-import { WebIngestError } from './guard';
+import { storePdfContent } from '@/lib/datasets/data-tiers';
+import type { StoredContent } from '@/lib/document/stored-content';
+import { fetchWebResource } from '@/lib/web-ingest/fetch';
+import { WebIngestError } from '@/lib/web-ingest/guard';
 
 /**
  * Fetch and store one PDF. Refusals are ready-to-return Responses that NAME the

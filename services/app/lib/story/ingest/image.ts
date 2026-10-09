@@ -1,4 +1,4 @@
-import type {ContentObjects} from '@/lib/story/prepared';
+import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 /**
  * URL → stored image content: the guarded fetcher composed with the SAME
  * storeImageContent every upload path runs, so the size cap and the type
@@ -8,11 +8,11 @@ import type {ContentObjects} from '@/lib/story/prepared';
  */
 import { MAX_IMAGE_BYTES } from '@/lib/platform/config';
 import { json } from '@/lib/http/http';
-import { storeImageContent } from '@/lib/story/data/data-tiers';
-import type { StoredContent } from '@/lib/story/document/input';
-import { fetchWebResource } from './fetch';
-import { WebIngestError } from './guard';
-import { sniffImageType } from './sniff';
+import { storeImageContent } from '@/lib/datasets/data-tiers';
+import type { StoredContent } from '@/lib/document/stored-content';
+import { fetchWebResource } from '@/lib/web-ingest/fetch';
+import { WebIngestError } from '@/lib/web-ingest/guard';
+import { sniffImageType } from '@/lib/web-ingest/sniff';
 
 /**
  * Fetch and store one image. Refusals are ready-to-return Responses that NAME

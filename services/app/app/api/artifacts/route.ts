@@ -2,7 +2,7 @@ import { createArtifactFromBody } from '@/lib/artifacts';
 import { withTokenAuth } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
 import { baseUrl, json, readJson } from '@/lib/http';
-import { readFileUpload } from '@/lib/story/assets/file-store';
+import { readFileUpload } from '@/lib/datasets/file-store';
 
 /**
  * The one create path both auth modes share (bearer here, session in

@@ -14,7 +14,7 @@ import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
 import { mintExportKey } from '@/lib/serving/export-read-key';
 import { storyBodyFor } from '@/lib/document';
 import { getArtifactById } from '@/lib/artifacts/store';
-import { servedRow } from '@/lib/serving/archived-version';
+import { servedRow } from '@/lib/artifacts/archived-version';
 import { warmPreparedPage } from '@/lib/story/prepared/prepared-page.server';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';

@@ -47,7 +47,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http/http';
 import { ID_RE } from '@/lib/platform/ids-shape';
 import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/workspace/folders';
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { CONTENT_FIELDS } from '@/lib/story/document/input';
 import { collectExternalAssetUrls } from '@/lib/document/external-images';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '@/lib/story/assets/web-assets';
