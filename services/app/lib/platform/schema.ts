@@ -178,7 +178,7 @@ const ARTIFACTS: Table = {
     { name: 'ancestor_ids', type: 'TEXT[]', notNull: true, default: "'{}'" },
     { name: 'title', type: 'TEXT' },
     { name: 'description', type: 'TEXT' },
-    { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (lib/story/document/input.ts); no CHECK on purpose
+    { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (@artifactbin/contracts artifact-format); no CHECK on purpose
     { name: 'source', type: 'TEXT' }, // legacy markup and non-markup formats; cleared after document conversion
     // canonical markup AST; old TEXT rows migrate lazily. lz4: every document commit rewrites the whole value
     // (a table-heavy document is megabytes), and pglz compresses it ~3x slower.

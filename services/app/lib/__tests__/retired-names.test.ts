@@ -176,7 +176,7 @@ describe('the surviving vocabulary', () => {
   it('is exactly the surviving artifact formats', async () => {
     // The VALUE, not a regex over the declaration: the runtime list and the type are one
     // declaration now, so asserting the list asserts both.
-    const { ARTIFACT_FORMATS } = await import('@/lib/story/document/input');
+    const { ARTIFACT_FORMATS } = await import('@artifactbin/contracts');
     expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'file', 'folder', 'image', 'markup', 'pdf', 'program', 'viz']);
   });
 

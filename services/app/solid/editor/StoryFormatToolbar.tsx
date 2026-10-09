@@ -47,7 +47,7 @@ import {
   stepSpacingClass,
 } from '@/lib/data/story/typography';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
-import { selectionToolbarPlan } from '@/lib/story/reader/selection-toolbar';
+import { selectionToolbarPlan } from '@/solid/lib/selection-toolbar';
 import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { ComposableFormatEdit } from '@/lib/document/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';

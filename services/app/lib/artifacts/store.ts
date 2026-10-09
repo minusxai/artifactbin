@@ -27,14 +27,14 @@ import { claimPendingDatasetSecret, resolveDatasetConnection } from '@/lib/datas
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '../platform/analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from '../platform/config';
-import { assetByteQuotaExceeded } from '../serving/asset-quota';
+import { assetByteQuotaExceeded } from '../story/assets/asset-quota';
 import { getDb, type Queryable } from '../platform/db';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { validateDatasetPolicyForRow } from '../datasets/policy/validation';
 import { actorSubject, emit } from '../platform/events';
 import { generateFileId } from '../platform/ids';
-import { type ArtifactFormat } from '../story/document/input';
+import { type ArtifactFormat } from '@artifactbin/contracts';
 import { json } from '../http/http';
 import { loadDatasetRows } from '../story/datasets/dataset-store';
 import { newEditId } from '../document/splice';

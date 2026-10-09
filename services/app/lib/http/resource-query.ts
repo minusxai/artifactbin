@@ -9,7 +9,7 @@ import {catalogOf} from '../datasets/catalog';
 import {executeCatalog} from '../datasets/execute';
 import {DatasetError} from '../datasets/errors';
 import {json} from './http';
-import {parseQueryRequest} from '../story/data/query-request';
+import {parseQueryRequest} from './query-request';
 import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 

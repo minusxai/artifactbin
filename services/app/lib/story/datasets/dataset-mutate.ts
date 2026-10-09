@@ -12,7 +12,7 @@ import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
 import {catalogOf,importedTables} from '@/lib/datasets/catalog';
-import {SIGN_IN_REQUIRED} from '../reader/sign-in-required';
+import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
 import {loadSqlite} from '@artifactbin/sql/core';
 import {sqlExtensions} from '@/lib/sql/extensions';
 import {paramSqlName} from '@artifactbin/contracts';
@@ -80,7 +80,7 @@ interface MutationRefused {
   detail: string;
   /**
    * A MACHINE-READABLE reason beside the sentence, for the one refusal a
-   * reader can act on: `sign_in_required` (lib/story/reader/sign-in-required). The
+   * reader can act on: `sign_in_required` (@artifactbin/contracts sign-in-required). The
    * status and `reason` are unchanged by it — it only lets the page draw a
    * door where it would otherwise print a parameter binding.
    */

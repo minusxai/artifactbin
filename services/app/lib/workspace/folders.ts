@@ -20,7 +20,7 @@ import { canAnnotate, canEdit, canRead } from '@/lib/artifacts/share-roles';
 // row-loading seam, so every one of them names the trash gate: a trashed
 // folder is not somewhere to file into, and a trashed child is not listed.
 import { effectiveRole, roleWithoutLink, LIVE_ARTIFACT_SQL, type ArtifactRow, type RoleActor } from '@/lib/artifacts/access';
-import type { ArtifactFormat } from '@/lib/story/document/input';
+import type { ArtifactFormat } from '@artifactbin/contracts';
 import { channelFor } from '@/lib/story/realtime/live';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 // The TYPED column shape (@artifactbin/contracts), not dataset-usage's loose

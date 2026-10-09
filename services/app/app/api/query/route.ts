@@ -4,7 +4,7 @@ import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';
 import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
 import { validateHelmet } from '@/lib/document/head';
-import { parseQueryRequest } from '@/lib/story/data/query-request';
+import { parseQueryRequest } from '@/lib/http/query-request';
 import { resolveToken } from '@/lib/accounts';
 import {DatasetError} from '@/lib/datasets/errors';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';

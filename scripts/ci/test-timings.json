@@ -550,7 +550,7 @@
    "services/app/lib/document/__tests__/query-notebook.test.ts": 136,
    "services/app/lib/story/__tests__/reader-sheet.test.ts": 2614,
    "services/app/lib/story/__tests__/row-scope.test.ts": 11,
-   "services/app/lib/story/__tests__/selection-toolbar.test.ts": 6,
+   "services/app/solid/lib/__tests__/selection-toolbar.test.ts": 6,
    "services/app/lib/story/__tests__/shipped-recipe.test.ts": 228,
    "services/app/lib/document/__tests__/social-preview.test.ts": 24,
    "services/app/lib/document/__tests__/splice.test.ts": 48,

@@ -1,12 +1,12 @@
 /**
  * THE ONE MAPPING from "what is selected" to "what the toolbar offers"
- * (lib/story/reader/selection-toolbar). Three controls are UNCONDITIONAL — the
+ * (solid/lib/selection-toolbar). Three controls are UNCONDITIONAL — the
  * breadcrumb naming the element, comment, delete — so every element in a
  * document is clickable and every click lands somewhere useful. What varies
  * is the format vocabulary, and it varies HERE, nowhere else.
  */
 import { describe, expect, it } from 'vitest';
-import { ALWAYS_OFFERED, selectionToolbarPlan } from '@/lib/story/reader/selection-toolbar';
+import { ALWAYS_OFFERED, selectionToolbarPlan } from '@/solid/lib/selection-toolbar';
 
 describe('the unconditional controls', () => {
   it('name, comment and delete are offered for EVERY selection kind', () => {

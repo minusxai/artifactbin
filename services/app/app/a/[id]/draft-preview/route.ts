@@ -11,7 +11,7 @@ import { requestOrSessionActor, roleFor } from '@/lib/accounts';
 import { refusesCrossSite } from '@/lib/accounts';
 import { STORY_DESIGN_NAMES, type StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { collectExternalAssetUrls } from '@/lib/document';
-import { lookupWebAssets } from '@/lib/serving';
+import { lookupWebAssets } from '@/lib/story/assets/web-assets';
 import { createHash } from 'node:crypto';
 import { collectRefUses } from '@/lib/dataflow/server';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';

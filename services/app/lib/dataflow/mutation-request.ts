@@ -4,7 +4,7 @@
  * values, unless the control's `args=` named other sources), and the context
  * built-ins the control supplies: the row it sits in (`$_row.<column>`) and
  * the value an editing cell holds (`$_value`). The twin of
- * lib/story/data/query-request, and narrow for the same reason: a caller supplies
+ * lib/http/query-request, and narrow for the same reason: a caller supplies
  * data, never SQL.
  *
  * ONE definition for every transport — the document's own POST, the page

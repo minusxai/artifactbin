@@ -125,7 +125,7 @@ export interface CapabilityRefusal { status: number; body: { error: string; hint
  *
  *  - a guest or an anonymous request is one click from being allowed, so it
  *    gets the DOOR (`sign_in_required`, the code every control already knows
- *    how to turn into `/login?callbackUrl=…` — lib/story/reader/sign-in-required);
+ *    how to turn into `/login?callbackUrl=…` — @artifactbin/contracts sign-in-required);
  *  - a test user is refused for good, and the fix is to bring the artifact INTO
  *    the sandbox, so the hint names the command that does it.
  *

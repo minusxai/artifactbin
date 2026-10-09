@@ -14,7 +14,7 @@
  *
  * The cache is GLOBAL and the FIRST importer wins: the same URL is the same
  * bytes for everyone, so a second document naming it fetches nothing, stores
- * nothing and is charged nothing (lib/asset-quota). Staleness is the price, and
+ * nothing and is charged nothing (./asset-quota). Staleness is the price, and
  * `refreshWebAsset` is what pays it — re-fetch and REPOINT the row, keeping the
  * address (see the note there about what a cached reader still sees).
  *

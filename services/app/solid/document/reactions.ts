@@ -4,7 +4,7 @@
  * navigates to login with the reaction as the carried intent, and an answer tells the page data it changed.
  */
 import { loginHref } from '@/lib/http/login-href';
-import { refusedForSignIn } from '@/lib/story/reader/sign-in-required';
+import { refusedForSignIn } from '@artifactbin/contracts';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { apiFetch } from '../lib/api';
 

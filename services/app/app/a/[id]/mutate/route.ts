@@ -60,7 +60,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         if (result.capability) return json(result.capability.body, result.capability.status, CORS);
         // Otherwise: same status, same `error`. `code` is the machine-readable
         // half, and today it has exactly one value: an anonymous reader pressed
-        // a write that binds `$_me` (lib/story/reader/sign-in-required).
+        // a write that binds `$_me` (@artifactbin/contracts sign-in-required).
         return json({error:'policy_denied',...(result.code?{code:result.code}:{}),detail:result.detail},403,CORS);
       case 'invalid_sql':
         return json({ error: 'mutation_failed', detail: result.detail }, 400, CORS);

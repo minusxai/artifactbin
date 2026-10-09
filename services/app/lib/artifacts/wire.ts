@@ -50,7 +50,7 @@ import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { CONTENT_FIELDS } from '@/lib/story/document/input';
 import { collectExternalAssetUrls } from '@/lib/document/external-images';
-import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '@/lib/serving/web-assets';
+import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '@/lib/story/assets/web-assets';
 import { getDb } from '@/lib/platform/db';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
