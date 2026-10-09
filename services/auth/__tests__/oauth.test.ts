@@ -423,7 +423,10 @@ it('direct HTTP bearer mint rejects unverified email and cross-site sessions',as
 });
 it('a direct HTTP consumer obtains its scoped bearer through real email OTP without device or browser approval',async()=>{
  let otp='';const human=await createHumanAuth({pglite:pg,secret:'oauth-routes-secret'.padEnd(32,'0'),baseURL:BASE,mail:{send:async message=>{otp=message.otp??'';}}});
- const options=await optionsOf();const direct=assemble(authParts({...options,sessions:{...human.sessions,handler:human.handler}}));
+ const options=await optionsOf();const direct=assemble(authParts({...options,sessions:{...human.sessions,handler:human.handler},upstream:async(request,actor)=>{
+  if(new URL(request.url).pathname==='/api/artifacts')return actor.credential==='bearer'?Response.json({credential:actor.credential}):Response.json({error:'unauthorized'},{status:401});
+  return options.upstream(request,actor);
+ }}));
  const email='mxmx_test_direct_http@example.com';
  const post=(path:string,body:unknown,cookie?:string)=>direct.request(path,{method:'POST',headers:{origin:BASE,'content-type':'application/json',...(cookie?{cookie}:{})},body:JSON.stringify(body)});
  expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
@@ -432,9 +435,24 @@ it('a direct HTTP consumer obtains its scoped bearer through real email OTP with
  const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
  const response=await post('/api/authentication/token',{},cookie);expect(response.status).toBe(201);
  const body=await response.json();expect(body.access_token).toMatch(/^mx_/);
+ expect(body.refresh_token).toMatch(/^mxr_/);expect(body.client_id).toEqual(expect.any(String));expect(body.expires_in).toBe(86400);
  const row=(await testDb().query('SELECT user_id,audience,scope FROM tokens WHERE id=$1',[body.id])).rows[0];
  expect(row.user_id).toBeTruthy();expect(row.audience).toBe(RESOURCE);expect(row.scope).toBe('artifacts');
  expect((await testDb().query('SELECT email FROM auth.user WHERE id=$1',[row.user_id])).rows[0]?.email).toBe(email);
+ // A later task has no login cookie and its access token has expired.
+ await testDb().query("UPDATE tokens SET expires_at=now()-interval '1 second' WHERE id=$1",[body.id]);
+ expect((await direct.request('/api/artifacts',{headers:{authorization:`Bearer ${body.access_token}`}})).status).toBe(401);
+ const refresh=(token:string,clientId=body.client_id,resource=RESOURCE)=>post('/oauth/token',{grant_type:'refresh_token',client_id:clientId,refresh_token:token,resource});
+ expect((await refresh(body.refresh_token,body.client_id,BASE+'/other')).status).toBe(400);
+ const renewed=await refresh(body.refresh_token);expect(renewed.status).toBe(200);
+ const next=await renewed.json();expect(next.refresh_token).not.toBe(body.refresh_token);expect(next.access_token).not.toBe(body.access_token);
+ const authenticated=await direct.request('/api/artifacts',{headers:{authorization:`Bearer ${next.access_token}`}});
+ expect(authenticated.status).toBe(200);expect(await authenticated.json()).toMatchObject({credential:'bearer'});
+ // Rotation persists another usable grant; revoking its bearer closes that grant too.
+ const again=await refresh(next.refresh_token);expect(again.status).toBe(200);const latest=await again.json();
+ await testDb().query('UPDATE tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(latest.access_token)]);
+ expect((await refresh(latest.refresh_token)).status).toBe(400);
+
 });
 
 it('words the unavailable device page by cause: expired, already approved, denied, all 400', async () => {

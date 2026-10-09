@@ -290,3 +290,11 @@ it('the published browser example preserves a capacity refusal and only polls an
     expect(operations[0]).toBe('script');expect(operations.at(-1)).toBe('close');
   } finally {await sessions.close();}
 });
+
+it('HTTP guidance preserves rotating credentials across tasks and renews without email login',()=>{
+ const guide=publicGuideText('http-api',BASE)!;
+ expect(guide).toContain('refresh_token');expect(guide).toContain('client_id');
+ expect(guide).toContain('persistent secret store');expect(guide).toContain('0600');
+ expect(guide).toContain('grant_type');expect(guide).toContain('/oauth/token');
+ expect(guide).toContain('Atomically');expect(guide).not.toContain('there is no refresh token');
+});

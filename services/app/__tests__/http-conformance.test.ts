@@ -13,15 +13,22 @@ const base='https://example.test';
 const json=(body:unknown,status=200,headers:Record<string,string>={})=>Response.json(body,{status,headers});
 const npmNotice=(helperBase:string)=>({message:'afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup — then use afbin as before.',hint:`Windows PowerShell: npx.cmd --yes @afbin/cli@latest setup. If Node.js 22+ is missing, run ${helperBase}/chat/install-node.sh (macOS/Linux) or ${helperBase}/chat/install-node.ps1 (Windows) first. Your files, account and skills stay.`});
 const legacyNotice=(helperBase:string)=>({message:'afbin now runs through npm',hint:`Node/npm setup: ${helperBase}/chat/install-node.sh (macOS/Linux), ${helperBase}/chat/install-node.ps1 (Windows). npx --yes @afbin/cli@latest <command>; npx.cmd`});
-function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperBase=base,legacyCopy=false}={}){
- let rows=[{region:'EU',amount:2}],version=1;
+function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperBase=base,legacyCopy=false,refreshFails=false}={}){
+ let rows=[{region:'EU',amount:2}],version=1;const tokens=new Set<string>();
  const calls:Array<{path:string;init:RequestInit}>=[];
  const fetch=async(input:string,init:RequestInit={})=>{
   const path=new URL(input).pathname;calls.push({path,init});
-  if(path==='/api/authentication/token')return json({id:'tok_test',access_token:'mx_test_http',token_type:'Bearer',expires_in:3600,scope:'artifacts'},201,{'Cache-Control':cache});
-  if(path==='/api/my/tokens/tok_test')return new Response(null,{status:204});
+  if(path==='/api/my/tokens')return json({tokens:[...tokens].map(id=>({id}))});
+  if(path==='/api/authentication/token'){tokens.add('tok_test');return json({id:'tok_test',access_token:'mx_test_http',refresh_token:'mxr_test_http',client_id:'afbin_test_http',token_type:'Bearer',expires_in:86400,scope:'artifacts'},201,{'Cache-Control':cache});}
+  if(path==='/oauth/token'){
+   expect(new Headers(init.headers).get('cookie')).toBeNull();
+   expect(JSON.parse(String(init.body))).toEqual({grant_type:'refresh_token',client_id:'afbin_test_http',refresh_token:'mxr_test_http',resource:base+'/api'});
+   if(refreshFails)return json({error:'invalid_grant'},400);
+   tokens.add('tok_refreshed');return json({access_token:'mx_test_http_next',refresh_token:'mxr_test_http_next',token_type:'Bearer',expires_in:86400,scope:'artifacts'});
+  }
+  if(path.startsWith('/api/my/tokens/')){expect(tokens.delete(path.split('/').at(-1)!)).toBe(true);return new Response(null,{status:204});}
   if(path==='/a/doc123/download')return new Response('<!doctype html><script id="afbin-file">{}</script>',{headers:{'Content-Type':'text/html','Content-Disposition':`attachment; filename="${filename}"`}});
-  expect(new Headers(init.headers).get('authorization')).toBe('Bearer mx_test_http');
+  expect(new Headers(init.headers).get('authorization')).toBe('Bearer mx_test_http_next');
   if(path==='/api/artifacts')return json({id:'csv123'},201);
   if(path.endsWith('/content'))return json(rows);
   if(init.method==='PUT'){
@@ -39,13 +46,13 @@ function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperB
 it('direct acceptance exercises email bearer CSV read/write, filename, no-op native refusal, and revocation',async()=>{
  const fake=host();const ids:string[]=[];
  await checkDirectHttp({base,fetch:fake.fetch,accountCookie:'email=session',artifactId:'doc123',stamp:'unit',onArtifact:(id:string)=>ids.push(id)});
- expect(ids).toEqual(['csv123']);expect(fake.calls.at(-1)?.path).toBe('/api/my/tokens/tok_test');
+ expect(ids).toEqual(['csv123']);expect(fake.calls.filter(call=>call.init.method==='DELETE').map(call=>call.path)).toEqual(['/api/my/tokens/tok_test','/api/my/tokens/tok_refreshed']);
 });
 it('guest issuance acceptance refuses a minted credential and requires no-store on refusal',async()=>{
  await checkGuestHttpIssuance({base,guestCookie:'guest=session',fetch:async()=>json({error:'email_auth_required'},401,{'Cache-Control':'no-store'})});
  await expect(checkGuestHttpIssuance({base,guestCookie:'guest=session',fetch:async()=>json({access_token:'mx_test_guest'},201)})).rejects.toThrow();
 });
-it.each([{cache:'public'},{mutates:true},{filename:'Report.html'},{helperBase:'http://artifactbin-app:3000'},{helperBase:'https://wrong-public.example'},{legacyCopy:true}])('acceptance catches a broken release contract %j',async options=>{
+it.each([{cache:'public'},{mutates:true},{filename:'Report.html'},{helperBase:'http://artifactbin-app:3000'},{helperBase:'https://wrong-public.example'},{legacyCopy:true},{refreshFails:true}])('acceptance catches a broken release contract %j',async options=>{
  const fake=host(options);
  await expect(checkDirectHttp({base,fetch:fake.fetch,accountCookie:'email=session',artifactId:'doc123',stamp:'unit',onArtifact:()=>{}})).rejects.toThrow();
 });
