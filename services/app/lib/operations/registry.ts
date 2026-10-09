@@ -15,7 +15,7 @@ import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
 import { resolveTestUser } from '@/lib/accounts/testusers';
 import { capabilityGuard } from '@/lib/artifacts/capabilities';
-import { TESTUSER_ERRORS } from '@artifactbin/contracts';
+import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
@@ -34,7 +34,6 @@ import {
   artifactSummaryToWire, artifactToWire, createdArtifactWire, parseParentField, parseVisibilityValue,
   parseExpectedVersion, respondToAnnotationAction, respondToEdit, respondToMutate,
 } from '@/lib/artifacts/wire';
-import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE } from '@/lib/serving/agent-guidance';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
 export interface OpReply {

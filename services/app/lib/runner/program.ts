@@ -1,8 +1,6 @@
 import {parseProgramDefinition,type ScheduledExecution} from '@artifactbin/contracts';
 import {getArtifactById} from '../artifacts/store';
 
-export {parseProgramDefinition} from '@artifactbin/contracts';
-
 /** Sharing permits reading the definition, never allocating compute under its owner's credentials. */
 export async function resolveProgramArtifact(artifactId:string,userId:string):Promise<ScheduledExecution|null>{
  const row=await getArtifactById(artifactId);

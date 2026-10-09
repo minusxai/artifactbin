@@ -1,24 +1,16 @@
-import {createHash,createHmac} from 'node:crypto';
-import {type HostedRemoteAgent,type RunnerJson} from '@artifactbin/contracts';
-import {attachActor,hostedAgentCallbackKey,verifyActor} from '@artifactbin/utils';
+import {annotationsChannel,type HostedRemoteAgent,type RunnerJson} from '@artifactbin/contracts';
+import {attachActor} from '@artifactbin/utils';
 import {getDb,type Db} from '../platform/db';
 import {PUBLIC_BASE_URL} from '../platform/config';
 import {getArtifactById,canReadArtifact} from '../artifacts';
 import {runnerOperation} from '../runner';
 import {json} from '../http';
-import {readCommentContext} from './comment-context';
-import {annotationsChannel} from '@artifactbin/contracts';
+import {readCommentContext} from '../remote/comment-context';
+import {externalHostedProof,setExternalHostedAgent,verifyExternalHostedCallback} from '../remote/hosted-proof';
 
 interface Work {id:string;owner:string;session_id:string;artifact_id:string;thread_id:string;comment_id:string;phase:string;data:{commentContext?:RunnerJson;payload:{body:string;author:string|null}}}
-let external:{agent:HostedRemoteAgent;key:string}|undefined;
-/** Only an explicitly configured URL service gets this callback capability. */
-function externalHostedProof(owner:string,id:string):string|undefined {
- if(!external?.agent.owns(owner,id))return;
- return createHmac('sha256',external.key).update(JSON.stringify([owner,id])).digest('hex');
-}
-export function clearExternalHostedComments(){external=undefined;}
 export function externalHostedComments(agent:HostedRemoteAgent,secret:string,options:{db?:Db;publicBaseUrl?:string}={}){
- external={agent,key:hostedAgentCallbackKey(secret)};
+ setExternalHostedAgent(agent,secret);
  const callbackUrl=new URL('/api/remote/hosted/operations',options.publicBaseUrl??PUBLIC_BASE_URL).href;
  let ticking=false;
  return async()=>{
@@ -51,7 +43,7 @@ export function externalHostedComments(agent:HostedRemoteAgent,secret:string,opt
 }
 /** The ordinary proxy actor signature is deliberately insufficient for this route. */
 export async function hostedCommentOperation(request:Request):Promise<Response>{
- const actor=external?verifyActor(request.headers.get('x-artifactbin-hosted-callback'),external.key):null;
+ const actor=verifyExternalHostedCallback(request.headers.get('x-artifactbin-hosted-callback'));
  if(!actor?.userId||actor.credential!=='session')return json({error:'unauthorized'},401);
  let body:Record<string,unknown>|null=null;
  const reader=request.body?.getReader();let bytes=0;const chunks:Uint8Array[]=[];
@@ -79,4 +71,3 @@ export async function hostedCommentOperation(request:Request):Promise<Response>{
  const trusted=attachActor(new Request(request.url,{method:'POST',headers}),{userId:actor.userId,credential:'session'});
  return runnerOperation(trusted,body.operation==='read'?'get_artifact':'annotate',body.operation==='read'?{id:work.artifact_id}:{id:work.artifact_id,annotation_id:work.thread_id,request_id:work.id,reply:input.body,phase:input.phase,...(input.resolve!==undefined?{resolve:input.resolve}:{})});
 }
-export const externalHostedProofHash=(owner:string,id:string)=>{const proof=externalHostedProof(owner,id);return proof?createHash('sha256').update(proof).digest('hex'):undefined;};

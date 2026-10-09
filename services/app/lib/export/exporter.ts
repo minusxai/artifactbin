@@ -17,7 +17,7 @@ import { getArtifactById } from '../artifacts/store';
 import { referencedArtifactForRow } from '../artifacts/dataflow';
 import { declarationsOf } from '../document/head';
 import { scriptModuleOrigins, scriptRenderAllowance } from './script-origins';
-import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '../serving/og-card';
+import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
 import { VERSION_PARAM } from '@/lib/artifacts/archived-version';
 import { mintExportKey } from '../serving/export-read-key';
 import { json } from '../http/http';

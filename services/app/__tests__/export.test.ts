@@ -20,7 +20,7 @@ import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExpo
 
 
 import { setServices } from '@/lib/platform';
-import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/serving';
+import { CARD_HEIGHT, CARD_WIDTH } from '@artifactbin/contracts';
 import { mintExportKey } from '@/lib/serving';
 
 const EXPORT_BYTES = EXPORT_PNG;

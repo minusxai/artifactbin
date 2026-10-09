@@ -6,7 +6,8 @@ import {POST as publish} from '@/app/api/artifacts/route';
 import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as download} from '@/app/a/[id]/download/route';
-import {parseProgramDefinition,resolveProgramArtifact} from '@/lib/runner/program';
+import {parseProgramDefinition} from '@artifactbin/contracts';
+import {resolveProgramArtifact} from '@/lib/runner/program';
 useAppHarness();
 const definition={version:1,command:['python','/home/runner/task.py'],env:{REPORT:'daily'}};
 it('publishes, reads, exports and replaces validated native program definitions',async()=>{

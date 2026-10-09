@@ -1,5 +1,5 @@
 import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';
-import { EMPTY_ARTIFACT_MARKUP } from '@/lib/serving/start-placeholder';
+import { EMPTY_ARTIFACT_MARKUP } from '@artifactbin/contracts';
 
 /** The creation menu's vocabulary and initial content; every write uses the normal artifact API. */
 export const ARTIFACT_STARTERS = [
