@@ -35,7 +35,7 @@ import { urlHash } from '@/lib/document/asset-url';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
 import { createAppServer } from '../app';
 
-useAppHarness();
+const harness = useAppHarness();
 beforeEach(() => setSession(() => (settings.session ? { user: { id: settings.session } } : null)));
 
 const APP = 'https://app.example.test';
@@ -97,14 +97,18 @@ async function world() {
   return { vivek, other, post, folder, filed, quiet, secret, local, ds, poll, theirs };
 }
 
+/** One `world()` for a describe whose tests only read it, on the verified host's configuration. */
+const sharedWorld = () => harness.shared(async () => { configure('domains.example.test'); return world(); });
+
 const noCookie = (res: Response) => expect(res.headers.get('set-cookie')).toBeNull();
 
 beforeEach(() => { configure('domains.example.test'); settings.session = ''; });
 afterEach(() => { setDomainResolver(null); });
 
 describe('the home page on a verified host', () => {
+  const shared = sharedWorld();
   it('lists the owner\'s public root documents, server-rendered with links and the footer, and nothing private', async () => {
-    const w = await world();
+    const w = shared();
     const res = await app().request(`${HOST}/`, { headers: { accept: 'text/html', cookie: 'mx_session=anything' } });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
@@ -131,7 +135,6 @@ describe('the home page on a verified host', () => {
 
 
   it('links the stylesheet the app page links, and its policy admits only this host\'s styles, fonts and images', async () => {
-    await world();
     const hrefs = (html: string) => [...html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map((m) => /href="([^"]+)"/.exec(m[0])?.[1]);
     const spa = await (await app().request(`${APP}/login`, { headers: { accept: 'text/html' } })).text();
     expect(hrefs(spa)).toEqual(['/shell.css']);
@@ -146,7 +149,6 @@ describe('the home page on a verified host', () => {
   });
 
   it('follows the theme the way the app page does: web/solid-app.html\'s own stamp, admitted by its hash and nothing else', async () => {
-    await world();
     // Parsed, not pattern-matched: the browser's own reading of each document.
     const shell = new JSDOM(readFileSync(join(__dirname, '..', '..', 'web', 'solid-app.html'), 'utf8')).window.document;
     const stamps = [...shell.querySelectorAll('script:not([src])')].map((script) => script.textContent ?? '');
@@ -177,7 +179,6 @@ describe('the home page on a verified host', () => {
     mkdirSync(join(dir, '.vite'));
     writeFileSync(join(dir, '.vite', 'manifest.json'), JSON.stringify({ 'main.tsx': { file: 'assets/main-Cd34ef.js', css: ['assets/shell-Ab12cd.css'], assets: ['assets/plex-Ef56ab.woff2'] } }));
     const built = createAppServer({ webDir: dir });
-    await world();
     const html = await (await built.request(`${HOST}/`, { headers: { accept: 'text/html' } })).text();
     expect(html).toContain('href="/assets/shell-Ab12cd.css"');
     expect(html).not.toContain('main-Cd34ef.js');
@@ -257,8 +258,9 @@ describe('card thumbnails and the owner\'s picture on a verified host', () => {
 });
 
 describe('a post on a verified host', () => {
+  const shared = sharedWorld();
   it('serves the document with no reader chrome, the footer, a self-canonical and its unfurl tags', async () => {
-    const w = await world();
+    const w = shared();
     const res = await app().request(`${HOST}/${w.post.id}-hello-world`, { headers: { accept: 'text/html' } });
     expect(res.status).toBe(200);
     noCookie(res);
@@ -281,7 +283,7 @@ describe('a post on a verified host', () => {
   });
 
   it('accepts the bare id, and redirects a wrong slug to the canonical one on the same host, keeping the query', async () => {
-    const w = await world();
+    const w = shared();
     expect((await app().request(`${HOST}/${w.post.id}`)).status).toBe(200);
     const wrong = await app().request(`${HOST}/${w.post.id}-old-title?$pick=a`);
     expect(wrong.status).toBe(302);
@@ -290,7 +292,7 @@ describe('a post on a verified host', () => {
   });
 
   it('ignores the capture, archive and editing switches: the post is always the plain reader copy', async () => {
-    const w = await world();
+    const w = shared();
     const res = await app().request(`${HOST}/${w.post.id}-hello-world?chrome=0&version=1&edit=1&comment=1&key=forged`);
     expect(res.status).toBe(200);
     const html = await res.text();
@@ -299,7 +301,7 @@ describe('a post on a verified host', () => {
   });
 
   it('answers 404 — never a redirect — for another owner\'s, an unlisted or a private document, a folder and a stranger id', async () => {
-    const w = await world();
+    const w = shared();
     for (const id of [w.theirs.id, w.quiet.id, w.secret.id, w.folder.id, w.ds.id, 'zzzzzz']) {
       const res = await app().request(`${HOST}/${id}`, { headers: { accept: 'text/html' } });
       expect(res.status, id).toBe(404);
@@ -309,8 +311,9 @@ describe('a post on a verified host', () => {
 });
 
 describe('everything else on a verified host is 404', () => {
+  const shared = sharedWorld();
   it('refuses the app: login, api, profiles, app document addresses and the SPA', async () => {
-    const w = await world();
+    const w = shared();
     for (const path of ['/login', '/account', '/api/server', '/api/health', `/api/domains/allow?domain=blog.example.org`, '/api/my/domain',
       '/@vivek', `/@vivek/${w.post.id}-hello-world`, `/a/${w.post.id}`, `/a/${w.post.id}/raw`, `/a/${w.post.id}/export?mode=card`, '/llms.txt', '/chat/install.sh', '/og.png', '/nope/deeper']) {
       const res = await app().request(`${HOST}${path}`, { headers: { accept: 'text/html' } });
@@ -322,7 +325,7 @@ describe('everything else on a verified host is 404', () => {
   });
 
   it('serves a public post\'s read-side routes, and scopes them to the owner\'s public documents', async () => {
-    const w = await world();
+    const w = shared();
     const q = encodeURIComponent(JSON.stringify({ only: ['current'] }));
     const own = await app().request(`${HOST}/a/${w.local.id}/query?q=${q}`);
     expect(own.status, await own.clone().text()).toBe(200);
@@ -347,7 +350,7 @@ describe('everything else on a verified host is 404', () => {
   });
 
   it('serves the live story fragment for the owner\'s public post as a guest', async () => {
-    const w = await world();
+    const w = shared();
     await drainPreparedPageWarmups();
     const fragment = await app().request(`${HOST}/a/${w.post.id}/story`, { headers: { cookie: 'authjs.session-token=forged' } });
     expect(fragment.status, await fragment.clone().text()).toBe(200);
@@ -360,7 +363,7 @@ describe('everything else on a verified host is 404', () => {
   });
 
   it('admits a query POST only with the reader\'s local tables', async () => {
-    const w = await world();
+    const w = shared();
     const post = (body: unknown) => app().request(`${HOST}/a/${w.local.id}/query`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
     const withLocal = await post({ only: ['current'], values: { count: 3 }, localTables: { drafts: [{ id: 7 }] } });
     expect(withLocal.status, await withLocal.clone().text()).toBe(200);
@@ -370,7 +373,7 @@ describe('everything else on a verified host is 404', () => {
   });
 
   it('runs a local mutation, and refuses every dataset-writing one without touching the dataset', async () => {
-    const w = await world();
+    const w = shared();
     const mutate = (id: string, body: unknown) => app().request(`${HOST}/a/${id}/mutate`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
     const local = await mutate(w.local.id, { mutation: 'inc', args: {} });
     expect(local.status, await local.clone().text()).toBe(200);
