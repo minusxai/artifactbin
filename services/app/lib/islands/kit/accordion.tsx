@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createContext, createEffect, createSignal, createUniqueId, onMount, splitProps, useContext, type JSX } from 'solid-js';
 import { collapsibleStyle } from './collapsible-style';
+import { commentSignal, commentStateKey } from '../comment-state';
 
 type Root = { value: () => string; toggle: (value: string) => void; disabled: boolean; orientation: string };
 type Item = { value: string; open: () => boolean; disabled: boolean; triggerId: () => string; contentId: string; panelId: () => string; setPanelId: (id: string) => void; setTriggerId: (id: string) => void };
@@ -8,7 +9,7 @@ const RootContext = createContext<Root>(); const ItemContext = createContext<Ite
 const root = () => { const ctx = useContext(RootContext); if (!ctx) throw new Error('Accordion outside root'); return ctx; };
 const item = () => { const ctx = useContext(ItemContext); if (!ctx) throw new Error('Accordion outside item'); return ctx; };
 export function Accordion(props: JSX.HTMLAttributes<HTMLDivElement> & { type?: 'single' | 'multiple'; value?: string; defaultValue?: string; collapsible?: boolean; disabled?: boolean; orientation?: string; onValueChange?: (value: string) => void }) {
-  const [local, setLocal] = createSignal(props.defaultValue ?? '');
+  const [local, setLocal] = commentSignal(props.value === undefined ? commentStateKey('value', props.id) : null, props.defaultValue ?? '');
   const ctx: Root = { value: () => props.value ?? local(), toggle: next => { const value = ctx.value() === next && props.collapsible ? '' : next; setLocal(value); props.onValueChange?.(value); }, disabled: !!props.disabled, orientation: props.orientation ?? 'vertical' };
   const [localProps, rest] = splitProps(props, ['type', 'value', 'defaultValue', 'collapsible', 'disabled', 'orientation', 'onValueChange', 'children']);
   return <RootContext.Provider value={ctx}><div data-slot="accordion" data-orientation={ctx.orientation} {...rest}>{localProps.children}</div></RootContext.Provider>;

@@ -144,7 +144,9 @@ describe('buildIslands', () => {
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/comment-view-state.ts'))).toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/routes.ts'))).toBe(false);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
-    expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
+    // 81 KB since kit view state (Tabs, Accordion, Collapsible, Dialog) registers as comment state: one shared
+    // chunk for lib/islands/comment-state + lib/story-runtime/comment-state, ~0.7 KB brotli, beside those families.
+    expect(staticBytes).toBeLessThanOrEqual(81 * 1024);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/upload/control.tsx')), 'optional upload interactions load after mounting').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/fit-drawing.ts')), 'legacy drawing compatibility is lazy').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/data-placeholder.tsx')), 'missing-data UI loads only when needed').toBe(false);
