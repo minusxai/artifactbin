@@ -161,3 +161,28 @@ describe('session capacity', () => {
     }finally{await sessions.close();}
   });
 });
+
+// A request cannot adopt a previous request's authenticated browser by reusing its ID.
+it('fences scripts and receipt replay by creation scope while retaining owner cleanup', async () => {
+  const run=vi.fn(async (code:string)=>({result:code,pages:[],attachments:[]}));
+  const sessions=createBrowserSessions(async()=>({run,close:async()=>{}}));
+  const actor={credential:'bearer' as const,userId:'owner',tokenId:'old-token'};
+  const request={actor,op:'script' as const,session_id:'scope-session',execution_id:'first',create:true,code:'one',requestScope:'request-A'};
+  try {
+    expect((await sessions.request(request)).error).toBeUndefined();
+    await vi.waitFor(()=>expect(run).toHaveBeenCalledTimes(1));
+    for(const requestScope of ['request-B',undefined]) {
+      expect((await sessions.request({...request,requestScope})).error?.code).toBe('SESSION_SCOPE_CONFLICT');
+      expect((await sessions.request({...request,requestScope,execution_id:'new-'+String(requestScope),code:'bad'})).error?.code).toBe('SESSION_SCOPE_CONFLICT');
+    }
+    expect(run).toHaveBeenCalledTimes(1);
+    expect((await sessions.request({...request,actor:{...actor,tokenId:'rotated'}})).error).toBeUndefined();
+    expect((await sessions.request({actor,op:'status',session_id:request.session_id,requestScope:'request-B'})).error).toBeUndefined();
+    expect((await sessions.request({actor,op:'close',session_id:request.session_id,requestScope:'request-B'})).error).toBeUndefined();
+    const legacy={...request,session_id:'legacy-session',requestScope:undefined};
+    expect((await sessions.request(legacy)).error).toBeUndefined();
+    await vi.waitFor(()=>expect(run).toHaveBeenCalledTimes(2));
+    expect((await sessions.request({...legacy,requestScope:'request-C',execution_id:'adopt'})).error?.code).toBe('SESSION_SCOPE_CONFLICT');
+    expect(run).toHaveBeenCalledTimes(2);
+  } finally {await sessions.close();}
+});
