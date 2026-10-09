@@ -14,7 +14,7 @@ import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor } from '@/
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 import { getArtifactById, getVersionFor } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts/actors';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/document/asset-url';

@@ -2,7 +2,7 @@ import {hostedAuthorization,hostedRefusal,hostedOperationCompleted} from '@/lib/
 import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/artifacts/mutation-operation';
 import {MembershipError} from '@/lib/artifacts/membership/membership';
 import {refusingUnservable} from '@/lib/artifacts/servable';
-import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
+import {grantsOf,grantsPermitWrite} from '@/lib/artifacts/dataset-policy/grants';
 import {tokenActorForRequest} from '@/lib/accounts/viewer';
 import {readableArtifact} from '@/lib/artifacts/read-access';
 import {canAnnotate} from '@/lib/artifacts/share-roles';

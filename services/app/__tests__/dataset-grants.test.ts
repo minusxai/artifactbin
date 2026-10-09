@@ -5,7 +5,7 @@ import { createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { readableArtifact, changeMembership } from '@/lib/artifacts';
 import { getArtifactById, dataflowForRow } from '@/lib/artifacts';

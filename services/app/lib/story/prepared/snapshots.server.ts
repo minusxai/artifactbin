@@ -51,7 +51,7 @@ import { createHash } from 'node:crypto';
 import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
 import { compiledForRow, dataflowForRow } from '@/lib/artifacts/dataflow';
 import { getArtifactById } from '@/lib/artifacts/store';
-import { grantsOf, grantsPermitRead } from '@/lib/datasets/policy/grants';
+import { grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import { dataRefs } from '@/lib/dataflow/compiled-flow';
 import { planOf } from '@/lib/compiled-page/plan';

@@ -27,7 +27,7 @@ export function fileContentType(filename: string): string | null {
  * The extensions that go through the IMAGE door — sniffed, re-encoded to webp,
  * measured, given a narrow variant.
  *
- * This is exactly what {@link IMAGE_CONTENT_TYPES} (lib/story/assets/image-store)
+ * This is exactly what {@link IMAGE_CONTENT_TYPES} (lib/object-store/image-store)
  * accepts, and it has to stay exactly that. `avif` is the interesting absence:
  * it is a perfectly good {@link FILE_TYPES} upload and the browser renders it,
  * but the image door refuses those bytes, so calling one an `image` here would

@@ -11,7 +11,7 @@ import type { Actor } from '@artifactbin/contracts';
 import { request, setSession, useAppHarness, mintAccountToken } from '@/__tests__/harness';
 import { claimToken, createUser, avatarVersion, getUserById } from '@/lib/accounts';
 import { getArtifactById, updateSharingFor, changeMembership } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { PUT as putProfileImage } from '@/app/api/my/profile/image/route';
 import { GET as getAvatar } from '@/app/api/users/[id]/avatar/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';

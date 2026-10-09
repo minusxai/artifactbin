@@ -1,6 +1,6 @@
 import {NotificationExecutionError} from '@/lib/notifications/errors';
 import {artifactQuery} from '@/lib/artifacts/document';
-import { grantsOf, assertGrantCommit } from '@/lib/datasets/policy/grants';
+import { grantsOf, assertGrantCommit } from '@/lib/artifacts/dataset-policy/grants';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
 import {artifactState} from '@/lib/artifacts/state';
@@ -10,7 +10,7 @@ import {notificationJobStore} from '@/lib/artifacts/notification-runtime';
 import {lockNotificationExecution} from '@/lib/artifacts/notification-authority';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
-import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
+import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/artifacts/dataset-policy';
 import {catalogOf,importedTables} from '@/lib/datasets/catalog';
 import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
 import {loadSqlite} from '@artifactbin/sql/core';

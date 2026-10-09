@@ -1,4 +1,4 @@
-import {grantsOf,grantsPermitRead} from '../datasets/policy/grants';
+import {grantsOf,grantsPermitRead} from '@/lib/artifacts/dataset-policy/grants';
 import { effectiveRole, type ArtifactRow } from './access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { getArtifactById, getEditableArtifactFor } from './store';

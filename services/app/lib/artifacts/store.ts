@@ -10,7 +10,7 @@ import type { DocumentOperation } from '@artifactbin/contracts';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '../accounts/relation-state';
 import { documentMentions } from './membership/document-mentions';
-import { grantsOf, grantsPermitRead } from '../datasets/policy/grants';
+import { grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import { claimArtifactId } from './identities';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
 import { validateUserContent, retainUserScope, resolveUserColumnScope } from '@/lib/datasets/user-fields';
@@ -150,7 +150,7 @@ export async function createArtifact(
    *                resetting the role would be incoherent.
    *   datasetPolicy— the stored write policy, copied WITH the dataset it
    *                governs (a fork of an app copies both). Every other route to
-   *                a policy is lib/datasets/policy `setDatasetPolicy`, which
+   *                a policy is lib/artifacts/dataset-policy `setDatasetPolicy`, which
    *                needs the row to exist first; a copy has no "first".
    *   tx         — run inside the caller's OPEN transaction instead of opening
    *                one. The caller then owns the post-commit effects

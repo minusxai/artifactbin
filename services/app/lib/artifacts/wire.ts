@@ -2,7 +2,7 @@ import {documentMutationReply,adaptMutationOperationReply} from './mutation-oper
 import {parseDocumentUpdate} from '@artifactbin/contracts';
 import {GRAPH_POLICY,graphIntegrity,graphNodes,graphSource} from '../document/document-graph';
 import {readableArtifact} from './read-access';
-import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
+import {grantsOf,grantsPermitWrite} from '@/lib/artifacts/dataset-policy/grants';
 import type {MutationReceipt} from './mutation-receipt';
 import {parseSharingEntries} from '@artifactbin/utils';
 import {artifactState} from './state';

@@ -1,7 +1,7 @@
 /** Transaction-only authorization shared by query execution, result commit and disclosure. */
 import {notificationRuleSourceIds,notificationRevision as hash} from '@/lib/notifications/context';
 import {hasExplicitNotificationMembership} from '@/lib/notifications/membership';
-import {grantsOf,grantsPermitRead,readThrough} from '@/lib/datasets/policy/grants';
+import {grantsOf,grantsPermitRead,readThrough} from '@/lib/artifacts/dataset-policy/grants';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts/actors';

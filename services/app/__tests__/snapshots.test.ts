@@ -17,7 +17,7 @@ import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
-import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { compiledForRow, getArtifactById } from '@/lib/artifacts';

@@ -1,12 +1,12 @@
 import {artifactQuery} from '@/lib/artifacts/document';
-import {JOIN_RELATIONS} from '../../accounts/relation-state';
+import {JOIN_RELATIONS} from '@/lib/accounts/relation-state';
 import type { DatasetGrantContext, DatasetGrantPolicy, Queryable } from '@artifactbin/contracts';
 import { datasetGrantAllows, parseDatasetGrants } from '@artifactbin/utils';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts/actors';
 import { getDb } from '@/lib/platform/db';
 import { hasDocumentEditorAccess } from '@/lib/artifacts/document-policy';
-import { DatasetError } from '../errors';
+import { DatasetError } from '@/lib/datasets/errors';
 
 export function grantsOf(row: Pick<ArtifactRow,'dataset_policy'>): DatasetGrantPolicy | null {
   const value=row.dataset_policy;

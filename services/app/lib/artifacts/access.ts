@@ -1,6 +1,6 @@
 import { getArtifactById } from './store';
 import type { StoredDocument } from '../document';
-import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from '../datasets/policy/grants';
+import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
 import { hasDocumentEditorAccess } from './document-policy';
 import type { RoleActor, TokenActor, Viewer } from '@/lib/accounts/actors';
 import type { RequestActor } from '@/lib/accounts/viewer';
@@ -8,7 +8,7 @@ import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/accounts/u
 import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb, type Queryable } from '../platform/db';
 import { type ArtifactFormat } from '@artifactbin/contracts';
-import { canUseDataPolicy } from '@/lib/datasets/policy';
+import { canUseDataPolicy } from '@/lib/artifacts/dataset-policy';
 import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
 
 /**

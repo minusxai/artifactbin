@@ -3,7 +3,7 @@ import type { TokenActor } from '@/lib/accounts/actors';
 import { getArtifactFor, writeShares } from './store';
 import { findWritersFor } from './dataflow';
 import { artifactQuery } from './document';
-import { grantsOf } from '../datasets/policy/grants';
+import { grantsOf } from '@/lib/artifacts/dataset-policy/grants';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb } from '../platform/db';
 import { actorSubject, emit } from '../platform/events';
