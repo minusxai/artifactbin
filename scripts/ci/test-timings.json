@@ -135,7 +135,6 @@
    "services/app/__tests__/reading-chrome.test.ts": 2251,
    "services/app/__tests__/refresh-asset.test.ts": 1471,
    "services/app/__tests__/refs-readable.test.ts": 1290,
-   "services/app/__tests__/relations-routes.test.ts": 825,
    "services/app/__tests__/relations.test.ts": 546,
    "services/app/__tests__/remote-review.test.ts": 3491,
    "services/app/__tests__/remote-sessions.test.ts": 1061,
