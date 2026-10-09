@@ -55,6 +55,7 @@ export type {CommentViewState, ReviewJson} from './comment-view-state';
 export type { DatasetUploadResult } from './dataset-upload';
 
 export * from './artifact-format';
+export * from './live-channels';
 export { BASEMAP_PATH } from './basemap';
 export { DOMAIN_FOOTER_TEXT } from './domain-footer';
 export { MAX_PEOPLE_IDS } from './query-request';

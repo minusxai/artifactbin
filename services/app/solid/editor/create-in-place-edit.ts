@@ -34,9 +34,9 @@ import {
   STORY_COMMIT_MESSAGE,
   type StoryEditSelection,
 } from '@/lib/story-runtime/contract';
-import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-v2/bookmark';
-import { editBlock } from '@/lib/editor-v2/block-edit';
-import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
+import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-engine/bookmark';
+import { editBlock } from '@/lib/editor-engine/block-edit';
+import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { composeSource, type ComposableFormatEdit } from '@/lib/document/edit-compose';
 
 /**

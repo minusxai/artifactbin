@@ -5,7 +5,7 @@
  * before it reaches a document. Its callers are the format toolbar's popover,
  * the edit session that applies
  * the mark (lib/story-runtime/edit/session), and the clipboard/AST paths in
- * lib/editor-v2. Normalizing at that boundary means an href the publish
+ * lib/editor-engine. Normalizing at that boundary means an href the publish
  * sanitizer would strip is refused where it is typed, rather than saved and
  * later stripped into a dead `<a>`.
  *

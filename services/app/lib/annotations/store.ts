@@ -25,7 +25,7 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  */
 import { annotationScope, effectiveRole, type ArtifactRow, type Scope, type TokenActor } from '@/lib/artifacts/access';
 import { canGovern } from '@/lib/artifacts/share-roles';
-import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from './anchors';
+import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/document/anchors';
 import { avatarUrl } from '@/lib/accounts/avatars';
 import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
@@ -33,7 +33,7 @@ import { generateInternalId } from '@/lib/platform/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type AnnotationRange, isAreaRange, isTargetRange } from '@/lib/document/annotation-range';
 import { sourcePathToBodyPath } from '@/lib/document/edit-compose';
-import { channelForAnnotations } from '@/lib/story/realtime/live';
+import { annotationsChannel } from '@artifactbin/contracts';
 
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */
@@ -188,7 +188,7 @@ const scopedRow = async (q: Queryable, scope: Scope, id: string): Promise<Artifa
 
 
 const notify = (q: Queryable, artifactId: string, annotationId: string) =>
-  q.query('SELECT pg_notify($1, $2)', [channelForAnnotations(artifactId), annotationId]);
+  q.query('SELECT pg_notify($1, $2)', [annotationsChannel(artifactId), annotationId]);
 
 /**
  * Every read that builds the wire goes through this relation instead of the

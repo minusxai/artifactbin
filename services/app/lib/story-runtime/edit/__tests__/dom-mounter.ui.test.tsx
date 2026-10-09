@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { mountCompiledEditRegions, runSlice, sameNodes, withRegionBreaks } from '../dom-mounter';
-import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
+import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
-import { flushFlowView, repathFlowView } from '@/lib/editor-v2/flow-view';
+import { flushFlowView, repathFlowView } from '@/lib/editor-engine/flow-view';
 import { storyUpdateParts } from '@/lib/document/update-parts';
 import { serializeJsx } from '@/lib/jsx';
 import { morphDraftDom } from '@/lib/islands/morph/engine';

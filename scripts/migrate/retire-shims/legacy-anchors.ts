@@ -23,7 +23,7 @@
  * is inert.
  */
 import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { sourceWithoutAnchors, ANNOTATION_ANCHOR_ATTR } from '@/lib/annotations/anchors';
+import { sourceWithoutAnchors, ANNOTATION_ANCHOR_ATTR } from '@/lib/document/anchors';
 import { commitNormalizedMarkup, getArtifactById, publishMarkupForArtifact } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { nodeIndex } from '@/lib/document/node-ids';

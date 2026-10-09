@@ -1,4 +1,4 @@
-import {RUN_TABLES,AGENT_TABLES,SCHEDULE_TABLES} from '../../../runner/src/schema';
+import {RUN_TABLES,AGENT_TABLES,SCHEDULE_TABLES} from '@artifactbin/runner/schema';
 /**
  * Schema as data → idempotent DDL. (Distilled from minusx
  * lib/database/schema/tables.ts + render.ts.)

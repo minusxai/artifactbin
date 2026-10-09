@@ -1,10 +1,10 @@
 import {PUBLIC_BASE_URL} from './platform/config';
-import type {CapabilityContext} from '../../runner/src/local';
-import {runnerIdentity} from '../../runner/src/capabilities';
+import type {CapabilityContext} from '@artifactbin/runner/local';
+import {runnerIdentity} from '@artifactbin/runner/capabilities';
 import {lambdaOperation} from './runner/operations';
 import {resolveLambdaProgram} from './runner/resolve';
 import {resolveProgramArtifact} from './runner/program';
-import { createScheduler } from '../../runner/src/scheduler';
+import { createScheduler } from '@artifactbin/runner/scheduler';
 import type { Db } from './platform/db';
 import { z } from 'zod';
 import type { RunStart, RunnerJson, ScheduledExecution, ScheduleInput, SchedulerService } from '@artifactbin/contracts';

@@ -49,10 +49,8 @@
         "lib/annotations -> lib/object-store",
         "lib/annotations -> lib/platform",
         "lib/annotations -> lib/remote",
-        "lib/annotations -> lib/story",
         "lib/artifact-backend -> lib/annotations",
         "lib/artifact-backend -> lib/http",
-        "lib/artifact-backend -> lib/story",
         "lib/artifacts -> lib/accounts",
         "lib/artifacts -> lib/annotations",
         "lib/artifacts -> lib/artifact-backend",
@@ -131,7 +129,6 @@
         "lib/remote -> lib/operations",
         "lib/remote -> lib/platform",
         "lib/remote -> lib/runner",
-        "lib/remote -> lib/story",
         "lib/runner -> lib/accounts",
         "lib/runner -> lib/artifacts",
         "lib/runner -> lib/http",
@@ -180,7 +177,6 @@
         "lib/workspace -> lib/artifacts",
         "lib/workspace -> lib/platform",
         "lib/workspace -> lib/serving",
-        "lib/workspace -> lib/story",
         "lib/workspace -> lib/viz"
       ]
     }

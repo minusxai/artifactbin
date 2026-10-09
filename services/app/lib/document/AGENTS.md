@@ -12,7 +12,7 @@ artifact tables) is `lib/artifacts/write` and the publish pipeline stays in `lib
 - `index.ts` (model and edits), `head.ts` and `annotations.ts` are browser-safe; `server.ts` holds the
   compiled-dataflow record (node:crypto, zod). Browser-bundled code imports leaf files directly: the
   island and app bundlers cannot drop the rest of a barrel.
-- Inversions that keep it below the cycle: `AnnotationOperation` is defined here and lib/editor-v2
+- Inversions that keep it below the cycle: `AnnotationOperation` is defined here and lib/editor-engine
   imports it; `StoredMermaidImage` is a contract; `runtimeId` is `@artifactbin/utils/runtime-id`;
   `prepareBrowserDocumentUpdate` takes a `{ prepare }` port (`DocumentPreparePort`), not the artifact
   backend; `MAX_CONTENT_BYTES` is defined here (`limits.ts`) and the publish door imports it;

@@ -11,7 +11,7 @@
  * takes the tab) and nothing it does not; the app's own CSP `frame-src` admits only the pages hosts.
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { STORY_FRAMED_ATTR } from '@/lib/islands/contract';
+import { STORY_FRAMED_ATTR } from '@/lib/islands';
 import { APP_BAR_H } from '@/lib/story-ui/edit-bar';
 
 /** What the app page needs to draw a document's frame and name the document in its head. */

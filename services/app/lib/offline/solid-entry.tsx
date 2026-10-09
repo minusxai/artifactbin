@@ -3,7 +3,7 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { JsxNode } from '@/lib/jsx';
-import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
+import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLANDS_READY_EVENT } from '@/lib/islands/contract';
 import { mountCompiledEditRegions, type CompiledEditMount } from '@/lib/story-runtime/edit/dom-mounter';

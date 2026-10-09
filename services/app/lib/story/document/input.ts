@@ -43,15 +43,7 @@ import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
  */
 export const isDocumentFormat = (format: string): boolean => format === 'markup';
 
-/**
- * EVERY KEY THAT CARRIES CONTENT, named once. `parseContentInput` counts them
- * to enforce "exactly one", and the replace door reads the same list to refuse
- * content on a folder — a second spelling there would go stale the first time a
- * tier is added and let that tier through the one door that must not take it.
- */
-const TEXT_CONTENT_FIELDS = ['markup'] as const;
-const DATA_CONTENT_FIELDS = ['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl', 'file', 'program'] as const;
-export const CONTENT_FIELDS = [...TEXT_CONTENT_FIELDS, ...DATA_CONTENT_FIELDS] as const;
+import { DATA_CONTENT_FIELDS, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
 import type { SourceRepair } from '@/lib/jsx/repair';
 
@@ -93,7 +85,7 @@ export interface ContentInputCtx {
    */
   creating?: boolean;
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
-  loadRef?: import('../data/data-checks').ServerRefLoader;
+  loadRef?: import('@/lib/datasets/schema-loader').ServerRefLoader;
   /**
    * "Is the caller already over their stored-byte quota?" — asked BEFORE a
    * tier stores something large, and answered by lib/asset-quota under the

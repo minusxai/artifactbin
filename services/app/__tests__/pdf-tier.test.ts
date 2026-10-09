@@ -17,7 +17,7 @@ import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { POST as preview } from '@/app/api/preview/route';
 import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
-import { setAssetByteQuotaForTests } from '@/lib/story/assets/asset-quota';
+import { setAssetByteQuotaForTests } from '@/lib/artifacts/asset-quota';
 import { LOCAL_OBJECT_DIR } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

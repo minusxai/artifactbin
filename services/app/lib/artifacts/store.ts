@@ -1,6 +1,7 @@
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility, writerFor } from './access';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
+import { artifactChannel } from '@artifactbin/contracts';
 import { commitDocumentUpdate } from './write/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import type { ProseOperation } from '../document';
@@ -19,15 +20,14 @@ import { userKindOf } from '@/lib/accounts/user-kinds';
 import { sourceChanges } from '../document/source-changes';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState } from './state';
-import { channelFor } from '../story/realtime/live';
 import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from '../document/annotation-edits';
-import type { AnnotationOperation } from '../editor-v2/annotation-map';
+import type { AnnotationOperation } from '../editor-engine/annotation-map';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { claimPendingDatasetSecret, resolveDatasetConnection } from '@/lib/datasets/secrets';
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '../platform/analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from '../platform/config';
-import { assetByteQuotaExceeded } from '../story/assets/asset-quota';
+import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from '../platform/db';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { defaultDatasetGrants } from '@artifactbin/utils';
@@ -45,7 +45,7 @@ import { warmPreparedPage } from '../story/prepared/prepared-page.server';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/data-syntax';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from '@/lib/workspace/folders';
-import type { ServerRef, ServerRefLoader } from '@/lib/story/data/data-checks';
+import type { ServerRef, ServerRefLoader } from '@/lib/datasets/schema-loader';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 import { type ShareEntry, type ShareRole } from './share-roles';
 
@@ -403,8 +403,7 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
      VALUES ($1, $2, 0, $3, $4, 0, $5, $6, $7, $8::jsonb)`,
     [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, changes?JSON.stringify(changes):null],
   );
-  // Lowercased to match channelFor (lib/story/realtime/live.ts) — see the note there.
-  await tx.query('SELECT pg_notify($1, $2)', [`artifact_${after.id.toLowerCase()}`, after.edit_id]);
+  await tx.query('SELECT pg_notify($1, $2)', [artifactChannel(after.id), after.edit_id]);
 }
 
 /**
@@ -1158,7 +1157,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
   if (result && !isVersionConflict(result) && !opts.dryRun) {
     if (moved) {await wakeParents(moved);sayMoved(actor,id,moved);}
     else await notifyParent(parentOf(result));
-    if (patch.access || patch.visibility || patch.link_role || patch.shares || patch.policy!==undefined) await db.query('SELECT pg_notify($1,$2)',[channelFor(id),result.edit_id]);
+    if (patch.access || patch.visibility || patch.link_role || patch.shares || patch.policy!==undefined) await db.query('SELECT pg_notify($1,$2)',[artifactChannel(id),result.edit_id]);
   }
   return result;
 }

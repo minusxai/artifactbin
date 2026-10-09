@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 /**
- * services/app/lib/editor-v2/__tests__/flow-editor.ui.test.tsx, PORTED to @solidjs/testing-library
+ * services/app/lib/editor-engine/__tests__/flow-editor.ui.test.tsx, PORTED to @solidjs/testing-library
  * against the Solid FlowEditor. Every assertion is the original's; what changes is how a test
  * gives a component NEW PROPS: React's `rerender(<C {...next} />)` becomes a signal the test sets
  * (Solid components run once; there is no re-render to request).
@@ -11,11 +11,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@/solid/__tests__/helpers';
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import type { EditorView } from 'prosemirror-view';
-import { editorDocument, sourceNodes } from '@/lib/editor-v2/model';
+import { editorDocument, sourceNodes } from '@/lib/editor-engine/model';
 import { FlowEditor } from '../FlowEditor';
-import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-v2/flow-view';
+import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-engine/flow-view';
 import { createEditorSource } from '@/solid/editor/create-editor-source';
-import { captureBookmark } from '@/lib/editor-v2/bookmark';
+import { captureBookmark } from '@/lib/editor-engine/bookmark';
 
 function nodes(source: string) {
   const p = parseJsx(source);
@@ -613,7 +613,7 @@ describe('document-editor keys: Tab indents, links are typed, pasted and found',
   });
 
   it('finds the whole link at a caret, edits or removes all of it, and inserts the address at a bare caret', async () => {
-    const { linkAt, setLink } = await import('@/lib/editor-v2/links');
+    const { linkAt, setLink } = await import('@/lib/editor-engine/links');
     const e = editor('<p id="p">Go <a href="https://a.example"><strong>to</strong> here</a> now</p>');
     e.select(e.at(' here', 2));
     expect(linkAt(e.v().state)).toEqual({ href: 'https://a.example', from: e.at('to'), to: e.at(' here', 5) });

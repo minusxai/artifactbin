@@ -1,6 +1,6 @@
 import type { CommentViewState } from '../../../contracts/src/comment-view-state';
-import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmark';
-import type { BlockEdit } from '@/lib/editor-v2/block-edit';
+import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-engine/bookmark';
+import type { BlockEdit } from '@/lib/editor-engine/block-edit';
 /**
  * The framework-free contract between the document builder (server), the compiler, and the browser
  * islands. BOTH sides import it, so it carries ONLY types and ids: a value
@@ -14,7 +14,7 @@ import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
-import type { PersonCard, StoredMermaidImage } from '@artifactbin/contracts';
+import type { DocumentGraph, PersonCard, StoredMermaidImage } from '@artifactbin/contracts';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -923,3 +923,94 @@ export function isEditParentMessage(data: unknown): data is StoryEditParentMessa
 /** What `mutationUnavailable` answers while a write's access check is in flight; the store and the island kit share this one string. */
 export const ACCESS_PENDING = 'Checking edit access…';
 
+/**
+ * THE LIVE STREAM'S WIRE — what app/a/[id]/events sends and the reader's live
+ * store (solid/editor/create-live-artifact, lib/artifact-backend) reads. The
+ * subscription that wakes the stream (lib/story/realtime/live) only says "go
+ * look"; these are the frames the route then writes, declared here with the
+ * rest of the reader wire so neither a route handler nor the server's story
+ * module is where a reader has to import a shape from.
+ */
+
+/**
+ * A DATA wakeup: a dataset this document reads was written, so the queries
+ * that read it must re-run.
+ */
+export interface ArtifactDataEvent {
+  /** Dataset artifact ids (today always exactly one — the one that was written). */
+  datasets: string[];
+  /** The version that dataset reached, for a client that wants to drop a repeat. */
+  version: number;
+}
+
+/** What the stream sends on a version: the head's identity, nothing else. */
+export interface ArtifactVersionPing {
+  editId: string;
+  version: number;
+  /** The handle of the account that made this version, or null. */
+  by: string | null;
+}
+
+export interface ArtifactLiveEvent {
+  document?:DocumentGraph;
+  editId: string;
+  version: number;
+  /**
+   * The handle of the account that made this version, or null (a token, an
+   * unnamed account, a version that predates attribution). A collaborator's
+   * open document can say WHO moved it under them.
+   */
+  by: string | null;
+  format: string;
+  title: string | null;
+  /** Derived by the server so readers can follow heading edits without loading source parsers. */
+  heading?: string | null;
+  /** markup source (the document tier) — null for other tiers. */
+  source: string | null;
+  /**
+   * Dataset/viz preview data, which the page displays inline. Images are
+   * deliberately absent: it renders straight from ./raw, so the client only
+   * needs to know the document changed (the editId) to refetch.
+   */
+  dataPreview: string | null;
+  /**
+   * OMITTED when it has not changed since the last frame on this connection.
+   * The compiled stylesheet is ~65KB and changes only when new Tailwind
+   * classes appear, so sending it with every keystroke-sized edit would
+   * dominate the stream. `null` still means "there is none"; absent means
+   * "keep what you have".
+   */
+  compiledCss?: string | null;
+  /**
+   * The authored DESIGN, sent on every frame (all three are tiny scalars next
+   * to the source they accompany). Without them a watcher renders new content
+   * under the design it first loaded with — the start-flow moment, where a
+   * themeless placeholder becomes a themed deck, arrives unthemed until a
+   * reload. `colorMode` is the AUTHOR's default mode; a reader who flipped the
+   * mode toggle keeps their override (document-update skips the mode class
+   * while one is active) — the rest of the design still applies.
+   * `template` never reaches the render — it travels so that entering edit mode
+   * after a live change seeds the editor with the genre actually stored.
+   */
+  theme: StoryDesignName | null;
+  colorMode: 'light' | 'dark' | null;
+  template: string | null;
+  /**
+   * The document's BODY, parsed — what a reader's already-open document
+   * re-renders itself from (lib/story-runtime/contract StoryDocumentUpdate).
+   * The runtime ships no JSX parser, so the nodes are made here, through the
+   * same door that builds the served document.
+   */
+  nodes?: JsxNode[];
+  /** The author's own <Helmet> <style>, on the same absent/null rule as compiledCss. */
+  authorCss?: string | null;
+  /** Legacy Helmet script; null revokes the prior isolated realm. */
+  authorScript?: string | null;
+  /**
+   * The data declarations and their freshly run state — sent ONLY when the
+   * declarations changed. A prose edit needs no query engine, and running a
+   * document's SQL for every sentence an agent writes would put a DuckDB run
+   * behind each one. Absent means "the data is as you have it".
+   */
+  dataflow?: StoryIslandDataflow;
+}

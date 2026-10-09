@@ -46,7 +46,7 @@ import X from 'lucide-solid/icons/x';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { editBlock } from '@/lib/editor-v2/block-edit';
+import { editBlock } from '@/lib/editor-engine/block-edit';
 import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story-ui/edit-bar';
 import { storyUpdateParts, storyUpdatePartsShared } from '@/lib/document/update-parts';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/document/edit-compose';
