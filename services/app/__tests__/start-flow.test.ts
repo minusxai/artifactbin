@@ -59,6 +59,9 @@ describe('POST /api/start', () => {
       if (template === 'doc') {
         expect(row.meta.theme).toBe('meridian');
         expect(row.source).toContain('data-placeholder="Headline"');
+        expect(row.source).toContain('<Markdown id="body"');
+        expect(row.source).toContain('{``}</Markdown>');
+        expect(row.source).not.toContain('<p id="body"');
         expect(row.source).not.toContain('>Headline<');
       }
     }
@@ -74,6 +77,7 @@ describe('POST /api/start', () => {
     const source = (await getArtifactById(body.id))!.source;
     expect(source).toContain('Untitled report');
     expect(source).toContain('Start writing here.');
+    expect(source).toContain('<Markdown');
     expect(source).not.toContain('Waiting for your agent');
     expect(rows[0].user_id).toBe(user.id);
     expect(rows[0].visibility).toBe('private');

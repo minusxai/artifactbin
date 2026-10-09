@@ -189,14 +189,13 @@ try {
   );
   await undo((s) => s.includes('alpha first paragraph'), 'HTML paste undoes in one step');
   await range('first', 0, 'first', 5);
-  await page.getByRole('button', { name: 'Paste Markdown', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Markdown to insert' }).fill('**Markdown**\n\n- one\n  - nested');
   await page.getByRole('button', { name: 'Insert Markdown', exact: true }).click();
-  await stored(
-    (s) => s.includes('Markdown') && s.includes('<ul') && s.includes('nested'),
-    'explicit Markdown uses structural list insertion',
-  );
-  await undo((s) => s.includes('alpha first paragraph') && !s.includes('nested'), 'Markdown paste undoes atomically');
+  await stored((s) => /<Markdown id="[A-Za-z][A-Za-z0-9]{3}">\{``\}<\/Markdown>/.test(s), 'Insert Markdown creates an empty component');
+  await waitInDoc(() => document.activeElement?.matches('[data-mx-lexical]'));
+  await page.keyboard.type('New Markdown region');
+  await stored((s) => s.includes('New Markdown region'), 'the inserted Markdown component is immediately editable');
+  await undo((s) => s.includes('<Markdown') && !s.includes('New Markdown region'), 'Markdown typing undoes');
+  await undo((s) => !s.includes('<Markdown') && s.includes('alpha first paragraph'), 'Markdown component insertion undoes');
   await setClipboard(() => navigator.clipboard.writeText('**literal**'));
   await range('code', 4);
   await page.keyboard.press(`${mod}+v`);
@@ -397,24 +396,20 @@ try {
   await doc().getByText('Remote changed', { exact: true }).waitFor();
   check(await doc().locator('.ProseMirror').count() === 0, 'a saved document reloads READ-ONLY');
   check(errors.length === 0, `and the browser reported no error on the way (${errors.slice(0, 2).join('; ') || 'none'})`);
-  must((await api('', { method: 'PUT', body: JSON.stringify({ markup: '<article><p id="task">Task</p><p id="fence">Code</p><p id="quote">Quote</p></article>' }) })).status === 200, 'the markdown shortcut fixture publishes');
+  must((await api('', { method: 'PUT', body: JSON.stringify({ markup: '<article><p id="literal">HTML text</p><p id="task"><input type="checkbox" aria-label="Task completed" disabled checked={false} /> Task</p><pre id="fence">Code</pre><blockquote><p id="quote">Quote</p></blockquote></article>' }) })).status === 200, 'the HTML editing fixture publishes');
   await page.goto('about:blank');
   await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
   await doc().getByRole('textbox', { name: 'Document text' }).first().waitFor();
-  await range('task', 0);
-  await page.keyboard.type('[] ');
+  await range('literal', 0);
+  await page.keyboard.type('# **literal** - [guide](example.com) ');
+  await stored(s => s.includes('<p id="literal"># **literal** - [guide](example.com) HTML text</p>'), 'HTML Markdown typing stays literal');
   await doc().getByRole('checkbox', { name: 'Task completed' }).check();
   await stored(s => /\bchecked\s*\/>/.test(s), 'checkbox toggles save their checked state');
   await range('fence', 0);
-  await page.keyboard.type('```');
-  await page.keyboard.press('Enter');
   await page.keyboard.type('# literal');
   await page.keyboard.press('Enter');
   await page.keyboard.type('  code');
   await stored(s => /<pre id="fence"># literal\n  codeCode<\/pre>/.test(s), 'fenced code keeps literal markers and indented newlines');
-  await range('quote', 0);
-  await page.keyboard.type('> ');
-  await stored(s => /<blockquote[^>]*><p id="quote">Quote<\/p><\/blockquote>/.test(s), 'blockquote shortcut persists');
   await page.getByRole('button', { name: 'Exit edit mode' }).click();
   await page.reload();
   const savedTask = doc().getByRole('checkbox', { name: 'Task completed' });
@@ -425,6 +420,43 @@ try {
   await doc().getByRole('checkbox', { name: 'Task completed' }).uncheck();
   await stored(s => /checked=\{false\}/.test(s), 'reopened checklist remains editable');
   await page.getByRole('button', { name: 'Exit edit mode' }).click();
+  const markdownFeatures = '- [ ] Open task\n- [ ] Next task\n\n---\n\n| Name | Value |\n| --- | --- |\n| Total | 42 |\n\nAfter table.';
+  must((await api('', { method: 'PUT', body: JSON.stringify({ markup: `<article><Markdown id="features">{${JSON.stringify(markdownFeatures)}}</Markdown></article>` }) })).status === 200, 'the Markdown features fixture publishes');
+  await page.goto('about:blank');
+  await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
+  await doc().getByRole('textbox', { name: 'Markdown text' }).waitFor();
+  const task = doc().getByRole('checkbox', { name: 'Open task', exact: true });
+  check(await task.evaluate(el => parseFloat(getComputedStyle(el, '::before').width) > 0), 'the Markdown checkbox has a visible hit target');
+  await task.click({ position: { x: 8, y: 12 } });
+  await stored(s => s.includes('[x] Open task'), 'Markdown checklist toggles persist');
+  await doc().getByText('Next task', { exact: true }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Tab');
+  await waitInDoc(() => document.querySelector('#features li li')?.textContent === 'Next task');
+  await stored(s => /\n +[-*] \[ \] Next task/.test(s), 'Tab persists nested Markdown checklist items');
+  await page.keyboard.press('Shift+Tab');
+  await waitInDoc(() => !document.querySelector('#features li li'));
+  await doc().getByRole('cell', { name: '42', exact: true }).dblclick();
+  await page.keyboard.type('43');
+  await stored(s => s.includes('| Total | 43 |'), 'Markdown table cell edits persist');
+  await page.getByRole('button', { name: 'Add row below', exact: true }).click();
+  await waitInDoc(() => document.querySelectorAll('#features tr').length === 3);
+  await page.getByRole('button', { name: 'Add column right', exact: true }).click();
+  await waitInDoc(() => document.querySelectorAll('#features th').length === 3);
+  await page.getByRole('button', { name: 'Exit edit mode' }).click();
+  await page.reload();
+  await doc().getByRole('cell', { name: '43', exact: true }).waitFor();
+  check(await doc().getByRole('checkbox', { name: 'Open task', exact: true }).getAttribute('aria-checked') === 'true', 'saved Markdown checklist state reopens');
+  check(await doc().locator('#features hr').count() === 1 && await doc().locator('#features tr').count() === 3 && await doc().locator('#features th').count() === 3, 'saved Markdown divider and table dimensions reopen');
+  await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
+  await doc().getByRole('textbox', { name: 'Markdown text' }).waitFor();
+  await doc().getByText('After table.', { exact: true }).click();
+  await page.keyboard.press('End');
+  await page.getByRole('button', { name: 'Markdown block style', exact: true }).click();
+  await page.getByRole('option', { name: 'Table', exact: true }).click();
+  await waitInDoc(() => document.activeElement?.matches('[data-mx-lexical]') && getSelection()?.anchorNode?.parentElement?.closest('th'));
+  await page.keyboard.type('New header');
+  await stored(s => s.includes('| New header |'), 'table insertion returns focus to the first cell for immediate typing');
   const extended =
     '<div className="p-10"><Grid mode="flow" id="three"><GridItem id="c1" w={4}><p id="a1">one</p></GridItem><GridItem id="c2" w={4}><p id="a2">two</p></GridItem><GridItem id="c3" w={4}><p id="a3">three</p></GridItem></Grid><table><tbody><tr><td><p id="cell1">first cell</p></td><td><p id="cell2">second cell</p></td></tr></tbody></table>' +
     Array.from(
