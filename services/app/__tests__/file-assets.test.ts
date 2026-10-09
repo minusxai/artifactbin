@@ -4,7 +4,7 @@ import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as resolve, HEAD } from '@/app/a/[id]/resolve/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
-import { assetBytesForToken } from '@/lib/serving';
+import { assetBytesForToken } from '@/lib/story/assets/asset-quota';
 import { getDb } from '@/lib/platform';
 import { useAppHarness } from './harness';
 

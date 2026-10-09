@@ -19,7 +19,7 @@ import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/story/datasets/dataset-usage';
 import { formatFileSize } from '@/lib/workspace/file-display';
 import { displayTitle } from '@/lib/document/title';
-import type { ReaderForkedFrom } from '@/lib/story/reader/fork-credit.server';
+import type { ReaderForkedFrom } from '@/lib/serving/fork-credit.server';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import WorkspaceShell from '../components/WorkspaceShell';

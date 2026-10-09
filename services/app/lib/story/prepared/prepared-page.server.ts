@@ -40,7 +40,7 @@ import { archivedReadOnly, servedRow, type ArchivedRender } from '@/lib/serving/
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { lookupWebAssets } from '@/lib/serving/web-assets';
+import { lookupWebAssets } from '../assets/web-assets';
 import { collectExternalAssetUrls } from '../../document/external-images';
 import { storedCompiledDataflow } from '@/lib/document/server';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';

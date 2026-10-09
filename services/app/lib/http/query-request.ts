@@ -5,11 +5,11 @@
  * own GET (`?q=`), the page relay's POST and the editor's draft path, so the
  * three cannot drift.
  */
-import { json } from '@/lib/http/http';
+import { MAX_PEOPLE_IDS } from '@artifactbin/contracts';
+import { json } from './http';
 import { MAX_QUERY_ROWS } from '@/lib/platform/config';
 import type { Scalar, Row } from '@/lib/dataflow/dataflow';
 import { parseLocalTables } from '@/lib/dataflow/local-tables';
-import { MAX_PEOPLE_IDS } from '@/lib/story-runtime/contract';
 
 export interface QueryRequest {
   localTables?: Record<string, Row[]>;

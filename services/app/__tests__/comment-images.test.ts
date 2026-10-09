@@ -8,7 +8,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {POST as createComment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {stageCommentImage,readCommentImage} from '@/lib/annotations';
-import {assetBytesForToken,setAssetByteQuotaForTests} from '@/lib/serving';
+import {assetBytesForToken,setAssetByteQuotaForTests} from '@/lib/story/assets/asset-quota';
 import type {CommentImageMetadata} from '../../contracts/src/comment-image';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});

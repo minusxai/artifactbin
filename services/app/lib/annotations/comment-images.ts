@@ -7,7 +7,7 @@ import {objectStore} from '../object-store/index';
 import {generateInternalId} from '../platform/ids';
 import {json} from '../http/http';
 import {readableArtifact} from '../artifacts/read-access';
-import {assetByteQuotaLimit} from '../serving/asset-quota';
+import {assetByteQuotaLimit} from '../story/assets/asset-quota';
 
 interface ImageRow {id:string;artifact_id:string;annotation_id:string|null;token_id:string;user_id:string|null;metadata:CommentImageMetadata;bytes:number;ready:boolean;expires_at:string}
 const variants=['original','preview','thumbnail'] as const;

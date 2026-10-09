@@ -4,7 +4,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import * as css from '@/lib/data/story/story-css.server';
-import * as assets from '@/lib/serving/web-assets';
+import * as assets from '@/lib/story/assets/web-assets';
 import * as artifacts from '@/lib/artifacts';
 import * as relations from '@/lib/accounts/relations';
 import * as tokens from '@/lib/accounts/tokens';

@@ -5,10 +5,9 @@ import { artifactQuery } from './document';
 import { JOIN_RELATIONS } from '../accounts/relation-state';
 import { grantContext, grantsOf, grantsPermitRead } from '../datasets/policy/grants';
 import { storedMediaReferences } from '../datasets/media-references';
-import { isQueryFailure, type PersonCard } from '@artifactbin/contracts';
+import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
 import type { DataflowState } from '@/lib/dataflow';
 import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
-import { SIGN_IN_REQUIRED } from '@/lib/story/reader/sign-in-required';
 import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from './capabilities';
 import { pinMutationContext, type MutationReceipt } from './mutation-receipt';
 import { notificationContextSnapshot } from '../notifications/context';
@@ -88,7 +87,7 @@ type DocumentMutationOutcome =
       ok: false;
       reason: 'operation_key_required' | 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row';
       detail?: string;
-      /** The machine-readable half of the one refusal a reader can act on (lib/story/reader/sign-in-required). */
+      /** The machine-readable half of the one refusal a reader can act on (@artifactbin/contracts sign-in-required). */
       code?: typeof SIGN_IN_REQUIRED;
       /**
        * The KIND was refused, not the statement: a guest or a test user that
@@ -124,7 +123,7 @@ export async function runDocumentMutation(
    * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
    *
    * A statement that reads the viewer has one honest answer for a signed-out
-   * caller, and it is a door (lib/story/reader/sign-in-required). A ROW action that
+   * caller, and it is a door (@artifactbin/contracts sign-in-required). A ROW action that
    * reads it — a membership button a `<For>` draws for exactly the people who
    * have not joined — used to be told its row was missing instead: true,
    * useless, and about the wrong problem. Deciding sign-in here makes the

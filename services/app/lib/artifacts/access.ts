@@ -5,7 +5,7 @@ import { hasDocumentEditorAccess, type VerifiedAccount } from './document-policy
 import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/accounts/user-kinds';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb, type Queryable } from '../platform/db';
-import { type ArtifactFormat } from '../story/document/input';
+import { type ArtifactFormat } from '@artifactbin/contracts';
 import { canUseDataPolicy } from '@/lib/datasets/policy';
 import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
 

@@ -201,10 +201,8 @@ export interface StoryIslandData {
   readOnly?: string;
 }
 
-/** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/data/query-request). */
+/** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/http/query-request). */
 export const QUERY_REQUEST_PARAM = 'q';
-/** The most ids one `{people}` request may name (lib/story/data/query-request); a page asks in batches of this. */
-export const MAX_PEOPLE_IDS = 1000;
 
 /** DOM contract between the builder and the entry. */
 export const STORY_ROOT_ID = 'mx-story-root';

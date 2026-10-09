@@ -23,7 +23,7 @@ import { loadDatasetRows } from '../datasets/dataset-store';
 import type { ArtifactLiveEvent } from '../realtime/live';
 import { storyUpdateParts } from '../../document/update-parts';
 import { assetLookupFrom } from '../../document/asset-url';
-import { webAssetsForSource } from '@/lib/serving/web-assets';
+import { webAssetsForSource } from '../assets/web-assets';
 import { servableDocument } from '@/lib/artifacts/servable';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {

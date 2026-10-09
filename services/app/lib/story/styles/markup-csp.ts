@@ -25,7 +25,7 @@
  * configured, the asset origin on `script`/`img`/`font`/`media-src`. Guarded by
  * __tests__/raw-document.test.ts.
  */
-import { BASEMAP_PATH } from '@/lib/serving/basemap';
+import { BASEMAP_PATH } from '@artifactbin/contracts';
 import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
 import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from '@/lib/story-ui/document-sources';
 import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/document/csp-extensions';

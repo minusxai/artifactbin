@@ -23,7 +23,7 @@ import { isServer } from 'solid-js/web';
 import { controlOptions as optionsOf, type ControlOption as Option, refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/dataflow/dataflow';
 import { substituteRow } from '@/lib/jsx/row-scope';
 import { VIEWER_ID } from '@/lib/dataflow/builtins';
-import { refusalText } from '@/lib/story/reader/sign-in-required';
+import { refusalText } from '@artifactbin/contracts';
 import { commentMetadata, instanceDomId } from '@/lib/story-ui/repeat-identity';
 import { createCellSessions, type CellSessions } from '@/lib/story-runtime/cell-sessions';
 import { rowAttrs } from './basic';

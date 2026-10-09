@@ -6,7 +6,7 @@
  *
  * `readEditPanelCollapsed`/`writeEditPanelCollapsed`/`editPanelWidth` are
  * already framework-free (plain localStorage + arithmetic); a Solid page uses
- * those from lib/story/reader/use-edit-panel directly, unchanged.
+ * those from solid/lib/use-edit-panel directly, unchanged.
  */
 import { createSignal, onCleanup, onMount, type Accessor } from 'solid-js';
 import { isWideEditViewport } from '@/lib/story-ui/edit-bar';
@@ -22,4 +22,4 @@ export function createWideEditViewport(): Accessor<boolean> {
   return wide;
 }
 
-export { readEditPanelCollapsed, writeEditPanelCollapsed, editPanelWidth } from '@/lib/story/reader/use-edit-panel';
+export { readEditPanelCollapsed, writeEditPanelCollapsed, editPanelWidth } from '@/solid/lib/use-edit-panel';

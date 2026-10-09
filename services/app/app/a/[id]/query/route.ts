@@ -2,7 +2,7 @@ import { canReadArtifact, dataflowForRow, getArtifactById, holdImport, nameableP
 import { ID_RE } from '@/lib/platform';
 import { json, readJson } from '@/lib/http';
 import { sessionActor } from '@/lib/accounts';
-import { parseQueryRequest, type QueryRequest } from '@/lib/story/data/query-request';
+import { parseQueryRequest, type QueryRequest } from '@/lib/http/query-request';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
 import { LocalStateInputError } from '@/lib/dataflow';
 import {DatasetError} from '@/lib/datasets/errors';
