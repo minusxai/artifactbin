@@ -21,7 +21,7 @@ import { canAnnotate, canEdit, canRead } from '@/lib/artifacts/share-roles';
 // folder is not somewhere to file into, and a trashed child is not listed.
 import { effectiveRole, roleWithoutLink, LIVE_ARTIFACT_SQL, type ArtifactRow, type RoleActor } from '@/lib/artifacts/access';
 import type { ArtifactFormat } from '@artifactbin/contracts';
-import { channelFor } from '@/lib/story/realtime/live';
+import { artifactChannel } from '@artifactbin/contracts';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 // The TYPED column shape (@artifactbin/contracts), not dataset-usage's loose
 // one: these columns are registered into the engine, so their types are the
@@ -461,8 +461,8 @@ export async function notifyParent(parentId: string | null): Promise<void> {
   if (!parentId) return;
   try {
     const db = await getDb();
-    // channelFor lowercases: unquoted LISTEN case-folds, so a mixed-case id
+    // artifactChannel lowercases: unquoted LISTEN case-folds, so a mixed-case id
     // would silently wake nobody.
-    await db.query('SELECT pg_notify($1, $2)', [channelFor(parentId), 'child']);
+    await db.query('SELECT pg_notify($1, $2)', [artifactChannel(parentId), 'child']);
   } catch { /* a listing that does not refresh is not a failed write */ }
 }

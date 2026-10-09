@@ -31,7 +31,7 @@ import { bindMutationRequest } from '@/lib/dataflow/mutation-request';
 import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/dataflow/placement';
 import { readerZone, VIEWER, VIEWER_ID } from '@/lib/dataflow/builtins';
 import type { MutationRequest } from '@/lib/dataflow';
-import { schemaLoaderFor } from '@/lib/story/data/data-checks';
+import { schemaLoaderFor, type ServerRef, type ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { mutationPolicy } from '@/lib/datasets/policy';
 import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
 import { runMutation } from '@/lib/sql/engine';
@@ -43,7 +43,7 @@ import { storedRowStats } from '@/lib/datasets/dataset-store';
 import { childrenTableFor, CHILDREN_COLUMNS } from '@/lib/workspace/folders';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import { checkDocumentData, type ServerRef, type ServerRefLoader } from '@/lib/story/data/data-checks';
+import { checkDocumentData } from '@/lib/story/data/data-checks';
 
 export function refLoaderForActor(actor: TokenActor): ServerRefLoader {
   return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId);

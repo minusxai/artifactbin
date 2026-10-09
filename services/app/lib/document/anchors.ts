@@ -6,12 +6,11 @@
  * `data-annotation-anchor="<key>"` is the RETIRED spelling: archived versions may
  * still carry it, where it is an inert attribute that anchors nothing.
  *
- * The attribute lives here because lib/artifacts' FORK strips every one of
- * them and may not import lib/annotations: a copy starts with no trace of the
- * original's comments.
- *
- * A pure module is what keeps that from being an import cycle (lib/annotations
- * already imports lib/artifacts), the same reason lib/share-roles exists.
+ * It lives in lib/document, beside the other pure readings of markup, because
+ * three owners read it: lib/annotations (threads), lib/offline (the file
+ * backend) and lib/artifacts' FORK, which strips every anchor so a copy starts
+ * with no trace of the original's comments. None of them has to import another
+ * for it.
  */
 import { parseJsx } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';

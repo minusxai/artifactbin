@@ -147,7 +147,7 @@ describe('capacity', () => {
   it('refuses new channels past the cap with 503, and never blocks READING the page', async () => {
     const { doc } = await setup();
     // Fill the registry with distinct channels, then ask for one more.
-    // channelFor lowercases, so the fillers are lowercase to begin with —
+    // artifactChannel lowercases, so the fillers are lowercase to begin with —
     // otherwise two ids differing only in case would collapse into one
     // channel and the cap would never be reached.
     const holders: Array<() => Promise<void>> = [];

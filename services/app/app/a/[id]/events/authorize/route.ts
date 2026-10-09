@@ -9,7 +9,7 @@
  */
 import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/platform';
-import { channelFor, channelForAnnotations } from '@/lib/story/realtime/live';
+import { annotationsChannel, artifactChannel } from '@artifactbin/contracts';
 import { sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -24,9 +24,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     {
       editId: row.edit_id,
       version: row.version,
-      channels: [channelFor(row.id), ...datasets.map(channelFor)],
-      datasets: Object.fromEntries(datasets.map((d) => [channelFor(d), d])),
-      annotations: channelForAnnotations(row.id),
+      channels: [artifactChannel(row.id), ...datasets.map(artifactChannel)],
+      datasets: Object.fromEntries(datasets.map((d) => [artifactChannel(d), d])),
+      annotations: annotationsChannel(row.id),
     },
     { headers: { 'Cache-Control': 'no-store' } },
   );
