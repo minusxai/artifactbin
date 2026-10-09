@@ -1,7 +1,7 @@
 /** The inert-text contract lowers directly to SQL. The database, not the client,
  * supplies the certified node, ancestry, revisions and UTF-16 history position. */
 import {inertProse,proseSource,type ProseOperation} from '../../document/document-prose';
-import {MAX_CONTENT_BYTES} from '../../document/limits';
+import {MAX_DOCUMENT_BYTES} from '@artifactbin/contracts';
 import {GRAPH_ROOT} from '../../document/document-graph';
 export function graphProseSql(document:string,version:string,baseEditId:string,op:ProseOperation,initial:unknown[]){
  if(!inertProse(op.oldText)||!inertProse(op.newText)||!op.newText.length||op.oldText===op.newText||!Array.isArray(op.path)||op.path.length>258||op.path[0]!=='roots'||op.path.at(-1)!=='value')return null;
@@ -13,7 +13,7 @@ export function graphProseSql(document:string,version:string,baseEditId:string,o
  if(!path.length||op.path.length!==path.length*2+1)return null;
  const params=[...initial],param=(value:unknown)=>{params.push(value);return `$${params.length}`;};
  const indices=param(path),base=param(baseEditId),oldText=param(op.oldText),newText=param(op.newText),before=proseSource(op.oldText),after=proseSource(op.newText);
- const removed=param(before),inserted=param(after),units=param(after.length),byteSize=param(Buffer.byteLength(after)),unitDelta=param(after.length-before.length),byteDelta=param(Buffer.byteLength(after)-Buffer.byteLength(before)),oldUnits=param(before.length),limit=param(MAX_CONTENT_BYTES);
+ const removed=param(before),inserted=param(after),units=param(after.length),byteSize=param(Buffer.byteLength(after)),unitDelta=param(after.length-before.length),byteDelta=param(Buffer.byteLength(after)-Buffer.byteLength(before)),oldUnits=param(before.length),limit=param(MAX_DOCUMENT_BYTES);
  const nodes=`(${document}->'nodes')`,contextRef='l.mutation_context';
  const context=`(WITH RECURSIVE base AS (
    SELECT (document_state->>'version')::int AS version FROM artifact_edits WHERE artifact_id=$1 AND edit_id=${base}

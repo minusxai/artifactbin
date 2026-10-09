@@ -15,9 +15,8 @@
  * database; lib/offline/assemble.server.ts wires `run` to dataflowRunsForRow
  * as the downloader (every combination of a batch in one engine call).
  */
-import { normalizeControlOptions } from '@/lib/story-ui/control-options';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { coerceScalarInput, refName, REF_ATTRS, type DataflowState, type Scalar } from '@/lib/dataflow/dataflow';
+import { coerceScalarInput, controlOptions, refName, REF_ATTRS, type DataflowState, type Scalar } from '@/lib/dataflow/dataflow';
 import type { CompiledDataflow, CompiledValue } from '@/lib/dataflow/compiled-dataflow';
 import { queriesReadingValues } from '@/lib/dataflow/compiled-flow';
 import type { ArtifactFileVariant } from './file-format';
@@ -91,7 +90,7 @@ function controlValues(domain: ControlDomain, decl: Pick<CompiledValue, "name" |
   const optionsName = refName(raw);
   const options = raw === undefined && decl.type === 'user'
     ? base.userOptions?.[decl.name] ?? []
-    : normalizeControlOptions(raw, optionsName ? base.tables[optionsName] : undefined);
+    : controlOptions(raw, optionsName ? base.tables[optionsName] : undefined);
   const values = options.map((o) => coerceScalarInput(decl.type, o.value));
   // The runtime offers "All" (null) for a Value whose default is null; a placeholder names that choice.
   return dedupe(nullable || typeof staticJson(el, 'placeholder') === 'string' ? [null, ...values] : values);

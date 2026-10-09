@@ -25,7 +25,6 @@ import { ingestImageFromUrl } from '@/lib/story/ingest/image';
 import { ingestPdfFromUrl } from '@/lib/story/ingest/pdf';
 import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '@/lib/datasets/data-tiers';
 import { publishFile } from '@/lib/datasets/file-store';
-import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
 
 
 /**
@@ -42,15 +41,15 @@ import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
  */
 export const isDocumentFormat = (format: string): boolean => format === 'markup';
 
-import { DATA_CONTENT_FIELDS, parseProgramDefinition, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
+import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, parseProgramDefinition, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
 import type { SourceRepair } from '@/lib/jsx/repair';
 
 import type { StoredContent } from '@/lib/document/stored-content';
 
 function tooLarge(value: string): Response | null {
-  if (Buffer.byteLength(value, 'utf8') > MAX_CONTENT_BYTES) {
-    return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);
+  if (Buffer.byteLength(value, 'utf8') > MAX_DOCUMENT_BYTES) {
+    return json({ error: 'too_large', maxBytes: MAX_DOCUMENT_BYTES }, 413);
   }
   return null;
 }
