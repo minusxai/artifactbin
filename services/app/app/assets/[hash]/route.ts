@@ -30,7 +30,7 @@
 import { objectStore } from '@/lib/object-store';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import { fileNameFromUrl } from '@/lib/workspace';
-import { pdfFilename } from '@/lib/story/assets/pdf-store';
+import { pdfFilename } from '@/lib/object-store/pdf-store';
 import { webAssetByHash } from '@/lib/story/assets/web-assets';
 
 /** Every asset response carries these, whatever the asset turns out to be. */

@@ -36,7 +36,7 @@ import { declarationsForRow, holdableImports, refDataForRow, viewerIdentityFor }
 import { LIVE_ARTIFACT_SQL, type RoleActor } from '@/lib/artifacts/access';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { savedMentionStates } from '@/lib/accounts/membership';
-import { archivedReadOnly, servedRow, type ArchivedRender } from '@/lib/serving/archived-version';
+import { archivedReadOnly, servedRow, type ArchivedRender } from '@/lib/artifacts/archived-version';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';

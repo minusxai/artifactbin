@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as mutateDoc } from '@/app/a/[id]/mutate/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from './harness';
 useAppHarness();

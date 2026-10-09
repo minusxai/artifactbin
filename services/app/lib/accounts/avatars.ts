@@ -118,7 +118,7 @@ const declaredType = (contentType: string): string => (contentType.split(';')[0]
  * `avatarVersion` is unaffected: it reads the LAST path segment, which is the
  * hash either way.
  *
- * `objects` is a seam for tests (the house pattern from lib/story/assets/file-store);
+ * `objects` is a seam for tests (the house pattern from lib/datasets/file-store);
  * every caller in the app takes the default.
  */
 export async function setAvatar(

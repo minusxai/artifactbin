@@ -5,7 +5,7 @@ import {applyEditFor,createArtifactFromBody,durableMutation,getEditableArtifactF
 import {UnservableDocument} from '../artifacts/servable';
 import {actOnAnnotationFor,createAnnotationFor,listAnnotationsFor,type AnnotationWire} from '../annotations';
 import {baseUrl,json} from '../http';
-import {prepareDocumentAuthoringContext} from '../story/document/document-authoring-context';
+import {prepareDocumentAuthoringContext} from '@/lib/artifacts/write/document-authoring-context';
 import {readFileOffer} from './offer';
 import {prepareHostedFileUpdate,prepareHostedFilePublication} from './hosted-connect';
 import {validateFileComments} from './comment-validation';

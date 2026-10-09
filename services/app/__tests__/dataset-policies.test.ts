@@ -4,7 +4,7 @@ import { it, expect, vi } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { artifactState } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { GET as query } from '@/app/a/[id]/query/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import {

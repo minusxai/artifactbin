@@ -27,7 +27,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { setDatasetRowCap } from '@/lib/story/datasets/dataset-mutate';
 
 
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness, request, type RequestOptions } from '@/__tests__/harness';

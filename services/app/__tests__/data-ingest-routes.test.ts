@@ -12,7 +12,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { MAX_ROWS_LIMIT } from '@/lib/platform';
 import { useAppHarness } from '@/__tests__/harness';
 

@@ -10,8 +10,8 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {createDocumentGraph} from '@/lib/document/document-graph';
-import {prepareGraphOperation} from '@/lib/story/graph/document-graph-admission';
-import {commitGraphOperation} from '@/lib/story/graph/document-graph-write';
+import {prepareGraphOperation} from '@/lib/artifacts/write/document-graph-admission';
+import {commitGraphOperation} from '@/lib/artifacts/write/document-graph-write';
 useAppHarness();
 async function setup(){
  const token=await mintToken('mxmx_test_graph_write'),actor={tokenId:token.id,userId:token.userId};

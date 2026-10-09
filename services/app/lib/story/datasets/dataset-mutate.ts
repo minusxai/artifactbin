@@ -17,7 +17,7 @@ import {loadSqlite} from '@artifactbin/sql/core';
 import {sqlExtensions} from '@/lib/sql/extensions';
 import {paramSqlName} from '@artifactbin/contracts';
 /**
- * WRITING a dataset — the other half of lib/story/datasets/dataset-store.
+ * WRITING a dataset — the other half of lib/datasets/dataset-store.
  *
  * A dataset's rows are ONE content-addressed blob per table and one row
  * pointing at them, so a write is: read the blob, run the author's DML over it
@@ -48,7 +48,7 @@ import { MAX_QUERY_ROWS } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
 import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow, type RoleActor } from '@/lib/artifacts/access';
-import { loadDatasetRows, storeDatasetRows } from './dataset-store';
+import { loadDatasetRows, storeDatasetRows } from '@/lib/datasets/dataset-store';
 import type {Scalar} from '@/lib/dataflow/dataflow';
 import { newEditId } from '../../document/splice';
 import {mutationInvocation} from '@/lib/artifacts/mutation-invocation';

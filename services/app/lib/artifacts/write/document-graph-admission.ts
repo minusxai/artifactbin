@@ -11,8 +11,8 @@ import {prepareGraphPatch,type GraphPatch} from '../../document/document-graph-p
 import {graphValidationScope} from '../../document/document-graph-scope';
 import {applyOperationsToNodes,DocumentOperationError} from '../../document/document-operation';
 import {stampNodeIds} from '../../document/node-ids';
-import {publishJsx} from '../document/jsx-tier';
-import {type ContentInputCtx} from '../document/input';
+import {publishJsx} from '@/lib/story/document/jsx-tier';
+import {type ContentInputCtx} from '@/lib/story/document/input';
 import {MAX_CONTENT_BYTES} from '../../document/limits';
 import type {ReferenceValidationState,ResolvedRef} from '@/lib/dataflow/refs';
 

@@ -1,13 +1,13 @@
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility, writerFor } from './access';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
-import { commitDocumentUpdate } from '../story/graph/document-update-write';
+import { commitDocumentUpdate } from './write/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import type { ProseOperation } from '../document';
 import type { DocumentOperation } from '@artifactbin/contracts';
 import { createDocumentGraph } from '../document/document-graph';
 import { prepareClientDocumentPublication } from '../document/document-update-client';
-import { prepareDocumentAuthoringContext } from '../story/document/document-authoring-context';
+import { prepareDocumentAuthoringContext } from './write/document-authoring-context';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '../accounts/relation-state';
 import { documentMentions } from '../annotations/saved-mentions';
@@ -36,7 +36,7 @@ import { actorSubject, emit } from '../platform/events';
 import { generateFileId } from '../platform/ids';
 import { type ArtifactFormat } from '@artifactbin/contracts';
 import { json } from '../http/http';
-import { loadDatasetRows } from '../story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { newEditId } from '../document/splice';
 import type { StringEdit } from '../document';
 import { nodeIndex, stampNodeIds } from '../document/node-ids';
@@ -877,7 +877,7 @@ export function committedHeadsSettled(): Promise<void> {
 
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
 
-/** One logged commit's patch, admitted at `version - 1` (lib/story/graph advanceGraph replays it). */
+/** One logged commit's patch, admitted at `version - 1` (lib/document/document-graph-patch advanceGraph replays it). */
 interface RemotePatch { version: number; patch: GraphPatch }
 /** Beyond this many versions between, the editor reads the head instead. */
 const MAX_REMOTE_PATCHES = 50;

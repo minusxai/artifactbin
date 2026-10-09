@@ -1,5 +1,5 @@
 import {createUser} from '@/lib/accounts';
-import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
+import {prepareDocumentAuthoringContext} from '@/lib/artifacts/write/document-authoring-context';
 import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/document/document-update-history';
 import {afterEach,expect,it,vi} from 'vitest';
 import {useAppHarness,request,settleBackgroundWrites} from './harness';
@@ -8,7 +8,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,editorScope} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {prepareClientDocumentUpdate,prepareClientDocumentReplacement} from '@/lib/document/document-update-client';
-import {commitDocumentUpdate} from '@/lib/story/graph/document-update-write';
+import {commitDocumentUpdate} from '@/lib/artifacts/write/document-update-write';
 import {graphIntegrity,graphSource,type DocumentGraph} from '@/lib/document/document-graph';
 import {applyGraphPatch} from '@/lib/document/document-graph-patch';
 useAppHarness();

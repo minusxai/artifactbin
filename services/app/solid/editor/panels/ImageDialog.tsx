@@ -26,7 +26,7 @@ import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 
 export type { ChosenImage, ImageChoice };
 
-/** What the upload door takes (lib/story/data/data-tiers). */
+/** What the upload door takes (lib/datasets/data-tiers). */
 export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml';
 const LIMIT_MB = Math.round(DEFAULT_UPLOAD_MAX_BYTES / 1_000_000);
 const IMAGE_HINT = `PNG, JPEG, WebP, GIF or SVG · up to ${LIMIT_MB} MB`;

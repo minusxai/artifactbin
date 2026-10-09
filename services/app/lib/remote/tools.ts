@@ -6,7 +6,7 @@ import {OPERATIONS} from '../operations/registry';
 import {runOperation} from '../operations/http';
 import {json} from '../http/http';
 import {prepareClientDocument} from '../document/document-update-client';
-import {prepareDocumentAuthoringContext} from '../story/document/document-authoring-context';
+import {prepareDocumentAuthoringContext} from '@/lib/artifacts/write/document-authoring-context';
 
 const names=['create_artifact','get_artifact','list_artifacts','query_resource','mutate_dataset'];
 const editInput=z.object({

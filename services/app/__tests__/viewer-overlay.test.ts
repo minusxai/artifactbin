@@ -12,7 +12,7 @@ import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';

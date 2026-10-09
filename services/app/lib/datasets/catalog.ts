@@ -1,9 +1,9 @@
-import type {ContentObjects} from '@/lib/story/prepared';
+import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 import type {ArtifactRow,TokenActor} from '@/lib/artifacts';
-import type {StoredContent} from '@/lib/story/document/input';
+import type { StoredContent } from '@/lib/document/stored-content';
 import {json} from '@/lib/http/http';
-import {publishDataset} from '@/lib/story/data/data-tiers';
-import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
+import {publishDataset} from '@/lib/datasets/data-tiers';
+import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import type {DatasetCatalog,DatasetTable} from './types';
 import {DatasetError} from './errors';
 import {discoverPostgres} from './postgres';

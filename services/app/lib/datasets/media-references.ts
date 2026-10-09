@@ -3,7 +3,7 @@
  * Computed SQL values and connected databases have no stored-cell retention guarantee.
  */
 import {catalogFromMetadata} from './catalog-metadata';
-import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import { imageReferenceId } from '@/lib/dataflow/image-source';
 
 export async function storedMediaReferences(row:{meta:unknown}):Promise<Set<string>> {

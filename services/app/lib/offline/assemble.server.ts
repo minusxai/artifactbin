@@ -24,7 +24,7 @@ import { readFile } from 'node:fs/promises';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import path from 'node:path';
 import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations/store';
-import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/serving/archived-version';
+import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/artifacts/archived-version';
 import { acceptedMembers, dataflowForRow, dataflowRunsForRow, importsFingerprint, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ImportCache } from '@/lib/artifacts/dataflow';
 import { canReadArtifact, type ArtifactRow, type RoleActor, type TokenActor } from '@/lib/artifacts/access';
 import { getArtifactById, retainDownloadedVersion } from '@/lib/artifacts/store';

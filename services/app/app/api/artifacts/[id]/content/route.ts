@@ -4,7 +4,7 @@ import {readableArtifact} from '@/lib/artifacts';
 import {withTokenAuth} from '@/lib/accounts';
 import {getVersionFor} from '@/lib/artifacts';
 import {canEdit} from '@/lib/artifacts';
-import {serveStoredFile} from '@/lib/story/assets/file-store';
+import {serveStoredFile} from '@/lib/datasets/file-store';
 import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
 import {serializeDatasetDefinition} from '@/lib/datasets/definition';
 import type {DatasetCatalog} from '@/lib/datasets/types';

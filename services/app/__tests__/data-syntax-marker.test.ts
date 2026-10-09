@@ -10,7 +10,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {editorScope,getArtifactById} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {prepareClientDocumentReplacement,prepareClientDocumentUpdate} from '@/lib/document/document-update-client';
-import {commitDocumentUpdate} from '@/lib/story/graph/document-update-write';
+import {commitDocumentUpdate} from '@/lib/artifacts/write/document-update-write';
 import type {DocumentGraph} from '@/lib/document/document-graph';
 
 const harness=useAppHarness();

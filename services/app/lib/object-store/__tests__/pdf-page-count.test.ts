@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { samplePdf } from '../../../../../scripts/lib/sample-pdf.mjs';
-import { pdfPageCount } from '../assets/pdf-store';
+import { pdfPageCount } from '../pdf-store';
 
 describe('pdfPageCount', () => {
   it('counts the leaves of a real file, not the page tree', () => {

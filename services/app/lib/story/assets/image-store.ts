@@ -1,5 +1,5 @@
 /**
- * Where image BYTES actually live — the exact shape of lib/story/datasets/dataset-store.
+ * Where image BYTES actually live — the exact shape of lib/datasets/dataset-store.
  *
  * Image bytes live in object storage; a base64 `data:` URL is ~33% larger than
  * the bytes, lives in a TEXT column read on every render, and is capped by the
@@ -20,7 +20,7 @@ interface ImageLocation {
 }
 
 /**
- * What a stored image row keeps in `meta` — the shape lib/story/data/data-tiers
+ * What a stored image row keeps in `meta` — the shape lib/datasets/data-tiers
  * writes and every reader of one relies on.
  *
  * `sha256` is the hash of the bytes THE CLIENT SENT, taken before the door

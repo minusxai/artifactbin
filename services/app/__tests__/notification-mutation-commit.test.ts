@@ -13,7 +13,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {notificationJobStore} from '@/lib/notifications';
 import {evaluateNotificationQuery} from '@/lib/notifications';
 import {createNotificationWorker} from '@/lib/notifications';
-import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 
 useAppHarness();
 
