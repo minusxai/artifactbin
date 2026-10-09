@@ -176,7 +176,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     const headers=new Headers(response.headers);
     headers.set('X-Artifactbin-Account',expectedAccount||account);
     headers.set('X-Artifactbin-Protocol',String(CLI_PROTOCOL_VERSION));
-    headers.set('X-Artifactbin-CLI-Version',cliReleaseVersion());
+    {const released=cliReleaseVersion();if(released)headers.set('X-Artifactbin-CLI-Version',released);}
     return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   };
 }
