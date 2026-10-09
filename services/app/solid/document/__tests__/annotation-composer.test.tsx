@@ -13,7 +13,20 @@ import { fireEvent } from '../../__tests__/helpers';
 import { fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
 
-beforeEach(installAnnotationFetch);
+beforeEach(() => {
+  installAnnotationFetch();
+  // JSDOM doesn't implement the pointer fields used by the browser drag path.
+  class TestPointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly isPrimary: boolean;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 1;
+      this.isPrimary = init.isPrimary ?? true;
+    }
+  }
+  vi.stubGlobal('PointerEvent', TestPointerEvent);
+});
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const creates = () => fetchCalls.filter((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
@@ -24,6 +37,154 @@ describe('the annotation composer', () => {
   beforeAll(() => preloadCommentField());
   const online = { id: '11111111-1111-1111-1111-111111111111', name: 'review', online: true, managed: true, exitCode: null, activity: 'listening' };
   const openComposer = () => layer({ initialSelection: TEXT() });
+
+  it('moves the comment box without losing its draft or annotation target', async () => {
+    openComposer(); await flush();
+    const field = screen.getByLabelText('Annotation comment');
+    replaceComment(field, 'keep this draft while moving');
+    const dialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+    const start = { left: dialog.style.left, top: dialog.style.top };
+    const handle = within(dialog).getByLabelText('Move comment box');
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 250, clientY: 180 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 350, clientY: 260 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 350, clientY: 260 });
+    expect({ left: dialog.style.left, top: dialog.style.top }).not.toEqual(start);
+    expect(field).toHaveTextContent('keep this draft while moving');
+    fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
+    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ node_id: 'node-1', body: 'keep this draft while moving' });
+  });
+
+  it('moves from the keyboard and clamps the box after viewport resize and selection reports', async () => {
+    const view = openComposer(); await flush();
+    const width = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const height = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+    try {
+      const dialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+      const handle = within(dialog).getByLabelText('Move comment box');
+      const beforeKeyboardMove = { left: dialog.style.left, top: dialog.style.top };
+      fireEvent.keyDown(handle, { key: 'ArrowRight' });
+      fireEvent.keyDown(handle, { key: 'ArrowDown', shiftKey: true });
+      expect({ left: dialog.style.left, top: dialog.style.top }).not.toEqual(beforeKeyboardMove);
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 420 });
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 320 });
+      fireEvent(window, new Event('resize'));
+      fireEvent.pointerDown(handle, { button: 0, pointerId: 3, clientX: 220, clientY: 170 });
+      fireEvent.pointerMove(window, { pointerId: 3, clientX: 900, clientY: 900 });
+      fireEvent.pointerUp(window, { pointerId: 3, clientX: 900, clientY: 900 });
+      expect(Number.parseFloat(dialog.style.left)).toBeLessThanOrEqual(420 - Number.parseFloat(dialog.style.width) - 12);
+      expect(Number.parseFloat(dialog.style.top)).toBeGreaterThanOrEqual(112);
+      const moved = { left: dialog.style.left, top: dialog.style.top };
+      view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ rect: { x: 40, y: 80, width: 200, height: 40 } }) });
+      expect({ left: dialog.style.left, top: dialog.style.top }).toEqual(moved);
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+      fireEvent(window, new Event('resize'));
+      expect(Number.parseFloat(dialog.style.left)).toBeLessThanOrEqual(360 - Number.parseFloat(dialog.style.width) - 12);
+      expect(Number.parseFloat(dialog.style.top)).toBeGreaterThanOrEqual(112);
+    } finally {
+      if (width) Object.defineProperty(window, 'innerWidth', width);
+      if (height) Object.defineProperty(window, 'innerHeight', height);
+      fireEvent(window, new Event('resize'));
+    }
+  });
+
+  it('only starts dragging from the move handle and releases canceled pointer gestures', async () => {
+    openComposer(); await flush();
+    const dialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+    const start = { left: dialog.style.left, top: dialog.style.top };
+    const field = screen.getByLabelText('Annotation comment');
+    fireEvent.pointerDown(field, { button: 0, pointerId: 2, clientX: 250, clientY: 180 });
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 350, clientY: 260 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 350, clientY: 260 });
+    fireEvent.pointerDown(screen.getByLabelText('Cancel annotation'), { button: 0, pointerId: 4, clientX: 250, clientY: 180 });
+    fireEvent.pointerMove(window, { pointerId: 4, clientX: 350, clientY: 260 });
+    fireEvent.pointerUp(window, { pointerId: 4, clientX: 350, clientY: 260 });
+    expect({ left: dialog.style.left, top: dialog.style.top }).toEqual(start);
+
+    const handle = screen.getByLabelText('Move comment box');
+    const setPointerCapture = vi.fn();
+    const releasePointerCapture = vi.fn();
+    Object.defineProperty(handle, 'setPointerCapture', { configurable: true, value: setPointerCapture });
+    Object.defineProperty(handle, 'releasePointerCapture', { configurable: true, value: releasePointerCapture });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 5, clientX: 250, clientY: 180 });
+    expect(setPointerCapture).toHaveBeenCalledWith(5);
+    fireEvent.pointerMove(window, { pointerId: 5, clientX: 300, clientY: 220 });
+    const moved = { left: dialog.style.left, top: dialog.style.top };
+    fireEvent.pointerCancel(window, { pointerId: 5 });
+    expect(releasePointerCapture).toHaveBeenCalledWith(5);
+    fireEvent.pointerMove(window, { pointerId: 5, clientX: 400, clientY: 300 });
+    expect({ left: dialog.style.left, top: dialog.style.top }).toEqual(moved);
+  });
+
+  it.each(['pointerup', 'blur'] as const)('releases pointer capture and stops following moves after %s', async (end) => {
+    openComposer(); await flush();
+    const dialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+    const handle = within(dialog).getByLabelText('Move comment box');
+    const releasePointerCapture = vi.fn();
+    Object.defineProperty(handle, 'setPointerCapture', { configurable: true, value: vi.fn() });
+    Object.defineProperty(handle, 'releasePointerCapture', { configurable: true, value: releasePointerCapture });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 8, clientX: 250, clientY: 180 });
+    fireEvent.pointerMove(window, { pointerId: 8, clientX: 280, clientY: 200 });
+    const moved = { left: dialog.style.left, top: dialog.style.top };
+    if (end === 'pointerup') fireEvent.pointerUp(window, { pointerId: 8 });
+    else fireEvent(window, new Event('blur'));
+    expect(releasePointerCapture).toHaveBeenCalledWith(8);
+    fireEvent.pointerMove(window, { pointerId: 8, clientX: 500, clientY: 500 });
+    expect({ left: dialog.style.left, top: dialog.style.top }).toEqual(moved);
+  });
+
+  it.each(['close', 'target change'] as const)('ends an active drag when the composer %s', async (reason) => {
+    const view = openComposer(); await flush();
+    const dialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+    const handle = within(dialog).getByLabelText('Move comment box');
+    const releasePointerCapture = vi.fn();
+    Object.defineProperty(handle, 'setPointerCapture', { configurable: true, value: vi.fn() });
+    Object.defineProperty(handle, 'releasePointerCapture', { configurable: true, value: releasePointerCapture });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 9, clientX: 250, clientY: 180 });
+    fireEvent.pointerMove(window, { pointerId: 9, clientX: 280, clientY: 200 });
+    const moved = { left: dialog.style.left, top: dialog.style.top };
+    if (reason === 'close') fireEvent.click(screen.getByLabelText('Close annotation composer'));
+    else view.set({ initialSelection: TEXT({ nodeId: 'next-target', path: '2' }) });
+    await flush();
+    expect(releasePointerCapture).toHaveBeenCalledWith(9);
+    fireEvent.pointerMove(window, { pointerId: 9, clientX: 500, clientY: 500 });
+    if (reason === 'target change') {
+      const nextDialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+      expect({ left: nextDialog.style.left, top: nextDialog.style.top }).not.toEqual(moved);
+    } else {
+      expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+    }
+  });
+
+  it('releases pointer capture and removes listeners when the layer unmounts mid-drag', async () => {
+    const view = openComposer(); await flush();
+    const dialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+    const handle = within(dialog).getByLabelText('Move comment box');
+    const releasePointerCapture = vi.fn();
+    Object.defineProperty(handle, 'setPointerCapture', { configurable: true, value: vi.fn() });
+    Object.defineProperty(handle, 'releasePointerCapture', { configurable: true, value: releasePointerCapture });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 10, clientX: 250, clientY: 180 });
+    fireEvent.pointerMove(window, { pointerId: 10, clientX: 280, clientY: 200 });
+    const moved = { left: dialog.style.left, top: dialog.style.top };
+    view.unmount();
+    expect(releasePointerCapture).toHaveBeenCalledWith(10);
+    fireEvent.pointerMove(window, { pointerId: 10, clientX: 500, clientY: 500 });
+    expect({ left: dialog.style.left, top: dialog.style.top }).toEqual(moved);
+  });
+
+  it('resets a moved placement for the next annotation target', async () => {
+    const view = openComposer(); await flush();
+    const dialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+    const before = { left: dialog.style.left, top: dialog.style.top };
+    const handle = screen.getByLabelText('Move comment box');
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 6, clientX: 250, clientY: 180 });
+    fireEvent.pointerMove(window, { pointerId: 6, clientX: 350, clientY: 260 });
+    fireEvent.pointerUp(window, { pointerId: 6, clientX: 350, clientY: 260 });
+    expect(dialog.style.left).not.toBe(before.left);
+    const movedLeft = dialog.style.left;
+    view.set({ initialSelection: TEXT({ nodeId: 'node-next', path: '2', rect: { x: 0, y: 400, width: 100, height: 40 } }) });
+    await flush();
+    expect(screen.getByRole('dialog', { name: 'Annotation composer' }).style.left).not.toBe(movedLeft);
+  });
 
   it('starts empty and inserts a chosen agent with its stable target, requiring comment text', async () => {
     knobs.sessions = [online, { ...online, id: 'offline', online: false, managed: false }];
