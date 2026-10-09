@@ -381,11 +381,18 @@ let cliRelease: string | undefined;
 /** The places the released CLI pointer can live, in order: the app's working directory (a production
  * package copies `public/` beside the bundle), this source tree's own `public/` (tests and tools that run the
  * app from another working directory, such as the server repository's), and a repository root. */
-export const CLI_RELEASE_CANDIDATES = (): string[] => [
-  path.resolve('public/chat/release.json'),
-  fileURLToPath(new URL('../../public/chat/release.json', import.meta.url)),
-  path.resolve('services/app/public/chat/release.json'),
-];
+export const CLI_RELEASE_CANDIDATES = (): string[] => {
+  const candidates = [path.resolve('public/chat/release.json')];
+  // Under a browser-like test environment import.meta.url is not a file URL; the source-tree candidate is
+  // then simply unavailable, never an error.
+  try {
+    if (import.meta.url.startsWith('file:')) candidates.push(fileURLToPath(new URL('../../public/chat/release.json', import.meta.url)));
+  } catch {
+    // no source-tree candidate
+  }
+  candidates.push(path.resolve('services/app/public/chat/release.json'));
+  return candidates;
+};
 /** Read the first candidate that parses; `''` when none does, so a missing pointer degrades the version header
  * and the update-required body instead of failing the request that needed them. */
 export function readCliReleaseVersion(candidates: string[] = CLI_RELEASE_CANDIDATES()): string {
