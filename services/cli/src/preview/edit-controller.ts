@@ -14,7 +14,7 @@
 import {type JsxNode,serializeJsx,type StoryController,STORY_ANNOTATIONS_MESSAGE,STORY_EDIT_MODE_MESSAGE,STORY_SELECTION_ACTIONS_MESSAGE,STORY_SELECTION_ACTION_MESSAGE,STORY_SELECT_MESSAGE,isEditParentMessage,type StoryDocumentUpdate,isStoryDocumentUpdate,type RuntimeChannel,type FrameEditSession,type FrameSelectionActions,type FrameAnnotateSession,loadFrameEditSession,loadCompiledEditRegions,loadFrameAnnotateSession,loadFrameSelectionActions,loadStoryUpdateParts,loadDraftMorph} from '../../../app/lib/cli-toolkit/browser';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 
-export interface PreviewEditControllerInput {
+interface PreviewEditControllerInput {
  win:Window;root:HTMLElement;file:string;
  initialNodes:JsxNode[];
  /** The current full source, so a structural draft asks the server with what the page is showing NOW. */
@@ -27,7 +27,7 @@ export interface PreviewEditControllerInput {
 }
 
 /** `StoryController` plus IslandStory's own extension: the portal arrived after the controller did. */
-export interface PreviewStoryController extends StoryController {selectionReady():void}
+interface PreviewStoryController extends StoryController {selectionReady():void}
 
 const componentIds=(source:JsxNode[]):Map<string,string>=>{
  const found=new Map<string,string>();

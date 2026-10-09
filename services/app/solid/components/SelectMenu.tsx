@@ -10,7 +10,7 @@ import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import { Popover } from './Popover';
 
-export interface SelectMenuOption {
+interface SelectMenuOption {
   value: string;
   label: string;
   /** Dim annotation after the label — a column's type, a dataset's row count. */

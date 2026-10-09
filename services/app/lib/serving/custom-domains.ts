@@ -45,7 +45,7 @@ export interface DomainResolver {
   caa(name: string): Promise<CaaRecord[]>;
 }
 
-export interface AttachedDomain {
+interface AttachedDomain {
   hostname: string;
   status: DomainStatus;
   /** The TXT record's name and value that prove this account holds the hostname. */
@@ -58,8 +58,8 @@ export interface AttachedDomain {
   homepageArtifactId: string | null;
   pathOverrides: Array<{ path: string; artifactId: string }>;
 }
-export type AttachRefusal = 'disabled' | 'invalid_hostname' | 'taken' | 'limit';
-export type VerifyRefusal = 'disabled' | 'not_found' | 'taken' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
+type AttachRefusal = 'disabled' | 'invalid_hostname' | 'taken' | 'limit';
+type VerifyRefusal = 'disabled' | 'not_found' | 'taken' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
 
 /** The TXT record's label; the name we ask for is `_artifactbin.<hostname>`. */
 const TXT_LABEL = '_artifactbin';

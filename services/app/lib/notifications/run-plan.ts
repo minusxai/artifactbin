@@ -1,5 +1,5 @@
 import type {MutationNotificationPlan,NotificationSource} from '@artifactbin/contracts';
-export interface NotificationRecipientPlan {recipientId:string;messages:string[];sources:NotificationSource[]}
+interface NotificationRecipientPlan {recipientId:string;messages:string[];sources:NotificationSource[]}
 /** Collapse all rows/rules to one recipient plan; retain every contributing source. */
 export function notificationRecipients(plan:MutationNotificationPlan):NotificationRecipientPlan[]{
  const recipients=new Map<string,NotificationRecipientPlan>();

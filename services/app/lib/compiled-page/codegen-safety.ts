@@ -76,7 +76,7 @@ const element = (tag: string, attributes: JsxAttribute[], children: JsxNode[] = 
 const reactive = (source: string, reactive: unknown, exprType: string) => ({ static: false as const, exprType, source, reactive });
 
 /** What the compiler is handed for one version: the parsed nodes and the version-owned facts (CompileInput minus the build). */
-export interface SafetyDocument {
+interface SafetyDocument {
   nodes: JsxNode[];
   colorMode: 'light' | 'dark';
   template: null;
@@ -123,7 +123,7 @@ export function malformedTagDocument(): SafetyDocument {
 /** The generated sources a compile yields (the compiler's `sources`): the skeleton and the islands module. */
 export interface GeneratedSources { skeleton: string; islands: string }
 
-export interface StructureVerdict {
+interface StructureVerdict {
   /** The skeleton's shape is the same for benign and hostile strings. */
   skeletonIndependent: boolean;
   islandsIndependent: boolean;

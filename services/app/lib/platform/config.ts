@@ -422,7 +422,7 @@ const SETTING_DEFAULTS = {
   publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, customDomainsTarget: CUSTOM_DOMAINS_TARGET,
   browserServiceUrl: BROWSER_SERVICE_URL, internalServiceSecret: INTERNAL_SERVICE_SECRET, sqlServiceUrl: SQL_SERVICE_URL, eventsServiceUrl: EVENTS_SERVICE_URL,
 };
-export type ConfigOverrides = { [K in keyof typeof SETTING_DEFAULTS]?: (typeof SETTING_DEFAULTS)[K] };
+type ConfigOverrides = { [K in keyof typeof SETTING_DEFAULTS]?: (typeof SETTING_DEFAULTS)[K] };
 export function overrideConfig(settings: ConfigOverrides, environment: Record<string, string | undefined> = {}): void {
   if ('publicBaseUrl' in settings) PUBLIC_BASE_URL = settings.publicBaseUrl!;
   if ('assetsOrigin' in settings) ASSETS_ORIGIN = settings.assetsOrigin!;

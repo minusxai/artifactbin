@@ -21,12 +21,12 @@ import type {ReferenceValidationState,ResolvedRef} from '@/lib/dataflow/refs';
  * reference loader it witnesses, the identity normalization, and the publisher
  * itself (story's publishJsx). Passed in rather than imported, so the write
  * path never reaches up into story while the admission token stays minted here. */
-export interface GraphAdmissionContext {
+interface GraphAdmissionContext {
  loadRef?:ServerRefLoader;
  normalizeMarkup?:(source:string)=>string|{source:string;repairs:SourceRepair[]};
  publish:(fields:Record<string,unknown>,source:string,context:{loadRef:ServerRefLoader})=>Promise<StoredContent|Response>;
 }
-export interface GraphBaseline {id:string;version:number;document:DocumentGraph;meta:Record<string,unknown>;reservedIds?:string[]}
+interface GraphBaseline {id:string;version:number;document:DocumentGraph;meta:Record<string,unknown>;reservedIds?:string[]}
 export interface GraphAdmissionPlan {
  id:string;patch:GraphPatch;references:ReferenceValidationState[];
  fields:Record<string,unknown>;expectedFields:Record<string,unknown>;meta:Record<string,unknown>;ids:string[];newIds:string[];

@@ -32,9 +32,9 @@ export const TESTUSER_LABEL = 'Test user';
 /** The token NAME, never the secret: `mxmx_test_` is the product's own prefix for disposable identities. */
 const TESTUSER_TOKEN_PREFIX = 'mxmx_test_';
 
-export interface TestUserRefusal { ok: false; status: number; error: string; message: string }
+interface TestUserRefusal { ok: false; status: number; error: string; message: string }
 
-export interface TestUserMinted extends TestUser {
+interface TestUserMinted extends TestUser {
   ok: true;
   /** The `users` row — the same value as `id`, spelled as what it is for callers holding an actor. */
   userId: string;
@@ -123,7 +123,7 @@ export async function getTestUserRow(testUserId: string): Promise<{ id: string; 
 }
 
 /** Why a named test user is not usable, in the vocabulary the wire speaks. */
-export type TestUserRefusalCode = typeof TESTUSER_ERRORS.notYours | typeof TESTUSER_ERRORS.expired;
+type TestUserRefusalCode = typeof TESTUSER_ERRORS.notYours | typeof TESTUSER_ERRORS.expired;
 
 /**
  * Resolve `{testuser: id}` against the account naming it: the row, or the

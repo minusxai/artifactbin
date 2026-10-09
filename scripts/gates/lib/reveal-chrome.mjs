@@ -7,11 +7,6 @@
  * a document carries the app's chrome any more, so there is nothing to reveal.
  */
 
-/** Kept for gates that still ask: there is no hidden reader chrome to bring back. Resolves false. */
-export async function revealReaderChrome() {
-  return false;
-}
-
 /** Wait for the destination's own bar (a lazy route's provisional page bar is not it). */
 async function settled(page, timeout) {
   await page.waitForSelector('[aria-label="Open artifact controls"], [aria-label="Open page controls"], [aria-label="Open menu"]', { state: 'attached', timeout }).catch(() => {});

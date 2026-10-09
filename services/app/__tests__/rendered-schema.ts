@@ -7,7 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
-export interface RenderedSchema {
+interface RenderedSchema {
   schema: string;
   roles: string;
   grants: string;

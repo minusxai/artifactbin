@@ -280,7 +280,7 @@ const viewerRoute = (): Handler | null =>
  * The boundary as Hono middleware. Mounted before every other route, so a
  * verified host never reaches the app behind it except for the static trees.
  */
-export interface CustomHostOptions {
+interface CustomHostOptions {
   /** The stylesheets the app page links (its index.html, as served for `url`), so the home page wears the same CSS. */
   stylesheets?: (url: string) => Promise<string[]>;
 }

@@ -45,8 +45,7 @@ export function urlListUrls(value: string, lowerAttributeName: string): string[]
  * SVG paint/reference attributes that accept `url(…)` values. A paint server
  * reference may only be LOCAL (`url(#id)`): an external target is a fetch fired
  * from a guest viewer's browser (exfiltration) and taints the serialized
- * capture — the same two reasons banned-css bans external `url()` in authored
- * CSS. Lowercase + both spellings, same contract as URL_ATTRS above.
+ * capture. Lowercase + both spellings, same contract as URL_ATTRS above.
  */
 export const SVG_PAINT_ATTRS = immutableSet([
   'fill',

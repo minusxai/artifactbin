@@ -24,9 +24,9 @@ export interface RecordedCall {
   key?: string;
 }
 
-export type Respond = (call: RecordedCall) => Response | Promise<Response>;
+type Respond = (call: RecordedCall) => Response | Promise<Response>;
 
-export interface CliHarness {
+interface CliHarness {
   root: string;
   home: string;
   out: string[];
@@ -44,7 +44,7 @@ export interface CliHarness {
   cleanup(): Promise<void>;
 }
 
-export interface HarnessOptions {
+interface HarnessOptions {
   server?: string;
   /** Saved before the first command; `null` starts unauthenticated. */
   token?: string | null;

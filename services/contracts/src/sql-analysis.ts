@@ -58,4 +58,3 @@ export interface StatementAnalysis {
  * before SQLite sees the statement, and binds it by the same name.
  */
 export const paramSqlName = (logical: string): string => logical.replace('.', '__');
-export const paramLogicalName = (sqlName: string): string => sqlName.replace('__', '.');

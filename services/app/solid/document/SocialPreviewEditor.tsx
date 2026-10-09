@@ -48,7 +48,7 @@ interface Interaction {
 }
 interface SaveResponse { edit_id?: string; source?: string; error?: string; details?: Array<{ message?: string }> }
 
-export interface SocialPreviewEditorProps { id: string; source: string; editId: string; version: number; onClose: () => void }
+interface SocialPreviewEditorProps { id: string; source: string; editId: string; version: number; onClose: () => void }
 
 /** The share-card crop editor: a locked 40:21 frame the owner pans and resizes over the document
  * overview or an uploaded image. Framing persists as Helmet meta directives (lib/document/social-preview);

@@ -5,7 +5,7 @@ import { esc } from './py.mjs';
 import { fontFaceCss } from './fonts.mjs';
 import { CATALOGUE, PAGES_DIR, ROSTER, fence, loadSpec } from './pages.mjs';
 
-export function buildIndex(existing) {
+function buildIndex(existing) {
   const { fit: FIT, heads: TPL_HEADS, sources: SOURCES, pageIds } = CATALOGUE;
   const cards = [], css = [], faces = [];
   const specs = Object.fromEntries(ROSTER.map((slug) => [slug, loadSpec(slug)]));

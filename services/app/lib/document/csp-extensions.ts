@@ -67,7 +67,7 @@ interface CspExtensionError extends ValidationError {
 }
 
 /** On refusal, `extensions` still holds the origins that did validate (what a reader of an unvalidated edit may be asked about). */
-export type CspExtensionsResult =
+type CspExtensionsResult =
   | { ok: true; extensions: CspExtensions }
   | { ok: false; errors: CspExtensionError[]; extensions: CspExtensions };
 

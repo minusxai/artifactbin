@@ -53,3 +53,30 @@ describe('a session a test names does not outlive it', () => {
     expect(await auth()).toBeNull();
   });
 });
+
+describe('a shared fixture starts empty and keeps its rows for its own describe alone', () => {
+  // A row a test outside leaves behind, which the shared describe's own wipe must remove.
+  it('a test before it leaves a row', async () => {
+    await createUser({ email: 'mxmx_test_harness_before@example.com' });
+    expect(await count(await h.db(), 'users')).toBe('1');
+  });
+  describe('the shared describe', () => {
+    const seeded = h.shared(async () => {
+      const t = await mintToken('shared');
+      return (await createArtifact(t.id, t.userId, { format: 'markup', source: '<div />', meta: {}, title: 'shared', description: null })).id;
+    });
+    it('its first test sees only the seed', async () => {
+      const db = await sameInstance();
+      expect((await db.query<{ id: string }>('SELECT id FROM artifacts')).rows.map((r) => r.id)).toEqual([seeded()]);
+      expect(await count(db, 'users')).toBe('1');
+      setSession({ user: { id: 'shared-session', email: null } });
+    });
+    it('its next test still sees the seed, with no session', async () => {
+      expect(await count(await h.db(), 'artifacts')).toBe('1');
+      expect(await auth()).toBeNull();
+    });
+  });
+  it('the next test outside starts empty again', async () => {
+    for (const table of ['artifacts', 'tokens', 'users']) expect(await count(await h.db(), table), table).toBe('0');
+  });
+});

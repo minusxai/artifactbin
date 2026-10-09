@@ -15,7 +15,7 @@
 import { MEMBER_COLUMNS, type ColumnType, type DatasetColumn } from '@artifactbin/contracts';
 import type { BuiltinInput, BuiltinTable } from './compiled-dataflow';
 
-export interface BuiltinInputSpec {
+interface BuiltinInputSpec {
   /** As written after `$`; `_row` stands for every `_row.<column>`. */
   name: '_me.id' | '_now' | '_tz' | '_value' | '_row';
   /** Null: typed where it is used — `_value` by the edited column, `_row.x` by the row's table. */

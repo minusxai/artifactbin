@@ -38,7 +38,7 @@ import type { DocumentFonts } from './document-fonts';
 type Slot = 'display' | 'body' | 'mono';
 type Style = 'normal' | 'italic';
 
-export interface FirstScreenFontsInput {
+interface FirstScreenFontsInput {
   theme?: string | null;
   nodes: JsxNode[];
   /** The document's `font-*` metas — each replaces its slot's family. */

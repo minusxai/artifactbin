@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { MAX_HIGHLIGHT_CODE_LENGTH, renderCodeBlock } from '../code-block';
 import { markdownContent } from '../content';
@@ -65,5 +67,26 @@ describe('language-tagged code rendering', () => {
     expect(output).toContain('mx-code-token-property');
     expect(decode(output.replace(/<[^>]*>/g, ''))).toBe(source);
     expect(output).not.toContain('<script>');
+  });
+});
+
+// Production externalizes these component imports; Vite's resolver is not Node's ESM resolver.
+describe('native server grammar loading', () => {
+  it('loads the declared grammar imports in a fresh native Node process', () => {
+    const sources = ['prism-core.ts', 'prism-grammars.ts'].map(name =>
+      readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'));
+    const specifiers = sources.flatMap(source => [...source.matchAll(/['"](prismjs\/components\/[^'"]+)['"]/g)].map(match => match[1]));
+    expect(specifiers).toHaveLength(9);
+    const script = `
+      for (const specifier of ${JSON.stringify(specifiers)}) await import(specifier);
+      const Prism = (await import(${JSON.stringify(specifiers[0])})).default;
+      for (const name of ['markup', 'markdown', 'javascript', 'typescript', 'css', 'jsx', 'tsx']) {
+        if (!Prism.languages[name]) throw new Error('Missing grammar: ' + name);
+        Prism.tokenize('const answer = 42;', Prism.languages[name]);
+      }
+    `;
+    expect(() => execFileSync(process.execPath, ['--input-type=module', '--eval', script], {
+      cwd: new URL('../../../../..', import.meta.url), stdio: 'pipe',
+    })).not.toThrow();
   });
 });

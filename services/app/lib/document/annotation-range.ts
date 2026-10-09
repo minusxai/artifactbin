@@ -51,7 +51,7 @@ export interface AnnotationTextRange {
 export interface AnnotationBox { x: number; y: number; w: number; h: number }
 
 /** A drawn AREA: the anchor is the lowest common ancestor of the blocks it touched, and this is where inside it. */
-export interface AnnotationAreaRange {
+interface AnnotationAreaRange {
   v: 1;
   kind: 'area';
   box: AnnotationBox;

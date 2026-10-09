@@ -8,7 +8,7 @@ export function previewServerOrigin(value: string): string {
   return origin;
 }
 
-export interface PreviewConnectionOptions {
+interface PreviewConnectionOptions {
   origin: string;
   prepare(): Promise<{ html: string; filename: string }>;
   onStatus(message: string): void;

@@ -17,7 +17,7 @@ import {configDir} from './config';
 export type NpmRunner=(args:string[],options:{env:NodeJS.ProcessEnv;timeoutMs?:number})=>Promise<{code:number;stdout:string;stderr:string}>;
 export type InstallKind='package'|'dev';
 export interface GlobalInstallResult {status:'installed'|'failed';version:string;prefix:string;bin:string;on_path:boolean;fallback:boolean;reason?:string;path_line?:string}
-export type FoundAfbin={path:string;kind:'standalone'|'forwarder'|'npm'};
+type FoundAfbin={path:string;kind:'standalone'|'forwarder'|'npm'};
 export interface RetiredAfbin {path:string;backup?:string;status:'removed'|'forwarded'|'kept';reason?:string}
 
 const PACKAGE_TREE=/(^|\/)node_modules\/@afbin\/cli(\/|$)/;

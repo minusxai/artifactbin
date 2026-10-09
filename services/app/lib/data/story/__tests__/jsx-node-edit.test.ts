@@ -1,5 +1,5 @@
 /**
- * ADDING AND REMOVING A NODE: `insertImageInJsx` (the editor's image drop) and
+ * ADDING AND REMOVING A NODE: `placeImageInJsx` (the editor's image drop) and
  * `removeJsxNodeAtPath` (its delete affordance). Both are total — a malformed
  * id, a stale path, a text-node path or unparseable source returns the source
  * untouched — and delete refuses to take the last top-level element, because a
@@ -8,11 +8,15 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  freshNodeId, imageAltInJsx, imageTargetInJsx, insertImageInJsx, nodeTargetInJsx, placeImageInJsx, placeMarkdownInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx,
-  setImageAltInJsx,
+  freshNodeId, imageAltInJsx, imageTargetInJsx, nodeTargetInJsx, placeImageInJsx, placeMarkdownInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx,
+  setImageAltInJsx, type JsxInsertAnchor,
 } from '@/lib/data/story/jsx-edit';
 import { parseJsx } from '@/lib/jsx';
 import { expectValidStoryJsx } from '@/test/helpers/jsx';
+
+/** `placeImageInJsx`'s source alone — the insert without the editor's follow-up selection. */
+const insertImageInJsx = (source: string, imageId: string, anchor?: JsxInsertAnchor | null): string =>
+  placeImageInJsx(source, imageId, anchor).source;
 
 describe('insertImageInJsx', () => {
   it('appends an <img ref:> inside the top-level container and stays valid story JSX', () => {

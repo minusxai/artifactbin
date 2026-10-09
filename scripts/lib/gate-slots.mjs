@@ -22,7 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 /** Where the container runner keeps its slots — beside the old single lock, visible to every worktree. */
-export const DEFAULT_SLOTS_DIR = '/tmp/afbin-gate-slots';
+const DEFAULT_SLOTS_DIR = '/tmp/afbin-gate-slots';
 
 const OWNER = 'owner.json';
 const RECLAIM = '.reclaim';
@@ -32,7 +32,7 @@ const RECLAIM_STALE_MS = 30_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Whether a pid on THIS host is a live process. EPERM means it exists but is someone else's. */
-export function pidAlive(pid) {
+function pidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);

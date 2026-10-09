@@ -127,7 +127,7 @@ export function forkRefusal(source: ArtifactRow): Response | null {
 }
 
 /** What one fork made: the copy, and a copied dataset per `ref:` it had to repoint. */
-export interface ForkResult {
+interface ForkResult {
   artifact: ArtifactRow;
   /** Empty for everything but an app — `forked_from` is the ORIGINAL dataset this copy was taken from. */
   datasets: Array<{ id: string; forked_from: string }>;

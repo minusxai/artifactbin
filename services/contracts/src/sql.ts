@@ -62,7 +62,7 @@ export interface QueryPage {
 
 /** An isolated DuckDB catalog. Only these logical tables and columns are exposed.
  * Models are native read SQL, bound lazily so unused drafts cannot break a read. */
-export interface SqlReadCatalog {
+interface SqlReadCatalog {
   defaultSchema: string;
   tables: Array<{ schema: string; name: string; columns: DatasetColumn[]; source?: string; sql?: string }>;
   paramTypes?: Record<string, ColumnType>;

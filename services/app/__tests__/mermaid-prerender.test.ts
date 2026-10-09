@@ -22,7 +22,6 @@ import { services, setServices } from '@/lib/platform';
 import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/story/assets/mermaid-harvester';
 import { MERMAID_RENDER_ENGINE } from '@/lib/mermaid-images/engine';
-import { queueMermaidBackfill } from '@/lib/mermaid-images/store';
 import { documentEditBody } from './prepared-document';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { installStoryCommitHooks } from '@/lib/story/prepared/commit-hooks.server';
@@ -368,25 +367,6 @@ describe('a published Mermaid document', () => {
     expect(await raw(id, '?color=dark')).not.toMatch(/<html[^>]*class="[^"]*\bdark\b/);
     const { mintExportKey } = await import('@/lib/platform/export-read-key');
     expect(await raw(id, `?chrome=0&key=${mintExportKey(id)}&color=dark`)).toMatch(/<html[^>]*class="[^"]*\bdark\b/);
-  });
-});
-
-describe('the backfill', () => {
-  it('queues every live head that draws Mermaid and has no harvest, once, and can give failed harvests another go', async () => {
-    setServices({ browser: drawingBrowser([FLOW]).browser });
-    const a = await publish([FLOW]);
-    const b = await publish([SEQ]);
-    const prose = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: (await mintToken('prose')).token, json: { markup: '<p>No diagram</p>', visibility: 'public' } }));
-    expect(prose.status).toBe(201);
-    const db = await getDb();
-    await db.query('DELETE FROM mermaid_harvests');
-    expect(await queueMermaidBackfill(db, { dryRun: true })).toEqual({ queued: 2, retried: 0 });
-    expect(await jobs(a.id)).toEqual([]);
-    expect(await queueMermaidBackfill(db)).toEqual({ queued: 2, retried: 0 });
-    expect(await queueMermaidBackfill(db)).toEqual({ queued: 0, retried: 0 });
-    await db.query("UPDATE mermaid_harvests SET state='failed', attempts=6 WHERE artifact_id=$1", [b.id]);
-    expect(await queueMermaidBackfill(db, { retryFailed: true })).toEqual({ queued: 0, retried: 1 });
-    expect(await jobs(b.id)).toEqual([expect.objectContaining({ state: 'pending', attempts: 0 })]);
   });
 });
 

@@ -14,7 +14,7 @@ export interface NotificationJobAuthority {
  admitRecipients(tx:Queryable,input:MutationNotificationJobInput,plan:MutationNotificationPlan,ids:string[]):Promise<string[]>;
  canManage(tx:Queryable,principal:MutationInitiator['principal'],documentId:string):Promise<boolean>;
 }
-export interface NotificationJobStoreOptions {db:Db;authority:NotificationJobAuthority;clock?:()=>Date}
+interface NotificationJobStoreOptions {db:Db;authority:NotificationJobAuthority;clock?:()=>Date}
 interface JobRow {id:string;input:MutationNotificationJobInput;generation:number;lease_until:string;status:string;attempts:number;error_code:string|null;next_attempt_at:string|null}
 const LEASE_MS=60_000;
 const MAX_ATTEMPTS=5;

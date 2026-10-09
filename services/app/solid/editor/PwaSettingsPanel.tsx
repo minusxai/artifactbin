@@ -5,7 +5,7 @@ import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/document/pwa-settings';
 import { InstallArtifactLink } from '../document/InstallArtifact';
 
-export interface PwaSettingsPanelProps { id: string; title: string; source: string; onChange: (source: string) => void; onUpload: (file: File) => Promise<ImageChoice>; beforeInstall?: () => Promise<boolean> }
+interface PwaSettingsPanelProps { id: string; title: string; source: string; onChange: (source: string) => void; onUpload: (file: File) => Promise<ImageChoice>; beforeInstall?: () => Promise<boolean> }
 const INPUT = 'mt-1 w-full rounded-md border border-edge bg-ground px-3 py-2 text-sm text-fg';
 
 /** Uses the editor's source queue: settings participate in autosave, conflicts and undo. */

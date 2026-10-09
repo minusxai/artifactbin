@@ -13,7 +13,7 @@ import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
 /** 'text' takes a caret; 'block' is a leaf a click selects; 'container' holds blocks and a click on it selects nothing. */
-export type EditChromeKind = 'text' | 'block' | 'container';
+type EditChromeKind = 'text' | 'block' | 'container';
 
 /** Parts of a line, not blocks: a grip on them would pick up a word. Mirrors the session's selection rule. */
 const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u']);

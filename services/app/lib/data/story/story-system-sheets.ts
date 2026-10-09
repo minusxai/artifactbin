@@ -11,7 +11,7 @@ import sheets from './story-system-sheets.json';
 import fontManifest from './story-font-manifest.json';
 import { STORY_SYSTEM_NAMES, type StorySystemName } from '@/lib/validation/story-system-names';
 
-export interface StorySystemSheet {
+interface StorySystemSheet {
   /** `@font-face` rules for every family, weight and style the type roles use, served from /fonts. */
   fontFaces: string;
   /** Type roles, components, the hand and the page-type kit, scoped to the document root's `data-theme`. */

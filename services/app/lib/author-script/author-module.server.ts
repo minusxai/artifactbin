@@ -72,7 +72,7 @@ export function pageModuleSource(): string {
 }
 
 /** The script's `createSignal`: Solid's, unless `{name}` makes it comment state through the runtime (lib/islands/page-runtime scriptCreateSignal). */
-export function solidShimSource(): string {
+function solidShimSource(): string {
   return [
     `import { createSignal as plain } from ${JSON.stringify(SOLID_SPECIFIER)};`,
     `const b = globalThis[${JSON.stringify(PAGE_GLOBAL)}];`,

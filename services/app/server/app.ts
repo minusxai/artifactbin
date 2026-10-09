@@ -156,7 +156,7 @@ function fontSlot(head: string): number {
   }
   return 0;
 }
-export function withReaderHeadOrder(html: string): string {
+function withReaderHeadOrder(html: string): string {
   const end = html.indexOf('</head>');
   if (end < 0) return html;
   const code = lift(html.slice(0, end), MODULE_TAG);

@@ -62,7 +62,7 @@ export function sameDataflow(a: CompiledDataflow | null | undefined, b: Compiled
 export class MorphRefused extends Error {}
 const refuse = (why: string): MorphRefused => new MorphRefused(why);
 
-export interface MorphDependencies {
+interface MorphDependencies {
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
   /** Import a document module by URL (its `boot` runs on first import only). */
   importModule?: (url: string) => Promise<unknown>;
@@ -488,7 +488,7 @@ function adoptHydrationKeys(kept: Element, next: Element): void {
  * Components without an id that a draft draws unchanged, by path: a set where none moved, or a map from each one's
  * path in the draft to its path on the page now (blocks added or removed ahead of it moved it, its content did not).
  */
-export type StablePaths = ReadonlySet<string> | ReadonlyMap<string, string>;
+type StablePaths = ReadonlySet<string> | ReadonlyMap<string, string>;
 const pathMap = (paths: StablePaths): ReadonlyMap<string, string> => 'get' in paths ? paths : new Map([...paths].map((path) => [path, path]));
 /** Their paths on the page before the draft is drawn. */
 const oldPathsOf = (paths: StablePaths): ReadonlySet<string> => 'get' in paths ? new Set(paths.values()) : paths;

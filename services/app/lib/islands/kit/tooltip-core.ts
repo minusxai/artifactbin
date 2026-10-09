@@ -10,7 +10,7 @@ import type { Side } from './popper';
 const TOOLTIP_OPEN = 'mx:tooltip-open';
 const provider = { closedAt: 0 };
 
-export type TooltipTiming = { state: () => 'closed' | 'delayed-open' | 'instant-open'; enter: () => void; openNow: () => void; close: () => void };
+type TooltipTiming = { state: () => 'closed' | 'delayed-open' | 'instant-open'; enter: () => void; openNow: () => void; close: () => void };
 
 export function createTooltipTiming(o: { open: () => boolean; setOpen: (value: boolean) => void; delay?: () => number | undefined }): TooltipTiming {
   const id = createUniqueId();

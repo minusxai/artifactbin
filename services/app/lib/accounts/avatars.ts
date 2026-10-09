@@ -49,7 +49,7 @@ export function avatarUrl(row: { id: string; image_key: string | null }): string
 export const AVATAR_MAX_BYTES = DEFAULT_UPLOAD_MAX_BYTES;
 
 /** Why a picture was refused. Each code is a sentence the client already knows how to say. */
-export type AvatarErrorCode = 'unsupported_image' | 'image_too_large' | 'image_unreadable';
+type AvatarErrorCode = 'unsupported_image' | 'image_too_large' | 'image_unreadable';
 
 /** A refusal a door turns into a status; never a 500. */
 export class AvatarError extends Error {

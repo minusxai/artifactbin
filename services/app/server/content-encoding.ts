@@ -27,7 +27,7 @@ const SIBLING = /\.(?:br|gz)$/;
 const COMPRESSIBLE_TYPE = /^(?:text\/|application\/(?:javascript|json|wasm|manifest\+json)|image\/svg\+xml)/i;
 
 /** Add `Accept-Encoding` to a response's Vary, once. */
-export function varyOnEncoding(headers: Headers): void {
+function varyOnEncoding(headers: Headers): void {
   const vary = headers.get('vary');
   if (!vary) headers.set('vary', 'Accept-Encoding');
   else if (!/(?:^|,)\s*(?:accept-encoding|\*)\s*(?:,|$)/i.test(vary)) headers.set('vary', `${vary}, Accept-Encoding`);
@@ -105,7 +105,7 @@ const brotli = promisify(zlib.brotliCompress);
  * (see the report): most of quality 11's saving at a small fraction of its CPU,
  * and smaller than nginx's on-the-fly gzip.
  */
-export const DYNAMIC_BROTLI_QUALITY = 5;
+const DYNAMIC_BROTLI_QUALITY = 5;
 /** Below this, compression cannot pay for its own framing. */
 const DYNAMIC_MIN_BYTES = 1024;
 const DYNAMIC_TYPE = /^(?:text\/html|application\/json)\b/i;

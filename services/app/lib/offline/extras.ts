@@ -50,7 +50,7 @@ export function extrasScriptUrl(origin: string, extras: ArtifactFileExtras | nul
 
 type ExtrasState = 'idle' | 'loading' | 'ready' | 'failed';
 
-export interface ExtrasLoader {
+interface ExtrasLoader {
   state(): ExtrasState;
   subscribe(listener: () => void): () => void;
   /** Resolves once the extras are on `globalThis`; rejects when they cannot be had. Safe to call again after a failure. */

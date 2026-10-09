@@ -3,8 +3,7 @@
  * walk over the three ways media gets in: a stored file, a web URL as written, and a picture a person adds.
  *
  *   1. A FILE (was gate-pdf): a stored PDF linked by `<File src="ref:…">` is a card in the document a STRANGER is
- *      served; a REAL click opens the file's own address and the download is named by Content-Disposition; the
- *      bytes are sandboxed and nosniff; the card widens no part of the document's policy.
+ *      served; a REAL click opens the file's own address and the download is named by Content-Disposition.
  *   2. WEB URLS (was gate-web-assets): the framed document keeps the URLs as written; a held copy made by the
  *      view-time door is no page in our origin when a browser navigates to it; a named Google family reaches the
  *      heading; the editor's insert-by-URL door; a URL BOUND to a reader's choice imports once, paints from
@@ -16,8 +15,11 @@
  *
  * What left, and where it lives now:
  *   - the PDF's type, Content-Disposition, Accept-Ranges, immutable cache, length and 206 range answers (pdf
- *     152–153, 156–158, 160–169) → services/app/__tests__/pdf-serving.test.ts ("the five headers") and
- *     services/app/server/__tests__/pdf-range.test.ts; the sandbox and nosniff headers stay here verbatim;
+ *     152–153, 156–158, 160–169) → services/app/__tests__/pdf-serving.test.ts ("the five headers", which also holds
+ *     the sandbox and nosniff headers this gate read until row 36) and services/app/server/__tests__/pdf-range.test.ts;
+ *     the stored format and page count → pdf-tier.test.ts ("is stored as its own format… the page count in meta");
+ *     the card widening no part of the document's own-origin policy (the plain document's CSP, ids aside) →
+ *     services/app/__tests__/media.test.ts;
  *   - the export PNG of a document with an uploaded image (image-upload 199–203) → the exports journey gate, which
  *     holds one PNG set for the suite;
  *   - the web-URL facts no browser is needed for: publish fetches, stores and warns about nothing and the stored and
@@ -26,14 +28,14 @@
  *     the held copy's sandbox, attachment, nosniff and immutable headers → assets-route.test.ts ("serves the stored
  *     bytes with all five headers", "leaves every other type as an attachment — the SVG hole stays closed"); a refresh
  *     repointing the held copy → refresh-asset.test.ts ("re-fetches one URL and repoints the row"); the Google font
- *     sheet's import and no /webfonts copy → google-fonts.test.ts;
+ *     sheet's import and no /webfonts copy → google-fonts.test.ts; a BOUND src publishing with no fetch, no warning and
+ *     its binding stored as written → bound-image-publish.test.ts ("publishes the braced form and imports NOTHING");
  *   - a PRIVATE document's asset door (born private, the stranger's uniform 404 for page and JSON, the owner and an
  *     invited viewer admitted, one source fetch, no artifact invented) → doc-assets-route.test.ts; the frame's doors
  *     carrying the pages session of its reader → pages-origin-host.test.ts ("answers its own doors with its reader").
  *
  *   usage: node scripts/gates/gate-media.mjs [base]
  */
-import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
@@ -60,15 +62,6 @@ await section('file', async () => {
 
   const owner = await startDocument(B);
   const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` };
-  const plainRes = await fetch(`${B}/api/artifacts`, {
-    method: 'POST', headers: auth,
-    body: JSON.stringify({ title: 'Plain CSP control', markup: '<p>Plain document</p>', visibility: 'public' }),
-  });
-  if (plainRes.status !== 201) throw new Error(`plain control publish failed: ${plainRes.status}`);
-  const plain = await plainRes.json();
-  /** A document's own origin, where its page and its policy are served (lib/http/pages-origin): `<hex id>.lvh.me`. */
-  const documentOrigin = (id) => `http://${Buffer.from(id, 'utf8').toString('hex')}.${PAGES_HOST}:${new URL(B).port}`;
-  const plainCsp = (await fetch(`${documentOrigin(plain.id)}/`)).headers.get('content-security-policy');
 
   // 1. the file itself
   const fileRes = await fetch(`${B}/api/artifacts`, {
@@ -81,8 +74,6 @@ await section('file', async () => {
     console.error(`could not publish the pdf (${fileRes.status} ${JSON.stringify(file)})`);
     throw new Error('the pdf fixture could not be published');
   }
-  check(file.format === 'pdf', `the file is stored as a pdf (${file.format})`);
-  check(file.pages === 3, `the page count was read from the file (${file.pages})`);
 
   // 2. the document that links it, published PUBLIC so a stranger may read it
   const markup = '<div data-design="tw" className="@container p-10">'
@@ -153,36 +144,6 @@ await section('file', async () => {
     check(true, 'the popup rendered rather than downloading — a viewer is present (headful)');
   }
 
-  /*
-   * The headers as the wire carries them — through the CONTEXT's own request
-   * client, not `fetch` inside the page. The document's CSP is `default-src
-   * 'none'` with a connect-src naming only its own doors, so a fetch from in
-   * there is refused. (Which is itself the design working, and cost this gate
-   * one rewrite.)
-   */
-  const res = await context.request.get(`${B}/a/${file.id}/raw?v=1`);
-  const headers = {
-    status: res.status(),
-    type: res.headers()['content-type'],
-    disposition: res.headers()['content-disposition'],
-    csp: res.headers()['content-security-policy'],
-    nosniff: res.headers()['x-content-type-options'],
-    ranges: res.headers()['accept-ranges'],
-    cache: res.headers()['cache-control'],
-    length: (await res.body()).byteLength,
-  };
-  // The type, Content-Disposition, ranges, cache and length are pdf-serving.test.ts' and pdf-range.test.ts'.
-  check(headers.csp === 'sandbox', `sandboxed, so the response context is opaque (${headers.csp})`);
-  check(headers.nosniff === 'nosniff', 'nosniff holds the browser to the type we sniffed');
-
-  // The document's CSP is UNCHANGED by any of this: a link is navigation, and
-  // nothing here asked for a new connect-src, frame-src or object-src.
-  // Compared on the documents' own origins, where their policy is served (the app page's is the app's).
-  const docCsp = (await context.request.get(`${documentOrigin(owner.id)}/`)).headers()['content-security-policy'];
-  // A File card must not widen that policy or enable a PDF/object embed.
-  check(Boolean(plainCsp) && docCsp === plainCsp.replaceAll(`/a/${plain.id}/`, `/a/${owner.id}/`).replaceAll(documentOrigin(plain.id), documentOrigin(owner.id)),
-    `the document needed no new CSP allowance for the card${docCsp === plainCsp ? '' : ` (${docCsp})`}`);
-
   await context.close();
   console.log('NOTE: headless Chromium has no PDF viewer, so nothing above proves the file RENDERS — that check is headful and by hand.');
 });
@@ -250,8 +211,6 @@ await section('web urls', async () => {
     console.error(`could not publish (${put.status} ${JSON.stringify(wrote)})`);
     throw new Error('the web-assets fixture could not be published');
   }
-  /* `/assets/<sha256 of the canonical url>` is the address a held copy has. */
-  const assetPath = (url) => `/assets/${createHash('sha256').update(new URL(url).href).digest('hex')}`;
 
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   await becomeOwner(page, B, owner.token);
@@ -284,8 +243,9 @@ await section('web urls', async () => {
   };
   const SVG_URL = `${WEB}/logo.svg${RUN}`;
   const svgHeld = await importForReader(SVG_URL);
-  check(svgHeld.status === 200 && /\/assets\/[0-9a-f]{64}/.test(svgHeld.url ?? ''), `the view-time door holds the SVG at /assets (${svgHeld.status} ${svgHeld.url})`);
-  const svgUrl = svgHeld.url ?? `${B}${assetPath(SVG_URL)}`;
+  // The door's 200 and its /assets address are doc-assets-route.test.ts's; here they are the leg's precondition.
+  if (svgHeld.status !== 200 || !/\/assets\/[0-9a-f]{64}/.test(svgHeld.url ?? '')) throw new Error(`the view-time door did not hold the SVG (${svgHeld.status} ${svgHeld.url})`);
+  const svgUrl = svgHeld.url;
   const bare = await browser.newPage();
   let verdict = 'unknown';
   bare.on('download', () => { verdict = 'download'; });
@@ -314,7 +274,7 @@ await section('web urls', async () => {
    * chosen while somebody is reading, so the document's own endpoint imports it
    * on demand. Same feature, same guarantees, the other end of the clock:
    *
-   *  a. publish fetches nothing and the stored markup keeps the BINDING
+   *  a. (publish fetches nothing and the stored markup keeps the BINDING: bound-image-publish.test.ts)
    *  b. the first pick imports once and paints from `/assets/<hash>`
    *  c. coming back to a URL costs neither the endpoint nor the source host
    *  d. a refused URL (the cloud metadata address; a `data:` value) is MARKED
@@ -348,7 +308,6 @@ await section('web urls', async () => {
       + `<option value="${BAD}">bad</option><option value="${DATA_URL}">data</option>`
       + '</select></div>';
 
-    const boundHitsBefore = hits.length;
     const boundPut = await fetch(`${B}/api/artifacts/${bound.id}`, {
       method: 'PUT', headers: boundAuth, body: JSON.stringify({ title: 'bound assets', markup: boundMarkup }),
     });
@@ -357,12 +316,7 @@ await section('web urls', async () => {
       console.error(`could not publish the bound document (${boundPut.status} ${JSON.stringify(boundWrote)})`);
       throw new Error('the bound fixture could not be published');
     }
-    check((boundWrote.warnings ?? []).length === 0,
-      `bound: publish fetched nothing and warned about nothing (${JSON.stringify(boundWrote.warnings ?? [])})`);
-    check(hits.length === boundHitsBefore,
-      `bound: the source host was not asked at publish — publish cannot see a bound URL (${hits.length - boundHitsBefore} requests)`);
-    const boundStored = await (await fetch(`${B}/api/artifacts/${bound.id}`, { headers: boundAuth })).json();
-    check(boundStored.markup.includes('src="$pick"'), 'bound: the stored markup keeps the binding the author wrote');
+    // Publish fetching nothing, warning about nothing and storing the binding as written: bound-image-publish.test.ts.
 
     // A STRANGER: no session, no adopted token. The app page frames the public
     // document on its own origin, read as nobody: the path a shared link gives someone.

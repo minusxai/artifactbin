@@ -14,12 +14,12 @@
  */
 
 /** One SSE block: its `event:` name (`message` when unnamed) and its parsed `data:` payload. */
-export interface SseEvent {
+interface SseEvent {
   event: string;
   data: Record<string, unknown>;
 }
 
-export interface SseStream {
+interface SseStream {
   /** The next `count` events, or fewer if the budget runs out. Never rejects on a slow stream. */
   next(count: number, budgetMs?: number): Promise<SseEvent[]>;
   /** The next `count` payloads, for the tests that only care what the frames said. */

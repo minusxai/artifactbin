@@ -23,7 +23,7 @@ import { assetsPath, mutatePath, queryPath } from './markup-csp';
 import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from '@/lib/story-ui/document-sources';
 import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/document/csp-extensions';
 
-export interface DocumentCspInput {
+interface DocumentCspInput {
   /** The document's own origin (`https://<hex>.<pages host>`). */
   self: string;
   /** The app's origin: the one framer, and where this document's doors also answer. */

@@ -39,7 +39,7 @@ function ThreadFoldControl(props: { folded: boolean; onToggle: () => void }): JS
   </button>;
 }
 
-export interface AnnotationThreadProps {
+interface AnnotationThreadProps {
   artifactId: string;
   backend: ArtifactBackend;
   a: AnnotationWire;

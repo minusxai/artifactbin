@@ -14,7 +14,7 @@ import { getDb } from '@/lib/platform/db';
 import { TABLES } from '@/lib/platform/schema';
 
 /** What an erase removed — what the person was holding at the moment it ran. */
-export interface TestUserErased { erased: boolean; artifacts: number; sessions: number }
+interface TestUserErased { erased: boolean; artifacts: number; sessions: number }
 
 /**
  * The tables an erase sweeps, DERIVED from the declarations rather than typed

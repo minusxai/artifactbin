@@ -9,7 +9,7 @@ export interface SessionWorker {
   close(): Promise<void>;
   onClose?(listener: () => void): void;
 }
-export type SessionWorkerFactory = (actor: Actor) => Promise<SessionWorker>;
+type SessionWorkerFactory = (actor: Actor) => Promise<SessionWorker>;
 interface Session {
   owner: string;
   /** Fixed trusted request binding, independent of credential rotation. */

@@ -10,7 +10,7 @@
  */
 import { framedDocument, useAppHarness, request, setSession } from '@/__tests__/harness';
 import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest';
-import { JSDOM } from 'jsdom';
+import { servedHtml } from '@/test/helpers/served-html';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
@@ -64,7 +64,9 @@ const inlined = (html: string) => {
   const m = new RegExp(`<script type="application/json" id="${BOOTSTRAP_ID}">([\\s\\S]*?)</script>`).exec(html);
   return m ? JSON.parse(m[1]!) : null;
 };
-const compiledData = (html: string) => JSON.parse(new JSDOM(html).window.document.getElementById(ISLAND_DATA_ID)?.textContent ?? '{}') as { results?: { tables: Record<string, { rows: unknown[] }> } };
+const compiledData = (html: string) => servedHtml(html).json<{ results?: { tables: Record<string, { rows: unknown[] }> } }>(ISLAND_DATA_ID) ?? {};
+/** The story root's whole text, as `textContent` reads it. */
+const storyRootText = (html: string) => servedHtml(html).find('*', { 'data-mx-story-root': true })!.text();
 
 beforeEach(() => { asSession(null); resetSpies(); });
 
@@ -86,8 +88,9 @@ const slots = async (id: string) => (await (await harness.db()).query<{ slot: st
 const readPage = async (id: string, search = '') => artifactPage(request(`/api/page/artifact/${id}${search}`), params(id));
 
 describe('the reader payload', () => {
+  const styled = harness.shared(() => world());
   it('carries no source, no document graph and each stylesheet once, already isolated', async () => {
-    const { id } = await world();
+    const { id } = styled();
     const res = await readPage(id);
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -113,7 +116,7 @@ describe('the reader payload', () => {
   });
 
   it('hands the editor its source, graph and raw sheets only on the editor door, and only to a writer', async () => {
-    const { owner, id } = await world();
+    const { owner, id } = styled();
     expect((await readPage(id, '?part=editor')).status).toBe(404);
     asSession(owner);
     const res = await readPage(id, '?part=editor');
@@ -142,9 +145,10 @@ describe('the prepared page store', () => {
     await db.query('UPDATE prepared_pages SET page = $2::jsonb WHERE artifact_id = $1', [id, JSON.stringify(cached)]);
     resetSpies();
     const html = await (await rawRoute(request(`/a/${id}/raw`), params(id))).text();
-    const document = new JSDOM(html).window.document;
-    expect(document.querySelector('#outer > ul > #child > #text')?.textContent).toBe('B');
-    expect(document.querySelector('#outer > ul > #empty > #blank')).not.toBeNull();
+    // The tree the browser's parser builds from the served bytes: the repaired nesting, not the legacy one.
+    const nested = servedHtml(html).byId('outer')?.child('ul');
+    expect(nested?.child('*', { id: 'child' })?.child('*', { id: 'text' })?.text()).toBe('B');
+    expect(nested?.child('*', { id: 'empty' })?.child('*', { id: 'blank' })).not.toBeNull();
     const after = (await getArtifactById(id))!;
     expect(after.version).toBe(original.version);
     expect(after.source).toBe(legacy);
@@ -215,7 +219,7 @@ describe('the prepared page store', () => {
     // The document in the app page's frame, on its own origin.
     const html = await (await framedDocument(app, `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
     expect(compiledData(html).results?.tables.q.rows).toEqual([{ n: 6 }]);
-    expect(new JSDOM(html).window.document.querySelector('[data-mx-story-root]')!.textContent).toContain('Six is 6');
+    expect(storyRootText(html)).toContain('Six is 6');
     // The overlay carries the rows, so its digest is not the stored anonymous render's: one fresh render, nothing else.
     expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
     const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
@@ -262,14 +266,14 @@ describe('the per-viewer overlay', () => {
     const ownHtml = await (await app.request(own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } })).text();
     const ownDoc = await (await framedDocument(app, own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
     expect(ownDoc).toContain('Signed in reader');
-    expect(new JSDOM(ownDoc).window.document.documentElement.hasAttribute('data-mx-signed-in')).toBe(true);
+    expect(servedHtml(ownDoc).html.has('data-mx-signed-in')).toBe(true);
     expect(inlined(ownHtml).artifact.surface.runtime.data.viewer).toEqual({ id: owner.id });
     expect(inlined(ownHtml).artifact.surface.hasInvitedUsers).toBe(false);
     asSession(null);
     resetSpies();
     const html = await (await app.request(own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } })).text();
     const doc = await (await framedDocument(app, own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
-    const story = new JSDOM(doc).window.document.querySelector('[data-mx-story-root]')!.textContent;
+    const story = storyRootText(doc);
     expect(story).toContain('Guest reader');
     expect(story).not.toContain('Signed in reader');
     const anon = inlined(html).artifact;
@@ -301,11 +305,9 @@ describe('the served HTML', () => {
     expect(data.surface.runtime).not.toHaveProperty('css');
     expect(page).not.toContain('& more');
     const html = await (await framedDocument(app, `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
-    const dom = new JSDOM(html);
-    const style = [...dom.window.document.querySelectorAll('style')].find((sheet) => sheet.textContent?.includes('& more'));
-    expect(style?.textContent).toContain('& more');
-    expect(html.split(style!.textContent!.slice(0, 200)).length - 1).toBe(1);
-    dom.window.close();
+    const style = servedHtml(html).findAll('style').find((sheet) => sheet.text().includes('& more'));
+    expect(style?.text()).toContain('& more');
+    expect(html.split(style!.text().slice(0, 200)).length - 1).toBe(1);
   });
 });
 
@@ -402,7 +404,7 @@ describe('the compiled-page failure contract', () => {
   }
   const raw = (id: string, search = '?reader=compiled') => rawRoute(request(`/a/${id}/raw${search}`), params(id));
   const storedBuild = async (id: string) => (await (await harness.db()).query<{ build: string | null }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
-  const storyText = (html: string) => new JSDOM(html).window.document.getElementById('mx-story-root')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  const storyText = (html: string) => servedHtml(html).byId('mx-story-root')?.text().replace(/\s+/g, ' ').trim() ?? '';
 
   describe('a compile from another build', () => {
     it('the stored compile keeps serving without an inline compile', async () => {
@@ -413,7 +415,7 @@ describe('the compiled-page failure contract', () => {
       const res = await raw(id);
       expect(res.status).toBe(200);
       expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
-      expect(new JSDOM(await res.text()).window.document.querySelector('#mx-story-root [role="tablist"]')).toBeTruthy();
+      expect(servedHtml(await res.text()).byId('mx-story-root')?.find('*', { role: 'tablist' })).toBeTruthy();
       expect(warn.mock.calls.some(([line]) => String(line).includes(`${id} v`) && String(line).includes('compiled inline'))).toBe(false);
       expect(await storedBuild(id)).toBe('0000000000000000');
       warn.mockRestore();

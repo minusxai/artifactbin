@@ -7,6 +7,8 @@ import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { GET as editSheet, POST as preview } from '@/app/a/[id]/draft-preview/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { documentPublicationBody } from './prepared-document';
+import { renderDraftPreview } from '@/lib/story/prepared/draft-preview.server';
+import { compiledDocument } from '@/lib/compiled-page/__tests__/document-helper';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
@@ -129,6 +131,10 @@ describe('the editor draft preview door', () => {
     const body = { editId: row.edit_id, source: '<div id="root"><p id="copy">Unsaved</p></div>' };
     const guest = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', json: body }), params(id));
     expect(guest.status).toBe(404);
+    // Incomplete source is refused rather than replacing the visible draft with an empty page.
+    const unfinished = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: { ...body, source: '<div><p>unfinished' } }), params(id));
+    expect(unfinished.status).toBe(422);
+    expect(await unfinished.json()).toMatchObject({ error: 'invalid_draft' });
     // A save can land between the editor's draft and its preview: the draft still renders.
     const stale = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: { ...body, editId: 'stale' } }), params(id));
     expect(stale.status).toBe(200);
@@ -138,6 +144,34 @@ describe('the editor draft preview door', () => {
     expect(document.querySelector('#copy')?.textContent).toBe('Unsaved');
     expect(document.querySelector('#copy')?.getAttribute('data-mx-ast')).toBe('0.0');
     expect((await getArtifactById(id))?.source).toContain('Published');
+  });
+});
+
+// Merged from lib/story/__tests__/draft-preview.test.ts: the draft render itself, against the reader's.
+describe('the compiled draft render', () => {
+  it('renders the same compiled story and AST anchors as the reader', async () => {
+    const input = {
+      source: '<div id="root"><h1 id="heading">Draft</h1><p id="copy">Editable prose</p></div>',
+      title: 'Draft',
+      theme: 'volta' as const,
+      template: null,
+      colorMode: 'light' as const,
+      compiledCss: '.sample { color: var(--primary); }',
+      refData: {},
+    };
+    const [preview, reader] = await Promise.all([renderDraftPreview(input), compiledDocument(input)]);
+    const parse = (html: string) => new JSDOM(html).window.document;
+    const draft = parse(preview), saved = parse(reader);
+    const previewStory = draft.querySelector('[data-mx-inline-story]');
+    expect(previewStory?.outerHTML).toBe(saved.querySelector('[data-mx-inline-story]')?.outerHTML);
+    expect(previewStory?.querySelector('#copy')?.getAttribute('data-mx-ast')).toBe('0.1');
+    expect(draft.documentElement.getAttribute('data-theme')).toBe('volta');
+    expect(draft.querySelector('style[data-mx-story-css]')).toBeNull();
+    for (const attr of ['data-mx-tw', 'data-mx-fonts', 'data-mx-system']) {
+      expect(draft.querySelector(`style[${attr}]`)).not.toBeNull();
+      expect(draft.querySelector(`style[${attr}]`)?.textContent).toBe(saved.querySelector(`style[${attr}]`)?.textContent);
+    }
+    expect(preview).not.toContain('story-ssr.cjs');
   });
 });
 

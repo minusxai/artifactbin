@@ -7,7 +7,7 @@ export { mintTestToken, testDb } from '@artifactbin/test-support/db';
 export { PAGE_HEADERS } from '@artifactbin/test-support/browser';
 
 /** Both sides' tables, idempotent — safe to call before anything exists. */
-export async function ensureTestSchema(): Promise<void> {
+async function ensureTestSchema(): Promise<void> {
   const { pg, query } = testDb();
   await pg().exec('CREATE SCHEMA IF NOT EXISTS auth');
   await ensureTokensTable();

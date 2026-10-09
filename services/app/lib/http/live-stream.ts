@@ -41,7 +41,7 @@ export interface LiveStreamHost {
   document?: { visibilityState?: string; addEventListener(type: string, listener: () => void): void; removeEventListener(type: string, listener: () => void): void };
 }
 
-export interface LiveStreamOptions {
+interface LiveStreamOptions {
   url: string;
   /** The default (unnamed) `message` frame's data. */
   onMessage?: (data: string) => void;
@@ -55,7 +55,7 @@ export interface LiveStreamOptions {
   random?: () => number;
 }
 
-export interface LiveStream {
+interface LiveStream {
   close(): void;
 }
 

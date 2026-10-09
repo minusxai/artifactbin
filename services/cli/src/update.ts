@@ -10,7 +10,7 @@ interface UpdateOptions {
  home:string;cwd?:string;takeover?:boolean;server:string;env?:NodeJS.ProcessEnv;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;npm?:NpmRunner;
  chooseHarnesses?:()=>Promise<SkillHarness[]>;report?:(event:UpdateProgress)=>void;platform?:string;
 }
-export type UpdateResult=
+type UpdateResult=
  |{dry_run:true;current:string;target:string;command:string}
  |{version:string;current:string;installed:GlobalInstallResult;installations:SkillInstallation[];harnesses:SkillHarness[]};
 const POINTER_TIMEOUT_MS=10_000;

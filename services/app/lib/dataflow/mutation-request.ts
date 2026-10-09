@@ -86,7 +86,7 @@ export function parseMutationRequest(body: Record<string, unknown>): MutationReq
   return out;
 }
 
-export type MutationBinding =
+type MutationBinding =
   | { ok: true; params: Record<string, Scalar>; paramTypes: Record<string, ColumnType>; bindings: MutationNotificationBindings }
   | { ok: false; reason: 'invalid_sql' | 'invalid_row'; detail: string };
 

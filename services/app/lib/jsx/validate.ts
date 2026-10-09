@@ -179,7 +179,7 @@ const SVG_TAGS: ReadonlySet<string> = new Set(STORY_SVG_TAGS.map((t) => t.toLowe
  * What a `<For>` inside `<svg>` would draw that is not SVG. The interpreter
  * wraps those rows in a `<g>`, so they parse back as written only while they
  * are SVG too: an HTML tag — or a component, which renders HTML — breaks out
- * of the drawing and fails hydration (lib/story/document/nesting.ts). Conditions and
+ * of the drawing and fails hydration (lib/document/nesting.ts). Conditions and
  * fragments render their children in place, so the search looks through them.
  */
 function nonSvgTemplateElements(nodes: JsxNode[]): JsxElement[] {
@@ -198,7 +198,7 @@ function validateElement(
 ): void {
   const lower = el.isComponent ? '' : el.tag.toLowerCase();
   /*
-   * Document-level tags have ONE home: `<Helmet>` (lib/story/document/helmet.ts). In the
+   * Document-level tags have ONE home: `<Helmet>` (lib/document/helmet.ts). In the
    * body they are not a second opinion, they are a second door —
    *
    *  - `<title>`: the HTML parser processes a body `<title>` under the in-head

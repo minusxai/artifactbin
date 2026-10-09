@@ -17,7 +17,7 @@
 import { MERMAID_TEXT_RENDERING, planFontFiles, type FontFile } from '@/lib/mermaid-images/svg-text';
 
 /** A face the page declares: its family, file, weight (or range) and range of characters. */
-export interface PageFontFace extends FontFile { family: string }
+interface PageFontFace extends FontFile { family: string }
 
 const unquote = (value: string) => value.trim().replace(/^["']|["']$/g, '');
 

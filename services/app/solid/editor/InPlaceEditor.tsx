@@ -153,7 +153,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const runtimeRef = props.runtimeRef;
   /**
    * The title someone TYPED (null until they do, when the document has none): what the field saves. The field
-   * shows what the reader's breadcrumb shows (lib/story/document/title `displayTitle`) — the typed title, else the
+   * shows what the reader's breadcrumb shows (lib/document/title `displayTitle`) — the typed title, else the
    * document's first heading, following it as it is edited — so edit mode names the document as reading did.
    */
   const [title, setTitle] = createSignal<string | null>(art.title?.trim() ? art.title : null);
@@ -277,7 +277,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
 
   let imageDoors: { dropped: (file: File, where?: ImageDropPlacement) => void; pick: (bodyPath: string) => void } | null = null;
   /**
-   * Where a mount badge's "Edit script" asked the source editor to open (lib/story/document/script-export-location):
+   * Where a mount badge's "Edit script" asked the source editor to open (lib/document/script-export-location):
    * read once when the code pane mounts, and revealed when it is already open. A fresh object per ask.
    */
   const [scriptAt, setScriptAt] = createSignal<{ start: number; end: number } | null>(null);

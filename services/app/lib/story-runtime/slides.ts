@@ -16,7 +16,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 /** A deck is two or more slides; one slide is a document with a header. */
 export const MIN_SLIDES_FOR_RAIL = 2;
 
-export interface DiscoveredSlide {
+interface DiscoveredSlide {
   /** Zero-based position in document order. */
   index: number;
   /** Rail/counter label (authored title ▸ first heading ▸ "Slide N"). */

@@ -283,7 +283,7 @@ describe('the markup skill', () => {
    *
    * "Social preview: upload and crop" pointed at publishing-versions.md, which
    * says nothing about either — while the real path is three `<meta>` tags in
-   * `<Helmet>` (lib/story/assets/social-preview reads them out of the document
+   * `<Helmet>` (lib/document/social-preview reads them out of the document
    * source), documented nowhere. A pointer to a doc that does not answer costs
    * the turns of reading it and still leaves the agent without the mechanism.
    *

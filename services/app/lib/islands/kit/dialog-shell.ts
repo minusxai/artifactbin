@@ -11,7 +11,7 @@ import { onCleanup, onMount } from 'solid-js';
  * Call it inside the dialog's own owner (the component, or a `<Show>` callback child) so it lives
  * exactly as long as the dialog is on screen. Placement (portal, backdrop, z-index) stays the caller's.
  */
-export interface DialogShellOptions {
+interface DialogShellOptions {
   panel: () => HTMLElement | undefined;
   /** Escape; the caller decides whether it may close now (a busy dialog ignores it). */
   onClose: () => void;

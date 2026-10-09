@@ -32,12 +32,12 @@ import type { IslandContext, IslandPageData, IslandViewer } from './contract';
 import type { ViewerOverlay } from '@/lib/story-runtime/contract';
 
 /** What boot hands the overlay: the runtime's viewer setter (an `overlay` IslandEvent follows each change). */
-export interface ViewerSeam {
+interface ViewerSeam {
   setViewer(viewer: IslandViewer): void;
 }
 
 /** The overlay's outside world; tests pass their own. */
-export interface ViewerOverlayEnv {
+interface ViewerOverlayEnv {
   fetch(url: string, init: RequestInit): Promise<Pick<Response, 'ok' | 'status' | 'json'>>;
   setTimeout(fn: () => void, ms: number): unknown;
 }
@@ -70,7 +70,7 @@ export function wantsViewerOverlay(data: IslandPageData, flow: CompiledDataflow 
 }
 
 /** The overlay URL at these values: the page's `$` params, as the route reads them (lib/dataflow/url-values). */
-export function viewerOverlayUrl(viewerUrl: string, flow: CompiledDataflow | null, values: Record<string, Scalar>): string {
+function viewerOverlayUrl(viewerUrl: string, flow: CompiledDataflow | null, values: Record<string, Scalar>): string {
   const at = viewerUrl.indexOf('?');
   const path = at < 0 ? viewerUrl : viewerUrl.slice(0, at);
   const search = at < 0 ? '' : viewerUrl.slice(at);

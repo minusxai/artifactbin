@@ -5,12 +5,17 @@ import {GET as readRun} from '@/app/api/runs/[id]/route';
 import {GET as readEvents} from '@/app/api/runs/[id]/events/route';
 import {POST as cancelRun} from '@/app/api/runs/[id]/cancel/route';
 import {afterEach,expect,it} from 'vitest';
-import {attachActor} from '@artifactbin/utils';
+import {actorOf,attachActor} from '@artifactbin/utils';
 import {useAppHarness,request} from './harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as publish} from '@/app/api/artifacts/route';
-import {invokeArtifact,runRequest,setLambdaProgramResolver,runnerOperation,startLambdaSchedules,artifactSchedule,deleteSchedule} from '@/lib/runner';
+import {invokeArtifact,runRequest,setLambdaProgramResolver,runnerOperation,startLambdaSchedules,artifactSchedule,scheduleRequest} from '@/lib/runner';
+/** DELETE one schedule as the request's actor. */
+function deleteSchedule(request:Request,id:string) {
+ const forwarded=new Request(request.url,{method:'DELETE',headers:request.headers});const actor=actorOf(request);
+ return scheduleRequest(actor?attachActor(forwarded,actor):forwarded,id);
+}
 import {getArtifactById} from '@/lib/artifacts';
 import {setServices} from '@/lib/platform/services';
 import {createRunner} from '@artifactbin/runner/local';

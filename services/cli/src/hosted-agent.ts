@@ -13,7 +13,7 @@ import {relocatePinnedOpenCodeSession} from './hosted-opencode';
 const execute=promisify(execFile);
 const openCodeId=/^ses_[a-zA-Z0-9]+$/;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-export interface HostedAgentPaths {cwd?:string;stateDirectory?:string}
+interface HostedAgentPaths {cwd?:string;stateDirectory?:string}
 async function transcripts(directory:string):Promise<string[]>{
  try{const entries=await readdir(directory,{withFileTypes:true});return (await Promise.all(entries.map(entry=>entry.isDirectory()?transcripts(join(directory,entry.name)):entry.isFile()&&entry.name.endsWith('.jsonl')?[join(directory,entry.name)]:[]))).flat();}
  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return [];throw error;}

@@ -23,7 +23,7 @@ import { inProcess, overHttp } from '@artifactbin/utils';
 import { BROWSER_FONT_RESOURCE_PATH, type Upstream } from '@artifactbin/contracts';
 import type { Hono } from 'hono';
 
-export interface SessionBridgeOptions {
+interface SessionBridgeOptions {
   /** `NODE_ENV !== 'production'`; the loopback hop is development-only. */
   dev: boolean;
   /** The port THIS process listens on — the socket Vite's middleware is in front of. */

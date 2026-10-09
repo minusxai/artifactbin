@@ -25,7 +25,7 @@ function cliVersionAt(rev) {
  * clone) reads as a release, because building bytes nobody publishes costs minutes while skipping
  * bytes the publisher then cannot find costs a release.
  */
-export function cliVersionChanged(env) {
+function cliVersionChanged(env) {
   let base = env.CI__EVENT === 'pull_request' ? env.CI__BASE_SHA : env.CI__EVENT === 'push' ? env.CI__BEFORE_SHA : '';
   if (!base && env.CI__EVENT === 'workflow_dispatch') {
     try { base = execFileSync('git', ['merge-base', 'origin/main', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { base = ''; }

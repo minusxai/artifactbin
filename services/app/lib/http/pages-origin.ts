@@ -108,7 +108,7 @@ export function pagesSessionUrl(site: PagesSite, next: string, ticket: string | 
 }
 
 /** A request server/pages-host routed to a document on its own origin: which document, at which origin. */
-export interface PagesRequest {
+interface PagesRequest {
   id: string;
   /** The document's origin, `pagesOriginFor(id, site)`. */
   self: string;

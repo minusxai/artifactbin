@@ -12,7 +12,7 @@ import { TRUSTED_LAYER_ATTR } from './trusted-portal';
 export type TrustedLayer = 'selection' | 'discussion' | 'navigation' | 'modal';
 const PRIORITY: Record<TrustedLayer, number> = { selection: 0, discussion: 1, navigation: 2, modal: 4 };
 
-export interface TrustedOverlayHost {
+interface TrustedOverlayHost {
   host: HTMLElement;
   content: HTMLElement;
   portal: HTMLElement;

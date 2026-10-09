@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 
 const ts = createRequire(import.meta.url)('typescript');
 
-export const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'pkg/cli', 'scripts', 'server'];
+const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'pkg/cli', 'scripts', 'server'];
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
 const PACKAGES = ['auth', 'browser', 'cli', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
 const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
@@ -85,7 +85,7 @@ const isHarness = file => file.startsWith('scripts/fixtures/') || file.startsWit
   || (/\/(test|fixtures)\//.test(file) && !file.startsWith('services/test-support/'));
 
 /** Non-test source files the graph is drawn from: tracked and untracked-but-not-ignored. */
-export function listSourceFiles(root) {
+function listSourceFiles(root) {
   const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'services', 'scripts', 'server.ts'], { cwd: root, maxBuffer: 1 << 28 }).toString();
   return [...new Set(out.split('\n'))].filter(file => /\.(ts|tsx|mjs|js)$/.test(file) && !/\.d\.ts$/.test(file)
     && !/(^|\/)(node_modules|dist|generated)\//.test(file) && !isTest(file) && !isHarness(file)
@@ -93,7 +93,7 @@ export function listSourceFiles(root) {
 }
 
 /** Scanner: every import specifier in each file, as `{ file, specifier }`. */
-export function scanImports(root, files) {
+function scanImports(root, files) {
   const found = [];
   for (const file of files) {
     const text = fs.readFileSync(path.join(root, file), 'utf8');
@@ -127,7 +127,7 @@ function importPath(fromFile, specifier) {
 }
 
 /** The module an import resolves to (path-based; the target need not exist), or null for npm/builtins. */
-export function resolveImport(fromFile, specifier) {
+function resolveImport(fromFile, specifier) {
   const base = importPath(fromFile, specifier);
   return base === null ? null : moduleOf(`${base}/index.ts`);
 }
@@ -170,7 +170,7 @@ function cliToolkitViolations(graph, entries) {
 }
 
 /** Graph: Map<from, Map<to, [{ file, specifier }]>> over cross-module imports. */
-export function buildModuleGraph(imports) {
+function buildModuleGraph(imports) {
   const graph = new Map();
   for (const { file, specifier } of imports) {
     const from = moduleOf(file);
@@ -189,7 +189,7 @@ export function buildModuleGraph(imports) {
 export const scanModuleGraph = root => buildModuleGraph(scanImports(root, listSourceFiles(root)));
 
 /** Strongly connected components with more than one module (Tarjan), each sorted. */
-export function cyclesOf(graph) {
+function cyclesOf(graph) {
   let next = 0; const index = new Map(), low = new Map(), stack = [], onStack = new Set(), cycles = [];
   const connect = v => {
     index.set(v, next); low.set(v, next++); stack.push(v); onStack.add(v);

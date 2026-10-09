@@ -26,7 +26,7 @@ interface Box3 {
 
 /** The slice of the bundle the viewer touches, typed structurally: `three`
  * ships no types here, and the viewer needs a dozen members, not the API. */
-export interface ThreeBundle {
+interface ThreeBundle {
   WebGLRenderer: new (options: { canvas: HTMLCanvasElement; antialias?: boolean; alpha?: boolean }) => {
     setPixelRatio(ratio: number): void;
     setSize(width: number, height: number, updateStyle?: boolean): void;

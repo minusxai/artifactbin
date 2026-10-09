@@ -64,7 +64,7 @@ export function createModuleStore(objects: ObjectStore = objectStore()): ModuleS
 }
 
 /** The speculation-rule files the assembler names in `Speculation-Rules` (`/islands/s/<sha>.json`). */
-export interface SpeculationRulesStore {
+interface SpeculationRulesStore {
   /**
    * Write the rule file for these link hints (idempotent); null when there
    * are none. The sha is `speculationRulesOf`'s, so it is the one the

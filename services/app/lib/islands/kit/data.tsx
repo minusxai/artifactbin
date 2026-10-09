@@ -246,7 +246,7 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
   </div></Show>;
 }
 
-export interface QuestionProps { data: unknown; viz?: Record<string, unknown>; title?: string; height?: number | string; id?: string; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule>; refData?: RefDataMap; recipeData?: unknown; inGridItem?: boolean; className?: string; [key: `data-${string}`]: unknown }
+interface QuestionProps { data: unknown; viz?: Record<string, unknown>; title?: string; height?: number | string; id?: string; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule>; refData?: RefDataMap; recipeData?: unknown; inGridItem?: boolean; className?: string; [key: `data-${string}`]: unknown }
 
 const fmt = (v: unknown): string => typeof v === 'number' ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(v) : String(v ?? '');
 /** The `aria-label` Vega gives its container: the spec's description, or vega-parser's default. */

@@ -58,7 +58,7 @@ export async function withHttpServer(handler: RequestListener): Promise<RunningS
 }
 
 /** One request on a raw socket, the body kept as the bytes written — for content-length and range assertions. */
-export interface RawResponse {
+interface RawResponse {
   status: number;
   headers: http.IncomingHttpHeaders;
   /** The bytes as written, never decoded or re-encoded. */

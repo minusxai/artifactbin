@@ -174,7 +174,7 @@ export function healthRefusal(port) {
 }
 
 /** The child's environment: the dev home, skills off, and no production credential carried in. */
-export function afbinChildEnv(env, port, home) {
+function afbinChildEnv(env, port, home) {
   const child = { ...env, ARTIFACTBIN_HOME: devHome(port, home), ARTIFACTBIN_SKILLS: 'off' };
   for (const name of ['ARTIFACTBIN_URL', 'ARTIFACTBIN_TOKEN', 'ARTIFACTBIN_REFRESH_TOKEN', 'ARTIFACTBIN_CLIENT_ID', 'ARTIFACTBIN_EXPIRES_AT']) delete child[name];
   return child;

@@ -1,7 +1,7 @@
 /** The portable copy used after a refused save. */
 import { stringify } from 'yaml';
 
-export interface DraftMetadata {title:string|null;theme:string|null;template:string|null;colorMode:string|null}
+interface DraftMetadata {title:string|null;theme:string|null;template:string|null;colorMode:string|null}
 
 /**
  * Preserve the current editable source and presentation metadata in a portable JSX document.

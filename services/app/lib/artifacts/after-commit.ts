@@ -19,10 +19,10 @@
 import type { ArtifactRow } from './access';
 
 /** What changed at the head beyond its content: `renderingChanged`, its stored rendering (diagrams drawn after it was prepared). */
-export interface HeadChange { renderingChanged?: boolean }
+interface HeadChange { renderingChanged?: boolean }
 /** `row`: the head as the emitter already read and decoded it, when it has it, so a listener need not read it again. */
-export type HeadCommittedListener = (id: string, row?: ArtifactRow, change?: HeadChange) => void;
-export type DatasetCommittedListener = (id: string) => void;
+type HeadCommittedListener = (id: string, row?: ArtifactRow, change?: HeadChange) => void;
+type DatasetCommittedListener = (id: string) => void;
 
 const headListeners = new Set<HeadCommittedListener>();
 const datasetListeners = new Set<DatasetCommittedListener>();

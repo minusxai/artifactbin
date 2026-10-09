@@ -44,7 +44,7 @@ ${preview.css}
 </style><div class="card" data-design-specimen="${spec.slug}"><div class="cover">${preview.svg}</div><div class="footer"><div class="mood">${escapeHtml(preview.mood)}</div><div class="name">${escapeHtml(spec.name)}</div></div></div></html>` };
 }
 
-export async function generatePreviews(slugs = ROSTER) {
+async function generatePreviews(slugs = ROSTER) {
   for (const slug of slugs) if (!ROSTER.includes(slug)) throw new Error(`Unknown design system: ${slug}`);
   mkdirSync(OUT, { recursive: true });
   mkdirSync(CACHE, { recursive: true });

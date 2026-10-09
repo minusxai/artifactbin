@@ -5,7 +5,7 @@
  * A busy directory or taken port is an ordinary operating condition, not a defect. Translate each only
  * at the startup boundary that knows what owns it; everything else keeps its stack as evidence.
  */
-export const OPERATOR_ERROR_NAME='OperatorError';
+const OPERATOR_ERROR_NAME='OperatorError';
 export class OperatorError extends Error{constructor(message:string){super(message);this.name=OPERATOR_ERROR_NAME;}}
 /**
  * `started` flips once the listener is open. After that the translation is OFF: both conditions it
@@ -13,7 +13,7 @@ export class OperatorError extends Error{constructor(message:string){super(messa
  * `workspace_busy` is something else entirely and "choose another with --port" would misdirect. A
  * running server that fails is a bug, and the stack is the evidence.
  */
-export interface StartupContext {directory:string;port:number;started?:boolean}
+interface StartupContext {directory:string;port:number;started?:boolean}
 export function startupPortFailure(error:unknown,port:number):unknown{
  const code=(error as NodeJS.ErrnoException|null)?.code;
  if(code==='EADDRINUSE')return new OperatorError(`Port ${port} is already in use; choose another with --port.`);

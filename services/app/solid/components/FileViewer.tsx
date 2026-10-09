@@ -14,7 +14,7 @@ import { Box, Download, File as FileIcon, FileArchive, FileSpreadsheet } from 'l
 import ModelPreview from './ModelPreview';
 import { formatFileSize } from '@/lib/islands/file-display';
 
-export type FileKind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'font' | 'model' | 'other';
+type FileKind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'font' | 'model' | 'other';
 const KIND_BY_EXTENSION: Record<string, FileKind> = {
   png: 'image', jpg: 'image', jpeg: 'image', webp: 'image', gif: 'image', svg: 'image', avif: 'image',
   pdf: 'pdf', mp4: 'video', webm: 'video', mov: 'video',
@@ -54,7 +54,7 @@ async function headText(source: Blob | string, limit: number): Promise<string> {
 }
 const bytesOf = async (source: Blob | string) => typeof source === 'string' ? (await fetch(source)).arrayBuffer() : source.arrayBuffer();
 
-export interface FileViewerProps {
+interface FileViewerProps {
   /** The file's name: its extension picks the viewer. */
   name: string;
   size: number;

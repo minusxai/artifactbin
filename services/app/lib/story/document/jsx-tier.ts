@@ -13,7 +13,7 @@
  *
  * The validation chain:
  * component allowlist + STORY_HTML_TAGS + `no-inline-style` style policy, then
- * the banned-css sanitizer as belt, then the compile.
+ * the compile.
  */
 import { validateMarkupStructure } from '../../document/local-validation';
 import { repairJsxSource } from '@/lib/jsx/repair';
@@ -43,7 +43,7 @@ export const JSX_TIER_COMPONENTS = JSX_STORY_COMPONENT_NAMES;
 
 const COLOR_MODES = ['light', 'dark'] as const;
 
-export interface PreparedMarkup {
+interface PreparedMarkup {
   content: StoredContent;
 }
 

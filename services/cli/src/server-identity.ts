@@ -49,7 +49,7 @@ const UNVERIFIED_TTL_MS = 10 * 60 * 1000;
 
 interface CachedIdentity {canonical: string; aliases: string[]; checkedAt: number}
 
-export interface IdentityOptions {
+interface IdentityOptions {
   home: string;
   env?: NodeJS.ProcessEnv;
   fetch?: typeof fetch;

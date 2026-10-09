@@ -40,7 +40,3 @@ export const STORY_TEMPLATES: StoryTemplate[] = STORY_TEMPLATE_NAMES.map((name) 
   return { name, ...entry };
 });
 
-/** Registry lookup by template name; undefined for unknown/absent names. */
-export function getStoryTemplate(name: string | null | undefined): StoryTemplate | undefined {
-  return STORY_TEMPLATES.find((t) => t.name === name);
-}

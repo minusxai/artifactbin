@@ -9,7 +9,7 @@
 import { parseJsx } from '@/lib/jsx/parse';
 import { splitHelmet } from './helmet';
 
-export interface ScriptExportLocation { offset: number; line: number }
+interface ScriptExportLocation { offset: number; line: number }
 
 export function scriptExportLocation(source: string, component: string): ScriptExportLocation | null {
   if (!/^[A-Za-z_$][\w$]*$/.test(component)) return null;

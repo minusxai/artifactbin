@@ -12,7 +12,7 @@ import {credentialPaths,credentialOrigin,readCredentials,saveCredentials,observe
 /** Where afbin talks when nothing selects a server (spelled once, in contracts). */
 export const DEFAULT_SERVER = CONTRACT_DEFAULT_SERVER;
 /** Client-only defaults. Reading or changing these never starts a server. */
-export interface ClientDefaults { host?: string; output?: "text" | "json"; updates?: boolean }
+interface ClientDefaults { host?: string; output?: "text" | "json"; updates?: boolean }
 
 export interface Connection {
   server: string;

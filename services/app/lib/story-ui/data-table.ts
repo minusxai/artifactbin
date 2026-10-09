@@ -23,7 +23,7 @@ import type { Row } from '@/lib/dataflow/dataflow';
 type SortDir = 'asc' | 'desc';
 export interface SortSpec { col: string; dir: SortDir }
 
-export interface DataTableColumnSpec {
+interface DataTableColumnSpec {
   col: string;
   title?: string;
   /** d3-format specifier (numbers only; a non-number renders as text). */
@@ -49,7 +49,7 @@ export interface DataTableColumnSpec {
 }
 
 /** A column as the table will render it — the spec resolved against the table's real columns. */
-export interface ResolvedColumn extends DataTableColumnSpec {
+interface ResolvedColumn extends DataTableColumnSpec {
   type: DatasetColumn['type'];
   title: string;
   align: 'left' | 'right' | 'center';

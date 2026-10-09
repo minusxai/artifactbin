@@ -40,7 +40,7 @@ const bareName = (ref: string): string => (typeof ref === 'string' && ref.starts
  *  - `ready(name)`: a Query's next settled rows;
  *  - `mutation(name)`: a Mutation's async function (undefined for an undeclared name).
  */
-export interface PublicPage {
+interface PublicPage {
   get(name: string): Scalar | Row[] | undefined;
   set(name: string, value: Scalar): void;
   ready(name: string): Promise<Row[]>;

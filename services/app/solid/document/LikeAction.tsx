@@ -5,7 +5,7 @@ import { loginHref } from '@/lib/http/login-href';
 import { Tooltip } from '../components/Tooltip';
 import { sendReaction } from './reactions';
 
-export interface LikeActionProps {
+interface LikeActionProps {
   id: string; accountSession: boolean; initial: { liked: boolean; count: number };
   onChange?: (state: { liked: boolean; count: number }) => void;
   navigate?: (href: string) => void;
