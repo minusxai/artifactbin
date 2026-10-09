@@ -1,17 +1,18 @@
 /**
  * THE `<DeckGL>` CONTRACT — what a document may say to the map engine, in
  * deck.gl's own JSON dialect (`@@type`, `@@=` accessors) because agents already
- * write it. One module, no deck.gl import: publish validation (lib/jsx/validate,
+ * write it. One module in lib/jsx, no deck.gl import: publish validation (./validate,
  * which `afbin validate` also runs offline), the column checks
- * (lib/story/data/data-checks) and the renderer all
- * read it, so what publish accepts is exactly what the engine builds.
+ * (lib/story/data/data-checks) and the renderer (lib/viz/deck-engine-core) all
+ * read it, so what publish accepts is exactly what the engine builds. Boundary
+ * ids are the static list in ./boundary-ids; their geometry stays in lib/viz.
  *
  * Props are ALLOWLISTED per layer, never denylisted: deck.gl fetches any URL it
  * is handed (`data`, `image`, `mesh`, `loadOptions`…), so an unknown prop is
  * refused rather than passed through. Accessors are parsed into a small tree and
  * interpreted — never `eval`, never a property walk off the row object.
  */
-import { BOUNDARY_IDS, isBoundary } from './geo-assets';
+import { BOUNDARY_IDS, isBoundary } from './boundary-ids';
 
 type Rgb = readonly [number, number, number];
 /** Theme colours the engine resolves from the document; the accessor colour functions draw from them. */

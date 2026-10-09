@@ -1,6 +1,6 @@
 /**
  * THE `<DeckGL>` ENGINE'S FRAMEWORK-FREE HALF: everything the map draws that is not a view. Every layer
- * is built from the lib/viz/deck-spec contract (allowlisted types and props, interpreted accessors),
+ * is built from the lib/jsx/deck-spec contract (allowlisted types and props, interpreted accessors),
  * never from the authored JSON directly. The compiled page's Solid island (lib/islands/kit/embed) draws it,
  * so a map is the same map on every reader.
  *
@@ -10,7 +10,7 @@ import { WebMercatorViewport, type MapViewState, type PickingInfo } from '@deck.
 import { ScatterplotLayer, ArcLayer, GeoJsonLayer, ColumnLayer, PolygonLayer } from '@deck.gl/layers';
 import { HexagonLayer, HeatmapLayer, GridLayer } from '@deck.gl/aggregation-layers';
 import { cellToBoundary, cellToLatLng, isValidCell } from 'h3-js';
-import { colorScales, compileAccessor, layerBoundary, GEOMETRY_COLUMN, DECK_LAYERS, type ColorScale, type DeckPalette } from '@/lib/viz/deck-spec';
+import { colorScales, compileAccessor, layerBoundary, GEOMETRY_COLUMN, DECK_LAYERS, type ColorScale, type DeckPalette } from '@/lib/jsx/deck-spec';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 
 export type Row = Record<string, unknown>;

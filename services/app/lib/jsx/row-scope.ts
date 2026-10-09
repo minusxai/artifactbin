@@ -1,6 +1,10 @@
-/** Pure grammar and substitution for DataTable's invocation-local row scope. */
-import type { JsxNode } from '@/lib/jsx';
-import {reactiveNames} from '@/lib/jsx/reactive';
+/**
+ * Pure grammar and substitution for DataTable's invocation-local row scope (`$_row.f`).
+ * It lives in lib/jsx because the static validator checks row references with it; the
+ * dataflow compiler, the page compiler and the reader kit read the same grammar.
+ */
+import type { JsxNode } from './types';
+import {reactiveNames} from './reactive';
 
 const ROW_REF = /^\$_row\.([A-Za-z_]\w*)$/;
 const ROW_TEMPLATE = /\{\s*\$_row\.([A-Za-z_]\w*)\s*\}/g;

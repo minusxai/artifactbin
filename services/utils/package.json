@@ -14,7 +14,8 @@
     "./dataset-policy": "./src/dataset-policy.ts",
     "./artifact-reference": "./src/artifact-reference.ts",
     "./account-resource": "./src/account-resource.ts",
-    "./escape": "./src/escape.ts"
+    "./escape": "./src/escape.ts",
+    "./sha256": "./src/sha256.ts"
   },
   "files": [
     "src"

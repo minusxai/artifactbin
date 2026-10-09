@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import mermaid from 'mermaid';
-import { MERMAID_DIAGRAMS, mermaidDiagramKind } from '@/lib/story-ui/mermaid-source';
+import { MERMAID_DIAGRAMS, mermaidDiagramKind } from '../mermaid-source';
 
 const cases: Array<[string, string]> = [
     ['flowchart TD\n  a --> b', 'flowchart'],

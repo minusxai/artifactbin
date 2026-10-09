@@ -25,7 +25,7 @@ import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
 import type { Dataflow } from '@/lib/story/data/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');

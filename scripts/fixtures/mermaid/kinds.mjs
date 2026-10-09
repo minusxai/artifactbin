@@ -1,6 +1,6 @@
 /**
  * One small diagram of every kind Mermaid 12 draws through the kit
- * (lib/story-ui/mermaid-source MERMAID_DIAGRAMS), for the prerender fidelity
+ * (lib/jsx/mermaid-source MERMAID_DIAGRAMS), for the prerender fidelity
  * gate (scripts/gates/gate-mermaid-prerender.mjs), which draws one kind per
  * class from here. `stored` says whether the harvest keeps a drawing of it, and
  * when it does not, why — the gate fails when a sampled kind is stored that

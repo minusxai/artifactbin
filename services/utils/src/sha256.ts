@@ -1,21 +1,18 @@
 /**
- * SHA-256 over a UTF-8 string, hex, SYNCHRONOUS and dependency-free — the one
- * hash that has to run in BOTH realms.
+ * The browser-safe synchronous hash: SHA-256 over a UTF-8 string, hex, with no
+ * dependency, so the same function runs in the browser, the server and the CLI.
  *
- * Every other hash in this app is `node:crypto` (tokens, object keys, the
- * export key) because every other hash is server-only. The URL-kept asset
- * address is not: `assetUrlFor` maps `<img src="https://…">` to
- * `/assets/<sha256 of the canonical url>`, and that mapping is applied by
- * `lib/story/document/update-parts.ts`, which `solid/editor/InPlaceEditor.tsx` imports —
- * so it lands in the SPA bundle. A `crypto` import there is the same class of
- * failure as the `process.env` read that once killed the whole SPA
- * (`process is not defined`); Web Crypto is asynchronous, and the mapping is a
- * pure synchronous tree pass. Hence this: forty lines of FIPS 180-4, pinned
- * against `node:crypto` by `lib/__tests__/sha256.test.ts`.
+ * Every other hash in the services is `node:crypto` because it runs only on a
+ * server. These values do not: the app's `assetUrlFor` maps `<img src="https://…">`
+ * to `/assets/<sha256 of the canonical url>` inside an editor the SPA bundles, and
+ * the Mermaid image key (app lib/jsx/mermaid-source) is computed by the reader.
+ * `crypto` cannot load there, and Web Crypto is asynchronous while those mappings
+ * are pure synchronous tree passes. Hence forty lines of FIPS 180-4, pinned against
+ * `node:crypto` by `__tests__/sha256.test.ts`.
  *
- * Not a general-purpose utility: server code keeps using node's, which is
- * faster and already audited. This exists for the values a browser must be
- * able to compute for itself.
+ * Browser code imports it from `@artifactbin/utils/sha256`, never the package root,
+ * which also carries node-only modules. Server code keeps using node's hash, which
+ * is faster and already audited.
  */
 
 const K = new Uint32Array([
@@ -51,18 +48,20 @@ export function sha256Hex(input: string): string {
   ]);
   const w = new Uint32Array(64);
 
+  // Typed-array reads below are in bounds by construction (w has 64 words, h has 8, K has 64).
   for (let offset = 0; offset < padded.length; offset += 64) {
     for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4, false);
     for (let i = 16; i < 64; i++) {
-      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
-      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
-      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+      const w15 = w[i - 15]!, w2 = w[i - 2]!;
+      const s0 = rotr(w15, 7) ^ rotr(w15, 18) ^ (w15 >>> 3);
+      const s1 = rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >>> 10);
+      w[i] = (w[i - 16]! + s0 + w[i - 7]! + s1) >>> 0;
     }
-    let [a, b, c, d, e, f, g, hh] = h;
+    let a = h[0]!, b = h[1]!, c = h[2]!, d = h[3]!, e = h[4]!, f = h[5]!, g = h[6]!, hh = h[7]!;
     for (let i = 0; i < 64; i++) {
       const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
       const ch = (e & f) ^ (~e & g);
-      const t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0;
+      const t1 = (hh + S1 + ch + K[i]! + w[i]!) >>> 0;
       const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
       const maj = (a & b) ^ (a & c) ^ (b & c);
       const t2 = (S0 + maj) >>> 0;
@@ -71,8 +70,8 @@ export function sha256Hex(input: string): string {
       d = c; c = b; b = a;
       a = (t1 + t2) >>> 0;
     }
-    h[0] = (h[0] + a) >>> 0; h[1] = (h[1] + b) >>> 0; h[2] = (h[2] + c) >>> 0; h[3] = (h[3] + d) >>> 0;
-    h[4] = (h[4] + e) >>> 0; h[5] = (h[5] + f) >>> 0; h[6] = (h[6] + g) >>> 0; h[7] = (h[7] + hh) >>> 0;
+    h[0] = (h[0]! + a) >>> 0; h[1] = (h[1]! + b) >>> 0; h[2] = (h[2]! + c) >>> 0; h[3] = (h[3]! + d) >>> 0;
+    h[4] = (h[4]! + e) >>> 0; h[5] = (h[5]! + f) >>> 0; h[6] = (h[6]! + g) >>> 0; h[7] = (h[7]! + hh) >>> 0;
   }
 
   let out = '';

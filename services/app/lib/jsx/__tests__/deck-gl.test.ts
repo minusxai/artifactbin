@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateJsx } from '../validate';
-import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 function errors(source: string) {

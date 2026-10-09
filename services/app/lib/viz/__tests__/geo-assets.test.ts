@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { assetFeatures, boundaryFile, GEO_ASSETS, isBoundary } from '../geo-assets';
+import { BOUNDARY_IDS, isBoundary } from '@/lib/jsx/boundary-ids';
+import { assetFeatures, boundaryFile, GENERATED_BOUNDARIES, GEO_ASSETS } from '../geo-assets';
 
 const read = (file: string) =>
   JSON.parse(readFileSync(resolve(process.cwd(), `public/geojson/${file}.json`), 'utf8'));
@@ -38,6 +39,10 @@ describe('geo asset feature extraction', () => {
 });
 
 describe('the <DeckGL> boundary registry', () => {
+  it('the validator\'s static id list is exactly the bundled boundary sets', () => {
+    expect(BOUNDARY_IDS).toEqual([...Object.keys(GEO_ASSETS), ...Object.keys(GENERATED_BOUNDARIES)]);
+    for (const id of BOUNDARY_IDS) expect(boundaryFile(id)).not.toBeNull();
+  });
   const props = (id: string) => assetFeatures(id, read(boundaryFile(id)!)).map(f => f.properties as Record<string, unknown>);
 
   it('names the bundled sets, and nothing else', () => {

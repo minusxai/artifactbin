@@ -4,7 +4,7 @@
  */
 import { resolveJsxNodeAtPath, updateJsxElementAtPath, setStaticJsxAttr } from './jsx-edit';
 import { parseJsx } from '@/lib/jsx';
-import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
+import { mermaidSourceError } from '@/lib/jsx/mermaid-source';
 
 /** What the diagram panel renders from: the `<Mermaid>` at `astPath`, or null if there is none. */
 export interface MermaidEmbed {

@@ -14,7 +14,7 @@
  * draft: a createEffect reseeds the draft signal whenever the prop changes.
  */
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
-import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
+import { mermaidSourceError } from '@/lib/jsx/mermaid-source';
 import type { MermaidEmbed, MermaidEmbedEdit } from '@/lib/data/story/story-mermaid';
 
 export interface MermaidEditorPanelProps {

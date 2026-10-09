@@ -11,7 +11,7 @@
  * round trips stays.
  */
 import type { JsxNode } from '@/lib/jsx';
-import { mermaidDiagramKind, mermaidImageKey } from '@/lib/story-ui/mermaid-source';
+import { mermaidDiagramKind, mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
 
 /** The `viz.kind`s whose branch in QuestionEmbed reaches the lazy chart module. */
@@ -20,7 +20,7 @@ export const CHART_VIZ_KINDS: ReadonlySet<string> = new Set(['vega', 'vega-lite'
 export interface LazyCode {
   /** A `<Question>` draws a chart, so the document imports the chart module. */
   chart: boolean;
-  /** The Mermaid diagram kinds it draws WITH THE ENGINE (lib/story-ui/mermaid-source), each once, in document order. */
+  /** The Mermaid diagram kinds it draws WITH THE ENGINE (lib/jsx/mermaid-source), each once, in document order. */
   mermaid: string[];
   /**
    * The stored drawings it shows instead (lib/mermaid-images), in document

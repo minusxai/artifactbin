@@ -8,7 +8,7 @@ import { MutationHint } from './disclosure';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import type { RowScope } from '../rt';
-import { substituteRow } from '@/lib/story/data/row-scope';
+import { substituteRow } from '@/lib/jsx/row-scope';
 import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
 import { commentMetadata, instanceDomId } from '@/lib/story/data/repeat-identity';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/icon-contract';

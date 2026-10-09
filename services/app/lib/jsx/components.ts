@@ -1,4 +1,4 @@
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_UI_COMPONENT_NAME_LIST } from './component-names';
 
 /**
  * The component names allowed in a NEW-format (`format:'jsx'`) story body: the live embeds

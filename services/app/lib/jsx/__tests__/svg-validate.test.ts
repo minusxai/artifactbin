@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
-import { STORY_HTML_TAGS, STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_HTML_TAGS, STORY_SVG_TAGS } from '@/lib/jsx/component-names';
 
 const validate = (src: string) =>
   validateJsxSource(src, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS, 'no-inline-style');

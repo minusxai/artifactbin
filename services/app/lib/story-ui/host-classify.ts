@@ -13,7 +13,7 @@
  * re-exports these so no caller has to learn a second name for them.
  */
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
+import { STORY_SVG_TAGS } from '@/lib/jsx/component-names';
 import { immutableSet } from '@/lib/jsx/immutable-set';
 
 /**

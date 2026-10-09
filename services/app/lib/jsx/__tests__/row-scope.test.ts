@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeRowScopes } from '../data/row-scope';
-import { rewriteBuiltinFields } from '../data/compile-dataflow';
+import { analyzeRowScopes, parseRowRef, substituteRow } from '../row-scope';
+import { rewriteBuiltinFields } from '@/lib/story/data/compile-dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 describe('row scope', () => {
+  it('reads an exact $_row reference, and fills one or a template from the row', () => {
+    expect(parseRowRef('$_row.city')).toBe('city');
+    expect(parseRowRef(' $_row.city')).toBeNull();
+    expect(parseRowRef('$_row.')).toBeNull();
+    expect(parseRowRef(3)).toBeNull();
+    expect(substituteRow('$_row.orders', { orders: 4 })).toBe(4);
+    expect(substituteRow('$_row.missing', {})).toBeNull();
+    expect(substituteRow('{$_row.city}: { $_row.orders }', { city: 'Pune', orders: 4 })).toBe('Pune: 4');
+    expect(substituteRow(7, { city: 'Pune' })).toBe(7);
+  });
   // Which row fields a statement reads is the compiler's answer (rewriteBuiltinFields), not a scan here.
   it('the compiler reads row fields from code only: not comments, strings or quoted identifiers', () => {
     const sql = `/* $_row.wrong */ update items.rows set status=$_value where id=$_row.id and '$_row.fake'='$_value' and "$_row.quoted" = 1 -- $_row.comment

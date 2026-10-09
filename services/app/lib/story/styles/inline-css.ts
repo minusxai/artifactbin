@@ -1,5 +1,5 @@
 import * as cssTree from './css-parser';
-import { sha256Hex } from '@/lib/platform/sha256';
+import { sha256Hex } from '@artifactbin/utils/sha256';
 import type { JsxNode } from '@/lib/jsx';
 
 /** Apply the same CSS policy to static inline style values. */

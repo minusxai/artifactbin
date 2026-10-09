@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
-import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
+import { mermaidImageKey, mermaidSourceError } from '@/lib/jsx/mermaid-source';
 import { useIsland } from '../context';
 import { STORY_ROOT_SELECTOR } from '../contract';
 import { deferEngine } from '../defer-engine';

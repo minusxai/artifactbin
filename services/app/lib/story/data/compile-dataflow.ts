@@ -30,7 +30,7 @@ import { sqlExtensions } from '@/lib/sql/extensions';
 import { BUILTIN_TABLES, builtinInput, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
 import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledNotify, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
 import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
-import { analyzeRowScopes } from './row-scope';
+import { analyzeRowScopes } from '@/lib/jsx/row-scope';
 import { datasetSqlParams } from '@/lib/datasets/sql';
 import { dateCastRefusal, editDistance, withSqliteHint } from './sqlite-hints';
 

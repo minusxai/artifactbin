@@ -5,7 +5,7 @@
  * the compiled reader's Solid Mermaid (lib/islands/kit/mermaid) draws through
  * `drawForReader`, so every reader draws and marks identically.
  */
-import { sha256Hex } from '@/lib/platform/sha256';
+import { sha256Hex } from '@artifactbin/utils/sha256';
 import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
 import type { MermaidImage, MermaidPalette } from '@/lib/mermaid-images/mermaid-render';
 import { embedPageFonts, pageFontFaces } from '@/lib/mermaid-images/mermaid-fonts';

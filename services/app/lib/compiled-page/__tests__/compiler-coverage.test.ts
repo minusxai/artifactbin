@@ -20,7 +20,7 @@ import { parseJsx } from '@/lib/jsx';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { COMPILED_PARITY_FIXTURES } from '../../../../../scripts/fixtures/compiled-parity/index.mjs';
 import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
 import { loadSsrModule } from '../bundle.server';

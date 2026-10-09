@@ -5,7 +5,7 @@
  * field's own documentation — so they carry the rule, not just the type.
  */
 import { Type, type Static, type TSchema } from 'typebox';
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { STORY_THEME_NAMES, type StoryDesignName } from './story-theme-names';
 import { STORY_SYSTEM_NAMES } from './story-system-names';
 

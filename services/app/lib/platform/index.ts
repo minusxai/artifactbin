@@ -12,4 +12,3 @@ export { runWithRequest } from './request-context';
 export { SCHEMA_STATEMENTS } from './schema';
 export { services, setServices } from './services';
 export type { Services } from './services';
-export { sha256Hex } from './sha256';

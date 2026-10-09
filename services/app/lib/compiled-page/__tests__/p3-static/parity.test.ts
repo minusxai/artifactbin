@@ -5,7 +5,7 @@ import { loadCompilerBuild } from '../../build.server';
 import { corpus } from './corpus';
 import { inputOf, parsedDomDiffs } from './harness';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { JSDOM } from 'jsdom';
 import { applyCurrentLayoutContracts } from '@/lib/islands/__tests__/kit-parity';
 
