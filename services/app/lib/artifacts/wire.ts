@@ -2,15 +2,11 @@ import {documentMutationReply,adaptMutationOperationReply} from './mutation-oper
 import {parseDocumentUpdate} from '@artifactbin/contracts';
 import {GRAPH_POLICY,graphIntegrity,graphNodes,graphSource} from '../document/document-graph';
 import {readableArtifact} from './read-access';
-import {MembershipError} from './membership/membership';
 import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
-import {RemoteError} from '../remote/registry';
-import type {ReviewReceipt} from '../remote/agents';
 import type {MutationReceipt} from './mutation-receipt';
 import {parseSharingEntries} from '@artifactbin/utils';
 import {artifactState} from './state';
 import { parseAnnotationOperations } from '../document/annotation-edits';
-import { notifyRemoteComment } from '../remote/mentions';
 import {catalogOf} from '@/lib/datasets/catalog';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a
@@ -28,7 +24,6 @@ import type { TokenActor } from '@/lib/accounts/actors';
 import { SHARE_ROLES, type ShareEntry, type ShareRole } from './share-roles';
 import { getArtifactById, getArtifactFor, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { declarationsForRow, runDocumentMutation } from './dataflow';
-import { AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations/store';
 import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/dataflow';
@@ -42,7 +37,7 @@ import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform/config';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json } from '@/lib/http/http';
 import { ID_RE } from '@/lib/platform/ids-shape';
-import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/workspace/folders';
+import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from './placement';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
@@ -106,17 +101,6 @@ export function artifactSummaryToWire(
 }
 
 /**
- * The artifact GET's shape: the wire row plus the OPEN annotations inlined,
- * anchors in current coordinates. This is where "colocation" lives — the read
- * an agent already makes before editing carries the owner's feedback, so no
- * second call and no second concept exist on the read side.
- */
-export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string) {
-  const wire = await artifactToWire(row, base);
-  return row.format === 'markup' || row.format === 'folder' ? { ...wire, annotations: await annotationsWireForRow(row) } : wire;
-}
-
-/**
  * The write echo, priced.
  *
  * Stored markup is CANONICAL — a `<p>` holding a block becomes a `<div>`, a
@@ -154,14 +138,26 @@ function markupEcho(sent: unknown, stored: string | null): Record<string, unknow
 export const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<string, unknown> =>
   (repairs?.length ? { source_repairs: repairs } : {});
 
+/**
+ * The open-thread count a COMMITTED row carries: the commit counts it in the statement that writes the row
+ * (write/document-update-write, store setMetadataFor). A row with no count is a data tier, which has no threads.
+ */
+export const committedOpenAnnotations = (row: ArtifactRow): number => row.open_annotations ?? 0;
+
 /** A committed head without its content: the wire shape less `markup`, `state` and the declared `mutations`. */
-async function artifactHeadToWire(row: ArtifactRow, base: string) {
-  const { document: _document, markup: _markup, state: _state, mutations: _mutations, ...head } = await artifactToWire(row, base, false) as Awaited<ReturnType<typeof artifactToWire>> & { document?: unknown; mutations?: unknown };
+async function artifactHeadToWire(row: ArtifactRow, base: string, openAnnotations: number) {
+  const { document: _document, markup: _markup, state: _state, mutations: _mutations, ...head } = await artifactToWire(row, base, openAnnotations, false) as Awaited<ReturnType<typeof artifactToWire>> & { document?: unknown; mutations?: unknown };
   return head;
 }
 
-/** Full wire shape for a single-artifact read. `content: false`: the row carries no source, so derive nothing from it. */
-export async function artifactToWire(row: ArtifactRow, base: string, content = true) {
+/**
+ * Full wire shape for a single-artifact read. `content: false`: the row carries no source, so derive nothing from it.
+ *
+ * `openAnnotations` is the document's open-thread count, which the CALLER supplies: annotations are lib/annotations'
+ * sidecar state, above this module. A commit counts it in its own statement (write/document-update-write, store
+ * setMetadataFor) and the row carries it; a read door above counts it (lib/annotations/wire).
+ */
+export async function artifactToWire(row: ArtifactRow, base: string, openAnnotations: number, content = true) {
   // `deleted_at` is dropped with the ownership columns: the trash gate means a
   // row a caller can read is always live, so the field could only ever echo
   // null — a key in every agent's context that can carry no news.
@@ -185,7 +181,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, content = t
     // Annotations are sidecar state (lib/annotations) — the write path never
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.
-    ...(isDoc ? { open_annotations: row.open_annotations ?? await countOpenAnnotations(row.id) } : {}),
+    ...(isDoc ? { open_annotations: openAnnotations } : {}),
     // markup (story-engine) tier only: the source IS the artifact;
     // template/colorMode ride meta.
     ...(isDoc
@@ -349,14 +345,15 @@ export async function placementFor(
 /**
  * WHAT A REPLACE ANSWERS — the echo of the stored row after the replace door
  * (story/publish/requests) wrote it, with the dependents it touched and the
- * refresh warnings it computed. The open-annotation count is read here, beside
- * the rest of the wire, so publishing never reaches the annotation store.
+ * refresh warnings it computed. The open-annotation count is the caller's: the
+ * commit that wrote the row counted it, so neither publishing nor this module
+ * reaches the annotation store.
  */
 export async function replacedArtifactWire(
   row: ArtifactRow,
   base: string,
   sentMarkup: unknown,
-  { affected, warnings, repairs }: { affected: ArtifactRow[] | null; warnings: Array<{ id: string; title: string | null; details: string[] }>; repairs?: SourceRepair[] },
+  { affected, warnings, repairs, openAnnotations }: { affected: ArtifactRow[] | null; warnings: Array<{ id: string; title: string | null; details: string[] }>; repairs?: SourceRepair[]; openAnnotations: number },
 ): Promise<Record<string, unknown>> {
   return {
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
@@ -374,7 +371,7 @@ export async function replacedArtifactWire(
     ...(row.format === 'dataset' ? { access: row.access } : {}),
     // Annotations are sidecar state a replace cannot touch — the count is the
     // echo's signal that feedback exists (the GET inlines the full set).
-    ...(row.format === 'markup' || row.format === 'folder' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
+    ...(row.format === 'markup' || row.format === 'folder' ? { open_annotations: openAnnotations } : {}),
     ...(warnings.length ? { warnings } : {}),
     ...sourceRepairsEcho(repairs),
   };
@@ -478,9 +475,9 @@ export async function respondToEdit(
     // On a newer head (a concurrent edit to other nodes) the answer carries the patches of the versions between too,
     // and the editor replays them; without them (the log could not yield every one) it reads the head itself.
     if (outcome.withheld && input.documentUpdate) {
-      return json({ ...(await artifactHeadToWire(outcome.row, base)), patch: input.documentUpdate.patch, ...(outcome.remotePatches ? { remote_patches: outcome.remotePatches } : {}) });
+      return json({ ...(await artifactHeadToWire(outcome.row, base, committedOpenAnnotations(outcome.row))), patch: input.documentUpdate.patch, ...(outcome.remotePatches ? { remote_patches: outcome.remotePatches } : {}) });
     }
-    const wire = await artifactToWire(outcome.row, base);
+    const wire = await artifactToWire(outcome.row, base, committedOpenAnnotations(outcome.row));
     const update = input.documentUpdate;
     if (echo === 'patch' && update && !update.whole && outcome.row.version === update.patch.baseVersion + 1) {
       const { document: _document, markup: _markup, ...head } = wire as typeof wire & { document?: unknown };
@@ -502,42 +499,6 @@ export async function respondToEdit(
     case 'not_editable':
       return json({ error: 'not_editable' }, 400);
   }
-}
-
-/** Body → action; null = malformed (neither field, or wrong types). */
-function parseAnnotationAction(body: Record<string, unknown>): AnnotationAction | null {
-  const action: AnnotationAction = {};
-  if(body.expected_revision!==undefined){if(!Number.isSafeInteger(body.expected_revision)||Number(body.expected_revision)<0)return null;action.expectedRevision=Number(body.expected_revision);}
-  if (typeof body.reply === 'string' && body.reply.trim().length > 0) action.reply = body.reply;
-  else if (body.reply !== undefined) return null;
-  if (typeof body.resolve === 'boolean') action.resolve = body.resolve;
-  else if (body.resolve !== undefined) return null;
-  if (typeof body.reopen === 'boolean') action.reopen = body.reopen;
-  else if (body.reopen !== undefined) return null;
-  if (action.resolve && action.reopen) return null; // contradictory transitions
-  if (!action.reply && !action.resolve && !action.reopen) return null; // an action that does nothing is malformed
-  return action;
-}
-
-/** The ONE annotation mutation — only the credential (and thus the attribution) differs per door. */
-export async function respondToAnnotationAction(
-  body: Record<string, unknown> | null,
-  actor: TokenActor,
-  author: AnnotationAuthor,
-  id: string,
-  annId: string,
-  receipt?:MutationReceipt,
-  review?:ReviewReceipt,
-): Promise<Response> {
-  if (!body) return json({ error: 'invalid_json' }, 400);
-  const action = parseAnnotationAction(body);
-  if (!action) return json({ error: 'invalid_annotation_action' }, 400);
-  let wire;
-  try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt,review);}
-  catch(error){if(error instanceof AnnotationRevisionError)return json({error:'annotation_conflict',current_revision:error.revision,hint:'Read the current conversation before retrying; no reply or state change was applied.'},409);if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
-  if (!wire) return json({ error: 'not_found' }, 404);
-  if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
-  return json(wire);
 }
 
 const isScalar = (v: unknown): v is Scalar =>

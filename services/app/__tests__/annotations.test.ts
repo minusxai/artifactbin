@@ -1,5 +1,6 @@
 import {artifactQuery} from '@/lib/artifacts';
-import {observedRequest} from '@/__tests__/conditional-request';
+import {observedRequest,patchMetadata} from '@/__tests__/conditional-request';
+import { getDb } from '@/lib/platform';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes, with reply/state transitions.
  *
@@ -188,6 +189,24 @@ describe('the wire — colocation on GET', () => {
     expect(rows.annotations[0].orphaned).toBe(true); // a whole-document write destroys every anchor…
     expect(rows.annotations[0].anchor).toBeNull();
     expect(rows.annotations[0].snippet).toContain('Revenue'); // …but never the comment
+  });
+
+  it('a folder\'s metadata writes echo the open count their own commit read (PATCH and PUT)', async () => {
+    const t = await mintToken('agent');
+    const folder = await create(t.token, { format: 'folder', title: 'Reports' });
+    // A thread on the folder itself, written straight to the table: the count is the commit's, not a second read.
+    await (await getDb()).query("INSERT INTO annotations (id, artifact_id, body, author_kind) VALUES ('ann_folder_open', $1, 'file the Q3 deck here', 'human')", [folder.id]);
+
+    const patched = await patchMetadata(t.token, folder.id, { title: 'Renamed' });
+    expect(patched.status, await patched.clone().text()).toBe(200);
+    expect(await patched.json()).toMatchObject({ title: 'Renamed', open_annotations: 1 });
+
+    const put = await putArtifactRoute(
+      await observedRequest(`/api/artifacts/${folder.id}`, { method: 'PUT', token: t.token, json: { title: 'Again' } }),
+      params({ id: folder.id }),
+    );
+    expect(put.status, await put.clone().text()).toBe(200);
+    expect(await put.json()).toMatchObject({ title: 'Again', open_annotations: 1 });
   });
 
   it('the bearer list honours ?status=', async () => {

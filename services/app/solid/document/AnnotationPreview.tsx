@@ -8,7 +8,8 @@
  * or focus, where it can open the rail or resolve an open thread without leaving the document.
  */
 import { createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
-import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { StoryEditRect } from '@/lib/story-runtime/contract';
 import Check from 'lucide-solid/icons/check';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';

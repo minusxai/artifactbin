@@ -3,8 +3,7 @@
  * the same protocol as the bearer twin. The current ACL admits the owner;
  * attribution remains HUMAN so future non-owner commenters fit the contract.
  */
-import { respondToAnnotationAction } from '@/lib/artifacts';
-import { deleteAnnotationFor } from '@/lib/annotations';
+import { deleteAnnotationFor, respondToAnnotationAction } from '@/lib/annotations';
 import { browserActor } from '@/lib/accounts';
 import { json, readJson, unauthorized } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';

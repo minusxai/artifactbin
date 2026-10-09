@@ -40,7 +40,8 @@ export { sourcePathToBodyPath } from '../document/edit-compose';
 export { canonicalQuote, canonicalText, parseAnnotationRange } from '../document/annotation-range';
 export type { AnnotationRange } from '../document/annotation-range';
 export { annotationAuthorForAgent } from '../annotations/author';
-export type { AnnotationAuthor, AnnotationCommentWire, AnnotationWire } from '../annotations/store';
+export type { AnnotationWire } from '../annotations/store';
+export type { AnnotationAuthor, AnnotationCommentWire } from '@artifactbin/contracts';
 export { validateFileComments } from '../offline/comment-validation';
 
 // ---- Dataflow: compile and evaluate a document's queries locally.

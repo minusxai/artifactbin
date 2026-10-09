@@ -4,7 +4,6 @@
     {
       "modules": [
         "lib/annotations",
-        "lib/artifact-backend",
         "lib/artifacts",
         "lib/datasets",
         "lib/export",
@@ -16,12 +15,7 @@
       "edges": [
         "lib/annotations -> lib/artifacts",
         "lib/annotations -> lib/remote",
-        "lib/artifact-backend -> lib/annotations",
-        "lib/artifacts -> lib/annotations",
-        "lib/artifacts -> lib/artifact-backend",
         "lib/artifacts -> lib/datasets",
-        "lib/artifacts -> lib/remote",
-        "lib/artifacts -> lib/workspace",
         "lib/datasets -> lib/artifacts",
         "lib/datasets -> lib/operations",
         "lib/datasets -> lib/story",
@@ -34,7 +28,6 @@
         "lib/operations -> lib/remote",
         "lib/operations -> lib/story",
         "lib/operations -> lib/workspace",
-        "lib/remote -> lib/annotations",
         "lib/remote -> lib/artifacts",
         "lib/story -> lib/artifacts",
         "lib/story -> lib/datasets",

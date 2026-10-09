@@ -3,7 +3,7 @@ import type { TokenActor } from '@/lib/accounts/actors';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
-import { commitDocumentUpdate } from './write/document-update-write';
+import { commitDocumentUpdate, openAnnotationsSql } from './write/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import type { ProseOperation } from '../document';
 import type { DocumentOperation } from '@artifactbin/contracts';
@@ -42,7 +42,7 @@ import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } f
 import { emitHeadCommitted } from './after-commit';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/data-syntax';
 import { servableDocument } from './servable';
-import { ancestorsForMove, notifyParent, parentOf } from '@/lib/workspace/folders';
+import { ancestorsForMove, notifyParent, parentOf } from './placement';
 import type { ServerRef, ServerRefLoader } from '@/lib/datasets/schema-loader';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 import { type ShareEntry, type ShareRole } from './share-roles';
@@ -1111,7 +1111,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
     if(opts.dryRun)return {...current,...patch,meta};
     const updated = (await artifactQuery<ArtifactRow>(tx,`UPDATE artifacts SET title=$3,description=$4,meta=$5::jsonb,
       visibility=$6,access=$7,ancestor_ids=$8::text[],link_role=$9,updated_at=now(),actor_user_id=$10,actor_token_id=$11
-      WHERE id=$1 AND ${scope.where('$2')} RETURNING *`, [id,scope.val,
+      WHERE id=$1 AND ${scope.where('$2')} RETURNING *,${openAnnotationsSql('artifacts.id')} AS open_annotations`, [id,scope.val,
       patch.title === undefined ? current.title : patch.title?.trim() ?? null,
       patch.description === undefined ? current.description : patch.description,
       JSON.stringify(meta),patch.visibility ?? current.visibility,patch.access ?? current.access,

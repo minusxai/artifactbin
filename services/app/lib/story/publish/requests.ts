@@ -16,7 +16,7 @@ import { creationOperation, lookupCreation, CreationReplay } from '@/lib/artifac
 import { artifactState } from '@/lib/artifacts/state';
 import {
   createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue,
-  placementFor, replacedArtifactWire, respondToEdit, sourceRepairsEcho,
+  committedOpenAnnotations, placementFor, replacedArtifactWire, respondToEdit, sourceRepairsEcho,
 } from '@/lib/artifacts/wire';
 import { parseAnnotationOperations } from '@/lib/document/annotation-edits';
 import { normalizeNodeIds } from '@/lib/document/node-ids';
@@ -216,7 +216,7 @@ export async function replaceArtifactWithBody(
   // resolve (warnings, never blocks).
   const warnings = await refreshWarningsFor(actor, row);
   const affected = ['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
-  return json(await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, repairs: parsed.repairs }));
+  return json(await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, repairs: parsed.repairs, openAnnotations: committedOpenAnnotations(row) }));
 }
 
 /**

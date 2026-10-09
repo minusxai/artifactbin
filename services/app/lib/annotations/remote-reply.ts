@@ -1,5 +1,5 @@
 import type {RemoteWork, RemoteSessionInfo} from '../../../contracts/src/remote';
-import {sessionMentions} from './session-mentions';
+import {sessionMentions} from '../remote/session-mentions';
 /** The latest human explicit targets are defaults, never inferred from an agent reply. */
 export function replyMentionPrefix(thread:ReadonlyArray<{body:string;author:{kind:string}}>):string{
  for(let i=thread.length-1;i>=0;i--){const c=thread[i]!;if(c.author.kind!=='human')continue;

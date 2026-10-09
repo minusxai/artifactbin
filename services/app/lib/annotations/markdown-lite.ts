@@ -1,5 +1,5 @@
 import {isPersonMentionHref} from '../document/person-mentions';
-import { isSessionMentionHref } from './session-mentions';
+import { isSessionMentionHref } from '../remote/session-mentions';
 
 /**
  * MARKDOWN-LITE — a STRICT, owned subset of markdown for comment bodies.

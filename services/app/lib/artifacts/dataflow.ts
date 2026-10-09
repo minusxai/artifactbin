@@ -41,7 +41,7 @@ import { runLocalStateMutation, type LocalMutationResult } from '@/lib/dataflow/
 import { localTableOverrides } from '@/lib/dataflow/local-tables';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
 import { storedRowStats } from '@/lib/datasets/dataset-store';
-import { childrenTableFor, CHILDREN_COLUMNS } from '@/lib/workspace/folders';
+import { childrenTableFor, CHILDREN_COLUMNS } from './placement';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 

@@ -8,7 +8,7 @@ import { getArtifactById } from '../artifacts/store';
 import { canReadArtifact } from '../artifacts/access';
 import {createHash,randomUUID} from 'node:crypto';
 import {getDb,type Queryable} from '../platform/db';
-import {sessionMentions} from '../annotations/session-mentions';
+import {sessionMentions} from './session-mentions';
 import {annotationsChannel} from '@artifactbin/contracts';
 import {RemoteRegistry,RemoteError,remoteSessions,type Registration} from './registry';
 import {REMOTE_WORK_LIMIT,REMOTE_WORK_BYTES,remoteColor} from '../../../contracts/src/remote';

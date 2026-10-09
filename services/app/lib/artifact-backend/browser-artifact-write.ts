@@ -4,8 +4,8 @@ import {createDocumentGraph} from '../document/document-graph';
  * its existing conditional protocol. */
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
 import {prepareBrowserDocumentUpdate} from '../document/document-authoring-client';
-import {artifactRequests,createHttpBackend} from '../artifact-backend/http';
-import type {ArtifactBackend} from '../artifact-backend/types';
+import {artifactRequests,createHttpBackend} from './http';
+import type {ArtifactBackend} from './types';
 /** Listings, folders and the social preview: an online write whose caller reads the Response itself. */
 export async function writeBrowserArtifact(id:string,change:Record<string,unknown>,editId?:string):Promise<Response>{
  const requests=artifactRequests(id);

@@ -26,7 +26,7 @@ import { GET as queryGet } from '@/app/a/[id]/query/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
-import { childrenTableFor } from '@/lib/workspace';
+import { childrenTableFor } from '@/lib/artifacts/placement';
 import { subscribeToArtifact } from '@/lib/story/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
