@@ -1,5 +1,5 @@
 /** Reader URLs use the shared app document; explicit raw/export keeps its sandbox. */
-import { pagesSite } from '@/lib/serving/pages-origin';
+import { pagesSite } from '@/lib/http/pages-origin';
 import { describe, expect, it } from 'vitest';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';

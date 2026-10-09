@@ -1,12 +1,12 @@
 /**
- * `auth()` — the account session, as the app sees it: the signed actor header
+ * `auth()` — the account session, as the app sees it (re-exported as `@/auth`): the signed actor header
  * the PROXY, which owns login, stamps on every request
  * (`@artifactbin/contracts`), read from the request scope. No JWT of our own
  * and no cookie decoded here. Off a request (a build, a direct handler call in
  * a test) there is no header and therefore no session — unless a test says who
  * is signed in (`overrideSession`).
  */
-import { sessionActor } from '@/lib/accounts/viewer';
+import { sessionActor } from './viewer';
 
 export interface Session {
   user: { id: string; email?: string | null; name?: string | null };

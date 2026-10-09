@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
-import {executeDocumentQueries} from '../sql/document-queries';
+import {executeDocumentQueries} from '../datasets/document-queries';
 import type {CompiledDataflow} from '@/lib/dataflow/compiled-dataflow';
 import type {DatasetCatalog} from '../datasets/types';
 const execute=vi.hoisted(()=>vi.fn());

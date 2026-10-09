@@ -1,6 +1,6 @@
 import { canReadArtifact, canWriteDataset, ownerScope, ownsArtifact, type ArtifactRow, type RoleActor, type Scope, type TokenActor, type WriteRefusal, writerFor } from './access';
 import { getArtifact, getArtifactById, getArtifactByUser, getArtifactFor, getLinkReadableArtifact, refLoaderFor, refLoaderForUser } from './store';
-import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../sql/document-queries';
+import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
 import { artifactQuery } from './document';
 import { JOIN_RELATIONS } from '../accounts/relation-state';
 import { grantContext, grantsOf, grantsPermitRead } from '../datasets/policy/grants';

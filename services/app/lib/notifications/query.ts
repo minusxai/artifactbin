@@ -3,7 +3,7 @@ import {NOTIFICATION_QUERY_LIMITS,type MutationNotificationJobInput,type Mutatio
 import {NotificationExecutionError} from './errors';
 import {notificationQueryContext,notificationRuleSourceIds} from './context';
 import {notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal} from './authority';
-import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '../sql/document-queries';
+import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '../datasets/document-queries';
 import {selectQueries} from '@/lib/dataflow';
 import {platformValues} from '@/lib/dataflow';
 import {DataflowResultError} from '@/lib/dataflow/evaluate';

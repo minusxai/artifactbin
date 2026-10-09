@@ -5,7 +5,7 @@ import { createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { framedDocumentSrc } from '@/lib/serving/artifact-page';
-import { pagesSiteFor } from '@/lib/serving/pages-origin';
+import { pagesSiteFor } from '@/lib/http/pages-origin';
 import { attachActor } from '@artifactbin/utils';
 
 useAppHarness();

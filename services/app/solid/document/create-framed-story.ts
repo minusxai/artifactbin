@@ -1,7 +1,7 @@
 /**
  * THE FRAMED DOCUMENT'S MOUNT — the document page's one way to hold its document.
  *
- * The document runs in an iframe on its own origin (APP__PAGES_HOST, lib/serving/pages-origin); this page reaches it
+ * The document runs in an iframe on its own origin (APP__PAGES_HOST, lib/http/pages-origin); this page reaches it
  * only through the bridge (lib/story-runtime/frame-bridge/parent). It answers `{ controller, nonce }`, so the page's
  * runtimeRef, edit lifecycle, annotation layer, selection actions and editor use the bridge's stand-in for the
  * document's controller. `nonce` stays null until the frame's controller runs (and again while a reloaded frame's

@@ -19,7 +19,7 @@ export interface SessionOrigins {
   pages(url: URL): boolean;
 }
 
-/** A document's label: its id's bytes in lowercase hex (lib/serving/pages-origin `pagesLabel`). */
+/** A document's label: its id's bytes in lowercase hex (lib/http/pages-origin `pagesLabel`). */
 const DOCUMENT_LABEL = /^(?:[0-9a-f]{2}){1,32}$/;
 
 export function sessionOrigins(baseURL: string, pagesHost?: string): SessionOrigins {

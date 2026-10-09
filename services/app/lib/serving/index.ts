@@ -22,5 +22,3 @@ export { publicRefAsset, publicRefAssetResponse } from './public-ref-assets';
 export { REPO_URL } from './repo';
 export { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from './start-placeholder';
 export { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from './theme-bootstrap';
-export { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl, tileUrlTemplate } from './tiles';
-export { pagesSite, pagesOriginFor } from './pages-origin';

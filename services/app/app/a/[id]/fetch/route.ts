@@ -20,7 +20,7 @@ import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { fetchWebResource, webIngestAllowsHttp } from '@/lib/web-ingest/fetch';
 import { servedRow } from '@/lib/serving';
-import { pagesRequestOf } from '@/lib/serving/pages-origin';
+import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { cspExtensionsFor, declaredCspExtensions } from '@/lib/trust/document-trust';
 import { cspOriginMatches } from '@/lib/document/csp-extensions';
 import { WebIngestError } from '@/lib/web-ingest/guard';
