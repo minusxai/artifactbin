@@ -14,7 +14,10 @@
  * `browser_test_users` table is never written, and the page can act inside its
  * sandbox and nowhere else.
  */
-import { expect, it } from 'vitest';
+import {afterEach,expect,it,vi} from 'vitest';
+import {POST as browserRoute} from '@/app/api/browser-sessions/route';
+import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
+import type {HostedRemoteAgent} from '@artifactbin/contracts';
 import type { Actor, BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
@@ -225,4 +228,23 @@ it('joins a viewers-write page as a genuinely second person — in its own copy,
   expect(original.map(row => String(row.who))).toEqual(['seed', owner.userId]);
   const copied = (await loadDatasetRows((await getArtifactById(copy.datasets[0]!.id))!)) as Array<Record<string, unknown>>;
   expect(copied.map(row => String(row.who))).toEqual(['seed', owner.userId, testuser.id]);
+});
+
+afterEach(()=>setHostedRemoteAgent(undefined));
+it('passes only the trusted authority scope through the actual browser operation handler',async()=>{
+ const owner=await account('scoped-browser');await (await getDb()).query('UPDATE tokens SET request_authority=true WHERE id=$1',[owner.tokenId]);
+ const seen=recordingSessions();setHostedRemoteAgent({authorizeOperation:async()=>({kind:'allowed',requestScope:'trusted-A'})} as unknown as HostedRemoteAgent);
+ const reply=await browserRoute(request('/api/browser-sessions',{method:'POST',token:owner.token,json:script('bound-browser',{requestScope:'forged-B'})}));
+ expect(reply.status).toBe(200);expect(seen).toHaveLength(1);expect(seen[0]?.requestScope).toBe('trusted-A');expect(seen[0]?.actor.tokenId).toBe(owner.tokenId);
+});
+it.each([undefined,null,'','   ','x'.repeat(257),42])('refuses malformed trusted scope %j before session creation',async requestScope=>{
+ const owner=await account('invalid-browser');await (await getDb()).query('UPDATE tokens SET request_authority=true WHERE id=$1',[owner.tokenId]);
+ const seen=recordingSessions();setHostedRemoteAgent({authorizeOperation:async()=>({kind:'allowed',requestScope})} as unknown as HostedRemoteAgent);
+ const reply=await browserRoute(request('/api/browser-sessions',{method:'POST',token:owner.token,json:script('invalid-bound')}));
+ expect(reply.status).toBe(403);expect(await reply.json()).toMatchObject({error:'agent_authority_invalid',admission_refused:true});expect(seen).toHaveLength(0);
+});
+it('keeps caller-supplied scope absent for an ordinary browser session',async()=>{
+ const owner=await account('ordinary-browser');const seen=recordingSessions();const hook=vi.fn();setHostedRemoteAgent({authorizeOperation:hook} as unknown as HostedRemoteAgent);
+ const reply=await browserRoute(request('/api/browser-sessions',{method:'POST',token:owner.token,json:script('ordinary-bound',{requestScope:'forged'})}));
+ expect(reply.status).toBe(200);expect(seen[0]?.requestScope).toBeUndefined();expect(hook).not.toHaveBeenCalled();
 });

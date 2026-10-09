@@ -16,6 +16,10 @@ export async function hostedAuthorization(owner:string|null|undefined,tokenId:st
  let decision:HostedOperationAuthorization;
  try{decision=await agent.authorizeOperation(owner,tokenId,name,input as RunnerJson,credential);}catch{return {kind:'denied',code:'agent_authority_unavailable',message:'Request authority is unavailable.'};}
  if(!decision||!['allowed','denied','deferred'].includes(decision.kind)||(decision.kind==='denied'&&(typeof decision.code!=='string'||typeof decision.message!=='string'))||(decision.kind==='deferred'&&!('body' in decision)))return {kind:'denied',code:'agent_authority_invalid',message:'Request authority is unavailable.'};
+ if(decision.kind==='allowed'){
+  const value=decision.requestScope;
+  if((value!==undefined&&(typeof value!=='string'||!value.trim()||value.length>256))||(name==='browser_session'&&(input as {op?:unknown})?.op==='script'&&value===undefined))return {kind:'denied',code:'agent_authority_invalid',message:'Request authority is unavailable.'};
+ }
  return decision;
 }
 export function hostedRefusal(decision:HostedOperationAuthorization):Response|null{

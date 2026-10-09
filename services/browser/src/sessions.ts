@@ -12,6 +12,8 @@ export interface SessionWorker {
 export type SessionWorkerFactory = (actor: Actor) => Promise<SessionWorker>;
 interface Session {
   owner: string;
+  /** Fixed trusted request binding, independent of credential rotation. */
+  requestScope: string | undefined;
   /**
    * Who its PAGES browse as, fixed when the session is created; undefined is
    * its owner. Held as the KEY rather than the choice, because a `{testuser}`
@@ -78,6 +80,7 @@ export function createBrowserSessions(factory: SessionWorkerFactory, capacity: S
       // Anything but a viewer named here is absent: the viewer a session browses as is one fixed decision.
       const viewer = input.op === 'script' ? viewerKey(input.viewer) : undefined;
       if (input.op === 'script') {
+        if(input.requestScope!==undefined&&(typeof input.requestScope!=='string'||!input.requestScope.trim()||input.requestScope.length>256))return empty(input.session_id,'INVALID_REQUEST','Invalid browser request scope');
         if (!idValid(input.execution_id) || typeof input.code !== 'string' || Buffer.byteLength(input.code) > SESSION_LIMITS.scriptBytes) return empty(input.session_id, 'INVALID_REQUEST', 'Invalid execution ID or script exceeds 64 KiB');
         if (!session && input.create) {
           if (sessions.size >= capacity.sessions) {
@@ -96,13 +99,16 @@ export function createBrowserSessions(factory: SessionWorkerFactory, capacity: S
           const worker = Promise.resolve().then(() => factory(pageActor));
           // Failure is recorded on the execution, including failures before the first script.
           void worker.catch(() => {});
-          session = { owner, viewer, worker, queue: Promise.resolve(), executions: new Map(), pages: [], status: 'idle', touched: Date.now() };
+          session = { owner, requestScope:input.requestScope, viewer, worker, queue: Promise.resolve(), executions: new Map(), pages: [], status: 'idle', touched: Date.now() };
           sessions.set(input.session_id, session);
           const created = session;
           void worker.then(value => value.onClose?.(() => { if (created.status === 'idle') void close(created, 'lost'); }), () => {});
         }
       }
       if (!session || session.owner !== owner) return empty(input.session_id, 'SESSION_NOT_FOUND', 'Session is unavailable to this credential');
+      // Bind scripts before touching the lease, viewer, receipts or worker.
+      // create:true never adopts an existing session; undefined only matches undefined.
+      if(input.op==='script'&&session.requestScope!==input.requestScope)return empty(input.session_id,'SESSION_SCOPE_CONFLICT','Browser session belongs to another request; create a new session instead');
       // Ownership is answered first: a stranger naming a viewer still only learns SESSION_NOT_FOUND.
       // An omitted viewer resumes whatever this session already browses as; a different one is refused.
       if (input.op === 'script' && viewer !== undefined && viewer !== session.viewer) return empty(input.session_id, 'VIEWER_CONFLICT', `Session ${input.session_id} browses as ${session.viewer ?? 'its owner'}; a session's viewer is fixed when it is created. Create a new session instead`);

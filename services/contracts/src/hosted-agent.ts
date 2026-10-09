@@ -27,7 +27,8 @@ export interface HostedAgentCommentOperation {
 /** Token-bound default-request authorization. Ordinary human/native tokens retain their existing policy.
  * The app attests the scoped token; the private owner resolves its live branch. Caller headers never confer authority. */
 export type HostedOperationAuthorization =
-  | {kind:'ordinary'|'allowed'}
+  | {kind:'ordinary'}
+  | {kind:'allowed';requestScope?:string}
   | {kind:'denied';code:string;message:string}
   | {kind:'deferred';body:RunnerJson};
 

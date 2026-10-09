@@ -25,7 +25,7 @@ export interface BrowserSessionResult {
   sandbox?: 'none';
 }
 /** `pageActor`: who the PAGES browse as when the app decided it (a throwaway second person); never the owner's credential. */
-export type BrowserSessionRequest = { actor: Actor; pageActor?: Actor } & (
+export type BrowserSessionRequest = { actor: Actor; pageActor?: Actor; requestScope?: string } & (
   /** `viewer` on the creating request: 'guest' browses signed out, `{testuser}` browses as one of the owner's test users; who a session browses as never changes. */
   | { op: 'script'; session_id: string; execution_id: string; create: boolean; code: string; viewer?: ViewerChoice }
   | { op: 'status'; session_id: string; execution_id?: string }
