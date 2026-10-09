@@ -121,8 +121,12 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     if(c.req.header('origin')!==base(c.req.raw))
       return new Response(JSON.stringify({error:'forbidden'}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
     try{
-      const minted=await mintFor(o,c.req.raw,{userId:actor.userId,resource:resource(c.req.raw),scope:ARTIFACT_SCOPE});
-      return new Response(JSON.stringify({id:minted.id,access_token:minted.token,token_type:'Bearer',expires_in:minted.expiresIn,scope:ARTIFACT_SCOPE}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
+      const client=await o.oauth.register({client_name:'artifactbin HTTP',redirect_uris:['http://127.0.0.1/callback']});
+      const clientId=String(client.client_id);
+      const grant={userId:actor.userId,resource:resource(c.req.raw),scope:ARTIFACT_SCOPE};
+      const minted=await mintFor(o,c.req.raw,grant);
+      const refreshToken=await o.oauth.issueRefresh({...grant,clientId,accessTokenId:minted.id});
+      return new Response(JSON.stringify({id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope:ARTIFACT_SCOPE}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
     }catch{return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});}
   });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
