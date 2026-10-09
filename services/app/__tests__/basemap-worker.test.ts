@@ -30,7 +30,7 @@ vi.mock('node:module', async (importOriginal) => {
 });
 
 const { GET } = await import('@/app/basemap/[...path]/route');
-const get = (segments: string[]) => GET(new Request(`http://localhost/basemap/${segments.join('/')}`), { params: Promise.resolve({ path: segments }) });
+const basemap = (segments: string[]) => GET(new Request(`http://localhost/basemap/${segments.join('/')}`), { params: Promise.resolve({ path: segments }) });
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -40,7 +40,7 @@ describe('/basemap/worker.mjs', () => {
   });
 
   it('is served from the built runtime directory, with maplibre-gl not installed', async () => {
-    const res = await get(['worker.mjs']);
+    const res = await basemap(['worker.mjs']);
     const built = readFileSync(path.join(process.cwd(), 'lib/build-assets/maplibre-gl-worker.mjs'));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('text/javascript');
@@ -63,7 +63,7 @@ describe('/basemap/ outside the allowlist', () => {
       ['styles', 'liberty'], ['styles', 'positron', 'extra'], ['planet', '..', '..', 'etc'], ['https:', '', 'evil.example', 'x'],
     ];
     for (const segments of refused) {
-      const res = await get(segments);
+      const res = await basemap(segments);
       expect(res.status, segments.join('/')).toBe(404);
     }
     expect(upstream).not.toHaveBeenCalled();
