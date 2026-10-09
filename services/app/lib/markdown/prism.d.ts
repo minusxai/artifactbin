@@ -7,6 +7,11 @@ declare module 'prismjs/components/prism-core' {
   export default Prism;
 }
 
+declare module 'prismjs/components/prism-core.js' {
+  import Prism from 'prismjs/components/prism-core';
+  export default Prism;
+}
+
 declare module 'prismjs/components/prism-markup';
 declare module 'prismjs/components/prism-clike';
 declare module 'prismjs/components/prism-css';
