@@ -18,7 +18,7 @@ const SVG_CAMEL_ATTRS = [
   'strokeOpacity', 'strokeMiterlimit', 'fillOpacity', 'fillRule', 'clipRule',
   'textAnchor', 'dominantBaseline', 'textLength', 'lengthAdjust', 'baselineShift',
 ] as const;
-export const SVG_ATTR_CASE: Record<string, string> = Object.fromEntries(
+const SVG_ATTR_CASE: Record<string, string> = Object.fromEntries(
   SVG_CAMEL_ATTRS.map(a => [a.toLowerCase(), a]),
 );
 
@@ -39,15 +39,7 @@ const CONTROLLED_TO_DEFAULT: Record<string, string> = {
  * keystroke, which is an authored form that silently does not work.
  */
 const VALUE_CONTROLLED_TAGS = immutableSet(['Tabs', 'Accordion']);
-export const FORM_CONTROL_TAGS = immutableSet(['input', 'textarea', 'select']);
-
-/**
- * The story components that render a plain `<button>` around whatever the
- * author put in them. The other triggers (Tabs/Accordion/Collapsible/Popover)
- * carry `role`/`aria-expanded`/`aria-controls` on that button and are left
- * alone: they are not interchangeable with a span.
- */
-export const BUTTON_TRIGGERS = new Set(['DialogTrigger', 'DialogClose']);
+const FORM_CONTROL_TAGS = immutableSet(['input', 'textarea', 'select']);
 
 /**
  * The tags that draw something INTERACTIVE, which the HTML content model

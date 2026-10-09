@@ -54,7 +54,7 @@ import { StoryToolbarMenu } from './StoryToolbarMenu';
 import { Tooltip } from '@/solid/components/Tooltip';
 import { nodeName } from '@/lib/story-ui/node-names';
 
-export interface ImageControls {
+interface ImageControls {
   /** The image's alt text; null when it has none (the button then hints). */
   alt: string | null;
   /** Open the "Replace image" dialog for this image. */
@@ -63,7 +63,7 @@ export interface ImageControls {
   onAlt: (alt: string) => void;
 }
 
-export interface StoryFormatBackend {
+interface StoryFormatBackend {
   /** `backend.unavailable('mentions')`: null when @mentions can be looked up. */
   mentionsUnavailable: string | null;
   members?: (query: string, opts: { signal: AbortSignal }) => Promise<{ people: Array<{ user_id: string; username: string }> } | null>;

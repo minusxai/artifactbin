@@ -19,7 +19,7 @@ import { Selection as ProseSelection, TextSelection } from 'prosemirror-state';
 import type { Node as ProseNode } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 
-export type ArrowDirection = 'up' | 'down' | 'left' | 'right';
+type ArrowDirection = 'up' | 'down' | 'left' | 'right';
 
 /** One editable text region: a ProseMirror flow (`view` set) or a single contentEditable host. */
 export interface TextRegion {
@@ -59,14 +59,14 @@ const forward = (direction: ArrowDirection) => direction === 'down' || direction
 const vertical = (direction: ArrowDirection) => direction === 'up' || direction === 'down';
 
 /** The move a plain arrow asks for, or null when this key is not ours to take. */
-export function arrowDirection(event: KeyboardEvent): ArrowDirection | null {
+function arrowDirection(event: KeyboardEvent): ArrowDirection | null {
   if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return null;
   if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return null;
   return DIRECTIONS[event.key] ?? null;
 }
 
 /** The neighbour in reading order; null past either end (no wrap) or when `current` is not listed. */
-export function adjacentRegion<T>(regions: readonly T[], current: T, direction: ArrowDirection): T | null {
+function adjacentRegion<T>(regions: readonly T[], current: T, direction: ArrowDirection): T | null {
   const index = regions.indexOf(current);
   if (index < 0) return null;
   return regions[index + (forward(direction) ? 1 : -1)] ?? null;

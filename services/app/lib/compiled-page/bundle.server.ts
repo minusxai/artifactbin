@@ -111,7 +111,7 @@ function rewriteImports(rewrite: (specifier: string) => string): () => PluginObj
 export type SsrImports = (specifier: string) => Record<string, unknown>;
 
 /** The shared build has no server half for a specifier a stored module imports. */
-export class IslandSsrUnavailable extends Error {
+class IslandSsrUnavailable extends Error {
   constructor(readonly specifier: string, detail: string) {
     super(`island SSR: no server build of ${specifier} (${detail})`);
     this.name = 'IslandSsrUnavailable';
@@ -200,7 +200,7 @@ function splitStaticHtml(code: string): { line: string; rest: string } {
 }
 
 /** A module's text as the body of a function of `__mx_import` that returns its exports (see `moduleToFunction`). */
-export function moduleFunctionBody(source: string): string {
+function moduleFunctionBody(source: string): string {
   const { line, rest: code } = splitStaticHtml(source);
   const hoisted: string[] = [];
   const body: string[] = line ? [line] : [];
@@ -249,7 +249,7 @@ export function moduleFunctionBody(source: string): string {
  */
 type SsrElement = (tag: string, props: unknown, children: unknown, needsId: boolean) => unknown;
 const solidSsrElement = solidWeb.ssrElement as unknown as SsrElement;
-export const ssrElementReactClass: SsrElement = (tag, props, children, needsId) => {
+const ssrElementReactClass: SsrElement = (tag, props, children, needsId) => {
   const given = (typeof props === 'function' ? (props as () => unknown)() : props ?? {}) as Record<string, unknown>;
   if ('classList' in given || !('class' in given || 'className' in given)) return solidSsrElement(tag, given, children, needsId);
   const values = [given.class, given.className].filter((v) => v !== undefined && v !== null && v !== false);
@@ -358,10 +358,10 @@ export async function defaultSsrImports(code: string, half?: SsrHalf): Promise<S
  * page's HTML (a private document's included), so it never sits beside the browser modules the
  * public `/islands/d/<sha>.js` route reads (`islands/<sha>`); its ref's `url` is this object key.
  */
-export const SSR_MODULE_PREFIX = 'islands-ssr';
+const SSR_MODULE_PREFIX = 'islands-ssr';
 
 /** SSR modules over the object store, content-addressed like the browser modules, under `SSR_MODULE_PREFIX`. */
-export function createSsrModuleStore(objects: ObjectStore = objectStore()): ModuleStore {
+function createSsrModuleStore(objects: ObjectStore = objectStore()): ModuleStore {
   return {
     async put(bytes, imports) {
       const sha = contentSha(bytes);

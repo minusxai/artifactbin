@@ -32,7 +32,7 @@ import { isSessionMentionHref } from "@/lib/annotations/session-mentions";
 import { isPersonMentionHref } from "@/lib/annotations/person-mentions";
 import { agentNameColor } from "../lib/agent-identity";
 
-export const commentSchema = new Schema({
+const commentSchema = new Schema({
   nodes: {
     doc: { content: "block+" },
     paragraph: {

@@ -62,7 +62,7 @@ export interface ArtifactFileEdit {
   summary: string;
 }
 
-export interface ArtifactFileCss {
+interface ArtifactFileCss {
   base: string;
   compiled: string | null;
   author: string | null;
@@ -80,7 +80,7 @@ export interface ArtifactFileExtras {
   integrity: string;
 }
 
-export interface ArtifactFileWorkspace {
+interface ArtifactFileWorkspace {
   documentId: string;
   /** Baseline fingerprint checked by the local importer before replacing source. */
   baseDigest: string;

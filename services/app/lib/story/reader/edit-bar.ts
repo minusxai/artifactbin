@@ -26,7 +26,7 @@ export const EDIT_PANEL_STRIP_W = 44;
  * RIGHT_RAIL_W + this (960px) there is no side panel at all: the document keeps
  * the full width and the panel's tabs open as bottom sheets instead.
  */
-export const EDIT_PANEL_MIN_DOC_W = 640;
+const EDIT_PANEL_MIN_DOC_W = 640;
 export const EDIT_PANEL_BREAKPOINT = RIGHT_RAIL_W + EDIT_PANEL_MIN_DOC_W;
 
 /** By innerWidth, like isPhoneViewport: readable anywhere, settable by a test. */

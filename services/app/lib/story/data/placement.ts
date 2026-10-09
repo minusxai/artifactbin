@@ -23,8 +23,8 @@
  */
 import type { CompiledDataflow, CompiledReads } from './compiled-dataflow';
 
-export type NodePlacement = 'browser' | 'server';
-export type WritePlacement = 'browser' | 'optimistic' | 'server';
+type NodePlacement = 'browser' | 'server';
+type WritePlacement = 'browser' | 'optimistic' | 'server';
 
 export interface DataflowPlacement {
   queries: Record<string, NodePlacement>;

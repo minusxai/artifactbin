@@ -162,7 +162,7 @@ export interface RemoteSessionsAnswer { sessions?: RemoteSessionInfo[] }
  * What the live stream delivers. The stream carries PINGS; the frame itself is
  * read with `liveFrame()`, and annotations with `listAnnotations('open')`.
  */
-export interface LiveHandlers {
+interface LiveHandlers {
   /** A head ping (`{editId, version, by}`), parsed; the subscriber validates it. */
   onPing: (ping: ArtifactVersionPing) => void;
   /** A dataset under this document changed (a named `data` frame), parsed. */

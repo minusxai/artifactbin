@@ -9,7 +9,7 @@ export function formatCount(n: number): string {
 }
 
 /** Blog-style absolute date ("Aug 8, 2026"). */
-export function dateStamp(iso: string): string {
+function dateStamp(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 

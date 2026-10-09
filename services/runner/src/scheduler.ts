@@ -3,7 +3,6 @@ import {createHash,randomUUID} from 'node:crypto';
 import type {RunnerService,RunStart,RunSnapshot,ScheduleInput,ScheduleRecord,ScheduleResolver,ScheduleOccurrence,ScheduleAttempt,SchedulerService} from '@artifactbin/contracts';
 import type {RunnerDatabase} from './store';
 import {initializeSchedules} from './schedule-store';
-export type {ScheduleInput} from '@artifactbin/contracts';
 export interface TransactionalDatabase extends RunnerDatabase{transaction<T>(fn:(tx:RunnerDatabase)=>Promise<T>):Promise<T>}
 interface ScheduleRow{id:string;owner:string;spec:ScheduleInput;next_due_at:Date;active_request:string|null;enabled:boolean;deleted:boolean}
 interface AttemptRow{id:string;occurrence_id:string;attempt_number:number;request_id:string;run_id:string|null;status:ScheduleAttempt['status'];next_attempt_at:Date;error:string|null;result:RunSnapshot|null;envelope:RunStart|null;lease_token:string|null;lease_until:Date|null}

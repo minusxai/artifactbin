@@ -9,7 +9,7 @@ export interface ExportCacheRequest { cacheKey:string; artifactId:string; revisi
 export interface ExportCacheOptions { freshMs?:number; leaseMs?:number; waitMs?:number; retryMs?:number; pollMs?:number[] }
 export type ExportProducer=(id:string)=>Promise<Omit<ExportImage,'id'|'artifact_id'>>;
 
-export class ExportCacheUnavailable extends Error {
+class ExportCacheUnavailable extends Error {
   constructor(){super('Export refresh did not complete; try again shortly');this.name='ExportCacheUnavailable';}
 }
 interface Snapshot {image:ExportImage|null;source_revision:string|null;fresh:boolean|null;backoff:boolean|null}

@@ -42,7 +42,7 @@ const reportedValue = (attribute: JsxAttribute | undefined): string | null => {
 };
 
 /** Every body element's id names its source node. Control expressions are not elements. */
-export const carriesNodeId = (node: JsxElement): boolean => !node.control;
+const carriesNodeId = (node: JsxElement): boolean => !node.control;
 
 /** Helmet is metadata/code, not part of the addressable document body. */
 function elements(nodes: JsxNode[]): Walked[] {

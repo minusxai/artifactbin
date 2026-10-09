@@ -18,7 +18,7 @@ import { STORY_FONT_FAMILIES } from '@/lib/data/story/story-fonts';
 /** The three slots a document may override, in the order the head declares them. */
 /** A family name is a css identifier, not free text — it lands in a stylesheet. Browser safe: the lazy
  * inline-CSS path rebuilds a document's base sheet from these same modules (lib/story/styles/story-base-css). */
-export const FAMILY_RE = /^[A-Za-z0-9][A-Za-z0-9 ]{0,48}$/;
+const FAMILY_RE = /^[A-Za-z0-9][A-Za-z0-9 ]{0,48}$/;
 
 const FONT_SLOTS = ['font-display', 'font-body', 'font-mono'] as const;
 type FontSlot = (typeof FONT_SLOTS)[number];

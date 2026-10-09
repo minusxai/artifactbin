@@ -16,7 +16,7 @@ import { DOCUMENT_FRAME_SELECTOR, freshFrameSrc } from './create-framed-story';
  * Draw the document again under the reader's new answer. A framed document (its own origin) loads a FRESH first URL:
  * the served one's ticket is spent, and only a new ticket carries a once-grant across; the page itself otherwise.
  */
-export async function reloadDocumentFrame(id: string): Promise<void> {
+async function reloadDocumentFrame(id: string): Promise<void> {
   const frame = document.querySelector<HTMLIFrameElement>(DOCUMENT_FRAME_SELECTOR);
   if (!frame) { window.location.reload(); return; }
   const src = await freshFrameSrc(id);

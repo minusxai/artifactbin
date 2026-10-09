@@ -299,8 +299,9 @@ const ARTIFACT_SOURCE_IDS: Table = {
 // keys to node ids; empty on production) and `node_identity_migration_jobs` (the
 // one-off migrations' cursors; its last job, `sqlite-data-syntax`, completed) went
 // with the code that read them, in the change that deleted the SQLite-syntax and
-// legacy-anchor compatibility shims. Boot DDL is additive-only, so databases created
-// before it keep the tables; nothing reads or writes them. A fresh database never
+// legacy-anchor compatibility shims. Both tables were dropped from production on
+// 2026-10-09 after a backup. Boot DDL is additive-only, so any other database created
+// before the change keeps them; nothing reads or writes them. A fresh database never
 // creates them.
 
 /**

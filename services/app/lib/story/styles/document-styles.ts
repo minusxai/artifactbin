@@ -75,6 +75,3 @@ export function documentStyleSheets(input: DocumentStylesInput): DocumentSheet[]
   ];
   return sheets.filter((sheet): sheet is DocumentSheet => sheet !== null);
 }
-
-/** `</style` inside CSS would close the tag early; CSS has no use for the sequence. */
-export const styleTag = (attr: string, css: string): string => `<style ${attr}>${css.replace(/<\/style/gi, '')}</style>`;

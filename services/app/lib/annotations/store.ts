@@ -71,7 +71,7 @@ export interface AnnotationAuthor {
  * account; public by construction (the handle is already a /@link, the avatar
  * route is public by id) and never the email or the token.
  */
-export interface AnnotationWireAuthor extends AnnotationAuthor {
+interface AnnotationWireAuthor extends AnnotationAuthor {
   user_id: string | null;
   image: string | null;
 }

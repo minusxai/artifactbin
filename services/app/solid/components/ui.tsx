@@ -1,17 +1,17 @@
 /* @jsxImportSource solid-js */
 /** The kit pieces the ported pages use and its tokens and labels. */
 import type { JSX } from 'solid-js';
-export { dateStamp, timeAgo } from '../lib/format';
+export { timeAgo } from '../lib/format';
 /** Display name for a normalized format — the designed tier is BRANDED "mx-markup". */
 export function formatLabel(format: string): string {
   return format === 'markup' ? 'mx-markup' : format;
 }
 
 /** Content-tier badge hues (flatuicolors defo palette); the fallback is the neutral grey. */
-export const FORMAT_COLORS: Record<string, string> = {
+const FORMAT_COLORS: Record<string, string> = {
   markup: '#c0392b',
 };
-export const FORMAT_FALLBACK_COLOR = '#95a5a6';
+const FORMAT_FALLBACK_COLOR = '#95a5a6';
 
 export const PAGE_COLUMN = 'mx-auto max-w-4xl px-4 sm:px-6';
 export const PANEL = 'rounded-[6px] border border-edge bg-surface';

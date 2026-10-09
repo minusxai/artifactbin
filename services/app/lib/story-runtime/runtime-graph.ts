@@ -16,9 +16,9 @@ import { VIEWER } from '@/lib/story/data/builtins';
 import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
 
 /** The source a membership change bumps; every query and every write check reads it. */
-export const MEMBERS_SOURCE = '_members';
+const MEMBERS_SOURCE = '_members';
 /** The source the viewer is: a query that reads `$_me.id` or `_me` re-runs when they change. */
-export const VIEWER_SOURCE = VIEWER;
+const VIEWER_SOURCE = VIEWER;
 /** The source the clock is: advanced once a minute, so only the readers of `$_now` re-run. */
 export const NOW_SOURCE = '_now';
 /**
@@ -28,7 +28,7 @@ export const NOW_SOURCE = '_now';
  */
 export const heldSource = (ref: string): string => `held:${ref}`;
 
-export type GraphValue =
+type GraphValue =
   | { kind: 'scalar'; name: string; type: ColumnType; default: Scalar }
   | { kind: 'table'; name: string; rows: Row[]; columns: DatasetColumn[] };
 
@@ -42,9 +42,9 @@ export interface GraphReads {
   queries: string[];
 }
 
-export interface GraphQuery { name: string; reads: GraphReads }
+interface GraphQuery { name: string; reads: GraphReads }
 
-export interface GraphMutation {
+interface GraphMutation {
   name: string;
   reads: GraphReads;
   /** A dataset write is checked per viewer; a local one writes a table value, and needs no check. */

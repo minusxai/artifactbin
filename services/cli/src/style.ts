@@ -1,5 +1,5 @@
 /** Terminal styling for human-facing output. Structured output (--json, --output, --format) never carries escapes. */
-export type Depth='truecolor'|'256'|'16';
+type Depth='truecolor'|'256'|'16';
 export interface StyleOptions {color:boolean;depth?:Depth}
 export interface Style {
  readonly enabled:boolean;

@@ -4,14 +4,14 @@ import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_MAX_BYTES,previewWorkspaceUrl,ty
 import {PageBar,DocumentTitle} from './PageBar';
 import {runtimeId} from '../../lib/story-runtime/runtime-id';
 import {FormPage,FORM_INPUT,FORM_PRIMARY_BUTTON,FORM_SECONDARY_BUTTON} from './FormControls';
-export interface ConnectOffer {html:string;filename:string}
-export interface ConnectInspection {title:string|null;comments:number;target:string;kind?:'local'|'update'|'copy';requiresAuth?:boolean;reason?:string}
+interface ConnectOffer {html:string;filename:string}
+interface ConnectInspection {title:string|null;comments:number;target:string;kind?:'local'|'update'|'copy';requiresAuth?:boolean;reason?:string}
 export interface ConnectAdapter {
  hosted?:boolean;
  inspect(offer:ConnectOffer):Promise<ConnectInspection>;
  apply(offer:ConnectOffer,input:{target:string;mode:'update'|'copy'|'local';operationId:string}):Promise<{path:string}>;
 }
-export class ConnectRequestError extends Error {constructor(message:string,readonly status:number){super(message);}}
+class ConnectRequestError extends Error {constructor(message:string,readonly status:number){super(message);}}
 export async function connectRequest<T>(path:string,body:unknown):Promise<T>{
  const response=await fetch(path,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
  const value=await response.json();if(!response.ok)throw new ConnectRequestError([value.error,value.hint,value.fix].filter(Boolean).join(' ')||'Could not apply this file.',response.status);return value;

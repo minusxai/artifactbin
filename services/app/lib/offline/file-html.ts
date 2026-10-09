@@ -68,7 +68,7 @@ const commentSafe = (text: string) => text.replace(/-(?=-)/g, '- ');
  * what the file really does (lib/offline/file-backend's rebuildArtifactFile,
  * lib/offline/solid-entry's banner); pinned by file-html.ui.test.
  */
-export function artifactFileAgentNote(file: Pick<ArtifactFile, 'origin' | 'liveUrl' | 'metadata'>): string {
+function artifactFileAgentNote(file: Pick<ArtifactFile, 'origin' | 'liveUrl' | 'metadata'>): string {
   const help = agentDiscovery(file.origin);
   // The title as the JSON below writes it (quoted, `<` as \u003c): a title is the author's text, never markup here.
   const title = JSON.stringify(file.metadata.title).replace(/</g, '\\u003c');
@@ -109,7 +109,7 @@ const ARTIFACT_FILE_BROKEN = 'This file is damaged and cannot be opened. Downloa
  * at all. It gunzips `#afbin-code` and runs the result as INLINE script text;
  * a data: fetch, a Blob URL or a module would each be refused somewhere.
  */
-export const ARTIFACT_FILE_BOOT = `(function(){
+const ARTIFACT_FILE_BOOT = `(function(){
 var d=document,status=d.getElementById(${scriptJson(ARTIFACT_FILE_IDS.boot)});
 function fail(m){if(status){status.textContent=m;status.setAttribute('role','alert');}}
 if(typeof DecompressionStream!=='function'||typeof Response!=='function'||typeof Uint8Array!=='function'){fail(${scriptJson(ARTIFACT_FILE_UNSUPPORTED)});return;}

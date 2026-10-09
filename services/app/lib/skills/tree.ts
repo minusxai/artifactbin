@@ -51,7 +51,7 @@ const SKILL_READ_FIRST_MAX_BYTES = 2500;
 type SkillAudience = 'agent' | 'human';
 
 /** `guide` (the default): prose under the reading caps. `data`: a paste-from reference exempt from them; see SkillFile.kind. */
-export type SkillKind = 'guide' | 'data';
+type SkillKind = 'guide' | 'data';
 
 export interface SkillFile {
   /** Tree-relative path: `artifactbin/SKILL.md` or `artifactbin/references/markup-data.md`. */

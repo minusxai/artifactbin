@@ -121,7 +121,7 @@ export interface AssembleDocumentInput {
  * need blob URLs, SQLite needs WebAssembly, and document CSS is intentionally inline.
  * This controls browser resource requests, not a general sandbox for authored HTML/code.
  */
-export function localPreviewCsp():string {
+function localPreviewCsp():string {
  return [
   "default-src 'none'",
   "script-src 'self' blob: 'wasm-unsafe-eval'",

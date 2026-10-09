@@ -28,7 +28,7 @@ import { Avatar } from '../components/Avatar';
 import { sendReaction } from './reactions';
 
 /** The one line an archived render's bar carries. */
-export const archivedBanner = (version: number, head: number): string => `Version ${version} of ${head} · read-only`;
+const archivedBanner = (version: number, head: number): string => `Version ${version} of ${head} · read-only`;
 
 export interface DocumentChromeProps {
   id: string;

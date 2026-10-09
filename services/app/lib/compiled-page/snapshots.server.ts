@@ -80,7 +80,7 @@ import {
  * The compiler build a snapshot records until the compiled page carries one
  * (w1-toolchain's build id reaches the store through w3-serve).
  */
-export const SNAPSHOT_BUILD_NONE = 'none';
+const SNAPSHOT_BUILD_NONE = 'none';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Keys

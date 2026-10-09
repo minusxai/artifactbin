@@ -8,8 +8,8 @@ import { CustomDomainPaths } from './CustomDomainPaths';
 
 interface Domain { hostname: string; status: 'pending' | 'verified'; txtName: string; txtValue: string; target: string | null; verifiedAt: string | null; missingSince: string | null; homepageArtifactId: string | null; pathOverrides: Array<{ path: string; artifactId: string }> }
 interface DomainSettings { enabled: boolean; target: string | null; targetAddresses: string[]; domain: Domain | null; homepageOptions?: Array<{ id: string; title: string }> }
-export const ATTACH_REFUSALS: Record<string, string> = { invalid_hostname: 'enter a domain name like blog.example.com — no https://, path or port, and not an artifactbin address', taken: 'another account already uses that domain', limit: 'an account holds one domain — remove this one first', disabled: 'custom domains are not available on this server right now' };
-export function verifyRefusal(error: string, domain: Domain, target: string | null): string {
+const ATTACH_REFUSALS: Record<string, string> = { invalid_hostname: 'enter a domain name like blog.example.com — no https://, path or port, and not an artifactbin address', taken: 'another account already uses that domain', limit: 'an account holds one domain — remove this one first', disabled: 'custom domains are not available on this server right now' };
+function verifyRefusal(error: string, domain: Domain, target: string | null): string {
   switch (error) {
     case 'txt_missing': return `The TXT record at ${domain.txtName} with the value shown was not found yet. DNS changes can take a few minutes to appear.`;
     case 'not_pointing': return `${domain.hostname} does not point at ${target ?? 'our servers'} yet. If your DNS host proxies it (Cloudflare's orange cloud), set the record to DNS only.`;

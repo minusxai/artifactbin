@@ -20,7 +20,7 @@ const shape = (nodes: JsxNode[]): unknown => nodes.map((node): unknown => node.t
 /** The downloaded module cannot compile new widgets without a local compiler.
  * Plain markup and static kit shells are projected; changed interactive trees
  * are refused before the backend adopts source, preserving the recoverable draft. */
-export const OFFLINE_COMPONENT_REASON = 'This component needs the local compiler. Open this file with afbin preview to edit it.';
+const OFFLINE_COMPONENT_REASON = 'This component needs the local compiler. Open this file with afbin preview to edit it.';
 const STATIC_SHELLS = new Set(['Badge', 'Alert', 'AlertTitle', 'AlertDescription', 'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardAction', 'CardContent', 'CardFooter']);
 export function assertProjectionSupported(beforeSource: string, nextSource: string): void {
   const before = parseJsx(beforeSource), next = parseJsx(nextSource);

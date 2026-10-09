@@ -107,7 +107,7 @@ interface OptimisedImage {
 }
 
 /** A second rendering of the same picture at a second width. */
-export interface ImageVariant {
+interface ImageVariant {
   buffer: Buffer;
   contentType: string;
   width: number;

@@ -3,7 +3,5 @@ export { storyBodyFor } from './body';
 export type { StoredDocument } from './document-codec';
 export type { StringEdit } from './edit-batch';
 export { declarationsOf, declaresMutations, validateHelmet } from './helmet';
-export { lazyCodeOf } from './lazy-code';
-export type { LazyCode } from './lazy-code';
 export { stampNodeIds } from './node-ids';
 export { displayTitle, firstHeadingTitle } from './title';

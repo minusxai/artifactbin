@@ -27,7 +27,7 @@ import type { SqlExtensions } from '../extensions';
 
 export interface WriteBounds { limit: number; timeoutMs: number }
 
-export class PolicyDenied extends Error {}
+class PolicyDenied extends Error {}
 const refuse = (message: string): never => { throw new PolicyDenied(`Dataset policy: ${message}`); };
 const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e)).split('\n').slice(0, 3).join(' ').trim();

@@ -1,6 +1,5 @@
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
-import { readFile } from 'node:fs/promises';
 const imports = new Set([
     "@earendil-works/pi-agent-core",
     "@earendil-works/pi-ai/utils/event-stream",
@@ -44,7 +43,4 @@ export async function bundleSource(source: string) {
         ],
     });
     return out.outputFiles[0]!.text;
-}
-export async function bundleProgram(filename: string) {
-    return bundleSource(await readFile(filename, "utf8"));
 }

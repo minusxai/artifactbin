@@ -6,7 +6,8 @@ host): `retired-themes` changed 7 rows, `sqlite-versions` 4,308, `legacy-anchors
 that followed deleted those scripts with the code they unlocked: the SQLite-syntax converter and
 its on-the-fly serving, the lazy source-to-graph migration and every non-graph branch of
 `decodeDocument`, the retired theme alias, the legacy-anchor alias machinery and table, and the
-`users.is_guest` / `users.password_hash` columns.
+`users.is_guest` / `users.password_hash` columns. The two retired tables, `artifact_node_aliases` and
+`node_identity_migration_jobs`, were dropped from production on 2026-10-09 after a backup.
 
 What production still holds in a retired shape is refused by name, never converted:
 `lib/artifacts/servable` answers 410 `unservable_document` for 3 trashed heads and 13 archived

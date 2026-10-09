@@ -245,9 +245,6 @@ export interface IslandRenderData {
   drawings: Readonly<Record<string, DrawnChart>>;
 }
 
-/** `compilePage`'s signature (compiler.ts, w2-compiler). Pure: the same input and build produce the same page. */
-export type CompilePage = (input: CompileInput, build: CompilerBuild) => Promise<CompiledPage>;
-
 /**
  * The most a read may spend compiling inline on a build-id miss before it is logged as slow
  * (spec §6). There is no other renderer: a read always waits for the compile.
@@ -334,9 +331,6 @@ export interface DataPlan {
   /** Whether any shared query runs inside a connected Postgres (no mark, no NOTIFY): the snapshot is time-bounded (spec §5.3). */
   postgres: boolean;
 }
-
-/** `planOf`'s signature (plan.ts, w1-planners). Pure. */
-export type PlanOf = (flow: CompiledDataflow, access: DatasetAccessFacts) => DataPlan;
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Snapshots
@@ -441,8 +435,6 @@ export interface LinkHints {
 }
 export const EMPTY_LINK_HINTS: LinkHints = { prefetch: [], prerender: [] };
 export const PRERENDER_LIMIT = 3;
-/** `linkHintsOf`'s signature (links.ts, w1-planners). Pure over the nodes and the deployment's origins. */
-export type LinkHintsOf = (nodes: JsxNode[], deployment: { origins: readonly string[] }) => LinkHints;
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The reader page assembler

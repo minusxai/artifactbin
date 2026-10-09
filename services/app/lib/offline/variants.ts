@@ -29,7 +29,7 @@ export interface VariantCaps {
   maxBytes: number;
 }
 
-export const DEFAULT_VARIANT_CAPS: VariantCaps = { maxVariants: 200, maxBytes: 8 * 1024 * 1024 };
+const DEFAULT_VARIANT_CAPS: VariantCaps = { maxVariants: 200, maxBytes: 8 * 1024 * 1024 };
 
 /**
  * Combinations per `run` call: each call is ONE engine run that loads the imports once

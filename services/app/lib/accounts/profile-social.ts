@@ -8,7 +8,7 @@ import { avatarUrl } from './avatars';
 import { count, countLinked, followersYouKnow, has } from './relations';
 
 /** How many followers-you-know are named; the rest are counted. */
-export const KNOWN_FOLLOWERS_SHOWN = 3;
+const KNOWN_FOLLOWERS_SHOWN = 3;
 
 export interface ProfileSocial {
   followers: number;
@@ -17,7 +17,7 @@ export interface ProfileSocial {
   relation?: ProfileRelation;
 }
 
-export interface ProfileRelation {
+interface ProfileRelation {
   youFollow: boolean;
   followsYou: boolean;
   /** Up to KNOWN_FOLLOWERS_SHOWN of the people you follow who follow them, newest first. */

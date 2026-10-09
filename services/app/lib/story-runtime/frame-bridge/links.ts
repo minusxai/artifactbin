@@ -20,7 +20,7 @@
 import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE, type StoryNavigateMessage } from '@/lib/story-runtime/contract';
 
 /** How long the frame waits for the app page's answer before taking the top itself: a cross-process round trip. */
-export const NAVIGATE_ANSWER_MS = 300;
+const NAVIGATE_ANSWER_MS = 300;
 
 /**
  * The app path (pathname, query and hash) a link in this document leads to, or null when it is not the app's: another

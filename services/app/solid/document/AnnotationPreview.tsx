@@ -21,12 +21,12 @@ import { useOptionalInbox } from '../lib/notifications';
 
 type Author = AnnotationCommentWire['author'];
 
-export const VIEW_COMMENT_COLLAPSED_W = 36;
-export const VIEW_COMMENT_COUNTED_W = 44;
-export const VIEW_COMMENT_MANY_W = 48;
+const VIEW_COMMENT_COLLAPSED_W = 36;
+const VIEW_COMMENT_COUNTED_W = 44;
+const VIEW_COMMENT_MANY_W = 48;
 export const VIEW_COMMENT_COLLAPSED_H = 36;
-export const VIEW_COMMENT_EXPANDED_H = 108;
-export const VIEW_COMMENT_GAP = 6;
+const VIEW_COMMENT_EXPANDED_H = 108;
+const VIEW_COMMENT_GAP = 6;
 export const VIEW_COMMENT_INSET = 12;
 
 /** Offline, a name is a label someone typed, not a profile to visit. */
@@ -37,7 +37,7 @@ export const previewText = (body: string) => plainText(parseMarkdownLite(body));
 /** What a folded comment or thread keeps: the sentence it opens with. */
 export const firstLine = (body: string) => previewText(body).split('\n', 1)[0] ?? '';
 
-export const authorLabel = (author: Author) => author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
+const authorLabel = (author: Author) => author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
 /** Prefer connected-session identity; legacy named authors still get their known logo. */
 const agentProgram = (author: Author): string => {
   const names: Record<string,string> = {claude:'Claude Code','claude-code':'Claude Code','claude code':'Claude Code','claude-web':'Claude',codex:'Codex',pi:'Pi',opencode:'OpenCode',chatgpt:'ChatGPT'};
@@ -46,7 +46,7 @@ const agentProgram = (author: Author): string => {
 const authorKey = (author: Author) => `${author.kind}:${authorLabel(author).toLowerCase()}`;
 
 /** Distinct people/agents who replied, oldest first. The root author is already named above. */
-export function replyParticipants(thread: AnnotationCommentWire[]): Author[] {
+function replyParticipants(thread: AnnotationCommentWire[]): Author[] {
   const seen = new Set<string>();
   return thread.slice(1).flatMap(({ author }) => {
     const key = authorKey(author);

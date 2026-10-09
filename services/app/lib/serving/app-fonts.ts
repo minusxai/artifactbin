@@ -22,7 +22,7 @@ export interface AppFontFace {
   unicodeRange?: string;
 }
 
-export const APP_FONT_FACES: readonly AppFontFace[] = fontManifest.app as AppFontFace[];
+const APP_FONT_FACES: readonly AppFontFace[] = fontManifest.app as AppFontFace[];
 
 /** The family every shell page sets its text in (app/globals.css `--font-jb-mono`, the body's `--font-mono`). */
 const SHELL_TEXT_FAMILY = 'JetBrains Mono Variable';

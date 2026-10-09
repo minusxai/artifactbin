@@ -135,7 +135,7 @@ const MENU_ROW = 'flex w-full items-center gap-3 rounded-[5px] border-0 bg-trans
  * The app menu (links, then sign out / disconnect / login), shared by the app bar and the document
  * page. It opens under the bar at the right, or as a bottom sheet on a phone.
  */
-export function PageMenuPanel(props: { close: () => void; phone?: boolean; top?: number }): JSX.Element {
+function PageMenuPanel(props: { close: () => void; phone?: boolean; top?: number }): JSX.Element {
   const { session } = useSession();
   const location = useLocation();
   const person = () => session()?.kind === 'account' ? session()?.user : null;
@@ -169,7 +169,7 @@ export function PageMenuPanel(props: { close: () => void; phone?: boolean; top?:
 }
 
 /** The notifications panel, shared by the app bar and the document page. */
-export function NotificationsPanel(props: { close: () => void }): JSX.Element {
+function NotificationsPanel(props: { close: () => void }): JSX.Element {
   const close = () => props.close();
   return <section aria-label="Notifications" class="fixed right-3 top-14 z-50 w-80 rounded-[7px] border border-edge bg-surface p-4 shadow-xl"><div class="mb-3 flex items-center justify-between"><h2 class="text-sm font-semibold">Notifications</h2><button type="button" aria-label="Close notifications" onClick={close}><X size={18} /></button></div><div class="max-h-[55vh] overflow-y-auto"><PeopleInbox compact close={close} /></div><nav aria-label="Notification links" class="mt-2 flex flex-col gap-2 border-t border-edge pt-3"><a href="/notifications" onClick={close}>All notifications</a><a href="/account#notifications" onClick={close}>Notification settings</a></nav></section>;
 }

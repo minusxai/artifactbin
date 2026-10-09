@@ -18,7 +18,7 @@
  */
 
 /** Space kept between the document's ink and the panel's edge. */
-export const EDIT_PANEL_GUTTER = 16;
+const EDIT_PANEL_GUTTER = 16;
 
 /** Elements past this many are not walked; the answer is then "does not fit". */
 const WALK_LIMIT = 6000;

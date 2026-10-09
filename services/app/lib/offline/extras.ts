@@ -48,7 +48,7 @@ export function extrasScriptUrl(origin: string, extras: ArtifactFileExtras | nul
   }
 }
 
-export type ExtrasState = 'idle' | 'loading' | 'ready' | 'failed';
+type ExtrasState = 'idle' | 'loading' | 'ready' | 'failed';
 
 export interface ExtrasLoader {
   state(): ExtrasState;

@@ -25,13 +25,3 @@ export async function forgetPagesSession(doc: Document = document): Promise<void
     /* the cookie expires on its own; the next framed page re-mints or clears it */
   }
 }
-
-/** Forget every token this browser holds (the anonymous owner's sign-out). */
-export async function forgetTokens(): Promise<void> {
-  await Promise.all([
-    forgetPagesSession(),
-    fetch('/api/session/token', { method: 'DELETE' }).catch(() => {
-      /* nothing to do — the cookie either cleared or the browser is offline */
-    }),
-  ]);
-}

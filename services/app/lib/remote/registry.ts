@@ -38,7 +38,7 @@ interface Session {
   events: Set<string>;
   pending: Promise<void>;
 }
-export function dimensions(cols: number, rows: number) {
+function dimensions(cols: number, rows: number) {
   if (
     !Number.isInteger(cols) ||
     cols < 2 ||

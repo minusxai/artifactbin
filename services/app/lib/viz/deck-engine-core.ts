@@ -30,7 +30,7 @@ class H3HexagonLayer extends PolygonLayer<Row> {
   }
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const LAYER_CLASSES: Record<keyof typeof DECK_LAYERS, new (props: any) => unknown> = {
+const LAYER_CLASSES: Record<keyof typeof DECK_LAYERS, new (props: any) => unknown> = {
   ScatterplotLayer, ArcLayer, GeoJsonLayer, ColumnLayer, HexagonLayer, HeatmapLayer, GridLayer, H3HexagonLayer,
 };
 const POSITION_PROPS = ['getPosition', 'getSourcePosition', 'getTargetPosition'];
@@ -45,7 +45,7 @@ export function paletteFor(dark: boolean): DeckPalette {
 }
 
 /** Query rows that carry an author's GeoJSON, as features: the geometry column parsed, the rest as properties. */
-export function rowsAsFeatures(rows: readonly Row[]): Feature[] {
+function rowsAsFeatures(rows: readonly Row[]): Feature[] {
   return rows.flatMap(({ [GEOMETRY_COLUMN]: geometry, ...properties }) => {
     try {
       const parsed = typeof geometry === 'string' ? JSON.parse(geometry) : geometry;
@@ -125,7 +125,7 @@ export function extentOf(layers: readonly Built[]): [[number, number], [number, 
   return Number.isFinite(minX) ? [[minX, minY], [maxX, maxY]] : null;
 }
 
-export const WORLD: MapViewState = { longitude: 0, latitude: 20, zoom: 1, pitch: 0, bearing: 0 };
+const WORLD: MapViewState = { longitude: 0, latitude: 20, zoom: 1, pitch: 0, bearing: 0 };
 
 /** The view fitted to the data (or the author's own), for a box of this size. */
 export function fittedView(initialViewState: Partial<MapViewState> | undefined, extent: ReturnType<typeof extentOf>, width: number, height: number): MapViewState {

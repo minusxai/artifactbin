@@ -16,7 +16,7 @@
  */
 
 /** The custom property carrying the viewport height the surface sizes against. */
-export const STORY_VH_VAR = '--mx-vh';
+const STORY_VH_VAR = '--mx-vh';
 
 /**
  * Fallback for a render whose base CSS never declared the property. Matches the
@@ -80,19 +80,6 @@ export function remapViewportHeightUnits(css: string): string {
     }
   }
   return out + pending; // unterminated tail (degenerate input) — never rewritten
-}
-
-const MARKUP_STYLE_BLOCK_RE = /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi;
-
-/**
- * Remap viewport-height units inside every `<style>` block of a chunk of story
- * SOURCE — the `<style>`-block wrapper around the declaration remap above. The
- * block content is a template-literal/text child in the source, so the CSS is
- * remapped in place and everything around it survives byte-for-byte.
- */
-export function remapStyleBlockViewportUnits(source: string): string {
-  return source.replace(MARKUP_STYLE_BLOCK_RE, (_m, open: string, css: string, close: string) =>
-    `${open}${remapViewportHeightUnits(css)}${close}`);
 }
 
 /**

@@ -45,7 +45,7 @@ const TIMEOUT_MS = 5_000;
 const WRITE_ROWS = 10_000;
 
 /** What a run knows beside its rows: the reader's values and local tables, the viewer, the clock, the zone. */
-export interface PageRunContext {
+interface PageRunContext {
   values: Record<string, Scalar>;
   localTables?: Record<string, Row[]>;
   userId: string | null;
@@ -54,7 +54,7 @@ export interface PageRunContext {
 }
 
 /** The platform facts a write is bound with. */
-export type PageWriteContext = Pick<PageRunContext, 'userId' | 'now' | 'tz'>;
+type PageWriteContext = Pick<PageRunContext, 'userId' | 'now' | 'tz'>;
 
 export interface PageEngineSource {
   /** The SQLite core, loaded on first use (a lazy chunk and its wasm, or the offline file's embedded bytes). */

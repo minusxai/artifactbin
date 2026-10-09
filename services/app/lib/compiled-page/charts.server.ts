@@ -36,7 +36,7 @@ import { DRAWING_CLASS } from '@/lib/islands/chart';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
 
 /** The largest drawing served in the HTML; a chart that draws more (thousands of marks) is drawn by its island. */
-export const MAX_DRAWING_BYTES = 512 * 1024;
+const MAX_DRAWING_BYTES = 512 * 1024;
 
 /** QuestionEmbed's title bar (`px-3 py-2 text-sm` + a 1px border): the chart below it gets the rest of the embed's height. */
 const TITLE_BAR_PX = 37;

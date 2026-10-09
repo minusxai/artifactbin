@@ -1,6 +1,5 @@
 /** Persistent refinements scoped to the annotation's independently validated source owner. */
 import { isCommentKey, type CommentKey } from '../data/row-key';
-export { isCommentKey } from '../data/row-key';
 export type { CommentKey } from '../data/row-key';
 export type CommentTarget =
   | { kind: 'table'; rowKey: CommentKey; columnKey?: string; templateNodeId?: string }

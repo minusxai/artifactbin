@@ -12,7 +12,7 @@ import {CliError} from './errors';
  * geometry in a `geometry` column). Every command that reads, pushes, diffs or
  * pulls a dataset file asks here, so the three never disagree.
  */
-export const DATASET_EXTENSIONS=['.csv','.json','.geojson'];
+const DATASET_EXTENSIONS=['.csv','.json','.geojson'];
 export const isDatasetFile=(path:string):boolean=>!isProgramFile(path)&&DATASET_EXTENSIONS.includes(extname(path).toLowerCase());
 
 type Row=Record<string,unknown>;

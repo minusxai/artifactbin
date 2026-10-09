@@ -7,7 +7,7 @@ import {documentAfterOperation} from '../../../app/lib/story/graph/document-upda
 import type {DocumentMetadata} from '../document';
 import type {LocalHistoryEntry} from '../local-history';
 
-export interface PreviewEditorDocument {body:string;revision:string;metadata:DocumentMetadata}
+interface PreviewEditorDocument {body:string;revision:string;metadata:DocumentMetadata}
 export interface PreviewEditorFiles {
  read(file:string):Promise<PreviewEditorDocument>;
  version?(file:string,revision:string):Promise<number>;

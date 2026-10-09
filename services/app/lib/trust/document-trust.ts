@@ -190,7 +190,7 @@ function sessionSetCookie(session: SessionTrust): string {
 }
 
 /** The key the once-grants ride under in a pages session's `carried` (lib/accounts/pages-sessions PagesCarried). */
-export const CARRIED_TRUST_KEY = 'trust';
+const CARRIED_TRUST_KEY = 'trust';
 
 /**
  * What the app page hands a document's own origin with its reader's pages ticket (lib/serving/artifact-page

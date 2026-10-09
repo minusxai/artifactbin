@@ -11,7 +11,7 @@ export function grantsOf(row: Pick<ArtifactRow,'dataset_policy'>): DatasetGrantP
   const value=row.dataset_policy;
   return value&&typeof value==='object'&&'version' in value&&value.version===2?parseDatasetGrants(value):null;
 }
-export const principalOf=(row:Pick<ArtifactRow,'user_id'|'token_id'>)=>({userId:row.user_id,tokenId:row.token_id});
+const principalOf=(row:Pick<ArtifactRow,'user_id'|'token_id'>)=>({userId:row.user_id,tokenId:row.token_id});
 export interface GrantDocument {id:string;editId:string}
 function owns(row:Pick<ArtifactRow,'user_id'|'token_id'>,actor:RoleActor){return row.user_id?!!actor.userId&&row.user_id===actor.userId:!!actor.tokenId&&row.token_id===actor.tokenId;}
 /** Called inside an optional existing transaction; never enqueues work on the outer database. */

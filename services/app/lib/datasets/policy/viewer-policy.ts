@@ -13,7 +13,7 @@ import type {
   Scalar,
 } from '@artifactbin/contracts';
 
-export const POLICY_ROLE = 'viewer';
+const POLICY_ROLE = 'viewer';
 
 /** The session a WRITE runs under: the role, plus who is writing when known. */
 export function policySession(userId: string | null): Record<string, Scalar> {

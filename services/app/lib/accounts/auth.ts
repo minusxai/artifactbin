@@ -98,7 +98,6 @@ export function docAssetImportRateLimited(id: string, now = Date.now()): boolean
  */
 const DOC_FETCHES_PER_HOUR = 600;
 let docFetchCap: number | null = null;
-export function setDocumentFetchCapForTests(cap: number | null): void { docFetchCap = cap; }
 export function documentFetchRateLimited(id: string, reader: string, now = Date.now()): boolean {
   return hourlyAttemptsExhausted(`doc-fetch:${id}:${reader}`, docFetchCap ?? DOC_FETCHES_PER_HOUR, now);
 }

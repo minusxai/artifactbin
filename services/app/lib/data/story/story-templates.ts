@@ -19,7 +19,6 @@ import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { storyGuidance } from './story-guidance';
 
-export type { StoryTemplateName };
 export { STORY_TEMPLATE_NAMES };
 
 interface StoryTemplate {

@@ -20,7 +20,7 @@ import { immutableSet } from '@/lib/jsx/immutable-set';
  * Components that may live INSIDE editable prose: they render inline, and are
  * spliced back verbatim on commit (locked islands while editing).
  */
-export const TEXT_HOST_INLINE_EMBEDS = immutableSet(['Number', 'Icon']);
+const TEXT_HOST_INLINE_EMBEDS = immutableSet(['Number', 'Icon']);
 
 const SVG_TAGS_LOWER = immutableSet<string>(STORY_SVG_TAGS.map((t) => t.toLowerCase()));
 

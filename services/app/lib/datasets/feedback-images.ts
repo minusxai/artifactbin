@@ -137,8 +137,3 @@ async function readContent(input:{actor:RoleActor;documentId:string;datasetId:st
     return {filename:downloadFilename(row),image:!row.meta.format||row.meta.format==='image',body:await objectStore().get(objectKey),contentType:typeof row.meta.contentType==='string'?row.meta.contentType:'application/octet-stream'};
   });
 }
-
-export function datasetImageRefId(ref:unknown):string|null { return typeof ref==='string'&&ref.startsWith('dimg:')?ref.slice(5):null; }
-export function datasetImageRawUrl(documentId:string,datasetId:string,ref:unknown):string|null {
-  const id=datasetImageRefId(ref);return id?imageUrl(documentId,datasetId,id):null;
-}

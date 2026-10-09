@@ -38,7 +38,7 @@ export interface DocumentCspInput {
 
 const eventsPath = (id: string): string => `/a/${id}/events`;
 /** The door a script reaches its declared hosts through (app/a/[id]/fetch). */
-export const fetchPath = (id: string): string => `/a/${id}/fetch`;
+const fetchPath = (id: string): string => `/a/${id}/fetch`;
 
 function httpsOrigins(list: readonly string[]): string[] {
   return list.map((entry) => {

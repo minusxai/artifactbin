@@ -51,7 +51,7 @@ export const EVENTS_TABLE: Table = {
   ],
 };
 
-export const DELIVERIES_TABLE: Table = {
+const DELIVERIES_TABLE: Table = {
   name: 'deliveries', columns: [
     {name:'event_id',type:'TEXT',notNull:true}, {name:'subscriber',type:'TEXT',notNull:true},
     {name:'available_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},

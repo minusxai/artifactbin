@@ -8,7 +8,7 @@
  */
 export const SPA_PATHS = /^(\/|\/login|\/connect|\/start|\/account|\/notifications|\/welcome|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/getting-started|\/datasets\/new|\/files\/new|\/schedules|\/programs\/new|\/programs\/[^/]+\/edit)$/;
 /** A profile page (server/app `/:user{@[a-z0-9_]+}`); `/@name/<slug>` is a document's pretty alias, not this. */
-export const PROFILE_PATH = /^\/@[a-z0-9_]+$/;
+const PROFILE_PATH = /^\/@[a-z0-9_]+$/;
 
 /** The app's router draws this pathname without the server (a static page or a profile). */
 export const isAppPagePath = (pathname: string): boolean => SPA_PATHS.test(pathname) || PROFILE_PATH.test(pathname);

@@ -8,14 +8,14 @@ import { fetchWebResource } from './fetch';
 import { WebIngestError } from './guard';
 import { sniffFontType } from './sniff';
 
-export const BROWSER_FONT_MAX_BYTES = 2_000_000;
-export const BROWSER_FONT_TIMEOUT_MS = 10_000;
+const BROWSER_FONT_MAX_BYTES = 2_000_000;
+const BROWSER_FONT_TIMEOUT_MS = 10_000;
 const MAX_URL_BYTES = 8192;
 const FONT_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const GOOGLE_FONT_FILE_PATH = /^\/s\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*\.(?:woff2?|ttf|otf)$/i;
 
 /** One CSS API and Google-hosted font files only; redirect hops use this same predicate. */
-export function browserFontUrlAllowed(url: URL): boolean {
+function browserFontUrlAllowed(url: URL): boolean {
   if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash) return false;
   if (url.origin === FONT_STYLES) return (url.pathname === '/css' || url.pathname === '/css2') && url.search.length > 1;
   if (url.origin === FONT_FILES) return GOOGLE_FONT_FILE_PATH.test(url.pathname) && !url.search;

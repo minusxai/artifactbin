@@ -12,7 +12,7 @@
  */
 import { parseArtifactFile, type ArtifactFile } from './file-format';
 
-export const NAME_KEY = 'afbin-offline-name';
+const NAME_KEY = 'afbin-offline-name';
 const DRAFT_PREFIX = 'afbin-offline-draft:';
 
 const store = (): Storage | null => {
@@ -42,7 +42,7 @@ export function clearDraft(file: Pick<ArtifactFile, 'artifactId' | 'downloadedAt
 }
 
 /** The newest moment the file itself records: a download, an edit, a comment, a reply or a status change. */
-export function fileTime(file: ArtifactFile): number {
+function fileTime(file: ArtifactFile): number {
   const times = [file.downloadedAt, ...file.journal.map((e) => e.at),
     ...file.threads.flatMap((t) => [t.created_at, t.resolved_at ?? '', ...t.thread.map((c) => c.created_at)])];
   return Math.max(0, ...times.map((t) => Date.parse(t)).filter((n) => Number.isFinite(n)));

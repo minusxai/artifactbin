@@ -4,7 +4,7 @@
 import {GRAPH_ROOT,graphAncestors,type DocumentGraph,type DocumentGraphNode} from './document-graph';
 import {applyDocumentPatch,prepareDocumentPatch,type DocumentPatch} from './document-patch';
 import {MAX_DOCUMENT_BYTES as MAX_CONTENT_BYTES,type GraphPatch,type GraphRead,type GraphFacet} from '@artifactbin/contracts';
-export type {GraphPatch,GraphRead,GraphFacet,GraphNodeWrite} from '@artifactbin/contracts';
+export type { GraphPatch, GraphFacet } from '@artifactbin/contracts';
 
 const canonical=(v:unknown):unknown=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)])):v;
 const equal=(a:unknown,b:unknown)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));

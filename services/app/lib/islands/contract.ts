@@ -24,7 +24,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
  * The document's data as one island reads it. Every accessor is reactive
  * inside an island (the bridge tracks reads), and plain outside one.
  */
-export interface IslandData {
+interface IslandData {
   /** Every declared scalar at its current value. */
   values(): Readonly<Record<string, Scalar>>;
   value(name: string): Scalar | undefined;
@@ -38,7 +38,7 @@ export interface IslandData {
   people(): Readonly<Record<string, PersonCard>>;
 }
 
-export interface IslandWrites {
+interface IslandWrites {
   /** Set a declared scalar; a continuous control (typing, a slider) passes `debounce` and waits for the store's pause. */
   setValue(name: string, value: Scalar, options?: { debounce?: boolean }): void;
   /** Run a declared `<Mutation>`. Optimistic when the plan allows; the status feed reports saving/saved/failed. */
@@ -144,8 +144,6 @@ export interface WriteStatusFeed {
 
 /** How long a `saved` status stays in the feed before it is dropped. */
 export const SAVED_STATUS_TTL_MS = 2000;
-/** The indicator's element attribute, for gates and the SPA to find it. */
-export const WRITE_STATUS_ATTR = 'data-mx-write-status';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The SPA's handover (docs §7)
@@ -243,7 +241,6 @@ export const AUTHOR_VENDOR_EXPORTS = {
   'solid-js/web': ['addEventListener', 'classList', 'className', 'createComponent', 'delegateEvents', 'effect', 'insert', 'memo', 'mergeProps', 'render', 'setAttribute', 'setAttributeNS', 'setBoolAttribute', 'setProperty', 'setStyleProperty', 'spread', 'style', 'template', 'use'],
   'solid-js/store': ['createStore', 'reconcile'],
 } as const satisfies Record<string, readonly string[]>;
-export type AuthorVendorSpecifier = keyof typeof AUTHOR_VENDOR_EXPORTS;
 
 /**
  * The page's data island (`<script type="application/json">`, written by the

@@ -38,10 +38,3 @@ export const VISIBILITY_ICON_NODES: Record<SharingIcon, IconNode> = {
     ['path', { d: 'M2 12h20', key: 'globe-equator' }],
   ],
 };
-
-/** Only the fixed, trusted geometry above is serialized; no authored attributes enter here. */
-export function visibilityIconPaths(visibility: SharingIcon): string {
-  return VISIBILITY_ICON_NODES[visibility].map(([tag, attributes]) =>
-    `<${tag} ${Object.entries(attributes).filter(([name]) => name !== 'key').map(([name, value]) => `${name}="${value}"`).join(' ')}/>`
-  ).join('');
-}

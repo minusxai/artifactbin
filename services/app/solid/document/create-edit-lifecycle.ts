@@ -21,10 +21,10 @@ import { STORY_EDIT_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import type { IslandStoryController } from '@/lib/story-runtime/island-controller';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
 
-export type EditPhase = 'reading' | 'entering' | 'editing' | 'leaving' | 'restoring';
+type EditPhase = 'reading' | 'entering' | 'editing' | 'leaving' | 'restoring';
 
 /** How long a way out of edit mode waits for the editor's last save before leaving anyway. */
-export const FLUSH_BOUND_MS = 3000;
+const FLUSH_BOUND_MS = 3000;
 
 export interface EditLifecycleOptions {
   editable: Accessor<boolean>;

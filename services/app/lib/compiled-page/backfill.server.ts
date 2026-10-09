@@ -1,7 +1,7 @@
 /** Select document versions by recorded build metadata, then ask the running app to recompile them. */
 import { READER_MODE_HEADER } from './contract';
 
-export interface BackfillDb { query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: R[] }> }
+interface BackfillDb { query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: R[] }> }
 export type BackfillColumn = 'compiler_version' | 'island_build' | 'css_version' | 'ssr_bundle' | 'page_format' | 'handover_contract';
 export interface BackfillFilter { column: BackfillColumn; op: '!=' | '=' | '<'; value: string | number }
 /** A filter, or a group of which any one may match (`--stale`: an old contract OR an old stylesheet). */
@@ -27,7 +27,7 @@ export interface BackfillOptions {
   /** The pause between health checks (tests). */
   sleep?: (ms: number) => Promise<void>;
 }
-export interface BackfillTarget { id: string; version: number; head: boolean }
+interface BackfillTarget { id: string; version: number; head: boolean }
 export interface BackfillReport {
   considered: number;
   done: number;
