@@ -39,7 +39,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { JsxNode } from '@/lib/jsx';
-import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
+import type { StoredMermaidImage } from '@artifactbin/contracts';
 import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import { getDb } from '@/lib/platform/db';
 import { objectStore } from '@/lib/object-store';

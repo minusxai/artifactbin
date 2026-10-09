@@ -1,5 +1,5 @@
 /** Selected-block controls own their preview; only a completed gesture changes source. */
-import { runtimeId } from '../story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import type { BlockEdit } from './block-edit';
 import { createDragPreview } from './drag-preview';
 import { SELECTION_PRESENTATION } from '../story-runtime/selection-presentation';

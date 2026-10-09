@@ -17,7 +17,7 @@ export { parseJsx } from './parse';
 export { repairJsxSource } from './repair';
 export { serializeJsx } from './serialize';
 // Node-level validation for callers that split the tree before validating
-// (lib/story/document/helmet.ts excludes the Helmet subtree while keeping exact spans).
+// (lib/document/helmet.ts excludes the Helmet subtree while keeping exact spans).
 export { validateJsx } from './validate';
 
 // The vocabulary validation checks against. Every module here is pure and browser-safe, so the

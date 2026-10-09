@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { sourceEdits } from '../source-edits';
-import { resolveEditBatch } from '@/lib/story/document/edit-batch';
+import { resolveEditBatch } from '@/lib/document/edit-batch';
 import { SourceHistory, sourceChanges } from '../history';
-import { applySplice } from '@/lib/story/document/splice';
+import { applySplice } from '@/lib/document/splice';
 const a = '<div><p id="a">one</p><p id="b">two</p><p id="c">three</p></div>';
 const b = a.replace('one', 'longer one').replace('three', '3');
 describe('one source history across editor operations', () => {

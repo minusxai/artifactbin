@@ -4,7 +4,7 @@ import {mkdtemp,writeFile,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {prepareLocalHtml,exportLocalHtml} from '../src/local-html';
-import {storyBodyFor} from '../../app/lib/story/document/body';
+import {storyBodyFor} from '../../app/lib/document/body';
 import {registerLocalFiles} from '../src/local-workspace';
 import {loadWorkspace} from '../src/workspace';
 import {localIdentities} from '../src/identities';

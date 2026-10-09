@@ -1,9 +1,9 @@
 import {describe,expect,it} from 'vitest';
-import {decodeDocument,type StoredDocument} from '../document/document-codec';
+import {decodeDocument,type StoredDocument} from '../document-codec';
 import {parseJsx} from '../../jsx/parse';
 import {serializeJsx} from '../../jsx/serialize';
-import {createDocumentGraph} from '../graph/document-graph';
-import {encodeDocumentNodes} from '../document/document-node-codec';
+import {createDocumentGraph} from '../document-graph';
+import {encodeDocumentNodes} from '../document-node-codec';
 const databaseOrder=(v:unknown):unknown=>Array.isArray(v)?v.map(databaseOrder):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,databaseOrder(x)])):v;
 const canonical=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return serializeJsx(parsed.nodes);};
 describe('stored document codec',()=>{

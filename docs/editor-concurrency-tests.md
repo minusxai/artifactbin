@@ -5,7 +5,7 @@ runtime protocol, and mounted ProseMirror editor. They do not mock the behavior 
 Run the fast matrix from the repository root:
 
 ```sh
-npm test -- --files services/app/lib/editor-v2/__tests__/source-edit.test.ts services/app/lib/editor-v2/__tests__/history.test.ts services/app/solid/editor/__tests__/create-editor-source.test.ts services/app/solid/editor/__tests__/create-in-place-edit.test.ts services/app/solid/editor/__tests__/flow-editor.test.tsx services/app/lib/story/__tests__/edit-batch.test.ts services/app/lib/story/__tests__/splice.test.ts
+npm test -- --files services/app/lib/editor-v2/__tests__/source-edit.test.ts services/app/lib/editor-v2/__tests__/history.test.ts services/app/solid/editor/__tests__/create-editor-source.test.ts services/app/solid/editor/__tests__/create-in-place-edit.test.ts services/app/solid/editor/__tests__/flow-editor.test.tsx services/app/lib/document/__tests__/edit-batch.test.ts services/app/lib/document/__tests__/splice.test.ts
 ```
 
 | Boundary | Cases | Required behavior |

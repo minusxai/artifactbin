@@ -8,7 +8,7 @@
  * Such a document exists because its imports can change shape after publish.
  */
 import { artifactQuery } from '@/lib/artifacts';
-import { createDocumentGraph } from '@/lib/story/graph/document-graph';
+import { createDocumentGraph } from '@/lib/document/document-graph';
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';

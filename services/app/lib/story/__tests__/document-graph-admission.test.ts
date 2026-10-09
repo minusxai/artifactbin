@@ -1,10 +1,10 @@
 import {expect,it} from 'vitest';
 import type {DocumentOperation} from '@artifactbin/contracts';
-import {createDocumentGraph,graphSource} from '../graph/document-graph';
+import {createDocumentGraph,graphSource} from '../../document/document-graph';
 import {prepareGraphOperation,prepareGraphSource,graphAdmissionPlan} from '../graph/document-graph-admission';
-import {applyGraphPatch} from '../graph/document-graph-patch';
+import {applyGraphPatch} from '../../document/document-graph-patch';
 import {publishJsx} from '../document/jsx-tier';
-import {stampNodeIds} from '../document/node-ids';
+import {stampNodeIds} from '../../document/node-ids';
 const context={loadRef:async()=>null};
 async function setup(source='<section id="root"><p id="a">Alpha</p><p id="b">Beta</p></section>'){
  const published=await publishJsx({},source,context);if(published instanceof Response)throw new Error(await published.text());

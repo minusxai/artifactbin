@@ -6,7 +6,7 @@
  * address never moves, and `refresh_asset` repointing the row is the one way
  * the bytes behind it change. A reader who already cached the old picture is
  * still reached, because the mapping puts a content-derived `?v=` on the url it
- * emits (lib/story/assets/asset-url): a refreshed asset is asked for at an address no
+ * emits (lib/document/asset-url): a refreshed asset is asked for at an address no
  * browser has seen before, while the bytes are still served here, from the
  * hash alone, whatever query anyone arrives with.
  *

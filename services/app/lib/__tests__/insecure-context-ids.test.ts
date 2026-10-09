@@ -2,16 +2,16 @@
  * A document framed on its own origin runs at `http://<hex>.lvh.me` in development and in the gates, and the app page
  * at `http://app.lvh.me`: neither is a secure context, so `crypto.randomUUID` (secure contexts only) is undefined there
  * and the editor, the save preparer and the comment layer threw on first use. Browser code takes ids from
- * lib/story-runtime/runtime-id (`getRandomValues`, available everywhere) instead.
+ * @artifactbin/utils/runtime-id (`getRandomValues`, available everywhere) instead.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
-import { runtimeId } from '../story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 
 const APP = path.resolve(__dirname, '../..');
-const BROWSER_TREES = ['lib/editor-v2', 'lib/story-runtime', 'lib/story/graph', 'lib/islands', 'lib/capture', 'solid'];
+const BROWSER_TREES = ['lib/editor-v2', 'lib/story-runtime', 'lib/document', 'lib/islands', 'lib/capture', 'solid'];
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

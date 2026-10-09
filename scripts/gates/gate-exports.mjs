@@ -17,7 +17,7 @@
  *      render, and the capture render (`raw?chrome=0`) carrying no navigation chrome.
  *   3. THE EDITABLE SOCIAL PREVIEW: owner chrome → sharing → cropper → pointer and keyboard → saved card pixels →
  *      reset back to the top-left default. The Helmet directive it writes is asserted on the source in
- *      services/app/lib/story/__tests__/social-preview.test.ts; here only the card's pixels are.
+ *      services/app/lib/document/__tests__/social-preview.test.ts; here only the card's pixels are.
  *
  *   usage: node scripts/gates/gate-exports.mjs [base]
  */

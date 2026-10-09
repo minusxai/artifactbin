@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {runtimeId as newRequestId} from '@/lib/story-runtime/runtime-id';
+import {runtimeId as newRequestId} from '@artifactbin/utils/runtime-id';
 afterEach(()=>vi.unstubAllGlobals());
 it('creates a UUID v4 on ordinary HTTP where randomUUID is unavailable',()=>{
  const random=vi.fn((bytes:Uint8Array)=>{bytes.set(Array.from({length:bytes.length},(_,i)=>i));return bytes;});vi.stubGlobal('crypto',{getRandomValues:random});

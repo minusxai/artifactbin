@@ -14,10 +14,10 @@
  */
 import { EditorToolbar, EditorViewTabs } from './EditorChrome';
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
-import { firstHeadingTitle } from '@/lib/story/document/title';
-import { scriptExportLocation } from '@/lib/story/document/script-export-location';
-import { contextRefOf } from '@/lib/story/document/helmet';
-import { writeContextRef } from '@/lib/story/document/context';
+import { firstHeadingTitle } from '@/lib/document/title';
+import { scriptExportLocation } from '@/lib/document/script-export-location';
+import { contextRefOf } from '@/lib/document/helmet';
+import { writeContextRef } from '@/lib/document/context';
 import ContextPanel from './ContextPanel';
 import ProseRecoveryDialog from './panels/ProseRecoveryDialog';
 import BookOpen from 'lucide-solid/icons/book-open';
@@ -28,7 +28,7 @@ import Check from 'lucide-solid/icons/check';
 import Code from 'lucide-solid/icons/code';
 import Database from 'lucide-solid/icons/database';
 import Smartphone from 'lucide-solid/icons/smartphone';
-import { readPwaSettings } from '@/lib/story/reader/pwa-settings';
+import { readPwaSettings } from '@/lib/document/pwa-settings';
 import { PwaSettingsPanel, PwaSharingSetting } from './PwaSettingsPanel';
 import Files from 'lucide-solid/icons/files';
 import ImagePlus from 'lucide-solid/icons/image-plus';
@@ -48,8 +48,8 @@ import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story-ui/edit-bar';
-import { storyUpdateParts, storyUpdatePartsShared } from '@/lib/story/document/update-parts';
-import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
+import { storyUpdateParts, storyUpdatePartsShared } from '@/lib/document/update-parts';
+import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/document/edit-compose';
 import {
   freshNodeId, imageAltInJsx, imageTargetInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath,
   replaceImageSrcInJsx, setImageAltInJsx, type JsxImageTarget, type JsxInsertAnchor,
@@ -58,8 +58,8 @@ import { readQuestionChart, updateQuestionChartInJsx, updateQuestionTitleInJsx, 
 import { readNumberEmbed, updateNumberEmbedInJsx, type NumberEmbedEdit } from '@/lib/data/story/story-number';
 import { readMermaidEmbed, updateMermaidEmbedInJsx, type MermaidEmbedEdit } from '@/lib/data/story/story-mermaid';
 import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
-import { tableChoices } from '@/lib/story/data/table-catalog';
-import { queryCells, updateQuerySqlInJsx } from '@/lib/story/data/query-notebook';
+import { tableChoices } from '@/lib/document/table-catalog';
+import { queryCells, updateQuerySqlInJsx } from '@/lib/document/query-notebook';
 import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
 import type { DataflowState } from '@/lib/dataflow/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';

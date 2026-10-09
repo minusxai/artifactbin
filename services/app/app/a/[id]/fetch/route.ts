@@ -4,7 +4,7 @@
  * A document on its own origin (APP__PAGES_HOST) may connect to its own doors and the module CDNs, and
  * nowhere else (lib/story/styles/document-csp): its reader's address never leaves for a host the reader
  * did not choose. A host the document DECLARES (`<meta name="csp-connect">` in this version's Helmet,
- * lib/story/document/csp-extensions) and this reader TRUSTS (they published it, or allowed it on the consent
+ * lib/document/csp-extensions) and this reader TRUSTS (they published it, or allowed it on the consent
  * bar: lib/trust/document-trust `cspExtensionsFor`) is reached here instead, by this server, under the open-web fetch guard every other server-side URL fetch uses
  * (lib/web-ingest): https only, no private, loopback or link-local address at any hop, redirects pinned
  * to the declared host, one 10 s deadline, a 5 MB cap. GET only, no cookie or credential forwarded,
@@ -22,7 +22,7 @@ import { fetchWebResource, webIngestAllowsHttp } from '@/lib/web-ingest/fetch';
 import { servedRow } from '@/lib/serving';
 import { pagesRequestOf } from '@/lib/serving/pages-origin';
 import { cspExtensionsFor, declaredCspExtensions } from '@/lib/trust/document-trust';
-import { cspOriginMatches } from '@/lib/story/document/csp-extensions';
+import { cspOriginMatches } from '@/lib/document/csp-extensions';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 
 /** The answer cap: what a script may pull through us in one call. */

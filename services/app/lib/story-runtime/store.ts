@@ -1,4 +1,4 @@
-import { runtimeId } from './runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import type {ImageAssetAnswer} from '@/lib/dataflow/ref-data';
 /**
  * The document's DATA at runtime — one store per document, framework-free.

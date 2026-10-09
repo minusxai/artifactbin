@@ -31,7 +31,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { setDocAssetImportCapForTests } from '@/lib/accounts';
-import { assetUrlFor, urlHash } from '@/lib/story/assets/asset-url';
+import { assetUrlFor, urlHash } from '@/lib/document/asset-url';
 import { getDb } from '@/lib/platform';
 import { mintExportKey } from '@/lib/serving';
 

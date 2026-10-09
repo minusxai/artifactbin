@@ -8,13 +8,13 @@ import type { BlockEdit } from '@/lib/editor-v2/block-edit';
  * composition lives in lib/islands (rt.tsx, boot.ts) and the compiler in
  * lib/compiled-page.
  */
-import type { AnnotationRange } from '@/lib/story/annotations/annotation-range';
+import type { AnnotationRange } from '@/lib/document/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
-import type { PersonCard } from '@artifactbin/contracts';
+import type { PersonCard, StoredMermaidImage } from '@artifactbin/contracts';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -906,8 +906,3 @@ export const PAGE_GLOBAL = '__mxPageBindings';
 /** What `mutationUnavailable` answers while a write's access check is in flight; the store and the island kit share this one string. */
 export const ACCESS_PENDING = 'Checking edit access…';
 
-/**
- * A server-harvested Mermaid drawing (lib/mermaid-images): fixed layout, and
- * the document's fonts carried inside it, so a reader shows it as it is.
- */
-export interface StoredMermaidImage { src: string; type: string; width?: number; height?: number; palette: string }

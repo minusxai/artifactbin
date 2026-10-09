@@ -16,19 +16,19 @@ import { renderHook } from './helpers';
 /** Solid applies updates synchronously: nothing to flush. */
 const act = <T,>(fn: () => T): T => fn();
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {createDocumentGraph,graphSource,type DocumentGraph} from '@/lib/story/graph/document-graph';
-import {applyGraphPatch} from '@/lib/story/graph/document-graph-patch';
+import {createDocumentGraph,graphSource,type DocumentGraph} from '@/lib/document/document-graph';
+import {applyGraphPatch} from '@/lib/document/document-graph-patch';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import { createLiveEdits } from '@/solid/editor/create-live-edits';
 import { httpBackend } from '@/test/helpers/artifact-backend';
-import * as updateClient from '@/lib/story/graph/document-update-client';
-import { prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
+import * as updateClient from '@/lib/document/document-update-client';
+import { prepareClientDocumentUpdate } from '@/lib/document/document-update-client';
 
 /** Every save preparation (no worker under test: the authoring client prepares in place), with the source it prepared. */
 const preparations = vi.hoisted(() => [] as Array<string | undefined>);
 // As in a browser with the save worker (the preparation itself still runs in place here): saves are prepared early.
-vi.mock('@/lib/story/document/document-authoring-client', async (original) => ({ ...(await original<object>()), preparesOffThread: () => true }));
-vi.mock('@/lib/story/graph/document-update-client', async (original) => {
+vi.mock('@/lib/document/document-authoring-client', async (original) => ({ ...(await original<object>()), preparesOffThread: () => true }));
+vi.mock('@/lib/document/document-update-client', async (original) => {
   const actual = await original<typeof updateClient>();
   return { ...actual, prepareClientDocument: (...args: Parameters<typeof actual.prepareClientDocument>) => { preparations.push(args[1].source); return actual.prepareClientDocument(...args); } };
 });

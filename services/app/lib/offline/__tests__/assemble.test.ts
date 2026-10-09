@@ -15,7 +15,7 @@ import { getArtifactById, getVersionFor, type RoleActor } from '@/lib/artifacts'
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
-import { urlHash } from '@/lib/story/assets/asset-url';
+import { urlHash } from '@/lib/document/asset-url';
 import { setAvatar } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';

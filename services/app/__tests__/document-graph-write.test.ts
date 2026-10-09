@@ -9,7 +9,7 @@ import {getDb} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
-import {createDocumentGraph} from '@/lib/story/graph/document-graph';
+import {createDocumentGraph} from '@/lib/document/document-graph';
 import {prepareGraphOperation} from '@/lib/story/graph/document-graph-admission';
 import {commitGraphOperation} from '@/lib/story/graph/document-graph-write';
 useAppHarness();

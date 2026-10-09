@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {parseJsx} from '../../jsx/parse';
-import {graphSelectors} from '../graph/document-graph-selectors';
+import {graphSelectors} from '../document-graph-selectors';
 const selectors=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return graphSelectors(parsed.nodes[0]!);};
 it('indexes only the own node, keeping independent descendants separate',()=>{
  expect(selectors('<section id="parent"><p id="child">Text</p></section>')).toEqual(['id:parent','tag:section']);

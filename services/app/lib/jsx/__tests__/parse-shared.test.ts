@@ -7,7 +7,7 @@ vi.mock('../parse',async(original)=>{
 });
 const {parseJsxShared,reparse}=await import('../parse-shared');
 const {parseJsx}=await import('../parse');
-const {sourceChanges}=await import('../../story/document/source-changes');
+const {sourceChanges}=await import('../../document/source-changes');
 const {sourceEdits}=await import('../../editor-v2/source-edits');
 const {SourceHistory}=await import('../../editor-v2/history');
 

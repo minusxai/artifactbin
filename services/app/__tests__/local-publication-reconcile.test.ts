@@ -9,7 +9,7 @@ import {GET as read} from '@/app/api/artifacts/[id]/route';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
 import {GET as history} from '@/app/api/artifacts/[id]/versions/[version]/route';
-import {prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';
+import {prepareClientDocumentUpdate} from '@/lib/document/document-update-client';
 import {loadWorkspace} from '../../cli/src/workspace';
 import {registerLocalFiles,localWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '../../cli/src/local-workspace';
 import {digest} from '../../cli/src/files';

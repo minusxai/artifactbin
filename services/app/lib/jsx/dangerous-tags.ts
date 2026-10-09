@@ -12,7 +12,7 @@
  *
  *  - a `<script>` in the BODY is not the frightening case it is elsewhere. The
  *    served document already runs an author script on purpose, through the one
- *    sanctioned door (`<Helmet><script>`, lib/story/document/helmet.ts), inside an
+ *    sanctioned door (`<Helmet><script>`, lib/document/helmet.ts), inside an
  *    opaque origin under `default-src 'none'`. Rejecting body scripts keeps ONE
  *    door instead of two; it is not what makes author JS safe.
  *  - `<base href>` and `<meta http-equiv>` are the ones that would act on the

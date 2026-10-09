@@ -5,7 +5,7 @@ import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import { flushFlowView, repathFlowView } from '@/lib/editor-v2/flow-view';
-import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { storyUpdateParts } from '@/lib/document/update-parts';
 import { serializeJsx } from '@/lib/jsx';
 import { morphDraftDom } from '@/lib/islands/morph/engine';
 

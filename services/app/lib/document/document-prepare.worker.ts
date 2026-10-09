@@ -10,9 +10,9 @@
  * reply is its source, so the whole graph never crosses the page thread after a save.
  */
 import type {DocumentGraph} from '@artifactbin/contracts';
-import {prepareClientDocument,type ClientDocumentSnapshot,type ClientDocumentChange} from '../graph/document-update-client';
-import {advanceGraph} from '../graph/document-graph-patch';
-import {graphSource} from '../graph/document-graph';
+import {prepareClientDocument,type ClientDocumentSnapshot,type ClientDocumentChange} from './document-update-client';
+import {advanceGraph} from './document-graph-patch';
+import {graphSource} from './document-graph';
 import type {WorkerRequest,PrepareResponse} from './document-prepare-protocol';
 
 let graph:DocumentGraph|null=null;

@@ -1,5 +1,5 @@
 /**
- * The claim behind lib/story/document/nesting.ts, tested over the thing that actually
+ * The claim behind lib/document/nesting.ts, tested over the thing that actually
  * ships: a complete served document, parsed by a real HTML parser.
  *
  * This is the shape of the probe that found the bug on production. Every node
@@ -117,7 +117,7 @@ describe('a served document parses back as the tree it was rendered from', () =>
 });
 
 /**
- * The tag list in lib/story/document/nesting.ts is the HTML parser's own — quoted from
+ * The tag list in lib/document/nesting.ts is the HTML parser's own — quoted from
  * the spec, which is a thing a person can get wrong. So it is checked against
  * a real parser instead of against the quote: for every tag the story
  * vocabulary admits, put one inside a `<p>` and one inside a `<div>`, parse

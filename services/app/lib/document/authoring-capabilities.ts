@@ -1,7 +1,7 @@
 /** Pure, bundled authoring knowledge. Reading it never initializes services. */
 import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
-import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../../validation/atlas-schemas';
-import {JSX_STORY_COMPONENT_NAMES} from '../../jsx/components';
+import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
+import {JSX_STORY_COMPONENT_NAMES} from '../jsx/components';
 import {STORY_HTML_TAGS} from '@/lib/jsx/component-names';
 export const authoringCapabilities={
  protocol:CLI_PROTOCOL_VERSION,

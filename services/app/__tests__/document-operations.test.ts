@@ -2,10 +2,10 @@ import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';
 import {parseJsx} from '@/lib/jsx';
-import {encodeDocumentNodes} from '@/lib/story/document/document-node-codec';
+import {encodeDocumentNodes} from '@/lib/document/document-node-codec';
 /** Any JSONB document: the patch is representation-agnostic, so a plain node tree serves. */
 const encodeDocument=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return encodeDocumentNodes(parsed.nodes);};
-import {prepareDocumentPatch,documentPatchSql} from '@/lib/story/graph/document-patch';
+import {prepareDocumentPatch,documentPatchSql} from '@/lib/document/document-patch';
 useAppHarness();
 it('composes nested text, attributes, insertion, removal and reordering in one JSONB update',async()=>{
  const before=encodeDocument('<section id="root"><p id="a">Alpha</p><p id="b">Beta</p></section>');

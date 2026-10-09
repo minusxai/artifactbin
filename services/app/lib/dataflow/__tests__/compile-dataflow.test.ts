@@ -7,9 +7,9 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { DatasetColumn } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx';
-import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
+import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { compileDataflow, prepareCompile, rewriteBuiltinFields, type ImportSource } from '../compile-dataflow';
-import { validateMarkupStructure } from '@/lib/story/document/local-validation';
+import { validateMarkupStructure } from '@/lib/document/local-validation';
 
 const BOOKINGS: DatasetColumn[] = [
   { name: 'id', type: 'string' }, { name: 'day', type: 'date' }, { name: 'slot', type: 'string' },

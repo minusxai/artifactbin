@@ -2,11 +2,11 @@
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import { parseJsxShared } from '@/lib/jsx/parse-shared';
 import { validateJsx } from '@/lib/jsx/validate';
-import { bodyPathToSourcePath } from '@/lib/story/document/edit-compose';
+import { bodyPathToSourcePath } from '@/lib/document/edit-compose';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { isProseTree } from './model';
-import { sourceChanges } from '@/lib/story/document/source-changes';
-import { rebaseEditBatch } from '@/lib/story/document/edit-batch';
+import { sourceChanges } from '@/lib/document/source-changes';
+import { rebaseEditBatch } from '@/lib/document/edit-batch';
 
 export function replaceProseRegion(source: string, path: string, expected: string, replacement: string): string {
   // Cached, incremental parsing keeps typing proportional to the changed block. An exact byte

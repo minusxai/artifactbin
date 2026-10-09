@@ -1,6 +1,6 @@
 import {parseCommentViewState} from '../../../contracts/src/comment-view-state';
 /** The inert import grammar, shared by the npm workspace and hosted receiver. */
-import {parseAnnotationRange} from '../story/annotations/annotation-range';
+import {parseAnnotationRange} from '../document/annotation-range';
 import type {ArtifactFile} from './file-format';
 export function validateFileComments(file:ArtifactFile):void {
  const roots=new Set<string>(),comments=new Set<string>();

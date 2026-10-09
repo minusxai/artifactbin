@@ -7,8 +7,8 @@ import {POST as createRoute} from '@/app/api/artifacts/route';
 import {POST as editRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {GET as readRoute} from '@/app/api/artifacts/[id]/route';
 import {GET as versionRoute} from '@/app/api/artifacts/[id]/versions/[version]/route';
-import {prepareClientDocumentUpdate,prepareClientDocumentReplacement} from '@/lib/story/graph/document-update-client';
-import {graphIntegrity,type DocumentGraph} from '@/lib/story/graph/document-graph';
+import {prepareClientDocumentUpdate,prepareClientDocumentReplacement} from '@/lib/document/document-update-client';
+import {graphIntegrity,type DocumentGraph} from '@/lib/document/document-graph';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 useAppHarness();
 /** A client-prepared patch is trusted for its shape only (parseDocumentUpdate), so the commit itself must refuse a

@@ -1,4 +1,4 @@
-import { runtimeId } from './runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import type { ImageUploadContext } from './store';
 
 const keys=new WeakMap<ImageUploadContext,WeakMap<File,Map<string,string>>>();

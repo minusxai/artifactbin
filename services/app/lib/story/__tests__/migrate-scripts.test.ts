@@ -9,7 +9,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseJsx } from '@/lib/jsx/parse';
 import { migrateDocumentScripts, scopeCss } from '@/lib/story/document/migrate-scripts';
-import { validateMarkupStructure } from '@/lib/story/document/local-validation';
+import { validateMarkupStructure } from '@/lib/document/local-validation';
 import { authorModuleNames, buildAuthorModule } from '@/lib/story/document/author-module.server';
 
 const fixture = (name: string) => readFileSync(path.join(import.meta.dirname, 'fixtures/migrate-scripts', name), 'utf8');

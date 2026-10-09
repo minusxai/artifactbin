@@ -9,7 +9,7 @@ import {runCli} from '../src/dispatch';
 import {saveTestConnection,seedIdentityPool} from './connection';
 import {parseDocument} from '../src/document';
 import {digest} from '../src/files';
-import {createDocumentGraph} from '../../app/lib/story/graph/document-graph';
+import {createDocumentGraph} from '../../app/lib/document/document-graph';
 import {automaticInstallPrefix,defaultNpm,type NpmRunner} from '../src/global-install';
 
 const release={version:'9.8.7',protocol:3};

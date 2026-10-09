@@ -2,7 +2,7 @@
  * applied only when the document succeeds, so attachment cannot partially bind
  * a dataset or silently overwrite a dataset changed during authoring. */
 import type {DocumentUpdate} from '@artifactbin/contracts';
-import {newEditId} from '../document/splice';
+import {newEditId} from '../../document/splice';
 export function documentResourceSql(bindings:DocumentUpdate['datasetBindings'],param:(value:unknown)=>string,dryRun:boolean){
  if(!bindings?.length)return {before:'',guard:'TRUE',after:''};
  const input=param(JSON.stringify(bindings.map(binding=>({...binding,editId:newEditId()}))));

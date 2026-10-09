@@ -21,8 +21,8 @@ import { authorHandle } from '@/lib/accounts/users';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { loadDatasetRows } from '../datasets/dataset-store';
 import type { ArtifactLiveEvent } from '../realtime/live';
-import { storyUpdateParts } from '../document/update-parts';
-import { assetLookupFrom } from '../assets/asset-url';
+import { storyUpdateParts } from '../../document/update-parts';
+import { assetLookupFrom } from '../../document/asset-url';
 import { webAssetsForSource } from '@/lib/serving/web-assets';
 import { servableDocument } from '@/lib/artifacts/servable';
 

@@ -6,7 +6,7 @@ import {tsImport} from 'tsx/esm/api';
 import {fileURLToPath} from 'node:url';
 // Standalone conformance also runs from temporary client homes or downstream repos.
 // Resolve the compiler's aliases against its own checkout, never the caller's cwd.
-const {prepareClientDocumentPublication}=await tsImport('../../../services/app/lib/story/graph/document-update-client.ts',{parentURL:import.meta.url,tsconfig:fileURLToPath(new URL('../../../tsconfig.json',import.meta.url))});
+const {prepareClientDocumentPublication}=await tsImport('../../../services/app/lib/document/document-update-client.ts',{parentURL:import.meta.url,tsconfig:fileURLToPath(new URL('../../../tsconfig.json',import.meta.url))});
 const snapshots=new WeakMap();
 export async function observeFixtureWrite(raw,input,init={}){
  let seen=snapshots.get(raw);if(!seen){seen=new Map();snapshots.set(raw,seen);}

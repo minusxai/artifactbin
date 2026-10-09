@@ -10,8 +10,8 @@
  * stylesheet.
  */
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/document/helmet';
-import { externalCssUrls } from '@/lib/story/assets/asset-url';
+import { splitHelmet } from '@/lib/document/helmet';
+import { externalCssUrls } from '@/lib/document/asset-url';
 import { carriesRef } from '@/lib/dataflow/dataflow';
 
 const WEB_URL = /^https?:\/\//i;

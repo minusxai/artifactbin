@@ -4,15 +4,16 @@
 import type {DocumentOperation} from '@artifactbin/contracts';
 import {json} from '../../http/http';
 import {repairJsxSource} from '../../jsx/repair';
-import {canonicalizeMarkup} from '../document/canonical-source';
-import {createDocumentGraph,graphNodes,graphSource,graphReferences,type DocumentGraph} from './document-graph';
-import {graphFromSource} from './document-graph-source';
-import {prepareGraphPatch,type GraphPatch} from './document-graph-patch';
-import {graphValidationScope} from './document-graph-scope';
-import {applyOperationsToNodes,DocumentOperationError} from './document-operation';
-import {stampNodeIds} from '../document/node-ids';
+import {canonicalizeMarkup} from '../../document/canonical-source';
+import {createDocumentGraph,graphNodes,graphSource,graphReferences,type DocumentGraph} from '../../document/document-graph';
+import {graphFromSource} from '../../document/document-graph-source';
+import {prepareGraphPatch,type GraphPatch} from '../../document/document-graph-patch';
+import {graphValidationScope} from '../../document/document-graph-scope';
+import {applyOperationsToNodes,DocumentOperationError} from '../../document/document-operation';
+import {stampNodeIds} from '../../document/node-ids';
 import {publishJsx} from '../document/jsx-tier';
-import {MAX_CONTENT_BYTES,type ContentInputCtx} from '../document/input';
+import {type ContentInputCtx} from '../document/input';
+import {MAX_CONTENT_BYTES} from '../../document/limits';
 import type {ReferenceValidationState,ResolvedRef} from '@/lib/dataflow/refs';
 
 export interface GraphBaseline {id:string;version:number;document:DocumentGraph;meta:Record<string,unknown>;reservedIds?:string[]}

@@ -8,7 +8,7 @@ import type {RenderRequest} from '@artifactbin/contracts';
 import {setServices} from '@/lib/platform';
 import {resetExportRenderer} from '@/lib/export';
 import {GET as raw} from '@/app/a/[id]/raw/route';
-import {prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';
+import {prepareClientDocumentUpdate} from '@/lib/document/document-update-client';
 import {EXPORT_PNG} from './export-helpers';
 
 useAppHarness();

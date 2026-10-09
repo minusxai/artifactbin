@@ -13,7 +13,7 @@ import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { validateMarkupStructure } from '@/lib/story/document/local-validation';
+import { validateMarkupStructure } from '@/lib/document/local-validation';
 
 const nodes = (source: string): JsxNode[] => parseJsxOrThrow(source).nodes;
 const EMPTY: Dataflow = { imports: [], values: [], queries: [], mutations: [] };
@@ -57,7 +57,7 @@ describe('the kit can show a person and ask a guest to sign in', () => {
 
 /**
  * THE PUBLISH DOOR, not just the unit. `validateDataflow` above is the rule;
- * this is the door every write goes through (lib/story/document/local-validation, which
+ * this is the door every write goes through (lib/document/local-validation, which
  * /api/preview and publish share), so a refusal proved in one is the refusal an
  * author actually gets.
  */

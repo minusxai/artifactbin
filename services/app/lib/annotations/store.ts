@@ -30,8 +30,8 @@ import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
 import { generateInternalId } from '@/lib/platform/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type AnnotationRange, isAreaRange, isTargetRange } from '@/lib/story/annotations/annotation-range';
-import { sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
+import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type AnnotationRange, isAreaRange, isTargetRange } from '@/lib/document/annotation-range';
+import { sourcePathToBodyPath } from '@/lib/document/edit-compose';
 import { channelForAnnotations } from '@/lib/story/realtime/live';
 
 

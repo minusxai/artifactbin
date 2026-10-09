@@ -6,7 +6,7 @@ import {observedRequest} from './conditional-request';
  */
 
 import { it, expect, afterEach } from 'vitest';
-import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/assets/social-preview';
+import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/document/social-preview';
 import { fakeBrowser } from '@artifactbin/utils';
 import { setServices } from '@/lib/platform';
 import { resetExportRenderer } from '@/lib/export';

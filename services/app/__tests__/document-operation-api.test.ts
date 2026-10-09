@@ -13,7 +13,7 @@ import {useAppHarness,request} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,type ArtifactRow,type TokenActor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
-import {prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/story/graph/document-update-client';
+import {prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/document/document-update-client';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';

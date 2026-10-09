@@ -1,7 +1,7 @@
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { parseJsxShared } from '@/lib/jsx/parse-shared';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { splitHelmet } from '../document/helmet';
+import { splitHelmet } from './helmet';
 
 /** Source-backed install presentation. Identity and scope are not author-controlled. */
 export interface PwaSettings { enabled?: boolean; name?: string; shortName?: string; icon?: string; themeColor?: string; backgroundColor?: string }

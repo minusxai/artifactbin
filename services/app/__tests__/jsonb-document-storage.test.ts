@@ -5,7 +5,7 @@ import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import {encodeDocumentNodes} from '@/lib/story/document/document-node-codec';
+import {encodeDocumentNodes} from '@/lib/document/document-node-codec';
 import {parseJsx} from '@/lib/jsx';
 import {getArtifactById,applyEditScoped,getVersionFor,forkArtifact} from '@/lib/artifacts';
 import {UnservableDocument} from '@/lib/artifacts/servable';

@@ -12,7 +12,7 @@ export { FONT_FILES, FONT_STYLES } from '@artifactbin/contracts/font-sources';
  * (no provider script), each on its narrowest embed origin. Form and booking tools stay behind the reader's consent
  * (a default-framed form is a phishing page), as does any origin wider than its embed (Google Maps is all of
  * www.google.com). Any other host is a `<meta name="csp-frame">` in the document's Helmet
- * (lib/story/document/csp-extensions). The markup reference teaches each provider's embed URL.
+ * (lib/document/csp-extensions). The markup reference teaches each provider's embed URL.
  */
 export const FRAME_HOSTS = [
   // Video

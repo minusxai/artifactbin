@@ -2,8 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
-import { createDocumentGraph, graphSource } from '@/lib/story/graph/document-graph';
-import { applyGraphPatch } from '@/lib/story/graph/document-graph-patch';
+import { createDocumentGraph, graphSource } from '@/lib/document/document-graph';
+import { applyGraphPatch } from '@/lib/document/document-graph-patch';
 import { SocialPreviewEditor } from '../SocialPreviewEditor';
 
 afterEach(() => { vi.unstubAllGlobals(); });

@@ -20,12 +20,12 @@ import { getDb } from '../platform/db';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { imageRawUrl, imageRefData, pdfRawUrl } from '@/lib/dataflow/ref-data';
-import { displayTitle } from '../story/document/title';
-import { readCompiledDataflow } from '../story/data/parsed-artifact-metadata';
+import { displayTitle } from '../document/title';
+import { readCompiledDataflow } from '@/lib/document/server';
 import { EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar } from '@/lib/dataflow/dataflow';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/dataflow/compiled-dataflow';
 import { compileWithLoader, type CompileResult } from '@/lib/dataflow/compile-dataflow';
-import { declarationsOf } from '@/lib/story/document/helmet';
+import { declarationsOf } from '@/lib/document/helmet';
 import type { ValidationError } from '@/lib/jsx';
 import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/dataflow/compiled-flow';
 import { bindMutationRequest } from '@/lib/dataflow/mutation-request';
@@ -225,7 +225,7 @@ export async function acceptedMembers(artifactId: string): Promise<Row[]> {
  */
 async function compileResultForRow(row: CompilableRow): Promise<CompileResult | null> {
   if (!row.source) return null;
-  return readCompiledDataflow(row.meta, row.source, schemaLoaderFor(refLoaderForActor(writerFor(row))));
+  return readCompiledDataflow(row.meta, row.source, schemaLoaderFor(refLoaderForActor(writerFor(row))), { extensions: sqlExtensions() });
 }
 type CompilableRow = Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id'>;
 

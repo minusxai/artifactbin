@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DatasetAccessPolicy, DatasetGrantSelector, DatasetOperation } from '@artifactbin/contracts';
-import { displayTitle } from '@/lib/story/document/title';
+import { displayTitle } from '@/lib/document/title';
 
 type Actions = { policy: DatasetAccessPolicy | null; writtenBy: Array<{id: string; title: string | null; mutations: string[]}> };
 const operations: DatasetOperation[] = ['insert', 'update', 'delete'];

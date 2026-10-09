@@ -25,7 +25,7 @@ import { transformAsync, type PluginObj, type types as BabelTypes } from '@babel
 import solidPreset from 'babel-preset-solid';
 import { AUTHOR_VENDOR_EXPORTS } from '@/lib/islands/contract';
 import { PAGE_GLOBAL } from '@/lib/story-runtime/contract';
-import type { HelmetContent } from './helmet';
+import type { HelmetContent } from '../../document/helmet';
 
 /** Where a bare npm specifier resolves (`three` → `https://esm.sh/three`): the module host every script may load from. */
 export const ESM_CDN_ORIGIN = 'https://esm.sh';

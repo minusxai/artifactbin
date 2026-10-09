@@ -42,7 +42,7 @@ import { canAnnotate, canEdit } from '@/lib/artifacts/share-roles';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/story/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { firstHeadingTitle } from '@/lib/story/document';
+import { firstHeadingTitle } from '@/lib/document/head';
 import { isStartPlaceholder } from './start-placeholder';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from './og-card';
@@ -299,7 +299,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
       // The framed page's own sheet is the frame's: the app page's data carries the runtime without it.
       runtime: framing ? { ...served.runtime, css: undefined } : served.runtime,
       // What the reader's chrome derived from the source: the document's own
-      // name (lib/story/document/title) and whether it is still the starter placeholder.
+      // name (lib/document/title) and whether it is still the starter placeholder.
       heading: firstHeadingTitle(row.source), starter,
     } : {
       // The data tiers: their source is their content (a dataset's only for those who may edit it).

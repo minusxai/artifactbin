@@ -13,7 +13,7 @@
  * and the live frame an open reader adopts all derive from it, and there is
  * nowhere left for them to disagree.
  *
- * No DB, no I/O, no `node:crypto` (lib/sha256): `lib/story/document/update-parts.ts`
+ * No DB, no I/O, no `node:crypto` (lib/sha256): `lib/document/update-parts.ts`
  * calls this and `solid/editor/InPlaceEditor.tsx` imports THAT, so everything
  * here lands in the browser bundle.
  *
@@ -57,7 +57,7 @@ export interface WebAssetBox {
 export type AssetLookup = (url: string) => WebAssetBox | boolean | null | undefined;
 
 /**
- * The same positions lib/story/assets/external-images.ts owns: `<img src>` and
+ * The same positions lib/document/external-images.ts owns: `<img src>` and
  * `<File src>` — the card that links a PDF, mapped here
  * for the same reason as an image, though the card is a LINK rather than a
  * subresource: the point of importing is that opening a document sends nothing

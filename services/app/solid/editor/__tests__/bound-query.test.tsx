@@ -7,7 +7,7 @@ import { expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import BoundQuery from '../BoundQuery';
-import type { TableChoice } from '@/lib/story/data/table-catalog';
+import type { TableChoice } from '@/lib/document/table-catalog';
 
 const QUERY: TableChoice = {
   name: 'sales',

@@ -2,7 +2,7 @@ import {getArtifactById,canReadArtifact} from '../artifacts';
 import {declarationsForRow} from '../artifacts/dataflow';
 import {EMPTY_COMPILED_DATAFLOW} from '@/lib/dataflow/compiled-dataflow';
 import {parseJsx} from '../jsx';
-import {splitHelmet,validateHelmet} from '../story/document/helmet';
+import {splitHelmet,validateHelmet} from '../document/helmet';
 import {buildLambdaModule} from './program.server';
 import type {LambdaProgramResolver} from '../runner';
 /** One published JSX source supplies both declarations and the executable entry point. */

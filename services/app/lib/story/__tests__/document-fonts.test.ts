@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { documentFonts, documentFontCss, documentFontImport, invalidFontFamilies } from '../styles/document-fonts';
-import { EMPTY_HELMET_CONTENT } from '../document/helmet';
+import { EMPTY_HELMET_CONTENT } from '../../document/helmet';
 
 const helmet = (meta: Array<{ name: string; content: string }>) => ({ ...EMPTY_HELMET_CONTENT, meta });
 

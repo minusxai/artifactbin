@@ -1,9 +1,9 @@
-import {createDocumentGraph} from '../story/graph/document-graph';
+import {createDocumentGraph} from '../document/document-graph';
 /** Controls outside the live editor load an authoring snapshot, validate locally,
  * then submit one permission-scoped JSONB commit. Non-document metadata retains
  * its existing conditional protocol. */
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
-import {prepareBrowserDocumentUpdate} from '../story/document/document-authoring-client';
+import {prepareBrowserDocumentUpdate} from '../document/document-authoring-client';
 import {artifactRequests,createHttpBackend} from '../artifact-backend/http';
 import type {ArtifactBackend} from '../artifact-backend/types';
 /** Listings, folders and the social preview: an online write whose caller reads the Response itself. */

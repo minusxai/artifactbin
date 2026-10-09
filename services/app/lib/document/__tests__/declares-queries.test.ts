@@ -17,7 +17,7 @@
  *    escaped text), and must never throw here — this runs on every read.
  */
 import { describe, expect, it } from 'vitest';
-import { declaresLiveData, declaresQueries } from '@/lib/story/document/helmet';
+import { declaresLiveData, declaresQueries } from '@/lib/document/helmet';
 
 const helmet = (inner: string) => `<Helmet>${inner}</Helmet><div><h1>Doc</h1></div>`;
 

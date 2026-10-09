@@ -188,7 +188,7 @@ const ARTIFACTS: Table = {
     { name: 'version', type: 'INTEGER', notNull: true, default: '1' },
     // Head pointer of the edit protocol: unguessable, regenerated on every
     // accepted write. The volatile DEFAULT backfills pre-protocol rows on the
-    // additive ALTER; app writes always set it explicitly (lib/story/document/splice
+    // additive ALTER; app writes always set it explicitly (lib/document/splice
     // newEditId). Possession proves the caller read the version it bases on.
     { name: 'edit_id', type: 'TEXT', notNull: true, default: 'md5(random()::text)' },
     // WHO made the head — the last accepted writer (an account, or the token
@@ -334,7 +334,7 @@ const ARTIFACT_SHARES: Table = {
  * comment. A ROOT row (root_id NULL) carries the anchor and the open/resolved
  * status; replies point at their root. Deliberately a SIDECAR, never part of
  * the source: a PUT/edit can no more clobber a comment than it can flip
- * `visibility`. The anchor key is the node's own `id` (lib/story/document/node-ids
+ * `visibility`. The anchor key is the node's own `id` (lib/document/node-ids
  * stamps one on every element), so commenting never edits the document; NULL is a
  * comment with no anchor. Resolution is a lookup in the CURRENT source: id present →
  * anchored, absent → orphaned, and orphaned is re-checked on every read, so a revert
@@ -369,7 +369,7 @@ const ANNOTATIONS: Table = {
     // snippet above is the node's CURRENT text; these are what was selected
     // then). APPENDED LAST, like every additive column: existing databases
     // grow them by ADD COLUMN IF NOT EXISTS on the next boot.
-    { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/story/annotations/annotation-range)
+    { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/document/annotation-range)
     { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
     { name: 'view_state', type: 'JSONB' }, // Optional bounded UI snapshot, independent of the comment target
     // The same soft-delete stamp `artifacts` carries, and the same gate: a row
@@ -455,7 +455,7 @@ const CODES: Table = {
 /**
  * THE GLOBAL URL → OBJECT CACHE for URL-kept external assets (lib/web-assets).
  *
- * Keyed by sha256 of the CANONICAL url (lib/story/assets/asset-url), so the same URL
+ * Keyed by sha256 of the CANONICAL url (lib/document/asset-url), so the same URL
  * is ONE object for everyone and the first importer pays the fetch — a second
  * document naming it stores nothing. The row is the INDEX (the db is the only
  * index); the bytes live in the object store under `object_key`.

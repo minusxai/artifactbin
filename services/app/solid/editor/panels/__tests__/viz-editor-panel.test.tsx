@@ -18,7 +18,7 @@ import { createSignal } from 'solid-js';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import VizEditorPanel from '../VizEditorPanel';
-import type { TableChoice } from '@/lib/story/data/table-catalog';
+import type { TableChoice } from '@/lib/document/table-catalog';
 
 const COLUMNS = [
   { name: 'region', type: 'string' as const },

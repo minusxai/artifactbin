@@ -68,7 +68,7 @@ describe('sanitizeCssText — declaration-level strip', () => {
    * Stripping it would let a publish answer 201 while the document quietly
    * lost its typeface. The URL is IMPORTED at publish
    * (lib/web-assets) and rewritten to our own origin on the way out
-   * (lib/story/assets/asset-url), so keeping it here costs the reader nothing: the
+   * (lib/document/asset-url), so keeping it here costs the reader nothing: the
    * served CSS never names the upstream host, and a face we failed to import is
    * refused by the document's own `font-src 'self' data:` anyway.
    *

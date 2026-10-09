@@ -1,5 +1,5 @@
-import {createDocumentGraph,graphSource} from '../story/graph/document-graph';
-import {applyGraphPatch} from '../story/graph/document-graph-patch';
+import {createDocumentGraph,graphSource} from '../document/document-graph';
+import {applyGraphPatch} from '../document/document-graph-patch';
 import {afterEach,expect,it,vi} from 'vitest';
 import {writeBrowserArtifact,restoreBrowserArtifact} from '@/lib/artifacts';
 import {createHttpBackend} from '../artifact-backend/http';

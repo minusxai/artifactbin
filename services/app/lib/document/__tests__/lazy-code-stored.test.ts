@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { lazyCodeOf } from '@/lib/story/document/lazy-code';
+import { lazyCodeOf } from '@/lib/document/lazy-code';
 import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
 
 const FLOW = 'flowchart LR\n  a --> b';

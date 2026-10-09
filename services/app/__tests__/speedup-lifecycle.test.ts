@@ -6,7 +6,7 @@ import {useAppHarness,request} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
-import {storedCompiledDataflow} from '@/lib/story/data/parsed-artifact-metadata';
+import {storedCompiledDataflow} from '@/lib/document/parsed-artifact-metadata';
 import {compiledSource} from '@/test/helpers/compiled';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';

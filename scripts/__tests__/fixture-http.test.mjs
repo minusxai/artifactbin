@@ -20,7 +20,7 @@ it('does not intercept reads, edits, or already guarded writes',async()=>{
  expect(raw).toHaveBeenCalledTimes(3);
 });
 it('prepares document fixtures with the real authoring compiler and submits only JSONB operations',async()=>{
- const {createDocumentGraph}=await import('../../services/app/lib/story/graph/document-graph');
+ const {createDocumentGraph}=await import('../../services/app/lib/document/document-graph');
  const source='<p id="a">Before</p>',document=createDocumentGraph(source,1);
  const raw=vi.fn(async(_url,init)=>init?.method==='GET'?Response.json({id:'abc123',format:'markup',version:1,edit_id:'before',markup:source,document}):Response.json({ok:true}));
  await observeFixtureWrite(raw,'https://example.test/api/artifacts/abc123',{method:'PUT',body:JSON.stringify({markup:'<p id="a">After</p>'})});

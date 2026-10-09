@@ -28,7 +28,7 @@ import { objectStore } from '@/lib/object-store';
 import { setAssetByteQuotaForTests } from '@/lib/serving';
 import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/serving';
 import { assetBytesForToken } from '@/lib/serving';
-import { assetUrlFor } from '@/lib/story/assets/asset-url';
+import { assetUrlFor } from '@/lib/document/asset-url';
 import { webIngestRateLimited } from '@/lib/accounts';
 import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/platform';
 

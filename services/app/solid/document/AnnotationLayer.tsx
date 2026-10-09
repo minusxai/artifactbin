@@ -19,7 +19,7 @@
  *
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
-import { runtimeId } from '@/lib/story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { useLocation } from '@solidjs/router';
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import Camera from 'lucide-solid/icons/camera';

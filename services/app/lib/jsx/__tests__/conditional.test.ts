@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx, validateJsxSource } from '../index';
 import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/jsx/component-names';
-import { stampNodeIds, nodeIndex } from '@/lib/story/document/node-ids';
+import { stampNodeIds, nodeIndex } from '@/lib/document/node-ids';
 import { collectRefUses } from '@/lib/dataflow/refs';
 import { collectRefNameUses, validateDataflow } from '@/lib/dataflow/dataflow';
-import { splitHelmet, hoistHelmet } from '@/lib/story/document/helmet';
+import { splitHelmet, hoistHelmet } from '@/lib/document/helmet';
 import {applyDomEditsToJsx, removeJsxNodeAtPath} from '@/lib/data/story/jsx-edit';
 
 const nodes = (source: string) => {const p = parseJsx(source); if (!p.ok) throw new Error(p.error); return p.nodes;};

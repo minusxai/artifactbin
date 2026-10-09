@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
-import {proseOperation,applyProseOperation,inertProse} from '../graph/document-prose';
-import {publishJsx} from '../document/jsx-tier';
+import {proseOperation,applyProseOperation,inertProse} from '../document-prose';
+import {publishJsx} from '../../story/document/jsx-tier';
 it.each(['β 👩🏽‍💻','<script>run()</script>','A & B','quotes " and apostrophe \'','line\nbreak',' leading and trailing ','&#123;','braces { literal }'])('an admitted leaf preserves full publication validity: %s',async value=>{
  const before='<section id="root"><p id="p">Alpha</p></section>';
  const source=applyProseOperation(before,{path:['roots','0','children','0','children','0','value'],oldText:'Alpha',newText:value});expect(source).not.toBeNull();

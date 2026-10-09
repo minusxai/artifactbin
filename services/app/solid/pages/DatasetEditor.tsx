@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { runtimeId } from '@/lib/story-runtime/runtime-id';
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { AssetWorkspace, type AssetSection } from '../components/AssetWorkspace';
 import WorkspaceShell from '../components/WorkspaceShell';
 import StepHeader from "../components/StepHeader";

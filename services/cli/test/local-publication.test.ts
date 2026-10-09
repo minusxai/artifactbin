@@ -16,12 +16,12 @@ import {configDir,withPrivateStateHome} from '../src/config';
 import {loadWorkspace,saveTracking,writeTracking,type Workspace} from '../src/workspace';
 import {snapshotDocument} from '../src/local';
 import {writeDocument} from '../src/document';
-import {createDocumentGraph,graphSource} from '../../app/lib/story/graph/document-graph';
-import {encodeDocumentNodes} from '../../app/lib/story/document/document-node-codec';
+import {createDocumentGraph,graphSource} from '../../app/lib/document/document-graph';
+import {encodeDocumentNodes} from '../../app/lib/document/document-node-codec';
 import {parseJsx} from '../../app/lib/jsx/parse';
 /** The tree an older server stored for a fork's create (no graph): what the CLI must still upgrade through a read. */
 const legacyTree=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return encodeDocumentNodes(parsed.nodes);};
-import {applyGraphPatch} from '../../app/lib/story/graph/document-graph-patch';
+import {applyGraphPatch} from '../../app/lib/document/document-graph-patch';
 import {startPreview} from '../src/preview/session';
 import {localIdentities} from '../src/identities';
 import {localInputReferences} from '../src/preview/local-inputs';

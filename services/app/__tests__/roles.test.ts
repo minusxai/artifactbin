@@ -11,8 +11,8 @@ import { GET as getSharingRoute, PUT as putSharingRoute, GET as read, PUT as wri
 import { observedRequest } from '@/__tests__/conditional-request';
 import { DELETE as remove, PATCH as metadata, DELETE as deleteMineRoute, GET as getMineRoute, PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { POST as restore } from '@/app/api/my/artifacts/[id]/restore/route';
-import { advanceGraph } from '@/lib/story/graph/document-graph-patch';
-import { graphSource } from '@/lib/story/graph/document-graph';
+import { advanceGraph } from '@/lib/document/document-graph-patch';
+import { graphSource } from '@/lib/document/document-graph';
 import { attachActor } from '@artifactbin/utils';
 import { POST as annotateBearerRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as editsMineRoute, POST as patchMineRoute, POST as revertMineRoute } from '@/app/api/my/artifacts/[id]/edits/route';
@@ -23,7 +23,7 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { getDb } from '@/lib/platform';
-import { storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadata';
+import { storedCompiledDataflow } from '@/lib/document/parsed-artifact-metadata';
 import { hasExplicitNotificationMembership } from '@/lib/notifications';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 

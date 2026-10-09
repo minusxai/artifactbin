@@ -12,7 +12,7 @@ import {
   clampImageCrop,
   savedSocialPreviewImageCrop,
   writeSocialPreviewImageCrop,
-} from '../assets/social-preview';
+} from '../social-preview';
 
 describe('social preview crop', () => {
   it('parses the canonical x/y/width grammar and derives its locked height', () => {

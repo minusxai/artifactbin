@@ -5,7 +5,7 @@ import {getEditableArtifactFor} from '../artifacts/store';
 import {OPERATIONS} from '../operations/registry';
 import {runOperation} from '../operations/http';
 import {json} from '../http/http';
-import {prepareClientDocument} from '../story/graph/document-update-client';
+import {prepareClientDocument} from '../document/document-update-client';
 import {prepareDocumentAuthoringContext} from '../story/document/document-authoring-context';
 
 const names=['create_artifact','get_artifact','list_artifacts','query_resource','mutate_dataset'];

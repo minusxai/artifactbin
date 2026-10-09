@@ -15,23 +15,24 @@
  * component allowlist + STORY_HTML_TAGS + `no-inline-style` style policy, then
  * the banned-css sanitizer as belt, then the compile.
  */
-import { validateMarkupStructure } from './local-validation';
+import { validateMarkupStructure } from '../../document/local-validation';
 import { repairJsxSource } from '@/lib/jsx/repair';
-import { canonicalizeMarkup } from './canonical-source';
-export {canonicalizeMarkup} from './canonical-source';
+import { canonicalizeMarkup } from '../../document/canonical-source';
+export {canonicalizeMarkup} from '../../document/canonical-source';
 import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/document/helmet';
+import { splitHelmet } from '@/lib/document/helmet';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { authorModuleNames, buildAuthorModule, type AuthorModule } from './author-module.server';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../../http/http';
-import { MAX_CONTENT_BYTES, type ContentInputCtx, type StoredContent } from './input';
+import { type ContentInputCtx, type StoredContent } from './input';
+import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
 import { documentFonts, invalidFontFamilies } from '../styles/document-fonts';
-import { cspExtensionsOf } from './csp-extensions';
+import { cspExtensionsOf } from '../../document/csp-extensions';
 import { checkDocumentData } from '../data/data-checks';
-import { COMPILED_DATAFLOW } from '../data/parsed-artifact-metadata';
+import { COMPILED_DATAFLOW } from '@/lib/document/server';
 import { buildLambdaModule } from '@/lib/runner/program.server';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/dataflow/compiled-dataflow';
 import { validateIconNames } from '../assets/icon-validation.server';
@@ -80,7 +81,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   // Gate 1: the ported three-gate pipeline (registry, handlers, URL schemes).
   // Gate 2 (artifactbin's own): every subresource must be self-contained —
   // see findExternalSubresources for why this can't live in the ported engine.
-  // The Helmet subtree is validated by ITS grammar (lib/story/document/helmet.ts) and
+  // The Helmet subtree is validated by ITS grammar (lib/document/helmet.ts) and
   // split out before the generic gate — lib/jsx never learns Helmet exists,
   // and body nodes keep their original spans so diagnostics stay precise.
   // The script first: its build errors are the publish's (a typo'd declared name, a syntax error, a relative
@@ -172,7 +173,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
       compiledCss,
       cssCompileVersion: storyCssCompileVersion(),
       refs,
-      // The compiled dataflow, for the commit to bind to the final source (lib/story/data/parsed-artifact-metadata).
+      // The compiled dataflow, for the commit to bind to the final source (lib/document/parsed-artifact-metadata).
       ...(compiled ? { [COMPILED_DATAFLOW]: compiled } : {}),
     },
     derivedTitle: helmetTitle?.trim() || null,

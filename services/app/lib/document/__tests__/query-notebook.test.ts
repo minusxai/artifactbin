@@ -4,7 +4,7 @@
  * declaration alone.
  */
 import { describe, expect, it } from 'vitest';
-import { queryCells, updateQuerySqlInJsx } from '@/lib/story/data/query-notebook';
+import { queryCells, updateQuerySqlInJsx } from '@/lib/document/query-notebook';
 import type { DataflowState } from '@/lib/dataflow/dataflow';
 import { compiledSource } from '@/test/helpers/compiled';
 

@@ -16,7 +16,7 @@ import { POST as restoreRoute } from '@/app/api/artifacts/[id]/restore/route';
 import { documentEditBody } from './prepared-document';
 import { artifactQuery, getArtifactById } from '@/lib/artifacts';
 import { servableDocument, UnservableDocument } from '@/lib/artifacts/servable';
-import { createDocumentGraph } from '@/lib/story/graph/document-graph';
+import { createDocumentGraph } from '@/lib/document/document-graph';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

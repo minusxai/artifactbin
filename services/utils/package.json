@@ -15,7 +15,8 @@
     "./artifact-reference": "./src/artifact-reference.ts",
     "./account-resource": "./src/account-resource.ts",
     "./escape": "./src/escape.ts",
-    "./sha256": "./src/sha256.ts"
+    "./sha256": "./src/sha256.ts",
+    "./runtime-id": "./src/runtime-id.ts"
   },
   "files": [
     "src"

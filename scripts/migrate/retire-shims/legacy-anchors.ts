@@ -26,7 +26,7 @@ import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx
 import { sourceWithoutAnchors, ANNOTATION_ANCHOR_ATTR } from '@/lib/annotations/anchors';
 import { commitNormalizedMarkup, getArtifactById, publishMarkupForArtifact } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifacts/document';
-import { nodeIndex } from '@/lib/story/document/node-ids';
+import { nodeIndex } from '@/lib/document/node-ids';
 import { isMain, newReport, recordChange, runCli, type BackfillOptions, type BackfillReport } from './common';
 import type { Db } from '@/lib/platform/db';
 
@@ -41,7 +41,7 @@ function staticString(node: JsxElement, name: string): string | null {
 interface Retired {
   /** The source without the attribute, legacy keys promoted to ids where they can be. */
   source: string;
-  /** Each legacy key, by the body path (lib/story/document/node-ids) of the element that carried it. */
+  /** Each legacy key, by the body path (lib/document/node-ids) of the element that carried it. */
   keys: Array<{ key: string; path: string }>;
 }
 

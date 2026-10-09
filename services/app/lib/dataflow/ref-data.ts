@@ -86,7 +86,7 @@ const imageVariantUrl = (id: string, version: number, width: number): string =>
  * loaded: the document column on a desktop, the whole viewport on a phone.
  *
  * ONE constant for both image paths — the `ref:` upload here and the URL-kept
- * copy in lib/story/assets/asset-url — because they are the same picture in the same
+ * copy in lib/document/asset-url — because they are the same picture in the same
  * column, and two numbers would be two answers to one question.
  */
 export const IMAGE_SIZES = '(max-width: 640px) 100vw, 768px';

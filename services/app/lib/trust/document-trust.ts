@@ -2,7 +2,7 @@
  * WHO TRUSTS WHAT A DOCUMENT ASKS OF THE NETWORK.
  *
  * Every document runs under one default policy. A document that needs more declares it in its Helmet
- * (`<meta name="csp-connect" …>`, lib/story/document/csp-extensions). Each version's own source is its
+ * (`<meta name="csp-connect" …>`, lib/document/csp-extensions). Each version's own source is its
  * declaration — nothing is copied beside it, because edits commit client-prepared patches and a copy
  * would drift. This module answers, per reader, which of those hosts are appended to the document's header:
  *
@@ -28,13 +28,13 @@ import { parseCookie } from '@/lib/http/http';
 import type { ArtifactRow } from '@/lib/artifacts/access';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/document/helmet';
+import { splitHelmet } from '@/lib/document/helmet';
 import {
   CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, cspExtensionsOf, emptyCspExtensions, hasCspExtensions, mergeCspExtensions,
   storedCspExtensions, subtractCspExtensions, type CspExtensions, type CspRequest,
-} from '@/lib/story/document/csp-extensions';
+} from '@/lib/document/csp-extensions';
 
-export type { CspExtensions, CspRequest } from '@/lib/story/document/csp-extensions';
+export type { CspExtensions, CspRequest } from '@/lib/document/csp-extensions';
 
 /** Who is reading: an account, a token (a guest's publishes are its token's), or nobody. */
 export interface TrustViewer {

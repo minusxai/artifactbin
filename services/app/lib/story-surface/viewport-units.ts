@@ -11,7 +11,7 @@
  * The caller is the publish door: authored `<style>` blocks (the
  * `no-inline-style` policy allows them) render straight through the
  * interpreter, so their `vh` lengths are remapped at SAVE
- * (`story/graph/document-update-client`, beside the banned-css sanitizer). The stored source is already the sanitized form and
+ * (`lib/document/document-update-client`, beside the banned-css sanitizer). The stored source is already the sanitized form and
  * the remap is idempotent, so the canonical-fixpoint contract holds.
  */
 

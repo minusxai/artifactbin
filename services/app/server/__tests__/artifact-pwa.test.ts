@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createDocumentGraph } from '@/lib/story/graph/document-graph';
+import { createDocumentGraph } from '@/lib/document/document-graph';
 import sharp from 'sharp';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';

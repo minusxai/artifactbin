@@ -25,7 +25,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { readQuestionChart, updateQuestionChartInJsx } from '@/lib/data/story/story-viz';
 import { createLiveEditsCore } from '@/solid/lib/live-edits-core';
-import type { DocumentGraph } from '@/lib/story/graph/document-graph';
+import type { DocumentGraph } from '@/lib/document/document-graph';
 
 useAppHarness();
 

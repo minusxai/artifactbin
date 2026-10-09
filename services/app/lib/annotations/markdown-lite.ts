@@ -1,4 +1,4 @@
-import {isPersonMentionHref} from './person-mentions';
+import {isPersonMentionHref} from '../document/person-mentions';
 import { isSessionMentionHref } from './session-mentions';
 
 /**

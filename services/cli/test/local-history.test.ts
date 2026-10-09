@@ -8,7 +8,7 @@ import {localHistory,localHistoryHead,moveLocalHistory} from '../src/local-histo
 import {localWorkspaceState,saveLocalFile} from '../src/local-workspace';
 import {digest} from '../src/files';
 import {parseDocument} from '../src/document';
-import {prepareClientDocumentUpdate} from '../../app/lib/story/graph/document-update-client';
+import {prepareClientDocumentUpdate} from '../../app/lib/document/document-update-client';
 
 test('local history saves and restores through real preview handlers, persists across restart and folder copy',async()=>{
  const root=await mkdtemp(join(tmpdir(),'local-history-')),transfer=await mkdtemp(join(tmpdir(),'local-history-copy-'));

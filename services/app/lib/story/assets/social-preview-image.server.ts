@@ -1,7 +1,7 @@
 /** Shared cover-image pixels for published and local exports. */
 import sharp from 'sharp';
 import {CARD_WIDTH,CARD_HEIGHT} from '../../serving/og-card';
-import {clampImageCrop,savedSocialPreviewImageCrop} from './social-preview';
+import {clampImageCrop,savedSocialPreviewImageCrop} from '../../document/social-preview';
 export async function renderSocialPreviewImage(body:Buffer,source:string,format:'png'|'jpg',imageOverview=false):Promise<Buffer>{
   // Normalize EXIF orientation before measuring/extracting so browser
   // coordinates and exported pixels refer to the same image.

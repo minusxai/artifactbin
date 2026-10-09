@@ -14,7 +14,7 @@ import { generate, declaredValues } from '@/lib/compiled-page/compiler';
 import { buildDocumentModules, loadSsrModule } from '@/lib/compiled-page/bundle.server';
 import type { ModuleRef, ModuleStore } from '@/lib/compiled-page/contract';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
+import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/compile-dataflow';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { bindModuleCode } from '@/lib/compiled-page/runtime-binding';

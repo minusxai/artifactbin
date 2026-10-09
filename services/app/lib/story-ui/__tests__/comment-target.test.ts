@@ -1,4 +1,4 @@
-import { parseAnnotationRange } from '@/lib/story/annotations/annotation-range';
+import { parseAnnotationRange } from '@/lib/document/annotation-range';
 import { describe, expect, it } from 'vitest';
 import { parseCommentTarget } from '../comment-target';
 

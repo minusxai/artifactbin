@@ -13,7 +13,7 @@ import type { CompileInput } from '../contract';
 import { shapeOf, diffShapes, applyCurrentLayoutContracts } from '@/lib/islands/__tests__/kit-parity';
 import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { compileDataflow, prepareCompile } from '@/lib/dataflow/compile-dataflow';
-import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
+import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import type { Dataflow } from '@/lib/dataflow/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';

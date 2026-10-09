@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {parseJsxOrThrow} from '@/test/helpers/jsx';
-import {splitHelmet,validateHelmet} from '../document/helmet';
+import {splitHelmet,validateHelmet} from '../../document/helmet';
 import {compiledDocument} from '@/lib/compiled-page/__tests__/document-helper';
 import {serializeJsx} from '@/lib/jsx';
 import {prepareStoryRuntime} from '../prepared/prepare-runtime.server';

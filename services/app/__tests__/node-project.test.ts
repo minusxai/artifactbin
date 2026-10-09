@@ -15,7 +15,7 @@ import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/ro
 import { DELETE as deleteCommentRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { createArtifact,getArtifactById,type ArtifactRow } from '@/lib/artifacts';
-import { createDocumentGraph } from '@/lib/story/graph/document-graph';
+import { createDocumentGraph } from '@/lib/document/document-graph';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 async function setup(markup:string) {

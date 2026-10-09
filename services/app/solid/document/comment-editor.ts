@@ -29,7 +29,7 @@ import {
   type MdMarker,
 } from "@/lib/annotations/markdown-lite";
 import { isSessionMentionHref } from "@/lib/annotations/session-mentions";
-import { isPersonMentionHref } from "@/lib/annotations/person-mentions";
+import { isPersonMentionHref } from "@/lib/document/person-mentions";
 import { agentNameColor } from "../lib/agent-identity";
 
 const commentSchema = new Schema({

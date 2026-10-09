@@ -1,6 +1,6 @@
 import {isDeepStrictEqual} from 'node:util';
-import {sourceChanges} from '../../app/lib/story/document/source-changes';
-import {rebaseEditBatch} from '../../app/lib/story/document/edit-batch';
+import {sourceChanges} from '../../app/lib/document/source-changes';
+import {rebaseEditBatch} from '../../app/lib/document/edit-batch';
 import {metadataFields,type LocalDocument} from './document';
 
 /** Pure local reconciliation. Identity comes from remote; permission lists are indivisible fields. */

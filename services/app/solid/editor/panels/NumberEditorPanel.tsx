@@ -15,7 +15,7 @@
 import { createEffect, createSignal, on, Show, type JSX } from 'solid-js';
 import { SelectMenu } from '@/solid/components/SelectMenu';
 import BoundQuery from '../BoundQuery';
-import type { TableChoice } from '@/lib/story/data/table-catalog';
+import type { TableChoice } from '@/lib/document/table-catalog';
 import { NUMBER_AGGS, type NumberEmbedBinding, type NumberEmbedEdit } from '@/lib/data/story/story-number';
 
 export interface NumberEditorPanelProps {

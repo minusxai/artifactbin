@@ -91,7 +91,7 @@ export const STORY_HTML_TAGS = [
   'section', 'article', 'aside', 'header', 'footer', 'main', 'nav', 'address',
   'hr', 'br', 'wbr', 'time', 'data', 'details', 'summary',
   // The INTERACTIVE vocabulary. A document may carry its own <script>
-  // (lib/story/document/helmet.ts), and a script with nothing to drive is not a
+  // (lib/document/helmet.ts), and a script with nothing to drive is not a
   // feature — these are the elements it acts on. `form`, `object` and `embed`
   // stay denied (lib/jsx/dangerous-tags.ts): navigation hijacks and plugin
   // contexts, which no author document needs.

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {createDocumentGraph,graphSource} from '@/lib/story/graph/document-graph';
+import {createDocumentGraph,graphSource} from '@/lib/document/document-graph';
 import {prepareHostedFileUpdate} from '../hosted-connect';
 import {artifactFile} from './fixture';
 describe('offline hosted update preparation',()=>{

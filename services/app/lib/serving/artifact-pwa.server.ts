@@ -1,6 +1,6 @@
 import sharp from 'sharp';
-import { graphNodes } from '../story/graph/index';
-import { readPwaSettings, type PwaSettings } from '../story/reader/index';
+import { graphNodes } from '../document';
+import { readPwaSettings, type PwaSettings } from '../document/head';
 import { loadImage } from '../story/assets/image-store';
 import { canReadArtifact, type ArtifactRow } from '../artifacts/access';
 import { getArtifactById } from '../artifacts/store';

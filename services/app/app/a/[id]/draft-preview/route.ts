@@ -10,7 +10,7 @@ import { compileDraft, draftCompileGate } from '@/lib/story/prepared/draft-compi
 import { requestOrSessionActor, roleFor } from '@/lib/accounts';
 import { refusesCrossSite } from '@/lib/accounts';
 import { STORY_DESIGN_NAMES, type StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { collectExternalAssetUrls } from '@/lib/story/assets';
+import { collectExternalAssetUrls } from '@/lib/document';
 import { lookupWebAssets } from '@/lib/serving';
 import { createHash } from 'node:crypto';
 import { collectRefUses } from '@/lib/dataflow/server';

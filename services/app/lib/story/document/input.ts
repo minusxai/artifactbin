@@ -26,9 +26,8 @@ import { ingestPdfFromUrl } from '@/lib/web-ingest/pdf';
 import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '../data/data-tiers';
 import { publishFile } from '../assets/file-store';
 import {parseProgramDefinition} from '../../runner/program';
+import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
 
-
-export const MAX_CONTENT_BYTES = 2_000_000;
 
 /**
  * THE format vocabulary — the wire, the DB and the pages all speak the same

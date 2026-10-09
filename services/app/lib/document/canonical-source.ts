@@ -4,7 +4,7 @@ import {fixHtmlNesting} from './nesting';
 
 /**
  * Store markup in the serializer's canonical form — the invariant the edit
- * protocol rests on (lib/story/document/splice.ts). `serializeJsx` normalizes
+ * protocol rests on (lib/document/splice.ts). `serializeJsx` normalizes
  * expression values to JSON (`{{kind:"x"}}` → `{{"kind":"x"}}`), so a
  * non-canonical stored doc would make the WYSIWYG's first whole-tree
  * re-serialize differ far outside the edited node, and every derived splice
@@ -39,7 +39,7 @@ export function canonicalizeMarkup(source: string): string {
   // …and so is nesting the HTML parser will not undo. A `<p>` holding block
   // content serializes to markup that parses back as a DIFFERENT tree, which
   // is a hydration mismatch and a visible repaint on every read
-  // (lib/story/document/nesting.ts). Canonical form is the right door precisely because
+  // (lib/document/nesting.ts). Canonical form is the right door precisely because
   // it is re-derived on every write: the editor's re-serialization, the edit
   // protocol's base, publish and preview all pass through here, so none of
   // them can reintroduce it.

@@ -1,5 +1,5 @@
 /**
- * ONE SPLIT, ONE TREE (lib/story/document/body).
+ * ONE SPLIT, ONE TREE (lib/document/body).
  *
  * The served document and the live frame are two renderings of one source, and
  * the way they drift is by each doing the parse → nesting → split → asset
@@ -9,9 +9,9 @@
  * (the nesting repair, the Helmet split) runs here.
  */
 import { describe, expect, it } from 'vitest';
-import { storyBodyFor } from '@/lib/story/document/body';
-import { storyUpdateParts } from '@/lib/story/document/update-parts';
-import { assetLookupFrom, assetUrlFor, type WebAssetBox } from '@/lib/story/assets/asset-url';
+import { storyBodyFor } from '@/lib/document/body';
+import { storyUpdateParts } from '@/lib/document/update-parts';
+import { assetLookupFrom, assetUrlFor, type WebAssetBox } from '@/lib/document/asset-url';
 
 const URL_A = 'https://picsum.photos/id/237/300/200';
 const FONT = 'https://fonts.example/Face.woff2';
