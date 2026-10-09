@@ -121,6 +121,12 @@ Their markup is in the published specimen's source (section 06); copy one, never
 
 The page type's reference owns the structure (grid, stage, measure, step column, beats); this system owns the look. A best fit carries its specimen: the same markup every system wears, dressed by this one, to start from at the dress step; its `ds-tpl-*` classes are the page-type kit the runtime provides. A specimen reads `$series`, `$table`, `$totals`, `$pick` and `$flag` from the page's own Helmet; declare the artifact's own data instead. Drawings are left as a comment: draw the artifact's object in the hand.
 
+Use `<Markdown>` for long prose on any page type. Keep headings, paragraphs and lists in one component per continuous passage; split around charts, images or other embeds. HTML remains available for custom titles and individually designed text.
+
+### Doc
+
+Template: doc. Follow [the Doc guide](templates-doc.md): the page supplies the reading column and gutters; use `<Markdown>` for the main body. It inherits this system's fonts and colors with a transparent background. Keep the writing surface quiet; decorative devices are optional.
+
 ### Dashboard · avoid
 
 Template: dashboard. The template owns the 12-column grid, 24px gutters and tile stacking; the system owns the tile edge, the numeral and the chart colours. Expect custom CSS: Dense operational dashboards, dev tools, anything that must feel fast or cold, and pages that need more than one accent per view.

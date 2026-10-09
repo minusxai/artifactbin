@@ -58,7 +58,7 @@ describe('no agent-facing doc denies a capability the door allows', () => {
   // Only an OFFER counts: "there is no separate markdown or html tier" is the
   // sentence we want, not the one we are hunting.
   it.each(SURFACES)('%s never offers a retired tier', (_name, text) => {
-    expect(text).not.toMatch(/html tier:|markdown input|<Markdown>|send (markdown|html)\b/i);
+    expect(text).not.toMatch(/html tier:|markdown input|send (markdown|html)\b/i);
   });
 });
 

@@ -23,7 +23,8 @@ templates:
     description: A simple writing surface for notes, drafts, meeting minutes and everyday documents.
     personality: >-
       Quiet and direct. A readable text column with a headline and flowing body copy,
-      ordinary headings and lists. Start writing immediately; add structure only as the
+      headings and lists together in one Markdown component per continuous passage.
+      Use HTML for custom title areas and individually designed text. Start writing immediately; add structure only as the
       content needs it. No cover, hero, table of contents or decorative section system.
     beats:
       - Headline (what the document is about)

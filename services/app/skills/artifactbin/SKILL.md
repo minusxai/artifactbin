@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. Datasets/media are artifacts too.
+Publish editable `.jsx`: YAML metadata, self-contained HTML and kit JSX with Tailwind `className`. Datasets/media are artifacts too.
 
 npm CLI: local files/browser approval. Email login required for CLI and HTTP; [HTTP API](references/http-api.md).
 
@@ -20,7 +20,8 @@ npm CLI: local files/browser approval. Email login required for CLI and HTTP; [H
 - Files: `afbin add <files> --json` assigns IDs; preview/push register files. Preview runs until Ctrl+C; never `preview && push`. Push separately; it runs `afbin validate` and publishes.
 - Every body element has a persistent `id` for its lifetime. Move it with the same id; never reuse an id.
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
-- The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
+- Use `<Markdown>` for long prose on any page type; keep headings, paragraphs and lists together. Use HTML for individually designed text.
+- Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: keep `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork: copy and remove those five fields.
 - Copy: plain words, short sentences; preserve facts and caveats. [Copy guidance](references/copy.md).
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. Files/registered IDs use local data, unchanged by server mutations. Published data: `afbin export <artifact-url> --output out.png` or ID with `--refresh` (fresh published image; refuses local paths). For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
@@ -31,7 +32,7 @@ npm CLI: local files/browser approval. Email login required for CLI and HTTP; [H
 
 ## Example
 
-Before writing, read `afbin help <page type>`; avoid content flush to the viewport edge.
+Keep content away from viewport edges.
 
 ```jsx
 [[ example ]]
