@@ -1,5 +1,5 @@
 /** CLI discussion over the same portable annotation store as the local browser editor. */
-import {annotationAuthorForAgent} from '../../app/lib/annotations/author';
+import {annotationAuthorForAgent,nodeIndex,stampNodeIds,canonicalQuote,canonicalText,type JsxNode,BackendRequestError} from '../../app/lib/cli-toolkit';
 import {resolve,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -13,10 +13,6 @@ import {previewAnnotations} from './preview/annotations';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE,registerLocalFiles,withLocalLock,recoverLocalFiles,migrateLocalDiscussion,saveLocalFile} from './local-workspace';
 import type {Workspace} from './workspace';
 import {digest} from './files';
-import {nodeIndex,stampNodeIds} from '../../app/lib/document/node-ids';
-import {canonicalQuote,canonicalText} from '../../app/lib/document/annotation-range';
-import type {JsxNode} from '../../app/lib/jsx';
-import {BackendRequestError} from '../../app/lib/artifact-backend/errors';
 
 /** Resolve every target before writing so a mixed remote/local request cannot partly mutate locally. */
 export async function localCommentCommand(workspace:Workspace,parsed:ParsedCommand,providedBody?:string,options:{hostedIds?:boolean}={}):Promise<unknown|undefined>{

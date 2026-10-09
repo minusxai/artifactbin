@@ -5,7 +5,7 @@ import {mkdtemp,writeFile,readFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
-import {serializeJsx} from '../../app/lib/jsx';
+import {serializeJsx} from '../../app/lib/cli-toolkit';
 import {runCli} from '../src/dispatch';
 import {startPreview} from '../src/preview/session';
 import {prepareClientDocumentUpdate} from '../../app/lib/document/document-update-client';

@@ -7,13 +7,15 @@
  * An edge is any import of non-test source — static, `export from`, dynamic import calls, CommonJS require calls and
  * `import("x")` types, type-only included — read with the TypeScript parser.
  *
- * Four rules:
+ * Five rules:
  *   1. no cycle may contain an entry point or the UI (ENTRY_OR_UI below);
  *   2. a package other than `pkg/cli` imports only `pkg/contracts`, `pkg/utils` and itself;
  *   3. every edge inside a cycle is recorded in module-graph.allowed-cycles.json, and every recorded
  *      edge still is one — the list only shrinks, and a new back edge is a reviewed edit to it;
  *   4. lib/islands is entered through its index from server code, and through a listed leaf from
- *      listed browser-bundled code (ISLANDS_BROWSER_IMPORTERS, ISLANDS_BROWSER_LEAVES below).
+ *      listed browser-bundled code (ISLANDS_BROWSER_IMPORTERS, ISLANDS_BROWSER_LEAVES below);
+ *   5. the CLI's source (services/cli/src) imports app code only through lib/cli-toolkit's entries
+ *      (CLI_TOOLKIT_ENTRIES below), so every app name the CLI depends on is a reviewed re-export.
  *
  * Three layers, separable: `scanImports` (files → imports), `buildModuleGraph` (imports → module
  * edges), `checkModuleGraph` (graph + allow-list → violations). Nothing is cached on disk.
@@ -41,7 +43,7 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
   'services/app/solid/',
-  'services/cli/src/preview/',
+  'services/app/lib/cli-toolkit/browser.ts',
   'services/app/lib/offline/compiled-boot.ts',
   'services/app/lib/offline/compiled-sqlite.ts',
   'services/app/lib/offline/solid-entry.tsx',
@@ -51,6 +53,13 @@ export const ISLANDS_BROWSER_LEAVES = [
   'live-update', 'module', 'morph/engine', 'rt', 'sqlite-engine', 'trusted-overlay-host', 'trusted-portal',
 ];
 const ISLANDS_DIR = 'services/app/lib/islands';
+/**
+ * Rule 5's entries, one per CLI bundle: `index` (the afbin process), `host.server` (its packaged
+ * preview and team hosts), `browser` and `browser-connect` (the preview's two browser pages).
+ * Paths without extension.
+ */
+export const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server', 'services/app/lib/cli-toolkit/browser', 'services/app/lib/cli-toolkit/browser-connect'];
+const CLI_SOURCE = 'services/cli/src/';
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 
 /** The module a repository-relative path belongs to, or null (outside services/scripts/server.ts). */
@@ -148,6 +157,18 @@ function islandsEntryViolations(graph, { importers, leaves }) {
   return violations;
 }
 
+/** Rule 5: every import of app code from the CLI's source that does not name a toolkit entry. */
+function cliToolkitViolations(graph, entries) {
+  const refused = [];
+  for (const [to, imports] of [...(graph.get('pkg/cli') ?? [])].sort(([a], [b]) => a.localeCompare(b))) {
+    if (!to.startsWith('lib/') && !to.startsWith('app/') && to !== 'app-root') continue;
+    for (const { file, specifier } of imports) {
+      if (file.startsWith(CLI_SOURCE) && !entries.includes(importPath(file, specifier))) refused.push(`  ${file} imports ${specifier}`);
+    }
+  }
+  return refused.length ? [`The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs): re-export the name from the entry of the bundle that uses it in services/app/lib/cli-toolkit (index.ts: the afbin process; host.server.ts: its preview and team hosts; browser.ts, browser-connect.ts: the preview's browser pages), and import it from there:`, ...refused] : [];
+}
+
 /** Graph: Map<from, Map<to, [{ file, specifier }]>> over cross-module imports. */
 export function buildModuleGraph(imports) {
   const graph = new Map();
@@ -195,7 +216,7 @@ const edgesWithin = (graph, members) => {
   return members.flatMap(from => [...graph.get(from).keys()].filter(to => inside.has(to)).sort().map(to => [from, to]));
 };
 
-/** Policy: the violations of the four rules, each a readable line naming the offending edge(s). `islands` overrides rule 4's lists. */
+/** Policy: the violations of the five rules, each a readable line naming the offending edge(s). `islands` overrides rule 4's lists. */
 export function checkModuleGraph(graph, allowed, islands = ISLANDS_ENTRY) {
   const violations = [];
   const allowedEdges = new Set((allowed.cycles ?? []).flatMap(cycle => cycle.edges));
@@ -221,6 +242,7 @@ export function checkModuleGraph(graph, allowed, islands = ISLANDS_ENTRY) {
     if (outside.length) violations.push(`Package ${from} may import only ${PACKAGE_FLOOR.join(', ')} and itself:`, ...outside.map(to => describeEdge(graph, from, to)));
   }
   violations.push(...islandsEntryViolations(graph, islands));
+  violations.push(...cliToolkitViolations(graph, CLI_TOOLKIT_ENTRIES));
   return { violations };
 }
 

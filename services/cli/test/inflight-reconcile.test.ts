@@ -1,5 +1,4 @@
-import {applyGraphPatch} from '../../app/lib/document/document-graph-patch';
-import {createDocumentGraph,graphSource} from '../../app/lib/document/document-graph';
+import {applyGraphPatch,createDocumentGraph,graphSource} from '../../app/lib/cli-toolkit';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';

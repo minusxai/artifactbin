@@ -1,9 +1,6 @@
 import {stat} from 'node:fs/promises';
 import {join} from 'node:path';
-import {validateMarkupStructure} from '../../app/lib/document/local-validation';
-import {repairJsxSource} from '../../app/lib/jsx';
-import {formatMarkupSource} from '../../app/lib/document/format-source';
-import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
+import {validateMarkupStructure,repairJsxSource,formatMarkupSource,STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/cli-toolkit';
 import {inspectWorkspace,type Workspace} from './workspace';
 import {assetInput} from './upload-input';
 import {atomicWrite,digest,readOptional} from './files';

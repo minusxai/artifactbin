@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {parseResourceFile,reconcileResource,resourceContent} from '../src/resource-file';
 import {helpDocument} from '../src/teaching';
-import {parseDatasetDefinition} from '../../app/lib/datasets/definition';
+import {parseDatasetDefinition} from '../../app/lib/cli-toolkit';
 import {runCli} from '../src/dispatch';
 import {validateFiles} from '../src/validation';
 import {loadWorkspace} from '../src/workspace';

@@ -9,17 +9,7 @@
  * export capture and the offline file all render through: no I/O, no database, no clock. This module's
  * whole job is building its input from a local file instead of an artifact row.
  */
-import {compilePage} from '../../../app/lib/compiled-page/compiler';
-import {loadCompilerBuild} from '../../../app/lib/compiled-page/build.server';
-import {assembleReaderPage} from '../../../app/lib/compiled-page/assembler';
-import {createModuleStore, createSpeculationRulesStore} from '../../../app/lib/compiled-page/modules.server';
-import {loadSsrModule} from '../../../app/lib/compiled-page/bundle.server';
-import {bindModuleCode} from '../../../app/lib/compiled-page/runtime-binding';
-import {ISLANDS_PATH,SPECULATION_RULES_HEADER, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
-import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepared-runtime';
-import {DOCUMENT_UI_FONT_CSS} from '../../../app/lib/serving/app-fonts';
-import {documentStyleSheets} from '../../../app/lib/compiled-page/styles';
-import type {StoryIslandData, ServedResults} from '../../../app/lib/story-runtime/contract';
+import {compilePage,loadCompilerBuild,assembleReaderPage,createModuleStore,createSpeculationRulesStore,loadSsrModule,bindModuleCode,ISLANDS_PATH,SPECULATION_RULES_HEADER,type CompileInput,type CompiledPage,type CompilerBuild,type PreparedStoryRuntime,DOCUMENT_UI_FONT_CSS,documentStyleSheets,type StoryIslandData,type ServedResults} from '../../../app/lib/cli-toolkit/host.server';
 import type {Scalar} from '../../../contracts/src/index';
 
 export {ISLANDS_PATH};

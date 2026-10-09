@@ -1,6 +1,5 @@
 /** The `/document` JSON shape — shared by the client bundle and the local `ArtifactBackend` adapter. */
-import type {StoryIslandData} from '../../../app/lib/story-runtime/contract';
-import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepared-runtime';
+import type {StoryIslandData,PreparedStoryRuntime} from '../../../app/lib/cli-toolkit/host.server';
 import type {DocumentMetadata} from '../document';
 
 export interface PreviewDocument {

@@ -8,11 +8,7 @@
 import './sqlite-wasm';
 import type {Row} from '@artifactbin/contracts';
 import {createSqliteSql} from '@artifactbin/sql/sqlite';
-import type {DatasetColumn} from '../../app/lib/dataflow/dataset-shape';
-import type {Dataflow,DataflowState} from '../../app/lib/dataflow/dataflow';
-import type {CompiledDataflow} from '../../app/lib/dataflow/compiled-dataflow';
-import {compileWithLoader} from '../../app/lib/dataflow/compile-dataflow';
-import {evaluateDataflow,type ImportTables,type RunDataflowOptions} from '../../app/lib/dataflow/evaluate';
+import {type DatasetColumn,type Dataflow,type DataflowState,type CompiledDataflow,compileWithLoader,evaluateDataflow,type ImportTables,type RunDataflowOptions} from '../../app/lib/cli-toolkit';
 import {CliError} from './errors';
 
 /** A dataset's rows as the workspace holds them, or undefined when it has no local copy. */

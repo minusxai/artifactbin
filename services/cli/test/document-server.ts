@@ -1,9 +1,7 @@
 /** A protocol model for CLI transport tests. SQL/ACL behavior is covered by the
  * native app tests; these tests exercise the real client and local journal. */
 import assert from 'node:assert/strict';
-import {createDocumentGraph,graphSource} from '../../app/lib/document/document-graph';
-import {applyGraphPatch} from '../../app/lib/document/document-graph-patch';
-import {documentAfterOperation} from '../../app/lib/document/document-update-history';
+import {createDocumentGraph,graphSource,applyGraphPatch,documentAfterOperation} from '../../app/lib/cli-toolkit';
 import type {DocumentUpdate,DocumentGraph} from '@artifactbin/contracts';
 import {digest} from '../src/files';
 export function documentHead<T extends {markup:string;version:number}>(head:T):T&{document:DocumentGraph}{

@@ -2,7 +2,7 @@
  * OSS team composition reuses the shared login and identity; the app owns authorization. The app host
  * is a parameter (services/app/server/team-host passes createAppHost), so the CLI never imports the server.
  */
-import {canAuthenticateUser} from '../../app/lib/accounts/user-kinds';
+import {canAuthenticateUser,EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS,setServices,type Db} from '../../app/lib/cli-toolkit/host.server';
 import {join} from 'node:path';
 import {createTokenReader} from '@artifactbin/utils';
 import {createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,createAuthHost,readEnv,sessionStoreOf} from '@artifactbin/auth';
@@ -10,9 +10,6 @@ import {createSql} from '@artifactbin/sql/local';
 import {createBrowser,sessionProcessPaths} from '@artifactbin/browser/local';
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
 import type {Actor,Upstream} from '@artifactbin/contracts';
-import type {Db} from '../../app/lib/platform';
-import {EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '../../app/lib/platform/config';
-import {setServices} from '../../app/lib/platform/services';
 import {chromiumExecutable} from './chromium';
 
 /** What team hosting needs of the app host (services/app/server/host `createAppHost`). */
