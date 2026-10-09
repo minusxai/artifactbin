@@ -40,8 +40,7 @@ import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides'
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { RECIPES, cn } from '@/lib/islands/kit/recipes';
-import { peopleClasses } from '@/lib/islands/kit/recipes/people';
+import { cn, peopleClasses, RECIPES } from '@/lib/islands';
 import type { GeneratedSources } from './codegen-safety';
 import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
