@@ -520,7 +520,6 @@
    "services/app/lib/document/__tests__/document-prepare-worker.test.ts": 1884,
    "services/app/lib/document/__tests__/document-prose.test.ts": 608,
    "services/app/lib/document/__tests__/document-update-client.test.ts": 103,
-   "services/app/lib/story/__tests__/draft-preview.test.ts": 1300,
    "services/app/lib/document/__tests__/edit-batch.test.ts": 69,
    "services/app/lib/document/__tests__/edit-compose.test.ts": 24,
    "services/app/lib/story/__tests__/escaped-backtick-publish.test.ts": 188,
