@@ -1,6 +1,4 @@
-import {parseJsx,type JsxElement} from '../../app/lib/jsx';
-import {parseDatasetDefinition} from '../../app/lib/datasets/definition';
-import type {CatalogInput} from '../../app/lib/datasets/types';
+import {parseJsx,type JsxElement,parseDatasetDefinition,type CatalogInput} from '../../app/lib/cli-toolkit';
 import {resolveReference} from './reference';
 import {extname,join,relative,resolve,sep} from 'node:path';
 import {CliError} from './errors';

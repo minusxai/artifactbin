@@ -1,7 +1,6 @@
 import {isProgramFile,programFileDefinition} from './program-file';
 import {basename,extname} from 'node:path';
-import {assetFormatOf,fileContentType} from '../../app/lib/document/file-types';
-import {parseCsv} from '../../app/lib/data-ingest/csv';
+import {assetFormatOf,fileContentType,parseCsv} from '../../app/lib/cli-toolkit';
 import {datasetFileRows,isDatasetFile} from './dataset-file';
 import {CliError} from './commands';
 export function assetInput(path:string,bytes:Buffer):Record<string,unknown>{

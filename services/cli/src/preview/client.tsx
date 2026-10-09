@@ -17,23 +17,11 @@
  */
 import {createSignal, Show, onCleanup, onMount} from 'solid-js';
 import {render} from 'solid-js/web';
-import {createInPlaceEdit} from '../../../app/solid/editor/create-in-place-edit';
-import {trustedPortalOf} from '../../../app/lib/islands/trusted-portal';
-import {TrustedUi} from '../../../app/solid/components/TrustedUi';
-import {configureTrustedUiStyles} from '../../../app/lib/serving/trusted-ui-styles';
-import {createDocumentViewport} from '../../../app/solid/document/create-document-viewport';
-import {PageBar,DocumentTitle} from '../../../app/solid/components/PageBar';
-import {DocumentCommentAction,DocumentEditAction} from '../../../app/solid/document/DocumentBarActions';
-import {EditorToolbar,EditorViewTabs,EditorSourcePanel} from '../../../app/solid/editor/EditorChrome';
-import SourceEditorPane from '../../../app/solid/editor/SourceEditorPane';
+import {createInPlaceEdit,trustedPortalOf,TrustedUi,configureTrustedUiStyles,createDocumentViewport,PageBar,DocumentTitle,DocumentCommentAction,DocumentEditAction,EditorToolbar,EditorViewTabs,EditorSourcePanel,SourceEditorPane,AnnotationLayer,parseJsx,splitHelmet,STORY_DOCUMENT_MESSAGE,STORY_ROOT_ID,type StoryController} from '../../../app/lib/cli-toolkit/browser';
 import Code from 'lucide-solid/icons/code';
 import Paintbrush from 'lucide-solid/icons/paintbrush';
-import {AnnotationLayer} from '../../../app/solid/document/AnnotationLayer';
 import {createPreviewBackend} from './backend';
 import {createPreviewEditController} from './edit-controller';
-import {parseJsx} from '../../../app/lib/jsx';
-import {splitHelmet} from '../../../app/lib/document/helmet';
-import {STORY_DOCUMENT_MESSAGE, STORY_ROOT_ID, type StoryController} from '../../../app/lib/story-runtime/contract';
 import type {PreviewDocument} from './types';
 
 const capture = new URLSearchParams(location.search).get('capture') === '1';

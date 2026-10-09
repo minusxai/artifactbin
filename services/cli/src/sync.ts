@@ -1,8 +1,7 @@
 import {accountMismatch} from './account-diagnostic';
 import {observeDelivery} from './delivery-observer';
-import {createDocumentGraph} from '../../app/lib/document/document-graph';
+import {createDocumentGraph,prepareClientDocumentPublication,canonicalizeMarkup,parseDatasetDefinition,stampNodeIds} from '../../app/lib/cli-toolkit';
 import {documentOutcomePresent} from './document-recovery';
-import {prepareClientDocumentPublication} from '../../app/lib/document/document-update-client';
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
 import {localIdentities} from './identities';
 import {referenceIds} from './preview/graph';
@@ -12,9 +11,6 @@ import type {DatasetAccessPolicy as DatasetPolicy} from '@artifactbin/contracts'
 import {readConflicts,persistConflict,clearConflict} from './conflict-state';
 import {isDeepStrictEqual} from 'node:util';
 import {extname,resolve} from 'node:path';
-import {canonicalizeMarkup} from '../../app/lib/document/canonical-source';
-import {parseDatasetDefinition} from '../../app/lib/datasets/definition';
-import {stampNodeIds} from '../../app/lib/document/node-ids';
 import {CliError} from './commands';
 import {digest,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles} from './journal';

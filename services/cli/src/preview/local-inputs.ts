@@ -4,8 +4,7 @@
  */
 import {join} from 'node:path';
 import {inferColumns} from '../../../utils/src/shape';
-import {parseCsv} from '../../../app/lib/data-ingest/csv';
-import {coerceRows} from '../../../app/lib/data-ingest/coerce';
+import {parseCsv,coerceRows} from '../../../app/lib/cli-toolkit';
 import type {DatasetColumn,Row} from '@artifactbin/contracts';
 
 /** A dataset's rows, by value. */

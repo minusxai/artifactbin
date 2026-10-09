@@ -1,8 +1,6 @@
 import {isProgramFile} from './program-file';
 import {extname} from 'node:path';
-import {parseCsv} from '../../app/lib/data-ingest/csv';
-import {coerceRows} from '../../app/lib/data-ingest/coerce';
-import {geoJsonRows,rowsGeoJson} from '../../app/lib/data-ingest/geojson';
+import {parseCsv,coerceRows,geoJsonRows,rowsGeoJson} from '../../app/lib/cli-toolkit';
 import {rowsCsv} from './tabular';
 import {CliError} from './errors';
 

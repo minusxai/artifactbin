@@ -2,7 +2,7 @@
 import {readFile,realpath} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {isLocalDevelopmentHost} from '@artifactbin/contracts';
-import {parseDatabaseUrl} from '../../app/lib/platform/database-url';
+import {parseDatabaseUrl} from '../../app/lib/cli-toolkit';
 // The auth service owns both questions: which settings amount to a login someone could COMPLETE,
 // and which origins the local outbox serves. Asking it keeps the refusals and the startup text true
 // to the mailer, and keeps the provider names spelled out in exactly one module.

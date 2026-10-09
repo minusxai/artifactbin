@@ -1,6 +1,5 @@
 /** Browser adapter: production components speak ArtifactBackend; only this module knows local routes. */
-import type {ArtifactBackend,BackendFeature,EditAnswer} from '../../../app/lib/artifact-backend/types';
-import {BackendRequestError} from '../../../app/lib/artifact-backend/errors';
+import {type ArtifactBackend,type BackendFeature,type EditAnswer,BackendRequestError} from '../../../app/lib/cli-toolkit/browser';
 import type {PreviewDocument} from './types';
 
 export function createPreviewBackend(file:string,onSaved:(document:PreviewDocument)=>void):ArtifactBackend {

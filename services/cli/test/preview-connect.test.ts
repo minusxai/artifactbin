@@ -5,7 +5,7 @@ import {mkdtemp,writeFile,readFile,rm,readdir,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {startPreview} from '../src/preview/session';
-import {sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
+import {sourceDigest,type ArtifactFile} from '../../app/lib/cli-toolkit';
 import {digest} from '../src/files';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '../src/local-workspace';
 const base='<p id="words">Initial</p>';

@@ -18,7 +18,7 @@ import {parseResourceFile,writeResourceFile,readResourceSource} from './resource
 import {referenceIds} from './preview/graph';
 import {datasetFileRows,datasetFileBytes,isDatasetFile} from './dataset-file';
 import {reconcileDocument} from './reconcile';
-import {stampNodeIds} from '../../app/lib/document/node-ids';
+import {stampNodeIds,graphSource,canonicalizeMarkup,parseJsx,serializeJsx,type JsxNode,collectRefUses,REFERENCE_POSITIONS,validateMarkupStructure} from '../../app/lib/cli-toolkit';
 import {push} from './sync';
 import {loadWorkspace,saveTracking,type Workspace,type Snapshot} from './workspace';
 import {stateFor} from './state-access';
@@ -27,12 +27,6 @@ import {readPendingRequest} from './pending-request';
 import {readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 import {snapshotDocument} from './local';
 import {ARTIFACT_ID_PATTERN,type DocumentGraph} from '@artifactbin/contracts';
-import {graphSource} from '../../app/lib/document/document-graph';
-import {canonicalizeMarkup} from '../../app/lib/document/canonical-source';
-import {parseJsx,serializeJsx,type JsxNode} from '../../app/lib/jsx';
-import {collectRefUses} from '../../app/lib/dataflow/refs';
-import {REFERENCE_POSITIONS} from '../../app/lib/dataflow/reference-positions';
-import {validateMarkupStructure} from '../../app/lib/document/local-validation';
 import type {HttpClient} from './http';
 import {publishLocalComments} from './local-comment-publication';
 export interface LocalPublicationResult {operations:Array<Record<string,unknown>>;dry_run?:boolean;local_only?:boolean;publication_copy?:string;local_source_preserved?:boolean}

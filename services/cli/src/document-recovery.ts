@@ -3,7 +3,7 @@
  * This confirms the desired outcome, not who performed an identical write. */
 import {isDeepStrictEqual} from 'node:util';
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
-import {applyGraphPatch} from '../../app/lib/document/document-graph-patch';
+import {applyGraphPatch} from '../../app/lib/cli-toolkit';
 import type {Snapshot} from './workspace';
 export function documentOutcomePresent(head:Snapshot,base:Snapshot|undefined,update:DocumentUpdate):boolean {
  const current=head.document as DocumentGraph|undefined,before=base?.document as DocumentGraph|undefined;

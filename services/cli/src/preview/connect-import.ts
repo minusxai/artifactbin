@@ -1,6 +1,6 @@
 import {localIdentities} from '../identities';
 import {previewGraph} from './graph';
-import {collectRefUses} from '../../../app/lib/dataflow/refs';
+import {collectRefUses} from '../../../app/lib/cli-toolkit';
 /** Browser offers are data, never executable HTML. The existing importer owns validation, conflicts and atomic writes. */
 import {randomUUID} from 'node:crypto';
 import {rm} from 'node:fs/promises';

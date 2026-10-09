@@ -5,8 +5,7 @@
  * Pure: no browser and no session here.
  */
 import type {RenderCardCrop,RenderFormat,RenderRequest} from '@artifactbin/contracts';
-import {CARD_WIDTH,CARD_HEIGHT} from '../../app/lib/serving/og-card';
-import {scriptModuleOrigins,scriptRenderAllowance} from '../../app/lib/export/script-origins';
+import {CARD_WIDTH,CARD_HEIGHT,scriptModuleOrigins,scriptRenderAllowance} from '../../app/lib/cli-toolkit/host.server';
 
 export interface PreviewRenderInput {
  /** The capture session's address (preview/session `url`). */

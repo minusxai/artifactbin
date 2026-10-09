@@ -11,16 +11,8 @@
  * in-place editing, the selection bubble, AnnotationLayer's anchor picking — sits inert). Built here
  * first because local preview needed it; the hosted Solid page can mount the same shape.
  */
-import type {JsxNode} from '../../../app/lib/jsx';
-import {serializeJsx} from '../../../app/lib/jsx';
-import type {StoryController} from '../../../app/lib/story-runtime/contract';
-import {STORY_ANNOTATIONS_MESSAGE,STORY_EDIT_MODE_MESSAGE,STORY_SELECTION_ACTIONS_MESSAGE,STORY_SELECTION_ACTION_MESSAGE,STORY_SELECT_MESSAGE,isEditParentMessage,type StoryDocumentUpdate} from '../../../app/lib/story-runtime/contract';
-import {isStoryDocumentUpdate} from '../../../app/lib/story-runtime/document-update';
+import {type JsxNode,serializeJsx,type StoryController,STORY_ANNOTATIONS_MESSAGE,STORY_EDIT_MODE_MESSAGE,STORY_SELECTION_ACTIONS_MESSAGE,STORY_SELECTION_ACTION_MESSAGE,STORY_SELECT_MESSAGE,isEditParentMessage,type StoryDocumentUpdate,isStoryDocumentUpdate,type RuntimeChannel,type FrameEditSession,type FrameSelectionActions,type FrameAnnotateSession,loadFrameEditSession,loadCompiledEditRegions,loadFrameAnnotateSession,loadFrameSelectionActions,loadStoryUpdateParts,loadDraftMorph} from '../../../app/lib/cli-toolkit/browser';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
-import type {RuntimeChannel} from '../../../app/lib/story-runtime/pristine';
-import type {FrameEditSession} from '../../../app/lib/story-runtime/edit/session';
-import type {FrameSelectionActions} from '../../../app/lib/story-runtime/edit/selection-actions';
-import type {FrameAnnotateSession} from '../../../app/lib/story-runtime/edit/annotate';
 
 export interface PreviewEditControllerInput {
  win:Window;root:HTMLElement;file:string;
@@ -71,7 +63,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
  const canPreviewDraft=()=>editRequested||isSourceEditing();
  let editLoading=false;
  let selection:FrameSelectionActions|null=null;
- let selectionFactory:typeof import('../../../app/lib/story-runtime/edit/selection-actions').createFrameSelectionActions|null=null;
+ let selectionFactory:Awaited<ReturnType<typeof loadFrameSelectionActions>>['createFrameSelectionActions']|null=null;
  let selectionCommand:Parameters<FrameSelectionActions['update']>[0]|null=null;
  let selectionLoading=false;
  // The selection bubble ("comment"/"edit"), over the SAME picked text AnnotationLayer anchors a new thread to.
@@ -125,7 +117,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
  const applyDraft=async(allowFocused=false):Promise<void>=>{
   const pending=pendingDraft;
   if(!pending||(focusedRegion()&&(!allowFocused||!edit?.canApplyDraft()))||disposed||!canPreviewDraft()||pending.sequence!==draftSequence)return;
-  const {disposeChangedDraftIslands,hydrateDraftIslands,morphDraftDom}=await import('../../../app/lib/islands/morph/engine');
+  const {disposeChangedDraftIslands,hydrateDraftIslands,morphDraftDom}=await loadDraftMorph();
   if(disposed||!canPreviewDraft()||pending.sequence!==draftSequence||pendingDraft!==pending)return;
   pendingDraft=null;
   if(quietDraftTimer!==null){win.clearTimeout(quietDraftTimer);quietDraftTimer=null;}
@@ -154,7 +146,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
     if(!command.on){draftSequence++;pendingDraft=null;if(quietDraftTimer!==null)win.clearTimeout(quietDraftTimer);quietDraftTimer=null;edit?.dispose();edit=null;return;}
     if(edit||editLoading)return;
     editLoading=true;
-    void Promise.all([import('../../../app/lib/story-runtime/edit/session'),import('../../../app/lib/story-runtime/edit/dom-mounter')]).then(([{createFrameEditSession},{mountCompiledEditRegions}])=>{
+    void Promise.all([loadFrameEditSession(),loadCompiledEditRegions()]).then(([{createFrameEditSession},{mountCompiledEditRegions}])=>{
      if(disposed||!editRequested)return;
      edit=createFrameEditSession({win,root,channel,requestRender:()=>{},mountCompiled:mountCompiledEditRegions});
      edit.setNodes(nodes);
@@ -171,7 +163,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
     if(annotate){annotate.update(command);return;}
     if(command.mode==='off'||annotationLoading)return;
     annotationLoading=true;
-    void import('../../../app/lib/story-runtime/edit/annotate').then(({createFrameAnnotateSession})=>{
+    void loadFrameAnnotateSession().then(({createFrameAnnotateSession})=>{
      if(disposed)return;
      annotate=createFrameAnnotateSession({win,root,channel,isEditing:()=>editRequested});
      annotate.setNodes(nodes);
@@ -185,7 +177,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
     if(selectionFactory){ensureSelection();return;}
     if((!command.edit&&!command.annotate)||selectionLoading)return;
     selectionLoading=true;
-    void import('../../../app/lib/story-runtime/edit/selection-actions').then(({createFrameSelectionActions})=>{
+    void loadFrameSelectionActions().then(({createFrameSelectionActions})=>{
      selectionFactory=createFrameSelectionActions;
      ensureSelection();
     }).catch(error=>{if(!disposed)onStatus?.(error instanceof Error?error.message:String(error));}).finally(()=>{selectionLoading=false;});
@@ -207,7 +199,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
      const nextRoot=next.querySelector<HTMLElement>('[data-mx-inline-story]');
      if(!nextRoot)throw new Error('draft preview carried no story');
      const baseline=lastDraftSource??sourceRef.current;
-     const {storyUpdateParts}=await import('../../../app/lib/document/update-parts');
+     const {storyUpdateParts}=await loadStoryUpdateParts();
      const before=baseline?storyUpdateParts(baseline)?.nodes??nodes:nodes;
      const after=storyUpdateParts(source)?.nodes??command.nodes;
      pendingDraft={document:next,root:nextRoot,sheets:documentSheets(next),nodes:command.nodes,source,

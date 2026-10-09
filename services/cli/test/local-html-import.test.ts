@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {importLocalHtml,readArtifactFileHtml} from '../src/local-html-import';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '../src/local-workspace';
 import {digest} from '../src/files';
-import {sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
+import {sourceDigest,type ArtifactFile} from '../../app/lib/cli-toolkit';
 const base='<p id="words">Initial</p>';
 function file(source=base):ArtifactFile{return {format:1,origin:'http://localhost',artifactId:'Ab12Cd',liveUrl:'',downloadedBy:'Local',downloadedAt:new Date().toISOString(),base:{version:0,editId:'',source:base},source,metadata:{title:'Report',description:null,theme:null,template:null,colorMode:null},css:{base:'',compiled:null,author:null},island:{nodes:[],refData:{},colorMode:'light'},snapshot:{at:'now',state:{values:{},tables:{},errors:{}},variants:[],frozen:[]},journal:[],threads:[],localIds:[],bundle:'solid',localWorkspace:{documentId:'Ab12Cd',baseDigest:sourceDigest(base),threadsDigest:digest('[]'),assets:{data01:{path:'rows.csv',contentType:'text/csv',base64:Buffer.from('amount\n10\n').toString('base64')}}}} as ArtifactFile;}
 const html=(value:ArtifactFile)=>`<html><script>throw new Error('MUST NOT RUN')</script><script type="application/json" id="afbin-file">${JSON.stringify(value).replace(/</g,'\\u003c')}</script></html>`;
