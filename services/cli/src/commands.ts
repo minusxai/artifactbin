@@ -6,6 +6,7 @@ export {CliError} from './errors.js';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ comments:{description:'Follow new human comments and replies.'},
  'idempotency-key':{value:'KEY',description:'Reuse this upload identity to recover a confirmed file without creating another.'},
  account:{value:'ACCOUNT',description:'Explicit workspace rebind target: current authenticated account only.'},
  artifact:{value:'ID',description:'Published live artifact ID for a schedule, including program artifacts.'},
@@ -84,6 +85,7 @@ const FORMATS:Record<string,readonly string[]>={
 export const globalFlags=['help','version','json','server','yes'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
+ {name:'watch',usage:'<url|id> --comments --json',description:'Follow new human comments and replies as NDJSON until cancelled; --cursor resumes an explicit checkpoint.',min:1,max:1,flags:['comments','cursor'],examples:['afbin watch abc123 --comments --json']},
  {name:'upload',usage:'<file> --in <document> --name <import>',description:'Upload one attachment to a declared dataset import; returns its file reference without changing rows.',min:1,max:1,flags:['in','name','idempotency-key'],examples:['afbin upload receipt.pdf --in abc123 --name expenses --json']},
  {name:'workspace',usage:'rebind --account current',description:'Explicitly rebind local workspace ownership; preserves content and remote permission checks.',min:1,max:1,flags:['account','dry-run'],examples:['afbin workspace rebind --account current --dry-run','afbin workspace rebind --account current']},
  {name:'add',usage:'<path> [<path> ...]',description:'Assign stable account-scoped identities to local files without publishing.',min:1,max:Infinity,flags:[],examples:['afbin add sales.csv report.jsx --json']},

@@ -89,15 +89,17 @@ export async function observeCredentialAccount(connection:Credentials,account:st
 }
 export class CredentialRefreshError extends Error {}
 export class CredentialRefreshUnavailableError extends Error {
+ readonly code='refresh_unavailable';
  constructor(message:string,readonly status?:number){super(message);}
 }
-export async function refreshCredentials(connection:Credentials,root:string,options:{fetch?:typeof fetch}={}):Promise<Credentials>{
+export async function refreshCredentials(connection:Credentials,root:string,options:{fetch?:typeof fetch;signal?:AbortSignal;timeoutMs?:number}={}):Promise<Credentials>{
  return withStateLock(root,'home',()=>withStateLock(root,'@credential-refresh',async()=>{
+  options.signal?.throwIfAborted();
   const saved=await readCredentials(connection.server,root);
   if(saved&&saved.token!==connection.token&&saved.refreshToken&&saved.clientId===connection.clientId)return saved;
   if(!connection.refreshToken||!connection.clientId)throw new CredentialRefreshError('auth_required: credentials could not be refreshed.');
   const origin=credentialOrigin(connection.server);
-  const response=await(options.fetch??fetch)(`${origin}/oauth/token`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:connection.clientId,refresh_token:connection.refreshToken,resource:`${origin}${API_RESOURCE_PATH}`})}).catch(()=>{throw new CredentialRefreshUnavailableError('refresh_unavailable: the refresh server could not be reached. Retry later; the saved grant was retained.');});
+  const response=await(options.fetch??fetch)(`${origin}/oauth/token`,{method:'POST',redirect:'error',signal:options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(options.timeoutMs??15000)]):AbortSignal.timeout(options.timeoutMs??15000),headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:connection.clientId,refresh_token:connection.refreshToken,resource:`${origin}${API_RESOURCE_PATH}`})}).catch(()=>{options.signal?.throwIfAborted();throw new CredentialRefreshUnavailableError('refresh_unavailable: the refresh server could not be reached. Retry later; the saved grant was retained.');});
   const data=await response.json().catch(()=>null) as {access_token?:unknown;refresh_token?:unknown;expires_in?:number;error?:unknown}|null;
   if(!response.ok){
    if(response.status<500&&response.status!==429&&['invalid_grant','invalid_client','revoked_token'].includes(String(data?.error)))throw new CredentialRefreshError('auth_required: credentials could not be refreshed.');
@@ -108,10 +110,11 @@ export async function refreshCredentials(connection:Credentials,root:string,opti
   if(!/^[A-Za-z0-9_-]+$/.test(data.access_token)||!/^[A-Za-z0-9_-]+$/.test(data.refresh_token)||!Number.isSafeInteger(expiresAt))throw new CredentialRefreshUnavailableError('refresh_unavailable: the refresh server returned invalid credentials. Retry later; the saved grant was retained.',response.status);
   const refreshed={...connection,server:origin,token:data.access_token,refreshToken:data.refresh_token,expiresAt};
   await saveCredentials(refreshed,root);return refreshed;
- },{reentrant:false}));
+ },{reentrant:false,signal:options.signal}),{signal:options.signal});
 }
 /** HTTP fallback shares the CLI's grant, lock and binding; secrets never enter URLs. */
-export async function credentialRequest(server:string,root:string,path:string,options:{method?:string;body?:string;account?:string;fetch?:typeof fetch}={}):Promise<Response>{
+export async function credentialRequest(server:string,root:string,path:string,options:{method?:string;body?:string;account?:string;fetch?:typeof fetch;signal?:AbortSignal;timeoutMs?:number}={}):Promise<Response>{
+ options.signal?.throwIfAborted();
  const origin=credentialOrigin(server);if(!path.startsWith('/api/')||path.includes('\\')||path.includes('#'))throw new Error('Use a path inside /api/.');
  const url=new URL(path,origin);if(url.origin!==origin||!url.pathname.startsWith('/api/'))throw new Error('Use a path inside /api/.');
  let connection=await readCredentials(origin,root);if(!connection)throw new Error('auth_required: no saved credentials for this origin.');
@@ -120,10 +123,11 @@ export async function credentialRequest(server:string,root:string,path:string,op
  if(options.account&&observed&&options.account!==observed.account)throw new Error('account_mismatch: saved credentials belong to another account.');
  const account=options.account??observed?.account;
  for(let attempt=0;attempt<2;attempt++){
+  options.signal?.throwIfAborted();
   const headers:Record<string,string>={Authorization:`Bearer ${connection.token}`};if(options.body!==undefined)headers['Content-Type']='application/json';
   if(account)headers['X-Artifactbin-Account']=account;
-  const response=await transport(url,{method:options.method??'GET',headers,body:options.body,redirect:'error',signal:AbortSignal.timeout(30000)});
-  if(response.status===401&&attempt===0&&connection.refreshToken&&connection.clientId){await response.body?.cancel();connection=await refreshCredentials(connection,root,{fetch:transport});continue;}
+  const response=await transport(url,{method:options.method??'GET',headers,body:options.body,redirect:'error',signal:options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(options.timeoutMs??30000)]):AbortSignal.timeout(options.timeoutMs??30000)});
+  if(response.status===401&&attempt===0&&connection.refreshToken&&connection.clientId){await response.body?.cancel();connection=await refreshCredentials(connection,root,{fetch:transport,signal:options.signal});continue;}
   const actual=response.headers.get('X-Artifactbin-Account');if(response.ok&&account&&actual&&actual!==account)throw new Error('account_mismatch: the response belongs to another account.');
   if(response.ok&&actual)try{await observeCredentialAccount(connection,actual,root);}catch{/* Advisory observations never change a confirmed outcome. */}
   return response;

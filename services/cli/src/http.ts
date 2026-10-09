@@ -96,7 +96,7 @@ export class HttpClient {
    if(raw&&[408,429,500,502,503,504].includes(response.status)&&attempt<2)continue;
    if(response.status===401){
     if(!this.options.readOnly&&!refreshed&&this.connection.refreshToken&&this.connection.clientId){
-     refreshed=true;try{await this.refresh();continue;}catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;}
+     refreshed=true;try{await this.refresh(signal);continue;}catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;}
     }
     if(!this.options.readOnly&&!authenticated&&this.options.authenticate){
      authenticated=true;const next=await this.options.authenticate();
@@ -129,9 +129,9 @@ export class HttpClient {
   }
   throw new CliError('auth_required','Run afbin auth to sign in again.',undefined,{http_status:401});
  }
- private async refresh():Promise<void>{
+ private async refresh(signal?:AbortSignal):Promise<void>{
   const home=this.options.home??homedir();
-  try{this.connection=await refreshCredentials(this.connection,configDir(home,this.options.env),{fetch:this.options.fetch});}
+  try{this.connection=await refreshCredentials(this.connection,configDir(home,this.options.env),{fetch:this.options.fetch,signal});}
   catch(error){if(error instanceof CredentialRefreshUnavailableError)throw new CliError('refresh_unavailable',error.message,'Retry the request later; the saved refresh grant is unchanged.',error.status?{http_status:error.status}:undefined);if(error instanceof CredentialRefreshError)throw new CliError('auth_required',error.message,'Run afbin auth again.');throw error;}
  }
 }

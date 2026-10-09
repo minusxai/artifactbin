@@ -8,8 +8,9 @@ import type * as SQLite from 'node:sqlite';
 import {privateDirectory} from './private-directory';
 const ownership=new AsyncLocalStorage<ReadonlyMap<string,symbol>>();
 const activeOwners=new Map<string,symbol>();
-export interface LockOptions {waitMs?:number;reentrant?:boolean}
+export interface LockOptions {waitMs?:number;reentrant?:boolean;signal?:AbortSignal}
 export async function withStateLock<T>(root:string,scope:string,run:()=>Promise<T>,options:LockOptions={}):Promise<T>{
+ options.signal?.throwIfAborted();
  const name=createHash('sha256').update(scope).digest('hex').slice(0,16);
  const file=resolve(join(root,'locks',`${name}.sqlite`));
  const inherited=ownership.getStore()?.get(file);
@@ -24,12 +25,12 @@ export async function withStateLock<T>(root:string,scope:string,run:()=>Promise<
  const db=new DatabaseSync(file);let acquired=false;const owner=Symbol(file);
  try{
   await chmod(file,0o600);const started=Date.now();const deadline=started+Math.max(0,options.waitMs??60000);let noticed=false;
-  for(;;){try{db.exec('BEGIN EXCLUSIVE');acquired=true;break;}catch(error){
+  for(;;){options.signal?.throwIfAborted();try{db.exec('BEGIN EXCLUSIVE');acquired=true;break;}catch(error){
    if((error as {errcode?:number}).errcode!==5)throw error;
    if(Date.now()>=deadline)throw new Error('workspace_busy: another afbin operation is using this directory. Retry when it finishes.');
    if(!noticed&&Date.now()-started>=1000){noticed=true;process.stderr.write('Waiting for another afbin operation in this directory to finish…\n');}
-   await sleep(Math.min(100,deadline-Date.now()));
+   await sleep(Math.min(100,deadline-Date.now()),undefined,{signal:options.signal});
   }}
-  activeOwners.set(file,owner);const owned=new Map(ownership.getStore());owned.set(file,owner);return await ownership.run(owned,run);
+  options.signal?.throwIfAborted();activeOwners.set(file,owner);const owned=new Map(ownership.getStore());owned.set(file,owner);return await ownership.run(owned,run);
  }finally{if(activeOwners.get(file)===owner)activeOwners.delete(file);if(acquired)db.exec('ROLLBACK');db.close();}
 }

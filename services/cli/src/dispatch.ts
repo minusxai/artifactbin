@@ -56,6 +56,7 @@ import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} fro
 import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext,claudeConfigDirectory,claudeConfigEnvironment} from './config';
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
+import {watchCommand} from './watch';
 import {HttpClient,detailLine} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
@@ -64,7 +65,7 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {/** Executable entry; defaults to the running CLI. */entry?:string;/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {signal?:AbortSignal;/** Executable entry; defaults to the running CLI. */entry?:string;/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const update=automaticUpdate({home:context.home??homedir(),env:context.env,entry:context.entry,npm:context.npm,stderr:context.stderr??(value=>process.stderr.write(value))});
  const code=await dispatchCli(argv,context,update.observe);
@@ -329,7 +330,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    emit({authenticated:true,server:connection.server});return 0;
   }
   if(!connection){
-   if(flags['dry-run'])throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.');
+   if(flags['dry-run']||command==='watch')throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.');
    connection=await authenticate();
   }
   // A directory is tracked against ONE server and account. Sending another server this directory's account
@@ -338,7 +339,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const sameManagedOrigin=!!managedOrigin&&sameServer(resolved,managedOrigin);
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server)&&!sameManagedOrigin)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const workspaceAccount=sameManagedOrigin&&!sameServer(resolved,workspace.tracking?.server??'')?undefined:workspace.tracking?.account;
-  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'?{onRelease}:{}),account:workspaceAccount,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'&&command!=='watch'?{onRelease}:{}),account:workspaceAccount,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']&&command!=='watch'?{authenticate}: {})});
+  if(command==='watch'){await watchCommand(workspace,parsed,client,{stdout,stderr,signal:context.signal});return 0;}
   if(command==='workspace'){emit(await rebindWorkspace(workspace,client,{dryRun:!!flags['dry-run']}));return 0;}
   if(command==='schedule'){emit(await scheduleCommand(workspace,client,positionals,flags));return 0;}
   if(command==='runs'){
@@ -460,7 +462,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    }
   }
   const failure=error instanceof ApprovalRequired?{code:error.code,message:error.message,verification_url:error.verificationUrl,user_code:error.userCode,expires_at:new Date(error.expiresAt).toISOString()}:error instanceof CliError?{code:error.code,message:error.message,...(error.fix?{fix:error.fix}:{}),...(error.details?{details:error.details}:{})}:{code:'operation_failed',message:error instanceof Error?error.message:String(error)};
-  if(json)stdout(JSON.stringify({error:failure})+'\n');
+  if(json&&parsed?.command!=='watch'&&argv[0]!=='watch')stdout(JSON.stringify({error:failure})+'\n');
   const diagnosed=refusalDetails(failure.message,'details'in failure?failure.details:undefined);
   stderr(`${style.red(style.bold(failure.code))}: ${withoutCode(failure.code,failure.message)}${diagnosed.length?`\n${diagnosed.join('\n')}`:''}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
   return error instanceof CliError?error.exitCode:1;
