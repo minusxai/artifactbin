@@ -1,3 +1,4 @@
+import {monitoringGuidance} from './monitoring-guidance';
 import {documentMutationReply,adaptMutationOperationReply} from './mutation-operation';
 import {parseDocumentUpdate} from '@artifactbin/contracts';
 import {GRAPH_POLICY,graphIntegrity,graphNodes,graphSource} from '../document/document-graph';
@@ -174,6 +175,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
     state: content ? artifactState(row) : '',
     format,
     url: `${base}/a/${row.id}`,
+    ...monitoringGuidance(base,row.id,format),
     // The trail rides in `...rest`; the parent is derived from it, and it is
     // the half a caller writes back.
     parent_id: parentOf(row),
@@ -356,6 +358,7 @@ export async function replacedArtifactWire(
   { affected, warnings, repairs, openAnnotations }: { affected: ArtifactRow[] | null; warnings: Array<{ id: string; title: string | null; details: string[] }>; repairs?: SourceRepair[]; openAnnotations: number },
 ): Promise<Record<string, unknown>> {
   return {
+    ...monitoringGuidance(base,row.id,row.format),
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     ...(affected?{affected_dependents:affected.map(dependent=>({id:dependent.id,title:dependent.title}))}:{}),
     // A replace moves the head pointer — hand back the new one so the caller
@@ -388,6 +391,7 @@ export async function replacedArtifactWire(
 export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: unknown): Record<string, unknown> {
   const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown; bytes?: number; pages?: number; filename?: string; contentType?: string };
   return {
+    ...monitoringGuidance(base,row.id,row.format),
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.

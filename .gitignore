@@ -71,3 +71,5 @@ services/app/public/libraries/
 
 # Bundled shared skill credential runtime (generate:teaching)
 services/app/skills/artifactbin/scripts/credentials.mjs
+
+services/app/skills/artifactbin/scripts/watch-comments.mjs

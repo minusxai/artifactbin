@@ -52,7 +52,7 @@ describe('the brief', () => {
 });
 
 describe('llms.txt and the discovery head', () => {
-  it('the first line is the blurb, and the meta tag names npm afbin, Windows and email HTTP help, under 150 characters', () => {
+  it('the shared root and deployment-scoped discovery teach both CLI and HTTP', () => {
     const text = llmsText(BASE);
     expect(text).toMatch(/^## Read first/);
     expect(agentBlurb()).toContain('artifactbin');
@@ -64,7 +64,7 @@ describe('llms.txt and the discovery head', () => {
     expect(help.instruction).toContain(`${BASE}/skills/artifactbin.zip`);
     expect(help.instruction).toContain(`${BASE}/llms.txt`);
     expect(help.instruction).toContain('recipient');
-    // The blurb is still line 1 of the one-pager, still used elsewhere; the meta no longer repeats it.
+    // Product blurb and shared root are separate; discovery need not repeat the blurb.
     expect(help.instruction).not.toContain(agentBlurb());
   });
 

@@ -46,6 +46,7 @@ describe('installable shared skill folder',()=>{
    expect(expected['SKILL.md']).toMatch(/^---\nname: artifactbin\n/);
    expect(expected['SKILL.md']).toContain(origin);
    expect(expected['scripts/credentials.mjs']).toContain('ARTIFACTBIN_HOME');
+   expect(expected['scripts/watch-comments.mjs']).toContain('annotations/changes');
    expect(Object.keys(expected)).not.toContain('.afbin-skill.json');
   }finally{rmSync(dir,{recursive:true,force:true});}
  });

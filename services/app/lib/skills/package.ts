@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {renderTree,skillFileWithFrontmatter} from './serve';
 import type {SkillTree} from './tree';
-export const SKILL_SCRIPT_FILES=['scripts/credentials.mjs'] as const;
+export const SKILL_SCRIPT_FILES=['scripts/credentials.mjs','scripts/watch-comments.mjs'] as const;
 export function skillPackageFiles(tree:SkillTree,base:string,root=path.resolve(process.cwd(),'skills/artifactbin')):Record<string,string>{
  const files=Object.fromEntries(renderTree(tree,base).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]));
  for(const name of SKILL_SCRIPT_FILES)files[name]=readFileSync(path.join(root,name),'utf8');
@@ -15,7 +15,7 @@ export function skillPackageFiles(tree:SkillTree,base:string,root=path.resolve(p
 export function skillZip(files:Record<string,string>):Uint8Array<ArrayBuffer>{
  const local:Buffer[]=[],central:Buffer[]=[];let offset=0;
  for(const [relative,text] of Object.entries(files).sort(([a],[b])=>a.localeCompare(b))){
-  if(!/^(?:SKILL\.md|references\/[a-z0-9-]+\.md|scripts\/credentials\.mjs)$/.test(relative))throw new Error(`Unsupported skill member: ${relative}`);
+  if(!/^(?:SKILL\.md|references\/[a-z0-9-]+\.md|scripts\/(?:credentials|watch-comments)\.mjs)$/.test(relative))throw new Error(`Unsupported skill member: ${relative}`);
   const name=Buffer.from(`artifactbin/${relative}`),data=Buffer.from(text);let crc=0xffffffff;
   for(const byte of data){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}crc=(crc^0xffffffff)>>>0;
   const head=Buffer.alloc(30);head.writeUInt32LE(0x04034b50);head.writeUInt16LE(20,4);head.writeUInt16LE(0x800,6);head.writeUInt16LE(0x21,12);head.writeUInt32LE(crc,14);head.writeUInt32LE(data.length,18);head.writeUInt32LE(data.length,22);head.writeUInt16LE(name.length,26);

@@ -145,6 +145,14 @@ function pageCallsPlugin(names: AuthorModuleNames, errors: string[]): PluginObj 
         }
         program.traverse({
           Identifier(path) {
+            // These page helpers are module imports, never ambient globals. Catch a
+            // missing import before publishing a script that would throw on load.
+            if ((PAGE_EXPORTS as readonly string[]).includes(path.node.name)
+              && path.isReferencedIdentifier() && !path.scope.getBinding(path.node.name)
+              && path.parentPath?.isCallExpression() && path.parentPath.node.callee === path.node) {
+              errors.push(at(path.node.loc?.start, `import { ${path.node.name} } from 'page' before calling ${path.node.name}(…)`));
+              return;
+            }
             const kind = binders.get(path.node.name);
             if (!kind || !path.isReferencedIdentifier() || path.scope.getBinding(path.node.name)?.kind !== 'module') return;
             const call = path.parentPath;
@@ -163,7 +171,7 @@ function pageCallsPlugin(names: AuthorModuleNames, errors: string[]): PluginObj 
             const declared = name === null ? null : kindOf(name);
             if (name === null) errors.push(at(call.node.loc?.start, `${kind}(${JSON.stringify(literal)}): write the name as the markup does, with its $: ${kind}('$${literal}')`));
             else if (!declared) errors.push(at(call.node.loc?.start, `${kind}('$${name}'): the Helmet declares no ${name}`));
-            else if (declared !== kind) errors.push(at(call.node.loc?.start, `${kind}('$${name}'): ${name} is ${kinds[declared].want}; ${kinds[declared].hint(name)}`));
+            else if (declared !== kind) errors.push(at(call.node.loc?.start, `${kind}('$${name}'): ${name} is ${kinds[declared].want}; ${kinds[declared].hint(name)}; import { ${declared} } from 'page'`));
             else {
               const decl = call.parentPath;
               if (decl?.isVariableDeclarator()) {

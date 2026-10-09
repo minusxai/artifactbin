@@ -40,14 +40,13 @@ for(const [path,text] of Object.entries(files)){
  condensed[path]=condenseForBundle(text);
  files[path]=stripBundleMarkers(text);
 }
-// This asset is generated from the credential runtime, never maintained as a second implementation.
-const helperSource=join(root,'../utils/src/credential-helper.ts');
-{
- const bundled=await build({entryPoints:[helperSource],bundle:true,platform:'node',format:'esm',target:'node22',write:false});
+// Both assets are generated from shared runtimes, never authored a second time.
+for(const [entry,name] of [['credential-helper.ts','credentials.mjs'],['comment-watch-helper.ts','watch-comments.mjs']] as const){
+ const bundled=await build({entryPoints:[join(root,'../utils/src',entry)],bundle:true,platform:'node',format:'esm',target:'node22',write:false});
  const helper=bundled.outputFiles[0]!.text;
- files['scripts/credentials.mjs']=helper;
- const helperTarget=join(root,'../app/skills/artifactbin/scripts/credentials.mjs');
- if(process.argv.includes('--check')){if(!existsSync(helperTarget)||readFileSync(helperTarget,'utf8')!==helper)throw new Error('Shared credential helper is missing or stale; run generate:teaching.');}
+ files[`scripts/${name}`]=helper;
+ const helperTarget=join(root,'../app/skills/artifactbin/scripts',name);
+ if(process.argv.includes('--check')){if(!existsSync(helperTarget)||readFileSync(helperTarget,'utf8')!==helper)throw new Error(`Shared ${name} helper is missing or stale; run generate:teaching.`);}
  else{mkdirSync(dirname(helperTarget),{recursive:true});if(!existsSync(helperTarget)||readFileSync(helperTarget,'utf8')!==helper)writeFileSync(helperTarget,helper);}
 }
 const version=JSON.parse(readFileSync(join(root,'package.json'),'utf8')).version;

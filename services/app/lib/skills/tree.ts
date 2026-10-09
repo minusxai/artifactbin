@@ -293,7 +293,7 @@ export function loadSkillSources(root = path.resolve(process.cwd(), 'skills')): 
       if (statSync(entryPath).isDirectory()) {
         if(entry==='scripts'){
           const scripts=readdirSync(entryPath);
-          if(scripts.some(file=>file!=='credentials.mjs'||!statSync(path.join(entryPath,file)).isFile()))throw new Error(`skills/${dir}/scripts: only the generated credentials.mjs helper is supported`);
+          if(scripts.some(file=>!['credentials.mjs','watch-comments.mjs'].includes(file)||!statSync(path.join(entryPath,file)).isFile()))throw new Error(`skills/${dir}/scripts: only generated credentials.mjs and watch-comments.mjs helpers are supported`);
           continue;
         }
         if (entry !== 'references') throw new Error(`skills/${dir}/${entry}: only a references/ folder may nest inside a skill`);

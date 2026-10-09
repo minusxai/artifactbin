@@ -15,6 +15,7 @@ export async function watchCommand(workspace:Workspace,parsed:ParsedCommand,clie
  try{
   for await(const event of watchComments({artifactId:ref.id,signal,cursor:typeof parsed.flags.cursor==='string'?parsed.flags.cursor:undefined,
    request:(path,requestOptions)=>client.request<CommentChangesPage>(path,'GET',undefined,{},requestOptions),
+   onCheckpoint:cursor=>{options.stderr(JSON.stringify({checkpoint:cursor})+'\n');},
    onRetry:attempt=>options.stderr(`Comment watch reconnecting (attempt ${attempt}).\n`),
   })){if(signal.aborted)return;options.stdout(JSON.stringify(event)+'\n');}
  }finally{process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);}

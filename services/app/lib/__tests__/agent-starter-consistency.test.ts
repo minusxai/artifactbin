@@ -168,7 +168,8 @@ describe('what the brief and the contract teach next', () => {
   it('teaches reuse before new publication and preserves identity during recovery', () => {
     const sheet = buildQuickSheet('https://example.test');
     expect(sheet.indexOf('For a supplied artifact')).toBeLessThan(sheet.indexOf('For a new artifact'));
-    expect(sheet).toContain('Preserve its identity');
+    expect(sheet).toContain('Preserve exactly the identity fields returned');
+    expect(sheet).toContain('never add `version` when absent');
     expect(sheet).toContain('after an uncertain write repeat the same command and arguments');
     expect(sheet).toContain('references/markup.md');
     expect(sheet).toContain('references/design.md');
