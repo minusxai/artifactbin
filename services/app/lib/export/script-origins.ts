@@ -2,7 +2,7 @@
  * WHAT AN EXPORT RENDER OF A SCRIPT DOCUMENT MUST LET THROUGH. The renderer aborts every cross-origin request
  * (`sameOriginOnly`), which would stop a Helmet script at its first library import and leave every component mount on
  * its fallback. A document with a script admits the hosts its module loads from — the ESM CDN its bare names resolve
- * to (lib/story/document/author-module.server), and the host of each full-URL import — and the hosts the version's
+ * to (lib/author-script/author-module.server), and the host of each full-URL import — and the hosts the version's
  * Helmet declares for scripts and connections (`csp-script`, `csp-connect`, lib/document/csp-extensions): the
  * publisher's declared set is enough for a capture, no reader's consent is involved. Exact origins only (the
  * renderer's `allowedOrigins`): a declared `*.` wildcard is not admitted. Nothing else: whatever else the script
@@ -11,7 +11,7 @@
 import type { PageRequest } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx/parse';
 import { splitHelmet } from '@/lib/document/helmet';
-import { ESM_CDN_ORIGIN } from '@/lib/story/document/author-module.server';
+import { ESM_CDN_ORIGIN } from '@/lib/author-script/contract';
 import { cspExtensionsOf } from '@/lib/document/csp-extensions';
 
 /** Static `import … from '…'`, `export … from '…'`, bare `import '…'` and `import('…')` with a literal. */

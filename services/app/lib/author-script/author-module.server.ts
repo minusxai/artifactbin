@@ -4,11 +4,11 @@
  *  - JSX becomes Solid DOM code (babel-preset-solid, `generate: 'dom'`, no hydration, helpers from `solid-js/web`),
  *    the transform the island build runs over the kit;
  *  - `import { signal, query, mutation } from 'page'` resolves to a generated module that reads the page's bindings
- *    (lib/islands/page-runtime PAGE_GLOBAL). Every call names a declared name as the markup spells it
+ *    (./contract PAGE_GLOBAL, set by lib/islands/page-runtime). Every call names a declared name as the markup spells it
  *    (`signal('$region')`), checked here: an undeclared name, a name of the wrong kind or a computed argument is a
  *    publish error with the line, and so is `createSignal('$region')` (a local signal that only looks bound);
  *  - `solid-js`, `solid-js/web` and `solid-js/store` stay bare, limited to the names the island build's vendor chunks
- *    export (contract AUTHOR_VENDOR_EXPORTS): the runtime points them at the serving build's chunks when the module
+ *    export (lib/author-script/contract AUTHOR_VENDOR_EXPORTS): the runtime points them at the serving build's chunks when the module
  *    loads, so the script runs on the kit's one Solid;
  *  - any other bare specifier is a package on esm.sh (`three` → `https://esm.sh/three`), and a full URL is
  *    kept as written; a relative path is an error, since nothing sits beside the script.
@@ -23,12 +23,9 @@ import { createHash } from 'node:crypto';
 import type * as esbuild from 'esbuild';
 import { transformAsync, type PluginObj, type types as BabelTypes } from '@babel/core';
 import solidPreset from 'babel-preset-solid';
-import { AUTHOR_VENDOR_EXPORTS } from '@/lib/islands/contract';
-import { PAGE_GLOBAL } from '@/lib/story-runtime/contract';
-import type { HelmetContent } from '../../document/helmet';
+import { AUTHOR_VENDOR_EXPORTS, ESM_CDN_ORIGIN, PAGE_GLOBAL } from './contract';
+import type { HelmetContent } from '@/lib/document/helmet';
 
-/** Where a bare npm specifier resolves (`three` → `https://esm.sh/three`): the module host every script may load from. */
-export const ESM_CDN_ORIGIN = 'https://esm.sh';
 const PAGE_SPECIFIER = 'page';
 /** The `page` exports that bind one declared name of their kind (`signal('$region')`). */
 const PAGE_BINDERS = ['signal', 'query', 'mutation'] as const;

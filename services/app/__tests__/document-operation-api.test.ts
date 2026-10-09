@@ -7,7 +7,7 @@ import {createTeamApplication} from '../server/team-host';
 import {AUTH_SECRET} from '@/lib/platform';
 import * as preparedPages from '@/lib/story/prepared/prepared-page.server';
 import {enablePreparedPageWarmups,drainPreparedPageWarmups} from '@/lib/story/prepared/prepared-page.server';
-import {drainSnapshotRevalidations} from '@/lib/compiled-page/snapshots.server';
+import {drainSnapshotRevalidations} from '@/lib/story/prepared/snapshots.server';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {useAppHarness,request} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

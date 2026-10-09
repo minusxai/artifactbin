@@ -23,12 +23,12 @@ import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER, type CompiledPage, ISLAND_DA
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { drainCompiledUpgrades, storyOf } from '@/lib/compiled-page/serve.server';
+import { drainCompiledUpgrades, storyOf } from '@/lib/story/prepared/serve.server';
 import { objectStore } from '@/lib/object-store';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { backfillCompiledPages, matchesBackfillFilters, type BackfillOptions, type BackfillSelector } from '@/lib/compiled-page/backfill.server';
 import { preparedCssVersion, stylesheetVersion } from '@/lib/story/prepared/css-version.server';
-import { STORY_BASE_SHEETS } from '@/lib/story/styles/story-base-css';
+import { STORY_BASE_SHEETS } from '@/lib/compiled-page/styles/story-base-css';
 import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-system-sheets';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
@@ -526,7 +526,7 @@ describe('a version with an author script', () => {
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const { data, scripts, occurrences } = authorOnly(await res.text());
-    // The data island carries the script as the module built at publish (lib/story/document/author-module.server).
+    // The data island carries the script as the module built at publish (lib/author-script/author-module.server).
     expect(data?.authorScript).toContain('document.body.dataset.ran = "1";');
     expect(occurrences, 'nowhere but the data island').toBe(1);
     for (const script of scripts) {

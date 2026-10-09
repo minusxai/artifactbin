@@ -5,8 +5,8 @@ import { splitHelmet } from '../helmet';
 import { coversCspExtensions, cspExtensionsOf, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../csp-extensions';
 import { validateMarkupStructure } from '../local-validation';
 import { prepareJsx } from '../../story/document/jsx-tier';
-import { buildDocumentCsp } from '@/lib/story/styles/document-csp';
-import { appendCspExtensions } from '@/lib/story/styles/markup-csp';
+import { buildDocumentCsp } from '@/lib/compiled-page/styles/document-csp';
+import { appendCspExtensions } from '@/lib/compiled-page/styles/markup-csp';
 
 const helmetOf = (metas: string) => {
   const source = `<Helmet>${metas}</Helmet><p>x</p>`;
@@ -138,7 +138,7 @@ describe('sets', () => {
   });
 });
 
-describe('the served document policy (lib/story/styles/document-csp)', () => {
+describe('the served document policy (lib/compiled-page/styles/document-csp)', () => {
   const base = { self: 'https://616263.pages.example.com', app: 'https://app.example.com', id: 'abc' };
   const directive = (csp: string, name: string) => csp.split('; ').find((d) => d.startsWith(`${name} `)) ?? '';
   it('is the default policy on an empty set', () => {
@@ -169,7 +169,7 @@ describe('the served document policy (lib/story/styles/document-csp)', () => {
   });
 });
 
-describe('appending to the app origin\'s /raw policy (lib/story/styles/markup-csp)', () => {
+describe('appending to the app origin\'s /raw policy (lib/compiled-page/styles/markup-csp)', () => {
   const policy = "default-src 'none'; script-src 'self' https://esm.sh; connect-src 'self'; style-src 'self'; font-src 'self'; frame-src 'none'; form-action 'none'";
   it('is the identity on an empty set', () => {
     expect(appendCspExtensions(policy, EMPTY_CSP_EXTENSIONS)).toBe(policy);

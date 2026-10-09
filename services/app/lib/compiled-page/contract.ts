@@ -450,7 +450,7 @@ export interface AssembleOverlay {
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
   signedIn: boolean;
-  /** Where the page queries, writes and fetches its overlay (lib/story/styles/markup-csp paths); absent on a capture. */
+  /** Where the page queries, writes and fetches its overlay (lib/compiled-page/styles/markup-csp paths); absent on a capture. */
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string; direct?: true } | null;
   /** A capture's verified image import door, even though it has no query or mutation door. */
   assetsUrl?: string;
@@ -514,7 +514,7 @@ export interface AssembleInput {
   footer?: { html: string; css: string } | null;
   /**
    * A document served BY ITSELF (`/raw`, a domain post, a capture) carries the standalone
-   * document's stylesheets, byte for byte (lib/story/styles/document-styles), in place of `css`: the story is
+   * document's stylesheets, byte for byte (lib/compiled-page/styles/document-styles), in place of `css`: the story is
    * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.
    */
   sheets?: ReadonlyArray<{ attr: string; css: string }> | null;

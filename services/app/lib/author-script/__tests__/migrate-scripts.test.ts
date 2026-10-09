@@ -1,5 +1,5 @@
 /**
- * THE SCRIPT MIGRATION (lib/story/document/migrate-scripts, run by scripts/migrate-scripts.mjs): each retired
+ * THE SCRIPT MIGRATION (lib/author-script/migrate-scripts, run by scripts/migrate-scripts.mjs): each retired
  * contract's document, before and after (fixtures/migrate-scripts), one rule per fixture. Every output is a fixpoint,
  * a document already on the Solid contract is never touched, and what it rewrites builds and validates as the Solid
  * contract publishes it.
@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseJsx } from '@/lib/jsx/parse';
-import { migrateDocumentScripts, scopeCss } from '@/lib/story/document/migrate-scripts';
+import { migrateDocumentScripts, scopeCss } from '@/lib/author-script/migrate-scripts';
 import { validateMarkupStructure } from '@/lib/document/local-validation';
-import { authorModuleNames, buildAuthorModule } from '@/lib/story/document/author-module.server';
+import { authorModuleNames, buildAuthorModule } from '@/lib/author-script/author-module.server';
 
 const fixture = (name: string) => readFileSync(path.join(import.meta.dirname, 'fixtures/migrate-scripts', name), 'utf8');
 const PAIRS = ['page-signals', 'mx-bridge', 'mx-set-chain', 'iframe', 'iframe-scoped', 'iframe-library', 'preact-component'];

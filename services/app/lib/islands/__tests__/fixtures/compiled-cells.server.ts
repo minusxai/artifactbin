@@ -3,7 +3,7 @@
  * (`ref:CELLS1`, one `rows` table, the columns given as JSON in argv[3]), so the document's queries and
  * mutations compile as a published document's do and run through the page's transport; and the story is
  * the SSR module's render over a snapshot (argv[4], `ServedResults`), as a reader with a guest snapshot is
- * served it (compiled-page/serve.server). Run in a plain node process (`tsx`, cwd services/app):
+ * served it (story/prepared/serve.server). Run in a plain node process (`tsx`, cwd services/app):
  * Solid's server entries resolve by node's own conditions, and the SSR module renders over the shared
  * build's REAL server half (public/islands/manifest.json `ssr`, loaded by `defaultSsrImports`), one Solid
  * injected into both — as in the server bundle. Prints `{ html, islands, islandRefs, flow }`.

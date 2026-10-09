@@ -56,5 +56,6 @@ export type { DatasetUploadResult } from './dataset-upload';
 
 export * from './artifact-format';
 export { BASEMAP_PATH } from './basemap';
+export { DOMAIN_FOOTER_TEXT } from './domain-footer';
 export { MAX_PEOPLE_IDS } from './query-request';
 export * from './sign-in-required';

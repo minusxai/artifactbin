@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
-import { compilePage } from '../compiler';
-import { loadCompilerBuild } from '../build.server';
+import { compilePage } from '@/lib/compiled-page/compiler';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { storyOf, withoutDeckChrome } from '../serve.server';
-import { LITERALS_ATTR, splitCarriers } from '../carriers';
+import { LITERALS_ATTR, splitCarriers } from '@/lib/compiled-page/carriers';
 
 describe('one-tree snapshot SSR', () => {
   it('hides bare deck controls without removing the compiled hydration tree or immutable carriers', () => {

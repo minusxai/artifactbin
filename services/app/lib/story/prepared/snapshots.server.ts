@@ -54,14 +54,14 @@ import { getArtifactById } from '@/lib/artifacts/store';
 import { grantsOf, grantsPermitRead } from '@/lib/datasets/policy/grants';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import { dataRefs } from '@/lib/dataflow/compiled-flow';
-import { planOf } from './plan';
+import { planOf } from '@/lib/compiled-page/plan';
 import { getDb } from '@/lib/platform/db';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { Scalar } from '@/lib/dataflow';
-import { marksOf } from '@/lib/story/prepared/served-results.server';
-import { preparedPageFor } from '@/lib/story/prepared/prepared-page.server';
-import { drawSnapshotCharts } from './charts.server';
-import { prepareWorkers } from '@/lib/story/prepared/prepare-workers.server';
+import { marksOf } from './served-results.server';
+import { preparedPageFor } from './prepared-page.server';
+import { drawSnapshotCharts } from '@/lib/compiled-page/charts.server';
+import { prepareWorkers } from './prepare-workers.server';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import {
   SNAPSHOT_INPUT_SETS_PER_ARTIFACT,
@@ -74,7 +74,7 @@ import {
   type SnapshotRead,
   type SnapshotSlot,
   type SnapshotStore,
-} from './contract';
+} from '@/lib/compiled-page/contract';
 
 /**
  * The compiler build a snapshot records until the compiled page carries one

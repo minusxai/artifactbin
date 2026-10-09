@@ -18,7 +18,7 @@ import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
 import { services } from '@/lib/platform/services';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { drainSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
+import { drainSnapshotRevalidations } from '@/lib/story/prepared/snapshots.server';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';

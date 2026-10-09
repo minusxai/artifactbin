@@ -18,7 +18,7 @@ import {bindModuleCode} from '../../../app/lib/compiled-page/runtime-binding';
 import {ISLANDS_PATH,SPECULATION_RULES_HEADER, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
 import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepared-runtime';
 import {DOCUMENT_UI_FONT_CSS} from '../../../app/lib/serving/app-fonts';
-import {documentStyleSheets} from '../../../app/lib/story/styles';
+import {documentStyleSheets} from '../../../app/lib/compiled-page/styles';
 import type {StoryIslandData, ServedResults} from '../../../app/lib/story-runtime/contract';
 import type {Scalar} from '../../../contracts/src/index';
 
@@ -142,7 +142,7 @@ function localPreviewCsp():string {
 /**
  * The compiled document, wrapped as a full page the way `/a/:id/raw` serves one: our own doors, no reader
  * chrome, no SPA — this IS the page. Its stylesheets are the standalone document's, byte for byte
- * (lib/story/styles/document-styles): they name the design on the document element, where a design
+ * (lib/compiled-page/styles/document-styles): they name the design on the document element, where a design
  * system's `:root:where([data-theme])` rules look, and carry its fonts, its faces and classes and the
  * author's own CSS. The reader app's single isolated sheet (`css`) would draw a local file in the
  * neutral contract instead, so an export of a tracked file looked nothing like the published page.

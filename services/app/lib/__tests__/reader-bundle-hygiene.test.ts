@@ -55,7 +55,7 @@ const RUNTIME_ENTRY = ['lib/islands/page.ts', 'lib/islands/rt.tsx', 'lib/islands
  *
  * An ICON SET (`lucide-solid`, `lucide-static`): `<Icon name>` resolves any of ~1600 glyphs by
  * name, and the whole map is 517 KB raw, 148 KB gz. The glyphs a document actually uses are
- * resolved server-side and travel in the island beside `refData` (lib/story/assets/icon-glyphs.ts).
+ * resolved server-side and travel in the island beside `refData` (lib/story-ui/icon-glyphs.server.ts).
  */
 const RUNTIME_FORBIDDEN = ['acorn', 'acorn-jsx', 'lucide-solid', 'lucide-static', ...SQLITE];
 

@@ -26,14 +26,15 @@
  * closure, then the styles.
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/serving/agent-discovery';
-import { AUTHOR_VENDOR_EXPORTS, LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands/contract';
+import { LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands/contract';
+import { AUTHOR_VENDOR_EXPORTS } from '@/lib/author-script/contract';
 import { renderOutlineRail } from '@/lib/story-runtime/outline-view';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
-import { fontPreloadTags } from '@/lib/story/styles';
+import { fontPreloadTags } from './styles/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
-import { documentRootAttributes } from '@/lib/story/styles/document-root';
-import { DOCUMENT_ROOT_CSS } from '@/lib/story/styles';
+import { documentRootAttributes } from './styles/document-root';
+import { DOCUMENT_ROOT_CSS } from './styles/document-styles';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
@@ -74,7 +75,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + fontPreloadTags(unique(input.fontPreloads), false)
     + islandPreloads.map(modulePreload).join('')
     + (input.sheets
-      // The standalone document's sheets, exactly (lib/story/styles/document-styles).
+      // The standalone document's sheets, exactly (lib/compiled-page/styles/document-styles).
       ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
       : '<style>:root{--mx-vh:100vh}body{margin:0}</style>')
     + (input.css && !input.sheets ? styleTag('data-mx-story-css', input.css) : '')

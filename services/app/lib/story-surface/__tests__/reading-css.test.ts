@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
-import { storyBaseCss } from '@/lib/story/styles/story-base-css';
+import { storyBaseCss } from '@/lib/compiled-page/styles/story-base-css';
 
 describe('tables', () => {
   it('every table is its own horizontal scroll box, capped at its column', () => {

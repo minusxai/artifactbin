@@ -90,7 +90,7 @@ export interface ValidateOptions {
   /** Registered component names (Capitalized tags) that are renderable. */
   components: Iterable<string>;
   /**
-   * Components the document's own script exports (lib/story/document/author-module.server): a capitalized tag
+   * Components the document's own script exports (lib/author-script/author-module.server): a capitalized tag
    * outside the registry is one of these, mounted where the markup places it. `'any'` accepts every unknown
    * capitalized tag, for a check that cannot build the script (the CLI); the server checks the exact set.
    */

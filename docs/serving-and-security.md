@@ -86,7 +86,7 @@ The compiled standalone page uses `script-src 'self'`: its data is inert JSON,
 not executable inline script, and author strings never become generated code.
 
 The author script is Solid, running in the document itself on the document's
-origin, with the same reach as the page. It is built into an ES module at publish (`lib/story/document/author-module.server.ts`:
+origin, with the same reach as the page. It is built into an ES module at publish (`lib/author-script/author-module.server.ts`:
 Solid JSX to DOM code, bare npm names to `https://esm.sh/<name>`), carried as data in
 the page's JSON island, and loaded by the page runtime
 (`lib/islands/page-runtime.ts`) from a `blob:` URL, with its `solid-js`
@@ -162,7 +162,7 @@ leaks to it.
 
 Fonts named by `<meta name="font-display" content="Lobster" />` (also `font-body`,
 `font-mono`) in `<Helmet>` are not imported: the served stylesheet `@import`s Google
-Fonts, whose two hosts the document's policy admits (`lib/story/styles/document-csp.ts`).
+Fonts, whose two hosts the document's policy admits (`lib/compiled-page/styles/document-csp.ts`).
 Bundled theme faces are served from this origin.
 
 The copy lives at `/assets/<sha256 of the URL>`, shared across every document

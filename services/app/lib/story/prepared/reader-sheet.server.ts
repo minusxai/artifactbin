@@ -23,7 +23,7 @@
  * editor, /raw, the export and the offline file all use it — and a live or
  * editor update re-isolates from those whole sheets (lib/story-runtime/inline-sheet).
  */
-import * as cssTree from '../styles/css-parser';
+import * as cssTree from '@/lib/mermaid-images/css-parser';
 import type { JsxNode } from '@/lib/jsx';
 import { STORY_RECIPE_UNION } from '@/lib/data/story/story-css.server';
 import { extractClassCandidates } from '@/lib/data/story/story-css';

@@ -77,7 +77,7 @@ function serverImports() {
 
 describe('server runtime dependencies', () => {
   it('sees the publish compiler load esbuild, so the check below is not vacuous', () => {
-    expect(serverImports().get('esbuild')).toContain('services/app/lib/story/document/author-module.server.ts');
+    expect(serverImports().get('esbuild')).toContain('services/app/lib/author-script/author-module.server.ts');
   });
 
   it('every package a server module imports is a runtime dependency, or deliberately bundled', () => {

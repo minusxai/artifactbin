@@ -90,7 +90,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
  let lastDraftSource:string|null=null;
  let quietDraftTimer:number|null=null;
  let pendingDraft:{document:Document;root:HTMLElement;sheets:HTMLStyleElement[];nodes:JsxNode[];source:string;stableIds:Set<string>;stablePaths:Set<string>;sequence:number}|null=null;
- /** A document sheet's identifying attribute: every `<style data-mx-*>` the standalone document carries (lib/story/styles/document-styles). */
+ /** A document sheet's identifying attribute: every `<style data-mx-*>` the standalone document carries (lib/compiled-page/styles/document-styles). */
  const sheetAttr=(style:HTMLStyleElement)=>style.getAttributeNames().find(name=>name.startsWith('data-mx-'))??null;
  const documentSheets=(doc:Document)=>Array.from(doc.head.querySelectorAll<HTMLStyleElement>('style')).filter(style=>sheetAttr(style)!==null);
  /**

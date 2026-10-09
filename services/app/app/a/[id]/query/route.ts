@@ -19,7 +19,7 @@ import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
  *
  * GET is the DOCUMENT's own path: the sandboxed standalone document served at
  * ./raw fetches its re-runs itself — its CSP admits exactly this URL
- * (lib/story/styles/markup-csp). It is answered with the ANONYMOUS read ACL, BY
+ * (lib/compiled-page/styles/markup-csp). It is answered with the ANONYMOUS read ACL, BY
  * CONSTRUCTION: no cookie is read, so it can only ever return what an
  * unauthenticated fetch gets (public/unlisted; a private document is the
  * uniform 404). That, not browser behaviour, is what makes the CORS `*` safe —

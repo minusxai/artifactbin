@@ -53,7 +53,7 @@ import type {Scalar} from '@/lib/dataflow/dataflow';
 import { newEditId } from '../../document/splice';
 import {mutationInvocation} from '@/lib/artifacts/mutation-invocation';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
-import { snapshotStore } from '@/lib/compiled-page/snapshots.server';
+import { snapshotStore } from '../prepared/snapshots.server';
 
 /** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
 const WRITE_SNAPSHOT_WINDOW_MS = 120_000;
@@ -268,7 +268,7 @@ export async function mutateDataset(
     if (row) {
       void trackEvent('mutate', row.id, { userId: row.user_id });
       // Committed: flag the guest snapshots that read this dataset and queue their heads' revalidation
-      // (lib/compiled-page/snapshots.server). Beside the NOTIFY, never awaited, never failing the write —
+      // (lib/story/prepared/snapshots.server). Beside the NOTIFY, never awaited, never failing the write —
       // freshness is decided on read by the marks, this only lets a head revalidate before anyone asks.
       void snapshotStore.invalidate(row.id).catch((error) => console.warn('[snapshots] invalidate failed', row.id, error));
       return { row, affected: out.affected, rowCount: out.rows.length,...(mutationRunId?{mutationRunId}:{}) };

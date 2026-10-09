@@ -22,7 +22,7 @@
  */
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { agentDiscovery, agentDiscoveryHead } from '@/lib/serving/agent-discovery-tags';
-import { documentRootAttributes } from '@/lib/story/styles/document-root';
+import { documentRootAttributes } from '@/lib/compiled-page/styles/document-root';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { withModuleDataId } from '@/lib/compiled-page/carriers';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';

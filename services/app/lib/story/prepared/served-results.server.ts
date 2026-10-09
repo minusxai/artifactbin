@@ -101,7 +101,7 @@ const pick = <T>(from: Record<string, T> | undefined, names: ReadonlySet<string>
 const MARK_SQL = `SELECT id, version, edit_id, visibility, link_role, sharing_revision, policy_revision, deleted_at IS NULL AS live, md5(meta::text) AS meta
   FROM artifacts WHERE id = ANY($1::text[])`;
 
-/** The current mark of each of these datasets; a missing one has none. Also the guest snapshots' freshness rule (lib/compiled-page/snapshots.server). */
+/** The current mark of each of these datasets; a missing one has none. Also the guest snapshots' freshness rule (lib/story/prepared/snapshots.server). */
 export async function marksOf(ids: readonly string[]): Promise<Map<string, string>> {
   if (!ids.length) return new Map();
   const rows = (await (await getDb()).query<{ id: string }>(MARK_SQL, [[...ids]])).rows;
