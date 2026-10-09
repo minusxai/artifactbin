@@ -17,12 +17,12 @@ The examples below use the installed helper path; substitute `artifactbin-creden
 
 ## Sign in only when required
 
-HTTP authentication requires an email account.
+HTTP authentication requires an email account. After `auth_required`, reuse the recipient’s actual email if already known. Ask the user for their email if unknown, and wait for their answer before sending an OTP. Do not invent an email or send to a placeholder. Never search other users’ homes or credential stores or probe undocumented mailbox APIs. Do not install the CLI to work around missing HTTP credentials.
 
 Send JSON to `[[ base ]]` with `Content-Type: application/json`; session requests need `Origin: [[ base ]]`.
 
-1. `POST /api/auth/email-otp/send-verification-otp` with `{"email":"you@example.com","type":"sign-in"}`; ask for the emailed OTP.
-2. `POST /api/auth/sign-in/email-otp` with `{"email":"you@example.com","otp":"<user's code>"}`; retain returned cookies in a private jar.
+1. `POST /api/auth/email-otp/send-verification-otp` with `{"email":"<recipient email>","type":"sign-in"}`; ask the user for the actual emailed OTP and wait for their answer before step 2; never invent a code.
+2. `POST /api/auth/sign-in/email-otp` with `{"email":"<recipient email>","otp":"<user's code>"}`; retain returned cookies in a private jar.
 3. `POST /api/authentication/token` with those cookies and Origin. Verified email sessions receive `access_token`, `refresh_token`, `client_id`, `expires_in` (seconds), `token_type: "Bearer"` and `scope: "artifacts"`.
 4. Save the new grant into the shared CLI/filesystem HTTP credential store; do not create a second rotating-token copy. In the installed artifactbin skill folder run:
 

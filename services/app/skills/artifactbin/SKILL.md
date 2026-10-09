@@ -25,6 +25,7 @@ Setup: [[ base ]]/getting-started.md. Reuse the skill or extract [[ base ]]/skil
 - No CDN scripts; use `<Helmet>` CSS and `<script>` (Solid/npm) for behaviour; exports mount by name.
 - Preserve exactly the identity fields returned in the YAML fence; never add `version` when absent. `version` is an optional historical selection, distinct from `head_version`. Fork: copy and remove `id`, `edit_id`, `head_version`, `state` and any `version`.
 - Copy: short; preserve facts/caveats. [Copy](references/copy.md).
+- Check numerical claims against query results: every value, ratio and range must match the actual results. Chart comparisons must encode every named series. Label assumptions about process or causes; do not present them as dataset facts.
 - Publishing does not verify appearance: one whole-document/all-slide `afbin export <artifact-url> --output out.png`. Files/IDs use local data; published URL or `--refresh` uses server data. [Export](references/publishing-versions.md).
 - [[ phoneAuthoringRule ]] (`afbin help live-sessions`).
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.

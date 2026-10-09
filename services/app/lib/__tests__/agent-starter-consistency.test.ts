@@ -397,3 +397,20 @@ it('HTTP guidance preserves rotating credentials across tasks and renews without
  expect(guide).toContain('grant_type');expect(guide).toContain('/oauth/token');
  expect(guide).toContain('Atomically');expect(guide).not.toContain('there is no refresh token');
 });
+
+
+describe('shared instructions after missing credentials and before publishing claims',()=>{
+ it('asks for the real recipient email before sending an OTP rather than inventing an identity',()=>{
+  const guide=publicGuideText('http-auth',BASE)!;
+  expect(guide).toContain('Ask the user for their email');
+  expect(guide.indexOf('Ask the user for their email')).toBeLessThan(guide.indexOf('POST /api/auth/email-otp/send-verification-otp'));
+  expect(guide).toContain('Do not invent an email');
+  expect(guide).toContain('Do not install the CLI');
+ });
+ it('grounds numerical claims and comparisons in query results and labels assumptions',()=>{
+  const brief=buildQuickSheet(BASE);
+  expect(brief).toContain('Check numerical claims against query results');
+  expect(brief).toContain('every named series');
+  expect(brief).toContain('Label assumptions');
+ });
+});
