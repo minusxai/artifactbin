@@ -396,9 +396,10 @@ async function ownerLeg(browser, { id, token }) {
  * failed check, and the other lane still reports.
  */
 const run = async () => {
-  const [main, quote, md, fold, pick, targets] = await Promise.all([
+  const [main, quote, md, fold, pick, targets, tableSelection] = await Promise.all([
     publish(DOC), publish(QUOTE_DOC), publish(MD_DOC), publish(FOLD_DOC), publish(DOC),
     publish(commentTargetsMarkup, { title: 'Dynamic comment acceptance', visibility: 'unlisted' }),
+    publish(TABLE_SELECTION_DOC),
   ]);
   const browser = await launchChromium();
   const lane = async (name, legs) => {
@@ -410,7 +411,7 @@ const run = async () => {
     await Promise.all([
       // the owner's loop (select → rail → agent resolve live → comment mid-edit → a stranger sees nothing),
       // then the comment that keeps the exact words, then an agent's reply read as markdown
-      lane('owner lane', [[ownerLeg, main], [quoteLeg, quote], [markdownLeg, md]]),
+      lane('owner lane', [[ownerLeg, main], [quoteLeg, quote], [markdownLeg, md], [tableSelectionLeg, tableSelection]]),
       // pins that follow declarative items, then a block PICKED and an area drawn
       lane('pick lane', [[targetsLeg, targets], [pickLeg, pick]]),
     ]);
@@ -420,6 +421,79 @@ const run = async () => {
     await browser.close();
   }
 };
+
+const TABLE_SELECTION_DOC = '<Helmet><title>Selected table rows</title></Helmet>'
+  + '<div data-design="tw" className="p-10"><h1>Two selected rows</h1>'
+  + '<table id="selected-table"><tbody>'
+  + '<tr><td id="row24-start">24</td><td>Deploy npm race</td></tr>'
+  + '<tr><td>25</td><td id="row25-end">Ask reporter to retry</td></tr>'
+  + '</tbody></table></div>';
+
+/** The three reported annoyances, through the compiled reader and saved comment. */
+async function tableSelectionLeg(browser, { id, token }) {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  try {
+    await becomeOwner(page, BASE, token);
+    await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    const frame = documentLocator(page);
+    await frame.locator('#row25-end').waitFor();
+    const raw = await documentFrame(page);
+    await until(async () => {
+      await raw.evaluate(() => {
+        const range = document.createRange();
+        range.setStart(document.querySelector('#row24-start').firstChild, 0);
+        const end = document.querySelector('#row25-end').firstChild;
+        range.setEnd(end, end.length);
+        const selection = window.getSelection();
+        selection.removeAllRanges(); selection.addRange(range);
+        document.querySelector('#row24-start').dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+      });
+      return frame.getByRole('button', { name: 'Comment on selected text', exact: true }).isVisible();
+    }, value => value === true, 15000);
+    await raw.evaluate(() => window.addEventListener('contextmenu', event => {
+      window.__gateContextMenuPrevented = event.defaultPrevented;
+    }, { once: true }));
+    await frame.locator('#row24-start').click({ button: 'right' });
+    check(await raw.evaluate(() => window.__gateContextMenuPrevented === true),
+      'right-click on selected table text keeps the document menu instead of the native menu');
+    check(await frame.getByRole('button', { name: 'Comment on selected text', exact: true }).isVisible()
+      && await frame.getByRole('button', { name: 'Edit selected text', exact: true }).isVisible()
+      && await frame.getByRole('button', { name: 'Select', exact: true }).isVisible(),
+    'Comment, Edit and Select remain available after right-click');
+    await frame.getByRole('button', { name: 'Comment on selected text', exact: true }).click();
+    await page.getByLabel('Annotation comment', { exact: true }).fill('Both rows are selected');
+    await page.getByLabel('Save annotation', { exact: true }).click();
+    await page.getByRole('dialog', { name: 'Annotation composer' }).waitFor({ state: 'hidden' });
+    const annotations = await until(async () => {
+      const response = await fetch(`${BASE}/api/artifacts/${id}/annotations`, { headers: { Authorization: `Bearer ${token}` } });
+      return (await response.json()).annotations;
+    }, rows => rows?.length === 1, 10000);
+    const annotation = annotations?.[0];
+    check(JSON.stringify(annotation?.range?.parts?.map(part => part.text))
+      === JSON.stringify(['24', 'Deploy npm race', '25', 'Ask reporter to retry']),
+    'the saved comment preserves every selected cell in both rows');
+    await page.reload({ waitUntil: 'load' });
+    await page.locator(COMMENT_GLYPH).click();
+    await page.getByLabel('Open annotation thread', { exact: true }).click();
+    const reloaded = await documentFrame(page);
+    const selectedWords = await until(() => reloaded.evaluate(name => {
+      const ranges = window.CSS?.highlights?.get(name);
+      return ranges ? [...ranges].map(range => range.toString()) : [];
+    }, `mx-annotation-${annotation.id}`), words => words.length === 4, 10000);
+    check(JSON.stringify(selectedWords) === JSON.stringify(['24', 'Deploy npm race', '25', 'Ask reporter to retry']),
+      'reopening the comment after refresh highlights all selected cells');
+    await page.getByLabel('Resolve annotation', { exact: true }).click();
+    await page.getByLabel('Show resolved conversation', { exact: true }).waitFor();
+    await page.getByLabel('Close comments', { exact: true }).click();
+    check(await page.locator('[aria-label^="Open annotation conversation by"]').count() === 0,
+      'my successful resolution immediately dismisses its countdown marker');
+    await page.reload({ waitUntil: 'load' });
+    await documentLocator(page).locator('#row25-end').waitFor();
+    check(await page.locator('[aria-label^="Open annotation conversation by"]').count() === 0,
+      'refresh does not restore a resolved countdown marker');
+  } finally { await ctx.close(); }
+}
 
 /**
  * A COMMENT KEEPS THE WORDS, NOT JUST THE NODE.

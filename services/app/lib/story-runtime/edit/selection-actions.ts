@@ -155,7 +155,10 @@ export function createFrameSelectionActions({
         if (!activeSelection || (action !== 'edit' && action !== 'annotate' && action !== 'select')) return;
         event.preventDefault();
         event.stopPropagation();
-        const chosen = (action === 'annotate' ? activeAnnotation : null) ?? activeSelection;
+        const chosen = action === 'annotate'
+          ? contextOpen ? activeSelection : activeAnnotation
+          : activeSelection;
+        if (!chosen) return;
         hide();
         if (action === 'select') win.getSelection()?.removeAllRanges();
         onAction(action, action === 'annotate' ? withReviewState(doc, chosen) : chosen);
@@ -165,10 +168,16 @@ export function createFrameSelectionActions({
     toolbar.setAttribute('aria-label', context ? 'Document actions' : 'Text selection actions');
     toolbar.replaceChildren();
     if (capabilities.edit && !isTargetRange(activeSelection?.range)) toolbar.appendChild(makeButton('edit'));
-    if (capabilities.annotate) {
+    if (capabilities.annotate && (context || activeAnnotation)) {
       const comment = makeButton('annotate');
       if (context) comment.setAttribute('aria-label', 'Comment');
       toolbar.appendChild(comment);
+    } else if (capabilities.annotate) {
+      const status = doc.createElement('span');
+      status.setAttribute('role', 'status');
+      status.setAttribute('data-mx-selection-action-status', '');
+      status.textContent = 'Comment is unavailable for this selection.';
+      toolbar.appendChild(status);
     }
     if (capabilities.annotate) toolbar.appendChild(makeButton('select'));
     return toolbar;
@@ -267,13 +276,16 @@ export function createFrameSelectionActions({
      * offering nothing.
      */
     const anchor = anchorFor(range);
-    const annotated = anchor && !anchor.closest('.mx-rail, .mx-present') ? describeCommentSelection(anchor, nodes) : null;
+    let annotated = anchor && !anchor.closest('.mx-rail, .mx-present') ? describeCommentSelection(anchor, nodes) : null;
     if (annotated && anchor) {
       const captured = describeRange(range, anchor);
-      annotated.quote = captured.quote;
-      // Owner-only repeats have no durable item identity. Keep the quote as
-      // feedback, but never persist offsets that could highlight another item.
-      if (annotated.tag !== 'For' || isTargetRange(annotated.range)) annotated.range = isTargetRange(annotated.range) ? {...annotated.range,range:captured.range} : captured.range;
+      if (!captured) annotated = null;
+      else {
+        annotated.quote = captured.quote;
+        // Owner-only repeats have no durable item identity. Keep the quote as
+        // feedback, but never persist offsets that could highlight another item.
+        if (annotated.tag !== 'For' || isTargetRange(annotated.range)) annotated.range = isTargetRange(annotated.range) ? {...annotated.range,range:captured.range} : captured.range;
+      }
     }
     activeAnnotation = annotated;
     const surface = ensureToolbar();
@@ -401,7 +413,16 @@ export function createFrameSelectionActions({
     const target = event.target as Element | null;
     if (!target?.closest || (root && !root.contains(target))) return;
     if (target.closest('a, input, textarea, select, [contenteditable="true"], .mx-rail, .mx-present')) return;
-    if (win.getSelection()?.toString().trim()) { showForSelection(); return; }
+    if (win.getSelection()?.toString().trim()) {
+      // A selection action bubble can already be visible from pointerup (or
+      // selectionchange). Recompute it at the context-menu boundary so a
+      // stale block menu cannot keep ownership, then suppress the native menu
+      // only when the current selection is one this document can act on.
+      hide();
+      showForSelection();
+      if (activeSelection && toolbar && !toolbar.hidden) event.preventDefault();
+      return;
+    }
     const element = target.closest(`[${COMMENT_TARGET_ATTR}], [${AST_PATH_ATTR}]`);
     const described = element && (element.closest(`[${COMMENT_TARGET_ATTR}]`) ? describeCommentSelection(element, nodes) : describeSelection(element, nodes));
     if (!described) return;

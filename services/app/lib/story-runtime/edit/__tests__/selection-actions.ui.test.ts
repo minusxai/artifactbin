@@ -65,6 +65,132 @@ afterEach(() => {
 });
 
 describe('view-mode text selection actions', () => {
+  it('keeps document actions available on right-click with selected text', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await selectText();
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 90 });
+    document.querySelector('p')!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(bubbleVisible()).toBe(true);
+    expect(document.querySelector('[data-mx-selection-action="annotate"]')).not.toBeNull();
+    expect(document.querySelector('[data-mx-selection-action="edit"]')).not.toBeNull();
+    expect(document.querySelector('[data-mx-selection-action="select"]')).not.toBeNull();
+  });
+  it('sends every selected table cell part with the authorized Comment action', async () => {
+    const source = parseJsxOrThrow('<table><tbody><tr><td>24</td><td>Deploy npm race</td></tr>'
+      + '<tr><td>25</td><td>Ask reporter to retry</td></tr></tbody></table>');
+    document.body.innerHTML = '<table data-mx-ast="0"><tbody data-mx-ast="0.0">'
+      + '<tr data-mx-ast="0.0.0"><td data-mx-ast="0.0.0.0">24</td><td data-mx-ast="0.0.0.1">Deploy npm race</td></tr>'
+      + '<tr data-mx-ast="0.0.1"><td data-mx-ast="0.0.1.0">25</td><td data-mx-ast="0.0.1.1">Ask reporter to retry</td></tr>'
+      + '</tbody></table>';
+    actions.setNodes(source.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: true });
+    const cells = document.querySelectorAll('td');
+    const range = document.createRange();
+    range.setStart(cells[0]!.firstChild!, 0);
+    range.setEnd(cells[3]!.firstChild!, 'Ask reporter to retry'.length);
+    Object.defineProperty(range, 'getBoundingClientRect', { value: () => ({ ...rangeRect, toJSON: () => ({}) }) });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    cells[3]!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>('[data-mx-selection-action="annotate"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('annotate', expect.objectContaining({
+      path: '0',
+      tag: 'table',
+      quote: '24 Deploy npm race 25 Ask reporter to retry',
+      range: expect.objectContaining({
+        parts: expect.arrayContaining([
+          expect.objectContaining({ text: '24' }),
+          expect.objectContaining({ text: 'Deploy npm race' }),
+          expect.objectContaining({ text: '25' }),
+          expect.objectContaining({ text: 'Ask reporter to retry' }),
+        ]),
+      }),
+    }));
+  });
+  it('captures the complete comment when selected blocks share a nested source owner', async () => {
+    const source = parseJsxOrThrow('<main><section><p>first nested section</p></section>'
+      + '<section><p>second nested section</p></section></main>');
+    document.body.innerHTML = '<main data-mx-ast="0">'
+      + '<section data-mx-ast="0.0"><p data-mx-ast="0.0.0">first nested section</p></section>'
+      + '<section data-mx-ast="0.1"><p data-mx-ast="0.1.0">second nested section</p></section>'
+      + '</main>';
+    actions.setNodes(source.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: true });
+    const paragraphs = document.querySelectorAll('p');
+    const range = document.createRange();
+    range.setStart(paragraphs[0]!.firstChild!, 0);
+    range.setEnd(paragraphs[1]!.firstChild!, 'second nested section'.length);
+    Object.defineProperty(range, 'getBoundingClientRect', { value: () => ({ ...rangeRect, toJSON: () => ({}) }) });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    paragraphs[1]!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>('[data-mx-selection-action="annotate"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('annotate', expect.objectContaining({
+      path: '0',
+      tag: 'main',
+      quote: 'first nested section second nested section',
+      range: expect.objectContaining({ parts: expect.arrayContaining([
+        expect.objectContaining({ text: 'first nested section' }),
+        expect.objectContaining({ text: 'second nested section' }),
+      ]) }),
+    }));
+  });
+  it('explains and blocks Comment for a selection spanning separate repeat items', async () => {
+    const source = parseJsxOrThrow('<For id="orders" each={$orders}><p id="name">{$_row.name}</p></For>');
+    document.body.innerHTML = '<div id="orders" data-mx-ast="0">'
+      + '<p id="first" data-mx-ast="0.0">first item text</p>'
+      + '<p id="second" data-mx-ast="0.0">second item text</p></div>';
+    const first = document.getElementById('first')!;
+    const second = document.getElementById('second')!;
+    first.setAttribute('data-mx-comment-owner', 'orders');
+    second.setAttribute('data-mx-comment-owner', 'orders');
+    first.setAttribute('data-mx-comment-target', JSON.stringify({ kind: 'repeat', scopes: [{ nodeId: 'orders', key: 'one' }], templateNodeId: 'name' }));
+    second.setAttribute('data-mx-comment-target', JSON.stringify({ kind: 'repeat', scopes: [{ nodeId: 'orders', key: 'two' }], templateNodeId: 'name' }));
+    actions.setNodes(source.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: true });
+    const range = document.createRange();
+    range.setStart(first.firstChild!, 0);
+    range.setEnd(second.firstChild!, 'second item text'.length);
+    Object.defineProperty(range, 'getBoundingClientRect', { value: () => ({ ...rangeRect, toJSON: () => ({}) }) });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    second.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector('[data-mx-selection-action="annotate"]')).toBeNull();
+    expect(document.querySelector('[data-mx-selection-action-status]')?.textContent).toBe('Comment is unavailable for this selection.');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+  it('owns a multiline selection across document blocks on right-click', () => {
+    const story = parseJsxOrThrow('<div><p>first paragraph</p><p>second paragraph</p></div>');
+    document.body.innerHTML = '<div data-mx-ast="0"><p data-mx-ast="0.0">first paragraph</p>'
+      + '<p data-mx-ast="0.1">second paragraph</p></div>';
+    actions.setNodes(story.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+
+    const range = document.createRange();
+    range.setStart(document.querySelector('p')!.firstChild!, 0);
+    range.setEnd(document.querySelectorAll('p')[1].firstChild!, 'second paragraph'.length);
+    Object.defineProperty(range, 'getBoundingClientRect', { value: () => ({ ...rangeRect, toJSON: () => ({}) }) });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    document.querySelectorAll('p')[1].dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(bubbleVisible()).toBe(true);
+    expect(document.querySelectorAll('[data-mx-selection-action]')).toHaveLength(3);
+  });
   it.each(['empty sibling', 'next text at offset zero', 'selected outside text'])('owns only selected document text across an exterior endpoint: %s', async boundary => {
     actions.dispose();
     document.body.innerHTML = '<div id="story"><p data-mx-ast="0">select these words</p></div><div id="outside"></div>';
@@ -556,6 +682,17 @@ describe('document context actions', () => {
     p.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     expect(document.querySelector('[data-mx-selection-action="edit"]')).toBeNull();
     expect(document.querySelector('[data-mx-selection-action="select"]')).not.toBeNull();
+  });
+
+  it('leaves native input context menus to the browser', () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    document.body.innerHTML = '<input aria-label="Search" value="native input text">';
+    const input = document.querySelector('input')!;
+    input.setSelectionRange(0, input.value.length);
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    input.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(bubbleVisible()).toBe(false);
   });
 });
 

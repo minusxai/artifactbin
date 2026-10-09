@@ -16,7 +16,7 @@ import { FOLD_STORAGE_KEY } from '@/lib/annotations/comment-folds';
 import { STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE } from '@/lib/story-runtime/contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentTimestamp } from '../AnnotationPreview';
-import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
+import { ANN, RESOLVED, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer } from './annotation-rig';
 
 const LONG_BODY = Array.from({ length: 40 }, (_, i) => `line ${i + 1} of the agent's answer`).join('\n');
 const SHORT_REPLY = 'thanks — shipping it';
@@ -261,6 +261,77 @@ describe('selecting a resolved thread', () => {
 
 describe('a thread resolved elsewhere counts down on its marker', () => {
   beforeEach(() => { knobs.open = [ANN]; knobs.resolved = null; });
+
+  it('dismisses my resolution immediately, including a live update arriving before the save response', async () => {
+    const resolved: AnnotationWire = { ...ANN, status: 'resolved', revision: 2 };
+    let finish!: (row: AnnotationWire) => void;
+    const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(() => new Promise<AnnotationWire>((done) => { finish = done; })) };
+    const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
+    await flush(); await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    fireEvent.click(screen.getByLabelText('Resolve annotation'));
+    knobs.open = [];
+    knobs.resolved = [resolved];
+    view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    await flush(); await flush();
+    finish(resolved);
+    await flush(); await flush();
+    expect(screen.queryByLabelText(/Open annotation conversation/)).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(view.runtime.posts().at(-1).pins).toEqual([]);
+    // A subsequent snapshot must not bring back the countdown for my revision.
+    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    await flush(); await flush();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(view.runtime.posts().at(-1).pins).toEqual([]);
+    view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    await flush(); await flush();
+    expect(screen.getByLabelText('Show resolved conversation')).toBeTruthy();
+    // A refresh starts with resolved history, without a transient marker.
+    view.unmount();
+    const refreshed = layer({ railOpen: true, pickOnOpen: false, showViewComments: true });
+    await flush(); await flush();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(refreshed.runtime.posts().at(-1).pins).toEqual([]);
+  });
+
+  it('dismisses my resolution when the save response arrives before the live update', async () => {
+    const resolved: AnnotationWire = { ...ANN, status: 'resolved', revision: 2 };
+    const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(async () => resolved) };
+    const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
+    await flush(); await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    knobs.resolved = [resolved];
+    fireEvent.click(screen.getByLabelText('Resolve annotation'));
+    await flush(); await flush();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(view.runtime.posts().at(-1).pins).toEqual([]);
+    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    await flush(); await flush();
+    expect(screen.queryByRole('status')).toBeNull();
+    // The same thread reopened and resolved remotely has a different revision.
+    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [{ ...ANN, revision: 3 }] });
+    await flush(); await flush();
+    knobs.resolved = [{ ...resolved, revision: 4 }];
+    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    await flush(); await flush();
+    expect(screen.getByRole('status')).toHaveTextContent('10 seconds');
+  });
+
+  it('keeps the comment after a failed save and still notices a remote resolution', async () => {
+    const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(async () => { throw new Error('save failed'); }) };
+    const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
+    await flush(); await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    fireEvent.click(screen.getByLabelText('Resolve annotation'));
+    await flush();
+    expect(screen.getByLabelText('Resolve annotation')).toBeEnabled();
+    expect(view.runtime.posts().at(-1).pins).toContainEqual(expect.objectContaining({ id: ANN.id }));
+    knobs.resolved = [{ ...ANN, status: 'resolved', revision: 2 }];
+    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    await flush(); await flush();
+    expect(screen.getByRole('status')).toHaveTextContent('10 seconds');
+  });
 
   it('counts only visible unpaused seconds and expires without acknowledging the notification', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'performance'] });

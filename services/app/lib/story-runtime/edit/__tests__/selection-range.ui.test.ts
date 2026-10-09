@@ -52,6 +52,87 @@ describe('anchorFor: the block containing the whole selection', () => {
 });
 
 describe('describeRange: quote plus anchor-relative parts', () => {
+  it('preserves selected cells across table rows through capture and highlight restoration', () => {
+    document.body.innerHTML = '<table data-mx-ast="0"><tbody data-mx-ast="0.0">'
+      + '<tr data-mx-ast="0.0.0"><td data-mx-ast="0.0.0.0">24</td><td data-mx-ast="0.0.0.1">Deploy npm race</td></tr>'
+      + '<tr data-mx-ast="0.0.1"><td data-mx-ast="0.0.1.0">25</td><td data-mx-ast="0.0.1.1">Ask reporter to retry</td></tr>'
+      + '</tbody></table>';
+    const cells = document.querySelectorAll('td');
+    const range = document.createRange();
+    range.setStart(textNode(cells[0]!), 0);
+    range.setEnd(textNode(cells[3]!), 'Ask reporter to retry'.length);
+    const anchor = anchorFor(range)!;
+    expect(anchor.tagName).toBe('TABLE');
+    const captured = describeRange(range, anchor)!;
+    expect(captured.quote).toContain('Deploy npm race');
+    expect(captured.quote).toContain('Ask reporter to retry');
+    expect(captured.range.parts.map(part => part.text)).toEqual(['24', 'Deploy npm race', '25', 'Ask reporter to retry']);
+    const restored = resolveParts(anchor, captured.range.parts);
+    expect(restored).toHaveLength(4);
+    expect(restored.map(part => part.toString())).toEqual(['24', 'Deploy npm race', '25', 'Ask reporter to retry']);
+  });
+
+  it('keeps partial nested text across rows and excludes an offset-zero endpoint row', () => {
+    document.body.innerHTML = '<table data-mx-ast="0"><tbody data-mx-ast="0.0">'
+      + '<tr data-mx-ast="0.0.0"><td data-mx-ast="0.0.0.0"><span><strong>24</strong></span></td>'
+      + '<td data-mx-ast="0.0.0.1">Deploy <em>npm race</em></td></tr>'
+      + '<tr data-mx-ast="0.0.1"><td data-mx-ast="0.0.1.0">25</td>'
+      + '<td data-mx-ast="0.0.1.1">Ask reporter to <strong>retry</strong></td></tr>'
+      + '<tr data-mx-ast="0.0.2"><td data-mx-ast="0.0.2.0">next row is not selected</td></tr>'
+      + '</tbody></table>';
+    const cells = document.querySelectorAll('td');
+    const start = textNode(cells[0]!.querySelector('strong')!);
+    const end = textNode(cells[3]!.querySelector('strong')!);
+    const range = document.createRange();
+    range.setStart(start, 1);
+    range.setEnd(end, end.length);
+
+    const anchor = anchorFor(range)!;
+    const captured = describeRange(range, anchor)!;
+    expect(anchor.tagName).toBe('TABLE');
+    expect(captured.quote).toBe('4 Deploy npm race 25 Ask reporter to retry');
+    const restored = resolveParts(anchor, captured.range.parts);
+    expect(restored.map(part => part.toString())).toEqual(['4', 'Deploy ', 'npm race', '25', 'Ask reporter to ', 'retry']);
+
+    const endpoint = document.createRange();
+    endpoint.setStart(start, 0);
+    endpoint.setEnd(textNode(cells[2]!), 0);
+    const endpointAnchor = anchorFor(endpoint)!;
+    const endpointCapture = describeRange(endpoint, endpointAnchor)!;
+    expect(endpointAnchor.tagName).toBe('TD');
+    expect(endpointCapture.quote).toBe('24 Deploy npm race');
+  });
+  it('uses the shared source owner when selected blocks have different wrappers', () => {
+    document.body.innerHTML = '<div data-mx-ast="0">'
+      + '<section data-mx-ast="0.0"><p data-mx-ast="0.0.0">first selected block</p></section>'
+      + '<section data-mx-ast="0.1"><p data-mx-ast="0.1.0">second selected block</p></section>'
+      + '</div>';
+    const paragraphs = document.querySelectorAll('p');
+    const range = document.createRange();
+    range.setStart(textNode(paragraphs[0]!), 0);
+    range.setEnd(textNode(paragraphs[1]!), 'second selected block'.length);
+    const anchor = anchorFor(range)!;
+    expect(anchor).toBe(document.querySelector('[data-mx-ast="0"]'));
+    const captured = describeRange(range, anchor)!;
+    expect(captured.quote).toBe('first selected block second selected block');
+    expect(resolveParts(anchor, captured.range.parts).map(part => part.toString())).toEqual([
+      'first selected block', 'second selected block',
+    ]);
+  });
+  it('does not cross separately addressed runtime items to find a shared source owner', () => {
+    document.body.innerHTML = '<div data-mx-ast="0">'
+      + '<p id="first" data-mx-ast="0.0">first item text</p>'
+      + '<p id="second" data-mx-ast="0.0">second item text</p>'
+      + '</div>';
+    const first = document.getElementById('first')!;
+    const second = document.getElementById('second')!;
+    first.setAttribute('data-mx-comment-target', JSON.stringify({ kind: 'repeat', scopes: [{ nodeId: 'items', key: 'one' }], templateNodeId: 'text' }));
+    second.setAttribute('data-mx-comment-target', JSON.stringify({ kind: 'repeat', scopes: [{ nodeId: 'items', key: 'two' }], templateNodeId: 'text' }));
+    const range = document.createRange();
+    range.setStart(textNode(first), 0);
+    range.setEnd(textNode(second), 'second item text'.length);
+    expect(anchorFor(range)).toBeNull();
+  });
   beforeEach(() => {
     document.body.innerHTML =
       '<div data-mx-ast="0">'
@@ -66,7 +147,7 @@ describe('describeRange: quote plus anchor-relative parts', () => {
     const range = document.createRange();
     range.setStart(textNode(strong), 5); // "decisions for you."
     range.setEnd(textNode(p), 48); // " (1) Should Fork appear for non-markup artifacts"
-    const described = describeRange(range, p);
+    const described = describeRange(range, p)!;
     // Parts in the SAME block concatenate as they are (the space is part of the second run).
     expect(described.quote).toBe('decisions for you. (1) Should Fork appear for non-markup artifacts');
     expect(described.range.v).toBe(1);
@@ -84,7 +165,7 @@ describe('describeRange: quote plus anchor-relative parts', () => {
     const range = document.createRange();
     range.setStart(textNode(p1), 77); // "so it is one predicate."
     range.setEnd(textNode(p2), 6); // "Tests."
-    const described = describeRange(range, p1);
+    const described = describeRange(range, p1)!;
     // Parts in DIFFERENT blocks are joined by one space.
     expect(described.quote).toBe('so it is one predicate. Tests.');
     expect(described.range.parts).toEqual([
@@ -99,7 +180,7 @@ describe('describeRange: quote plus anchor-relative parts', () => {
     const range = document.createRange();
     range.setStart(textNode(p), 0);
     range.setEnd(textNode(p), textNode(p).length);
-    const described = describeRange(range, p);
+    const described = describeRange(range, p)!;
     expect(described.quote).toBe('Hello, wide world');
     expect(described.range.parts).toEqual([{ rel: '', start: 0, end: 17, text: 'Hello, wide world' }]);
   });
