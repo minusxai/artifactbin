@@ -202,7 +202,7 @@ export const WEB_INGEST_TIMEOUT_MS = Number(env('WEB_INGEST', 'TIMEOUT_MS') ?? '
 export const WEB_INGEST_MAX_PER_HOUR = Number(env('WEB_INGEST', 'MAX_PER_HOUR') ?? '300');
 
 /**
- * The biggest image an artifact may hold. Decoupled from MAX_CONTENT_BYTES (the
+ * The biggest image an artifact may hold. Decoupled from MAX_DOCUMENT_BYTES (the
  * ~2 MB JSON-body cap) because an image rides its own object in the store and a
  * raw-body upload, not a base64 string in a JSON document.
  */

@@ -15,5 +15,5 @@ artifact tables) is `lib/artifacts/write` and the publish pipeline stays in `lib
 - Inversions that keep it below the cycle: `AnnotationOperation` is defined here and lib/editor-engine
   imports it; `StoredMermaidImage` is a contract; `runtimeId` is `@artifactbin/utils/runtime-id`;
   `prepareBrowserDocumentUpdate` takes a `{ prepare }` port (`DocumentPreparePort`), not the artifact
-  backend; `MAX_CONTENT_BYTES` is defined here (`limits.ts`) and the publish door imports it;
+  backend; the document size limit is the contracts' `MAX_DOCUMENT_BYTES`;
   `readCompiledDataflow` takes the composition's SQL extensions from its caller.

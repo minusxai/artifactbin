@@ -26,9 +26,8 @@ import { STORY_THEMES } from '@/lib/data/story/story-themes';
 import { STORY_TEMPLATES } from '@/lib/data/story/story-templates';
 import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
-import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
-import { COMPUTED_FIGURE_RULE, DISPLAY_ROWS, NATIVE_TABLE_AUTHORING_RULE, PHONE_AUTHORING_RULE, PROGRESSIVE_AUTHORING_RULE, SQL_FUNCTIONS, URL_REPLY_RULE } from '@artifactbin/contracts';
+import { COMPUTED_FIGURE_RULE, DISPLAY_ROWS, MAX_DOCUMENT_BYTES, NATIVE_TABLE_AUTHORING_RULE, PHONE_AUTHORING_RULE, PROGRESSIVE_AUTHORING_RULE, SQL_FUNCTIONS, URL_REPLY_RULE } from '@artifactbin/contracts';
 import { OPERATIONS } from '@/lib/operations/registry';
 import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/dataflow';
 import { CORE_FUNCTIONS } from '@artifactbin/sql/core';
@@ -107,7 +106,7 @@ const REGISTRY_GLOBALS = {
   components: STORY_UI_COMPONENT_NAME_LIST,
   tags: STORY_HTML_TAGS,
   refusedTags: [...DANGEROUS_TAGS],
-  maxContentBytes: MAX_CONTENT_BYTES.toLocaleString('en-US'),
+  maxContentBytes: MAX_DOCUMENT_BYTES.toLocaleString('en-US'),
   maxImageBytes: MAX_IMAGE_BYTES.toLocaleString('en-US'),
   maxPdfBytes: MAX_PDF_BYTES.toLocaleString('en-US'),
   /** One shared sentence for validation and authoring guidance — the rule that figures are computed, never typed. */

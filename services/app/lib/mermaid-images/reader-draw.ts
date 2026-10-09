@@ -9,6 +9,7 @@ import { sha256Hex } from '@artifactbin/utils/sha256';
 import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
 import type { MermaidImage, MermaidPalette } from '@/lib/mermaid-images/mermaid-render';
 import { embedPageFonts, pageFontFaces } from '@/lib/mermaid-images/mermaid-fonts';
+import { inUnicodeRange, unquote } from '@/lib/mermaid-images/svg-text';
 
 /**
  * The document's theme as Mermaid needs it: tokens resolved to hex (its colour
@@ -98,8 +99,6 @@ function measureFaces(palette: MermaidPalette, code: string): MermaidMetrics | n
   }
 }
 
-// Quotes as escapes: the kit's class extraction (lib/story-ui/recipe-classes) reads this file as text.
-const unquote = (family: string) => family.trim().replace(/^[\x22\x27]|[\x22\x27]$/g, '');
 /** The face a font stack leads with, unquoted: the one it draws in when it has loaded. */
 const firstFamily = (stack: string) => unquote(stack.split(',')[0] ?? '');
 
@@ -111,17 +110,6 @@ export const facesOf = (palette: MermaidPalette): string | undefined => {
   const faces = parseMermaidFaces(formatMermaidFaces({ label: firstFamily(palette.fontFamily), size: Number.parseFloat(palette.fontSize), edge: firstFamily(palette.fontMono) }));
   return faces ? formatMermaidFaces(faces) : undefined;
 };
-
-/** A `unicode-range` descriptor holds this code point (`U+0-FF, U+131, U+4??`). */
-function inUnicodeRange(range: string, point: number): boolean {
-  return (range || 'U+0-10FFFF').split(',').some((part) => {
-    const match = /^\s*U\+([0-9a-f?]+)(?:-([0-9a-f]+))?\s*$/i.exec(part);
-    if (!match) return false;
-    const low = Number.parseInt(match[1]!.replace(/\?/g, '0'), 16);
-    const high = Number.parseInt(match[2] ?? match[1]!.replace(/\?/g, 'f'), 16);
-    return point >= low && point <= high;
-  });
-}
 
 /**
  * Is this drawing made ENTIRELY in the document's web fonts — the label and

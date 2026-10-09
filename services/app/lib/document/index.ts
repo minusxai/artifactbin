@@ -36,4 +36,3 @@ export { storyBodyFor } from './body';
 export { storyUpdateParts } from './update-parts';
 export { urlHash } from './asset-url';
 export { collectExternalAssetUrls } from './external-images';
-export { MAX_CONTENT_BYTES } from './limits';

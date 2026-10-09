@@ -29,7 +29,7 @@ import { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas
 import { json } from '../../http/http';
 import { type ContentInputCtx } from './input';
 import type { StoredContent } from '@/lib/document/stored-content';
-import { MAX_CONTENT_BYTES } from '@/lib/document/limits';
+import { MAX_DOCUMENT_BYTES } from '@artifactbin/contracts';
 import { documentFonts, invalidFontFamilies } from '@/lib/compiled-page/styles/document-fonts';
 import { cspExtensionsOf } from '../../document/csp-extensions';
 import { checkDocumentData } from '../data/data-checks';
@@ -133,7 +133,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   const sanitized = canonicalizeMarkup(normalized);
   if(sanitized.includes('\0'))return json({error:'invalid_source_encoding',details:['Document source cannot contain a NUL character.']},400);
   if(!sanitized.isWellFormed())return prepareJsx(body,Buffer.from(sanitized,'utf8').toString('utf8'),ctx);
-  if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);
+  if (Buffer.byteLength(sanitized, 'utf8') > MAX_DOCUMENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_DOCUMENT_BYTES }, 413);
 
   // The reference graph: every ref:<id> resolves to one of the
   // caller's artifacts, with bidirectional binding validation. Skipped when no

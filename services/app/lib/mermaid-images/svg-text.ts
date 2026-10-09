@@ -46,7 +46,8 @@ function textOf(svg: string): { label: string; edge: string } {
   return text;
 }
 
-const unquote = (family: string) => family.trim().replace(/^["']|["']$/g, '');
+/** A font family name without its surrounding quotes. */
+export const unquote = (family: string) => family.trim().replace(/^["']|["']$/g, '');
 
 /** The first family of every font stack the drawing declares (its own CSS and attributes). */
 function namedFamilies(svg: string): Set<string> {
@@ -70,7 +71,8 @@ function weightsOf(svg: string): number[] {
   return [...weights].sort((a, b) => a - b);
 }
 
-function inUnicodeRange(range: string | null | undefined, point: number): boolean {
+/** A `unicode-range` descriptor holds this code point (`U+0-FF, U+131, U+4??`); none means every point. */
+export function inUnicodeRange(range: string | null | undefined, point: number): boolean {
   return (range || 'U+0-10FFFF').split(',').some((part) => {
     const match = /^\s*U\+([0-9a-f?]+)(?:-([0-9a-f]+))?\s*$/i.exec(part);
     if (!match) return false;
