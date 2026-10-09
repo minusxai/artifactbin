@@ -17,7 +17,7 @@ export function connectedAgentStatus(session: RemoteSessionInfo): string {
     case 'starting': return 'Online · Starting';
     case 'listening': return 'Online · Ready';
     case 'working': return 'Online · Running';
-    case 'blocked': return 'Online · Waiting for approval';
+    case 'blocked': return 'Online · Waiting for input';
     case 'unknown': return 'Online · Waiting for readiness';
     default: return 'Online';
   }

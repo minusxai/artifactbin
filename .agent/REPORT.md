@@ -99,3 +99,13 @@ Evidence: `.agent/scope-red.log`, `.agent/app-propagation-red.log`, `.agent/fina
 ===CONCISE===
 
 Browser scopes cannot be forged or relabeled through existing-session creation/replay. Ordinary sessions, owner cleanup, and same-scope credential rotation remain compatible. Genuine browser RED and app Blue→Red→Blue observed; validate+3files37tests passed. No resources or production changes.
+
+## Generic blocked readiness label
+
+Changed the shared connected-agent formatter from `Online · Waiting for approval` to `Online · Waiting for input`. Both roster/sidebar and terminal header use the same formatter. This accurately covers default clarification questions and native permission prompts without asserting that approval was requested.
+
+Observed actual RED after seeded expectations: chat-page1failed/36passed, unable to find the expected Waiting for input header. After the one-line change, fresh `npm run validate` passed and `npm test -- --files services/app/solid/__tests__/chat-page.test.tsx` passed37/37. `git diff --check` passed. No development servers, browser sessions or provider fixtures were started; exact blocked production UI confirmation is parent-owned after deployment. No push, local build, SLOW gate or production operation was performed.
+
+===CONCISE===
+
+Shared blocked status now says Waiting for input. Genuine RED→GREEN:1/36 to37/37; validation clean. No owned resources to clean up. Parent owns CI and deployed confirmation.

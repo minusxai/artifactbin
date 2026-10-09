@@ -365,8 +365,8 @@ it('updates the selected sidebar from the terminal connection instead of waiting
   const session = { id:'fresh-connection',name:'Fresh Claude',harness:'claude',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null,runId:'fresh-run',managed:true,activity:'blocked' };
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[{...session,online:false}]}:url==='/api/run-capabilities'?{managedProcesses:false}:{session,seq:0,frames:[],snapshot:''}})));
   open(session.id);
-  expect(await screen.findByText(metadataMatch('Online · Waiting for approval · claude · Cloud box'))).toBeInTheDocument();
-  expect(screen.getByRole('button',{name:'Open Fresh Claude'})).toHaveTextContent('claude · Online · Waiting for approval');
+  expect(await screen.findByText(metadataMatch('Online · Waiting for input · claude · Cloud box'))).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Open Fresh Claude'})).toHaveTextContent('claude · Online · Waiting for input');
 });
 
 it.each(['pi', 'opencode'])('offers and starts hosted %s with the selected harness', async (harness) => {
