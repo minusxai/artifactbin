@@ -12,7 +12,7 @@ import { framedDocument } from './harness';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { JSDOM } from 'jsdom';
+import { servedHtml } from '@/test/helpers/served-html';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
@@ -41,14 +41,7 @@ beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const asSession = (u: { id: string; email: string } | null) => { sessionUser.id = u?.id ?? ''; sessionUser.email = u?.email ?? ''; };
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
-const storyText = (html: string) => {
-  const dom = new JSDOM(html);
-  const story = dom.window.document.querySelector('[data-mx-story-root]');
-  for (const style of story?.querySelectorAll('style') ?? []) style.remove();
-  const text = story?.textContent ?? '';
-  dom.window.close();
-  return text;
-};
+const storyText = (html: string) => servedHtml(html).find('*', { 'data-mx-story-root': true })?.text(['style']) ?? '';
 
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
@@ -78,8 +71,7 @@ async function dashboard() {
 const html = async (id: string, search = '') => (await framedDocument(app, `/a/${id}${search}`, { headers: { accept: 'text/html' } }))!.text();
 const pageJson = async (id: string, search = '') => (await artifactPage(request(`/api/page/artifact/${id}${search}`), params(id))).json();
 const resultOf = (html: string) => {
-  const script = new JSDOM(html).window.document.getElementById(ISLAND_DATA_ID);
-  return (script ? (JSON.parse(script.textContent ?? '{}') as { results?: unknown }).results : undefined) as
+  return servedHtml(html).json<{ results?: unknown }>(ISLAND_DATA_ID)?.results as
   { tables: Record<string, { rows: Array<Record<string, unknown>> }>; errors: Record<string, string>; mutationAccess?: Record<string, string | null>; since?: string } | undefined;
 };
 const servedOf = (body: { surface: { runtime: { data: { dataflow?: { results?: unknown } } } } }) => body.surface.runtime.data.dataflow?.results as
@@ -89,8 +81,10 @@ const routeAnswer = async (id: string, values: Record<string, unknown> = {}) =>
   (await queryRoute(request(`/a/${id}/query`, { method: 'POST', json: { values } }), params(id))).json() as Promise<{ tables: Record<string, unknown>; errors: Record<string, string>; mutationAccess?: Record<string, string | null> }>;
 
 describe('the reader page carries its first results', () => {
+  describe('of one dashboard its tests only read', () => {
+  const board = harness.shared(dashboard);
   it('renders the dashboard fixture\'s KPI, table rows and select options into the anonymous HTML', async () => {
-    const { id } = await dashboard();
+    const { id } = board();
     const page = await html(id);
     const text = storyText(page);
     expect(text).toContain(KPI);
@@ -103,7 +97,7 @@ describe('the reader page carries its first results', () => {
   });
 
   it('never stores snapshot rows in the prepared page', async () => {
-    const { id } = await dashboard();
+    const { id } = board();
     expect(storyText(await html(id))).toContain(KPI);
     const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
     expect(stored.page.ssr).toBeUndefined();
@@ -111,7 +105,7 @@ describe('the reader page carries its first results', () => {
   });
 
   it('serves exactly what the query route answers the same viewer, anonymous and signed in', async () => {
-    const { id, user } = await dashboard();
+    const { id, user } = board();
     for (const who of [null, { id: user.id, email: user.email ?? '' }]) {
       asSession(who);
       const results = servedOf(await pageJson(id))!;
@@ -122,7 +116,7 @@ describe('the reader page carries its first results', () => {
   });
 
   it('serves the rows of the URL\'s values, as the route answers them', async () => {
-    const { id } = await dashboard();
+    const { id } = board();
     const all = storyText(await html(id));
     const west = await html(id, '?$region=West');
     expect(storyText(west)).not.toContain(KPI);
@@ -132,6 +126,25 @@ describe('the reader page carries its first results', () => {
     const total = (answer.tables.monthly as { rows: Array<{ revenue: number }> }).rows.reduce((s, r) => s + r.revenue, 0);
     expect(storyText(west)).toContain(`$${total.toLocaleString('en-US')}`);
     expect(all).toContain(KPI);
+  });
+
+  it('serves the compiled raw document its first results with the same compiled reader as the app page', async () => {
+    const { id } = board();
+    const res = await rawRoute(request(`/a/${id}/raw`), params(id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const data = servedHtml(await res.text()).json<{ results?: { tables?: unknown } }>(ISLAND_DATA_ID)!;
+    expect(data.results?.tables).toBeTruthy();
+  });
+
+  it('opens a live stream that sends nothing when nothing changed, and ignores a token it cannot read', async () => {
+    const { id } = board();
+    const since = servedOf(await pageJson(id))!.since!;
+    // Each token gets its own stream, all read at once: a quiet stream is only shown quiet by waiting out its budget.
+    const streams = await Promise.all([since, 'not a token', `${'x'.repeat(6)}.deadbeef0000`].map(async (token) =>
+      readEvents((await eventsRoute(request(`/a/${id}/events?since=${encodeURIComponent(token)}`), params(id))).body!, 2, 800)));
+    for (const events of streams) expect(events.filter((e) => e.event === 'data')).toEqual([]);
+  });
   });
 
   it('answers the next response from the dataset as it is now', async () => {
@@ -262,17 +275,6 @@ describe('the budget', () => {
   });
 });
 
-describe('the compiled raw document', () => {
-  it('serves its first results with the same compiled reader as the app page', async () => {
-    const { id } = await dashboard();
-    const res = await rawRoute(request(`/a/${id}/raw`), params(id));
-    expect(res.status).toBe(200);
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    const data = JSON.parse(new JSDOM(await res.text()).window.document.getElementById(ISLAND_DATA_ID)!.textContent!);
-    expect(data.results?.tables).toBeTruthy();
-  });
-});
-
 describe('the live stream picks up where the served results left off', () => {
   const stream = (id: string, since?: string) => eventsRoute(request(`/a/${id}/events${since ? `?since=${encodeURIComponent(since)}` : ''}`), params(id));
 
@@ -295,14 +297,5 @@ describe('the live stream picks up where the served results left off', () => {
     await (await harness.db()).query('UPDATE artifacts SET sharing_revision = sharing_revision + 1 WHERE id = $1', [sales]);
     const data = (await readEvents((await stream(id, since)).body!, 2)).find((e) => e.event === 'data');
     expect(data?.data).toMatchObject({ datasets: [sales] });
-  });
-
-  it('sends nothing when nothing changed, and ignores a token it cannot read', async () => {
-    const { id } = await dashboard();
-    const since = servedOf(await pageJson(id))!.since!;
-    for (const token of [since, 'not a token', `${'x'.repeat(6)}.deadbeef0000`]) {
-      const events = await readEvents((await stream(id, token)).body!, 2, 800);
-      expect(events.filter((e) => e.event === 'data')).toEqual([]);
-    }
   });
 });
