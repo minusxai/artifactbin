@@ -359,6 +359,37 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 });
 
 describe('lifecycle', () => {
+  it('soft-deletes one reply while preserving its thread, sibling reply and open count', async () => {
+    const { t, doc, actor } = await publish();
+    const root = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'keep the root' })).json()) as AnnotationWire;
+    for (const reply of ['delete only this reply', 'keep this sibling']) {
+      const saved = await actOnAnnotationRoute(
+        request(`/api/artifacts/${doc.id}/annotations/${root.id}`, { method: 'POST', token: t.token, json: { reply } }),
+        params({ id: doc.id, annId: root.id }),
+      );
+      expect(saved.status).toBe(200);
+    }
+    const db = await harness.db();
+    const before = await artifactQuery<{ id: string; body: string }>(db,
+      'SELECT id, body FROM annotations WHERE root_id = $1', [root.id]);
+    const replyId = before.rows.find((row) => row.body === 'delete only this reply')!.id;
+    const deleted = await myDeleteAnnotationRoute(
+      request(`/api/my/artifacts/${doc.id}/annotations/${replyId}`, { method: 'DELETE', actor }),
+      params({ id: doc.id, annId: replyId }),
+    );
+    expect(deleted.status).toBe(200);
+    const stored = await artifactQuery<{ id: string; deleted_at: string | null }>(db,
+      'SELECT id, deleted_at FROM annotations WHERE id = $1 OR root_id = $1', [root.id]);
+    expect(stored.rows).toHaveLength(3);
+    expect(stored.rows.find((row) => row.id === replyId)!.deleted_at).not.toBeNull();
+    expect(stored.rows.filter((row) => row.id !== replyId).every((row) => row.deleted_at === null)).toBe(true);
+    const response = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor }), params({ id: doc.id }));
+    const listed = (await response.json()).annotations as AnnotationWire[];
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.thread.map((comment) => comment.body)).toEqual(['keep the root', 'keep this sibling']);
+    expect(await countOpenAnnotations(doc.id)).toBe(1);
+  });
+
   it('the owner deletes a thread outright — root and replies; a stranger gets the uniform 404', async () => {
     const { t, doc, actor } = await publish();
     const a = (await (await annotate(doc.id, actor, { node_id: 'findings', edit_id: doc.edit_id, body: 'erase me' })).json()) as AnnotationWire;

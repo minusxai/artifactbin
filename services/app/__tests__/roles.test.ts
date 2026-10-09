@@ -936,9 +936,29 @@ describe('editors through every door', () => {
 
       asSession({ id: w.owner.id, email: w.owner.email });
       const byOwner = (await (await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'owner note' })).json()) as { id: string };
+      const ownerReplyResponse = await actOnAnnotationRoute(
+        await jreq(`/api/my/artifacts/${id}/annotations/${byOwner.id}`, 'POST', { reply: 'owner reply' }),
+        params({ id, annId: byOwner.id }),
+      );
+      const ownerReply = (await ownerReplyResponse.json() as { thread: Array<{ id: string }> }).thread[1]!;
 
       asSession({ id: w.bob.id, email: w.bob.email });
       const byEditor = (await (await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'editor note' })).json()) as { id: string };
+      const editorReplyResponse = await actOnAnnotationRoute(
+        await jreq(`/api/my/artifacts/${id}/annotations/${byOwner.id}`, 'POST', { reply: 'editor reply' }),
+        params({ id, annId: byOwner.id }),
+      );
+      const editorReply = (await editorReplyResponse.json() as { thread: Array<{ id: string }> }).thread[2]!;
+
+      // A reply is independently deletable, with the same author check as a root.
+      const refusedReply = await deleteAnnotationRoute(
+        await jreq(`/api/my/artifacts/${id}/annotations/${ownerReply.id}`, 'DELETE'), params({ id, annId: ownerReply.id }),
+      );
+      expect(refusedReply.status).toBe(404);
+      const ownReply = await deleteAnnotationRoute(
+        await jreq(`/api/my/artifacts/${id}/annotations/${editorReply.id}`, 'DELETE'), params({ id, annId: editorReply.id }),
+      );
+      expect(ownReply.status, await ownReply.clone().text()).toBe(200);
 
       // The editor may not erase the owner's words…
       const refused = await deleteAnnotationRoute(

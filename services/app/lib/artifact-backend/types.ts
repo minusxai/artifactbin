@@ -219,6 +219,8 @@ export interface ArtifactBackend {
   /** Rejects with a BackendRequestError (`signInRequired` for a guest). */
   createAnnotation(body: Record<string, unknown>, idempotencyKey: string): Promise<AnnotationWire>;
   actOnAnnotation(annotationId: string, body: { reply?: string; resolve?: boolean; reopen?: boolean }): Promise<AnnotationWire>;
+  /** Optional exact permission hint for comments stored in an offline file. The backend still enforces it on delete. */
+  canDeleteLocalAnnotation?(annotationId: string): boolean;
   deleteAnnotation(annotationId: string): Promise<void>;
   uploadCommentImage(form: FormData): Promise<{ id: string }>;
   /** `query` omitted reads the saved mentions' statuses; a string (even '') searches people. Null when refused. */

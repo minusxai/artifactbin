@@ -105,7 +105,7 @@ describe('AnnotationLayer', () => {
     layer({ railOpen: true }, makeRuntime(), { trusted: true });
     await waitFor(() => expect(trustedRoot().querySelector('[aria-label="Annotation actions"]')).not.toBeNull());
     fireEvent.click(trustedRoot().querySelector('[aria-label="Annotation actions"]')!);
-    const button = trustedRoot().querySelector('[aria-label="Delete annotation"]')!;
+    const button = trustedRoot().querySelector('[aria-label="Delete thread"]')!;
     expect(button).not.toBeNull();
     fireEvent.pointerDown(button, { bubbles: true, composed: true });
     expect(button.isConnected).toBe(true);
@@ -245,9 +245,9 @@ describe('AnnotationLayer', () => {
     const thread = await screen.findByLabelText('Annotation thread');
     expect(thread.className).toContain('shrink-0');
     expect(within(thread).getByLabelText('Resolve annotation').querySelector('.lucide-check')).toBeTruthy();
-    expect(within(thread).queryByLabelText('Delete annotation')).toBeNull();
+    expect(within(thread).queryByLabelText('Delete thread')).toBeNull();
     fireEvent.click(within(thread).getByLabelText('Annotation actions'));
-    expect(within(thread).getByLabelText('Delete annotation').querySelector('.lucide-trash-2')).toBeTruthy();
+    expect(within(thread).getByLabelText('Delete thread').querySelector('.lucide-trash-2')).toBeTruthy();
     expect(screen.getByText('is this right?').className).toContain('line-clamp-2');
     expect(screen.queryByText('one more thought')).toBeNull();
     expect(thread.textContent).toContain('+1 more');
@@ -356,14 +356,51 @@ describe('AnnotationLayer', () => {
     view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
     const thread = await screen.findByLabelText('Annotation thread');
     fireEvent.click(within(thread).getByLabelText('Annotation actions'));
-    fireEvent.click(within(thread).getByLabelText('Delete annotation'));
+    fireEvent.click(within(thread).getByLabelText('Delete thread'));
     expect(fetchCalls.some((c) => c.init?.method === 'DELETE')).toBe(false);
-    expect(screen.getByRole('dialog', { name: 'Delete this comment?' })).toBeTruthy();
-    fireEvent.click(screen.getByLabelText('Confirm delete comment'));
+    expect(screen.getByRole('dialog', { name: 'Delete this thread?' })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Confirm delete thread'));
     await flush();
     expect(fetchCalls.find((c) => c.url.endsWith('/annotations/ann_1') && c.init?.method === 'DELETE')).toBeTruthy();
     expect(screen.queryByLabelText('Annotation thread')).toBeNull();
     expect(view.runtime.posts().at(-1)).toMatchObject({ pins: [] });
+  });
+
+  it('deletes only the chosen reply and keeps the rest of the thread visible', async () => {
+    const view = layer({ railOpen: true });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    const thread = await screen.findByLabelText('Annotation thread');
+    const reply = thread.querySelector<HTMLElement>('[data-comment-id="ann_2"]')!;
+    fireEvent.click(within(reply).getByLabelText('Comment actions 1'));
+    fireEvent.click(within(reply).getByLabelText('Delete comment'));
+    expect(screen.getByRole('dialog', { name: 'Delete this comment?' }).textContent).toContain('rest of the thread will stay');
+    fireEvent.click(screen.getByLabelText('Confirm delete comment'));
+    await flush();
+    expect(fetchCalls.find((c) => c.url.endsWith('/annotations/ann_2') && c.init?.method === 'DELETE')).toBeTruthy();
+    expect(screen.getByLabelText('Annotation thread')).toBeTruthy();
+    expect(screen.getByText('is this right?')).toBeTruthy();
+    expect(screen.queryByText('one more thought')).toBeNull();
+    expect(view.runtime.posts().at(-1)?.pins).toContainEqual(expect.objectContaining({ id: 'ann_1' }));
+  });
+
+  it('keeps a reply and its thread when reply deletion fails', async () => {
+    const priorFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string | URL | Request, init?: RequestInit) => init?.method === 'DELETE'
+      ? Promise.resolve(new Response('{}', { status: 500 }))
+      : priorFetch(url, init)));
+    const view = layer({ railOpen: true });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    const thread = await screen.findByLabelText('Annotation thread');
+    const reply = thread.querySelector<HTMLElement>('[data-comment-id="ann_2"]')!;
+    fireEvent.click(within(reply).getByLabelText('Comment actions 1'));
+    fireEvent.click(within(reply).getByLabelText('Delete comment'));
+    fireEvent.click(screen.getByLabelText('Confirm delete comment'));
+    await flush();
+    expect(screen.getByRole('alert').textContent).toContain('Could not delete this comment');
+    expect(screen.getByText('one more thought')).toBeTruthy();
+    expect(screen.getByLabelText('Annotation thread')).toBeTruthy();
   });
 
   it('draws each person as their own face — picture over the initial, colour from the account id — and agents as their marks', async () => {

@@ -564,8 +564,8 @@ export async function actOnAnnotationFor(
 }
 
 /**
- * Delete a thread outright — root and replies. A browser door only: an agent
- * may answer feedback, never take it away.
+ * Delete one comment, or a whole thread when its root is named. A browser door
+ * only: an agent may answer feedback, never take it away.
  *
  * DELETING IS NARROWER THAN COMMENTING. Reaching the document is the editor
  * scope like every other annotation verb, but taking words away is then
@@ -588,20 +588,43 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
   const cleanup = await db.transaction(async (tx): Promise<{ anchorKey: string | null } | null> => {
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
-    const found = await tx.query<AnnotationRowDb>(
-      `SELECT anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
+    const target = await tx.query<{ id: string; root_id: string | null }>(
+      `SELECT id, root_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND ${LIVE_ANNOTATION_SQL}`,
       [annotationId, artifactId],
     );
-    if (found.rows.length === 0) return null;
+    if (!target.rows[0]) return null;
+    const rootId = target.rows[0].root_id ?? target.rows[0].id;
+    // Every mutation locks the root before a reply. This matches actOnAnnotationFor
+    // and serializes deleting a reply against deleting or updating its thread.
+    const root = await tx.query<AnnotationRowDb>(
+      `SELECT id, anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
+      [rootId, artifactId],
+    );
+    if (!root.rows[0]) return null;
+    const replyId = target.rows[0].root_id ? target.rows[0].id : undefined;
+    const found = replyId
+      ? await tx.query<AnnotationRowDb>(
+        `SELECT id, root_id, anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id = $3 AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
+        [replyId, artifactId, rootId],
+      )
+      : root;
+    if (!found.rows[0]) return null;
     // An editor may take back their own words and no one else's.
     if (!owner && (!actor.userId || found.rows[0].author_user_id !== actor.userId)) return null;
-    // The root AND its replies, in one statement and one stamp: a conversation
-    // is deleted as a whole, and a reply left live under a deleted root would
-    // be a thread with no first message.
-    await tx.query('UPDATE annotations SET deleted_at = now() WHERE (id = $1 OR root_id = $1) AND deleted_at IS NULL', [annotationId]);
-    await recordEvent(tx,actorSubject(actor),'annotation_deleted',{kind:'artifact',id:artifactId},{annotation_id:annotationId});
-    await notify(tx, artifactId, annotationId);
-    const anchorKey = found.rows[0].anchor_key;
+    if (replyId) {
+      await tx.query('UPDATE annotations SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL', [replyId]);
+      await tx.query('UPDATE annotations SET revision = revision + 1 WHERE id = $1 AND deleted_at IS NULL', [rootId]);
+    } else {
+      // Removing the root removes its replies too: a conversation cannot be
+      // left live without its first message.
+      await tx.query('UPDATE annotations SET deleted_at = now() WHERE (id = $1 OR root_id = $1) AND deleted_at IS NULL', [rootId]);
+    }
+    await recordEvent(tx, actorSubject(actor), 'annotation_deleted', { kind: 'artifact', id: artifactId }, {
+      annotation_id: rootId, ...(replyId ? { reply_id: replyId } : {}),
+    });
+    await notify(tx, artifactId, rootId);
+    if (replyId) return { anchorKey: null };
+    const anchorKey = root.rows[0].anchor_key;
     if (!anchorKey) return { anchorKey: null };
     const others = await tx.query(`SELECT 1 FROM annotations WHERE artifact_id = $1 AND anchor_key = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`, [artifactId, anchorKey]);
     return { anchorKey: others.rows.length === 0 ? anchorKey : null };

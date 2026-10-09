@@ -542,6 +542,8 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
       return threadsNow().filter((thread) => thread.status === status);
     },
 
+    canDeleteLocalAnnotation(annotationId) { return file.localIds.includes(annotationId); },
+
     async createAnnotation(body, idempotencyKey) {
       const again = created.get(idempotencyKey);
       if (again) return findThread(again);

@@ -346,6 +346,8 @@ describe('comments in the file', () => {
     await expect(backend.deleteAnnotation('ann_server')).rejects.toThrow(LOCAL_DELETE_ONLY);
     const mine = await backend.createAnnotation({ path: '0.0', node_id: headingId(file), body: 'Mine' }, 'k');
     const reply = (await backend.actOnAnnotation('ann_server', { reply: 'A reply here' })).thread[1]!;
+    expect(backend.canDeleteLocalAnnotation?.(reply.id)).toBe(true);
+    expect(backend.canDeleteLocalAnnotation?.('ann_server')).toBe(false);
     await backend.deleteAnnotation(reply.id);
     expect(latest().threads.find((t) => t.id === 'ann_server')!.thread).toHaveLength(1);
     await backend.deleteAnnotation(mine.id);
