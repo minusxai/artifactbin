@@ -27,7 +27,7 @@ describe('language-tagged code rendering', () => {
   });
   it('uses escaped plain text for missing, unknown or unsafe language labels', () => {
     const source = '<script>alert("hello & goodbye")</script> 🌻';
-    for (const language of [undefined, 'unknown-language', '\"><script>alert(1)</script>']) {
+    for (const language of [undefined, 'unknown-language', 'constructor', '__proto__', '\"><script>alert(1)</script>']) {
       expect(renderCodeBlock(source, language)).toBe(`<pre><code>${escapeHtml(source)}</code></pre>`);
     }
   });

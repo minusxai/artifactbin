@@ -184,12 +184,8 @@ async function build() {
   ]);
   const packagesIn = (result, re) => Object.keys(result.metafile.inputs).filter((key) => re.test(key));
   results.forEach((result, i) => {
-    // These bounded Lezer packages provide the shared Markdown renderer's
-    // grammars/highlighter. All other Lezer packages are editor-only extras.
-    const readerGrammar = /node_modules\/@lezer\/(common|highlight|lr|javascript|css|html|markdown)\//;
-    const leaked = packagesIn(result, /node_modules\/(@codemirror|@lezer|prettier)\//)
-      .filter((input) => !readerGrammar.test(input));
-    if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle CodeMirror or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
+    const leaked = packagesIn(result, /node_modules\/(?:@codemirror|@lezer|prettier)\//);
+    if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle CodeMirror, Lezer, or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
   });
   const reactInSolid = packagesIn(results[KINDS.indexOf('solid')], /node_modules\/(react|react-dom|scheduler)\//);
   if (reactInSolid.length) {

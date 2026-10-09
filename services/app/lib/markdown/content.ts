@@ -81,7 +81,7 @@ export function markdownContent(source: string): MarkdownContent {
         return { html: '', text: '' };
     }
   };
-  const blocks = parseMarkdown(source).children.map(node => render(node));
+  const blocks = parser.parse(source).children.map(node => render(node));
   result.html = blocks.map(block => block.html).join('');
   result.text = blocks.map(block => block.text).join('');
   return result;

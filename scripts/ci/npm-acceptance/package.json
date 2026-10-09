@@ -13,6 +13,7 @@
     "hono": "4.13.7",
     "parse5": "8.0.1",
     "playwright": "npm:playwright-core@1.62.1",
+    "prismjs": "1.30.0",
     "remark-gfm": "4.0.1",
     "remark-parse": "11.0.0",
     "sharp": "0.35.5",

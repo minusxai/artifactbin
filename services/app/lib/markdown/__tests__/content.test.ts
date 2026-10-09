@@ -23,6 +23,7 @@ describe('Markdown source contract', () => {
     expect(markdownContent(md!).headings).toEqual([{ level: 2, title: 'Overview' }]);
   });
 
+
   it('rejects executable links and unsupported constructs at publication', () => {
     for (const md of ['[bad](javascript:alert)', '<script>alert(1)</script>', '![image](https://example.com/a.png)', '> | A | B |\n> | --- | --- |\n> | C | D |']) {
       expect(validateMarkupStructure(`<Markdown id="body">{${JSON.stringify(md)}}</Markdown>`).errors.length, md).toBeGreaterThan(0);
@@ -35,7 +36,7 @@ describe('Markdown source contract', () => {
     const result = markdownContent('> A [link](https://example.com)\n\n1. First\n   - Nested\n\n```html\n<script>x</script>\n```');
     expect(result.errors).toEqual([]);
     expect(result.html).toContain('<code class="language-html" data-language="html">');
-    expect(result.html).toContain('class="mx-code-token-tag">script</span>');
+    expect(result.html).toContain('mx-code-token-tag');
     expect(result.html).not.toContain('<script>');
     expect(result.text).toContain('<script>x</script>');
     expect(result.html).toContain('<ol');
