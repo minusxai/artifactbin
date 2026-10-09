@@ -1,7 +1,7 @@
 /**
  * Names-only contract for the story design system, owned by lib/jsx because its
  * validator checks tags against it — importable WITHOUT pulling the component sources in.
- * The compiler's `KIT` table (lib/compiled-page/compiler.ts) maps these names to the real components.
+ * The compiler (lib/compiled-page/compiler.ts) renders these tags directly or maps them to shared kit components.
  */
 
 /** The shadcn component tags a new-format (`format:'jsx'`) story may use. */

@@ -51,6 +51,19 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('compiles Markdown as static HTML without a reader module or shared kit dependency', async () => {
+    const input = await inputOf('<Markdown id="body" className="text-lg">{`# Notes\n\nKeep **formatting** together.`}</Markdown>');
+    const page = await compilePage(input, loadCompilerBuild());
+    const body = dom(page.html).querySelector('#body')!;
+    expect(body.className).toBe('mx-markdown text-lg');
+    expect(body.querySelector('h1')?.textContent).toBe('Notes');
+    expect(body.querySelector('strong')?.textContent).toBe('formatting');
+    expect(page.module).toBeNull();
+    expect(page.islands).toEqual([]);
+    expect(page.kit).toEqual({ skeleton: [], islands: [] });
+    expect(page.unported).toEqual([]);
+  });
+
   it('compiles FileUpload as a separate island family', async () => {
     const input = await inputOf('<Helmet><Import name="attachments" src="ref:SALES1" /><Value name="refs" type="string" default="[]" url={false}/><Value name="uploading" type="boolean" default={false} url={false}/></Helmet><FileUpload dataset="attachments" value="$refs" busy="$uploading" multiple label="Screenshots" maxFiles={5} />');
     const page = await compilePage(input, loadCompilerBuild());

@@ -1,0 +1,3 @@
+{
+  "kitchen-sink-markdown": "<div data-mx-ast=\"1.23.3.15\" id=\"markdown-prose\" class=\"mx-markdown mt-6\" data-mx-markdown=\"\"><h3 data-mx-markdown-heading=\"0\">Editable Markdown</h3><p>Continuous prose with <strong>bold</strong>, <em>emphasis</em> and a <a href=\"https://example.com\">link</a>.</p><ul class=\"mx-md-check-list\"><li role=\"checkbox\" aria-checked=\"false\" aria-disabled=\"true\">Review the draft</li><li role=\"checkbox\" aria-checked=\"true\" aria-disabled=\"true\">Keep formatting together</li></ul><hr><div class=\"mx-md-table-scroll\"><table><thead><tr><th>Format</th><th>Supported</th></tr></thead><tbody><tr><td>Markdown</td><td>Yes</td></tr></tbody></table></div></div>"
+}

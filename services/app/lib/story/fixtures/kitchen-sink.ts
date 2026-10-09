@@ -223,6 +223,18 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
     </details>
     <hr className="my-6 border-border" />
     <p className="text-sm text-muted-foreground">Line<br />break, and a horizontal rule above.</p>
+    <Markdown id="markdown-prose" className="mt-6">{\`### Editable Markdown
+
+Continuous prose with **bold**, *emphasis* and a [link](https://example.com).
+
+- [ ] Review the draft
+- [x] Keep formatting together
+
+---
+
+| Format | Supported |
+| --- | --- |
+| Markdown | Yes |\`}</Markdown>
   </article>
 </section>
 

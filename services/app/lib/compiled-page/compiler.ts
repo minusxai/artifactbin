@@ -94,9 +94,11 @@ interface KitMeta {
   noChildren?: true;
 }
 
-/** Which module each ported kit component comes from, and its API props (everything else is a DOM attribute). */
+/**
+ * Which module each ported kit component comes from, and its API props (everything else is a DOM attribute).
+ * Compiler-native tags such as Markdown, Grid and For render directly; they have no shared kit export.
+ */
 export const KIT: Readonly<Record<string, KitMeta>> = {
-  Markdown: { mod: 'static' }, // Compiled directly to HTML; Lexical belongs only to edit mode.
   Badge: { mod: 'basic', api: ['variant'] }, Alert: { mod: 'basic', api: ['variant'] }, AlertTitle: { mod: 'basic' }, AlertDescription: { mod: 'basic' },
   Progress: { mod: 'basic', api: ['value'] }, Icon: { mod: 'basic', api: ['name', 'glyphs', 'catalogUrl'] },
   Card: { mod: 'basic' }, CardHeader: { mod: 'basic' }, CardTitle: { mod: 'basic' }, CardDescription: { mod: 'basic' }, CardAction: { mod: 'basic' }, CardContent: { mod: 'basic' }, CardFooter: { mod: 'basic' },
