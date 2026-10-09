@@ -7,15 +7,15 @@ description: >-
 
 Publish editable `.jsx`: YAML metadata, HTML and kit JSX with Tailwind `className`. Datasets/media.
 
-Server: [[ base ]]. Prefer an already installed runnable CLI; otherwise use [HTTP](references/http-api.md). Remote CLI commands use `--server [[ base ]]`. CLI `help <topic>` and HTTP links share guides. Commands below are CLI examples.
+Server: [[ base ]]. Use an already installed runnable CLI (`afbin`); otherwise use [HTTP](references/http-api.md). npx downloads the CLI: it is not an installed CLI. Remote creation, editing, comments and exports work over HTTP. CLI commands use `--server [[ base ]]`; examples below are CLI examples. Both interfaces share these guides.
 
 Setup: [[ base ]]/getting-started.md. Reuse the skill or extract [[ base ]]/skills/artifactbin.zip into the harness skill directory; restart. Without files read [[ base ]]/llms.txt. Download ≠ loading.
 
-- Install CLI only when the user requests CLI or the operation needs local CLI (preview/workspace/serve). If `afbin` is missing: run `npx --yes @afbin/cli@latest setup --server '[[ base ]]'` (Windows: replace `npx` with `npx.cmd`). [Setup details](references/npm-local.md).
+- Install CLI only when explicitly requested or needed for local preview/serve: [setup](references/npm-local.md).
 - CLI chat/phone: ask email, run `afbin auth --email <email>`, ask code, then `afbin auth --email <email> --otp <code>`. Automatic browser approval only on a shared desktop or request. Reuse the origin-scoped credentials under `ARTIFACTBIN_HOME` or `~/.artifactbin`; [authentication](references/http-auth.md). never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. For a new artifact, CLI uses an afbin workspace; HTTP uses [authoring](references/http-authoring.md). Share its returned URL. [[ urlReplyRule ]]
-- Shared/friends/team/signup/vote/RSVP flows: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
-- Read `afbin help <page type>` and choose ONE design system. [[ progressiveAuthoringRule ]] Push confirms acceptance; do not reconfirm it.
+- Shared/friends/team/signup/vote/RSVP flows: read [apps](references/apps.md) BEFORE picking a data shape: accounts, never typed names.
+- Read your [page type](references/templates.md); choose ONE design system. [[ progressiveAuthoringRule ]] Push confirms acceptance; do not reconfirm it.
 - Use declared [queries](references/publishing-query.md) to read/update existing data; preserve source.
 - QA changed actions/state in [live sessions](references/live-sessions.md): each identity's isolated copy, then original `--as guest` (writes off). One session; each works once.
 - Files: `afbin add <files> --json` assigns IDs. `afbin preview report.jsx` registers files and runs until Ctrl+C; never `preview && push`. Push separately; it validates/publishes.

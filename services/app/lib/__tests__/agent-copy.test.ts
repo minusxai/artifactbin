@@ -31,7 +31,8 @@ describe('the tokenless paste', () => {
     expect(existingPaste(B, ID)).toContain('https://x.test/getting-started.md');
     expect(existingPaste(B, ID)).not.toMatch(/ensure-node|npx|@afbin\/cli|afbin help|--server|Approve access/);
     const guide = gettingStartedMarkdown(B);
-    expect(guide).toContain('If afbin is not installed');
+    expect(guide).toContain('If afbin is absent, use HTTP');
+    expect(guide).not.toContain('If afbin is not installed, install and set it up first');
     expect(guide).toContain('Run afbin help to discover everything you can do');
     expect(guide).toContain('Authenticate as the recipient');
     expect(guide).toContain("afbin auth 'ARTIFACT_URL' --server 'https://x.test'");

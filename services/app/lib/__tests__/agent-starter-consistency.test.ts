@@ -33,8 +33,8 @@ const BOOTSTRAP = 'npx --yes @afbin/cli@latest setup';
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['token','mint','claim'];
-const httpDiscovery=(name:string)=>name==='skills/artifactbin/llms.txt'||name==='skills/artifactbin/SKILL.md'||name==='lib/compiled-page/agent-discovery meta';
-const linkedInstaller = (name: string) => name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt') ;
+const httpDiscovery=(name:string)=>name==='the 401 hint'||name==='skills/artifactbin/llms.txt'||name==='skills/artifactbin/SKILL.md'||name==='lib/compiled-page/agent-discovery meta';
+const linkedInstaller = (name: string) => name==='skills/artifactbin/SKILL.md'||name==='skills/artifactbin/llms.txt'|| name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt') ;
 
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
 const ALLOWED_SENTENCE = 'never mint or print tokens';
@@ -78,14 +78,14 @@ describe('every agent-facing starter says the same thing', () => {
     for (const [name, text] of await surfaces()) expect(text, name).toContain('afbin');
   });
 
-  it('(b) carries the installer, so an agent without the binary is never stuck', async () => {
-    for (const [name, text] of await surfaces()) expect(text, name).toContain(linkedInstaller(name) ? `${BASE}/getting-started.md` : INSTALLER);
+  it('(b) links HTTP auth on refusal and offers CLI setup on the relevant surfaces', async () => {
+    for (const [name, text] of await surfaces()) expect(text, name).toContain(name==='the 401 hint' ? `${BASE}/llms/http-auth` : linkedInstaller(name) ? `${BASE}/getting-started.md` : INSTALLER);
     expect(gettingStartedMarkdown(BASE)).toContain(INSTALLER);
   });
 
   it('(b) spells npm only as that one setup line; every other command is `afbin <command>`', async () => {
     for (const [name, text] of await surfaces()) {
-      expect(text.split('npx --yes @afbin/cli@').length - 1, name).toBe(linkedInstaller(name) ? 0 : 1);
+      expect(text.split('npx --yes @afbin/cli@').length - 1, name).toBe(linkedInstaller(name)||name==='the 401 hint' ? 0 : 1);
       for (const [, command] of text.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command, name).toBe('setup');
     }
   });
@@ -153,15 +153,14 @@ describe('every agent-facing starter says the same thing', () => {
 describe('what the brief and the contract teach next', () => {
   const brief = renderTree(skillTree(), 'https://artifactbin.dev').find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
 
-  it('teaches automatic sign-in, browser approval, the private configuration location and the one-time setup line', () => {
-    expect(brief).toContain(BOOTSTRAP);
-    expect(brief.split('npx --yes @afbin/cli@').length - 1).toBe(1);
+  it('links optional CLI setup while teaching automatic sign-in and shared credential reuse', () => {
+    expect(brief).not.toContain(BOOTSTRAP);
+    expect(brief).toContain('npx downloads the CLI');
     expect(brief).not.toContain('shorthand');
     expect(brief).toContain('references/npm-local.md');
     expect(brief).toMatch(/automatic|authenticates itself|signs you in/i);
     expect(brief).toContain('origin-scoped credentials');
     expect(brief).toContain('browser approval');
-    expect(brief).toContain('--yes');
     expect(brief).toMatch(/never.*mint/i);
   });
 

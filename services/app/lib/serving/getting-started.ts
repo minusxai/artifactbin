@@ -19,13 +19,16 @@ export function gettingStarted(base: string) {
   const origin = base.replace(/\/+$/, '');
   const server = afbinServerFlag(origin);
   const sections: Array<{ id: string; title: string; blocks: GuideBlock[] }> = [
-    { id: 'install', title: 'Install afbin', blocks: [
-      { kind: 'text', text: 'If afbin is not installed, install and set it up first. Run one command for your platform. It reuses supported Node/npm or installs official Node LTS for your user, then installs afbin and the artifactbin skill for your coding agents. Open a new terminal after installation. Setup supports Claude Code, Codex, Pi, and OpenCode; choose which agents receive the skill.' },
+    { id: 'choose', title: 'Choose the available interface', blocks: [
+      { kind: 'text', text: `Use an already installed runnable afbin CLI. If afbin is absent, use HTTP: read ${origin}/llms.txt and ${origin}/llms/http-auth. Remote publishing, editing, comments and exports do not require installing the CLI. Install it only when explicitly requested or for local preview/serve. The CLI steps below apply only to that choice.` },
+    ] },
+    { id: 'install', title: 'Install afbin when requested', blocks: [
+      { kind: 'text', text: 'For an explicitly requested CLI installation or local preview/serve, run one command for your platform. It reuses supported Node/npm or installs official Node LTS for your user, then installs afbin and the artifactbin skill for your coding agents. Open a new terminal after installation. Setup supports Claude Code, Codex, Pi, and OpenCode; choose which agents receive the skill.' },
       { kind: 'command', label: 'macOS / Linux', language: 'sh', text: afbinInstallCommand(origin) },
       { kind: 'command', label: 'Windows · PowerShell', language: 'powershell', text: afbinWindowsInstallCommand(origin) },
       { kind: 'text', text: `Already have Node/npm? Run npx --yes @afbin/cli@latest setup${server} directly (PowerShell: npx.cmd --yes @afbin/cli@latest setup${afbinServerFlag(origin, true)}). For Node only, use ${origin}/chat/install-node.sh with bash and reopen your terminal, or run ${origin}/chat/install-node.ps1 inline in PowerShell.` },
     ] },
-    { id: 'http', title: 'Use HTTP when the CLI cannot run', blocks: [
+    { id: 'http', title: 'Use HTTP without installing the CLI', blocks: [
       { kind: 'text', text: `Reuse an installed artifactbin skill for ${origin}. Otherwise download ${origin}/skills/artifactbin.zip and extract its artifactbin/ folder into your harness skill directory. Restart the harness so it loads SKILL.md. With no filesystem, read ${origin}/llms.txt and its topic links. Email sign-in and authenticated HTTP requests are in ${origin}/llms/http-api. Local preview, filesystem workspaces and npm scripts require CLI/shell access.` },
       { kind: 'command', label: 'Download skill (macOS / Linux)', language: 'sh', text: `curl -fsSL '${origin}/skills/artifactbin.zip' -o artifactbin.zip` },
       { kind: 'text', text: 'Install once: Codex uses ~/.agents/skills; Claude Code uses ~/.claude/skills; Pi uses ~/.pi/agent/skills; OpenCode uses ~/.config/opencode/skills. First inspect existing artifactbin folders, including project/shared/symlink locations, and reuse them. Do not extract over an existing skill. Choose the directory your harness loads, then run the extraction command only when artifactbin is absent there. CLI setup reuses this installation.' },
@@ -56,7 +59,7 @@ export function gettingStarted(base: string) {
   ];
   return {
     title: 'Getting started',
-    intro: 'Set up afbin, connect your coding agent, and create or edit your first artifact.',
+    intro: 'Use the installed CLI or direct HTTP to create and edit artifacts. Reuse your skill and credentials.',
     sections,
   };
 }

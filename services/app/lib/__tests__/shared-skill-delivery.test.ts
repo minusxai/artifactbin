@@ -4,6 +4,11 @@ import {skillTree} from '../skills';
 import {renderSkill} from '../skills/render';
 
 describe('one root for installed and direct HTTP agents',()=>{
+ it('distinguishes an installed CLI from downloading one through npx',()=>{
+  const root=llmsText('https://skills-contract.example');
+  expect(root).toContain('npx downloads the CLI');
+  expect(root).not.toContain('If `afbin` is missing: run');
+ });
  it('serves precisely the root body with online topic links, without appending a second manual',()=>{
   const origin='https://skills-contract.example';
   const root=skillTree().get('artifactbin/SKILL.md')!;

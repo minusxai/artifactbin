@@ -36,6 +36,11 @@ to it.
 
 ## Chapter layout and live figures
 
+- Bind every data figure to its query, including ticker/headline numbers and
+  figures in prose: `<Number data="$summary" col="value" />`. Do not copy
+  dataset values into JSX text or chart specifications. Use nonnumeric prose
+  if inline binding would distract; chapter labels and layout sizes are fine.
+
 - Entrance animations are classes: `animate-fade-up` on the hero, `reveal-up` and
   `reveal-left` on chapter elements, staggered with `[transition-delay:120ms]`.
   Captures and reduced-motion viewers see the page finished; nothing is
@@ -82,5 +87,7 @@ Don't
 - Fake sticky scenes; walls of prose; two conceits; a payoff without its
   number.
 - A conceit the data cannot carry; chapters that are just a different chart.
+
+Finish with exactly the requested response format; a URL-only request gets only the URL.
 
 Components: [markup.md](markup.md); publish API: [publishing.md](publishing.md).
