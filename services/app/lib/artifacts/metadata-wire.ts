@@ -1,7 +1,8 @@
 import {artifactState} from './state';
 import {respondToEdit,artifactToWire,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
 import { applyEditFor, getArtifactFor, getOwnedArtifactFor, isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
-import { writerFor, type TokenActor } from './access';
+import { writerFor } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {resolveParent,isParentRefusal} from '../workspace/folders';
 import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
 import {json} from '../http/http';

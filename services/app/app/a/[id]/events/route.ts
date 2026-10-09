@@ -13,11 +13,10 @@
  * wakeup converges on the next event with no cursor bookkeeping.
  */
 import { trackEvent } from '@/lib/platform';
-import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, datasetsForDocument, getArtifactById, isOwner, roleFor } from '@/lib/artifacts';
 import { isDocumentFormat } from '@/lib/story/document/input';
-import { isOwner, roleFor, sessionActor } from '@/lib/accounts';
 import { canAnnotate } from '@/lib/artifacts';
-import { authorHandle } from '@/lib/accounts';
+import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/story/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';

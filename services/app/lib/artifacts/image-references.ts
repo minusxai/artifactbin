@@ -1,5 +1,6 @@
 /** Runtime reference resolution never inherits the containing document's ownership. */
-import { canReadArtifact, type Viewer } from './access';
+import { canReadArtifact } from './access';
+import type { Viewer } from '@/lib/accounts/actors';
 import { getArtifactById } from './store';
 import {imageReferenceId} from '@/lib/dataflow';
 import {imageRefData,type ImageRefData} from '@/lib/dataflow';

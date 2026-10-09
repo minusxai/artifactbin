@@ -10,11 +10,11 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
-import { syncProfile } from '@/lib/accounts';
+import { syncProfile, createTestUser } from '@/lib/accounts';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { avatarUrl, avatarVersion, setAvatar } from '@/lib/accounts';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
-import { createTestUser, eraseTestUser } from '@/lib/accounts';
+import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';

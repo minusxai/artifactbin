@@ -1,5 +1,5 @@
 import {notificationJobOperations} from './notification-jobs';
-import {notificationJobStore} from '../notifications/runtime';
+import {notificationJobStore} from '@/lib/artifacts/notification-runtime';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
@@ -22,7 +22,8 @@ import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANC
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { applyEditFor, versionToWire, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor, revertArtifactFor, isVersionNotArchived } from '@/lib/artifacts/store';
-import { canReadArtifact, type TokenActor } from '@/lib/artifacts/access';
+import { canReadArtifact } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
 import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/story/publish';
 import { isParentRefusal, resolveParent } from '@/lib/workspace/folders';

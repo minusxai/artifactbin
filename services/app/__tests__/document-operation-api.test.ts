@@ -12,7 +12,8 @@ import {drainSnapshotRevalidations} from '@/lib/story/prepared/snapshots.server'
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {useAppHarness,request} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {getArtifactById,type ArtifactRow,type TokenActor} from '@/lib/artifacts';
+import { getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {getDb} from '@/lib/platform';
 import {prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/document/document-update-client';
 import {prepareDocumentAuthoringContext} from '@/lib/story/publish';

@@ -1,10 +1,9 @@
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById, roleFor } from '@/lib/artifacts';
 import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/story/publish';
 import { forkOwner } from '@/lib/operations/registry';
 import { capabilityGuard } from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
 import { canRead } from '@/lib/artifacts';
-import { roleFor } from '@/lib/accounts';
 import { ensureUserToken } from '@/lib/accounts';
 import { ownerUsername } from '@/lib/accounts';
 import { canonicalArtifactPath } from '@/lib/http';

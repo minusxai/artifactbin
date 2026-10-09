@@ -1,11 +1,10 @@
 import {expect,it} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
-import {dataflowForRow,getArtifactById} from '@/lib/artifacts';
+import {dataflowForRow,getArtifactById,accountProfile} from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {count,has,link} from '@/lib/accounts';
-import {accountProfile} from '@/lib/accounts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {request,useAppHarness} from './harness';
 useAppHarness();

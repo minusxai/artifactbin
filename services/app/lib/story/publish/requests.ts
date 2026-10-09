@@ -8,7 +8,8 @@
  * artifacts and nothing in artifacts calls up into it.
  */
 import { CONTENT_FIELDS } from '@artifactbin/contracts';
-import { canReadArtifact, writerFor, type ArtifactRow, type DatasetAccess, type TokenActor, type Visibility } from '@/lib/artifacts/access';
+import { canReadArtifact, writerFor, type ArtifactRow, type DatasetAccess, type Visibility } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { applyEditFor, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput } from '@/lib/artifacts/store';
 import { findDependentsFor, refLoaderForActor, rowToResolvedRef } from '@/lib/artifacts/dataflow';
 import { creationOperation, lookupCreation, CreationReplay } from '@/lib/artifacts/creation-ledger';

@@ -13,7 +13,7 @@ import { artifactPage as ArtifactPage } from '@/test/helpers/pages';
 import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PATCH as patchArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
-import { mintExportKey } from '@/lib/serving';
+import { mintExportKey } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 

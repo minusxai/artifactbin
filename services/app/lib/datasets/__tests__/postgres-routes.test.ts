@@ -34,7 +34,8 @@ import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { GET as publicPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as jobs } from '@/app/api/notification-runs/[runId]/jobs/route';
 import { GET as inbox } from '@/app/api/my/people/route';
-import { createNotificationWorker, evaluateNotificationQuery, notificationJobStore } from '@/lib/notifications';
+import { createNotificationWorker } from '@/lib/notifications';
+import { evaluateNotificationQuery, notificationJobStore } from '@/lib/artifacts';
 import { notificationDocumentPayload, notificationMutationPayload } from '../../../../../scripts/fixtures/postgres-notifications.mjs';
 
 vi.mock('@/lib/platform/config', async (original) => ({ ...await original<object>(), DATASET_ALLOW_PRIVATE_NETWORKS: true }));

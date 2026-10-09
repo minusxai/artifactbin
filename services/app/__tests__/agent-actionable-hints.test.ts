@@ -25,7 +25,7 @@ import { GET as listAnnotations, POST as createAnnotation } from '@/app/api/arti
 import { DELETE as deleteAnnotation } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { runOperation } from '@/lib/operations/http';
 import { remoteRoute } from '@/lib/remote/route';
-import { accountProfile, updateAccountProfile } from '@/lib/accounts';
+import { accountProfile, updateAccountProfile } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 

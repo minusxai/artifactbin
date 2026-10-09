@@ -1,6 +1,6 @@
 import {hostedAuthorization,hostedRefusal,hostedOperationCompleted} from '@/lib/accounts/request-authority';
 import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/artifacts/mutation-operation';
-import {MembershipError} from '../accounts/membership';
+import {MembershipError} from '@/lib/artifacts/membership/membership';
 import {refusingUnservable} from '@/lib/artifacts/servable';
 import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
 import {tokenActorForRequest} from '@/lib/accounts/viewer';
@@ -20,7 +20,7 @@ import {sessionOwnedBy} from '@/lib/remote/resource';
  * pipeline).
  */
 import { json, baseUrl } from '@/lib/http/http';
-import type { TokenActor } from '@/lib/artifacts';
+import type { TokenActor } from '@/lib/accounts/actors';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
 

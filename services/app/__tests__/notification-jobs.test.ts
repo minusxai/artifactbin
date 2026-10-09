@@ -1,9 +1,9 @@
 import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {useAppHarness} from './harness';
-import {eraseTestUser} from '@/lib/accounts';
+import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import {getDb} from '@/lib/platform';
-import {notificationAuthority} from '@/lib/notifications';
+import { notificationAuthority } from '@/lib/artifacts';
 import {seedOwnerJoin} from '@/lib/accounts';
 import {createNotificationJobStore,type NotificationJobAuthority} from '@/lib/notifications';
 useAppHarness();

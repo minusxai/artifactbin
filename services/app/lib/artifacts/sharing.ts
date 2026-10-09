@@ -1,4 +1,5 @@
-import { editorScope, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility } from './access';
+import { editorScope, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type Visibility } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { getArtifactFor, writeShares } from './store';
 import { findWritersFor } from './dataflow';
 import { artifactQuery } from './document';

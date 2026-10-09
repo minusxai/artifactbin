@@ -1,7 +1,7 @@
 /** Saved-mention effects in the document's existing statement. Authorization of
  * recipients remains server-owned even though document semantics are trusted. */
 import {PENDING_MEMBERSHIP_LIMIT,type DocumentUpdate} from '@artifactbin/contracts';
-import type {TokenActor} from '@/lib/artifacts';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {envelope} from '../../platform/events';
 import {notificationChannel} from '../../notifications/write';
 import {JOIN_RELATIONS} from '../../accounts/relation-state';

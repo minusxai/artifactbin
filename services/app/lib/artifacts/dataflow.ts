@@ -1,4 +1,5 @@
-import { canReadArtifact, canWriteDataset, ownerScope, ownsArtifact, type ArtifactRow, type RoleActor, type Scope, type TokenActor, type WriteRefusal, writerFor } from './access';
+import { canReadArtifact, canWriteDataset, ownerScope, ownsArtifact, type ArtifactRow, type Scope, type WriteRefusal, writerFor } from './access';
+import type { RoleActor, TokenActor } from '@/lib/accounts/actors';
 import { getArtifact, getArtifactById, getArtifactByUser, getArtifactFor, getLinkReadableArtifact, refLoaderFor, refLoaderForUser } from './store';
 import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
 import { artifactQuery } from './document';

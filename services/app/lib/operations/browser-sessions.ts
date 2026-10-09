@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { services } from '@/lib/platform/services';
 import type { Actor, BrowserSessionRequest, ViewerChoice } from '@artifactbin/contracts';
 import { TESTUSER_ERRORS } from '@artifactbin/contracts';
-import { resolveTestUser, sweepTestUsers } from '@/lib/accounts/testusers';
+import { resolveTestUser } from '@/lib/accounts/testusers';
+import { sweepTestUsers } from './testuser-erase';
 import { forgetTestUserSession, noteTestUserSession } from '@/lib/accounts/testuser-sessions';
 import type { Operation } from './registry';
 

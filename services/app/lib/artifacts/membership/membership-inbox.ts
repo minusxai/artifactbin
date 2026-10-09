@@ -1,12 +1,13 @@
-import {mutationNotificationInbox} from '../notifications/mutation-inbox';
-import {JOIN_RELATIONS,dismissPendingRelations} from './relation-state';
-import {canAnnotate} from '../artifacts/share-roles';
-import {notificationChanged} from '../notifications/write';
-import {getDb} from '../platform/db';
+import {mutationNotificationInbox} from './mutation-inbox';
+import {JOIN_RELATIONS,dismissPendingRelations} from '@/lib/accounts/relation-state';
+import {canAnnotate} from '../share-roles';
+import {notificationChanged} from '@/lib/notifications/write';
+import {getDb} from '@/lib/platform/db';
 import {MembershipError} from './membership';
-import { getArtifactById } from '../artifacts/store';
-import { effectiveRole, type RoleActor } from '../artifacts/access';
-import {readThrough} from '../datasets/policy/grants';
+import { getArtifactById } from '../store';
+import { effectiveRole } from '../access';
+import type { RoleActor } from '@/lib/accounts/actors';
+import {readThrough} from '@/lib/datasets/policy/grants';
 export async function membershipInbox(actor:RoleActor,offset=0,onlyId:string|null=null){
  if(!actor.userId)throw new MembershipError('Sign in to see notifications');
  const db=await getDb();

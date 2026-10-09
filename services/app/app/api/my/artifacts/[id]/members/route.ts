@@ -1,7 +1,7 @@
 import { browserActor } from '@/lib/accounts';
 import { actorForArtifacts, sessionActor } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
-import { membershipState, MembershipError } from '@/lib/accounts';
+import { membershipState, MembershipError } from '@/lib/artifacts';
 import { json, readJson, unauthorized } from '@/lib/http';
 type Ctx={params:Promise<{id:string}>};
 export async function GET(request:Request,ctx:Ctx){

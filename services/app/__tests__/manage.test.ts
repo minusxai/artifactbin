@@ -17,7 +17,8 @@ import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById,getVersionFor,applyEditFor,listVersionsFor,revertArtifactFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, listAccountTokenRows, revokeUserToken } from '@/lib/accounts';
+import { createUser, revokeUserToken } from '@/lib/accounts';
+import { listAccountTokenRows } from '@/lib/workspace';
 
 const harness = useAppHarness();
 

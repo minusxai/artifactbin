@@ -1,15 +1,16 @@
 /** Transaction-only authorization shared by query execution, result commit and disclosure. */
-import {notificationRuleSourceIds,notificationRevision as hash} from './context';
-import {hasExplicitNotificationMembership} from './membership';
-import {grantsOf,grantsPermitRead,readThrough} from '../datasets/policy/grants';
+import {notificationRuleSourceIds,notificationRevision as hash} from '@/lib/notifications/context';
+import {hasExplicitNotificationMembership} from '@/lib/notifications/membership';
+import {grantsOf,grantsPermitRead,readThrough} from '@/lib/datasets/policy/grants';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
-import type {ArtifactRow,RoleActor} from '@/lib/artifacts';
-import {hasDocumentEditorAccess} from '../artifacts/document-policy';
-import {catalogOf} from '../datasets/catalog';
-import {PUBLIC_BASE_URL} from '../platform/config';
-import {NotificationExecutionError} from './errors';
-import {resolveDatasetConnection} from '../datasets/secrets';
-import {DatasetError} from '../datasets/errors';
+import type { ArtifactRow } from '@/lib/artifacts';
+import type { RoleActor } from '@/lib/accounts/actors';
+import {hasDocumentEditorAccess} from './document-policy';
+import {catalogOf} from '@/lib/datasets/catalog';
+import {PUBLIC_BASE_URL} from '@/lib/platform/config';
+import {NotificationExecutionError} from '@/lib/notifications/errors';
+import {resolveDatasetConnection} from '@/lib/datasets/secrets';
+import {DatasetError} from '@/lib/datasets/errors';
 
 interface Account {id:string;email:string|null;kind:string;expires_at:string|null}
 interface LiveToken {id:string;user_id:string|null;expires_at:string|null;audience:string|null;scope:string|null}

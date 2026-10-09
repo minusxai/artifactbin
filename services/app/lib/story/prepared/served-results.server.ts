@@ -46,7 +46,8 @@
  * rather than a cold start.
  */
 import { createHash } from 'node:crypto';
-import { canReadArtifact, type ArtifactRow, type RoleActor, type Viewer } from '@/lib/artifacts/access';
+import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
+import type { RoleActor, Viewer } from '@/lib/accounts/actors';
 import { dataflowForRow } from '@/lib/artifacts/dataflow';
 import { getArtifactById } from '@/lib/artifacts/store';
 import { getDb } from '@/lib/platform/db';

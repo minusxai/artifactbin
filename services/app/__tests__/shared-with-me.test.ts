@@ -21,7 +21,8 @@ import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/rout
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername, listSharedWithEmail, setUsername } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
+import { listSharedWithEmail } from '@/lib/workspace';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();

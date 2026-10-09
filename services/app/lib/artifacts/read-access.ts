@@ -1,5 +1,6 @@
 import {grantsOf,grantsPermitRead} from '../datasets/policy/grants';
-import { effectiveRole, type TokenActor } from './access';
+import { effectiveRole } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import { getArtifactById, getEditableArtifactFor } from './store';
 import {servableDocument} from './servable';
 import {canRead,canEdit,canAnnotate} from './share-roles';

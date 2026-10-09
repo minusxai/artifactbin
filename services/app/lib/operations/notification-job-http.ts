@@ -1,7 +1,7 @@
-import {requestOrSessionActor,actorForArtifacts} from '../accounts/viewer';
-import {refusesCrossSite} from '../accounts/auth';
-import {json} from '../http/http';
-import {runOperation} from '../operations/http';
+import {requestOrSessionActor,actorForArtifacts} from '@/lib/accounts/viewer';
+import {refusesCrossSite} from '@/lib/accounts/auth';
+import {json} from '@/lib/http/http';
+import {runOperation} from './http';
 
 /** Browser sessions and bearer clients share repository authorization; cookie writes retain CSRF checks. */
 export async function notificationJobHttp(name:string,request:Request,input:Record<string,unknown>):Promise<Response>{

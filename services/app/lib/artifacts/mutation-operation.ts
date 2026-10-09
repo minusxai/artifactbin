@@ -1,5 +1,5 @@
 import type {MutationInitiator, MutationOperationRequest, MutationOperationSuccess, Queryable} from '@artifactbin/contracts';
-import type { TokenActor } from './access';
+import type { TokenActor } from '@/lib/accounts/actors';
 import {completeMutationReceipt,type MutationReceipt,type MutationReply} from './mutation-receipt';
 
 /** Only explicit caller inputs belong in the fingerprint; server defaults are pinned separately. */

@@ -1,7 +1,6 @@
 import {withTokenAuth} from '@/lib/accounts';
 import {json,readJson} from '@/lib/http';
-import {accountProfile,updateAccountProfile} from '@/lib/accounts';
-import {durableMutation} from '@/lib/artifacts';
+import {durableMutation,accountProfile,updateAccountProfile} from '@/lib/artifacts';
 
 export const GET=withTokenAuth(async(request,{userId,credential})=>{
  if(request.headers.has('authorization')&&credential!=='bearer')return json({error:'auth_required'},401);

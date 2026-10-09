@@ -901,7 +901,7 @@ const DATASET_IMAGES: Table = {name:'dataset_images',columns:[
  * actor snapshot of who the app page served — never the authentication session, which the app does not
  * see — so a token behind it is re-resolved on every read, and logout deletes the row
  * (`DELETE <pages apex>/pages-session`); `expires_at` bounds the rest. Erased with a test user
- * (`user_id`, lib/accounts/testusers).
+ * (`user_id`, lib/operations/testusers).
  */
 const PAGES_SESSIONS: Table = {
   name: 'pages_sessions',
@@ -934,7 +934,7 @@ const PAGES_SESSIONS: Table = {
  * about is in the set, so a republish asking for more asks again. "Allow once" is never a row: it lives
  * in the reader's browser session. Hosts a reader published themselves need no row: their publish was
  * their consent. `user_id` names the reader, so a test user's rows are erased with it
- * (lib/accounts/testusers ERASE_BY_USER).
+ * (lib/operations/testusers ERASE_BY_USER).
  */
 const DOCUMENT_TRUST: Table = {
  name:'document_trust',columns:[

@@ -1,6 +1,6 @@
 import {sessionActor,actorForArtifacts} from '@/lib/accounts';
 import {unauthorized} from '@/lib/http';
-import {membershipInbox} from '@/lib/accounts';
+import { membershipInbox } from '@/lib/artifacts';
 import {notificationChannel} from '@/lib/notifications';
 import {subscribeChannel} from '@/lib/story/realtime/live';
 import {LIVE_KEEPALIVE_EVENT,LIVE_KEEPALIVE_MS} from '@/lib/http';
