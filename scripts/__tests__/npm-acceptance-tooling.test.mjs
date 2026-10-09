@@ -1,11 +1,33 @@
 import {it,expect} from 'vitest';
-import {mkdtemp,mkdir,cp,rm,access,readFile} from 'node:fs/promises';
+import {mkdtemp,mkdir,cp,rm,access,readFile,writeFile} from 'node:fs/promises';
+import {createRequire} from 'node:module';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {copyInstalledPackage} from './npm-installed-fixture.mjs';
 const repository=fileURLToPath(new URL('../../',import.meta.url));
+it('isolated package fixtures share matching dependencies and preserve conflicting versions',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-package-fixture-'));
+ try{
+  const source=join(root,'source'),target=join(root,'target');
+  for(const [relative,name,version,dependencies,body] of [
+   ['alpha','alpha','1.0.0',{shared:'1.0.0'},"module.exports = require('shared')"],
+   ['beta','beta','1.0.0',{shared:'2.0.0'},"module.exports = require('shared')"],
+   ['gamma','gamma','1.0.0',{shared:'1.0.0'},"module.exports = require('shared')"],
+   ['shared','shared','1.0.0',{},"module.exports = 'one'"],
+   ['beta/node_modules/shared','shared','2.0.0',{},"module.exports = 'two'"],
+  ]){
+   const directory=join(source,'node_modules',relative);await mkdir(directory,{recursive:true});
+   await writeFile(join(directory,'package.json'),JSON.stringify({name,version,dependencies,main:'index.cjs'}));
+   await writeFile(join(directory,'index.cjs'),body);
+  }
+  for(const name of ['alpha','beta','gamma'])await copyInstalledPackage(name,source,target);
+  const require=createRequire(join(target,'package.json'));
+  expect([require('alpha'),require('beta'),require('gamma')]).toEqual(['one','two','one']);
+  for(const name of ['alpha','gamma'])await expect(access(join(target,'node_modules',name,'node_modules/shared'))).rejects.toThrow();
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 it('isolated acceptance tooling loads the real runner boundary and browser without app/native execution engines',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-acceptance-tools-'));
  try{

@@ -13,10 +13,13 @@
     "hono": "4.13.7",
     "parse5": "8.0.1",
     "playwright": "npm:playwright-core@1.62.1",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
     "sharp": "0.35.5",
     "topojson-client": "3.1.0",
     "tsx": "4.23.11",
     "typebox": "1.1.37",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "unified": "11.0.5"
   }
 }
