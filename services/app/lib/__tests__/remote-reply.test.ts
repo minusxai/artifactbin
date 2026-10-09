@@ -61,3 +61,8 @@ it('shows activity only during pending delivery or execution',()=>{
  expect(remoteWorkActive({...work,connection:'stopped'})).toBe(false);
  expect(remoteWorkActive({...work,reason:'queue_full'})).toBe(false);
 });
+
+it('reports cancellation as terminal without presenting it as failed or still working',()=>{
+ const work={id:'request',sessionId:'session',artifactId:'doc',threadId:'thread',commentId:'comment',name:'afbin',color:'blue' as const,updatedAt:'now',phase:'cancelled' as const,connection:'online' as const};
+ expect(remoteWorkLabel(work)).toBe('Cancelled');expect(remoteWorkActive(work)).toBe(false);
+});

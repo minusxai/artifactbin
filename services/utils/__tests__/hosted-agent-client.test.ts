@@ -57,3 +57,13 @@ it('delivers committed comments with stable receipt identity and no callback cre
  const ordinaryOnly=hostedAgentClient('https://service.test',async()=>{throw Error('must not send');});
  await expect(ordinaryOnly.deliverComment!('alice',comment)).rejects.toThrow('hosted_comment_transport_unavailable');
 });
+
+it('transports app-attested authority metadata and readonly status through the signed owner boundary',async()=>{
+ const calls:Array<{path:string;body:unknown;owner:string|undefined}>=[];
+ const client=hostedAgentClient('https://service.test',async(request,actor)=>{const path=new URL(request.url).pathname;calls.push({path,body:await request.json(),owner:actor.userId});return Response.json(path.endsWith('/status')?null:path.endsWith('/authorize-operation')?{kind:'allowed'}:{ok:true});});
+ const credential={name:'server-grant',expiresAt:null,scoped:true};
+ expect(await client.status!('alice')).toBeNull();expect(await client.authorizeOperation!('alice','token','annotate',{id:'doc'},credential)).toEqual({kind:'allowed'});
+ await client.operationCompleted!('alice','token','create_artifact',{}, {id:'created'},credential);
+ expect(calls).toEqual([{path:'/v1/agents/status',body:{},owner:'alice'},{path:'/v1/agents/authorize-operation',body:{tokenId:'token',name:'annotate',input:{id:'doc'},credential},owner:'alice'},{path:'/v1/agents/operation-completed',body:{tokenId:'token',name:'create_artifact',input:{},result:{id:'created'},credential},owner:'alice'}]);
+ const wrong=hostedAgentClient('https://service.test',async()=>Response.json({id:hostedAgentSessionId('bob')}));await expect(wrong.status!('alice')).rejects.toThrow('not_found');
+});

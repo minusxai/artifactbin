@@ -484,3 +484,13 @@ it('shows a connected agent program instead of its transport', () => {
   expect(screen.getByLabelText('Pi agent').querySelector('svg')).toBeTruthy();
   expect(screen.queryByLabelText('Transport HTTP')).toBeNull();
 });
+
+it('does not replace newer online live statuses with an older offline annotation read',async()=>{
+ let resolve!: (rows: typeof ANN[])=>void;
+ const work={id:'work',sessionId:'agent',artifactId:'doc1',threadId:ANN.id,commentId:ANN.id,name:'afbin',color:'blue' as const,phase:'completed' as const,updatedAt:'now'};
+ const offline={...ANN,remote_work:[{...work,connection:'offline' as const}]};
+ const online={...ANN,remote_work:[{...work,connection:'online' as const,activity:'working' as const}]};
+ const backend={...httpBackend('doc1'),listAnnotations:(status?:string)=>status==='resolved'?Promise.resolve([]):new Promise<typeof ANN[]>(done=>{resolve=done;})};
+ const rig=layer({backend,railOpen:true});await flush();rig.set({backend,railOpen:true,liveAnnotations:[online]});await flush();
+ expect(screen.getByText('Answered')).toBeTruthy();resolve([offline]);await flush();expect(screen.queryByText('Answered · offline')).toBeNull();expect(screen.getByText('Answered')).toBeTruthy();
+});

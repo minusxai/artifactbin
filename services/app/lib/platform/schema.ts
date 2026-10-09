@@ -120,6 +120,7 @@ const TOKENS: Table = {
     // NULL keeps manually minted tokens general-purpose.
     { name: 'audience', type: 'TEXT' },
     { name: 'scope', type: 'TEXT' },
+    { name: 'request_authority', type: 'BOOLEAN', notNull: true, default: 'false' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     // NULL = live. The verb stays REVOKE everywhere a person or a function
     // reads it (revokeToken, tokenStatus 'revoked', the dashboard's copy); the

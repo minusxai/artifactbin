@@ -63,7 +63,7 @@ export async function hostedCommentOperation(request:Request):Promise<Response>{
  if(!proof)return json({error:'not_found'},404);
  const db=await getDb();
  const work=(await db.query<Work>('SELECT w.* FROM remote_work w JOIN remote_agents a ON a.id=w.session_id AND a.owner=w.owner WHERE w.id=$1 AND w.owner=$2 AND w.session_id=$3 AND a.active=true',[body.requestId,actor.userId,body.sessionId])).rows[0];
- if(!work||['unavailable','superseded'].includes(work.phase)||(work.phase==='queued'&&(body.operation!=='reply'||(body.input as Record<string,unknown>).phase!=='failed')))return json({error:'not_found'},404);
+ if(!work||(work.phase==='queued'&&(body.operation!=='reply'||(body.input as Record<string,unknown>).phase!=='failed')))return json({error:'not_found'},404);
  const artifact=await getArtifactById(work.artifact_id);
  if(!artifact||artifact.deleted_at||!await canReadArtifact(artifact,{userId:actor.userId,email:null}))return json({error:'not_found'},404);
  const input=body.input as Record<string,unknown>;
@@ -71,7 +71,7 @@ export async function hostedCommentOperation(request:Request):Promise<Response>{
  if(body.operation==='reply'){
   if(typeof input.body!=='string'||!input.body||input.body.length>32000||!['acknowledged','completed','blocked','failed'].includes(String(input.phase))||(input.resolve!==undefined&&typeof input.resolve!=='boolean'))return json({error:'invalid_reply'},400);
   // The durable terminal receipt owns delivery identity, even if recovery reconstructs different prose.
-  if(work.phase===input.phase&&['completed','failed'].includes(work.phase))return json({ok:true,alreadyDelivered:true});
+  if((work.phase===input.phase&&['completed','failed','blocked','cancelled'].includes(work.phase))||['superseded','cancelled','unavailable'].includes(work.phase))return json({ok:true,alreadyDelivered:true});
   headers.set('X-Artifactbin-Remote-Session',work.session_id);
   headers.set('X-Artifactbin-Remote-Proof',proof);
   headers.set('Idempotency-Key',`${work.id}-${input.phase}`);

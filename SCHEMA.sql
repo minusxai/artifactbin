@@ -858,6 +858,7 @@ CREATE TABLE IF NOT EXISTS app.tokens (
   client_harness TEXT,
   audience TEXT,
   scope TEXT,
+  request_authority BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
@@ -878,6 +879,8 @@ ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS client_harness TEXT;
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS audience TEXT;
 
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS scope TEXT;
+
+ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS request_authority BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 

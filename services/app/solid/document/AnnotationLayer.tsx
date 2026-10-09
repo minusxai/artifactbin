@@ -132,7 +132,19 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   let mutation = { signature: '', key: '' };
   const postToFrame = (message: unknown) => { if (props.runtimeRef) sendDocument({ runtimeRef: props.runtimeRef }, message); };
 
-  const [annotations, setAnnotations] = createSignal<AnnotationWire[]>([]);
+  const [annotations, writeAnnotations] = createSignal<AnnotationWire[]>([]);
+  let annotationEpoch = 0, readSequence = 0, appliedRead = 0;
+  const setAnnotations: typeof writeAnnotations = (next) => { annotationEpoch++; return writeAnnotations(next); };
+  // Reads may finish out of order or after a live event/local write. Only a
+  // current snapshot may replace the rail; network responses never revoke newer state.
+  const readAnnotations = (signal: AbortSignal) => {
+    const epoch = annotationEpoch, sequence = ++readSequence;
+    void backend.listAnnotations(undefined, { signal }).then((list) => {
+      if (!signal.aborted && epoch === annotationEpoch && sequence > appliedRead) {
+        appliedRead = sequence; writeAnnotations(list);
+      }
+    }).catch(() => {});
+  };
   const [recentResolved, setRecentResolved] = createSignal<Record<string, { row: AnnotationWire; remaining: number }>>({});
   let previousOpen = new Set<string>();
   const [resolvedList, setResolvedList] = createSignal<AnnotationWire[] | null>(null);
@@ -193,7 +205,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     if (!hasRemoteWork() || busy()) return;
     const abort = new AbortController();
     const timer = setInterval(() => {
-      void backend.listAnnotations(undefined, { signal: abort.signal }).then((list) => { if (!abort.signal.aborted) setAnnotations(list); }).catch(() => {});
+      readAnnotations(abort.signal);
     }, 15000);
     onCleanup(() => { clearInterval(timer); abort.abort(); });
   });
@@ -269,7 +281,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   // The session's own read; the live stream replaces it wholesale.
   onMount(() => {
     const abort = new AbortController();
-    void backend.listAnnotations(undefined, { signal: abort.signal }).then((list) => { if (!abort.signal.aborted) setAnnotations(list); }).catch(() => {});
+    readAnnotations(abort.signal);
     onCleanup(() => abort.abort());
   });
   createEffect(() => { const live = liveAnnotations(); if (live) setAnnotations(live); });
