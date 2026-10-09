@@ -27,7 +27,7 @@ async function world() {
   const publish = async (body: Record<string, unknown>) => {
     const res = await createRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }));
     expect(res.status, await res.clone().text()).toBe(201);
-    return (await res.json()) as { id: string };
+    return (await res.json()) as { id: string } & Record<string, unknown>;
   };
   const ownerActor: Actor = { credential: 'session', userId: user.id, email: user.email, emailVerified: true };
   return { publish, ownerActor };
@@ -51,7 +51,11 @@ describe('a folder\'s page', () => {
   it('carries its listing in the first HTML byte: the whole shelf to its owner, the public children to a stranger', async () => {
     const w = await world();
     const folder = await w.publish({ format: 'folder', title: 'Field Notes', visibility: 'public' });
-    await w.publish({ title: 'Opening Note', visibility: 'public', parent_id: folder.id, markup: '<div class="p-8"><h1>Opening Note</h1></div>' });
+    // The create echo hands back no markup nobody sent, and a child is filed under the folder at publish.
+    expect(folder).toMatchObject({ format: 'folder', visibility: 'public' });
+    expect(folder.markup ?? '').toBe('');
+    const opening = await w.publish({ title: 'Opening Note', visibility: 'public', parent_id: folder.id, markup: '<div class="p-8"><h1>Opening Note</h1></div>' });
+    expect(opening.parent_id).toBe(folder.id);
     await w.publish({ title: 'Quiet Note', parent_id: folder.id, markup: '<div class="p-8"><h1>Quiet Note</h1></div>' });
 
     const owned = await app.request(`/a/${folder.id}`, { headers: as(w.ownerActor) });
