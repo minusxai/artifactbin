@@ -407,6 +407,13 @@ describe('shared instructions after missing credentials and before publishing cl
   expect(guide).toContain('Do not invent an email');
   expect(guide).toContain('Do not install the CLI');
  });
+ it('keeps hosted root guidance within budget at production and custom origins',()=>{
+  for(const origin of ['https://app.artifactbin.dev','https://artifacts.acme.example']) {
+   const text=llmsText(origin);
+   console.info('Hosted root bytes',origin,Buffer.byteLength(text));
+   expect(Buffer.byteLength(text),origin).toBeLessThanOrEqual(8192);
+  }
+ });
  it('grounds numerical claims and comparisons in query results and labels assumptions',()=>{
   const brief=buildQuickSheet(BASE);
   expect(brief).toContain('Check numerical claims against query results');
