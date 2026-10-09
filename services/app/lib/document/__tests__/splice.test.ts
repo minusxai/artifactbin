@@ -13,7 +13,6 @@ import {
   deriveSpliceFromStrings,
   newEditId,
   normalizeSplice,
-  reconstructBaseSource,
   shiftThroughEdits,
   spansOverlap,
   touchedSpanFor,
@@ -338,26 +337,6 @@ describe('shiftThroughEdits', () => {
     const e2 = record(2, { start: 4, removed: '45', inserted: '' }, { start: 4, end: 6 }); // -2 (frame1: still before incoming@10)
     const r = shiftThroughEdits(incoming, [e1, e2]);
     expect(r).toEqual({ ok: true, splice: { ...incoming.splice, start: 8 }, span: { start: 8, end: 9 } });
-  });
-});
-
-describe('reconstructBaseSource', () => {
-  it('empty log → head is the base', () => {
-    expect(reconstructBaseSource('abc', [])).toBe('abc');
-  });
-
-  it('inverts a chain of edits (each recorded in its own base frame)', () => {
-    const base = 'hello world';
-    const e1: Splice = { start: 0, removed: 'hello', inserted: 'goodbye' };
-    const v1 = applySplice(base, e1);
-    expect(v1).toBe('goodbye world');
-    const e2: Splice = { start: v1.indexOf('world'), removed: 'world', inserted: 'earth' };
-    const v2 = applySplice(v1, e2);
-    expect(v2).toBe('goodbye earth');
-    const log = [record(1, e1, { start: 0, end: 5 }), record(2, e2, { start: 8, end: 13 })];
-    expect(reconstructBaseSource(v2, log)).toBe(base);
-    // Reconstructing an intermediate base uses only the edits after it.
-    expect(reconstructBaseSource(v2, [log[1]])).toBe(v1);
   });
 });
 

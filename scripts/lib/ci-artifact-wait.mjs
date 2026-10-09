@@ -53,7 +53,7 @@ export function verifyArtifactArchive(bytes,digest){
 /** The listing shows an artifact before its blob is downloadable: a 404 (or a 5xx that outlived
  * requestCurrentArtifact's own retries) on the zip of an artifact the listing already reported is
  * retried with backoff for up to `window` ms, never past the caller's deadline. */
-export const ARTIFACT_DOWNLOAD_RETRY_MS=60000;
+const ARTIFACT_DOWNLOAD_RETRY_MS=60000;
 export async function downloadCurrentArtifactArchive(artifact,{repo,deadline,request=requestCurrentArtifact,now=Date.now,sleep:pause=sleep,window=ARTIFACT_DOWNLOAD_RETRY_MS,backoff=2000}={}){
  if(Number.isFinite(artifact.size_in_bytes)&&artifact.size_in_bytes>MAX_ARTIFACT_ARCHIVE_BYTES)throw Error(`Current-run artifact archive exceeds ${MAX_ARTIFACT_ARCHIVE_BYTES} byte download limit`);
  const retryUntil=Math.min(deadline??Infinity,now()+window);

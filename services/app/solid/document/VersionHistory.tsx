@@ -14,7 +14,7 @@ import { Tooltip } from '../components/Tooltip';
 import MobileSheet, { isPhoneViewport } from '../components/MobileSheet';
 import type { ArtifactVersionSummary } from '@/lib/artifact-backend/types';
 
-export interface VersionHistoryProps {
+interface VersionHistoryProps {
   versions: ArtifactVersionSummary[]; currentVersion: number; previewing: number | null;
   onPreview: (version: number) => void; onRestore: (version: number) => void;
   onBackToCurrent: () => void; onClose: () => void; busy: boolean;

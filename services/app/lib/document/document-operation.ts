@@ -2,7 +2,6 @@
  * the complete publisher before a server-owned certificate can reach SQL. */
 import {MAX_DOCUMENT_OPERATIONS,type DocumentOperation,type DocumentPath,type DocumentValue} from '@artifactbin/contracts';
 import {parseJsx} from '../jsx/parse';
-import {serializeJsx} from '../jsx/serialize';
 import type {JsxNode,JsxElement} from '../jsx/types';
 
 export class DocumentOperationError extends Error {
@@ -30,11 +29,6 @@ function parseDocumentOperations(value:unknown):DocumentOperation[]|null {
   }
  }
  return value as DocumentOperation[];
-}
-export function applyDocumentOperations(source:string,operations:readonly DocumentOperation[]):string {
- const parsed=parseJsx(source);
- if(!parsed.ok)throw new DocumentOperationError(parsed.error,-1);
- return serializeJsx(applyOperationsToNodes(parsed.nodes,operations));
 }
 /** Internal projection planning retains server-owned slot annotations on nodes. */
 export function applyOperationsToNodes(nodes:JsxNode[],operations:readonly DocumentOperation[]):JsxNode[] {

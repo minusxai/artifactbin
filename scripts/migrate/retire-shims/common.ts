@@ -62,7 +62,7 @@ export function formatReport(report: BackfillReport): string {
 export const isMain = (moduleUrl: string): boolean => moduleUrl === pathToFileURL(process.argv[1] ?? '').href;
 
 /** The target with credentials removed, for the line printed before any write. */
-export function describeTarget(url: string): string {
+function describeTarget(url: string): string {
   try {
     const parsed = new URL(url);
     return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
@@ -71,7 +71,7 @@ export function describeTarget(url: string): string {
   }
 }
 
-export interface CliOptions {
+interface CliOptions {
   /** The script publishes through the app's write path, which needs the query engine in process. */
   services?: boolean;
   /** The script has no write mode. */

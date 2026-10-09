@@ -151,7 +151,7 @@ export function setSession(session: Session | (() => Session | null) | null): vo
   overrideSession(typeof session === 'function' ? session : () => session);
 }
 
-export interface AppHarness {
+interface AppHarness {
   /** The one open database of this file — an escape hatch for tests whose behaviour includes a direct row assertion. */
   db(): ReturnType<typeof getDb>;
   /**

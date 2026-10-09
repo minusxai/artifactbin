@@ -11,7 +11,7 @@ import { $insertNodeToNearestRoot } from '@lexical/utils';
 import { TableNode, TableRowNode, TableCellNode, $isTableRowNode, $isTableCellNode, $isTableSelection, $findTableNode, TableCellHeaderStates, INSERT_TABLE_COMMAND, registerTablePlugin, registerTableSelectionObserver, registerTableCellUnmergeTransform, setScrollableTablesActive, $insertTableRowAtSelection, $insertTableColumnAtSelection, $deleteTableRowAtSelection, $deleteTableColumnAtSelection } from '@lexical/table';
 import { markdownTransformers as transformers } from './transformers';
 import { markdownContent, markdownHref } from './content';
-export type MarkdownBlock = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'bullet' | 'number' | 'code' | 'check' | 'hr' | 'table';
+type MarkdownBlock = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'bullet' | 'number' | 'code' | 'check' | 'hr' | 'table';
 export type MarkdownTableAction = 'row-before' | 'row-after' | 'column-before' | 'column-after' | 'delete-row' | 'delete-column' | 'delete-table';
 export interface MarkdownEditor {
   editor: LexicalEditor;
@@ -27,7 +27,7 @@ export interface MarkdownEditor {
   selection(): { strong: boolean; em: boolean; u: boolean; link?: string; block?: MarkdownBlock | 'mixed' };
   destroy(): void;
 }
-export interface MarkdownEditorOptions {
+interface MarkdownEditorOptions {
   source: string;
   onChange(source: string): void;
   onBusy?(busy: boolean): void;

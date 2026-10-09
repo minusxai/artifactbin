@@ -1,5 +1,5 @@
 /** Document-owned action state survives row reordering, filtering and virtualization. */
-export interface RowActionState {
+interface RowActionState {
   readonly pending: boolean;
   readonly error: string | null;
 }

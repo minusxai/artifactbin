@@ -152,7 +152,7 @@ const viewerPath = (id: string): string => `/a/${id}/viewer`;
  */
 const COMPILED_SCRIPT_SRC = `script-src 'self' 'wasm-unsafe-eval' blob: ${MODULE_CDNS.join(' ')}`;
 
-export interface MarkupCspOptions {
+interface MarkupCspOptions {
   /** The response is the compiled reader's (x-mx-reader: compiled): no inline script is admitted. */
   compiled?: boolean;
 }

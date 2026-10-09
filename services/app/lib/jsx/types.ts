@@ -102,7 +102,7 @@ export interface ValidateOptions {
   allowedHtmlTags?: Iterable<string>;
   /**
    * Authoring policy for static JSX. `no-inline-style` allows authored `<style>` BLOCKS
-   * (custom CSS attached to classes — sanitized at save by banned-css) but rejects
+   * (custom CSS attached to classes) but rejects
    * inline style props while leaving the general interpreter capable of rendering grandfathered
    * stored content.
    */

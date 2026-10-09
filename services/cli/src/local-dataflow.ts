@@ -12,7 +12,7 @@ import {type DatasetColumn,type Dataflow,type DataflowState,type CompiledDataflo
 import {CliError} from './errors';
 
 /** A dataset's rows as the workspace holds them, or undefined when it has no local copy. */
-export type LocalTable=(ref:string)=>Promise<{rows:Row[];columns:DatasetColumn[]}|undefined>;
+type LocalTable=(ref:string)=>Promise<{rows:Row[];columns:DatasetColumn[]}|undefined>;
 
 /** The artifacts a document's declarations name — what a local run must find copies of. */
 export const declaredRefs=(flow:Dataflow):string[]=>[...new Set([...flow.imports.map(i=>i.ref),...flow.queries.flatMap(q=>q.source?[q.source]:[])])];

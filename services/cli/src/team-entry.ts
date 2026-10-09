@@ -16,7 +16,7 @@ import {withLock} from './state';
  * not stacks — but only while STARTING. `phase` is shared with `listen`, which flips it the moment the
  * listener is open, so a failure during the hours of serving that follow keeps its own report.
  */
-export type TeamApplication=(env:NodeJS.ProcessEnv,runtime:string)=>Promise<{fetch:(request:Request)=>Promise<Response>;close:()=>Promise<void>}>;
+type TeamApplication=(env:NodeJS.ProcessEnv,runtime:string)=>Promise<{fetch:(request:Request)=>Promise<Response>;close:()=>Promise<void>}>;
 export async function startTeamHost(configFile:string,assets:string,overrides:TeamOverrides,application:TeamApplication):Promise<void>{
  const settings=await teamSettings(configFile,process.env,overrides),runtime=resolve(assets),data=join(settings.directory,'data');
  const phase={directory:settings.directory,port:settings.port,started:false};

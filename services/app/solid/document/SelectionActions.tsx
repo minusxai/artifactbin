@@ -3,7 +3,7 @@ import { createEffect, onCleanup, onMount, type JSX } from 'solid-js';
 import { sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { isEditFrameMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryEditSelection, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 
-export interface SelectionActionsProps {
+interface SelectionActionsProps {
   runtimeRef: DocumentRuntimeRef; nonce: string | null; canEdit: boolean; canAnnotate: boolean; editing: boolean;
   onEdit: (path: string) => void; onAnnotate: (selection: StoryEditSelection) => void;
 }

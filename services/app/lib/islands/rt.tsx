@@ -57,7 +57,7 @@ export { createDataflowStore } from '@/lib/story-runtime/store';
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /** `createDataflowStore`'s input: the compiled declarations plus what the page starts from. */
-export interface IslandDataflowInput {
+interface IslandDataflowInput {
   flow: CompiledDataflow;
   state?: DataflowState;
   values?: Record<string, Scalar>;
@@ -66,7 +66,7 @@ export interface IslandDataflowInput {
 }
 
 /** What one document's runtime starts from. */
-export interface IslandRuntimeData {
+interface IslandRuntimeData {
   assetsUrl?: string;
   /** The store's input; absent or null for a document that declares no data (tabs, a diagram). */
   dataflow?: IslandDataflowInput | null;
@@ -78,7 +78,7 @@ export interface IslandRuntimeData {
   readOnly?: string | null;
 }
 
-export interface IslandRuntimeOptions {
+interface IslandRuntimeOptions {
   /**
    * The write status feed over the runtime's store (lib/islands/writes `createWriteStatusFeed`),
    * injected so this module never imports the writes seam; absent: the empty feed.
@@ -91,7 +91,7 @@ export interface IslandRuntimeOptions {
 }
 
 /** One document's runtime: the context every island receives, and the handles only the page holds. */
-export interface IslandRuntime {
+interface IslandRuntime {
   context: IslandContext;
   store: DataflowStore | null;
   /**
@@ -123,7 +123,7 @@ export function declarationsOf(store: () => DataflowStore | null): Pick<IslandCo
   };
 }
 
-export const EMPTY_WRITE_FEED: WriteStatusFeed = Object.freeze({ current: () => [], subscribe: () => () => {}, dismiss: () => {} });
+const EMPTY_WRITE_FEED: WriteStatusFeed = Object.freeze({ current: () => [], subscribe: () => () => {}, dismiss: () => {} });
 
 interface Bridged {
   values: Record<string, Scalar>;
@@ -292,7 +292,7 @@ export const text = (e: ReactiveExpression, row?: Record<string, unknown>, islan
 /** A static value with `$_row.f` references filled from `row` (lib/jsx/row-scope). */
 export const sub = <T,>(value: T, row: Record<string, unknown>): T => substituteRow(value, row);
 
-export interface RepeatProps {
+interface RepeatProps {
   /** The table (or table value) whose rows repeat. */
   name: string;
   keyBy?: string;

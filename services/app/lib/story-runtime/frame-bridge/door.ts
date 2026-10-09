@@ -30,7 +30,7 @@ export interface FrameBridgeStartOptions {
   post: (payload: FrameBridgeFramePayload) => void;
   attach: FrameBridgeAttach;
 }
-export type FrameBridgeStart = (options: FrameBridgeStartOptions) => FrameBridgeSession;
+type FrameBridgeStart = (options: FrameBridgeStartOptions) => FrameBridgeSession;
 
 const MIN_KEY = 16;
 

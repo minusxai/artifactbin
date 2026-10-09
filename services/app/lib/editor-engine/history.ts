@@ -19,7 +19,7 @@ interface Entry {
   time?: number;
 }
 /** What one recorded change carries besides its before/after source. */
-export interface RecordOptions {
+interface RecordOptions {
   /** Consecutive changes in one group within 750 ms collapse into one undo step. */
   group?: string;
   /** The selection to restore on undo (before) and on redo (after). */

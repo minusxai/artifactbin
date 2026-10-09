@@ -30,7 +30,7 @@ import { sendReaction } from './reactions';
 /** The one line an archived render's bar carries. */
 const archivedBanner = (version: number, head: number): string => `Version ${version} of ${head} · read-only`;
 
-export interface DocumentChromeProps {
+interface DocumentChromeProps {
   id: string;
   title: Accessor<string>;
   author: { username: string | null; id?: string | null; image?: string | null } | null;

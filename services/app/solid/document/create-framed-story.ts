@@ -22,7 +22,7 @@ import type { IslandStoryController } from '@/lib/story-runtime/contract';
 export const DOCUMENT_FRAME_SELECTOR = 'iframe[data-mx-document-frame]';
 
 /** The framed document: the server's frame, and the origin its messages must come from. */
-export interface FramedDocument { frame: HTMLIFrameElement; origin: string }
+interface FramedDocument { frame: HTMLIFrameElement; origin: string }
 
 /** The frame condition: the served story is one frame on the document's own origin, or the page holds the story itself. */
 export function framedDocumentFor(story: HTMLElement, framedOrigin: string | null | undefined): FramedDocument | null {
@@ -57,7 +57,7 @@ export function followFramedValues(win: Window, values: string): void {
   win.history.replaceState(win.history.state, '', `${pathname}${next}${hash}`);
 }
 
-export interface FramedStoryOptions {
+interface FramedStoryOptions {
   id: string;
   framed: FramedDocument;
   /** The version's SOURCE nodes, which comments and selections are classified against. */

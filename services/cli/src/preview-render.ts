@@ -7,7 +7,7 @@
 import type {RenderCardCrop,RenderFormat,RenderRequest} from '@artifactbin/contracts';
 import {CARD_WIDTH,CARD_HEIGHT,scriptModuleOrigins,scriptRenderAllowance} from '../../app/lib/cli-toolkit/host.server';
 
-export interface PreviewRenderInput {
+interface PreviewRenderInput {
  /** The capture session's address (preview/session `url`). */
  url:string;
  /** The document's markup as the session read it (the file's body, below its front matter). */

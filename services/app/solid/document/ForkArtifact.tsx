@@ -12,7 +12,7 @@ function copiedDatasetsNote(datasets: Dataset[]): string | null {
   return datasets.length === 1 ? `Its dataset “${first.title ?? first.id}” will be copied too` : `Its ${datasets.length} datasets will be copied too`;
 }
 
-export interface ForkProps { id: string; title?: string | null; variant?: 'menu' | 'bar'; navigate?: (href: string) => void }
+interface ForkProps { id: string; title?: string | null; variant?: 'menu' | 'bar'; navigate?: (href: string) => void }
 const go = (href: string) => { window.location.assign(href); };
 
 export function ForkConfirm(props: ForkProps & { onClose: () => void }): JSX.Element {

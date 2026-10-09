@@ -9,7 +9,7 @@ import {collectRefNameUses,validateDataflow} from '@/lib/dataflow/dataflow';
 import {findBrokenEmbeds} from '@/lib/dataflow/refs';
 import {cspExtensionsOf} from './csp-extensions';
 
-export interface MarkupStructureOptions{
+interface MarkupStructureOptions{
  /** The components the document's script exports (the server builds the script first); absent, any unknown capitalized tag passes when a script exists. */
  scriptComponents?:ReadonlySet<string>;
 }

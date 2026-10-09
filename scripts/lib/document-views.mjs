@@ -31,7 +31,7 @@
  */
 
 /** Installed before any page script; records paint entries and DOM milestones. */
-export function documentViewProbe() {
+function documentViewProbe() {
   const state = (window.__documentView = { fcp: null, lcp: null, takeover: null, painted: null, ready: null, want: null, view: false });
   /*
    * READY — when the page is interactive (docs/phase2-architecture.md §11): on the
@@ -77,10 +77,10 @@ export function documentViewProbe() {
 export const LAB_THROTTLE = { latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4 };
 
 /** Size samples per cell: the summary takes their median, so one late-landing chunk cannot move a target. */
-export const SIZE_RUNS = 3;
+const SIZE_RUNS = 3;
 /** Size mode reads the byte totals only after the network has been quiet this long (bounded by SIZE_SETTLE_MAX_MS). */
-export const SIZE_QUIET_MS = 500;
-export const SIZE_SETTLE_MAX_MS = 8000;
+const SIZE_QUIET_MS = 500;
+const SIZE_SETTLE_MAX_MS = 8000;
 
 /**
  * Resolve once `busy()` has been false for `quietMs` straight, or `maxMs` has passed.
@@ -106,7 +106,7 @@ export const documentMeasurementMode = sizeOnly => sizeOnly
 const kindOf = ({ type }) => type === 'Document' ? 'html' : type === 'Script' ? 'js' : type === 'Stylesheet' ? 'css' : 'other';
 
 /** One cold view of `url` in a fresh tab of `context`; size mode skips throttling and timing waits. */
-export async function measureDocumentView(context, url, { route, painted, throttle = LAB_THROTTLE, sizeOnly = false, timeoutMs = 60_000 }) {
+async function measureDocumentView(context, url, { route, painted, throttle = LAB_THROTTLE, sizeOnly = false, timeoutMs = 60_000 }) {
   const page = await context.newPage();
   try {
     const cdp = await context.newCDPSession(page);
@@ -201,7 +201,7 @@ export async function waitForStoredDiagrams(base, fixtures, { timeoutMs = 60_000
 }
 
 /** Resolve `/a/<id>` to the address a reader lands on: a redirect's target (one hop, untimed), else `/a/<id>`. */
-export async function canonicalView(base, id, fetchImpl = fetch) {
+async function canonicalView(base, id, fetchImpl = fetch) {
   const response = await fetchImpl(`${base}/a/${id}`, { redirect: 'manual' });
   const location = response.headers.get('location');
   return location ? new URL(location, base).href : `${base}/a/${id}`;

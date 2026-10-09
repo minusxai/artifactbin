@@ -20,7 +20,7 @@ export function mermaidSourceError(code: unknown): string | null {
 /** A layout engine Mermaid loads on demand (its `registerDefaultLayoutLoaders`). */
 type MermaidLayout = 'elk' | 'cose-bilkent' | 'swimlane' | 'dagre';
 
-export interface MermaidDiagram {
+interface MermaidDiagram {
   /** The kit's name for the kind: what a manifest keys a kind's code by. */
   kind: string;
   /** Mermaid's own detector id, whose loader names the diagram's module. */

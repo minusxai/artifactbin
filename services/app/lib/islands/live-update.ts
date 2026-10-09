@@ -35,7 +35,7 @@ export interface StoryUpdateOptions {
 }
 
 /** What `updateCompiledStory` settled as: drawn in place, or a reload was asked for. */
-export type StoryUpdateOutcome = 'morphed' | 'reloaded';
+type StoryUpdateOutcome = 'morphed' | 'reloaded';
 
 /** Where the in-flight update lives: on the window, shared by every copy of this module over one page. */
 const STATE_KEY = '__mxStoryUpdate';

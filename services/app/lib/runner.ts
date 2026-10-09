@@ -182,7 +182,3 @@ export async function artifactSchedule(request:Request,artifactId:string) {
     const actor=actorOf(request);
     return schedulesRequest(actor?attachActor(forwarded,actor):forwarded);
 }
-export function deleteSchedule(request:Request,id:string) {
-    const forwarded=new Request(request.url,{method:'DELETE',headers:request.headers});const actor=actorOf(request);
-    return scheduleRequest(actor?attachActor(forwarded,actor):forwarded,id);
-}

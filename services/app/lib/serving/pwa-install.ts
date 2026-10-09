@@ -1,6 +1,6 @@
 /** Capture before the lazy reader loads. A prompt belongs to one document
  * path and must never be reused after SPA navigation to a different artifact. */
-export interface InstallPrompt extends Event {
+interface InstallPrompt extends Event {
   prompt(): Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 let pending: { path: string; event: InstallPrompt } | null = null;

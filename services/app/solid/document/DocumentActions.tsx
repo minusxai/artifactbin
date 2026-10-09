@@ -12,7 +12,7 @@ import { DocumentPeople } from './DocumentPeople';
 import { RefreshDocumentAssets } from './RefreshDocumentAssets';
 
 const ROW = 'flex w-full items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg';
-export interface DocumentActionsProps {
+interface DocumentActionsProps {
   pwaEnabled?: boolean; membershipAvailable?: boolean;
   id: string; title: string; version: number; archived?: boolean;
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean;

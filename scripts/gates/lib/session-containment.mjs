@@ -18,7 +18,7 @@
 const OURS = { own: 'ok', credentials: [] };
 /** The facts the Linux sandbox owns, and the names they are skipped under. */
 const SANDBOX = { checkout: false, network: false };
-export const CONTAINMENT_SKIPS = ['filesystem containment (probe.checkout)', 'network containment (probe.network)'];
+const CONTAINMENT_SKIPS = ['filesystem containment (probe.checkout)', 'network containment (probe.network)'];
 
 /**
  * @param {string|undefined} sandbox the `sandbox` the SERVER reported on the session result

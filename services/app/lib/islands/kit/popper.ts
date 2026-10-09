@@ -8,9 +8,9 @@ import { arrow as arrowMiddleware, autoUpdate, computePosition, flip, limitShift
 export type Side = 'top' | 'right' | 'bottom' | 'left';
 export type Align = 'start' | 'center' | 'end';
 export interface Placed { side: Side; align: Align; arrowX?: number; arrowY?: number; hideArrow: boolean }
-export interface PopperOptions { side: Side; align: Align; sideOffset: number; collisionPadding: number; arrowWidth: number; arrowHeight: number; onPlaced: (placed: Placed) => void }
+interface PopperOptions { side: Side; align: Align; sideOffset: number; collisionPadding: number; arrowWidth: number; arrowHeight: number; onPlaced: (placed: Placed) => void }
 
-export const sideAndAlign = (placement: Placement): [Side, Align] => { const [side, align = 'center'] = placement.split('-'); return [side as Side, align as Align]; };
+const sideAndAlign = (placement: Placement): [Side, Align] => { const [side, align = 'center'] = placement.split('-'); return [side as Side, align as Align]; };
 
 /** Radix's transformOrigin middleware. */
 const transformOrigin = (arrowWidthOption: number, arrowHeightOption: number): Middleware => ({

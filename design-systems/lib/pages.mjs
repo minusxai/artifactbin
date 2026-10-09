@@ -43,7 +43,7 @@ export function fence(spec, existing, theme = null) {
   return '---\n' + lines.join('\n') + '\n---\n';
 }
 
-export function tokenCss(spec, mode) {
+function tokenCss(spec, mode) {
   const names = new Set(spec.tokens.map((t) => t.name));
   const lines = [];
   for (const tk of spec.tokens) lines.push(`  --ds-${tk.name}: ${mode in tk ? tk[mode] : tk.light};`);

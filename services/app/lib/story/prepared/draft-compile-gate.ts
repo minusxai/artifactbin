@@ -47,7 +47,7 @@ interface Session { running: Waiter | null; pending: Waiter | null; latest: numb
 /** Sessions idle this long with nothing running or waiting are forgotten. */
 const IDLE_MS = 60_000;
 
-export interface DraftCompileGateOptions {
+interface DraftCompileGateOptions {
   concurrency: number;
   waitMs: number;
   /**

@@ -8,7 +8,7 @@
  *
  * A document names its system in the fence `theme`; the server emits the variables with the theme suffix of the
  * compiled sheet (lib/data/story/story-themes storyThemeCss, pruned per reader) and the fonts and classes with the
- * document's base sheet (lib/story/styles/story-base-css). The agent writes no CSS. Output is committed and reviewed
+ * document's base sheet (lib/compiled-page/styles/story-base-css). The agent writes no CSS. Output is committed and reviewed
  * in the diff; scripts/__tests__/design-systems.test.mjs regenerates in process and fails on drift.
  */
 import { writeFileSync } from 'node:fs';

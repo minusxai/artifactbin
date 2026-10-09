@@ -6,14 +6,14 @@ import {REMOTE_WORKER_ARG} from './entry-args';
 import {CliError} from './errors';
 import type {Connection} from './config';
 import type {ClaudeConversationRecord,ClaudeConversationReservation} from './claude-conversation';
-export interface RemoteLaunchOptions {
+interface RemoteLaunchOptions {
  connection:Connection; command:string; args:string[]; name?:string; history?:string;
  conversation?:ClaudeConversationRecord;
  resumeReservation?:ClaudeConversationReservation;
  cwd:string; home:string; env?:NodeJS.ProcessEnv; timeoutMs?:number;
  worker?:{command:string;args:string[]};
 }
-export interface RemoteLaunchReceipt {id:string;name:string;url:string;pid:number;status:'starting'}
+interface RemoteLaunchReceipt {id:string;name:string;url:string;pid:number;status:'starting'}
 export interface RemoteWorkerInput extends Omit<RemoteLaunchOptions,'worker'|'timeoutMs'|'env'> {history?:string}
 /** Credentials travel only over the private startup pipe, never argv or a persisted launch file. */
 export async function launchRemote(options:RemoteLaunchOptions):Promise<RemoteLaunchReceipt>{

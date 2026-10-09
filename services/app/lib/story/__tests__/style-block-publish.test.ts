@@ -3,13 +3,8 @@
  * home for it (a body `<style>` is refused and told where it belongs, because
  * CSS in a body block styles the whole document wherever it sits). The policy
  * lets an agent write arbitrary CSS (keyframes, complex selectors) attached to
- * classes — in-distribution vocabulary — while the door still enforces:
- *  - the banned-css strip (position:fixed/sticky, external url()/@import) on
- *    style-block content, declaration-level;
- *  - the viewport-height remap (a raw `100vh` inside the content-sized iframe
- *    sizes against the frame's own viewport instead of the document's `--mx-vh`
- *    — see lib/story-surface/viewport-units);
- *  - inline `style=` stays rejected (the editor's class algebra can't merge it).
+ * classes — in-distribution vocabulary — and stores it as written, while
+ * inline `style=` stays rejected (the editor's class algebra can't merge it).
  * And the compiled sheet carries `!important` utilities, so Tailwind
  * classes always beat authored CSS — the instructable cascade contract.
  */

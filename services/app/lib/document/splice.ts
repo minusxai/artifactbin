@@ -281,21 +281,6 @@ export function shiftThroughEdits(
   return { ok: true, splice: { start, removed, inserted }, span };
 }
 
-/**
- * Rebuild the base version's source from head by inverse-applying the
- * intervening edits newest-first (replace `[start, start+inserted.length)`
- * with `removed`).
- */
-export function reconstructBaseSource(head: string, intervening: EditRecord[]): string {
-  let source = head;
-  for (let i = intervening.length - 1; i >= 0; i--) {
-    const { splice } = intervening[i];
-    source =
-      source.slice(0, splice.start) + splice.removed + source.slice(splice.start + splice.inserted.length);
-  }
-  return source;
-}
-
 /** Unguessable 128-bit edit id — a read-proof, not a sequence number. */
 export function newEditId(): string {
   return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');

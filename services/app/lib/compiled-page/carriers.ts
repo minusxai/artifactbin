@@ -32,7 +32,7 @@ export function emitCarriers(lits: { literals: readonly string[]; key: string } 
     + (moduleData?.length ? `${MODULE_DATA_OPEN}${scriptJson({ moduleData })}${CLOSE}` : '');
 }
 
-export interface SplitCarriers {
+interface SplitCarriers {
   /** The html without its carriers. */
   story: string;
   /** Every literals carrier, as tags, in document order ('' when none). */

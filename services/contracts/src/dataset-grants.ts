@@ -9,7 +9,7 @@ export interface DatasetGrantSelector {
   artifactOwner?: string;
 }
 
-export interface DatasetGrant {
+interface DatasetGrant {
   actions: DatasetAction[];
   from: DatasetGrantSelector;
 }

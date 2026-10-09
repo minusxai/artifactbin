@@ -70,7 +70,7 @@ const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title>
  * a footer back to the app, and a self-canonical on the domain; every
  * capture, archive and editing switch on the URL is ignored.
  */
-export interface DomainPost { hostname: string; ownerId: string; homepage?: boolean; path?: string }
+interface DomainPost { hostname: string; ownerId: string; homepage?: boolean; path?: string }
 
 const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
@@ -84,7 +84,7 @@ const notFound = () =>
  * same compiled inputs, same sandbox; never a view, never a fallback renderer (a fallback is an answer the
  * page reloads on), and readable from the `/raw` copy's opaque origin by an anonymous reader.
  */
-export interface StoryFragmentRequest { surface: StorySurface }
+interface StoryFragmentRequest { surface: StorySurface }
 
 /** A stored shape the current code no longer serves answers its 410 (lib/artifacts/servable), after the ACL below. */
 export function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: StoryFragmentRequest }): Promise<Response> {

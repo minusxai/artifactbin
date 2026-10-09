@@ -81,7 +81,7 @@ export interface EditViews {
 
 type SelectMessage = Extract<StoryEditParentMessage, { type: 'mx:select' }>;
 
-export interface HoverSelect {
+interface HoverSelect {
   /** The selected node's body path, or null. */
   selectedPath(): string | null;
   /** Whether the selection is a BLOCK selection (outline and handles, no caret). */
@@ -107,7 +107,7 @@ export interface HoverSelect {
   dispose(): void;
 }
 
-export interface HoverSelectOptions {
+interface HoverSelectOptions {
   win: Window;
   root: HTMLElement;
   nodes: () => JsxNode[];

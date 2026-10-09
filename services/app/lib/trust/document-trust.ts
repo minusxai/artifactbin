@@ -42,7 +42,7 @@ export interface TrustViewer {
   tokenId?: string | null;
 }
 
-export interface TrustQuery {
+interface TrustQuery {
   /** The row being served: its source declares the set, and its version is where the history walk starts. */
   artifact: Pick<ArtifactRow, 'id' | 'version' | 'source'>;
   viewer: TrustViewer | null;

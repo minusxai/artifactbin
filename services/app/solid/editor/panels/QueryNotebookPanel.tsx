@@ -25,7 +25,7 @@ import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { formatCount } from '../../lib/format';
 
-export interface QueryNotebookPanelProps {
+interface QueryNotebookPanelProps {
   cells: QueryCell[];
   onSqlChange: (name: string, sql: string) => void;
   /** Outline these BODY paths in the document; [] clears. Absent when nothing can be pointed at. */

@@ -6,7 +6,7 @@ import {dirname,isAbsolute,join} from 'node:path';
 import {normalizeServer,type Connection} from './config';
 import {CliError} from './errors';
 
-export interface RemoteBridgeContext {id:string;proof:string;home:string;server:string;connection?:Connection}
+interface RemoteBridgeContext {id:string;proof:string;home:string;server:string;connection?:Connection}
 const LIMIT=16384,DEADLINE=2000;
 const blocked=()=>new CliError('remote_context_blocked','The sandbox blocked managed agent context. Approve this exact command through your harness’s existing approval flow, then retry it.');
 const denied=(error:unknown)=>['EPERM','EACCES'].includes((error as NodeJS.ErrnoException|undefined)?.code??'');

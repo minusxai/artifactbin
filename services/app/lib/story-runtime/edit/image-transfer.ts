@@ -22,7 +22,7 @@ const DROP_REPLACE_LABEL_ATTR = 'data-mx-drop-replace-label';
 /** Parts of a line: never a gap of their own — the block holding them is. */
 const LINE_PARTS = new Set(['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u', 'mark']);
 
-export interface ImageTransferOptions {
+interface ImageTransferOptions {
   win: Window;
   root: HTMLElement;
   nodes: () => JsxNode[];

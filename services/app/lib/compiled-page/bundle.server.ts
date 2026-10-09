@@ -50,7 +50,7 @@ import { emitCarriers, literalsReadCode, MODULE_DATA_READ_CODE } from './carrier
  * The Solid transform
  * ──────────────────────────────────────────────────────────────────────────── */
 
-export interface SolidTarget { generate: 'dom' | 'ssr'; hydratable: boolean }
+interface SolidTarget { generate: 'dom' | 'ssr'; hydratable: boolean }
 
 /**
  * Solid's JSX transform over one generated module, then a finishing pass: the optional import
@@ -108,7 +108,7 @@ function rewriteImports(rewrite: (specifier: string) => string): () => PluginObj
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /** What a server module's import specifiers resolve to: a namespace object per specifier. */
-export type SsrImports = (specifier: string) => Record<string, unknown>;
+type SsrImports = (specifier: string) => Record<string, unknown>;
 
 /** The shared build has no server half for a specifier a stored module imports. */
 class IslandSsrUnavailable extends Error {
@@ -382,7 +382,7 @@ function createSsrModuleStore(objects: ObjectStore = objectStore()): ModuleStore
 }
 
 /** A stored SSR module, loaded: `render(data)` → the whole story HTML with the islands rendered from `data`. */
-export interface SsrModule { render(data: IslandRenderData): string }
+interface SsrModule { render(data: IslandRenderData): string }
 
 const ssrModules = new Map<string, Promise<SsrModule>>();
 
@@ -442,7 +442,7 @@ const browserSource = (document: string, flow: CompiledDataflow | null, flowInde
   ? `${document}import { boot as $boot } from '@mx/boot';\nexport const TREE = Document;\nconst FLOW = ${flowIndex === undefined ? `JSON.parse(${lit(JSON.stringify(readerDataflow(flow)))})` : `$moduleData[${flowIndex}]`};\n$boot({ TREE, FLOW });\n`
   : `${document}import { boot as $boot } from '@mx/boot';\nexport const TREE = Document;\n$boot({ TREE });\n`;
 
-export interface DocumentModules {
+interface DocumentModules {
   html: string;
   module: ModuleRef | null;
   ssr: ModuleRef | null;

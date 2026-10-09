@@ -8,7 +8,7 @@ import { Tooltip } from '../components/Tooltip';
 
 const COLORS = [['Red', '#ef4444'], ['Orange', '#f59e0b'], ['Blue', '#3b82f6'], ['Green', '#22c55e'], ['Black', '#171717'], ['White', '#ffffff']] as const;
 export interface ScreenshotDrawing { preview: Blob; strokes: BrushStroke[] }
-export interface ScreenshotEditorProps {
+interface ScreenshotEditorProps {
   image: CapturedImage; initialStrokes: BrushStroke[];
   exportRef: { current: (() => Promise<ScreenshotDrawing>) | null };
   busy: boolean; onRetake: () => void;

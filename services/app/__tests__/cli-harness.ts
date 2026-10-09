@@ -52,7 +52,7 @@ export const addressesCalled = (calls: CliCall[]): string[] => calls.map((call) 
  * the artifacts routes — that is how a test adds `/api/sessions`, `/a/<id>/raw` or `/api/secrets`
  * without re-implementing the artifacts half.
  */
-export type ExtraRoute = (request: Request, url: URL) => Promise<Response | undefined | null> | Response | undefined | null;
+type ExtraRoute = (request: Request, url: URL) => Promise<Response | undefined | null> | Response | undefined | null;
 
 /**
  * The artifacts API as the CLI addresses it, backed by the real handlers. An unexpected path
@@ -87,14 +87,14 @@ export function artifactTransport(calls: CliCall[] = [], extra?: ExtraRoute): ty
 }
 
 /** What the CLI returned: its exit status, the parsed `--json` envelope, and anything on stderr. */
-export interface CliResult {
+interface CliResult {
   code: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   result: any;
   errors: string;
 }
 
-export interface CliWorkspace {
+interface CliWorkspace {
   /** The working directory the CLI runs in. */
   root: string;
   /** The home directory holding `.artifactbin` — the same as `root` unless `separateHome` was asked for. */
@@ -112,7 +112,7 @@ export interface CliWorkspace {
   cleanup(): Promise<void>;
 }
 
-export interface CliWorkspaceOptions {
+interface CliWorkspaceOptions {
   /** Default transport for `run`/`invoke`; each call may still override it. */
   fetch?: typeof fetch;
   /** Explicit renderer boundary for dispatcher tests; compilation is covered by local HTML tests. */

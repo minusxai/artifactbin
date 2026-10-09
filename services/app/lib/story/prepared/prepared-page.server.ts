@@ -98,7 +98,7 @@ export interface PreparedPage {
 interface PreparedDeps { datasets: string[]; assets: string[] }
 
 /** What a request (never the document) decides about its render. */
-export interface ReaderContext {
+interface ReaderContext {
   at: ArchivedRender | null;
   viewer: RoleActor | null;
   /** The page's query string — the reader's `$` values. */

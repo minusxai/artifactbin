@@ -12,7 +12,6 @@ import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import type { Dataflow } from '@/lib/dataflow/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
-import { shapeOf, diffShapes } from '@/lib/islands/__tests__/kit-parity';
 import { parseFragment } from 'parse5';
 import { KITCHEN_REFS, type CorpusDoc } from './corpus';
 
@@ -37,8 +36,6 @@ export async function inputOf(doc: CorpusDoc): Promise<CompileInput> {
 }
 
 export const sha = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 16);
-
-export const shapeDiffs = (react: string, solid: string): string[] => diffShapes(shapeOf(react), shapeOf(solid));
 
 interface HtmlNode { nodeName: string; tagName?: string; value?: string; data?: string; attrs?: Array<{ name: string; value: string; namespace?: string }>; childNodes?: HtmlNode[]; content?: { childNodes: HtmlNode[] } }
 interface DomEntry { path: string; value: string; scriptPayload: boolean }
@@ -111,101 +108,4 @@ export function parsedDomDiffs(react: string, solid: string): { dom: string[]; h
     if (a.comments[i] !== b.comments[i]) comments.push(`${a.comments[i] ?? '(none)'} -> ${b.comments[i] ?? '(none)'}`);
   }
   return { dom, hydrationKeys, generatedIds, scripts, comments };
-}
-
-const NAMED: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' };
-/** The character references either renderer writes, decoded. */
-const decodeHTML = (text: string): string => text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, ref: string) =>
-  ref[0] === '#' ? String.fromCodePoint(ref[1] === 'x' || ref[1] === 'X' ? parseInt(ref.slice(2), 16) : Number(ref.slice(1))) : NAMED[ref] ?? whole);
-
-/** Markup split into tags and text runs. */
-function tokens(html: string): string[] {
-  const out: string[] = [];
-  for (let i = 0; i < html.length;) {
-    if (html.startsWith('<!--', i)) {
-      const end = html.indexOf('-->', i + 4);
-      out.push(html.slice(i, end < 0 ? html.length : end + 3));
-      i = end < 0 ? html.length : end + 3;
-    } else if (html[i] === '<') {
-      let end = i + 1, quote = '';
-      for (; end < html.length; end++) {
-        const c = html[end]!;
-        if (quote) { if (c === quote) quote = ''; }
-        else if (c === '"' || c === "'") quote = c;
-        else if (c === '>') { end++; break; }
-      }
-      out.push(html.slice(i, end)); i = end;
-    } else {
-      const end = html.indexOf('<', i + 1);
-      out.push(html.slice(i, end < 0 ? html.length : end));
-      i = end < 0 ? html.length : end;
-    }
-  }
-  return out;
-}
-
-type Tag = { name: string; close: boolean; attrs: Array<[string, string | null]>; selfClosing: boolean };
-function parseTag(token: string): Tag | null {
-  const m = /^<(\/?)([a-zA-Z][\w:-]*)([\s\S]*?)(\/?)>$/.exec(token);
-  if (!m) return null;
-  const attrs: Array<[string, string | null]> = [];
-  for (const a of m[3]!.matchAll(/([^\s=/]+)(?:="([^"]*)")?/g)) attrs.push([a[1]!, a[2] === undefined ? null : decodeHTML(a[2])]);
-  return { name: m[2]!.toLowerCase(), close: m[1] === '/', attrs, selfClosing: m[4] === '/' };
-}
-
-/** Why two differing tokens differ (the first rule that explains the whole difference). */
-function classify(a: string, b: string): string {
-  const stripHk = (t: string) => t.replace(/\sdata-hk="[^"]*"/g, '');
-  if (stripHk(a) === stripHk(b)) return 'data-hk';
-  if (!a.startsWith('<') && !b.startsWith('<')) return decodeHTML(a) === decodeHTML(b) ? 'text escaping' : 'text content';
-  const x = parseTag(stripHk(a)), y = parseTag(stripHk(b));
-  if (!x || !y) return 'markup';
-  if (x.name !== y.name || x.close !== y.close) return 'element';
-  const norm = (attrs: Array<[string, string | null]>) => attrs.map(([n, v]) => `${n}=${v ?? ''}`);
-  const [na, nb] = [norm(x.attrs), norm(y.attrs)];
-  const sameList = na.join('\u0000') === nb.join('\u0000');
-  const sameSet = [...na].sort().join('\u0000') === [...nb].sort().join('\u0000');
-  if (sameList && x.selfClosing !== y.selfClosing) return 'void self-closing';
-  if (sameList) {
-    const booleanForm = x.attrs.some(([n, v], i) => (v === null) !== (y.attrs[i]![1] === null) && n === y.attrs[i]![0]);
-    return booleanForm ? 'boolean attribute form' : 'attribute escaping';
-  }
-  if (sameSet) return x.selfClosing !== y.selfClosing ? 'attribute order + void self-closing' : 'attribute order';
-  return 'attribute value';
-}
-
-export interface ByteReport { equal: boolean; tokens: number; diffs: number; byCause: Record<string, number>; samples: Array<{ cause: string; react: string; solid: string }> }
-
-/** Token-by-token comparison of the two HTML strings, each differing pair classified. */
-export function byteDiffs(react: string, solid: string, samples = 6): ByteReport {
-  const a = tokens(react), b = tokens(solid);
-  const byCause: Record<string, number> = {};
-  const out: ByteReport['samples'] = [];
-  let diffs = 0;
-  for (let i = 0, j = 0; i < a.length || j < b.length;) {
-    const x = a[i] ?? '', y = b[j] ?? '';
-    if (x === y) { i++; j++; continue; }
-    // Solid may add a comment separator. Find a nearby common token before pairing later elements.
-    let skipA = 0, skipB = 0;
-    for (let d = 1; d <= 12; d++) {
-      if (!skipA && a[i + d] === y) skipA = d;
-      if (!skipB && b[j + d] === x) skipB = d;
-      if (skipA || skipB) break;
-    }
-    if (skipA || skipB) {
-      const skip = skipA && (!skipB || skipA <= skipB) ? skipA : skipB;
-      const cause = skipA && (!skipB || skipA <= skipB) ? 'react-only token' : 'solid-only token';
-      byCause[cause] = (byCause[cause] ?? 0) + skip;
-      diffs += skip;
-      if (out.filter((s) => s.cause === cause).length < samples) out.push({ cause, react: x.slice(0, 400), solid: y.slice(0, 400) });
-      if (cause === 'react-only token') i += skip; else j += skip;
-      continue;
-    }
-    diffs++;
-    const cause = !x || !y ? 'token count' : classify(x, y);
-    byCause[cause] = (byCause[cause] ?? 0) + 1;
-    if (out.filter((s) => s.cause === cause).length < samples) out.push({ cause, react: x.slice(0, 400), solid: y.slice(0, 400) });
-    i++; j++;
-  }
-  return { equal: react === solid, tokens: Math.max(a.length, b.length), diffs, byCause, samples: out };
 }

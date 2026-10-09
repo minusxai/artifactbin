@@ -11,7 +11,7 @@ import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import type { Scalar, TableResult } from '@/lib/dataflow/dataflow';
 
-export interface ParityData { tables?: Record<string, TableResult>; values?: Record<string, Scalar> }
+interface ParityData { tables?: Record<string, TableResult>; values?: Record<string, Scalar> }
 
 /**
  * The React kit's render of `markup`, as the retired interpreter drew it — recorded (./fixtures/react-oracle.json,

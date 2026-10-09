@@ -16,7 +16,7 @@ interface Account {id:string;email:string|null;kind:string;expires_at:string|nul
 interface LiveToken {id:string;user_id:string|null;expires_at:string|null;audience:string|null;scope:string|null}
 interface Identity {actor:RoleActor;kind:string|null;revision:string}
 interface Share {user_id:string|null;email:string;role:string}
-export interface NotificationArtifactAuthority {row:ArtifactRow;shares:Share[];revision:string}
+interface NotificationArtifactAuthority {row:ArtifactRow;shares:Share[];revision:string}
 const denied=()=>new NotificationExecutionError('notification_access_revoked');
 const owner=(row:ArtifactRow,actor:RoleActor)=>row.user_id?row.user_id===actor.userId:row.token_id===actor.tokenId;
 async function account(tx:Queryable,id:string):Promise<Account|null>{

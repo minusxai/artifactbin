@@ -64,7 +64,7 @@ export const LOCAL_DELETE_ONLY = 'Only comments made in this file can be deleted
 /** Who wrote a journal entry or a comment when nobody picked a name. */
 const UNNAMED_AUTHOR = 'Someone';
 
-export interface FileBackendHooks {
+interface FileBackendHooks {
   /** Every new state of the file: an edit, a comment, a reply, a status change. */
   onChange(file: ArtifactFile): void;
   /** The name picked in this file, or null when nobody has picked one. */
@@ -299,7 +299,7 @@ export function sourceChangedOutside(file: ArtifactFile): boolean {
   return typeof file.derivedFrom === 'string' && sourceDigest(file.source) !== file.derivedFrom;
 }
 
-export interface RebuildResult {
+interface RebuildResult {
   /** The file to open: rebuilt from its source, or unchanged when that could not be done. */
   file: ArtifactFile;
   /** True when `file` differs from the file as it was stored (and wants saving). */

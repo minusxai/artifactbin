@@ -4,7 +4,7 @@ import type {Queryable} from '@artifactbin/contracts';
 import {envelope} from '../platform/events';
 import {enqueueEvent} from '../platform/event-outbox';
 export const notificationChannel=(userId:string)=>'inbox_'+createHash('sha256').update(userId).digest('hex').slice(0,32);
-export interface NotificationInput {id:string;artifactId:string|null;recipientId:string;senderId:string;kind:string;userId?:string;source?:string|null;once?:boolean;revision?:number;firstUpdateId?:string;sourceEventId?:string;agentLabel?:string|null}
+interface NotificationInput {id:string;artifactId:string|null;recipientId:string;senderId:string;kind:string;userId?:string;source?:string|null;once?:boolean;revision?:number;firstUpdateId?:string;sourceEventId?:string;agentLabel?:string|null}
 export async function notificationChanged(tx:Queryable,id:string,recipientId:string,revision:number,kind:'updated'|'read'|'removed'):Promise<void>{
  await enqueueEvent(tx,envelope({kind:'user',id:recipientId},'notification_changed',{kind:'user',id:recipientId},{notification_id:id,revision,change:kind}));
  await tx.query('SELECT pg_notify($1,$2)',[notificationChannel(recipientId),id]);

@@ -14,8 +14,8 @@
 import type { ReviewJson } from '../../../contracts/src/comment-view-state';
 
 /** One piece of commentable state: read now, write synchronously. */
-export interface CommentStatePart { get(): unknown; set(value: ReviewJson): void }
-export interface CommentStateSlot { parts: Map<string, CommentStatePart>; pending: Record<string, ReviewJson>; transaction: (run: () => void) => void }
+interface CommentStatePart { get(): unknown; set(value: ReviewJson): void }
+interface CommentStateSlot { parts: Map<string, CommentStatePart>; pending: Record<string, ReviewJson>; transaction: (run: () => void) => void }
 
 // The frame editor, the page runtime and the kit are built separately. A module-local WeakMap would create
 // several slots. This symbol shares only document-local callbacks, never the trusted parent bridge.

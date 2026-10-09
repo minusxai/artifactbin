@@ -13,7 +13,7 @@ export const PAGE_CHROME = ['.ds-section', '.ds-chip', '.ds-cover', '.ds-wrap', 
   '-sample', '.ds-tpls', '.ds-tpl-block', '.ds-tpl-head', '.ds-progress', '.ds-fields', '.ds-callouts', '.ds-swatch-chip'];
 
 /** The skeleton lines that are the page-type KIT (served by the runtime), not the specimen page's own chrome. */
-export const KIT_SELECTORS = ['.h-', '.ds-row', '.ds-tpl'];
+const KIT_SELECTORS = ['.h-', '.ds-row', '.ds-tpl'];
 
 export const selectorOf = (line) => line.split('{')[0];
 export const isChrome = (line) => PAGE_CHROME.some((c) => selectorOf(line).includes(c));

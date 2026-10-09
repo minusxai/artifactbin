@@ -122,7 +122,7 @@ function regionEnd(siblings: JsxNode[], start: number): number {
 }
 
 /** The measured height of a region's compiled blocks, on its mount: the edit-mode CSS's off-screen placeholder size. */
-export const REGION_HEIGHT_VAR = '--mx-region-h';
+const REGION_HEIGHT_VAR = '--mx-region-h';
 /** How many recent hand-overs an editor remembers: drafts in flight are one or two behind it. */
 const HANDED_KEPT = 8;
 /**
@@ -196,7 +196,7 @@ export function sameNodes(a: unknown, b: unknown): boolean {
 }
 
 /** The prose runs the mounter gives one editor each, by the same walk as `visit` (without the DOM). */
-export function proseRegions(nodes: JsxNode[]): ProseRegion[] {
+function proseRegions(nodes: JsxNode[]): ProseRegion[] {
   const regions: ProseRegion[] = [];
   const walk = (siblings: JsxNode[], parentPath: string) => {
     for (let index = 0; index < siblings.length;) {

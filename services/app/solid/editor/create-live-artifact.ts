@@ -28,7 +28,7 @@ import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import { liveBackoffDelay } from '@/lib/http/live-stream';
 
-export interface LiveArtifactOptions {
+interface LiveArtifactOptions {
   /** Where the stream comes from; a backend without `live` is simply never subscribed. */
   backend: ArtifactBackend;
   id: string;

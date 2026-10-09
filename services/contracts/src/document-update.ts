@@ -15,7 +15,7 @@ export interface DocumentGraph {
 }
 export type GraphFacet='selfVersion'|'childrenVersion'|'subtreeVersion';
 export interface GraphRead {key:string;facet:GraphFacet;version:number}
-export interface GraphNodeWrite {patches:JsonDocumentPatch[];self:boolean;children:boolean}
+interface GraphNodeWrite {patches:JsonDocumentPatch[];self:boolean;children:boolean}
 export interface GraphPatch {
  baseVersion:number;reads:GraphRead[];selections:Array<{selector:string;keys:string[]}>;
  inserted:Record<string,DocumentGraphNode>;removed:string[];updated:Record<string,GraphNodeWrite>;touched:string[];

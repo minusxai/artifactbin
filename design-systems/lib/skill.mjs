@@ -20,7 +20,7 @@ const RATING = ['avoid', 'good', 'best'];
 export { PAGE_CHROME, selectorOf, filterBlock };
 
 /** The system's own classes, less the page chrome, the svg vocabulary and the page-type overrides. */
-export const componentCss = (spec) => filterBlock(spec.css ?? '', (l) => !isChrome(l) && !selectorOf(l).includes('-svg-') && !selectorOf(l).includes('.ds-tpl'));
+const componentCss = (spec) => filterBlock(spec.css ?? '', (l) => !isChrome(l) && !selectorOf(l).includes('-svg-') && !selectorOf(l).includes('.ds-tpl'));
 
 const classesIn = (markup) => {
   const found = [];

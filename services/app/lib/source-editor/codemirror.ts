@@ -26,7 +26,7 @@ import { bracketMatching, HighlightStyle, indentOnInput, syntaxHighlighting } fr
 import { jsxLanguage } from '@codemirror/lang-javascript';
 import { tags as t } from '@lezer/highlight';
 
-export interface SourceViewOptions {
+interface SourceViewOptions {
   parent: HTMLElement;
   doc: string;
   readOnly: boolean;

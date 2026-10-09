@@ -53,7 +53,7 @@ export function usePageIntentPreload(): void {
   onCleanup(() => { for (const name of events) document.removeEventListener(name, onIntent, true); });
 }
 
-export interface PageData<T> {
+interface PageData<T> {
   data: Accessor<T | null>;
   pending: Accessor<boolean>;
   error: Accessor<Error | null>;

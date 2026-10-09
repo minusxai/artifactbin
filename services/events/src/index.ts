@@ -73,7 +73,7 @@ export function serveEvents(svc: EventsService, opts: { maxBody?: number; servic
 }
 
 /** What the process needs, resolved from the environment by `loadEventsConfig`. */
-export interface EventsConfig {
+interface EventsConfig {
   /** APP__PORT, default 8080; 0 = ephemeral. */
   port: number;
   /** APP__HOST, default 0.0.0.0. */
@@ -88,7 +88,7 @@ export interface EventsConfig {
   unknownNames: string[];
 }
 
-export interface LoadEventsConfigOptions {
+interface LoadEventsConfigOptions {
   /** Names that MUST be present; every missing one is named in ONE error. */
   required?: string[];
   /** Names the CALLER reads itself (a deployment wrapper's own settings), so the audit does not report them unknown. */
@@ -136,7 +136,7 @@ export function loadEventsConfig(source: Record<string, string | undefined>, opt
 }
 
 /** How a deployment composes against the OSS boot: the sinks, and (tests only) the database. */
-export interface EventsOverrides {
+interface EventsOverrides {
   routes?: Record<string,(body:unknown)=>Promise<unknown>>;
   sinks?: EventSink[];
   subscribers?: EventSubscriber[];
@@ -144,7 +144,7 @@ export interface EventsOverrides {
   db?: Queryable;
 }
 
-export interface RunningEvents {
+interface RunningEvents {
   url: string;
   /** Stops the socket, then the pool; idempotent. Never installs signal handlers — the entry's job. */
   close(): Promise<void>;

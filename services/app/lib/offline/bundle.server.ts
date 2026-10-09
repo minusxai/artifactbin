@@ -18,7 +18,7 @@ import type { ArtifactFile } from './file-format';
 import type { ArtifactFileParts } from './file-html';
 import type { JsxNode } from '@/lib/jsx';
 
-export type OfflineBundleKind = 'solid';
+type OfflineBundleKind = 'solid';
 
 interface OfflineBundleManifest {
   bundles: Record<OfflineBundleKind, { file: string; sha256: string; raw: number; gzip: number }>;

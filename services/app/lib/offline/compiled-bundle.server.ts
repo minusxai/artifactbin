@@ -27,7 +27,7 @@ export interface OfflineHalf {
   modules: Record<string, { code: string; imports: string[]; dynamic: string[] }>;
 }
 
-export interface PackedCompiledModule {
+interface PackedCompiledModule {
   /** A single inline, classic script. No import, worker, blob or fetch is needed to execute it. */
   code: string;
   /** DOM factories externalized by the compiler, keyed as rt.templateFromPage reads them. */

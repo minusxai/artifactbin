@@ -346,10 +346,8 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, o
  * that names a self-hosted font paints it without the reader's browser ever
  * touching the host it came from.
  *
- * Everything else in authored CSS is still stripped at the door
- * (lib/data/story/banned-css) — this rewrites what survived, and leaves a URL
- * we do not hold exactly as it is: the document's `font-src 'self' data:`
- * refuses to load it, which is the same closed door the strip was.
+ * This rewrites the URLs we hold, and leaves a URL we do not hold exactly as
+ * it is: the document's `font-src 'self' data:` refuses to load it.
  */
 const CSS_URL_RE = /url\(\s*(['"]?)(https?:\/\/[^'")\s]+)\1\s*\)/gi;
 

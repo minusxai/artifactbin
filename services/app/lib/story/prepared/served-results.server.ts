@@ -79,7 +79,7 @@ function servable(flow: CompiledDataflow): string[] {
     .map((q) => q.name);
 }
 
-export interface ServedResultsRequest {
+interface ServedResultsRequest {
   /** The viewer the page's query door admits: the session's for the app page (the POST door); null is the anonymous door. */
   admit: Viewer;
   /** Who the run is for, as that door passes it (null: anonymous). */

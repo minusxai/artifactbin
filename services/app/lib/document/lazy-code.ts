@@ -35,7 +35,7 @@ export interface LazyCode {
  * is drawn from it, so its kind's engine code is not
  * this document's to preload — unless another diagram of the kind has none.
  */
-export interface StoredDrawings { images?: Readonly<Record<string, StoredMermaidImage>>; mode: 'light' | 'dark' }
+interface StoredDrawings { images?: Readonly<Record<string, StoredMermaidImage>>; mode: 'light' | 'dark' }
 
 /**
  * Only `<Question>` imports the chart bundle, and only for the kinds above: a

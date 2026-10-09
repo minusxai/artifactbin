@@ -19,27 +19,27 @@ export type ObjectKind = 'artifact' | 'user' | 'token' | 'door' | 'route';
 export type EventSource = 'app' | 'auth' | 'proxy';
 
 /** Nothing to say beyond the sentence itself. */
-export type EmptyPayload = Record<string, never>;
+type EmptyPayload = Record<string, never>;
 /** Who touched an artifact, as far as telemetry may know it: the client guess (lib/client-identity) and the account when signed in. */
-export interface ArtifactActorPayload { client?: string | null; user_id?: string | null }
+interface ArtifactActorPayload { client?: string | null; user_id?: string | null }
 /** A create also says WHERE, so a folder create and a filed create read as themselves in the log. Null/absent = the root. */
-export interface ArtifactCreatedPayload extends ArtifactActorPayload { parent_id?: string | null }
-export interface AnnotationPayload { annotation_id: string; reply_id?: string; agent?: boolean; resolved?: boolean }
-export interface MembershipEventPayload { user_id: string; revision: number; mention_ref?: string | null }
+interface ArtifactCreatedPayload extends ArtifactActorPayload { parent_id?: string | null }
+interface AnnotationPayload { annotation_id: string; reply_id?: string; agent?: boolean; resolved?: boolean }
+interface MembershipEventPayload { user_id: string; revision: number; mention_ref?: string | null }
 /** Where a row went. Either end may be the ROOT, which is null — a folder is an artifact, so both are artifact ids. */
-export interface MovedPayload { from_parent_id: string | null; to_parent_id: string | null }
+interface MovedPayload { from_parent_id: string | null; to_parent_id: string | null }
 /** A delete also says what went with it: the row's own format, and the descendants that followed (0 for a document). */
-export interface ArtifactDeletedPayload extends ArtifactActorPayload { format?: string; subtree?: number }
+interface ArtifactDeletedPayload extends ArtifactActorPayload { format?: string; subtree?: number }
 /** Whether the row came back where it was, or at the root because an ancestor was not there to hold it. */
-export interface RestoredPayload { landed_at_root: boolean }
-export interface TokenPayload { name?: string | null }
+interface RestoredPayload { landed_at_root: boolean }
+interface TokenPayload { name?: string | null }
 
 /**
  * THE CATALOGUE — every verb an object kind takes, with the payload it
  * carries. A wrong verb or a wrong payload is a compile error; `EVENT_VERBS`
  * below is the same list at runtime, so a test can walk every one.
  */
-export interface EventVerbs {
+interface EventVerbs {
   artifact: {
     created: ArtifactCreatedPayload;
     updated: ArtifactActorPayload;

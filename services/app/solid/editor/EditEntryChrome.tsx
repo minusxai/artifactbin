@@ -12,7 +12,7 @@ import { EDIT_BAR_H } from '@/lib/story-ui/edit-bar';
 const LOADING_CSS = `@keyframes mx-edit-loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
 @media (prefers-reduced-motion: reduce) { [data-mx-edit-loading] > span { animation: none !important; transform: none !important; width: 100% !important; opacity: .5; } }`;
 
-export interface EditEntryChromeProps {
+interface EditEntryChromeProps {
   /** Where the editor bar sits (under the app bar; 0 on a phone). */
   top: number;
   mode: 'light' | 'dark';

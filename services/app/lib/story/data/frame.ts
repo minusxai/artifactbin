@@ -27,7 +27,7 @@ import { webAssetsForSource } from '../assets/web-assets';
 import { servableDocument } from '@/lib/artifacts/servable';
 import { firstHeadingTitle } from '../../document/title';
 
-export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
+interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
   authorCss: string | null;
   authorScript: string | null;
@@ -61,7 +61,7 @@ async function build(stored: ArtifactRow): Promise<LiveFrame> {
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const css = row.format === 'markup' ? await currentStoryCss(meta, row.source) : meta.compiledCss ?? null;
   /*
-   * The SAME serve-time asset mapping the page applies (lib/story/assets/asset-url):
+   * The SAME serve-time asset mapping the page applies (lib/document/asset-url):
    * a reader adopting this frame and a reader reloading must see one document,
    * and an external image in a frame that skipped the mapping would be a URL
    * the document's own CSP refuses to load.

@@ -350,7 +350,7 @@ export async function webAssetsForSource(source: string | null | undefined): Pro
 }
 
 /** A refusal an agent can act on: the code, the URL it was about, and what to do. */
-export interface AssetWarning {
+interface AssetWarning {
   code: string;
   url: string;
   fix: string;
@@ -380,7 +380,7 @@ const FIXES: Readonly<Record<string, string>> = {
  * picture would have been. Refusing the publish instead would throw away a
  * whole document over one link.
  */
-export const assetWarningFor = (error: WebAssetRefused): AssetWarning =>
+const assetWarningFor = (error: WebAssetRefused): AssetWarning =>
   ({ code: error.code, url: error.url, fix: FIXES[error.code] ?? error.message });
 
 /** What a refresh moved, what it left alone, and what it could not do. */

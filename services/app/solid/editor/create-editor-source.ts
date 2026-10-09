@@ -31,7 +31,7 @@ interface EditorSourceApply {
   redraw?: boolean;
 }
 
-export interface EditorSource {
+interface EditorSource {
   source: Accessor<string>;
   /** Moves when the source was replaced from outside this editor's typing: a remote document, undo, redo. */
   revision: Accessor<number>;
@@ -46,7 +46,7 @@ export interface EditorSource {
   redo(): Promise<HistoryOutcome>;
 }
 
-export interface EditorSourceOptions {
+interface EditorSourceOptions {
   initial: string;
   /** Persistence: the save-less protocol's queue (solid/editor/create-live-edits). */
   live: { queue(change: PendingChange): void };

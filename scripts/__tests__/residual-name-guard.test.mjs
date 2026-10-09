@@ -114,7 +114,7 @@ const CREDENTIAL_SHAPED_IDENTIFIER = /\bapiKey(Env|Name|Var)[A-Za-z0-9_]*\b/;
 const CREDENTIAL_RULE_APPLIES = /^evals\//;
 
 /** Pure so a synthetic violation can prove the scan bites. `files` is a list of `[path, text]`. */
-export function retiredSurfaces(files) {
+function retiredSurfaces(files) {
   const found = [];
   for (const [file, text] of files) {
     if (NOT_SHIPPED.test(file)) continue;

@@ -7,8 +7,8 @@ export const BROWSER_SESSION_HEADER = 'x-mx-browser-session';
 /** Private app relay path used by the isolated session worker for supported font resources. */
 export const BROWSER_FONT_RESOURCE_PATH = '/api/internal/browser-font-resource';
 
-export interface BrowserSessionPage { page_id: string; url: string; artifact_id?: string }
-export interface BrowserSessionAttachment { mime: 'image/png' | 'image/jpeg'; base64: string }
+interface BrowserSessionPage { page_id: string; url: string; artifact_id?: string }
+interface BrowserSessionAttachment { mime: 'image/png' | 'image/jpeg'; base64: string }
 export interface BrowserSessionResult {
   session_id: string;
   execution_id?: string;

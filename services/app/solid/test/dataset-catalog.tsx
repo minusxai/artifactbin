@@ -31,7 +31,7 @@ export const catalog: DatasetCatalog = { kind: 'postgres', connection, defaultSc
 
 export const reply = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 
-export interface DatasetCall { url: string; body: any; method: string }
+interface DatasetCall { url: string; body: any; method: string }
 
 /** Everything a case may turn, in one object so it survives an import. */
 export const state = {

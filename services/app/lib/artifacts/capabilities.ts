@@ -42,7 +42,7 @@ export interface CapabilityActor {
 /** A user target (follow) rather than a document one. */
 interface UserTarget { userId: string }
 
-export type CapabilityTarget = ArtifactRow | UserTarget;
+type CapabilityTarget = ArtifactRow | UserTarget;
 
 const isArtifact = (target: CapabilityTarget): target is ArtifactRow => 'id' in target && 'visibility' in target;
 

@@ -16,7 +16,7 @@ import { pathToFileURL } from 'node:url';
 import { triggerPaths } from './page-speed-base.mjs';
 
 /** GitHub path-filter subset the workflow uses: `dir/**` prefixes and exact files. */
-export function matchesPath(file, pattern) {
+function matchesPath(file, pattern) {
   return pattern.endsWith('/**') ? file.startsWith(pattern.slice(0, -2)) : file === pattern;
 }
 

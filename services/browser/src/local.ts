@@ -97,7 +97,7 @@ function collectDrawings(input: { selector: string; collect: string; limit: numb
 }
 
 /** The SVG text of an `image/svg+xml` data URL (percent-encoded or base64). */
-export function svgFromDataUrl(src: string): string {
+function svgFromDataUrl(src: string): string {
   const comma = src.indexOf(',');
   const head = src.slice(0, comma);
   if (comma < 0 || !/^data:image\/svg\+xml(;charset=utf-8)?(;base64)?$/i.test(head)) throw new Error('Not an SVG data URL');
