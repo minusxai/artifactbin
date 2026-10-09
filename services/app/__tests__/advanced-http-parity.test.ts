@@ -96,15 +96,15 @@ describe('advanced HTTP parity',()=>{
     expect((await operationHttp(stranger.token, 'fork_artifact', { id: doc.data.id as string })).isError).toBe(false);
   });
 
-  it('a retired theme is a real HTTP result carrying the successor hint, not a schema error', async () => {
+  it('an unknown theme is a real HTTP result carrying the allowed names, not a schema error', async () => {
     const t = await mintToken('t');
-    // The zod schema deliberately does NOT enum the theme: a retired name must
-    // reach the publish pipeline, whose 400 names the successor — an agent's
+    // The zod schema deliberately does NOT enum the theme: an unknown name must
+    // reach the publish pipeline, whose 400 lists the live names — an agent's
     // only route out. A schema enum would answer with a generic zod error.
     const res = await operationHttp(t.token, 'create_artifact', { markup: '<p>x</p>', theme: 'classical' });
     expect(res.isError).toBe(true);
-    expect(res.data.error).toBe('retired_theme');
-    expect(String(res.data.hint)).toContain('manuscript');
+    expect(res.data.error).toBe('unknown_theme');
+    expect(res.data.allowed).toContain('manuscript');
   });
 
   it('edit_artifact speaks the concurrent-edit protocol: accept, then doc_changed with head to rebase on', async () => {

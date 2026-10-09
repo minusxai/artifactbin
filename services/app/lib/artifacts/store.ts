@@ -28,7 +28,7 @@ import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '../platform/analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from '../platform/config';
 import { assetByteQuotaExceeded } from '../serving/asset-quota';
-import { getDb, type Db, type Queryable } from '../platform/db';
+import { getDb, type Queryable } from '../platform/db';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { validateDatasetPolicyForRow } from '../datasets/policy/validation';
@@ -42,9 +42,8 @@ import type { StringEdit } from '../story/document/index';
 import { nodeIndex, stampNodeIds } from '../story/document/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } from '../story/data/parsed-artifact-metadata';
 import { warmPreparedPage } from '../story/prepared/prepared-page.server';
-import { DATA_SYNTAX_META, hasCurrentDataSyntax, previousEngineRestore } from '../story/data/data-syntax';
-import { inCurrentSyntax } from '../migrate/sqlite/stored';
-import { convertArtifactNow } from './sqlite-syntax-migration';
+import { DATA_SYNTAX_META } from '../story/data/data-syntax';
+import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from '@/lib/workspace/folders';
 import type { RefLoader, ResolvedRef } from '@/lib/story/data';
 import type { DatasetColumn } from '@/lib/story/data/data-tiers';
@@ -164,7 +163,7 @@ export async function createArtifact(
   atCreation: { reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
   if (input.format === 'markup' && input.source) {
-    input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
+    input = { ...input, source: stampNodeIds(input.source).source };
   }
   // A document is born in the current data syntax (lib/story/data/data-syntax).
   input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
@@ -359,7 +358,7 @@ async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void
   await tx.query(
     `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id, document)
      VALUES ($1, $2, $3, $4, $5, CASE WHEN $10::jsonb IS NULL THEN $6::text ELSE NULL END, $7, $8, $9, $10::jsonb) ON CONFLICT DO NOTHING`,
-    [current.id, current.version, current.title, current.description, current.format, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id,sourceStorage(current.format,current.source).document],
+    [current.id, current.version, current.title, current.description, current.format, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id,sourceStorage(current.format,current.source,false,current.version).document],
   );
   await tx.query('UPDATE artifacts SET document_archived_at=now() WHERE id=$1',[current.id]);
 }
@@ -415,7 +414,7 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
  * after its surrounding transaction commits.
  */
 export interface PreparedMarkupWrite {
- source:string;meta:Record<string,unknown>;ids:string[];aliases:Array<{legacyKey:string;nodeId:string;path:string}>;
+ source:string;meta:Record<string,unknown>;ids:string[];
  update:DocumentUpdate;
 }
 export async function commitNormalizedMarkup(
@@ -423,7 +422,7 @@ export async function commitNormalizedMarkup(
  normalized:PreparedMarkupWrite & {title?:string|null;description?:string|null;format?:ArtifactFormat},
 ):Promise<ArtifactRow>{
  const scope=actor?editorScope(actor):{val:current.id,where:(param:string)=>`id=${param}`};
- const committed=await commitDocumentUpdate(tx,actor,scope,current.id,{...normalized.update,aliases:normalized.aliases});
+ const committed=await commitDocumentUpdate(tx,actor,scope,current.id,normalized.update);
  if(!committed?.applied)throw new Error('artifact changed after identity preparation');
  return committed.row;
 }
@@ -432,8 +431,7 @@ export async function commitNormalizedMarkup(
 export async function publishMarkupForArtifact(current:ArtifactRow,source:string,metaOverride:Record<string,unknown>=current.meta):Promise<Response|PreparedMarkupWrite>{
  const db=await getDb();
  const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
- const aliases=await db.query<{legacy_key:string;source_id:string}>('SELECT legacy_key,source_id FROM artifact_node_aliases WHERE artifact_id=$1',[current.id]);
- const identity=stampNodeIds(source,{previousSource:current.source,reservedIds:reserved.rows.map(row=>row.source_id),legacyAliases:new Map(aliases.rows.map(row=>[row.legacy_key,row.source_id])),retireLegacyAliases:true});
+ const identity=stampNodeIds(source,{previousSource:current.source,reservedIds:reserved.rows.map(row=>row.source_id)});
  try{
   const document=current.document?.kind==='graph'?current.document:createDocumentGraph(current.source??'',current.version);
   const metadata={theme:(metaOverride.theme??null) as string|null,template:(metaOverride.template??null) as string|null,colorMode:(metaOverride.colorMode??null) as 'light'|'dark'|null};
@@ -442,7 +440,7 @@ export async function publishMarkupForArtifact(current:ArtifactRow,source:string
    if(!response.ok)throw response;
    return response.json();
   });
-  return {source:identity.source,meta:metaOverride,ids:identity.ids,aliases:identity.aliases,update};
+  return {source:identity.source,meta:metaOverride,ids:identity.ids,update};
  }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[`${error}`]},400);}
 }
 
@@ -463,48 +461,40 @@ interface VersionContent extends VersionSummary {
   document?: DocumentGraph | null;
   source: string | null;
   meta: Record<string, unknown>;
-  /** Written for the previous engine, and the converter cannot carry it over without a person (lib/migrate/sqlite/stored). */
-  previousEngine?: true;
 }
 
-/** One archived version WITH content (the editor's version viewer). */
+/**
+ * One archived version WITH content (the editor's version viewer). History
+ * stays as stored; a version the current code no longer reads throws
+ * UnservableDocument (lib/artifacts/servable) for the door to answer.
+ */
 async function getVersionScoped(scope: Scope, id: string, version: number): Promise<VersionContent | null> {
   const db = await getDb();
-  const owner = (await db.query<{ user_id: string | null; token_id: string }>(`SELECT user_id, token_id FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
-  if (!owner) return null;
+  const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
+  if (owned.rows.length === 0) return null;
   const row = await loadArtifactDocument<VersionContent>(db,
     `SELECT v.artifact_id, v.document, v.version, v.title, v.description, v.format, v.source, v.meta, u.username AS by, v.created_at
      FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id
      WHERE v.artifact_id = $1 AND v.version = $2`,
     [id, version],
   );
-  if (row?.format !== 'markup') return row;
-  // History stays as stored; it READS in the current data syntax, so whatever
-  // restores it (the browser and CLI restores submit these bytes whole) lands
-  // the converted document (lib/migrate/sqlite/stored).
-  const { id: _id, user_id: _user, token_id: _token, ...served } = await inCurrentSyntax({ ...row, id, user_id: owner.user_id, token_id: owner.token_id });
-  return served;
+  return row && servableDocument(row);
 }
 
-/** One archived version on the wire: `markup` carries the source; one written for the previous engine that needs a person says it cannot be restored as it stands. */
+/** One archived version on the wire: `markup` carries the source. */
 export function versionToWire(row: VersionContent): Record<string, unknown> {
-  const { source, previousEngine, ...rest } = row;
-  return { ...rest, markup: source, ...(previousEngine ? { previous_engine: previousEngineRestore(row.version) } : {}) };
+  const { source, ...rest } = row;
+  return { ...rest, markup: source };
 }
 
 /**
  * The head an EDITOR reads to edit (the CLI pull, the browser editor's load):
- * a document the migration has not reached is converted for real first
- * (lib/sqlite-syntax-migration convertArtifactNow), so its markup, graph,
- * edit id and state all describe the converted document the next patch is
- * prepared against, and an author never edits the previous syntax. One that
- * needs a person is read as it stands.
+ * one the current code no longer reads throws UnservableDocument
+ * (lib/artifacts/servable), so an author never edits a retired shape.
  */
 export async function getEditableArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
   const row = await getArtifactFor(actor, id);
-  if (row?.format !== 'markup' || hasCurrentDataSyntax(row.meta)) return row;
-  const outcome = await convertArtifactNow(await getDb(), id);
-  return outcome?.outcome === 'converted' || outcome?.outcome === 'unchanged' ? getArtifactFor(actor, id) : row;
+  return row && servableDocument(row);
 }
 
 /**
@@ -689,17 +679,8 @@ async function replaceScoped(
       ? stampNodeIds(input.source, {
           previousSource: current.source,
           reservedIds: (await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id),
-          retireLegacyAliases: true,
         })
       : null;
-    if(replacementIdentity) {
-      const aliases=new Map<string,string>();
-      for(const alias of replacementIdentity.aliases) {
-        const prior=aliases.get(alias.legacyKey);
-        if(prior && prior!==alias.nodeId) return {conflict:true,currentVersion:current.version};
-        aliases.set(alias.legacyKey,alias.nodeId);
-      }
-    }
 
     const operations=opts.annotationOps??[];
     const annotationRows=operations.length?(await tx.query<AnnotationRecord>('SELECT id,anchor_key,range FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND deleted_at IS NULL FOR UPDATE',[id])).rows:[];
@@ -756,13 +737,6 @@ async function replaceScoped(
         SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [id, updated.rows[0].version, JSON.stringify(ids)]);
       await tx.query(`UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id = ANY($3::text[]))`, [id, updated.rows[0].version, ids]);
       await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[id,ids]);
-      await tx.query(`WITH added AS (
-        INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version)
-        SELECT $1,x->>'legacyKey',x->>'nodeId',x->>'path',$3 FROM jsonb_array_elements($2::jsonb) x
-        ON CONFLICT DO NOTHING RETURNING legacy_key,source_id)
-        UPDATE annotations a SET anchor_key=x.source_id FROM added x
-        WHERE a.artifact_id=$1 AND a.anchor_key=x.legacy_key`,
-        [id,JSON.stringify(replacementIdentity?.aliases ?? []),updated.rows[0].version]);
     }
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
@@ -932,21 +906,6 @@ async function patchesSince(db: Queryable, id: string, baseVersion: number, head
   return patches;
 }
 
-/**
- * AN EDIT NEVER MIXES DATA SYNTAXES. A document the migration has not reached
- * (lib/story/data/data-syntax) refuses the edit's commit, and is converted first,
- * as its own version by no actor (lib/sqlite-syntax-migration
- * convertArtifactNow); the edit then meets the ordinary stale head, and the
- * client re-reads the converted document and prepares again. A document with
- * nothing to convert is marked in place, and one that needs a person is left
- * as it stands: for those the edit is committed after all. Null when the edit
- * should commit.
- */
-async function convertForEdit(db: Db, id: string): Promise<ArtifactRow | null> {
-  const outcome = await convertArtifactNow(db, id);
-  return outcome?.outcome === 'converted' ? getArtifactById(id) : null;
-}
-
 /** Clients own semantic validation and patch preparation. This boundary owns
  * authorization and the atomic operation/dependency/history commit. */
 export async function applyEditScoped(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
@@ -954,18 +913,11 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
   const scope = opts.scope ?? editorScope(actor);
   if(input.documentUpdate){
     const update=input.documentUpdate;
-    if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.aliases?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
+    if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
     if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
     const withholdDocument=!!input.patchEcho&&!opts.dryRun;
-    let committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,currentSyntax:!opts.dryRun,withholdDocument});
+    const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,withholdDocument});
     if(!committed)return null;
-    // Only an editor gets here with a head: the commit already applied the scope.
-    if(!committed.applied&&!opts.dryRun&&committed.head.format==='markup'&&!hasCurrentDataSyntax(committed.head.meta)){
-      const converted=await convertForEdit(db,id);
-      if(converted)return {applied:false,reason:'doc_changed',head:headOf(converted)};
-      committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{withholdDocument});
-      if(!committed)return null;
-    }
     if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
     if(!committed.applied&&committed.head.format!=='markup')return {applied:false,reason:'not_editable'};
     if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);

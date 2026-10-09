@@ -14,6 +14,7 @@
  * per document and reader, like the document's other outbound fetching (lib/accounts/auth).
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { refusingUnservable } from '@/lib/artifacts/servable';
 import { documentFetchRateLimited, requestOrSessionActor } from '@/lib/accounts';
 import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -45,7 +46,11 @@ const refusedStatus = (error: WebIngestError): number => {
   }
 };
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+export function GET(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  return refusingUnservable(() => fetchForDocument(request, ctx), NO_STORE);
+}
+
+async function fetchForDocument(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404, NO_STORE);
   const artifact = await getArtifactById(id);
@@ -58,7 +63,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   try { target = new URL(raw); } catch { return json({ error: 'invalid_url' }, 400, NO_STORE); }
   // This version's declared hosts, narrowed to the ones this reader trusts. On the document's own origin the reader's
   // "Allow once" grants arrive with the pages session (server/pages-host marks the request).
-  const row = await servedRow(artifact, null);
+  const row = servedRow(artifact, null);
   if (!admits(declaredCspExtensions(row.source).connect, target)) {
     return json({ error: 'undeclared_host', detail: `this document does not declare ${target.origin}` }, 403, NO_STORE);
   }

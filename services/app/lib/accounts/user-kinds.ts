@@ -1,7 +1,7 @@
 /**
  * WHAT A USER IS, read from the one column that says it.
  *
- * `users.kind` replaced the `is_guest` flag because a flag only has two values
+ * `users.kind` replaced a boolean guest flag because a flag only has two values
  * and there are three kinds of person: an `account` (a signed-in person with an
  * email), a `guest` (an anonymous browser that saved something and may claim it
  * by logging in) and a `testuser` (a throwaway second person an account minted

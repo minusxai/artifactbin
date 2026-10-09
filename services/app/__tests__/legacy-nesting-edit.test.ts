@@ -25,6 +25,8 @@ import { mintAccountToken } from '@/__tests__/harness';
 
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { getArtifactById } from '@/lib/artifacts';
+import { createDocumentGraph } from '@/lib/story/graph/document-graph';
 
 const harness = useAppHarness();
 
@@ -50,7 +52,7 @@ async function legacyRow(): Promise<{ id: string; token: string; editId: string 
   const doc = await created.json();
 
   const db = await harness.db();
-  await db.query('UPDATE artifacts SET document=NULL,source = $1 WHERE id = $2', [LEGACY, doc.id]);
+  await db.query('UPDATE artifacts SET source=NULL,document=$1::jsonb WHERE id = $2', [JSON.stringify(createDocumentGraph(LEGACY, 1, { preserveSource: true })), doc.id]);
   await db.query('UPDATE artifact_edits SET inserted = $1 WHERE artifact_id = $2', [LEGACY, doc.id]);
   return { id: doc.id, token, editId: doc.edit_id };
 }
@@ -58,10 +60,8 @@ async function legacyRow(): Promise<{ id: string; token: string; editId: string 
 describe('a document stored before the nesting rule existed', () => {
   it('is stored the old way, and still SERVES the fixed tree', async () => {
     const { id } = await legacyRow();
-    const db = await harness.db();
-    const { rows } = await db.query<{ source: string }>('SELECT source FROM artifacts WHERE id = $1', [id]);
     // Precondition: the fixture really is non-canonical, or this file proves nothing.
-    expect(rows[0].source).toContain('<p className="mx-auto mt-7 max-w-2xl text-justify">');
+    expect((await getArtifactById(id))!.source).toContain('<p className="mx-auto mt-7 max-w-2xl text-justify">');
 
     const html = await rawRoute(request(`/a/${id}/raw`), params({ id })).then((res) => res.text());
     expect(html).not.toMatch(/<p[^>]*class="[^"]*text-justify/);

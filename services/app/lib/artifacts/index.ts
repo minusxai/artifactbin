@@ -24,8 +24,6 @@ export { ANONYMOUS_CEILING, ROLE_ORDER, SHARE_ROLES, SHARE_ROLE_LABEL, atLeast, 
 export type { ArtifactRole, ShareRole } from './share-roles';
 export { getSharingFor, setAccessFor, updateSharing, updateSharingFor } from './sharing';
 export type { SharingPatch } from './sharing';
-export { runSqliteSyntaxMigrationBatch } from './sqlite-syntax-migration';
-export type { SqliteSyntaxMigrationOutcome } from './sqlite-syntax-migration';
 export { artifactState } from './state';
 export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, commitNormalizedMarkup, committedHeadsSettled, createArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor, publishMarkupForArtifact, replaceArtifactFor, revertArtifactFor, setArtifactQuotaForTests, setMetadataFor, versionToWire } from './store';
 export type { ArtifactSummary, EditOutcome } from './store';

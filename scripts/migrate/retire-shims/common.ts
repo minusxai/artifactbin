@@ -11,7 +11,7 @@
  *
  * `DATABASE_URL` is read through the platform config module (lib/platform/config),
  * which reads it once on first import — so app modules are imported only after
- * the environment is settled, as in scripts/migrate/sqlite. A dry run opens no
+ * the environment is settled (./local-services). A dry run opens no
  * transaction and writes nothing. Nothing here is on a boot path or in a workflow.
  */
 import { pathToFileURL } from 'node:url';
@@ -21,6 +21,8 @@ import type { Db } from '@/lib/platform/db';
 export interface BackfillOptions {
   /** False (the default everywhere) reports what would change and writes nothing. */
   apply: boolean;
+  /** legacy-anchors only: republish a document whose comments would stop resolving, detaching them. */
+  detachOrphanedAnchors?: boolean;
   /** Called once per changed id, as each change commits (dry run: as each would be made). */
   log?: (line: string) => void;
 }
@@ -74,17 +76,21 @@ export interface CliOptions {
   services?: boolean;
   /** The script has no write mode. */
   reportOnly?: boolean;
+  /** The script takes --detach-orphaned-anchors. */
+  detach?: boolean;
 }
 
 export async function runCli(name: string, run: (db: Db, options: BackfillOptions) => Promise<BackfillReport>, cli: CliOptions = {}): Promise<void> {
   const { values } = parseArgs({ options: {
     apply: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, objects: { type: 'string' }, 'live-objects': { type: 'boolean' },
+    'detach-orphaned-anchors': { type: 'boolean' },
   } });
+  if (values['detach-orphaned-anchors'] && !cli.detach) throw new Error(`${name} has no --detach-orphaned-anchors`);
   if (values.apply && values['dry-run']) throw new Error('--apply and --dry-run are exclusive');
   if (cli.reportOnly && values.apply) throw new Error(`${name} only reports; it has no --apply`);
   if (!process.env.DATABASE_URL) throw new Error(`usage: DATABASE_URL=<url> npx tsx scripts/migrate/retire-shims/${name}.ts [--apply]`);
   if (cli.services) {
-    const { useLocalServices } = await import('../sqlite/local-services');
+    const { useLocalServices } = await import('./local-services');
     await useLocalServices({ db: process.env.DATABASE_URL, objects: values.objects, liveObjects: !!values['live-objects'] });
   }
   // After the environment is set: the config module reads it on first import.
@@ -94,7 +100,7 @@ export async function runCli(name: string, run: (db: Db, options: BackfillOption
   console.error(`${name}: ${apply ? 'APPLY to' : 'dry run against'} ${describeTarget(DATABASE_URL)}`);
   const db = await getDb();
   try {
-    console.log(formatReport(await run(db, { apply, log: (line) => console.log(line) })));
+    console.log(formatReport(await run(db, { apply, detachOrphanedAnchors: !!values['detach-orphaned-anchors'], log: (line) => console.log(line) })));
   } finally {
     await db.close();
   }

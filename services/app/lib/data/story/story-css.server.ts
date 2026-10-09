@@ -335,8 +335,7 @@ export function storyCssCompileVersion(): string {
  * output, so any registry change (a retired theme, a new dark palette) makes
  * every older row stale HERE and it self-heals on first read — the memoized
  * compile bounds the cost to one in-process Tailwind run per hot document per
- * deploy. This is what lets stored rows carrying a retired theme name alias
- * forward: their frozen sheet predates the successor's blocks.
+ * deploy.
  */
 export async function currentStoryCss(
   meta: { compiledCss?: string | null; cssCompileVersion?: string | null },

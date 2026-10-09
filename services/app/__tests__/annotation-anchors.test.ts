@@ -2,13 +2,12 @@ import {getArtifactById,getVersionFor} from '@/lib/artifacts';
 import {documentEditBody,documentPublicationBody} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
- * THE ANCHOR LIVES IN THE DOCUMENT — `data-annotation-anchor="<key>"` on the annotated
- * node, stamped by the FIRST comment as a real edit through the protocol
- * (version bump, CAS, conflict check and all). Resolution is a lookup in the
- * CURRENT source, which is what makes it robust where spans were fragile:
- *  - a full-replace PUT that KEEPS the attribute keeps the annotation;
- *  - dropping the attribute orphans it — and orphaned is COMPUTED PER READ,
- *    so putting the text back (or reverting forward) re-anchors it;
+ * THE ANCHOR IS THE NODE'S OWN `id` — a comment is a relation to it, written
+ * without editing the document. Resolution is a lookup in the CURRENT source,
+ * which is what makes it robust where spans were fragile:
+ *  - a full-replace PUT that KEEPS the id keeps the annotation;
+ *  - dropping the id orphans it — and orphaned is COMPUTED PER READ,
+ *    so putting the node back (or reverting forward) re-anchors it;
  *  - revert below the comment's version orphans it honestly (the thing
  *    commented on does not exist there) and revert forward restores it.
  */
@@ -100,26 +99,26 @@ describe('the annotation anchor', () => {
     expect(a.anchor?.key).toBe(ann.anchor!.key);
   });
 
-  it('a full-replace PUT that KEEPS the attribute keeps the annotation — the fragile case the ids exist for', async () => {
+  it('a full-replace PUT that KEEPS the id keeps the annotation — the fragile case the ids exist for', async () => {
     const { t, doc, ann } = await setup();
     const key = ann.anchor!.key;
-    await put(t.token, doc.id, `<h1>All new</h1><div data-annotation-anchor="${key}">Revenue grew 34% in Q3, recomputed.</div>`);
+    await put(t.token, doc.id, `<h1>All new</h1><div id="${key}">Revenue grew 34% in Q3, recomputed.</div>`);
     const [a] = await list(t.token, doc.id);
     expect(a.orphaned).toBe(false);
     expect(a.anchor?.key).toBe(key);
     expect(a.snippet).toContain('34%'); // the snippet follows the node's current text
   });
 
-  it('dropping the attribute orphans; putting it back re-anchors — orphaned is a state, not a tombstone', async () => {
+  it('dropping the id orphans; putting it back re-anchors — orphaned is a state, not a tombstone', async () => {
     const { t, doc, ann } = await setup();
     const key = ann.anchor!.key;
-    await put(t.token, doc.id, '<p>regenerated from scratch, attribute lost</p>');
+    await put(t.token, doc.id, '<p>regenerated from scratch, id lost</p>');
     const [orphaned] = await list(t.token, doc.id);
     expect(orphaned.orphaned).toBe(true);
     expect(orphaned.anchor).toBeNull();
     expect(orphaned.snippet).toContain('40%'); // capture-time text — nothing current to derive from
 
-    await put(t.token, doc.id, `<p>restored</p><div data-annotation-anchor="${key}">Revenue grew 40% in Q3.</div>`);
+    await put(t.token, doc.id, `<p>restored</p><div id="${key}">Revenue grew 40% in Q3.</div>`);
     const [restored] = await list(t.token, doc.id);
     expect(restored.orphaned).toBe(false);
     expect(restored.anchor?.key).toBe(key);
@@ -140,7 +139,17 @@ describe('the annotation anchor', () => {
     expect(below.anchor?.key).toBe(ann.anchor!.key);
   });
 
-  it('a second comment on the same node reuses its key — no second attribute, no version bump', async () => {
+  it('a detached anchor (anchor_key NULL) reads as an unanchored comment: listed, orphaned, its words kept', async () => {
+    const { t, doc, ann } = await setup();
+    await (await harness.db()).query('UPDATE annotations SET anchor_key=NULL WHERE id=$1', [ann.id]);
+    const [detached] = await list(t.token, doc.id);
+    expect(detached.id).toBe(ann.id);
+    expect(detached.anchor).toBeNull();
+    expect(detached.orphaned).toBe(true);
+    expect(detached.snippet).toBe(ann.snippet);
+  });
+
+  it('a second comment on the same node reuses its key — no attribute, no version bump', async () => {
     const { t, doc, browserActor, ann } = await setup();
     const h = await head(t.token, doc.id);
     const second = await myCreateAnnotationRoute(
@@ -155,7 +164,7 @@ describe('the annotation anchor', () => {
     expect((after.markup.match(/data-annotation-anchor=/g) ?? []).length).toBe(0);
   });
 
-  it('deleting the last thread on a node cleans its attribute back out of the source', async () => {
+  it('deleting the last thread on a node leaves no attribute in the source', async () => {
     const { t, doc, browserActor, ann } = await setup();
     const del = await myDeleteAnnotationRoute(
       request(`/api/my/artifacts/${doc.id}/annotations/${ann.id}`, { method: 'DELETE', actor: browserActor }),

@@ -19,6 +19,7 @@
  */
 import {agentDiscovery} from '@/lib/serving';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
+import { refusingUnservable } from '@/lib/artifacts/servable';
 import { canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';
 import { trackEvent } from '@/lib/platform';
 import { requestOrSessionActor } from '@/lib/accounts';
@@ -86,7 +87,12 @@ const notFound = () =>
  */
 export interface StoryFragmentRequest { surface: StorySurface }
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: StoryFragmentRequest }) {
+/** A stored shape the current code no longer serves answers its 410 (lib/artifacts/servable), after the ACL below. */
+export function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: StoryFragmentRequest }): Promise<Response> {
+  return refusingUnservable(() => serveRaw(request, ctx));
+}
+
+async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: StoryFragmentRequest }): Promise<Response> {
   const { id } = await ctx.params;
   const domain = ctx.domain ?? null;
   // The document's own origin (APP__PAGES_HOST): server/pages-host marked this request when it routed it here.
@@ -285,9 +291,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       if (!key && !fragment && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: viewer?.userId ?? null });
 
       const meta = row.meta as { theme?: StoryDesignName | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
-      // Stored rows may still carry a retired theme name (aliased forward) and
-      // a sheet compiled under an older registry (recompiled) — both resolve
-      // at the door so the served document always speaks the live vocabulary.
+      // Stored rows may carry an unknown theme name (unthemed) and a sheet
+      // compiled under an older registry (recompiled) — both resolve at the
+      // door so the served document always speaks the live vocabulary.
       // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's.
       const design = resolveStoredStoryDesign(meta.theme, (byExportKey && !domain ? captureColor(request.url) : null) ?? meta.colorMode);
       const compiledCss = await currentStoryCss(meta, row.source);

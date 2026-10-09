@@ -151,21 +151,17 @@ it('sweeps the ones nobody deleted, and leaves the live ones alone', async () =>
   expect(await sweepTestUsers(), 'the sweep is idempotent').toBe(0);
 });
 
-it('backfills the kinds at boot: every guest keeps its drafts, and P12\'s leftovers are erased', async () => {
+it('erases P12\'s leftovers at boot, and every other guest keeps its drafts', async () => {
   const db = await harness.db();
   const guest = await createGuestOwner();
   const leftover = await createGuestOwner({ name: TESTUSER_LABEL });
   const draft = await publish((await mintToken('anon')).token, { markup: '<p>anonymous</p>' });
   await db.query('UPDATE artifacts SET user_id = $2 WHERE id = $1', [draft.id, leftover.userId]);
-
-  // The database as an older build left it: the flag set, the column not.
-  await db.query("UPDATE users SET kind = 'account', is_guest = true WHERE id = ANY($1::text[])", [[guest.userId, leftover.userId]]);
   await backfillUserKinds(db);
 
-  // Every guest is a guest again…
   expect((await getUserById(guest.userId))!.kind).toBe('guest');
-  // …and the throwaway second people the old design left behind are gone, with
-  // the artifacts nobody will ever claim.
+  // The throwaway second people the old design left behind are gone, with the
+  // artifacts nobody will ever claim.
   expect(await getUserById(leftover.userId)).toBeNull();
   expect(await getArtifactById(draft.id)).toBeNull();
   // Idempotent: the boot after this one changes nothing.

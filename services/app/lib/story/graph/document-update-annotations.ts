@@ -16,7 +16,7 @@ export function annotationSqlGuard(operations:string):string {
   AND NOT EXISTS(SELECT 1 FROM artifact_edits e CROSS JOIN LATERAL jsonb_array_elements(e.annotation_changes) r
    WHERE e.artifact_id=$1 AND r->>'operationId'=op->>'id' AND r->>'direction'='map'))`;
 }
-export function documentAnnotationSql(operations:string,aliases:string):string {
+export function documentAnnotationSql(operations:string):string {
  return `annotation_steps AS MATERIALIZED (
   SELECT row_number() OVER(ORDER BY op.ordinal,m.ordinal)::int AS step,op.value->>'id' AS operation_id,
    op.value->>'kind' AS kind,m.value AS mapping
@@ -28,9 +28,9 @@ export function documentAnnotationSql(operations:string,aliases:string):string {
    AND EXISTS(SELECT 1 FROM annotation_steps s WHERE s.operation_id=r->>'operationId')
  ), annotation_walk AS (
   SELECT a.id,0 AS step,a.anchor_key AS original_anchor,a.range AS original_range,
-   COALESCE((SELECT x->>'nodeId' FROM jsonb_array_elements(${aliases}::jsonb) x WHERE x->>'legacyKey'=a.anchor_key LIMIT 1),a.anchor_key) AS anchor,a.range AS range,'[]'::jsonb AS receipts
+   a.anchor_key AS anchor,a.range AS range,'[]'::jsonb AS receipts
   FROM annotations a WHERE a.artifact_id=$1 AND a.root_id IS NULL AND a.deleted_at IS NULL
-   AND EXISTS(SELECT 1 FROM updated) AND (EXISTS(SELECT 1 FROM annotation_steps) OR jsonb_array_length(${aliases}::jsonb)>0)
+   AND EXISTS(SELECT 1 FROM updated) AND EXISTS(SELECT 1 FROM annotation_steps)
   UNION ALL
   SELECT w.id,s.step,w.original_anchor,w.original_range,COALESCE(next.relation->>'anchor',w.anchor),
    CASE WHEN next.relation IS NULL THEN w.range ELSE next.relation->>'range' END,

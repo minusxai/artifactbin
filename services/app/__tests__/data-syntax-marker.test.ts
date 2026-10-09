@@ -46,7 +46,7 @@ it('marks a whole-document write of an unmarked document',async()=>{
  expect((await getArtifactById(id))!.meta.dataSyntax).toBe(2);
 });
 
-it('keeps an unmarked document unmarked through a partial commit (the edit door converts first: unmigrated-document-serving)',async()=>{
+it('keeps an unmarked document unmarked through a partial commit (its reads refuse it: lib/artifacts/servable)',async()=>{
  const {actor,id}=await created('<main id="root"><p id="a">Alpha</p></main>');
  const {base}=await unmark(id);
  const update=prepareClientDocumentUpdate(base,{operations:[{kind:'setText',path:[0,0,0],value:'Partial'}]});

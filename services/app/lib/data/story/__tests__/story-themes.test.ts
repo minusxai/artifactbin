@@ -10,12 +10,12 @@
  *    theme (dark after light, same specificity — mode is a class flip, never a recompile),
  *  - mode resolution: the author's colorMode wins, the theme's declared defaultMode is the
  *    fallback, light is the floor,
- *  - retirement: classical/broadsheet/nocturne alias forward for stored rows.
+ *  - stored rows: a live name resolves, an unknown one (classical, retired) renders unthemed.
  */
 import { describe, it, expect } from 'vitest';
 import {
   STORY_THEMES, STORY_THEME_NAMES, getStoryTheme, storyThemeCss,
-  storyThemeDefaultMode, resolveStoryMode, RETIRED_STORY_THEMES, resolveStoredStoryDesign,
+  storyThemeDefaultMode, resolveStoryMode, resolveStoredStoryDesign,
 } from '../story-themes';
 import { skillTree } from '@/lib/skills';
 import { renderDoc } from '@/test/helpers/skill-docs';
@@ -61,10 +61,8 @@ describe('STORY_THEMES registry', () => {
       expect(skillTree().get(`artifactbin/references/themes-${name}.md`), `${name} guide retired from teaching`).toBeUndefined();
       expect(legacy, `${name} named as a legacy value`).toContain(`\`${name}\``);
     }
-    for (const name of Object.keys(RETIRED_STORY_THEMES)) {
-      expect(skillTree().get(`artifactbin/references/themes-${name}.md`), `${name} guidance retired`).toBeUndefined();
-      expect(legacy).not.toContain(`\`${name}\``);
-    }
+    expect(skillTree().get('artifactbin/references/themes-classical.md'), 'classical guidance retired').toBeUndefined();
+    expect(legacy).not.toContain('`classical`');
   });
 
   it('every theme defines the FULL light contract and the full dark color contract', () => {
@@ -203,23 +201,15 @@ describe('mode resolution (dual-palette themes)', () => {
   });
 });
 
-describe('retired themes alias forward', () => {
-  it('the alias table names a live successor and a hint for each retired theme', () => {
-    expect(Object.keys(RETIRED_STORY_THEMES).sort()).toEqual(['classical']);
-    for (const [name, r] of Object.entries(RETIRED_STORY_THEMES)) {
-      expect(STORY_THEME_NAMES, `${name} successor live`).toContain(r.successor);
-      expect(r.hint).toContain(r.successor);
-    }
-  });
-
-  it('resolveStoredStoryDesign: retired names resolve, colorMode carries, nocturne implies dark only when unset', () => {
-    expect(resolveStoredStoryDesign('classical', null)).toEqual({ theme: 'manuscript', colorMode: null });
-    // broadsheet and nocturne came back as design systems: a stored row reaches the system, not an alias.
+describe('stored theme names', () => {
+  it('resolveStoredStoryDesign: live names and design systems resolve, colorMode carries, anything else is unthemed', () => {
+    // broadsheet and nocturne came back as design systems: a stored row reaches the system.
     expect(resolveStoredStoryDesign('broadsheet', 'dark')).toEqual({ theme: 'broadsheet', colorMode: 'dark' });
     expect(resolveStoredStoryDesign('nocturne', null)).toEqual({ theme: 'nocturne', colorMode: null });
     expect(resolveStoredStoryDesign('terminal', null)).toEqual({ theme: 'terminal', colorMode: null });
     expect(resolveStoredStoryDesign(null, 'dark')).toEqual({ theme: null, colorMode: 'dark' });
-    // An unknown junk name is left null rather than invented.
+    // A retired or junk name is left null rather than aliased or invented.
+    expect(resolveStoredStoryDesign('classical', null)).toEqual({ theme: null, colorMode: null });
     expect(resolveStoredStoryDesign('bogus', null)).toEqual({ theme: null, colorMode: null });
   });
 

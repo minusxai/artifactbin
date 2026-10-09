@@ -18,11 +18,10 @@
  * declared `defaultMode` is the fallback, and the READER may flip it at view time (the served
  * document's mode toggle) — see {@link resolveStoryMode}.
  *
- * RETIRED themes (classical) live only in {@link RETIRED_STORY_THEMES}: stored
- * rows alias forward through {@link resolveStoredStoryDesign}; publish rejects
- * the names with a hint. `broadsheet` and `nocturne` were retired themes too;
- * since 3 October 2026 they are DESIGN SYSTEMS (./story-systems), so a stored
- * row carrying either name renders in that system rather than in the alias.
+ * A name outside the registry is UNKNOWN: publish rejects it with the allowed
+ * list, and a stored row naming one renders unthemed ({@link resolveStoredStoryDesign}).
+ * `broadsheet` and `nocturne` were retired themes once; since 3 October 2026
+ * they are DESIGN SYSTEMS (./story-systems).
  *
  * FONTS — families vs packaged assets: a theme family must be one the font catalog serves
  * (lib/data/story/story-fonts.ts, generated at install time from the @fontsource packages by
@@ -511,28 +510,16 @@ export const STORY_THEMES: StoryTheme[] = [
   },
 ];
 
-/** Registry lookup by name (undefined for unknown/null/retired). */
+/** Registry lookup by name (undefined for unknown/null). */
 export function getStoryTheme(name: string | null | undefined): StoryTheme | undefined {
   return STORY_THEMES.find(t => t.name === name);
 }
 
 /**
- * RETIRED themes — the ONLY place their names survive as values. Stored rows
- * alias forward through {@link resolveStoredStoryDesign}; publish rejects the
- * name with `hint`. `impliedColorMode` fires only when the row pinned no
- * colorMode: nocturne was a dark design, so its successor must open dark.
- */
-export const RETIRED_STORY_THEMES: Record<string, { successor: StoryThemeName; impliedColorMode?: 'dark'; hint: string }> = {
-  classical: { successor: 'manuscript', hint: "theme 'classical' is retired — use 'manuscript' (the serif editorial theme)" },
-};
-
-/**
- * Read-path aliasing for STORED rows: a retired theme name resolves to its
- * successor (with the implied mode when the row pinned none); an unknown junk
- * name resolves to unthemed rather than being invented. Every serving surface
- * (raw route, events frames, the app page) passes stored meta through here, so
- * a pre-retirement row keeps rendering — and self-heals to the new vocabulary
- * on its owner's next save.
+ * The design a STORED row renders in: a live theme or design system by its
+ * name; an unknown junk name resolves to unthemed rather than being invented.
+ * Every serving surface (raw route, events frames, the app page) passes stored
+ * meta through here.
  */
 export function resolveStoredStoryDesign(
   theme: string | null | undefined,
@@ -540,8 +527,6 @@ export function resolveStoredStoryDesign(
 ): { theme: StoryDesignName | null; colorMode: 'light' | 'dark' | null } {
   const mode = colorMode ?? null;
   if (theme == null) return { theme: null, colorMode: mode };
-  const retired = RETIRED_STORY_THEMES[theme];
-  if (retired) return { theme: retired.successor, colorMode: mode ?? retired.impliedColorMode ?? null };
   const live = getStoryTheme(theme) ?? getStorySystem(theme);
   return live ? { theme: live.name, colorMode: mode } : { theme: null, colorMode: mode };
 }

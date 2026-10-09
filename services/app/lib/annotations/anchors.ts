@@ -2,13 +2,13 @@
  * THE ANNOTATION ANCHOR AS IT LIVES IN THE MARKUP — pure, parser only, no DB.
  *
  * A thread is pinned to the node's own `id` (lib/story/document/node-ids stamps one on
- * every element through the ordinary edit protocol), and
- * `data-annotation-anchor="<key>"` is the RETIRED spelling stored rows may
- * still name — lib/annotations reads `id` first and falls back to it.
+ * every element through the ordinary edit protocol), and nothing else.
+ * `data-annotation-anchor="<key>"` is the RETIRED spelling: archived versions may
+ * still carry it, where it is an inert attribute that anchors nothing.
  *
- * The attribute lives here because lib/artifacts' FORK must strip every one of
- * them and may not import lib/annotations: comments belong to the original
- * document's life, not to its content, so a copy starts with none.
+ * The attribute lives here because lib/artifacts' FORK strips every one of
+ * them and may not import lib/annotations: a copy starts with no trace of the
+ * original's comments.
  *
  * A pure module is what keeps that from being an import cycle (lib/annotations
  * already imports lib/artifacts), the same reason lib/share-roles exists.
@@ -48,10 +48,9 @@ export function sourceWithoutAnchors(source: string): string {
 
 // ── the anchor, read against the parsed source (the server's comments and the offline file's) ──
 
-/** A node's anchor key: its own `id`, else the retired attribute; null when it carries neither. */
+/** A node's anchor key: its own `id`; null when it carries none. */
 export const anchorKeyOf = (node: JsxElement): string | null => {
-  const attr = node.attributes.find((a) => a.name === 'id')
-    ?? node.attributes.find((a) => a.name === ANNOTATION_ANCHOR_ATTR);
+  const attr = node.attributes.find((a) => a.name === 'id');
   return attr && attr.value.static && typeof attr.value.json === 'string' ? attr.value.json : null;
 };
 

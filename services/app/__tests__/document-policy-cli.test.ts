@@ -1,4 +1,5 @@
 import {expect,it} from 'vitest';
+import {createDocumentGraph} from '@/lib/story/graph/document-graph';
 import {setDocumentEditorPolicy} from '@/lib/artifacts';
 import {Hono} from 'hono';
 import {createAuthHost} from '@artifactbin/auth';
@@ -24,7 +25,7 @@ it('ordinary afbin pull/push works across owners through proxy and real handlers
  const user=await createUser({email:'admin@example.com'}),token=await mintToken('mxmx_test_admin_cli',user.id);await claimToken(user.id,token.token);
  setDocumentEditorPolicy(actor=>actor.userId===user.id && actor.emailVerified===true);
  const db=await harness.db();
- await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,format,visibility,edit_id) VALUES ('abc123','tok_owner','usr_owner','Private document','<p id="intro">Before</p>','markup','private','base-edit')`);
+ await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,document,meta,format,visibility,edit_id) VALUES ('abc123','tok_owner','usr_owner','Private document',$1::jsonb,'{"dataSyntax":2}','markup','private','base-edit')`,[JSON.stringify(createDocumentGraph('<p id="intro">Before</p>',1))]);
  let identity={userId:user.id,email:user.email,emailVerified:true};
  const app=new Hono();
  app.get('/api/capabilities',c=>capabilities(c.req.raw));

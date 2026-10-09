@@ -49,7 +49,7 @@ const isArtifact = (target: CapabilityTarget): target is ArtifactRow => 'id' in 
 /**
  * What the actor IS, for this decision. `none` is an unauthenticated request or
  * a bare anonymous token; a `userId` with no row at all reads as an account,
- * which is the polarity the retired `is_guest` flag had — the product does not
+ * which is the polarity the retired guest flag had — the product does not
  * produce such an id, and inventing a refusal for it would be a silent change.
  */
 type ActorKind = 'none' | 'account' | 'guest' | 'testuser';

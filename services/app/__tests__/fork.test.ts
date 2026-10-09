@@ -104,30 +104,28 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect(source.edit_id).toBe(w.doc.edit_id);
   });
 
-  it('does not certify grandfathered source when copying a fork', async () => {
+  it('refuses to copy a document stored in a retired shape, by name', async () => {
     const w = await world();
     const db = await getDb();
     await db.query("UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1", [w.doc.id, '<p id="old">Legacy</p>']);
     asSession(w.bob);
     const response = await fork(w.doc.id);
-    expect(response.status).toBe(201);
-    const copy = await response.json();
-    const row = (await db.query<{document:{schema:number};source:string|null}>('SELECT document,source FROM artifacts WHERE id=$1',[copy.id])).rows[0]!;
-    expect(row.source).toBeNull();
-    expect(row.document.schema).toBe(1);
+    expect(response.status, await response.clone().text()).toBe(410);
+    expect(((await response.json()) as { error: string }).error).toBe('unservable_document');
   });
 
-  it('legacy annotation metadata does not travel, while source identity and prose do', async () => {
+  it('the retired anchor attribute does not travel, while source identity and prose do', async () => {
     const w = await world();
     const source = await head(w.doc.id);
-    expect(source.source).not.toContain('data-annotation-anchor');
-    expect(source.source).toContain('id="a1b2c3d4e"');
+    // Inert on the original: publish keeps it as written, and the node has its own id.
+    expect(source.source).toMatch(/<p data-annotation-anchor="a1b2c3d4e" id="([A-Za-z0-9]+)">hello<\/p>/);
+    const id = /data-annotation-anchor="a1b2c3d4e" id="([A-Za-z0-9]+)"/.exec(source.source!)![1];
     asSession({ id: w.bob.id, email: w.bob.email });
     const res = await fork(w.doc.id);
     expect(res.status, await res.clone().text()).toBe(201);
     const copy = await head(((await res.json()) as { id: string }).id);
     expect(copy.source).not.toContain('data-annotation-anchor');
-    expect(copy.source).toContain('<p id="a1b2c3d4e">hello</p>');
+    expect(copy.source).toContain(`<p id="${id}">hello</p>`);
     expect(copy.source).toContain('Payroll');
   });
 
