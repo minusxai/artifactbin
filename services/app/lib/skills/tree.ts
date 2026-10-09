@@ -291,6 +291,11 @@ export function loadSkillSources(root = path.resolve(process.cwd(), 'skills')): 
     for (const entry of readdirSync(full)) {
       const entryPath = path.join(full, entry);
       if (statSync(entryPath).isDirectory()) {
+        if(entry==='scripts'){
+          const scripts=readdirSync(entryPath);
+          if(scripts.some(file=>file!=='credentials.mjs'||!statSync(path.join(entryPath,file)).isFile()))throw new Error(`skills/${dir}/scripts: only the generated credentials.mjs helper is supported`);
+          continue;
+        }
         if (entry !== 'references') throw new Error(`skills/${dir}/${entry}: only a references/ folder may nest inside a skill`);
         for (const file of readdirSync(entryPath)) {
           if (!file.endsWith('.md')) continue;

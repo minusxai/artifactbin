@@ -390,7 +390,7 @@ describe('the bundled teaching and the manual', () => {
     assert.ok(topic.join('').includes(`${self}/chat/install-node.sh`));
     assert.doesNotMatch(topic.join(''),/__AFBIN_SERVER__/);
     const http:string[]=[];
-    assert.equal(await runCli(['help','http-api'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:false,color:false,stdout:(x:string)=>http.push(x),stderr:()=>{},fetch:async()=>assert.fail('HTTP reference help must stay offline')}),0);
+    assert.equal(await runCli(['help','http-auth'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:false,color:false,stdout:(x:string)=>http.push(x),stderr:()=>{},fetch:async()=>assert.fail('HTTP reference help must stay offline')}),0);
     const guide=http.join('');
     assert.ok(guide.includes('Origin: '+self));
     assert.ok(guide.includes('/api/auth/email-otp/send-verification-otp'));

@@ -11,17 +11,11 @@
  * line is the blurb (`agentBlurb`) still used elsewhere. Read once per process; the file ships
  * in the image beside `skills/`.
  */
-import {readFileSync} from 'node:fs';
-import path from 'node:path';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import {AGENT_HELP_TITLE,type AgentDiscovery} from './agent-discovery-tags';
 export {AGENT_HELP_TITLE,agentDiscovery,agentDiscoveryHead,type AgentDiscovery} from './agent-discovery-tags';
-let source:string|null=null;
-export function llmsSource():string{
- return source??=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/llms.txt'),'utf8');
-}
-/** The one sentence that says what artifactbin is: line 1 of llms.txt. */
-export function agentBlurb():string{return llmsSource().split('\n')[0]!.trim();}
+/** Stable product blurb; the shared skill root opens with its reading instruction. */
+export function agentBlurb():string{return 'artifactbin publishes editable JSX artifacts, datasets and media.';}
 /** The pointer again, as the page's last line: what a tail-keeping reader sees. */
 export function agentDiscoveryTail(help:AgentDiscovery):string{
  return `<!-- ${AGENT_HELP_TITLE}: ${escapeHtml(help.url)}. ${escapeHtml(help.instruction)} -->`;

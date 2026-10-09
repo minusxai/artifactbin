@@ -68,3 +68,6 @@ services/app/public/libraries/
 
 # the shared island build (scripts/build/build-islands.mjs) — content-addressed chunks + manifest
 **/public/islands/
+
+# Bundled shared skill credential runtime (generate:teaching)
+services/app/skills/artifactbin/scripts/credentials.mjs

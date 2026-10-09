@@ -6,16 +6,13 @@ order: 2
 ---
 ## Read first
 
-Use `<DataTable>` with `<Column>` for row templates. An editor in a Column with
-`run="$mutation"` saves its cell: the mutation reads the new value as `$_value`
-and the row as `$_row.<column>`. See [data](markup-data.md) for queries and
-controls, and [apps](apps.md) for who may write.
+`<DataTable>`/`<Column>` supplies row templates. `run="$mutation"` saves a cell with `$_value` and `$_row.<column>`. See [data](markup-data.md) for queries/controls and [apps](apps.md) for write access.
 
 [User fields](databases-users.md).
 
 ## Contents
 
-Example · Scope and identity · Committing · References and authorization.
+Example · Identity · Committing · Authorization.
 
 ## Seven roadmap editors
 

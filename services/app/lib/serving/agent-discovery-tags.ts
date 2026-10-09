@@ -19,7 +19,7 @@ export const afbinInstallCommand=(base:string):string=>`curl -fsSL ${quoted(`${o
 export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${origin(base)}/chat/install.ps1`,true)} | Invoke-Expression`;
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=origin(base);
- return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`};
+ return {url:`${o}/llms.txt`,instruction:`CLI: npx --yes @afbin/cli@latest setup${afbinServerFlag(o)} (Windows: npx.cmd). HTTP: reuse artifactbin skill or install ${o}/skills/artifactbin.zip; read ${o}/llms.txt. Authenticate as the recipient with artifact access.`};
 }
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="${escapeHtml(help.instruction)}">`;

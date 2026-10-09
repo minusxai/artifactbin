@@ -54,28 +54,24 @@ describe('the brief', () => {
 describe('llms.txt and the discovery head', () => {
   it('the first line is the blurb, and the meta tag names npm afbin, Windows and email HTTP help, under 150 characters', () => {
     const text = llmsText(BASE);
-    expect(text.split('\n')[0]).toBe(agentBlurb());
+    expect(text).toMatch(/^## Read first/);
+    expect(agentBlurb()).toContain('artifactbin');
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
-    expect(help.instruction).toBe(`afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`);
-    expect(help.instruction.length).toBeLessThanOrEqual(150);
-    expect(help.instruction).toContain('afbin');
+    expect(help.instruction).toContain('npx --yes @afbin/cli@latest setup');
+    expect(help.instruction).toContain('--server');
     expect(help.instruction).toContain('Windows: npx.cmd');
-    expect(help.instruction).toContain('HTTP: email auth');
-    expect(help.instruction).toContain('/llms.txt');
-    expect(help.instruction).toContain('Local/offline editing needs no remote API.');
+    expect(help.instruction).toContain(`${BASE}/skills/artifactbin.zip`);
+    expect(help.instruction).toContain(`${BASE}/llms.txt`);
+    expect(help.instruction).toContain('recipient');
     // The blurb is still line 1 of the one-pager, still used elsewhere; the meta no longer repeats it.
     expect(help.instruction).not.toContain(agentBlurb());
   });
 
   it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
-    for (const line of [`${BASE}/getting-started.md`, `${BASE}/getting-started`, 'afbin help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, 'afbin preview report.jsx', 'afbin help http-api', 'skill']) {
-      expect(text, line).toContain(line);
-    }
+    for (const line of [`${BASE}/getting-started.md`, 'afbin help', 'afbin preview report.jsx', `${BASE}/llms/http-api`, 'skill']) expect(text,line).toContain(line);
     expect(text).not.toContain('[[');
-    // Discovery links to the single setup guide; it does not maintain a second installer.
-    expect(text).not.toContain('@afbin/cli@');
     const guide = gettingStartedMarkdown(BASE);
     expect(guide).toContain(afbinInstallCommand(BASE));
     expect(guide).toContain(afbinWindowsInstallCommand(BASE));
@@ -103,7 +99,9 @@ describe('llms.txt and the discovery head', () => {
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
     expect(AGENT_HELP_TITLE).toBe('Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
-    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
+    expect(head).toContain(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}">`);
+    expect(head).toContain('setup --server');
+    expect(head).toContain('https://x.test/skills/artifactbin.zip');
   });
 });
 

@@ -6,8 +6,7 @@ order: 1
 ---
 ## Read first
 
-In `<Helmet>`: `<Import>` datasets, `<Value>` state, `<Query>` reads and `<Mutation>`
-writes. The view binds names: `data="$query"`, `value="$value"`, `run="$mutation"`; no SQL.
+`<Helmet>` holds datasets/state/reads/writes via `<Import>`/`<Value>`/`<Query>`/`<Mutation>`. Views bind `data="$query"`, `value="$value"`, `run="$mutation"`; no SQL.
 
 ```jsx
 <Helmet>
@@ -32,36 +31,23 @@ SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing]
 ## Declarations (Helmet only)
 
 - `<Import name="sales" src="ref:<id>" />` — a stored dataset or folder. SQL reads
-  it as `sales.rows` (a multi-table dataset: `sales.<table>`). Get the id from
-  `afbin add --json` or `afbin push`.<!--bundle:skip--> A FOLDER import
-  (`<Import name="kids" src="ref:<folderId>" />`) reads its children as `kids.rows`,
-  which a document can list with `<Files data="$children" variant="icons|tiles" />`.
-  Columns `id title format level visibility updated_at url thumbnail views sparkline`,
-  computed per VIEWER: a stranger gets the `public` children.<!--/bundle:skip-->
+  it as `sales.rows` (a multi-table dataset: `sales.<table>`). IDs: `afbin add --json` / `afbin push`.<!--bundle:skip--> Folder imports read children as `kids.rows`; list with `<Files data="$children" variant="icons|tiles" />`. Columns `id title format level visibility updated_at url thumbnail views sparkline`; per VIEWER, strangers see only public children.<!--/bundle:skip-->
 - `<Value name type default />` — a page value the reader changes. `type`:
   `string | number | boolean | date | user`; no default = `null`, so
-  `$region is null` means "all".<!--bundle:skip--> A value TRAVELS IN THE LINK:
-  `?$region=EU` seeds it and a reader's pick rewrites it, so a pre-filtered link
-  is yours to hand over. `url={false}` keeps a
-  form field or flag out of the address both ways.<!--/bundle:skip-->
+  `$region is null` means "all".<!--bundle:skip--> `?$region=EU` seeds state; picks rewrite the link. `url={false}` excludes it both ways.<!--/bundle:skip-->
 - `<Value name="tiny" type="table" value={[{…}]} />` — inline rows; SQL reads
   `tiny`, the view binds `$tiny`. Local mutations may change them until reload.
   [Local state](markup-state.md).
 - `<Query name>{`select …`}</Query>` — a function `(params) → rows`: one SELECT.
   `$name` is a page value, bound, never spliced. A query reads imports, table
-  values and other queries by name, in any order (cycles are refused). Checked
-  at publish against the real columns; a mistake names the column and what to
-  write instead.<!--bundle:skip--> A result shows its first [[ displayRows ]] rows and pages the rest;
+  values and other queries by name, in any order (cycles are refused). Publish checks real columns; errors name the correction.<!--bundle:skip--> A result shows its first [[ displayRows ]] rows and pages the rest;
   a query stops at 10,000 rows and 5 s.<!--/bundle:skip--> Dates are ISO text; the
   library adds `date_add`, `date_part`, `date_format`, `date_series`,
   `to_timezone`, `dayname` and more ([SQL](markup-sql.md)).
 - `<Query name source="ref:<id>">` — ONLY for a connected Postgres dataset:
   Postgres SQL, run inside that database. [Catalogs](databases.md).
 - `<Mutation name expectedAffected={1} reset="note">{`insert into sales.rows …`}</Mutation>`
-  — an action `(args) → result`: one INSERT, UPDATE or DELETE on one imported
-  table or table value. It runs only when a control runs it. A plain `$name` is
-  the page value of that name (a control's `args=` can pass another); built-ins
-  come from context. `expectedAffected` refuses a write that changed another
+  — `(args) → result`: one INSERT/UPDATE/DELETE on one import or table value, run by a control. `$name` reads page state unless control `args=` overrides it; built-ins come from context. `expectedAffected` refuses a write that changed another
   number of rows; `reset` returns those values to their defaults after it commits.
 
 After-write notifications: [notification queries](markup-notifications.md).
@@ -78,9 +64,7 @@ Markup reads `$_me.id` too, and `$_row.<column>` inside a `<For>` or `<Column>`.
 A guest's `$_me.id` is null, so a mutation that binds it needs a signed-in
 reader. The current time is `$_now`, never `'now'`. A new row's id: `uuid()`.
 <!--bundle:skip-->
-Where a query runs is not yours to choose: in the reader's browser when the
-data it reads may be held there, otherwise on the server. Both run the same
-SQLite with the same functions and the same `$_now`, so results are the same.
+Queries run in the browser if its data may be held there, otherwise server-side; both use identical SQLite/functions/`$_now`.
 <!--/bundle:skip-->
 
 First read [chart authoring](markup-data-authoring.md).

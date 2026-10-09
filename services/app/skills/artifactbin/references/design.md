@@ -6,8 +6,7 @@ description: >-
 ## Read first
 
 <!--bundle:skip-->
-Make deliberate choices. The kit supplies components; the design system
-supplies their appearance. Use only what the content needs.
+Choose deliberately; the kit supplies components, the design system their appearance. Use only needed content.
 
 <!--/bundle:skip-->
 Three choices, in this order, each from its own reference: the PAGE TYPE

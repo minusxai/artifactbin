@@ -11,7 +11,7 @@ import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. If afbin is not installed, install and set it up first: https://x.test/getting-started.md\n\n---\n\nLet's build an artifact for ...";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin or HTTP: https://x.test/getting-started.md. Sign in as the recipient with edit access; the sender's login is not transferred.\n\n---\n\nLet's build an artifact for ...";
 
 describe('the tokenless paste', () => {
   it('offers one full installer command per platform on the selected host', () => {
@@ -33,7 +33,7 @@ describe('the tokenless paste', () => {
     const guide = gettingStartedMarkdown(B);
     expect(guide).toContain('If afbin is not installed');
     expect(guide).toContain('Run afbin help to discover everything you can do');
-    expect(guide).toContain('Approve access in your browser');
+    expect(guide).toContain('Authenticate as the recipient');
     expect(guide).toContain("afbin auth 'ARTIFACT_URL' --server 'https://x.test'");
   });
   it.each(['https://x.test', 'http://127.0.0.1:45407/'])('selects the handed-over server for every remote command: %s', (base) => {
@@ -47,7 +47,7 @@ describe('the tokenless paste', () => {
   });
   it('keeps the handoff concise and leaves a separated brief for the user', () => {
     const prompt = existingPaste('http://127.0.0.1:45407', ID);
-    expect(prompt.length).toBeLessThan(250);
+    expect(prompt.length).toBeLessThan(350);
     expect(prompt).toContain("\n\n---\n\nLet's build an artifact for " );
   });
   it('a trailing slash on the base does not double up', () => {

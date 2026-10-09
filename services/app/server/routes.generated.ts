@@ -144,8 +144,10 @@ import * as r140 from '@/app/health/route';
 import * as r141 from '@/app/llms.txt/route';
 import * as r142 from '@/app/llms/[topic]/route';
 import * as r143 from '@/app/people/[id]/route';
-import * as r144 from '@/app/tiles/[...tile]/route';
-import * as r145 from '@/app/workspace/[id]/route';
+import * as r144 from '@/app/skills/artifactbin.zip/route';
+import * as r145 from '@/app/skills/artifactbin/credentials.mjs/route';
+import * as r146 from '@/app/tiles/[...tile]/route';
+import * as r147 from '@/app/workspace/[id]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -293,6 +295,8 @@ export const ROUTES: RouteEntry[] = [
   { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r141 },
   { path: "/llms/:topic", dir: "/llms/[topic]", methods: ["GET"], module: r142 },
   { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r143 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r144 },
-  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r145 },
+  { path: "/skills/artifactbin.zip", dir: "/skills/artifactbin.zip", methods: ["GET"], module: r144 },
+  { path: "/skills/artifactbin/credentials.mjs", dir: "/skills/artifactbin/credentials.mjs", methods: ["GET"], module: r145 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r146 },
+  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r147 },
 ];

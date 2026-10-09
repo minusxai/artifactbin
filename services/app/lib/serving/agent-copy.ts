@@ -13,7 +13,7 @@ export function existingPaste(base: string, artifactId: string, template?: strin
   const origin = base.replace(/\/$/, '');
   const pageType = template === 'doc' ? 'document' : template === 'scrolly' ? 'scrollytelling page'
     : ARTIFACT_STARTERS.find(starter => starter.template === template)?.label.toLowerCase() ?? 'artifact';
-  return `Edit my artifact at ${artifactUrl(base, artifactId)} in place.${template ? ` Keep template: ${template}.` : ''} If afbin is not installed, install and set it up first: ${origin}/getting-started.md
+  return `Edit my artifact at ${artifactUrl(base, artifactId)} in place.${template ? ` Keep template: ${template}.` : ''} Use afbin or HTTP: ${origin}/getting-started.md. Sign in as the recipient with edit access; the sender's login is not transferred.
 
 ---
 

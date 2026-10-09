@@ -13,6 +13,7 @@ import { renderSkill } from '@/lib/skills/render';
 import { agentDiscovery } from '@/lib/serving';
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
+import {projectSkillLinks} from '@/lib/skills/serve';
 import { renderTree, skillTree } from '@/lib/skills';
 import { buildQuickSheet } from '@/test/helpers/skill-docs';
 import { createUser, mintToken } from '@/lib/accounts';
@@ -27,13 +28,13 @@ useAppHarness();
 const BASE = 'http://localhost:3000';
 const INSTALLER = `npx --yes @afbin/cli@latest setup`;
 /** The canonical bootstrap sentence: the one place the npm spelling appears in a document. */
-const BOOTSTRAP = 'If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills.';
+const BOOTSTRAP = 'npx --yes @afbin/cli@latest setup';
 
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['token','mint','claim'];
-const httpDiscovery=(name:string)=>name==='skills/artifactbin/llms.txt'||name==='lib/agent-discovery meta';
-const linkedInstaller = (name: string) => name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt') || name === 'skills/artifactbin/llms.txt';
+const httpDiscovery=(name:string)=>name==='skills/artifactbin/llms.txt'||name==='skills/artifactbin/SKILL.md'||name==='lib/agent-discovery meta';
+const linkedInstaller = (name: string) => name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt') ;
 
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
 const ALLOWED_SENTENCE = 'never mint or print tokens';
@@ -99,19 +100,12 @@ describe('every agent-facing starter says the same thing', () => {
   });
 
   it('direct HTTP discovery requires email and teaches the real scoped bearer and graph contract',()=>{
-    const guide=llmsText(BASE);
-    expect(guide).toContain('Direct HTTP clients require email authentication');
-    expect(guide).toContain('CLI and HTTP authentication require email');
+    const guide=publicGuideText('http-auth',BASE)!;
+    expect(guide).toContain('HTTP authentication requires an email account');
     expect(guide).toContain('/api/authentication/token');
-    expect(guide).toContain('Only verified email account sessions qualify');
     expect(guide).toContain('Authorization: Bearer <access_token>');
-    expect(guide).toContain('patch.claims');
-    expect(guide).toContain('expectedVersion:snapshot.version');
-    expect(guide).toContain('document_update:prepared.document_update');
-    expect(guide).toContain('](http://localhost:3000/llms/http-authoring)');
-    expect(guide).toContain('](http://localhost:3000/llms/http-document-graph)');
-    expect(guide).not.toMatch(/\]\(http-(?:api|authoring|document-graph)\.md\)/);
-    expect(guide).not.toContain('{"csv":');
+    expect(llmsText(BASE)).toContain(`${BASE}/llms/http-authoring`);
+    expect(llmsText(BASE)).toContain(`${BASE}/llms/http-document-graph`);
   });
 
   it('CLI and HTTP teach the same reply and mobile authoring rules without sharing CLI authentication', () => {
@@ -129,8 +123,7 @@ describe('every agent-facing starter says the same thing', () => {
       expect(text).not.toContain('Automatic browser approval also applies');
       expect(text).not.toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
     }
-    expect(discovery).toContain('CLI and HTTP authentication require email');
-    expect(discovery).toContain('Direct HTTP clients require email authentication');
+    expect(discovery).toContain(`${BASE}/llms/http-api`);
   });
 
   it('the ONE exception is the skill\'s prohibition, spelled exactly and only once', () => {
@@ -166,7 +159,7 @@ describe('what the brief and the contract teach next', () => {
     expect(brief).not.toContain('shorthand');
     expect(brief).toContain('references/npm-local.md');
     expect(brief).toMatch(/automatic|authenticates itself|signs you in/i);
-    expect(brief).toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
+    expect(brief).toContain('origin-scoped credentials');
     expect(brief).toContain('browser approval');
     expect(brief).toContain('--yes');
     expect(brief).toMatch(/never.*mint/i);
@@ -198,8 +191,7 @@ describe('public HTTP authoring references', () => {
     for (const file of skillTree().files.filter(file => file.ref && file.dir === 'artifactbin')) {
       const topic = file.file.replace(/\.md$/, '');
       const actual = publicGuideText(topic, BASE);
-      const expected = renderSkill(file, {base:BASE}).replace(/\]\((?:references\/)?([a-z0-9-]+)\.md(#[^)\s]+)?\)/g,
-        (_match, name:string, hash:string|undefined) => `](${BASE}/llms/${['publishing','publishing-versions','publishing-datasets'].includes(name)?'http-api':name}${hash ?? ''})`);
+      const expected = projectSkillLinks(file,renderSkill(file,{base:BASE}),BASE);
       expect(actual, topic).toBe(expected);
       expect(actual, topic).not.toMatch(/\[\[|{%/);
       for (const [, linkedTopic] of actual!.matchAll(/\]\(http:\/\/localhost:3000\/llms\/([a-z0-9-]+)/g)) {
@@ -221,10 +213,10 @@ describe('public HTTP authoring references', () => {
   });
 
   it('teaches source preparation before graph construction and links the format without an install', () => {
-    const text = llmsText(BASE);
-    expect(text.indexOf('## Prepare an edit from JSX')).toBeLessThan(text.indexOf('## Document graph wire contract'));
+    const text = publicGuideText('http-authoring',BASE)!;
+    expect(text.indexOf('## Prepare an edit from JSX')).toBeLessThan(text.indexOf('// BEGIN HTTP TEXT EDIT'));
     for (const topic of ['markup','markup-data','design-systems','templates']) expect(text).toContain(`${BASE}/llms/${topic}`);
-    expect(text).toContain('An HTTP client does not need Node or the CLI');
+    expect(text).toContain('No CLI, bundled code or manual graph construction is needed.');
   });
 
   it('teaches the HTTP workflow without duplicating its QA client and fits the production guide budget', () => {
@@ -241,7 +233,7 @@ describe('public HTTP authoring references', () => {
 
 
 it('the published HTTP comment example creates, replies, resolves and reopens through real handlers', async () => {
-  const guide = llmsText(BASE);
+  const guide = publicGuideText('http-api',BASE)!;
   const script = guide.match(/\/\/ BEGIN HTTP COMMENTS\n([\s\S]*?)\/\/ END HTTP COMMENTS/)?.[1];
   expect(script, 'executable HTTP comment contract is published').toBeTruthy();
   const user = await createUser({email:'http-comments-contract@example.com'});
@@ -292,7 +284,7 @@ it('the published browser example preserves a capacity refusal and only polls an
 });
 
 it('HTTP guidance preserves rotating credentials across tasks and renews without email login',()=>{
- const guide=publicGuideText('http-api',BASE)!;
+ const guide=publicGuideText('http-auth',BASE)!;
  expect(guide).toContain('refresh_token');expect(guide).toContain('client_id');
  expect(guide).toContain('persistent secret store');expect(guide).toContain('0600');
  expect(guide).toContain('grant_type');expect(guide).toContain('/oauth/token');

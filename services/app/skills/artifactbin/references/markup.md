@@ -34,20 +34,7 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
 <!--bundle:skip-->
 ## Skeleton (editorial)
 
-```jsx
-<Helmet><Import name="s" src="ref:abc123" /><Query name="monthly">{`select month, sum(revenue) revenue from s.rows group by 1 order by 1`}</Query></Helmet>
-<div data-design="tw" className="@container px-6 py-12 @2xl:px-12 @2xl:py-16">
-  <header className="max-w-4xl">
-    <p className="animate-fade-in text-xs uppercase tracking-widest text-muted-foreground">Eyebrow</p>
-    <h1 className="animate-fade-up mt-4 text-5xl @2xl:text-7xl font-bold tracking-tight leading-[1.05]">The headline states the finding</h1>
-    <p className="animate-fade-up [animation-delay:200ms] mt-6 text-lg text-muted-foreground max-w-prose">The standfirst earns the scroll.</p>
-  </header>
-  <section className="py-16">
-    <h2 className="reveal-up text-2xl font-semibold tracking-tight">01 · A claim, not a topic</h2>
-    <div className="reveal-up mt-6"><Question title="Revenue by month" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" /></div>
-  </section>
-</div>
-```
+Start from the [complete root example](../SKILL.md#example), then [editorial](templates-editorial.md) for its frame. Choose one design system and keep container padding, responsive type and a thesis headline. Data belongs in Helmet queries; views bind query names.
 <!--/bundle:skip-->
 
 ## Component vocabulary (the complete allowlist)
