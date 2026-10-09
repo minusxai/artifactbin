@@ -1,4 +1,5 @@
 import { artifactAppPath } from '@/lib/serving';
+import { UnservableDocument } from '@/lib/artifacts/servable';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
 import { loginRedirectTarget } from '@/lib/http';
 /**
@@ -302,6 +303,12 @@ function archiveLiveBuild(): void {
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
+  // A page route that reads a stored document the current code does not serve answers its 410 by name (lib/artifacts/servable), never a bare 500.
+  app.onError((error, c) => {
+    if (error instanceof UnservableDocument) return error.response();
+    console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
+    return new Response('Internal Server Error', { status: 500 });
+  });
   // A serving process prepares each new head for its readers after the write commits (lib/story/prepared/prepared-page.server).
   enablePreparedPageWarmups();
   // …and revalidates the guest snapshots a write made stale (lib/compiled-page/snapshots.server).
