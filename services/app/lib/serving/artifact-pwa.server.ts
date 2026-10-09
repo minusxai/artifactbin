@@ -4,18 +4,21 @@ import { readPwaSettings, type PwaSettings } from '../story/reader/index';
 import { loadImage } from '../story/assets/image-store';
 import { canReadArtifact, type ArtifactRow } from '../artifacts/access';
 import { getArtifactById } from '../artifacts/store';
+import { unservable } from '../artifacts/servable';
 import { referencedArtifactForRow } from '../artifacts/dataflow';
 import { sessionActor } from '../accounts/viewer';
 import { escapeAttr } from '@artifactbin/utils/escape';
 import { ID_RE } from '../platform/ids-shape';
 import { artifactAppPath, type ArtifactManifest } from './artifact-pwa';
 
-type PwaRow = Pick<ArtifactRow, 'source' | 'document'>;
+type PwaRow = Pick<ArtifactRow, 'format' | 'version' | 'meta' | 'source' | 'document'>;
 const graphSettings = new WeakMap<object, PwaSettings>();
 
 /** Published rows already carry the parsed graph. Reuse it for every PWA
  * consumer; source-only legacy rows retain the editor's parsing fallback. */
 function settingsForRow(row: PwaRow): PwaSettings {
+  // A stored document the current code does not serve (lib/artifacts/servable) declares no app: its graph is never walked.
+  if (unservable(row)) return {};
   if (row.document?.kind !== 'graph') return readPwaSettings(row.source ?? '');
   const cached = graphSettings.get(row.document);
   if (cached) return cached;
