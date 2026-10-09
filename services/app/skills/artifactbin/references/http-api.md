@@ -11,7 +11,7 @@ Send JSON to `[[ base ]]` with `Content-Type: application/json`; session request
 1. `POST /api/auth/email-otp/send-verification-otp` with `{"email":"you@example.com","type":"sign-in"}`; ask for the emailed OTP.
 2. `POST /api/auth/sign-in/email-otp` with `{"email":"you@example.com","otp":"<user's code>"}`; retain returned cookies in a private jar.
 3. `POST /api/authentication/token` with those cookies and Origin. Verified email sessions receive `access_token`, `refresh_token`, `client_id`, `expires_in` (seconds), `token_type: "Bearer"` and `scope: "artifacts"`.
-4. Save the server origin, both tokens, client ID and access expiry in your runtime's persistent secret store, available across tasks/sandbox restarts. For a private persistent filesystem, use an origin-scoped credential file outside the workspace, directory mode `0700`, file mode `0600`. Temporary task files and chat memory are insufficient. Never put credentials in URLs, docs, source control or logs.
+4. Persist origin, both tokens, client ID and access expiry in a persistent secret store across tasks/sandbox restarts. A private persistent filesystem may use an origin-scoped file outside the workspace: directory `0700`, file `0600`. Task files and chat memory are insufficient. Never put credentials in URLs, docs, source control or logs.
 5. Use `Authorization: Bearer <access_token>` only on that origin's `/api` requests. Sign-out closes the temporary email session, not the credentials.
 
 Before access expiry (24 hours), or after a 401, `POST /oauth/token` on the saved origin with JSON `{"grant_type":"refresh_token","client_id":"<saved client_id>","refresh_token":"<saved refresh_token>","resource":"[[ base ]]/api"}`. No login cookies or OTP are needed. Atomically replace both saved tokens and access expiry before retrying the API request once. Serialize refresh across tasks: each refresh token is single-use; replay can revoke the connection. A successful refresh renews its 30-day lifetime. Repeat email login only for missing credentials or `invalid_grant` (expired/revoked); keep credentials on transient errors. Without persistent secret storage, authentication cannot survive sandbox replacement.
@@ -32,7 +32,7 @@ Follow non-success JSON recovery instructions. Reconcile uncertain mutations bef
 
 ## Browser preview and interactive QA
 
-Use `POST /api/browser-sessions` with your bearer. Its `viewer` is fixed at creation. Each changed script needs a new `execution_id`; reuse only for exact replay and poll with that ID. Scripts run at most 20 seconds. Check receipt errors and IDs. Capacity refusal creates no session; follow its recovery message. See [live sessions](live-sessions.md).
+Use `POST /api/browser-sessions` with your bearer; no local Chrome is needed. Its `viewer` is fixed at creation. Each changed script needs a new `execution_id`; reuse only for exact replay and poll with that ID. Scripts run at most 20 seconds. Check receipt errors and IDs. Capacity refusal creates no session; follow its recovery message. See [live sessions](live-sessions.md).
 
 ```js
 const headers = {Authorization:'Bearer ' + accessToken,'Content-Type':'application/json',Origin:base};
@@ -49,7 +49,7 @@ try {
 } finally {if(accepted)await call({op:'close',session_id});}
 ```
 
-Use `s.result.controls` to find accessible names, then Playwright role/name locators. Kit `<Select>` uses a button/listbox. Return text/data; `output.image` attaches PNG/JPEG. Keep both error arrays.
+Use `s.result.controls` to find accessible names, then Playwright role/name locators. Kit `<Select>` uses a button/listbox. Return text/data; `output.image` attaches PNG/JPEG (no `output.text` or `output.log`). Keep both error arrays.
 
 - A saved page action uses `POST /api/artifacts/<page-id>/mutate` with `{"name":"vote","args":{"choice":"ramen"}}`. The API checks page access, dataset policy and membership. Public/unlisted links do not grant writes; direct dataset SQL may return 403 even to owners. See [actions](markup-data.md#declarations-helmet-only) and [dataset rules](apps.md#dataset-rules).
 
@@ -81,5 +81,7 @@ const reopened = await commentRequest(threadPath, {reopen:true, expected_revisio
 ```
 
 `Idempotency-Key` recovers uncertain create/reply: retry the same key/body. Comments are separate from JSX; no remote review headers.
+
+Publishing requires access to the selected server.
 
 [HTTP authoring](http-authoring.md) covers creation and edits; [document graphs](http-document-graph.md) defines wire fields and concurrency. See the [public index](/llms.txt).
