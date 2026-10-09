@@ -36,8 +36,6 @@
    "services/app/__tests__/data-ingest-routes.test.ts": 757,
    "services/app/__tests__/data-syntax-marker.test.ts": 1350,
    "services/app/__tests__/data-tiers.test.ts": 5505,
-   "services/app/__tests__/dataflow-publish.test.ts": 2335,
-   "services/app/__tests__/dataflow-render.test.ts": 3185,
    "services/app/__tests__/dataset-access.test.ts": 1595,
    "services/app/__tests__/dataset-grants.test.ts": 1799,
    "services/app/__tests__/dataset-policies.test.ts": 4275,
