@@ -1,5 +1,5 @@
 import {documentPublicationWithResources} from './prepared-document';
-import {prepareDocumentAuthoringContext} from '@/lib/story/publish';
+import {prepareDocumentAuthoringContext} from '@/lib/publish/publish';
 import {prepareClientDocumentPublication} from '@/lib/document/document-update-client';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**

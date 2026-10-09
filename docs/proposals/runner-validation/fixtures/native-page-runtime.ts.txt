@@ -6,7 +6,7 @@
  *    and `ready` beside it; a Mutation is an async function that resolves after commit and rejects with the
  *    server's message. One store subscription pushes every change into the signals in one batch. The signals are
  *    instances of signals-core's `Signal`, so the author's `effect` tracks them and Preact renders them in JSX.
- *  - `startAuthorModule(...)`: loads the version's module (built at publish, lib/story/document/author-module.server)
+ *  - `startAuthorModule(...)`: loads the version's module (built at publish, lib/publish/document/author-module.server)
  *    with its vendor imports pointed at this build's chunks, hands it the bindings through the `page` module's
  *    global, and mounts every component it exports where the markup placed one (`data-mx-mount`).
  *
@@ -17,7 +17,7 @@
 import { Signal, batch, signal } from '@preact/signals';
 import { h, render, type ComponentType } from 'preact';
 import type { DataflowStore } from '@/lib/story-runtime/store';
-import type { Row, Scalar } from '@/lib/story/data/dataflow';
+import type { Row, Scalar } from '@/lib/publish/data/dataflow';
 
 /** The global the generated `page` module reads at import (author-module.server PAGE_GLOBAL). */
 export const PAGE_GLOBAL = '__mxPageBindings';

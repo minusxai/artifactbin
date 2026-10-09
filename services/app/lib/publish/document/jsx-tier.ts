@@ -142,7 +142,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   // dataset shapes — a typo'd column, a non-SELECT, a missing table are 400s
   // with the engine's own message, which names candidates) and every chart
   // bound to a query checked against that query's result columns. ONE module
-  // (lib/story/data/data-checks) shared with the dataset-refresh warnings path.
+  // (lib/publish/data/data-checks) shared with the dataset-refresh warnings path.
   let refs: Array<{ id: string; kind: string }> = [];
   let compiled: import('@/lib/dataflow/compiled-dataflow').CompiledDataflow | null = null;
   if (ctx.loadRef) {

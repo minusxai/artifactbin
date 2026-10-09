@@ -538,7 +538,7 @@ export function resolveStoredStoryDesign(
  * override lives client-side and never reaches this resolution.)
  *
  * Here rather than beside the document builder because BOTH ends need it and
- * only one of them is server-only — the served document (lib/story/document),
+ * only one of them is server-only — the served document (lib/publish/document),
  * the edit canvas, and the page's loading ground must resolve this identically
  * or a reader watches the same document paint twice in two different modes.
  */
@@ -599,7 +599,7 @@ export function storyThemeCss(only?: string | null): string {
     `${descendantScope} :is(code, pre, kbd, samp) {\n  font-family: var(--font-mono);\n}`,
   ];
   // `only` (a document's own theme, or null for none): the reader's sheet
-  // (lib/story/prepared/reader-sheet.server) keeps the blocks its story root can match
+  // (lib/publish/prepared/reader-sheet.server) keeps the blocks its story root can match
   // and drops every other theme's — byte-identical otherwise, so the kept
   // blocks keep their order and specificity.
   for (const t of STORY_THEMES) {

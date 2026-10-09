@@ -19,13 +19,13 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { compiledForRow, getArtifactById } from '@/lib/artifacts';
-import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
+import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { planOf } from '@/lib/compiled-page/plan';
 import { updateSharingFor } from '@/lib/artifacts';
-import { installStoryCommitHooks } from '@/lib/story/prepared/commit-hooks.server';
-import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/story/prepared/snapshots.server';
+import { installStoryCommitHooks } from '@/lib/publish/prepared/commit-hooks.server';
+import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/publish/prepared/snapshots.server';
 import { SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS } from '@/lib/compiled-page/contract';
 
 const harness = useAppHarness();

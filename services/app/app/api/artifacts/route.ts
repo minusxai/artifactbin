@@ -1,4 +1,4 @@
-import { createArtifactFromBody } from '@/lib/story/publish';
+import { createArtifactFromBody } from '@/lib/publish/publish';
 import { withTokenAuth } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
 import { baseUrl, json, readJson } from '@/lib/http';

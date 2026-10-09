@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { renderDoc } from '@/test/helpers/skill-docs';
-import { publishJsx } from '../story/document/jsx-tier';
+import { publishJsx } from '../publish/document/jsx-tier';
 
 const B = 'https://example.test';
 /** The markup skill as one text: its SKILL.md plus the motion, svg and data files it links. */

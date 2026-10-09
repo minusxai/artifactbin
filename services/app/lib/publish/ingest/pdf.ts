@@ -1,7 +1,7 @@
 import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 /**
  * URL → stored PDF content: the guarded fetcher composed with the SAME
- * storePdfContent the upload door runs, exactly as lib/story/ingest/image.ts
+ * storePdfContent the upload door runs, exactly as lib/publish/ingest/image.ts
  * composes storeImageContent — so the cap, the sniff and the stored shape are
  * one implementation rather than two that agree today.
  */

@@ -17,8 +17,8 @@ import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
 import { services } from '@/lib/platform/services';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { drainSnapshotRevalidations } from '@/lib/story/prepared/snapshots.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
+import { drainSnapshotRevalidations } from '@/lib/publish/prepared/snapshots.server';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
@@ -176,7 +176,7 @@ export function useAppHarness(): AppHarness {
 
   const wipe = async () => {
     const db = await database!;
-    // A publish prepares its page after the response (lib/story/prepared/prepared-page.server): let the last
+    // A publish prepares its page after the response (lib/publish/prepared/prepared-page.server): let the last
     // test's finish before its rows go, so no warm-up writes into the next test's database.
     await drainPreparedPageWarmups();
     // Likewise a guest-snapshot revalidation a write queued (server/app enables them).

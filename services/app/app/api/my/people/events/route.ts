@@ -2,7 +2,7 @@ import {sessionActor,actorForArtifacts} from '@/lib/accounts';
 import {unauthorized} from '@/lib/http';
 import { membershipInbox } from '@/lib/artifacts';
 import {notificationChannel} from '@/lib/notifications';
-import {subscribeChannel} from '@/lib/story/realtime/live';
+import {subscribeChannel} from '@/lib/publish/realtime/live';
 import {LIVE_KEEPALIVE_EVENT,LIVE_KEEPALIVE_MS} from '@/lib/http';
 /** Recipient-scoped wakeups, using the same database transport as artifact live updates. */
 export async function GET(request:Request){

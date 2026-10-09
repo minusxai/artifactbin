@@ -43,7 +43,7 @@ const IMPORT = '<Import name="bookings" src="ref:BookRows1" />';
 
 describe('the booking golden', () => {
   it('compiles to the reviewed record', async () => {
-    const source = readFileSync(new URL('../../story/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../publish/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
     const result = await compile(source);
     if (!result.ok) throw new Error(result.errors.map((e) => e.message).join('\n'));
     await expect(`${JSON.stringify(result.compiled, null, 2)}\n`).toMatchFileSnapshot('./__snapshots__/booking.compiled.json');

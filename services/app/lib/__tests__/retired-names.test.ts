@@ -93,8 +93,8 @@ const SCANS: Scan[] = [
       /FormatBadge format="(html|markdown)"/, /\bhtml:\s*(row|artifact)\.content/,
       /^\s*html:\s*(content|row\.content|artifact\.content)/, /^\s*(html|markdown):\s*['"]/,
     ].map((r) => r.source).join('|'), 'm'),
-    allow: [`${APP}/lib/story/document/input.ts`],
-    proof: { atLeast: 50, contains: `${APP}/lib/story/document/input.ts` },
+    allow: [`${APP}/lib/publish/document/input.ts`],
+    proof: { atLeast: 50, contains: `${APP}/lib/publish/document/input.ts` },
   },
   {
     // The mint has one address and it is internal. `/api/tokens/anonymous` is gone: no public route

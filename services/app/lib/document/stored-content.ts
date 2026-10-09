@@ -1,5 +1,5 @@
 /**
- * What the publish door hands back for one content body (lib/story/document/input): the row's format,
+ * What the publish door hands back for one content body (lib/publish/document/input): the row's format,
  * its markup source, its `meta` and a derived title. Type-only, so the content stores and the dataset
  * tiers (lib/datasets, lib/object-store) can name it without importing the publish pipeline.
  */

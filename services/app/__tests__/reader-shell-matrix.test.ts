@@ -14,7 +14,7 @@ import { useAppHarness, request, setSession, framedDocument, mintAccountToken } 
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { pagesOriginFor, pagesSite } from '@/lib/http/pages-origin';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { createAppServer } from '@/server/app';
 
 useAppHarness();

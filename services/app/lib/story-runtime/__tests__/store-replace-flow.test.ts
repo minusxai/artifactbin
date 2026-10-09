@@ -13,7 +13,7 @@ import { createDataflowStore, type QueryTransport } from '../store';
 import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';
 import type { CompiledDataflow, CompiledQuery, CompiledValue } from '@/lib/dataflow/compiled-dataflow';
 
-// The store's own unit: compiled records built by shape (the compiler's output is covered in lib/story).
+// The store's own unit: compiled records built by shape (the compiler's output is covered in lib/publish).
 const flowOf = (values: CompiledValue[], queries: CompiledQuery[]): CompiledDataflow => ({ imports: [], values, queries, mutations: [] });
 
 const scalar = (name: string, type: 'string' | 'number' = 'string', def: Scalar = null): CompiledValue =>

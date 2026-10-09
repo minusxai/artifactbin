@@ -20,7 +20,7 @@ import { declarationsOf } from '@/lib/document/head';
 import { compileWithLoader } from '@/lib/dataflow/server';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { stampNodeIds } from '@/lib/document';
-import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
 import type { DataflowState, TableResult } from '@/lib/dataflow';
 import { ARTIFACT_FILE_FORMAT, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 

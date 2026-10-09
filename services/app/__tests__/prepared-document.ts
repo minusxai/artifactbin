@@ -5,7 +5,7 @@ import {request} from './harness';
  * this explicit prevents fixture preparation reads from hiding commit queries. */
 import { getArtifactById, type EditInput } from '@/lib/artifacts/store';
 import { type ArtifactRow } from '@/lib/artifacts/access';
-import {prepareDocumentAuthoringContext} from '@/lib/story/publish';
+import {prepareDocumentAuthoringContext} from '@/lib/publish/publish';
 import {prepareClientDocumentUpdate,prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/document/document-update-client';
 export function documentEdit(row:ArtifactRow,change:ClientDocumentChange):EditInput {
  if(row.document?.kind!=='graph')throw new Error('Read the authoring snapshot before editing');

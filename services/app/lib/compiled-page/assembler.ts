@@ -8,7 +8,7 @@
  * No I/O, no database, no clock: the same input is the same bytes.
  *
  * What it adds to the stored, per-version parts is what one request decides:
- *   - the story element (lib/story/inline-story-html) around `input.story` —
+ *   - the story element (lib/publish/inline-story-html) around `input.story` —
  *     the serve path's render, placed verbatim and never re-rendered here —
  *     with the snapshot's server-drawn charts put into their slots;
  *   - the island data as `<script type="application/json" id="mx-story-data">`,
@@ -143,7 +143,7 @@ function headMetadata(head: AssembleHead | null): string {
       : '');
 }
 
-/** `</style` inside CSS would close the element early; CSS has no use for the sequence (lib/story/document's rule). */
+/** `</style` inside CSS would close the element early; CSS has no use for the sequence (lib/publish/document's rule). */
 const styleTag = (attr: string, css: string): string => `<style ${attr}>${css.replace(/<\/style/gi, '')}</style>`;
 
 /** A behaviour chunk by its specifier in the shared manifest (`@mx/deck`), or by its short name (`deck`). */

@@ -1,6 +1,6 @@
 /**
  * THE BOOKING GOLDEN, END TO END on the server: the document in
- * lib/story/__tests__/fixtures/booking.jsx published through the real door,
+ * lib/publish/__tests__/fixtures/booking.jsx published through the real door,
  * its compiled record stored and reused, its queries run on the SQLite engine,
  * and its two mutations — book and cancel — run through the document's write
  * door as two people and a guest, under the dataset's data policy.
@@ -20,7 +20,7 @@ import { request, useAppHarness } from './harness';
 
 useAppHarness();
 
-const GOLDEN = readFileSync(new URL('../lib/story/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
+const GOLDEN = readFileSync(new URL('../lib/publish/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
 const SNAPSHOT = JSON.parse(readFileSync(new URL('../lib/dataflow/__tests__/__snapshots__/booking.compiled.json', import.meta.url), 'utf8'));
 const COLUMNS = [
   { name: 'id', type: 'string' }, { name: 'day', type: 'date' }, { name: 'slot', type: 'string' },

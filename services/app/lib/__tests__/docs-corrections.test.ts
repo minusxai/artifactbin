@@ -18,7 +18,7 @@ const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md',
 const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
-import { publishJsx } from '../story/document/jsx-tier';
+import { publishJsx } from '../publish/document/jsx-tier';
 
 const BASE = 'https://example.test';
 

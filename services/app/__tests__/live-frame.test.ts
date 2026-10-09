@@ -22,8 +22,8 @@ import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 
 
-import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { resetFrameCache, frameBuilds } from '@/lib/story/data/frame';
+import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
+import { resetFrameCache, frameBuilds } from '@/lib/publish/data/frame';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness, setSession } from '@/__tests__/harness';

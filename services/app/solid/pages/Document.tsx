@@ -8,7 +8,7 @@ import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { displayTitle } from '@/lib/document/display-title';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import type { ServedStoryRuntime } from '@/lib/story/prepared/prepared-runtime';
+import type { ServedStoryRuntime } from '@/lib/publish/prepared/prepared-runtime';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { loginHref } from '@/lib/http/login-href';
 import { takeBootstrap } from '@/solid/lib/bootstrap';

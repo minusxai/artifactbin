@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { applyDomEditsToJsx } from '@/lib/data/story/jsx-edit';
-import { canonicalizeMarkup } from '@/lib/story/document/jsx-tier';
+import { canonicalizeMarkup } from '@/lib/publish/document/jsx-tier';
 
 const HELMET =
   '<Helmet><title>Doc</title><style>{`h1 { color: red; }`}</style><script>{`document.body.dataset.ran = "1";`}</script></Helmet>';

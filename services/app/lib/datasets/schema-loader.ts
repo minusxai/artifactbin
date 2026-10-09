@@ -2,7 +2,7 @@
  * THE SERVER'S REF LOADER, as the data compiler sees it. A reference the server resolves is the data
  * language's `ResolvedRef` plus the dataset's catalog, which only the publish checks read (to compile an
  * import against its tables). Kept here, above lib/dataflow, so the data language never depends on the
- * dataset module; the publish checks (lib/story/data/data-checks) and the write path (lib/artifacts)
+ * dataset module; the publish checks (lib/publish/data/data-checks) and the write path (lib/artifacts)
  * both speak it.
  */
 import { importedTables } from '@/lib/datasets/catalog';

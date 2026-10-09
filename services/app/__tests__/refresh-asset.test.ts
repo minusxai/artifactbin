@@ -21,7 +21,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { webAssetByHash } from '@/lib/story/assets/web-assets';
+import { webAssetByHash } from '@/lib/publish/assets/web-assets';
 import { urlHash } from '@/lib/document/asset-url';
 
 useAppHarness();

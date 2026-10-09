@@ -14,13 +14,13 @@
  */
 import { trackEvent } from '@/lib/platform';
 import { canReadArtifact, datasetsForDocument, getArtifactById, isOwner, roleFor } from '@/lib/artifacts';
-import { isDocumentFormat } from '@/lib/story/document/input';
+import { isDocumentFormat } from '@/lib/publish/document/input';
 import { canAnnotate } from '@/lib/artifacts';
 import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
-import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/story/realtime/live';
+import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
-import { changedSince } from '@/lib/story/prepared/served-results.server';
+import { changedSince } from '@/lib/publish/prepared/served-results.server';
 import { LIVE_KEEPALIVE_EVENT, LIVE_KEEPALIVE_MS } from '@/lib/http';
 
 /**
@@ -195,7 +195,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   /*
    * A PING, not a frame. The document itself is `GET ./events/frame` — built
-   * once per (id, edit_id) and cached (lib/story/data/frame), fetched by whoever
+   * once per (id, edit_id) and cached (lib/publish/data/frame), fetched by whoever
    * wants it under the same ACL. This stream therefore carries nothing a relay
    * would have to understand, which is what lets a proxy blind to content
    * hold it.
@@ -287,7 +287,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // same ordered `queueRow` path (version-guarded) as every later frame.
   void pushCurrent();
   /*
-   * WHERE A SERVED PAGE LEFT OFF (`?since=`, lib/story/prepared/served-results.server):
+   * WHERE A SERVED PAGE LEFT OFF (`?since=`, lib/publish/prepared/served-results.server):
    * a page whose first rows came with its HTML names the datasets they were
    * computed from and a mark of each. Every one that has moved since is sent
    * the ordinary `data` frame NOW — after the subscriptions above, so nothing

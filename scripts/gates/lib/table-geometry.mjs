@@ -40,7 +40,7 @@ export async function checkTableGeometry(BASE, browser, check) {
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
   const doc = await documentFrame(page);
   await doc.waitForSelector('#long [data-slot="data-table"]', { timeout: 20000 });
-  // The rows arrive with the page (lib/story/prepared/served-results.server) in the static regime; what is
+  // The rows arrive with the page (lib/publish/prepared/served-results.server) in the static regime; what is
   // measured below is the VIRTUAL one, which the runtime switches the long table to once it owns it.
   await doc.waitForFunction(
     (last) => (document.querySelector('#short tbody')?.textContent ?? '').includes('row-2')

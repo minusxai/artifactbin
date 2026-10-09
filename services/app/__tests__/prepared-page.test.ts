@@ -1,5 +1,5 @@
 /**
- * THE PREPARED PAGE (lib/story/prepared/prepared-page.server): each document version is
+ * THE PREPARED PAGE (lib/publish/prepared/prepared-page.server): each document version is
  * compiled for the reader ONCE — parsed, its sheet put under the inline CSS
  * policy, rendered for the anonymous reader — stored per version, written back
  * on a miss, and overlaid per request with what only the viewer decides.
@@ -18,19 +18,19 @@ import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { installStoryCommitHooks } from '@/lib/story/prepared/commit-hooks.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
+import { installStoryCommitHooks } from '@/lib/publish/prepared/commit-hooks.server';
 import { applyStyleOverrides } from '@/lib/compiled-page/styles/style-overrides';
 import { inlineStoryCss as realInlineStoryCss, inlineStoryNodes as realInlineStoryNodes } from '@/lib/compiled-page/styles/inline-css';
-import { prepareStoryRuntime } from '@/lib/story/prepared/prepare-runtime.server';
+import { prepareStoryRuntime } from '@/lib/publish/prepared/prepare-runtime.server';
 import { storyBaseCss } from '@/lib/compiled-page/styles/story-base-css';
-import { readerStorySheet } from '@/lib/story/prepared/reader-sheet.server';
+import { readerStorySheet } from '@/lib/publish/prepared/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
 import { type CompiledPage, type StoredCompile, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { readFileSync } from 'node:fs';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import { compiledPageFailures } from '@/lib/story/prepared/serve.server';
+import { compiledPageFailures } from '@/lib/publish/prepared/serve.server';
 import path from 'node:path';
 import { createDocumentGraph } from '@/lib/document/document-graph';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
@@ -103,7 +103,7 @@ describe('the reader payload', () => {
     // The sheet the SSR `<style>` carries: base + compiled + author under the CSS policy.
     const row = (await getArtifactById(id))!;
     const raw = await prepareStoryRuntime({ source: row.source!, compiledCss: (row.meta as { compiledCss?: string }).compiledCss ?? null, theme: null, colorMode: null, refData: {}, title: null, assetUrls: new Map() });
-    // …with the reader's copy of the compiled sheet: only what this story can match (lib/story/prepared/reader-sheet.server).
+    // …with the reader's copy of the compiled sheet: only what this story can match (lib/publish/prepared/reader-sheet.server).
     const reader = { ...raw, compiledCss: readerStorySheet(raw.compiledCss, { source: row.source!, nodes: raw.data.nodes, theme: null }) };
     expect(reader.compiledCss!.length).toBeLessThan(raw.compiledCss!.length);
     expect(runtime.css).toBe(realInlineStoryCss(reader));
@@ -200,7 +200,7 @@ describe('the prepared page store', () => {
   });
 
   it('reuses the anonymous render of a document with data, whose stored flow comes back from JSONB in another key order', async () => {
-    // Its one query reads the reader's zone, so no first results ride in the overlay (lib/story/prepared/served-results.server).
+    // Its one query reads the reader's zone, so no first results ride in the overlay (lib/publish/prepared/served-results.server).
     const { id } = await world(`<Helmet><Value name="n" type="number" default={2} /><Query name="q">{\`select $n * 3 as n, $_tz as tz\`}</Query></Helmet>
 <div><h1>Data notes</h1><p>Six is <Number data="$q" col="n" /></p></div>`);
     resetSpies();
@@ -313,7 +313,7 @@ describe('the served HTML', () => {
 
 // Merged from prepared-page-compiled.test.ts.
 /**
- * THE COMPILE BESIDE THE PREPARED PAGE (docs/phase2-architecture.md §2.1, §6; lib/story/prepared/prepared-page.server
+ * THE COMPILE BESIDE THE PREPARED PAGE (docs/phase2-architecture.md §2.1, §6; lib/publish/prepared/prepared-page.server
  * `PreparedPage.compiled`): every deployment stores the version's compiled page or its recorded
  * failure in the same row as the prepared page, keyed with the compiler build. Real publish handler on the harness's
  * isolated database.
@@ -378,7 +378,7 @@ describe('the compile beside the prepared page', () => {
 
 // Merged from compiled-fallback-policy.test.ts.
 /**
- * THE FAILURE CONTRACT (docs/phase2-architecture.md §6; lib/story/prepared/serve.server). With no other
+ * THE FAILURE CONTRACT (docs/phase2-architecture.md §6; lib/publish/prepared/serve.server). With no other
  * renderer left, a missing compile or one below a hand-raised compatibility minimum is compiled inline and
  * waited for; a compile from another build is served.
  * The inline budget only decides whether that is logged as

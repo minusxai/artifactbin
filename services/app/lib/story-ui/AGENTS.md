@@ -14,7 +14,7 @@ where the author script runs in [serving and security](../../../../docs/serving-
   `style` string as an object, controlled-to-uncontrolled props — and re-checks no policy: every document
   runs on its own origin under the document CSP, and a document that predates a rule is migrated by
   republishing, never filtered at render. Account for authored HTML spellings versus compiled JSX prop names.
-- The publish path (`lib/story/document/jsx-tier.ts`) owns markup policy, sanitization and CSS compilation.
+- The publish path (`lib/publish/document/jsx-tier.ts`) owns markup policy, sanitization and CSS compilation.
   Inline style policy and authored style blocks have different rules. Do not relax one because another
   layer also sanitizes.
 - The final model: each document is served on its own origin, framed by the app page, and calls its

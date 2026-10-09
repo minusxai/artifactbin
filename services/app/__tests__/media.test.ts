@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '../server/app';
 

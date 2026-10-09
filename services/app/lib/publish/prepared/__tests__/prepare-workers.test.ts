@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { drawSnapshotCharts } from '@/lib/compiled-page/charts.server';
 import { compilePage } from '@/lib/compiled-page/compiler';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { heavyChartsMarkup } from '@/lib/story/fixtures/heavy-prepare';
+import { heavyChartsMarkup } from '@/lib/publish/fixtures/heavy-prepare';
 import { prepareStoryParts } from '../prepare-runtime.server';
 import { prepareWorkers, usePrepareWorkers } from '../prepare-workers.server';
 

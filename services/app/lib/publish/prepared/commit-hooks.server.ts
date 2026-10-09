@@ -5,7 +5,7 @@
  * background work, and its readers still miss and write back.
  *
  *  - A head committed: prepare it for its first reader (prepared-page.server warmPreparedPage). A head whose
- *    rendering changed (diagrams drawn after it was prepared, lib/story/assets/mermaid-harvester) drops its stored
+ *    rendering changed (diagrams drawn after it was prepared, lib/publish/assets/mermaid-harvester) drops its stored
  *    page first, so it is prepared again with them.
  *  - A dataset committed: flag the guest snapshots that read it and queue their heads' revalidation
  *    (snapshots.server). Never awaited, never failing the write: freshness is decided on read by the marks.

@@ -15,7 +15,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import type { ViewerOverlay } from '@/lib/story-runtime/contract';
 
 const sessionUser = { id: '', email: '' };

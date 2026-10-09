@@ -13,7 +13,7 @@ import { COMMENT_TARGET_ATTR } from '@/lib/story-ui/comment-target';
  *                     when the first block cannot address every selected run).
  *   `describeRange` — the quote plus one part per text run, each addressed
  *                     relative to that anchor and indexed into its node's
- *                     CANONICAL text (`lib/story/annotations/annotation-range`).
+ *                     CANONICAL text (`lib/publish/annotations/annotation-range`).
  *   `resolveParts`  — the reverse on a later DOM: re-find each part's text,
  *                     nearest the stored index, and build a live Range for it.
  *

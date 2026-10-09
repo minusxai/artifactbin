@@ -4,13 +4,13 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import * as css from '@/lib/data/story/story-css.server';
-import * as assets from '@/lib/story/assets/web-assets';
+import * as assets from '@/lib/publish/assets/web-assets';
 import * as artifacts from '@/lib/artifacts';
 import * as relations from '@/lib/accounts/relations';
 import * as tokens from '@/lib/accounts/tokens';
 import * as profiles from '@/lib/accounts/profiles';
 import { createAppServer } from '@/server/app';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { getDb } from '@/lib/platform';
 
 useAppHarness();

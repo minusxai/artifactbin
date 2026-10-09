@@ -35,8 +35,8 @@ async function withPublic(enabled: boolean) {
 }
 afterEach(async () => {
   const [{ drainPreparedPageWarmups }, { drainSnapshotRevalidations }] = await Promise.all([
-    import('@/lib/story/prepared/prepared-page.server'),
-    import('@/lib/story/prepared/snapshots.server'),
+    import('@/lib/publish/prepared/prepared-page.server'),
+    import('@/lib/publish/prepared/snapshots.server'),
   ]);
   await drainPreparedPageWarmups();
   await drainSnapshotRevalidations();

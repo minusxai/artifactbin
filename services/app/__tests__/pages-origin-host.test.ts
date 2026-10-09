@@ -12,7 +12,7 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, pagesSessionActor, revokeToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
 import { framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';

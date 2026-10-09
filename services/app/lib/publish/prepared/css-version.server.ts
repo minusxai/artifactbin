@@ -4,7 +4,7 @@
  * tables, column — lib/compiled-page/styles/story-base-css). The Tailwind compile environment alone
  * (`storyCssCompileVersion`) does not see a base-sheet change, so a page prepared before one kept serving the old
  * rules. This version hashes both: a stored page whose version differs is served once more and re-prepared in the
- * background (lib/story/prepared/prepared-page.server), and the backfill's `--stale` selects it.
+ * background (lib/publish/prepared/prepared-page.server), and the backfill's `--stale` selects it.
  */
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_BASE_SHEETS } from '@/lib/compiled-page/styles/story-base-css';

@@ -2,7 +2,7 @@
  * Which lazily loaded code a document will reach for — read from its parsed
  * body at render time, so both reader paths can name that code in the head
  * instead of discovering it one import at a time: the served document
- * (lib/story/prepared) from the runtime build's manifest, the app's reader
+ * (lib/publish/prepared) from the runtime build's manifest, the app's reader
  * page (server/reader-preloads) from the Vite manifest.
  *
  * The precision matters in both directions. Code a document will not run must

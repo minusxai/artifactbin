@@ -1,5 +1,5 @@
 /**
- * lib/story/use-live-edits in SOLID: the framework-free core (solid/lib/live-edits-core) owned by
+ * lib/publish/use-live-edits in SOLID: the framework-free core (solid/lib/live-edits-core) owned by
  * the current reactive scope. One signal mirrors the core's state; `onCleanup` is the unmount.
  *
  * `options` may be a Solid props object: the core reads it LIVE, so a new `onRemoteDocument` or

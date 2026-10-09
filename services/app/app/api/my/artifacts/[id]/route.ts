@@ -9,7 +9,7 @@
  * present and unforgeable.
  */
 import { artifactToWireWithAnnotations } from '@/lib/annotations';
-import { replaceArtifactFromRequest } from '@/lib/story/publish';
+import { replaceArtifactFromRequest } from '@/lib/publish/publish';
 import { getEditableArtifactFor } from '@/lib/artifacts';
 import {updateMetadataFromBody} from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';

@@ -1,5 +1,5 @@
 import { getArtifactById, roleFor } from '@/lib/artifacts';
-import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/story/publish';
+import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/publish/publish';
 import { forkOwner } from '@/lib/operations/registry';
 import { capabilityGuard } from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';

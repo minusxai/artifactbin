@@ -1,6 +1,6 @@
 import {withTokenAuth} from '@/lib/accounts';
 import {readJson,json} from '@/lib/http';
-import {prepareDocumentAuthoringContext,prepareDocumentSource} from '@/lib/story/publish';
+import {prepareDocumentAuthoringContext,prepareDocumentSource} from '@/lib/publish/publish';
 export const POST=withTokenAuth(async(request,{tokenId,userId,params})=>{
  const body=await readJson(request);
  if(!body)return json({error:'invalid_json'},400);

@@ -278,7 +278,7 @@ function validateElement(
     // The message stays SHORT on purpose. The model still needs the set to
     // recover, but repeating ~130 tokens of vocabulary per offending tag bloats
     // a response that may carry many — so the door attaches it ONCE
-    // (`allowed_html_tags`, lib/story/document/jsx-tier.ts), as `unknown_theme` does.
+    // (`allowed_html_tags`, lib/publish/document/jsx-tier.ts), as `unknown_theme` does.
     errors.push({
       message: `Tag <${el.tag}> is not in the allowed HTML tag list — see allowed_html_tags`,
       tag: el.tag, start: el.start, end: el.end,

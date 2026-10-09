@@ -46,8 +46,8 @@ import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
 import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
 import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/contract';
 import type { StorySurface } from '@/lib/story-runtime/story-fragment';
-import { compiledPageFor, domainFooter } from '@/lib/story/prepared';
-import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/story/prepared/prepared-page.server';
+import { compiledPageFor, domainFooter } from '@/lib/publish/prepared';
+import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';
 import { documentStyleSheets } from '@/lib/compiled-page/styles';
 import { cspExtensionsFor } from '@/lib/trust/document-trust';
 

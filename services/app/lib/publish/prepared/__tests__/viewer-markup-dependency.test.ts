@@ -3,7 +3,7 @@ import { compilePage } from '@/lib/compiled-page/compiler';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { doorsFor } from '../serve.server';
 import { wantsViewerOverlay } from '@/lib/islands/viewer';
-import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
 import { compileDataflow, prepareCompile } from '@/lib/dataflow/compile-dataflow';
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { parseJsx } from '@/lib/jsx';

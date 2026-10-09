@@ -1,6 +1,6 @@
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { sessionActor } from '@/lib/accounts';
-import { parseContentInput } from '@/lib/story/document/input';
+import { parseContentInput } from '@/lib/publish/document/input';
 import { resolveToken } from '@/lib/accounts';
 
 /**
