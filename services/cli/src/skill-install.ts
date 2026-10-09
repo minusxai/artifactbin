@@ -1,8 +1,8 @@
 import {compareVersions,validVersion} from './version-order';
 import {configDir} from './config';
 /** Local integration boundary: selection never writes; installation owns managed files only. */
-import {cp,lstat,mkdir,readdir,realpath,rename,rm} from 'node:fs/promises';
-import {basename,dirname,join,resolve,relative,isAbsolute} from 'node:path';
+import {cp,lstat,mkdir,readdir,realpath,rename,rm,symlink} from 'node:fs/promises';
+import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {emitKeypressEvents,type Key} from 'node:readline';
 import {atomicWrite,digest,isMissing,privateDirectory,readOptional} from './files';
@@ -88,7 +88,7 @@ function safeSkillPath(path:string):boolean{return !!path&&!isAbsolute(path)&&!p
 interface Manifest {version:string;source?:string;server?:string;files:Record<string,string>}
 /** Managed copies record their provenance so status, update and the harness agree on who owns them. */
 const SKILL_SOURCE='afbin-cli';
-export interface SkillInstallation {path:string;harnesses:SkillHarness[];status:'installed'|'updated'|'unchanged';source:string;version:string;backup?:string;restart_required?:true}
+export interface SkillInstallation {path:string;harnesses:SkillHarness[];status:'installed'|'updated'|'unchanged'|'reused'|'modified'|'conflict';source:string;version:string;backup?:string;links?:{path:string;target:string}[];duplicates?:string[];recovery?:string;restart_required?:true}
 /** These harnesses read their skills folder once, at startup; pi and OpenCode read it per run. */
 const restartHarnesses:Partial<Record<SkillHarness,string>>={claude:'Claude Code',codex:'Codex'};
 /** One line per harness that will not see a freshly written skill until it restarts. */
@@ -97,54 +97,82 @@ export function restartHints(installations:readonly SkillInstallation[]):string[
   const name=restartHarnesses[harness];return name?[`Restart ${name} to load the installed skill at ${item.path}.`]:[];
  }));
 }
-export interface SkillPlan {harness:SkillHarness;path:string;status:'install'|'update'|'unchanged';source:string;installed?:string;version:string}
+export interface SkillPlan {harness:SkillHarness;path:string;status:'install'|'update'|'unchanged'|'reused'|'modified'|'conflict';source:string;installed?:string;version:string;link_required?:true}
 /** A backup says which harness it belongs to and which version of the skill it holds. */
 const backupName=(harness:string,replaced:string|undefined):string=>`${harness}-${(replaced&&validVersion(replaced)?replaced:'unmanaged').replace(/[^\w.+-]/g,'_')}`;
-/**
- * One superseded copy per skill destination is enough to recover an edit; older ones only grow.
- * Entries are matched by this destination's own `<harness>-` prefix, so another harness' backup and
- * anything a person put here are left alone, and a symlink is removed as a link, never followed.
- * Cleanup never fails an installation whose skill files are already written.
- */
-async function pruneSkillBackups(directory:string,keep:string,prefix:string):Promise<void>{
- try{
-  for(const entry of await readdir(directory,{withFileTypes:true})){
-   if(entry.name===keep||!entry.name.startsWith(prefix)||entry.isSymbolicLink())continue;
-   await rm(join(directory,entry.name),{recursive:true,force:true});
-  }
- }catch{/* A missing directory or an unreadable leftover is not a reason to fail an installed skill. */}
-}
 async function readManifest(path:string):Promise<Manifest|undefined>{
  const bytes=await readOptional(join(path,'.afbin-skill.json'));if(!bytes)return;
- try{const value=JSON.parse(bytes.toString());if(!value||typeof value.files!=='object')throw new Error();return value;}catch{return undefined;}
+ try{const value=JSON.parse(bytes.toString());if(!value||!value.files||typeof value.files!=='object'||Array.isArray(value.files)||typeof value.version!=='string'||value.source!==undefined&&typeof value.source!=='string'||value.server!==undefined&&typeof value.server!=='string'||Object.entries(value.files).some(([key,value])=>!safeSkillPath(key)||typeof value!=='string'))throw new Error();return value;}catch{return undefined;}
 }
-interface SkillStatus {harness:SkillHarness;path:string;installed:boolean;current:boolean;version?:string;source?:string}
+interface SkillStatus {harness:SkillHarness;path:string;installed:boolean;current:boolean;version?:string;source?:string;duplicates?:string[]}
 /** Read-only view for `afbin status`: where each harness' skill lives and whether it matches this CLI. */
-export async function skillStatus(home:string,env?:NodeJS.ProcessEnv):Promise<SkillStatus[]>{
+export async function skillStatus(home:string,env?:NodeJS.ProcessEnv,cwd?:string):Promise<SkillStatus[]>{
  const targets=skillTargets(home,env);const result:SkillStatus[]=[];
  for(const harness of skillHarnesses){
-  const path=targets[harness];const manifest=await readManifest(path);
-  const installed=manifest!==undefined||await readOptional(join(path,'SKILL.md'))!==null;
+  const found=await discoverSkills(harness,{home,env,cwd});const path=found[0]??targets[harness];const manifest=await readManifest(path);
+  const installed=(await discoverSkills(harness,{home,env,cwd},false)).includes(path);
   result.push({harness,path,installed,current:installed&&manifest?.version===CLI_VERSION,
-   ...(manifest?.version?{version:manifest.version}:{}),...(manifest?.source?{source:manifest.source}:{})});
+   ...(manifest?.version?{version:manifest.version}:{}),...(found.length?{source:manifest?.source??'external'}:{}),...(found.length>1?{duplicates:found.slice(1)}:{})});
  }
  return result;
 }
-/** Read-only projection of installSkills: what each selected destination would become. */
-export async function planSkills(selected:readonly SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;version?:string;origin?:string}):Promise<SkillPlan[]>{
- const targets=skillTargets(options.home,options.env);const version=options.version??CLI_VERSION;const origin=options.origin??DEFAULT_SERVER;const plans:SkillPlan[]=[];
+interface SkillOptions {home:string;env?:NodeJS.ProcessEnv;cwd?:string;version?:string;origin?:string;files?:Readonly<Record<string,string>>;takeover?:boolean;link?:(target:string,path:string)=>Promise<void>}
+/** Discover existing skills in harness, shared and ancestor project locations without writing. */
+async function discoverSkills(harness:SkillHarness,options:SkillOptions,shared=true):Promise<string[]>{
+ const target=skillTargets(options.home,options.env)[harness];
+ const paths=[target,...(shared?[join(options.home,'.agents','skills','artifactbin')]:[])];
+ if(options.cwd){
+  let directory=resolve(options.cwd);
+  for(;;){
+   const project=skillTargets(directory,{});
+   paths.push(project[harness],join(directory,harness==='opencode'?'.opencode':harness==='pi'?'.pi':`.${harness}`,'skills','artifactbin'),...(shared?[join(directory,'.agents','skills','artifactbin')]:[]));
+   const parent=dirname(directory);if(parent===directory)break;directory=parent;
+  }
+ }
+ const found:string[]=[];
+ for(const path of [...new Set(paths)]){
+  if(await readOptional(join(path,'SKILL.md'))!==null){const physical=await realpath(path);if(!found.includes(physical))found.push(physical);}
+ }
+ return found;
+}
+/** A directory link must expose a skill the harness can load under the artifactbin name. */
+async function usableSkillRoot(path:string):Promise<boolean>{
+ const bytes=await readOptional(join(path,'SKILL.md'));if(!bytes)return false;
+ const header=/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(bytes.toString());
+ return !!header&&/^name:[ \t]*(?:artifactbin|'artifactbin'|"artifactbin")[ \t]*$/m.test(header[1]!);
+}
+/** Never read through nested symlinks in a managed copy. */
+async function safeManagedFile(path:string,file:string):Promise<boolean>{
+ let part=path;
+ for(const segment of file.split('/')){part=join(part,segment);try{if((await lstat(part)).isSymbolicLink())return false;}catch(error){if(!isMissing(error))throw error;}}
+ return true;
+}
+async function inspectSkill(path:string,files:Readonly<Record<string,string>>):Promise<{manifest?:Manifest;owned:boolean;modified:boolean;exists:boolean}>{
+ const manifest=await readManifest(path);let exists=false;
+ try{const info=await lstat(path);if(!info.isDirectory())throw new CliError('invalid_skill_destination',`Skill destination is not a directory: ${path}`);exists=(await readdir(path)).length>0;}catch(error){if(!isMissing(error))throw error;}
+ // A valid pre-provenance manifest is the former CLI format; hashes still prove its files.
+ const owned=!!manifest&&validVersion(manifest.version)&&Object.keys(manifest.files).length>0&&(manifest.source===SKILL_SOURCE||manifest.source===undefined);
+ let modified=false;
+ if(owned){for(const file of new Set([...Object.keys(manifest.files),...Object.keys(files)])){
+  if(!await safeManagedFile(path,file)){modified=true;continue;}
+  const current=await readOptional(join(path,file));
+  if(file in manifest.files?current===null||digest(current)!==manifest.files[file]:current!==null)modified=true;
+ }}
+ return {manifest,owned,modified,exists};
+}
+/** Read-only projection uses the same discovery and ownership rules as application. */
+export async function planSkills(selected:readonly SkillHarness[],options:SkillOptions):Promise<SkillPlan[]>{
+ const targets=skillTargets(options.home,options.env),version=options.version??CLI_VERSION,origin=options.origin??DEFAULT_SERVER;
+ const files=teachingFilesFor(options.files??localSkillFiles,origin);const plans:SkillPlan[]=[];
  for(const harness of [...new Set(selected)]){
-  const path=targets[harness];const manifest=await readManifest(path);
-  const exists=manifest!==undefined||await readOptional(join(path,'SKILL.md'))!==null;
-  plans.push({harness,path,version,
-   // A skill addressed to another server teaches the agent to publish there.
-   status:!exists?'install':manifest?.version===version&&manifest?.server===origin?'unchanged':'update',
-   source:manifest?.source??(exists?'unmanaged':SKILL_SOURCE),
-   ...(manifest?.version?{installed:manifest.version}:{})});
+  const found=await discoverSkills(harness,options);const path=found[0]??await physicalPath(targets[harness]);
+  const {manifest,owned,modified,exists}=await inspectSkill(path,files);
+  const linkRequired=found.length>0&&await physicalPath(resolve(targets[harness]))!==path;
+  plans.push({harness,path,version,...(linkRequired?{link_required:true as const}:{}),status:!exists?'install':options.takeover&&(!owned||modified)?owned&&manifest&&validVersion(version)&&compareVersions(manifest.version,version)>0?'unchanged':'update':!owned?await usableSkillRoot(path)?'reused':'conflict':modified?'modified':manifest?.version===version&&manifest.server===origin?'unchanged':'update',source:manifest?.source??(owned||!exists?SKILL_SOURCE:'external'),...(manifest?.version?{installed:manifest.version}:{})});
  }
  return plans;
 }
-export async function installSkills(selected:SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;files?:Readonly<Record<string,string>>;origin?:string;version?:string;alreadyLocked?:boolean;preserveSelection?:boolean}):Promise<{installations:SkillInstallation[];harnesses:SkillHarness[]}>{
+export async function installSkills(selected:SkillHarness[],options:SkillOptions&{files?:Readonly<Record<string,string>>;origin?:string;version?:string;alreadyLocked?:boolean;preserveSelection?:boolean}):Promise<{installations:SkillInstallation[];harnesses:SkillHarness[]}>{
  // Whichever bundle this is — the compiled one or a downloaded release — it
  // ships addressed to nobody; the skill an agent reads must name the server
  // THIS afbin uses, or the agent is taught to publish somewhere else.
@@ -153,20 +181,39 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
  const files=teachingFilesFor(options.files??localSkillFiles,origin),version=options.version??CLI_VERSION;
  if(!files['SKILL.md']||Object.keys(files).some(path=>!safeSkillPath(path)))throw new CliError('invalid_skill_bundle','Invalid skill bundle path or missing SKILL.md.');
  if(selected.some(x=>!skillHarnesses.includes(x)))throw new CliError('invalid_harness','Unknown harness selection.');
- const targets=skillTargets(options.home,options.env);const groups=new Map<string,SkillHarness[]>();
- for(const name of selected){const path=await physicalPath(resolve(targets[name]));groups.set(path,[...(groups.get(path)??[]),name]);}
+ const targets=skillTargets(options.home,options.env);const groups=new Map<string,SkillHarness[]>();const duplicates=new Map<string,string[]>();
+ for(const name of selected){const found=await discoverSkills(name,options);const path=found[0]??await physicalPath(resolve(targets[name]));groups.set(path,[...new Set([...(groups.get(path)??[]),name])]);duplicates.set(path,[...new Set([...(duplicates.get(path)??[]),...found.slice(1)])]);}
  const install=async()=>{
   const saved=await settings(options.home,options.env)??{};
   const installations:SkillInstallation[]=[];
-  for(const [path,harnesses] of groups){
-   const manifestBytes=await readOptional(join(path,'.afbin-skill.json'));let previous:Manifest|undefined;
-   if(manifestBytes){try{previous=JSON.parse(manifestBytes.toString());if(!previous||typeof previous.files!=='object'||Object.entries(previous.files).some(([key,value])=>!safeSkillPath(key)||typeof value!=='string'))throw new Error();}catch{throw new CliError('invalid_skill_manifest',`Invalid managed skill manifest at ${path}.`,'Move the manifest aside and rerun the command; the existing skill will be backed up.');}}
-   // Recheck under the install lock: an older running process must not undo a newer install.
-   if(previous && validVersion(previous.version) && validVersion(version) && compareVersions(previous.version,version)>0){
-    installations.push({path,harnesses,status:'unchanged',source:previous.source??SKILL_SOURCE,version:previous.version});continue;
+  for(const [path,requestedHarnesses] of groups){
+   const links:{path:string;target:string}[]=[];const harnesses:SkillHarness[]=[];let linkedStartup=false;
+   for(const harness of requestedHarnesses){
+    const target=resolve(targets[harness]);
+    if(await physicalPath(target)===path){harnesses.push(harness);try{if((await lstat(target)).isSymbolicLink())links.push({path:target,target:path});}catch(error){if(!isMissing(error))throw error;}continue;}
+    try{
+     if(!options.takeover&&!await usableSkillRoot(path))throw new CliError('invalid_skill_root',`Existing SKILL.md must name artifactbin: ${path}`);
+     // The link is the harness's discovery entry; content remains owned by its original installer.
+     try{await lstat(target);throw new CliError('skill_link_conflict',`Existing destination must be preserved: ${target}`);}catch(error){if(!isMissing(error))throw error;}
+     await mkdir(dirname(target),{recursive:true});
+     await (options.link??((source,destination)=>symlink(source,destination,process.platform==='win32'?'junction':'dir')))(path,target);
+     harnesses.push(harness);links.push({path:target,target:path});if(harness in restartHarnesses)linkedStartup=true;
+    }catch(error){
+     installations.push({path:target,harnesses:[harness],status:'conflict',source:'external',version:'unknown',recovery:(error as NodeJS.ErrnoException).code==='invalid_skill_root'?`Existing SKILL.md at ${path} must declare name: artifactbin. Preserve it and provide a valid Artifactbin skill, or run afbin setup --takeover to back it up and replace it.`:`Could not link ${target} to the existing skill at ${path} (${(error as NodeJS.ErrnoException).code??'link failed'}). Preserve the existing folder and create a directory symlink (Windows: junction) at that harness path, then rerun afbin setup.`});
+    }
    }
-   const allPaths=new Set([...Object.keys(previous?.files??{}),...Object.keys(files)]);let modified=false,changed=previous?.version!==version;let existed=false;
-   try{const info=await lstat(path);if(!info.isDirectory())throw new CliError('invalid_skill_destination',`Skill destination is not a directory: ${path}`);existed=true;}catch(error){if(!isMissing(error))throw error;}
+   if(!harnesses.length)continue;
+   const linked={...(links.length?{links}:{}),...(linkedStartup?{restart_required:true as const}:{})};
+   const inspection=await inspectSkill(path,files);const previous=inspection.manifest;
+   const duplicatePaths=duplicates.get(path)??[];
+   if(inspection.exists&&(!inspection.owned||inspection.modified)&&!options.takeover){
+    installations.push({path,harnesses,status:inspection.owned?'modified':await usableSkillRoot(path)?'reused':'conflict',...linked,source:previous?.source??(inspection.owned?SKILL_SOURCE:'external'),version:previous?.version??'unknown',...(duplicatePaths.length?{duplicates:duplicatePaths}:{}),recovery:'Existing skill preserved. To replace it with a backed-up CLI-managed copy, run afbin setup --takeover.'});continue;
+   }
+   // Recheck under the install lock: an older running process must not undo a newer install.
+   if(inspection.owned && previous && validVersion(previous.version) && validVersion(version) && compareVersions(previous.version,version)>0){
+    installations.push({path,harnesses,status:'unchanged',...linked,source:previous.source??SKILL_SOURCE,version:previous.version});continue;
+   }
+   const allPaths=new Set([...Object.keys(previous?.files??{}),...Object.keys(files)]);let modified=inspection.modified,changed=!inspection.owned||previous?.version!==version;const existed=inspection.exists;
    for(const file of allPaths){
     const target=join(path,file);let current:Buffer|null=null;
     // Do not follow a file or nested-directory symlink while reading or replacing managed content.
@@ -176,24 +223,23 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
     if(file in files?current?.toString()!==files[file]:current!==null)changed=true;
    }
    if(previous&&previous.server!==origin)changed=true;
-   if(!changed){installations.push({path,harnesses,status:'unchanged',source:previous?.source??SKILL_SOURCE,version:previous?.version??version});continue;}
-   let backup:string|undefined;let label:string|undefined;
-   if(existed&&(!previous||modified)){
+   if(!changed){installations.push({path,harnesses,status:'unchanged',...linked,source:previous?.source??SKILL_SOURCE,version:previous?.version??version});continue;}
+   let backup:string|undefined;
+   if(existed&&(!inspection.owned||modified)){
     const backupRoot=join(configDir(options.home,options.env),'skill-backups');await privateDirectory(backupRoot);
-    label=[...harnesses].sort()[0]!;
-    backup=join(backupRoot,backupName(label,previous?.version));
+    const label=[...harnesses].sort()[0]!;
+    backup=join(backupRoot,`${backupName(label,previous?.version)}-${randomUUID()}`);
     // Copy beside the name first: a copy of the same version survives until its replacement is whole.
     const staged=`${backup}.${randomUUID()}.tmp`;
     await cp(path,staged,{recursive:true,dereference:false,errorOnExist:true,force:false});
-    await rm(backup,{recursive:true,force:true});await rename(staged,backup);
+    await rename(staged,backup);
    }
    await mkdir(path,{recursive:true});
    for(const [file,content] of Object.entries(files)){await mkdir(dirname(join(path,file)),{recursive:true});await atomicWrite(join(path,file),content);}
-   for(const file of Object.keys(previous?.files??{}))if(!(file in files))await rm(join(path,file),{force:true});
+   if(inspection.owned)for(const file of Object.keys(previous?.files??{}))if(!(file in files)){const current=await readOptional(join(path,file));if(current&&digest(current)===previous!.files[file])await rm(join(path,file),{force:true});}
    await atomicWrite(join(path,'.afbin-skill.json'),JSON.stringify({version,source:SKILL_SOURCE,server:origin,files:Object.fromEntries(Object.entries(files).map(([file,content])=>[file,digest(content)]))}));
-   // The new skill files are in place, so this destination's earlier copies are dead weight.
-   if(backup&&label)await pruneSkillBackups(dirname(backup),basename(backup),`${label}-`);
-   installations.push({path,harnesses,status:existed?'updated':'installed',source:SKILL_SOURCE,version,...(backup?{backup}:{}),...(harnesses.some(name=>name in restartHarnesses)?{restart_required:true as const}:{})});
+
+   installations.push({path,harnesses,status:existed?'updated':'installed',...linked,source:SKILL_SOURCE,version,...(backup?{backup}:{}),...(duplicatePaths.length?{duplicates:duplicatePaths}:{}),...(harnesses.some(name=>name in restartHarnesses)?{restart_required:true as const}:{})});
   }
   // Preserve other settings when adding the selected integrations.
   if(!options.preserveSelection)await atomicWrite(join(configDir(options.home,options.env),'settings.json'),JSON.stringify({...saved,harnesses:[...new Set(selected)]},null,2)+'\n');

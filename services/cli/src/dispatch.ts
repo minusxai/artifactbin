@@ -134,15 +134,15 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    // The default is stored as the deployment's CANONICAL origin when it publishes one, so an
    // installer served from a second hostname does not pin the folder to a name of the same server.
    if(typeof flags.server==='string')await saveDefaultServer((await serverIdentity(flags.server,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})})).canonical,home,context.env);
-   const result=await setupSkills({home,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
+   const result=await setupSkills({home,cwd:context.cwd??process.cwd(),takeover:!!flags.takeover,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    const installed=await setupGlobal({home,env:context.env??process.env,noGlobal:!!flags['no-global'],...(context.installKind?{kind:context.installKind}:{}),...(context.npm?{npm:context.npm}:{})});
    if(json){emit({...result,...installed});if(installed.global.status==='failed')stderr(`afbin command not installed: ${installed.global.reason}\n${manualInstallHint(installed.global.version)}\n`);}
    else stdout(setupSummary(result.installations,style)+globalSummary(installed,style));
-   return 0;
+   return result.installations.some(item=>item.status==='conflict')?2:0;
   }
   // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
   // harnesses. It never authenticates or touches the network, and is a no-op once the skill is current.
-  if(command!=='setup')await ensureInit({home,env:context.env,origin:declaredServer,stderr,style});
+  if(command!=='setup')await ensureInit({home,cwd:context.cwd??process.cwd(),env:context.env,origin:declaredServer,stderr,style});
   if(flags.help||command==='help'){
    const bundled=command==='help'?flags:{};
    const format=typeof bundled.format==='string'?bundled.format:'text';const topic=command==='help'?positionals[0]:command;
@@ -156,7 +156,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    if(json){emit({help:text});return 0;}
    // The printed brief says its references are files beside SKILL.md; without the absolute path an agent
    // searched the whole filesystem for them (three tasks, 100–120 s each).
-   const installed=!topic&&screen===undefined?(await skillStatus(await realpath(home),context.env)).filter(item=>item.installed).map(item=>item.path):[];
+   const installed=!topic&&screen===undefined?(await skillStatus(await realpath(home),context.env,context.cwd??process.cwd())).filter(item=>item.installed).map(item=>item.path):[];
    emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd,home);
@@ -204,12 +204,12 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    const selected=await selectSkills({...selection,interactive:false});
    const ask=interactive&&!json&&!flags.yes&&!flags.harness&&!skillsDisabled(context.env);
    const live=!json&&(context.progress??(!context.stderr&&!!process.stderr.isTTY));
-   const updated=await (context.update??updateCli)({home,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch,...(context.npm?{npm:context.npm}:{}),
+   const updated=await (context.update??updateCli)({home,cwd:context.cwd??process.cwd(),takeover:!!flags.takeover,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch,...(context.npm?{npm:context.npm}:{}),
     ...(ask?{chooseHarnesses:()=>selectSkills({...selection,interactive:true})}:{}),
     ...(live?{report:progressRenderer(stderr,createStyle(context.stderr?styleOptions:colorSupport(context.env??process.env,true)))}:{})});
    emit(updated);
    if('installations' in updated)for(const hint of restartHints(updated.installations))stderr(hint+'\n');
-   return 0;
+   return 'installations' in updated&&updated.installations.some(item=>item.status==='conflict')?2:0;
   }
   if(workspace.tracking&&typeof flags.server==='string'&&!managedOrigin&&!['auth','update'].includes(command)){
    // Two names of ONE deployment are not two servers. Ask only when the strings differ.
@@ -552,17 +552,17 @@ async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(co
  * never prompts (selection is non-interactive here) and never authenticates. Idempotent: it installs
  * only when the managed skill manifest is missing or stale, and stays silent otherwise.
  */
-async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;origin?:string;stderr:(value:string)=>void;style:Style}):Promise<void>{
+async function ensureInit(options:{home:string;cwd?:string;env?:NodeJS.ProcessEnv;origin?:string;stderr:(value:string)=>void;style:Style}):Promise<void>{
  const selected=await selectSkills({home:options.home,env:options.env,interactive:false});
  if(!selected.length)return;
- const plans=await planSkills(selected,{home:options.home,env:options.env,origin:options.origin});
+ const plans=await planSkills(selected,{home:options.home,cwd:options.cwd,env:options.env,origin:options.origin});
  // Eager init installs a MISSING or version-stale skill. A skill addressed to another server is
  // `afbin setup`'s decision: without this gate, a command run with --server against a second
  // server rewrites every harness's skill files on every invocation.
- const stale=plans.filter(plan=>plan.status==='install'||(plan.status==='update'&&(!validVersion(plan.installed)||compareVersions(plan.installed,plan.version)<0)));
+ const stale=plans.filter(plan=>plan.link_required||plan.status==='install'||(plan.status==='update'&&(!validVersion(plan.installed)||compareVersions(plan.installed,plan.version)<0)));
  if(!stale.length)return;
- const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,env:options.env,origin:options.origin,preserveSelection:true});
- for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${options.style.green(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
+ const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,cwd:options.cwd,env:options.env,origin:options.origin,preserveSelection:true});
+ for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${(item.status==='conflict'?options.style.yellow:options.style.green)(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}${item.recovery?`\n${item.recovery}`:''}\n`);
  for(const hint of restartHints(installed.installations))options.stderr(options.style.yellow(hint)+'\n');
 }
 /** The approval sentence keeps its words; the code and the URL stand out on a terminal. */
