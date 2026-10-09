@@ -4,6 +4,7 @@ import { $isTableNode, $isTableCellNode, $isTableRowNode } from '@lexical/table'
 import { $getRoot, $isTextNode, KEY_TAB_COMMAND } from 'lexical';
 import { mountMarkdownEditor, type MarkdownEditor } from '../editor';
 import { markdownContent } from '../content';
+import { prepareEditorMarkdown } from '../transformers';
 import { describeRange, resolveParts } from '@/lib/story-runtime/edit/selection-range';
 import { createMarkdownRegions } from '@/lib/story-runtime/edit/markdown-regions';
 import { parseJsx, serializeJsx } from '@/lib/jsx';
@@ -17,6 +18,26 @@ function mount(source: string) {
   return { root, changes, view };
 }
 describe('Lexical Markdown region', () => {
+  it.each(['~~~', '~~~~', '````'])('preserves %s fenced code and its language through edit/save/reopen', fence => {
+    const original = 'const answer: number = 42;';
+    const source = `${fence}ts\n${original}\n${fence}`;
+    const { root, changes, view } = mount(source);
+    expect(root.querySelector('code')?.textContent).toBe(original);
+    expect(root.innerHTML).not.toContain('mx-code-token');
+    view.editor.update(() => {
+      const text = $getRoot().getAllTextNodes().find(node => node.getTextContent().includes(original));
+      if (!$isTextNode(text)) throw new Error('code text');
+      text.selectEnd().insertText(' // edited');
+    }, { discrete: true });
+    view.flush();
+    const saved = changes.at(-1)!;
+    expect(saved).not.toContain('mx-code-token');
+    const rendered = markdownContent(saved);
+    const reader = document.createElement('div'); reader.innerHTML = rendered.html;
+    expect(reader.querySelector('code.language-typescript')?.textContent).toBe(original + ' // edited');
+    expect(rendered.html).toContain('mx-code-token-keyword');
+    expect(mount(saved).root.querySelector('code')?.textContent).toBe(original + ' // edited');
+  });
   it('keeps fenced code source through editor saves and highlights the saved Markdown again', () => {
     const { root, changes, view } = mount('```js\nconst answer = "<script>";\n```');
     const code = root.querySelector('code');
@@ -35,6 +56,86 @@ describe('Lexical Markdown region', () => {
     expect(rendered.text).toContain('const answer = "<script>"; // edited');
     expect(rendered.html).toContain('mx-code-token-keyword');
     expect(rendered.html).not.toContain('<script>');
+  });
+  it('exports code with a fence longer than any embedded delimiter and keeps its language', () => {
+    const { view, changes } = mount('~~~~ts\nconst fence = "```";\n~~~~');
+    view.editor.update(() => {
+      const code = $getRoot().getAllTextNodes().find(node => node.getTextContent().includes('const fence'));
+      if (!$isTextNode(code)) throw new Error('code text');
+      code.setTextContent('const fence = "```";\n~~~\nreturn true;');
+    }, { discrete: true });
+    view.flush();
+    const saved = changes.at(-1)!;
+    expect(saved).toContain('const fence = "```";\n~~~\nreturn true;');
+    const reopened = mount(saved);
+    expect(reopened.root.querySelector('code')?.textContent).toBe('const fence = "```";\n~~~\nreturn true;');
+    expect(markdownContent(saved).html).toContain('class="language-typescript"');
+  });
+  it('imports a tilde fence with backticks in its info string', () => {
+    const { root } = mount('~~~ts caption`meta\nconst answer = 42;\n~~~');
+    expect(root.querySelector('code')?.textContent, root.innerHTML).toBe('const answer = 42;');
+    expect(markdownContent('~~~ts caption`meta\nconst answer = 42;\n~~~').html).toContain('class="language-typescript"');
+  });
+  it('preserves a language that itself contains backticks in a tilde fence', () => {
+    const source = '~~~foo`bar\nconst answer = 42;\n~~~';
+    prepareEditorMarkdown(source); // An unused preparation must not affect a later import.
+    const authoredAlias = '__mx_internal_code_language_1__';
+    const aliasEditor = mount(`~~~${authoredAlias}\nconst marker = 1;\n~~~`);
+    expect(aliasEditor.root.querySelector('code')?.getAttribute('data-language')).toBe(authoredAlias);
+    expect(aliasEditor.root.querySelector('code')?.textContent).toBe('const marker = 1;');
+    const { root, changes, view } = mount(source);
+    expect(root.querySelector('code')?.textContent, root.innerHTML).toBe('const answer = 42;');
+    view.editor.update(() => {
+      const code = $getRoot().getAllTextNodes().find(node => node.getTextContent().includes('const answer'));
+      if (!$isTextNode(code)) throw new Error('code text');
+      code.selectEnd().insertText(' // edited');
+    }, { discrete: true });
+    view.flush();
+    expect(changes.at(-1)).toContain('~~~foo`bar');
+    expect(mount(changes.at(-1)!).root.querySelector('code')?.textContent).toBe('const answer = 42; // edited');
+  });
+  it('keeps CommonMark three-space fence indentation out of the code value', () => {
+    const { root } = mount('   ~~~ts\n   const answer = 42;\n   ~~~');
+    expect(root.querySelector('code')?.textContent).toBe('const answer = 42;');
+  });
+  it('does not overflow while preparing a long tilde fence with many backtick runs', () => {
+    const body = 'x`'.repeat(150_000);
+    const source = `~~~txt\n${body}\n~~~`;
+    expect(prepareEditorMarkdown(source).source).toContain(body);
+  });
+  it('does not interpret a tab-indented tilde line as a fenced block', () => {
+    const { root } = mount('\t~~~ts\n\tconst answer = 42;\n\t~~~');
+    expect(root.querySelector('pre')).toBeNull();
+    expect(root.textContent).toContain('~~~ts');
+  });
+  it('imports a pasted tilde fence as editable code and saves its language', () => {
+    const { root, view, changes } = mount('before');
+    view.editor.update(() => $getRoot().selectEnd(), { discrete: true });
+    view.paste('~~~ts\nconst pasted: number = 7;\n~~~', 'markdown');
+    view.flush();
+    expect(root.querySelector('code')?.textContent).toBe('const pasted: number = 7;');
+    expect(markdownContent(changes.at(-1)!).html).toContain('class="language-typescript"');
+  });
+  it('replaces selected text when pasting a Markdown code block', () => {
+    const { root, view, changes } = mount('before old after');
+    view.editor.update(() => {
+      const text = $getRoot().getAllTextNodes()[0];
+      if (!$isTextNode(text)) throw new Error('paragraph text');
+      text.select(7, 10);
+    }, { discrete: true });
+    view.paste('~~~ts\nconst pasted: number = 7;\n~~~', 'markdown');
+    view.flush();
+    expect(root.innerHTML).toContain('before');
+    expect(root.innerHTML).toContain('after');
+    expect(root.querySelector('code')?.textContent).toBe('const pasted: number = 7;');
+    const saved = changes.at(-1)!;
+    expect(saved).not.toContain('old');
+    expect(markdownContent(saved).html).toContain('class="language-typescript"');
+  });
+  it('leaves an invalid backtick info string as prose instead of importing a code block', () => {
+    const { root } = mount('```js`title\nconst answer = 42;\n```');
+    expect(root.querySelector('pre')).toBeNull();
+    expect(root.textContent).toContain('const answer = 42;');
   });
   it('edits and formats selected text, persists Markdown, and reopens it', () => {
     const { root, changes, view } = mount('## Overview\n\nHello world');
