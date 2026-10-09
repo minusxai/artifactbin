@@ -11,4 +11,4 @@ export { actOnAnnotationFor, countOpenAnnotations, createAnnotationFor, deleteAn
 export type { AnnotationWire, CreateAnnotationInput } from './store';
 export { artifactToWireWithAnnotations, artifactWireFor, readArtifactSnapshot, respondToAnnotationAction } from './wire';
 
-export { readCommentChangesFor, InvalidCommentCursor } from './changes';
+export { readCommentChangesFor, InvalidCommentCursor, CommentWaitCapacityError } from './changes';

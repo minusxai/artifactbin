@@ -1,5 +1,5 @@
 import { withTokenAuth } from '@/lib/accounts';
-import { InvalidCommentCursor, readCommentChangesFor } from '@/lib/annotations';
+import { CommentWaitCapacityError, InvalidCommentCursor, readCommentChangesFor } from '@/lib/annotations';
 import { json } from '@/lib/http';
 import { COMMENT_CHANGES_MAX_WAIT_SECONDS } from '@artifactbin/contracts';
 
@@ -18,6 +18,7 @@ export const GET = withTokenAuth(async (request, {tokenId, userId, params}) => {
     return result ? json(result, 200, {'Cache-Control': 'no-store'}) : json({error: 'not_found'}, 404);
   } catch (error) {
     if (request.signal.aborted) return json({error: 'aborted'}, 499);
+    if (error instanceof CommentWaitCapacityError) return json({error: 'too_many_comment_waits'}, 429, {'Retry-After': '1'});
     if (error instanceof InvalidCommentCursor) return json({error: 'invalid_cursor'}, 400);
     throw error;
   }

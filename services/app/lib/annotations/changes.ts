@@ -10,6 +10,29 @@ import { getDb } from '@/lib/platform/db';
 import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/story/realtime/live';
 
 export class InvalidCommentCursor extends Error {}
+export class CommentWaitCapacityError extends Error {}
+
+// Concurrency leases, not historical request buckets: keys disappear when their
+// last wait finishes, and the process cap bounds the registry to 128 keys.
+// Each replica enforces its own caps; this is not a distributed account quota.
+const MAX_ACCOUNT_WAITS = 4;
+const MAX_PROCESS_WAITS = 128;
+const accountWaits = new Map<string, number>();
+let activeWaits = 0;
+function acquireWait(actor: TokenActor): () => void {
+  const key = actor.userId ? `account:${actor.userId}` : `token:${actor.tokenId}`;
+  const count = accountWaits.get(key) ?? 0;
+  // No await between checking and reserving: concurrent requests cannot overbook.
+  if (count >= MAX_ACCOUNT_WAITS || activeWaits >= MAX_PROCESS_WAITS) throw new CommentWaitCapacityError();
+  accountWaits.set(key, count + 1);
+  activeWaits++;
+  return () => {
+    const remaining = accountWaits.get(key)! - 1;
+    if (remaining) accountWaits.set(key, remaining);
+    else accountWaits.delete(key);
+    activeWaits--;
+  };
+}
 interface Cursor { v: 1; scope: string; seq: string }
 interface ChangeRow {
   id: string; seq: string; root_id: string | null; body: string;
@@ -67,6 +90,7 @@ export async function readCommentChangesFor(actor: TokenActor, id: string, optio
   };
   let result = await scan();
   if (!result || result.events.length || result.has_more || !options.waitSeconds) return result;
+  const releaseWait = acquireWait(actor);
   const deadline = Date.now() + options.waitSeconds * 1000;
   let wake: (() => void) | undefined;
   let pending = false;
@@ -95,5 +119,7 @@ export async function readCommentChangesFor(actor: TokenActor, id: string, optio
         else if (pending) finish();
       });
     }
-  } finally { await unsubscribe?.(); }
+  } finally {
+    try { await unsubscribe?.(); } finally { releaseWait(); }
+  }
 }

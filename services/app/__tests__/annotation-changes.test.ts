@@ -154,3 +154,64 @@ it('resolve and reopen changes never appear as comment events',async()=>{
  await actOnAnnotationFor(f.actor,f.doc.id,root.id,{reopen:true},human);
  expect((await (await f.read(cursor)).json()).events).toEqual([]);
 });
+it('caps four account waits across credentials/artifacts and releases aborted slots',async()=>{
+ const f=await fixture();const extra=await mintAccountToken('another agent',f.token.userId);
+ const made=await createArtifact(request('/api/artifacts',{method:'POST',token:extra.token,json:{markup:'<p>Other document</p>'}}));expect(made.status).toBe(201);const second=await made.json();
+ const secondCursor=(await (await f.read('now','',undefined,second.id,extra.token)).json()).next_cursor;
+ const controls=Array.from({length:4},()=>new AbortController());
+ const waiting=controls.map((control,index)=>f.read(index===3?secondCursor:f.cursor,'wait=60',control.signal,index===3?second.id:f.doc.id,index%2?extra.token:f.token.token));
+ try {
+  await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(2));
+  // Wait until every request reached the subscription boundary, using the
+  // real responses to ensure the fifth is refused without waiting a minute.
+  const fifthControl=new AbortController();const safety=setTimeout(()=>fifthControl.abort(),2000);
+  const refused=await f.read(f.cursor,'wait=60',fifthControl.signal);clearTimeout(safety);
+  expect(refused.status).toBe(429);expect(refused.headers.get('Retry-After')).toBe('1');
+  expect(await refused.json()).toEqual({error:'too_many_comment_waits'});
+  expect((await f.read(f.cursor,'wait=0')).status).toBe(200);expect((await f.read('now','wait=60')).status).toBe(200);
+  controls[0]!.abort();expect((await waiting[0]!).status).toBe(499);
+  const replacement=new AbortController();const resumed=f.read(f.cursor,'wait=60',replacement.signal);
+  await new Promise(resolve=>setTimeout(resolve,25));replacement.abort();expect((await resumed).status).toBe(499);
+ } finally { controls.forEach(control=>control.abort());await Promise.all(waiting); }
+ expect(live.liveChannelCount()).toBe(0);
+});
+it.each(['timeout','access loss','subscription error'] as const)('releases account wait slots on %s',async(reason)=>{
+ const f=await fixture();
+ if(reason==='subscription error'){
+  const failure=vi.spyOn(live,'subscribeToAnnotations').mockRejectedValue(new Error('subscription failed'));
+  for(let index=0;index<4;index++)await expect(f.read(f.cursor,'wait=1')).rejects.toThrow('subscription failed');
+  failure.mockRestore();
+ }else{
+  const waiting=Array.from({length:4},()=>f.read(f.cursor,'wait=1'));
+  if(reason==='access loss'){
+   await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));
+   await (await getDb()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[f.doc.id]);
+  }
+  for(const response of await Promise.all(waiting))expect(response.status).toBe(reason==='timeout'?200:404);
+  if(reason==='access loss')await (await getDb()).query('UPDATE artifacts SET deleted_at=NULL WHERE id=$1',[f.doc.id]);
+ }
+ const controllers=Array.from({length:4},()=>new AbortController());const polling=controllers.map(c=>f.read(f.cursor,'wait=60',c.signal));
+ try{await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));await new Promise(r=>setTimeout(r,25));}
+ finally{controllers.forEach(c=>c.abort());}
+ for(const response of await Promise.all(polling))expect(response.status).toBe(499);
+ expect(live.liveChannelCount()).toBe(0);
+});
+it('bounds total active waits across accounts to 128 per process',async()=>{
+ const f=await fixture();const db=await getDb();await db.query("UPDATE artifacts SET visibility='unlisted',link_role='commenter' WHERE id=$1",[f.doc.id]);
+ const tokens=[f.token,...await Promise.all(Array.from({length:32},()=>mintAccountToken('process cap')))];
+ const cursors=await Promise.all(tokens.map(async token=>(await (await f.read('now','',undefined,f.doc.id,token.token)).json()).next_cursor as string));
+ const controllers=Array.from({length:128},()=>new AbortController());
+ let subscribed=0;const original=live.subscribeToAnnotations;
+ const spy=vi.spyOn(live,'subscribeToAnnotations').mockImplementation(async(...args)=>{const stop=await original(...args);subscribed++;return stop;});
+ const polling=controllers.map((controller,index)=>{const account=Math.floor(index/4);return f.read(cursors[account]!,'wait=60',controller.signal,f.doc.id,tokens[account]!.token);});
+ try{
+  await vi.waitFor(()=>expect(subscribed).toBe(128),{timeout:10000});
+  const safetyAbort=new AbortController();const timer=setTimeout(()=>safetyAbort.abort(),2000);
+  const refused=await f.read(cursors[32]!,'wait=60',safetyAbort.signal,f.doc.id,tokens[32]!.token);clearTimeout(timer);
+  expect(refused.status).toBe(429);expect(refused.headers.get('Retry-After')).toBe('1');
+  controllers[0]!.abort();expect((await polling[0]!).status).toBe(499);
+  const restored=new AbortController();const admitted=f.read(cursors[32]!,'wait=60',restored.signal,f.doc.id,tokens[32]!.token);
+  await vi.waitFor(()=>expect(subscribed).toBe(129));restored.abort();expect((await admitted).status).toBe(499);
+ }finally{controllers.forEach(controller=>controller.abort());await Promise.all(polling);spy.mockRestore();}
+ expect(live.liveChannelCount()).toBe(0);
+});
