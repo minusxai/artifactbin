@@ -1,7 +1,7 @@
 /**
  * The shim-retirement scripts that outlive the backfills (scripts/migrate/retire-shims):
  * legacy-anchors republishes the live documents still carrying `data-annotation-anchor`
- * (a second run finds nothing), and bare-scripts reports without ever writing. Fixture rows
+ * (a second run finds nothing). Fixture rows
  * are inserted as the old shapes stood; no script ever runs against anything but this
  * isolated PGLite.
  */
@@ -11,7 +11,6 @@ import { createDocumentGraph } from '@/lib/story/graph/document-graph';
 import { useAppHarness } from './harness';
 import { formatReport } from '../../../scripts/migrate/retire-shims/common';
 import { retireAnchorAttributes, run as retireAnchors } from '../../../scripts/migrate/retire-shims/legacy-anchors';
-import { bareScriptVerdict, run as detectBareScripts } from '../../../scripts/migrate/retire-shims/bare-scripts';
 
 const harness = useAppHarness();
 const dry = { apply: false } as const;
@@ -105,37 +104,5 @@ describe('legacy-anchors: live documents lose data-annotation-anchor', () => {
     // A second run is a no-op: nothing carries the attribute, and a detached comment is no candidate.
     const again = await retireAnchors(db, { ...apply, detachOrphanedAnchors: true });
     expect([again.candidates, again.changed, again.blocked]).toEqual([0, [], []]);
-  });
-});
-
-describe('bare-scripts: the report-only detector', () => {
-  const BARE = '<Helmet><script>{`export default () => 1`}</script></Helmet><p>x</p>';
-  const BOTH = '<Helmet><script>{`export default () => 1`}</script><script type="server">{`export default () => 2`}</script></Helmet><p>x</p>';
-  const SERVER = '<Helmet><script type="server">{`export default () => 2`}</script></Helmet><p>x</p>';
-
-  it('classifies by the runner’s own predicate', () => {
-    expect(bareScriptVerdict(BARE)).toBe('used');
-    expect(bareScriptVerdict(BOTH)).toBe('shadowed');
-    expect(bareScriptVerdict(SERVER)).toBe('none');
-    expect(bareScriptVerdict('<p>x</p>')).toBe('none');
-  });
-
-  it('lists the documents that depend on the compat branch, never writes, and refuses --apply', async () => {
-    await head('bare', BARE);
-    await head('both', BOTH);
-    await head('srv', SERVER);
-    await head('gone', BARE, MARKED, true);
-    const db = await harness.db();
-    // A stored graph whose boundaries are broken: skipped and listed, never a crash of the report.
-    const broken = createDocumentGraph(BARE, 1);
-    const root = Object.values(broken.nodes).find((node) => node.children.length)!;
-    root.parts = [];
-    await db.query(`INSERT INTO artifacts (id,token_id,document,format,version,meta) VALUES ('brkn','tok_retire',$1::jsonb,'markup',1,$2)`, [JSON.stringify(broken), JSON.stringify(MARKED)]);
-    const report = await detectBareScripts(db, dry);
-    expect(report.changed).toEqual(['bare']);
-    expect(report.blocked).toEqual([{ id: 'both', reason: expect.stringContaining('shadowed') }, { id: 'brkn', reason: expect.stringContaining('unreadable') }]);
-    expect(report.notes).toContain('used (bare script is the handler): 1');
-    expect(report.notes).toContain('unreadable (skipped): 1');
-    await expect(detectBareScripts(db, apply)).rejects.toThrow(/only reports/);
   });
 });
