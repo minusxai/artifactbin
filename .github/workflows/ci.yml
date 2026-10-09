@@ -360,7 +360,7 @@ jobs:
           path: dist/npm-candidate/*.tgz
           compression-level: 0
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
       # Browser gates need neither the host runtime nor its archive.
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: rm -rf services/cli/dist/runtime services/cli/dist/afbin-runtime-*.gz
@@ -612,7 +612,7 @@ jobs:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
+        if: failure()
         with:
           name: browser-session-images-${{ matrix.shard }}
           path: tmp/browser-session-evidence/*.png
@@ -1039,7 +1039,7 @@ jobs:
           path: services/cli/dist/packages/*.tgz
           compression-level: 0
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
   # A fresh standard-user bootstrap is a separate machine/user proof. It must not
   # contend with native install/browser consumers in the same Windows VM.
