@@ -36,7 +36,7 @@ export interface ForkOverrides {
  * FORK — the same artifact under a NEW OWNER and a new id, and nothing else.
  *
  * Which parts of a document travel and which belong to the original's life is stated once, in
- * [serving and security](../../../docs/serving-and-security.md). Two things the doc cannot say:
+ * [serving and security](../../../../docs/serving-and-security.md). Two things the doc cannot say:
  * object-store bytes are REFERENCED rather than re-uploaded (every key is content-addressed, so a
  * fork of a 27 MB sheet costs no bytes), and a Postgres catalog copies only when the forker owns
  * its live connection.
