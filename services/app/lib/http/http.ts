@@ -1,4 +1,5 @@
 import { currentHeaders } from '../platform/request-context';
+import { measureQueries } from '../platform/query-stats';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 
 /** Absolute origin as the client sees it — honors reverse-proxy forwarding headers, falling back to the request's own url. */
@@ -25,6 +26,26 @@ export async function publicOrigin(): Promise<string> {
   }
   // Off-request (a direct handler call in a test, a build): what the deployment declares.
   return PUBLIC_BASE_URL;
+}
+
+/**
+ * Answer with a `Server-Timing` header: the handler's wall time (`total`) and the time it spent
+ * awaiting the database (`db`, its statement count in `desc`), so a deployment can be measured from
+ * the browser's network panel without logs.
+ */
+export async function withServerTiming(handler: () => Promise<Response>): Promise<Response> {
+  const started = performance.now();
+  const { value: response, stats } = await measureQueries(handler);
+  const timing = `total;dur=${(performance.now() - started).toFixed(1)}, db;dur=${stats.ms.toFixed(1)};desc="${stats.count} queries"`;
+  try {
+    response.headers.append('Server-Timing', timing);
+    return response;
+  } catch {
+    // Immutable headers (a redirect): copy the response rather than lose the measurement.
+    const copy = new Response(response.body, response);
+    copy.headers.append('Server-Timing', timing);
+    return copy;
+  }
 }
 
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {

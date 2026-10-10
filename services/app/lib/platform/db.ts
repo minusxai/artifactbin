@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATABASE_URL, IS_TEST } from './config';
 import { SCHEMA_STATEMENTS } from './schema';
+import { recordQuery } from './query-stats';
 
 /**
  * The single database knob, dispatched on scheme — the URL IS the type:
@@ -115,10 +116,10 @@ class PgliteDb implements Db {
   }
 
   query<T>(sql: string, params: unknown[] = []): Promise<QueryResult<T>> {
-    return this.serialize(async () => {
+    return recordQuery(() => this.serialize(async () => {
       const r = await this.db.query<T>(sql, params);
       return { rows: r.rows, rowCount: r.affectedRows ?? r.rows.length };
-    });
+    }));
   }
 
   transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T> {
@@ -128,10 +129,10 @@ class PgliteDb implements Db {
       this.db.transaction(async (pgtx) => {
         const t = pgtx as { query<U>(sql: string, params?: unknown[]): Promise<{ rows: U[]; affectedRows?: number }> };
         const tx: Queryable = {
-          query: async <U,>(sql: string, params: unknown[] = []) => {
+          query: <U,>(sql: string, params: unknown[] = []) => recordQuery(async () => {
             const r = await t.query<U>(sql, params);
             return { rows: r.rows, rowCount: r.affectedRows ?? r.rows.length };
-          },
+          }),
         };
         return fn(tx);
       }),
@@ -197,9 +198,11 @@ export class PostgresDb implements Db {
     this.pool = pool;
   }
 
-  async query<T>(sql: string, params: unknown[] = []): Promise<QueryResult<T>> {
-    const r = await this.pool.query<T>(sql, params);
-    return { rows: r.rows, rowCount: r.rowCount ?? r.rows.length };
+  query<T>(sql: string, params: unknown[] = []): Promise<QueryResult<T>> {
+    return recordQuery(async () => {
+      const r = await this.pool.query<T>(sql, params);
+      return { rows: r.rows, rowCount: r.rowCount ?? r.rows.length };
+    });
   }
 
   async transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T> {
@@ -207,10 +210,10 @@ export class PostgresDb implements Db {
     try {
       await client.query('BEGIN');
       const tx: Queryable = {
-        query: async <U,>(sql: string, params: unknown[] = []) => {
+        query: <U,>(sql: string, params: unknown[] = []) => recordQuery(async () => {
           const r = await client.query<U>(sql, params);
           return { rows: r.rows, rowCount: r.rowCount ?? r.rows.length };
-        },
+        }),
       };
       const result = await fn(tx);
       await client.query('COMMIT');

@@ -18,7 +18,7 @@ export { auth, overrideSession, type Session } from './session';
 export { closeTestUserSessions, forgetTestUserSession, noteTestUserSession, testUserSessionCount } from './testuser-sessions';
 export { createTestUser, getTestUserRow, listTestUsers, resolveTestUser } from './testusers';
 export { DEFAULT_TOKEN_TTL_MS, LIVE_TOKEN_SQL, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, TOUCH_INTERVAL_MS, ensureUserToken, listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus, touchToken } from './tokens';
-export { ACCOUNT_REACH_SQL, canAuthenticateUser, isLinkOnlyActor, userKindOf } from './user-kinds';
+export { ACCOUNT_REACH_SQL, canAuthenticateUser, userKindOf } from './user-kinds';
 export { USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensById, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, isAccountRow, ownerUsername, revokeUserToken, setUserEmail, setUsername, usernameFromEmail } from './users';
 export type { UserRow } from './users';
 export { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, isCookieCredential, requestOrSessionActor, sessionActor, tokenActorForRequest } from './viewer';

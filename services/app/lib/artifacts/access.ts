@@ -1,14 +1,14 @@
-import { getGroupRole } from '../groups';
 import { getArtifactById } from './store';
 import type { StoredDocument } from '../document';
 import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
 import { hasDocumentEditorAccess } from './document-policy';
 import {
-  ACCOUNT_REACH_SQL, isLinkOnlyActor, type RequestActor, type RoleActor, type TokenActor, userKindOf,
+  ACCOUNT_REACH_SQL, type RequestActor, type RoleActor, type TokenActor,
   type Viewer,
 } from '@/lib/accounts';
 import { catalogOf } from '@/lib/datasets/catalog';
-import { getDb, type Queryable } from '../platform/db';
+import { isLinkOnlyKind } from '../user-kinds';
+import { liveAccessFacts, type AccessFacts } from './access-facts';
 import { canUseDataPolicy } from '@/lib/artifacts/dataset-policy';
 import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
@@ -135,11 +135,12 @@ export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | '
 export async function roleWithoutLink(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
   actor: RoleActor,
+  facts: AccessFacts = liveAccessFacts(actor),
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
   let groupRole:ArtifactRole='none';
   if (row.group_id) {
-    const role = await getGroupRole(actor.userId, row.group_id);
+    const role = await facts.groupRole(row.group_id);
     if(role==='editor')return 'owner';
     if(role==='viewer')groupRole='viewer';
   }
@@ -147,9 +148,9 @@ export async function roleWithoutLink(
   // for an invitation to be addressed to, and neither is the kind of identity
   // an account invites. They reach a stranger's document through the LINK or
   // not at all (lib/user-kinds).
-  if (await isLinkOnlyActor(actor.userId)) return groupRole;
+  if (isLinkOnlyKind(await facts.userKind(actor.userId))) return groupRole;
   if (row.format === 'markup' && hasDocumentEditorAccess(actor)) return 'editor';
-  return maxRole(groupRole,await namedRoleFor(row, actor));
+  return maxRole(groupRole,await namedRoleFor(row, actor, facts));
 }
 
 /**
@@ -162,17 +163,21 @@ export async function roleWithoutLink(
  *   - ownership       — the account, or the bare token that created it;
  *   - a named share   — artifact_shares, by resolved user id or unresolved email;
  *   - the LINK        — what a stranger holding the address gets.
+ *
+ * `facts` is where the decision reads groups, kinds and shares (lib/artifacts/access-facts): the
+ * database, one lookup at a time, unless a caller deciding many rows preloaded them.
  */
 export async function effectiveRole(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
   actor: RoleActor,
+  facts: AccessFacts = liveAccessFacts(actor),
 ): Promise<ArtifactRole> {
-  const held = await roleWithoutLink(row, actor);
+  const held = await roleWithoutLink(row, actor, facts);
   if (held === 'owner') return 'owner';
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
   // URL is not. Without an account there is nothing to attribute a write to.
-  const byLink = actor.userId && await reachesAsAccount(row, actor) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
+  const byLink = actor.userId && await reachesAsAccount(row, actor, facts) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
   return maxRole(byLink, held);
 }
 
@@ -184,11 +189,11 @@ export async function effectiveRole(
  * owns, which is what makes it a full user in there and a guest out here
  * (lib/user-kinds, the same rule the SQL scopes read).
  */
-async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: RoleActor): Promise<boolean> {
-  const kind = await userKindOf(actor.userId);
+async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: RoleActor, facts: AccessFacts): Promise<boolean> {
+  const kind = await facts.userKind(actor.userId);
   if (kind === null || kind === 'account') return true;
   if (kind !== 'testuser') return false;
-  return await userKindOf(row.user_id) === 'testuser';
+  return await facts.userKind(row.user_id) === 'testuser';
 }
 
 /**
@@ -220,19 +225,10 @@ export function linkRoleOf(row: Pick<ArtifactRow, 'visibility' | 'link_role'>): 
 async function namedRoleFor(
   row: Pick<ArtifactRow, 'id'>,
   actor: RoleActor,
+  facts: AccessFacts,
 ): Promise<ArtifactRole> {
   if (!actor.userId) return 'none';
-  const db = await getDb();
-  await resolveSharesFor(db, row.id, actor.userId);
-  const r = await db.query<{ role: ShareRole }>(
-    `SELECT s.role FROM artifact_shares s
-     WHERE s.artifact_id = $1 AND (
-       s.user_id = $2
-       OR (s.user_id IS NULL AND (s.email = $3 OR s.email = (SELECT email FROM users WHERE id = $2)))
-     )`,
-    [row.id, actor.userId, actor.email?.toLowerCase().trim() ?? ''],
-  );
-  return maxRole(...r.rows.map((x) => x.role as ArtifactRole));
+  return facts.namedRole(row.id);
 }
 
 /**
@@ -287,17 +283,6 @@ export const SHARE_PREDICATE = (roles: readonly string[], param: string) =>
   `EXISTS (SELECT 1 FROM artifact_shares s
            WHERE s.artifact_id = artifacts.id AND s.role IN (${roles.map((r) => `'${r}'`).join(', ')})
              AND (s.user_id = ${param} OR (s.user_id IS NULL AND s.email = (SELECT email FROM users WHERE id = ${param}))))`;
-
-/**
- * Stamp `user_id` on every still-unresolved share that matches this user's
- * current email — the moment of RESOLUTION. Idempotent; a no-op once stamped.
- */
-async function resolveSharesFor(db: Queryable, artifactId: string, userId: string): Promise<void> {
-  await db.query(
-    `UPDATE artifact_shares SET user_id = $2 WHERE artifact_id = $1 AND user_id IS NULL AND email = (SELECT email FROM users WHERE id = $2)`,
-    [artifactId, userId],
-  );
-}
 
 /**
  * WHO owns the row, WITHOUT the trash gate — for lib/trash alone, which reads

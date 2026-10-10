@@ -15,6 +15,21 @@ function destination(item: MemberNotificationItem): string {
   return `/a/${item.artifact_id}${tail}`;
 }
 
+/**
+ * The inbox's failure, with a Retry that visibly retries: disabled as "Retrying…" while the read is
+ * in flight, the error gone on success, and a fresh attempt time when it fails again.
+ */
+export function InboxAlert(props: { message?: string; dismiss?: () => void; class?: string }): JSX.Element {
+  const inbox = useInbox();
+  const message = () => props.message || inbox.error();
+  const retry = () => { props.dismiss?.(); void inbox.load(); };
+  return <Show when={message()}><div role="alert" class={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-danger ${props.class ?? ''}`}>
+    <span>{message()}</span>
+    <Show when={!props.message && inbox.failedAt()}>{at => <time dateTime={new Date(at()).toISOString()} class="text-xs text-muted">Tried {new Date(at()).toLocaleTimeString()}</time>}</Show>
+    <button type="button" disabled={inbox.loading()} onClick={retry} class="rounded-[4px] border border-edge px-2 py-0.5 text-xs font-medium text-fg hover:bg-accent-soft disabled:opacity-50">{inbox.loading() ? 'Retrying…' : 'Retry'}</button>
+  </div></Show>;
+}
+
 export function PeopleInbox(props: { compact?: boolean; close?: () => void }): JSX.Element {
   const inbox = useInbox();
   const [busy, setBusy] = createSignal(false);
@@ -46,7 +61,8 @@ export function PeopleInbox(props: { compact?: boolean; close?: () => void }): J
   </>;
   return <section aria-label="Notification list" class="font-sans">
     <Show when={inbox.state()?.unread}><div class="flex justify-end border-b border-edge px-3 py-2"><button type="button" disabled={busy()} onClick={() => void markAllRead()} class="rounded px-2 py-1 text-xs font-medium text-accent hover:bg-accent-soft disabled:opacity-50">Mark all as read</button></div></Show>
-    <Show when={inbox.error() || actionError()}><p role="alert" class="p-3 text-sm text-danger">{actionError() || inbox.error()} <button onClick={() => void inbox.load()}>Retry</button></p></Show>
+    <InboxAlert message={actionError()} dismiss={() => setActionError('')} class="p-3" />
+    <Show when={inbox.reconnecting() && inbox.state()}><p role="status" aria-label="Live updates" class="px-3 pt-2 text-xs text-muted">Live updates paused. Reconnecting…</p></Show>
     <Show when={!inbox.state() && !inbox.error()}><p role="status" class="p-4 text-sm text-muted">Loading notifications…</p></Show>
     <Show when={inbox.state() && !items().length}><div class="px-6 py-10 text-center"><Bell size={24} class="mx-auto mb-3 text-muted" /><p class="text-sm font-medium">You’re all caught up.</p><p class="mt-1 text-xs leading-5 text-muted">Invitations, replies and activity will appear here.</p></div></Show>
     <ul class="m-0 list-none divide-y divide-edge p-0"><For each={items()}>{item => <li data-notification-id={item.id} class={`relative flex gap-3 px-3 py-3.5 ${item.read_at ? '' : 'bg-accent-soft/40'}`}>
