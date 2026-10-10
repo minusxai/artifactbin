@@ -29,7 +29,7 @@ export interface MermaidImage { src: string; type: string; width?: number; heigh
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** `#rrggbb` mixed toward `#rrggbb` by `amount` (0..1) — a tint Mermaid's hex-only variables can take. */
-function mixHex(color: string, toward: string, amount: number): string {
+export function mixHex(color: string, toward: string, amount: number): string {
   const channel = (hex: string, i: number) => Number.parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
   return '#' + [0, 1, 2].map(i => {
     const value = Math.round(channel(color, i) + (channel(toward, i) - channel(color, i)) * amount);
