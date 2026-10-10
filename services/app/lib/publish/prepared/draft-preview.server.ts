@@ -1,6 +1,5 @@
 /** Compile an unsaved editor draft through the reader's Solid compiler. */
-import { assembleReaderPage } from '@/lib/compiled-page/assembler';
-import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { assembleReaderPage, loadCompilerBuild } from '@/lib/compiled-page';
 import { loadSsrModule } from '@/lib/compiled-page/bundle.server';
 import { compilePage } from '@/lib/compiled-page/compiler';
 import { documentStyleSheets } from '@/lib/page-styles';

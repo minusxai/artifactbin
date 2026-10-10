@@ -23,6 +23,10 @@
  *
  * Author text is only ever in string literals of the sources handed in (codegen-safety.ts); nothing
  * here adds any.
+ *
+ * A SEPARATE ENTRY (@/lib/compiled-page/bundle.server), never re-exported by the index: it loads Babel,
+ * Solid's server build and node:vm, which serving pays for only on a cold render (serve.server imports
+ * it lazily).
  */
 import { escapeText } from '@artifactbin/utils/escape';
 import { transformAsync, type PluginObj, type types as BabelTypes } from '@babel/core';

@@ -1,6 +1,8 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
-import { applyEditFor, artifactQuery, type ArtifactRow, canReadArtifact, changeMembership, committedHeadsSettled, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, linkRoleOf, membershipInbox, membershipState, mentionCandidates, parseShareEntries, roleFor as requestRoleFor, updateMembershipInbox, updateSharingFor } from '@/lib/artifacts';
+import { applyEditFor, artifactQuery, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, membershipInbox, membershipState, mentionCandidates, parseShareEntries, roleFor as requestRoleFor, updateMembershipInbox, updateSharingFor } from '@/lib/artifacts';
+import { committedHeadsSettled } from '@/lib/artifacts/store';
+import { linkRoleOf } from '@/lib/artifacts/access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
 import { claimToken, createUser, setUserEmail, ensureUsername, setRelationState, has, count, linked, link } from '@/lib/accounts';
 import { documentEdit, documentEditBody, documentPublicationBody } from '@/__tests__/prepared-document';

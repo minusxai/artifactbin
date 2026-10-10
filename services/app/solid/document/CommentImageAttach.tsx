@@ -20,6 +20,7 @@ import { createContext, createSignal, lazy, onCleanup, Show, Suspense, useContex
 import ImagePlus from 'lucide-solid/icons/image-plus';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { FeatureGate } from '../components/FeatureGate';
 import { Tooltip } from '../ui/Tooltip';
 import { COMMENT_IMAGE_TYPES, createCommentCapture } from './CommentCapture';
@@ -45,8 +46,13 @@ export interface CommentImageDraft {
   refusal: () => string;
   attach: (file: File) => void;
   remove: () => void;
-  /** Upload the image as drawn; undefined when the draft has none. */
-  stage: () => Promise<CommentImageAttachment | undefined>;
+  /** Upload the image as drawn (against `head` when given); undefined when the draft has none. */
+  stage: (head?: string) => Promise<CommentImageAttachment | undefined>;
+  /**
+   * Stage, then `write` with the attachment. When the write is refused as `stale` and the image is an attached
+   * one (of no version), it is staged once more against the head the refusal names and written again.
+   */
+  send: <T>(write: (attachment?: CommentImageAttachment) => Promise<T>) => Promise<T>;
 }
 
 interface CommentImagesSource { backend: ArtifactBackend; editId: () => string | undefined }
@@ -69,6 +75,13 @@ export function createCommentImageDraft(options: { backend?: ArtifactBackend; ed
   const exportRef: CommentImageDraft['exportRef'] = { current: null };
   const [refusal, setRefusal] = createSignal('');
   const unavailable = () => backend.unavailable('commentImages') ?? (editId() ? null : 'Images need a saved document.');
+  const stage = async (head?: string): Promise<CommentImageAttachment | undefined> => {
+    const shot = capture.draft();
+    if (!shot) return undefined;
+    if (!exportRef.current) throw new Error('The screenshot is still loading. Please try again.');
+    const staged = await capture.stage(await exportRef.current(), head);
+    return staged ? { attachment_id: staged.id, edit_id: staged.editId } : undefined;
+  };
   return {
     capture, exportRef, unavailable, refusal,
     retake: options.retake ?? (() => undefined),
@@ -80,12 +93,15 @@ export function createCommentImageDraft(options: { backend?: ArtifactBackend; ed
       void capture.upload(file);
     },
     remove: () => { setRefusal(''); capture.skip(); },
-    stage: async () => {
-      const shot = capture.draft();
-      if (!shot) return undefined;
-      if (!exportRef.current) throw new Error('The screenshot is still loading. Please try again.');
-      const staged = await capture.stage(await exportRef.current());
-      return staged ? { attachment_id: staged.id, edit_id: staged.editId } : undefined;
+    stage,
+    send: async (write) => {
+      const attachment = await stage();
+      try { return await write(attachment); }
+      catch (cause) {
+        const attached = capture.draft()?.image.method === 'upload';
+        if (!attachment || !attached || !(cause instanceof BackendRequestError) || cause.code !== 'stale' || !cause.headEditId || cause.headEditId === attachment.edit_id) throw cause;
+        return write(await stage(cause.headEditId));
+      }
     },
   };
 }

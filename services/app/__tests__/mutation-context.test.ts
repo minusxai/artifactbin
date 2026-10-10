@@ -1,8 +1,9 @@
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';
-import {durableMutation,pinMutationContext} from '@/lib/artifacts';
-import {completeDocumentMutationReceipt} from '@/lib/artifacts';
+import { durableMutation } from '@/lib/artifacts';
+import { pinMutationContext } from '@/lib/artifacts/mutation-receipt';
+import { completeDocumentMutationReceipt } from '@/lib/artifacts/mutation-operation';
 useAppHarness();
 it('pins context before work and reads the winning canonical receipt for first and repeated calls',async()=>{
  const actor={userId:null,tokenId:'mxmx_test_token'};

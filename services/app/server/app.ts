@@ -19,7 +19,12 @@ import { loginRedirectTarget } from '@/lib/http';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {agentDiscovery,agentDiscoveryHead,withAgentDiscoveryTail} from '@/lib/compiled-page/agent-discovery';
+import {
+  agentDiscovery, agentDiscoveryHead, archiveSharedBuild, bindModule, createModuleStore,
+  createSpeculationRulesStore, createTemplateResourceStore, loadCompilerBuild, READER_MODE_HEADER,
+  retainedBuild, retainedIslandFile, SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH,
+  TEMPLATE_RESOURCE_PATH, withAgentDiscoveryTail,
+} from '@/lib/compiled-page';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
@@ -61,12 +66,6 @@ import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
 import { fontPreloadTags } from '@/lib/page-styles';
-import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
-import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
-import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { bindModule } from '@/lib/compiled-page/runtime-binding';
-import { archiveSharedBuild, retainedBuild, retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
-import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/story-runtime/contract';
 
 /**

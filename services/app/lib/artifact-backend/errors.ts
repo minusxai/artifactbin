@@ -9,11 +9,14 @@ export class BackendRequestError extends Error {
   readonly signInRequired: boolean;
   /** The server's refusal code, where the caller acts on which refusal it was (`invalid_attachment`, `stale`). */
   readonly code?: string;
-  constructor(message: string, status: number, signInRequired = false, code?: string) {
+  /** On a `stale` refusal: the document's head now, which a write that is not about a version may retry against. */
+  readonly headEditId?: string;
+  constructor(message: string, status: number, signInRequired = false, code?: string, headEditId?: string) {
     super(message);
     this.name = 'BackendRequestError';
     this.status = status;
     this.signInRequired = signInRequired;
     if (code) this.code = code;
+    if (headEditId) this.headEditId = headEditId;
   }
 }

@@ -7,18 +7,9 @@
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import {parseArtifactDestination,newArtifactDestination} from '@/lib/artifacts';
-import {CONTENT_FIELDS, type DatasetAccess, type Visibility} from '@artifactbin/contracts';
-import {ownsArtifact, canReadArtifact, writerFor, type ArtifactRow} from '@/lib/artifacts/access';
+import { parseArtifactDestination, newArtifactDestination, ownsArtifact, applyEditFor, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, respondToEdit, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
+import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import type { TokenActor } from '@/lib/accounts/actors';
-import { applyEditFor, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput } from '@/lib/artifacts/store';
-import { findDependentsFor, refLoaderForActor, rowToResolvedRef } from '@/lib/artifacts/dataflow';
-import { creationOperation, lookupCreation, CreationReplay } from '@/lib/artifacts/creation-ledger';
-import { artifactState } from '@/lib/artifacts/state';
-import {
-  createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue,
-  committedOpenAnnotations, placementFor, replacedArtifactWire, respondToEdit, sourceRepairsEcho,
-} from '@/lib/artifacts/wire';
 import { parseAnnotationOperations } from '@/lib/document/annotation-edits';
 import { normalizeNodeIds } from '@/lib/document/node-ids';
 import { collectExternalAssetUrls } from '@/lib/document/external-images';

@@ -3,10 +3,13 @@ import { beginCapture } from '@/lib/capture/screen';
 import { CaptureError, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture/contract';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke, type CommentImageMetadata } from '../../../contracts/src/comment-image';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import { BackendRequestError } from '@/lib/artifact-backend/errors';
 
 /** What the server stores (lib/annotations/comment-images decodes exactly these). */
 export const COMMENT_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 const TYPE_MESSAGE = 'Attach a PNG, JPEG or WebP image.';
+/** An attached image is of no version: when the document still moves under it, it is never "retake the screenshot". */
+const ATTACHED_STALE_MESSAGE = 'The document changed while you were commenting. Your draft is preserved; send it again.';
 const SIZE_MESSAGE = `This image is larger than ${Math.round(COMMENT_IMAGE_LIMITS.bytes / 1_000_000)} MB.`;
 
 interface Draft { image: CapturedImage; preview: Blob; strokes: BrushStroke[]; editId: string }
@@ -106,19 +109,28 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string |
   };
   /**
    * Upload the draft as drawn, once per drawing and revision. A captured screenshot is a picture of the
-   * revision it was taken at; an attached image is of no revision, so it is staged against the CURRENT one.
+   * revision it was taken at; an attached image is of no revision, so it is staged against the head: `head`
+   * when the caller learned a newer one, else the page's current one. If the server says the head moved,
+   * an attached image is staged once more against the head it names; a captured one asks for a retake.
    */
-  const stage = async (drawing?: { preview: Blob; strokes: BrushStroke[] }): Promise<{ id: string; editId: string } | undefined> => {
+  const stage = async (drawing?: { preview: Blob; strokes: BrushStroke[] }, head?: string): Promise<{ id: string; editId: string } | undefined> => {
     const current = draft();
     if (!current) return undefined;
     const preview = drawing?.preview ?? current.preview;
-    const editId = current.image.method === 'upload' ? revision() ?? current.editId : current.editId;
+    const attached = current.image.method === 'upload';
+    const editId = attached ? head ?? revision() ?? current.editId : current.editId;
     if (staged?.draft === current && staged.preview === preview && staged.editId === editId) return { id: staged.id, editId };
     const metadata: CommentImageMetadata = { v: 1, capturedEditId: editId, capturedAt: current.image.capturedAt, method: current.image.method, width: current.image.width, height: current.image.height, rect: current.image.rect, viewport: current.image.viewport, strokes: drawing?.strokes ?? current.strokes };
     const form = new FormData();
     form.set('original', current.image.blob, 'original.png'); form.set('preview', preview, 'preview.png');
     form.set('metadata', JSON.stringify(metadata));
-    const result = await backend.uploadCommentImage(form);
+    let result: { id: string };
+    try { result = await backend.uploadCommentImage(form); }
+    catch (cause) {
+      if (!(attached && cause instanceof BackendRequestError && cause.code === 'stale')) throw cause;
+      if (!head && cause.headEditId && cause.headEditId !== editId) return stage(drawing, cause.headEditId);
+      throw new BackendRequestError(ATTACHED_STALE_MESSAGE, cause.status, false, 'stale');
+    }
     staged = { draft: current, preview, id: result.id, editId };
     return { id: result.id, editId };
   };

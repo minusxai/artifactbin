@@ -1,12 +1,9 @@
 import {notificationJobOperations} from './notification-jobs';
-import {notificationJobStore} from '@/lib/artifacts/notification-runtime';
+import { applyEditFor, artifactSummaryToWire, canReadArtifact, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, notificationJobStore, parseExpectedVersion, parseParentField, parseVisibilityValue, readDatasetPolicy, resolveParent, respondToEdit, respondToMutate, revertArtifactFor, updateMetadataFromBody, versionToWire, writeDatasetPolicy } from '@/lib/artifacts';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
-import type {MutationReceipt} from '@/lib/artifacts';
 import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction} from '@/lib/annotations';
-import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/artifacts/dataset-policy/http';
-import {updateMetadataFromBody} from '@/lib/artifacts/metadata-wire';
 import {decodePage, encodeCursor} from '@/lib/http/pagination';
 import {DATASET_OPERATIONS} from '@/lib/operations/datasets';
 import {ACCOUNT_OPERATIONS} from './account';
@@ -14,29 +11,20 @@ import {SESSION_OPERATIONS} from './sessions';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
 import { resolveTestUser } from '@/lib/accounts/testusers';
-import { capabilityGuard } from '@/lib/artifacts/capabilities';
 import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
-import { applyEditFor, versionToWire, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor, revertArtifactFor, isVersionNotArchived } from '@/lib/artifacts/store';
-import { canReadArtifact } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
-import { findDependentsFor } from '@/lib/artifacts/dataflow';
 import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish/publish';
 import {parseArtifactDestination,transferArtifact} from '@/lib/artifacts';
 import {DatasetError} from '@/lib/datasets/errors';
-import { isParentRefusal, resolveParent } from '@/lib/artifacts/placement';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
 import { trackEvent } from '@/lib/platform/analytics';
 import { exportImageResponse } from '@/lib/export/exporter';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
-import {
-  artifactSummaryToWire, createdArtifactWire, parseParentField, parseVisibilityValue,
-  parseExpectedVersion, respondToEdit, respondToMutate,
-} from '@/lib/artifacts/wire';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
 export interface OpReply {

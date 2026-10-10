@@ -60,10 +60,9 @@ const ISLANDS_BROWSER_LEAVES = [
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
 const ARTIFACTS_ENTRIES = [
-  '', 'access', 'after-commit', 'archived-version', 'asset-quota', 'capabilities', 'creation-ledger', 'dataflow', 'dataset-policy/grants',
-  'dataset-policy/http', 'document', 'feedback-images', 'file-upload-http', 'identities', 'membership/membership', 'metadata-wire',
-  'mutation-operation', 'mutation-receipt', 'notification-authority', 'notification-query', 'notification-runtime', 'placement',
-  'read-access', 'servable', 'state', 'store', 'wire',
+  '', 'access', 'archived-version', 'asset-quota', 'dataflow', 'dataset-policy/http', 'document', 'feedback-images', 'file-upload-http',
+  'membership/membership', 'mutation-operation', 'mutation-receipt', 'notification-authority', 'notification-query', 'placement',
+  'read-access', 'servable', 'store', 'wire',
 ];
 const STORY_RUNTIME_ENTRIES = [
   'authenticated-transport', 'chrome-css', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',
@@ -113,10 +112,7 @@ const DOCUMENT_ENTRIES = [
 ];
 const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
 const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];
-const COMPILED_PAGE_ENTRIES = [
-  'agent-discovery', 'assembler', 'backfill.server', 'build.server', 'bundle.server', 'carriers', 'compiler', 'contract',
-  'modules.server', 'plan', 'runtime-binding', 'shared-builds.server', 'speculation', 'story-element',
-];
+const COMPILED_PAGE_ENTRIES = ['', 'agent-discovery', 'backfill.server', 'bundle.server', 'carriers', 'compiler', 'story-element'];
 /** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
 const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
 const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];

@@ -23,7 +23,8 @@ import { PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
-import { getArtifactById, updateSharing } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
+import { updateSharing } from '@/lib/artifacts/sharing';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
 

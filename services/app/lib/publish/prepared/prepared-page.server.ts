@@ -31,13 +31,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getDb } from '@/lib/platform/db';
-import type { ArtifactRow } from '@/lib/artifacts';
+import { archivedReadOnly, type ArchivedRender, artifactQuery, type ArtifactRow, declarationsForRow, holdableImports, LIVE_ARTIFACT_SQL, refDataForRow, savedMentionStates, servedRow, viewerIdentityFor } from '@/lib/artifacts';
 import type { Viewer, RoleActor } from '@/lib/accounts/actors';
-import { declarationsForRow, holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/artifacts/dataflow';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/access';
-import { artifactQuery } from '@/lib/artifacts/document';
-import { savedMentionStates } from '@/lib/artifacts/membership/membership';
-import { archivedReadOnly, servedRow, type ArchivedRender } from '@/lib/artifacts/archived-version';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -48,18 +43,16 @@ import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './p
 import { assetsPath, inlineStoryCss, inlineStoryNodes, mutatePath, queryPath, type StoryBaseCssRecipe, type StyleOverride, styleOverrides } from '@/lib/page-styles';
 import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
-import { inlineStoryElement } from '@/lib/compiled-page/story-element';
+import {
+  archiveSharedBuild, type CompilerBuild, createSpeculationRulesStore, inlineStoryElement, loadCompilerBuild,
+  MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, type StoredCompile,
+} from '@/lib/compiled-page';
 import { lazyCodeOf, type LazyCode } from '../../document/lazy-code';
 import { readUrlValues } from '@/lib/dataflow/url-values';
 import { servedResultsFor } from './served-results.server';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
-import { archiveSharedBuild } from '@/lib/compiled-page/shared-builds.server';
-import type { CompilerBuild, StoredCompile } from '@/lib/compiled-page/contract';
-import { MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
 import { prepareWorkers } from './prepare-workers.server';
 import { fixHtmlNesting } from '../../document/nesting';
 

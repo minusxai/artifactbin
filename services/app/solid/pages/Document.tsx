@@ -342,6 +342,19 @@ export function DocumentPage(): JSX.Element {
     });
   });
   const currentVersion = () => page?.archived?.version ?? live()?.version ?? page?.surface?.version ?? 0;
+  /**
+   * The head the page SHOWS: the newest of the version it loaded, the editor's part and the version the live stream
+   * drew in place. Comments, screenshots and their images are made against it — the id the page loaded with is a
+   * version the frame may no longer show, and the server refuses an image staged against it.
+   */
+  const shownEditId = () => {
+    const heads = [
+      { version: page?.surface?.version ?? 0, editId: page?.surface?.editId },
+      { version: editorPart()?.version ?? -1, editId: editorPart()?.editId },
+      { version: live()?.version ?? -1, editId: live()?.editId },
+    ];
+    return heads.reduce((best, head) => (head.editId && head.version > best.version ? head : best), { version: -1, editId: undefined as string | undefined }).editId;
+  };
   // The editor owns its stream while editing. Its title signal names every surface until the
   // reading stream catches up; thereafter live metadata wins, including later remote renames.
   const shownTitle = () => {
@@ -405,7 +418,7 @@ export function DocumentPage(): JSX.Element {
         }} />
     </Show>
     <Show when={ready() && annotatable() && id}>
-      <AnnotationLayer id={id!} backend={backend ?? undefined} canDeleteAny={isOwner()} editId={editorPart()?.editId ?? page?.surface?.editId} runtimeRef={runtimeRef} sessionNonce={nonce()}
+      <AnnotationLayer id={id!} backend={backend ?? undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} showViewComments={annotatable()} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickOnOpen={!editing() || wide()} onAnnotationsChange={setAnnotationItems}
