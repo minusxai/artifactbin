@@ -161,7 +161,7 @@ leaks to it.
 
 Fonts named by `<meta name="font-display" content="Lobster" />` (also `font-body`,
 `font-mono`) in `<Helmet>` are not imported: the served stylesheet `@import`s Google
-Fonts, whose two hosts the document's policy admits (`lib/compiled-page/styles/document-csp.ts`).
+Fonts, whose two hosts the document's policy admits (`lib/page-styles/document-csp.ts`).
 Bundled theme faces are served from this origin.
 
 The copy lives at `/assets/<sha256 of the URL>`, shared across every document

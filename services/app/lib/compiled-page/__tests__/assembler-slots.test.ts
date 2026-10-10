@@ -10,7 +10,8 @@ import { compile, type TopLevelSpec } from 'vega-lite';
 import { assembleReaderPage, isInertSvg, scriptJson } from '../assembler';
 import { speculationRulesOf } from '../speculation';
 import { agentDiscovery, agentDiscoveryTail } from '../agent-discovery';
-import { SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
+import { SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage } from '../contract';
+import type { DataSnapshot } from '@/lib/publish/prepared/snapshots.server';
 import { CHART_SLOT_ATTR, ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
 const build = { id: 'b'.repeat(16), manifest: { '@mx/rt': '/islands/rt-4444dddd.js', '@mx/deck': '/islands/deck-6666ffff.js' } };

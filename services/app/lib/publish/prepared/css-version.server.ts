@@ -1,13 +1,13 @@
 /**
  * THE STORED STYLESHEET VERSION of a prepared page (`prepared_pages.css_version`). A prepared page stores its
  * whole inline sheet: the compiled Tailwind AND the base sheet (bare typography and controls, chrome, embeds,
- * tables, column — lib/compiled-page/styles/story-base-css). The Tailwind compile environment alone
+ * tables, column — lib/page-styles/story-base-css). The Tailwind compile environment alone
  * (`storyCssCompileVersion`) does not see a base-sheet change, so a page prepared before one kept serving the old
  * rules. This version hashes both: a stored page whose version differs is served once more and re-prepared in the
  * background (lib/publish/prepared/prepared-page.server), and the backfill's `--stale` selects it.
  */
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
-import { STORY_BASE_SHEETS } from '@/lib/compiled-page/styles/story-base-css';
+import { STORY_BASE_SHEETS } from '@/lib/page-styles';
 import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-system-sheets';
 
 /** djb2 — stability matters, cryptographic strength does not (as storyCssCompileVersion). */

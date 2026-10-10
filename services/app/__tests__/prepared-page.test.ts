@@ -20,10 +20,10 @@ import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { installStoryCommitHooks } from '@/lib/publish/prepared/commit-hooks.server';
-import { applyStyleOverrides } from '@/lib/compiled-page/styles/style-overrides';
-import { inlineStoryCss as realInlineStoryCss, inlineStoryNodes as realInlineStoryNodes } from '@/lib/compiled-page/styles/inline-css';
+import { applyStyleOverrides } from '@/lib/page-styles/style-overrides';
+import { inlineStoryCss as realInlineStoryCss, inlineStoryNodes as realInlineStoryNodes } from '@/lib/page-styles/inline-css';
 import { prepareStoryRuntime } from '@/lib/publish/prepared/prepare-runtime.server';
-import { storyBaseCss } from '@/lib/compiled-page/styles/story-base-css';
+import { storyBaseCss } from '@/lib/page-styles/story-base-css';
 import { readerStorySheet } from '@/lib/publish/prepared/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
 import { type CompiledPage, type StoredCompile, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
@@ -41,8 +41,8 @@ vi.mock('@/lib/jsx/parse', async (original) => {
   const actual = await original<typeof import('@/lib/jsx/parse')>();
   return { ...actual, parseJsx: (...args: Parameters<typeof actual.parseJsx>) => { spies.parse++; return actual.parseJsx(...args); } };
 });
-vi.mock('@/lib/compiled-page/styles/inline-css', async (original) => {
-  const actual = await original<typeof import('@/lib/compiled-page/styles/inline-css')>();
+vi.mock('@/lib/page-styles/inline-css', async (original) => {
+  const actual = await original<typeof import('@/lib/page-styles/inline-css')>();
   return {
     ...actual,
     inlineStoryCss: (...args: Parameters<typeof actual.inlineStoryCss>) => { spies.css++; return actual.inlineStoryCss(...args); },

@@ -14,7 +14,7 @@ import { lookupWebAssets } from '@/lib/publish/assets/web-assets';
 import { createHash } from 'node:crypto';
 import { collectRefUses } from '@/lib/dataflow/server';
 import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
-import { inlineStoryCss } from '@/lib/compiled-page/styles/inline-css';
+import { inlineStoryCss } from '@/lib/page-styles';
 
 const MAX_SOURCE_LENGTH = 1024 * 1024;
 const NO_STORE = { 'Cache-Control': 'no-store' };

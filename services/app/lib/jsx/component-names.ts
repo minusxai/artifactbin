@@ -87,7 +87,7 @@ export const STORY_HTML_TAGS = [
   'video', 'audio', 'track',
   // A player or page, framed as written: an https `src` and a short attribute
   // list (lib/jsx/validate `iframeErrors`); which hosts load is the document
-  // CSP's `frame-src` (lib/compiled-page/styles/document-csp, `<meta name="csp-frame">`).
+  // CSP's `frame-src` (lib/page-styles/document-csp, `<meta name="csp-frame">`).
   'iframe',
   'section', 'article', 'aside', 'header', 'footer', 'main', 'nav', 'address',
   'hr', 'br', 'wbr', 'time', 'data', 'details', 'summary',

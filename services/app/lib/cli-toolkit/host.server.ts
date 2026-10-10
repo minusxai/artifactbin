@@ -15,7 +15,7 @@ export { loadCompilerBuild } from '../compiled-page/build.server';
 export { loadSsrModule } from '../compiled-page/bundle.server';
 export { createModuleStore, createSpeculationRulesStore } from '../compiled-page/modules.server';
 export { bindModuleCode } from '../compiled-page/runtime-binding';
-export { documentStyleSheets } from '../compiled-page/styles';
+export { documentStyleSheets } from '../page-styles';
 export { withStoredCarriers } from '../compiled-page/carriers';
 export { SPECULATION_RULES_HEADER } from '../compiled-page/contract';
 export type { CompileInput, CompiledPage, CompilerBuild } from '../compiled-page/contract';

@@ -30,7 +30,7 @@ import { json } from '../../http/http';
 import { type ContentInputCtx } from './input';
 import type { StoredContent } from '@/lib/document/stored-content';
 import { MAX_DOCUMENT_BYTES } from '@artifactbin/contracts';
-import { documentFonts, invalidFontFamilies } from '@/lib/compiled-page/styles/document-fonts';
+import { documentFonts, invalidFontFamilies } from '@/lib/page-styles';
 import { cspExtensionsOf } from '../../document/csp-extensions';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '@/lib/document/server';
@@ -101,7 +101,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
 
   // FONTS the document asks for (Helmet <meta name="font-display" …>): only the NAME is checked here,
   // because it lands in a stylesheet. Nothing is fetched or stored: serving emits the Google Fonts
-  // `@import` from the meta (lib/compiled-page/styles/document-fonts), and a bundled family is served from this origin.
+  // `@import` from the meta (lib/page-styles/document-fonts), and a bundled family is served from this origin.
   const fonts = documentFonts(split.content);
   const badFamilies = invalidFontFamilies(fonts);
   if (badFamilies.length > 0) {

@@ -2,7 +2,7 @@
 import { parentPort } from 'node:worker_threads';
 import { renderDraftPreview } from './draft-preview.server';
 import { compilePage } from '@/lib/compiled-page/compiler';
-import { drawSnapshotCharts } from '@/lib/compiled-page/charts.server';
+import { drawSnapshotCharts } from './charts.server';
 import type { DraftCompileAnswer, DraftCompileRequest } from './draft-compile-pool';
 
 const run = (request: DraftCompileRequest): Promise<unknown> => {

@@ -339,7 +339,7 @@ function validateElement(
 
 /**
  * THE AUTHOR'S `<iframe>`: a player or page, framed as written. The document runs on its own origin under its own
- * CSP (lib/compiled-page/styles/document-csp), whose `frame-src` is what decides which hosts actually load — the kit's former
+ * CSP (lib/page-styles/document-csp), whose `frame-src` is what decides which hosts actually load — the kit's former
  * embed hosts by default, plus any the document declares with `<meta name="csp-frame">`. This gate keeps the element
  * itself narrow: an https `src` (never `srcdoc`, never `data:`/`http:`), no children, and only the attributes that
  * size, label and permit a player. `id` is every body element's persistent identity, so it is allowed too.

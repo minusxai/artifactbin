@@ -35,7 +35,7 @@ import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/document/head';
-import { appendCspExtensions, assetsPath, buildDocumentCsp, markupCsp, mutatePath, queryPath } from '@/lib/compiled-page/styles';
+import { appendCspExtensions, assetsPath, buildDocumentCsp, documentStyleSheets, markupCsp, mutatePath, queryPath } from '@/lib/page-styles';
 import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { readUrlValues } from '@/lib/dataflow';
 import { displayTitle } from '@/lib/document/head';
@@ -48,10 +48,9 @@ import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/con
 import type { StorySurface } from '@/lib/story-runtime/story-fragment';
 import { compiledPageFor, domainFooter } from '@/lib/publish/prepared';
 import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';
-import { documentStyleSheets } from '@/lib/compiled-page/styles';
 import { cspExtensionsFor } from '@/lib/trust/document-trust';
 
-// The markup document's policy — per document, built in lib/compiled-page/styles/markup-csp:
+// The markup document's policy — per document, built in lib/page-styles/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
 // document's own query endpoint (the top-level reader's transport).
 
@@ -374,7 +373,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
           ...(ran ? { results: { tables: ran.state.tables, errors: ran.state.errors, ...(ran.state.userOptions ? { userOptions: ran.state.userOptions, people: ran.state.people ?? {} } : {}) } } : {}),
           // Its style rides in the sheets, where the standalone document has it.
           footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
-          // The standalone document's stylesheets, byte for byte (lib/compiled-page/styles/document-styles); the app
+          // The standalone document's stylesheets, byte for byte (lib/page-styles/document-styles); the app
           // page's story carries its one isolated sheet instead (the assembler's `css`).
           sheets: appStory ? null : documentStyleSheets({
             compiledCss, chrome, bare: !!domain, theme: design.theme,
@@ -394,7 +393,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
             status: 200,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
-              // On its own origin the document needs no sandbox: the origin is its alone (lib/compiled-page/styles/document-csp).
+              // On its own origin the document needs no sandbox: the origin is its alone (lib/page-styles/document-csp).
               'Content-Security-Policy': pages
                 ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN, ...(extensions ? { extensions } : {}) })
                 : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions),

@@ -9,7 +9,7 @@
  *    rejects with the server's message. One store subscription pushes every change into the signals in one `batch`.
  *  - `proxy(url)` (`import { proxy } from 'page'`): the document's own `/a/<id>/fetch?url=` door for an https URL, which
  *    the server fetches for the script when the document declares the host (`<meta name="csp-connect">`) and the reader
- *    allowed it — a document's policy connects only to its own origin and the module CDNs (lib/compiled-page/styles/document-csp).
+ *    allowed it — a document's policy connects only to its own origin and the module CDNs (lib/page-styles/document-csp).
  *  - `exposePage(win, store)`: the same bindings as `window.page` (`get`, `set`, `ready`, `mutation`) for browser sessions.
  *  - `startAuthorModule(...)`: loads the version's module (built at publish, lib/author-script/author-module.server)
  *    with its `solid-js` imports pointed at this build's chunks, hands it the bindings through the `page` module's

@@ -1,7 +1,6 @@
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import type { StoryBaseCssRecipe } from '@/lib/compiled-page/styles/story-base-css';
-import type { StyleOverride } from '@/lib/compiled-page/styles/style-overrides';
+import type { StoryBaseCssRecipe, StyleOverride } from '@/lib/page-styles';
 
 /**
  * Browser-safe prepared artifact with its RAW stylesheet parts: /a/<id>/raw,
@@ -18,7 +17,7 @@ export interface PreparedStoryRuntime {
   /**
    * How `baseCss` was built: the Helmet's font slots and the design system's sheet text. With `theme`,
    * `compiledCss` and `authorCss` it is everything the standalone document's sheets are built from
-   * (lib/compiled-page/styles/document-styles), so a renderer holding only this object (the CLI's local
+   * (lib/page-styles/document-styles), so a renderer holding only this object (the CLI's local
    * capture) serves the same sheets /a/<id>/raw does.
    */
   base: StoryBaseCssRecipe;
@@ -35,7 +34,7 @@ export interface PreparedStoryRuntime {
  *
  * `data.nodes` is the RAW tree (what edit and annotation sessions classify
  * against); `overrides` are the attribute values the policy rewrote in it
- * (lib/compiled-page/styles/style-overrides), so the render is exactly the server's.
+ * (lib/page-styles/style-overrides), so the render is exactly the server's.
  */
 export interface ServedStoryRuntime {
   data: StoryIslandData;
