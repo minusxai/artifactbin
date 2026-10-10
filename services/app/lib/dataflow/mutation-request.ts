@@ -150,5 +150,3 @@ export function bindMutationRequest(flow: CompiledDataflow, m: CompiledMutation,
   return { ok: true, params: bindParams(names, logical), paramTypes: bindTypes(names, types), bindings:{values:logical,types:{...Object.fromEntries(Object.entries(types).filter((entry):entry is [string,ColumnType]=>entry[1]!==null)), '_me.id':'user',_now:'timestamp',_tz:'string'},...platform} };
 }
 
-/** @public The evals repository's tracker scorer imports the builder from this path (evals/lib/score/kinds/tracker.ts). */
-export { mutationRequestFor } from './mutation-request-builder';

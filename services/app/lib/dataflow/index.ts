@@ -42,6 +42,8 @@ export { HOLD_MAX_BYTES, HOLD_MAX_ROWS, placeDataflow } from './placement';
 // Mutation requests and the reader's local state.
 export type { MutationRequest } from './mutation-request';
 export { bindMutationRequest, parseMutationRequest } from './mutation-request';
+/** @public The evals repository's tracker scorer builds requests with it (evals/lib/score/kinds/tracker.ts). */
+export { mutationRequestFor } from './mutation-request-builder';
 export type { LocalMutationResult } from './local-state';
 export { runLocalStateMutation } from './local-state';
 export { LocalStateInputError, localTableOverrides, parseLocalTables } from './local-tables';
