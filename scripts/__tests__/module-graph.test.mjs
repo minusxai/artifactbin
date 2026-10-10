@@ -261,6 +261,37 @@ describe('module graph', () => {
     });
   });
 
+  describe('lib/document row (rule 4, DEEP_MODULES)', () => {
+    const base = { 'services/app/lib/document/index.ts': '', 'services/app/lib/document/server.ts': '', 'services/app/lib/document/helmet.ts': '', 'services/app/lib/document/splice.ts': '' };
+    const check = files => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files })), allowList([])).violations.join('\n');
+    const refusal = /lib\/document is entered through @\/lib\/document from server code/;
+
+    it('passes server code through the index or server, and listed browser code through a listed leaf', () => {
+      expect(check({
+        'services/app/lib/publish/a.ts': "import { splitHelmet } from '@/lib/document';\nimport { COMPILED_DATAFLOW } from '../document/server';\n",
+        'services/app/lib/cli-toolkit/index.ts': "export { splitHelmet } from '../document';\n",
+        'services/app/solid/editor/Panel.tsx': "import { splitHelmet } from '@/lib/document/helmet';\n",
+        'services/app/lib/editor-engine/history.ts': "import type { EditRecord } from '../document/splice';\n",
+        'services/app/lib/offline/file-backend.ts': "import { declarationsOf } from '../document/helmet';\n",
+      })).not.toMatch(refusal);
+    });
+
+    it('refuses a leaf from server code, the index from browser code and a leaf from an unlisted file, naming each', () => {
+      const violations = check({
+        'services/app/lib/trust/document-trust.ts': "import { splitHelmet } from '@/lib/document/helmet';\n",
+        'services/app/solid/pages/Document.tsx': "import type { CspRequest } from '@/lib/document';\n",
+        'services/app/lib/offline/hosted-connect.ts': "import { graphSource } from '../document/helmet';\n",
+      });
+      expect(violations).toContain('services/app/lib/trust/document-trust.ts imports @/lib/document/helmet (server code imports @/lib/document)');
+      expect(violations).toContain('services/app/solid/pages/Document.tsx imports @/lib/document (browser-bundled code imports a leaf file, not the index)');
+      expect(violations).toContain('services/app/lib/offline/hosted-connect.ts imports ../document/helmet (server code imports @/lib/document)');
+    });
+
+    it('fails a listed browser leaf nothing imports any more', () => {
+      expect(check({ 'services/app/solid/editor/Panel.tsx': "import '@/lib/document/helmet';\n" })).toMatch(/lib\/document leaves no browser-bundled code imports any more[\s\S]*\n  query-notebook\n/);
+    });
+  });
+
   describe('CLI toolkit entry (rule 5)', () => {
     const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
 
