@@ -40,13 +40,12 @@ export { attachAuthoringContext, prepareClientDocument, prepareClientDocumentPub
 export { documentAfterOperation } from './document-update-history';
 export { storyUpdateParts } from './update-parts';
 
-// ---- Assets: asset URLs, external images, the lazy code a page loads, upload file types.
+// ---- Assets: asset URLs, external images and the lazy code a page loads.
 export type { WebAssetBox } from './asset-url';
 export { assetLookupFrom, assetUrlFor, canonicalAssetUrl, urlHash } from './asset-url';
 export { collectExternalAssetUrls } from './external-images';
 export type { LazyCode } from './lazy-code';
 export { CHART_VIZ_KINDS, lazyCodeOf } from './lazy-code';
-export { assetFormatOf, FILE_EXTENSIONS, fileContentType } from './file-types';
 
 // ---- Head: the <Helmet> split and its checks, the title, PWA settings, social preview and CSP origins.
 export type { HelmetContent } from './helmet';

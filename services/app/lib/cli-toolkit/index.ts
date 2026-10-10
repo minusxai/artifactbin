@@ -20,9 +20,10 @@ export type { JsxElement, JsxNode } from '../jsx';
 
 // ---- Document model: the head (Helmet), node ids, validation and canonical source.
 export {
-  assetFormatOf, canonicalizeMarkup, dataflowOf, declarationsOf, fileContentType, formatMarkupSource, nodeIndex, socialPreviewCrop, socialPreviewImage,
-  splitHelmet, stampNodeIds, validateMarkupStructure,
+  canonicalizeMarkup, dataflowOf, declarationsOf, formatMarkupSource, nodeIndex, socialPreviewCrop, socialPreviewImage, splitHelmet, stampNodeIds,
+  validateMarkupStructure,
 } from '../document';
+export { assetFormatOf, fileContentType } from '@artifactbin/contracts';
 
 // ---- Edit algebra: the document graph, its patches, update preparation and rebasing.
 export {

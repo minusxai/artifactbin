@@ -118,7 +118,7 @@ const DOCUMENT_BROWSER_IMPORTERS = [
 ];
 const DOCUMENT_BROWSER_LEAVES = [
   'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'csp-extensions', 'display-title', 'document-authoring-client',
-  'document-graph', 'document-graph-patch', 'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'file-types', 'helmet',
+  'document-graph', 'document-graph-patch', 'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet',
   'nesting', 'person-mentions', 'pwa-settings', 'query-notebook', 'script-export-location', 'social-preview', 'source-changes', 'splice', 'table-catalog',
   'title', 'update-parts',
 ];
