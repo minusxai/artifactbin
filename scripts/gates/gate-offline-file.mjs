@@ -922,6 +922,8 @@ const input = await sharp({ create: { width: 200, height: 100, channels: 3, back
 /** Real tab capture in Chromium; the upload fallback elsewhere; brush; persisted through a reload. */
 async function screenshotComment(engineName, dpr, selectionWidth, selectionHeight) {
   const name = `${engineName} (DPR ${dpr}) screenshot comment`;
+  // Chromium captures the tab (a Screenshot); Firefox and WebKit attach an uploaded file (an Image).
+  const kind = engineName === 'chromium' ? 'Screenshot' : 'Image';
   const { step, must, run } = lane(check, name);
   let browser;
   await run(async () => {
@@ -1025,16 +1027,16 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
       await page.reload();
       await openArtifactControls(page); await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
       await expect(doc.locator('#capturebox')).toHaveCSS('background-color', 'rgb(220, 30, 30)');
-      await page.getByRole('img', { name: 'Screenshot attached to comment' }).last().waitFor();
+      await page.getByRole('img', { name: `${kind} attached to comment` }).last().waitFor();
     });
-    const thumbnail = page.getByRole('img', { name: 'Screenshot attached to comment' }).last();
+    const thumbnail = page.getByRole('img', { name: `${kind} attached to comment` }).last();
     await step('persisted thumbnail', async () => {
       // Visibility precedes image decoding; wait for the persisted bytes, not only the img element.
       await expect.poll(() => thumbnail.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
     });
     await step('the screenshot opens', async () => {
-      await page.getByRole('button', { name: 'Open comment screenshot' }).last().click();
-      await expect(page.getByRole('dialog', { name: 'Comment screenshot' })).toBeVisible();
+      await page.getByRole('button', { name: `Open comment ${kind.toLowerCase()}` }).last().click();
+      await expect(page.getByRole('dialog', { name: `Comment ${kind.toLowerCase()}` })).toBeVisible();
     });
   });
   await browser?.close();

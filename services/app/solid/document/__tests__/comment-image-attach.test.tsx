@@ -209,11 +209,19 @@ describe('attaching an image to a reply', () => {
 
   it("draws each reply's own image under that reply", async () => {
     const image = (id: string) => ({ id, width: 100, height: 50, capturedEditId: 'edit-current', capturedAt: '2026-10-10T00:00:00.000Z', originalUrl: `/i/${id}?variant=original`, previewUrl: `/i/${id}?variant=preview`, thumbnailUrl: `/i/${id}?variant=thumbnail` });
-    knobs.open = [{ ...ANN, thread: [ANN.thread[0]!, { ...ANN.thread[1]!, image: image('cim_reply') }] }];
+    knobs.open = [{ ...ANN, thread: [{ ...ANN.thread[0]!, image: { ...image('cim_root'), method: 'region' as const } }, { ...ANN.thread[1]!, image: { ...image('cim_reply'), method: 'upload' as const } }] }];
     await openThread();
     const items = within(screen.getByLabelText('Annotation thread')).getAllByRole('listitem');
-    expect(within(items[0]!).queryByRole('img', { name: 'Screenshot attached to comment' })).toBeNull();
-    expect(within(items[1]!).getByRole('img', { name: 'Screenshot attached to comment' })).toHaveAttribute('src', '/i/cim_reply?variant=thumbnail');
+    // A captured shot is a Screenshot; an attached picture is an Image — in the preview, its button and its reader.
+    expect(within(items[0]!).getByRole('img', { name: 'Screenshot attached to comment' })).toHaveAttribute('src', '/i/cim_root?variant=thumbnail');
+    expect(within(items[0]!).getByRole('button', { name: 'Open comment screenshot' })).toHaveTextContent('Screenshot');
+    expect(within(items[1]!).queryByRole('img', { name: 'Screenshot attached to comment' })).toBeNull();
+    expect(within(items[1]!).getByRole('img', { name: 'Image attached to comment' })).toHaveAttribute('src', '/i/cim_reply?variant=thumbnail');
+    const open = within(items[1]!).getByRole('button', { name: 'Open comment image' });
+    expect(open).toHaveTextContent('Image');
+    expect(open).not.toHaveTextContent('Screenshot');
+    expect(items[1]!.querySelector('dialog')).toHaveAttribute('aria-label', 'Comment image');
+    expect(items[1]!.querySelector('dialog a')).toHaveAttribute('aria-label', 'Open image at full size');
   });
 
   it.each([
@@ -273,10 +281,89 @@ describe('attaching an image to a reply from the hover card', () => {
   });
 
   it("shows a reply's image in the hover card's replies", async () => {
-    const image = { id: 'cim_card', width: 100, height: 50, capturedEditId: 'edit-current', capturedAt: '2026-10-10T00:00:00.000Z', originalUrl: '/i/cim_card?variant=original', previewUrl: '/i/cim_card?variant=preview', thumbnailUrl: '/i/cim_card?variant=thumbnail' };
+    const image = { id: 'cim_card', method: 'upload' as const, width: 100, height: 50, capturedEditId: 'edit-current', capturedAt: '2026-10-10T00:00:00.000Z', originalUrl: '/i/cim_card?variant=original', previewUrl: '/i/cim_card?variant=preview', thumbnailUrl: '/i/cim_card?variant=thumbnail' };
     knobs.open = [{ ...ANN, thread: [ANN.thread[0]!, { ...ANN.thread[1]!, image }] }];
     const { card } = await hoverCard();
     const list = within(card).getByRole('list', { name: 'Thread replies' });
-    expect(within(list).getByRole('img', { name: 'Screenshot attached to comment' })).toHaveAttribute('src', '/i/cim_card?variant=thumbnail');
+    expect(within(list).getByRole('img', { name: 'Image attached to comment' })).toHaveAttribute('src', '/i/cim_card?variant=thumbnail');
   });
 });
+
+/**
+ * AFTER A LIVE VERSION (production regression): the page's revision may be older than the head by the time an
+ * image is attached. An attached image is of no version: it is staged against the head the server names and the
+ * write goes through, once, automatically — and it never says "retake the screenshot", which only a captured one can.
+ */
+describe('an attached image when the document moved', () => {
+  beforeAll(() => preloadCommentField());
+  const replies = () => fetchCalls.filter((call) => call.url.endsWith(`/api/my/artifacts/doc1/annotations/${ANN.id}`) && call.init?.method === 'POST');
+  const staged = (index: number) => JSON.parse(String((stages()[index]!.init!.body as FormData).get('metadata')));
+  /** Answer the first `times` matching POSTs with a refusal, then let the rig answer. */
+  const refuse = (matches: (url: string) => boolean, times: number, status: number, body: unknown) => {
+    const real = globalThis.fetch;
+    let left = times;
+    vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
+      if (left > 0 && init?.method === 'POST' && matches(String(url))) {
+        left -= 1;
+        fetchCalls.push({ url: String(url), init });
+        return new Response(JSON.stringify(body), { status });
+      }
+      return real(url, init);
+    }) as unknown as typeof fetch);
+  };
+
+  it('restages a dropped image against the head the stage refusal names, and saves', async () => {
+    layer({ initialSelection: TEXT, editId: 'edit-loaded' }); await flush();
+    refuse((url) => url.endsWith('/comment-images'), 1, 409, { error: 'stale', edit_id: 'edit-live' });
+    replaceComment(field(), 'after a live version');
+    fireEvent.drop(composer(), { dataTransfer: transfer([png()]) });
+    await waitFor(() => expect(editorCanvas()).toHaveAttribute('aria-busy', 'false'));
+    fireEvent.click(screen.getByLabelText('Save annotation')); await flush(); await flush(); await flush();
+    expect(stages().map((_, index) => staged(index).capturedEditId)).toEqual(['edit-loaded', 'edit-live']);
+    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ body: 'after a live version', edit_id: 'edit-live', attachment_id: expect.any(String) });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull());
+  });
+
+  it('restages once when the comment write itself says the head moved, and saves', async () => {
+    layer({ initialSelection: TEXT, editId: 'edit-loaded' }); await flush();
+    refuse((url) => url.endsWith('/api/my/artifacts/doc1/annotations'), 1, 409, { error: 'stale', edit_id: 'edit-newer', version: 3 });
+    replaceComment(field(), 'moved while saving');
+    fireEvent.paste(field(), { clipboardData: clipboard([png()]) });
+    await waitFor(() => expect(editorCanvas()).toHaveAttribute('aria-busy', 'false'));
+    fireEvent.click(screen.getByLabelText('Save annotation')); await flush(); await flush(); await flush();
+    expect(stages().map((_, index) => staged(index).capturedEditId)).toEqual(['edit-loaded', 'edit-newer']);
+    expect(creates().map((call) => JSON.parse(String(call.init!.body)).edit_id)).toEqual(['edit-loaded', 'edit-newer']);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull());
+  });
+
+  it('a reply with a pasted image follows a moved head without asking', async () => {
+    layer({ railOpen: true, pickOnOpen: false, editId: 'edit-loaded' }); await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Open annotation thread' })); await flush();
+    const reply = screen.getByLabelText('Reply to annotation');
+    refuse((url) => url.endsWith(`/annotations/${ANN.id}`), 1, 409, { error: 'stale', edit_id: 'edit-live', message: 'The document changed while you were replying; send again to attach the image.' });
+    replaceComment(reply, 'on the new version');
+    fireEvent.paste(reply, { clipboardData: clipboard([png()]) });
+    await waitFor(() => expect(editorCanvas()).toHaveAttribute('aria-busy', 'false'));
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' })); await flush(); await flush(); await flush();
+    expect(replies().map((call) => JSON.parse(String(call.init!.body)).edit_id)).toEqual(['edit-loaded', 'edit-live']);
+    expect(staged(1).capturedEditId).toBe('edit-live');
+    await waitFor(() => expect(screen.queryByLabelText('Screenshot editor')).toBeNull());
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('an attached image that still cannot follow the head says so without "retake the screenshot"', async () => {
+    layer({ initialSelection: TEXT, editId: 'edit-loaded' }); await flush();
+    refuse((url) => url.endsWith('/comment-images'), 5, 409, { error: 'stale', edit_id: 'edit-moving' });
+    replaceComment(field(), 'keeps moving');
+    fireEvent.paste(field(), { clipboardData: clipboard([png()]) });
+    await waitFor(() => expect(editorCanvas()).toHaveAttribute('aria-busy', 'false'));
+    fireEvent.click(screen.getByLabelText('Save annotation')); await flush(); await flush(); await flush();
+    expect(stages()).toHaveLength(2);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('The document changed while you were commenting. Your draft is preserved; send it again.');
+    expect(alert).not.toHaveTextContent(/retake/i);
+    expect(field()).toHaveTextContent('keeps moving');
+    expect(screen.getByLabelText('Screenshot editor')).toBeTruthy();
+  });
+});
+

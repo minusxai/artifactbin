@@ -28,7 +28,7 @@ function validCommentImage(value:unknown):value is CommentImageMetadata {
 }
 const commentImageWire=(row:ImageRow):CommentImageWire=>{
  const url=`/api/my/artifacts/${row.artifact_id}/comment-images/${row.id}`;
- return {id:row.id,width:row.metadata.width,height:row.metadata.height,capturedEditId:row.metadata.capturedEditId,capturedAt:row.metadata.capturedAt,originalUrl:`${url}?variant=original`,previewUrl:`${url}?variant=preview`,thumbnailUrl:`${url}?variant=thumbnail`};
+ return {id:row.id,method:row.metadata.method,width:row.metadata.width,height:row.metadata.height,capturedEditId:row.metadata.capturedEditId,capturedAt:row.metadata.capturedAt,originalUrl:`${url}?variant=original`,previewUrl:`${url}?variant=preview`,thumbnailUrl:`${url}?variant=thumbnail`};
 };
 /** Opportunistic bounded sweep on upload. Rows remain charged until every object was removed. */
 export async function sweepCommentImages(database?:Queryable):Promise<void>{
@@ -43,7 +43,8 @@ export async function stageCommentImage(actor:TokenActor,artifactId:string,origi
  const access=await db.query<{edit_id:string}>(`SELECT edit_id FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[artifactId,scope.val]);
  if(!access.rows[0])return json({error:'not_found'},404);
  if(!validCommentImage(metadata))return json({error:'invalid_image_metadata'},400);
- if(access.rows[0].edit_id!==metadata.capturedEditId)return json({error:'stale'},409);
+ // A moved head says which head it is now: an attached image is restaged against it (solid/document/CommentCapture).
+ if(access.rows[0].edit_id!==metadata.capturedEditId)return json({error:'stale',edit_id:access.rows[0].edit_id},409);
  if(original.length>LIMITS.bytes||preview.length>LIMITS.bytes)return json({error:'image_too_large'},413);
  let originals:Buffer,previews:Buffer,thumbnail:Buffer;
  try{

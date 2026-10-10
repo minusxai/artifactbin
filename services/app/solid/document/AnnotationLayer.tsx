@@ -51,7 +51,7 @@ import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_CO
 import { RailChrome } from './AnnotationRail';
 import { AnnotationThread } from './AnnotationThread';
 import { createCommentCapture } from './CommentCapture';
-import { CommentImagesProvider, createCommentImageDraft, createImageDropTarget, ImageDropTarget, preloadScreenshotEditor } from './CommentImageAttach';
+import { CommentImagesProvider, createCommentImageDraft, createImageDropTarget, ImageDropTarget, preloadScreenshotEditor, type CommentImageAttachment } from './CommentImageAttach';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { PersonMentionProvider } from './PersonMention';
@@ -582,20 +582,23 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     setBusy(true);
     setFailure(null);
     try {
-      const attachment = await composerImage.stage();
       const body = draft();
-      const signature = JSON.stringify([subject, body, attachment?.attachment_id]);
-      if (mutation.signature !== signature) mutation = { signature, key: runtimeId() };
-      let wire: AnnotationWire;
-      try {
+      const create = (attachment?: CommentImageAttachment) => {
+        const signature = JSON.stringify([subject, body, attachment?.attachment_id]);
+        if (mutation.signature !== signature) mutation = { signature, key: runtimeId() };
         // The exact words ride along when there are any; a caret comment carries neither key.
-        wire = await backend.createAnnotation({
+        return backend.createAnnotation({
           node_id: subject.nodeId, body,
           ...(attachment ?? {}),
           ...(subject.quote ? { quote: subject.quote } : {}),
           ...(subject.range ? { range: subject.range } : {}),
           ...(subject.viewState ? { view_state: subject.viewState, edit_id: attachment?.edit_id ?? props.editId } : {}),
         }, mutation.key);
+      };
+      let wire: AnnotationWire;
+      try {
+        // Staged and written together: an attached image follows a head that moved under it (CommentImageAttach `send`).
+        wire = await composerImage.send(create);
       } catch (error) {
         if (!(error instanceof BackendRequestError)) throw error;
         // A guest may READ a thread and may not start one: the login page, and back here with the ask.
