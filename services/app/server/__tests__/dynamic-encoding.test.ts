@@ -68,20 +68,22 @@ describe('the document page and its page data', () => {
       expect((await res.text()), accept).toContain('public words');
     }
   });
-  it('answer HEAD without a body, and leave a body too small to gain as it is', async () => {
+  it('answer HEAD without a body and compress the discovery-bearing HTML shell', async () => {
     const doc = await publicDocument();
     const head = await app.request(doc.canonical, { method: 'HEAD', headers: { ...stranger, 'accept-encoding': BROWSER } });
     expect(head.status).toBe(200);
     expect(await head.text()).toBe('');
     const miss = await app.request('/nope/nothing', { headers: { accept: 'text/html', 'accept-encoding': 'br' } });
-    // Discovery tags belong in this shell; prove the actual complete response remains tiny.
+    // Discovery tags are part of the body: compare the encoded shell with its identity response.
     expect(miss.status).toBe(404);
-    expect(miss.headers.get('content-encoding')).toBeNull();
+    expect(miss.headers.get('content-encoding')).toBe('br');
     expect(miss.headers.get('vary')).toMatch(/accept-encoding/i);
-    const tiny=await miss.text();
-    expect(Buffer.byteLength(tiny)).toBeLessThan(1024);
-    expect(tiny).toContain('SPA');
-    expect(tiny).toContain('HTTP: email auth');
+    const encoded = await bytes(miss);
+    const identity = await (await app.request('/nope/nothing', { headers: { accept: 'text/html' } })).text();
+    expect(brotliDecompressSync(encoded).toString()).toBe(identity);
+    expect(encoded.byteLength).toBeLessThan(Buffer.byteLength(identity));
+    expect(identity).toContain('SPA');
+    expect(identity).toContain('otherwise HTTP');
   });
   it('the content-addressed island reader is its build-time brotli sibling through the app', async () => {
     const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'public/islands/manifest.json'), 'utf8')) as { manifest: Record<string,string> };
@@ -98,6 +100,12 @@ describe('the document page and its page data', () => {
 describe('compressDynamic', () => {
   const html = '<!doctype html>' + '<p>words</p>'.repeat(500);
   const accepting = new Request('http://x/', { headers: { 'accept-encoding': 'br' } });
+  it('leaves a body below the compression threshold unchanged', async () => {
+    const small = new Response('<p>small</p>', { headers: { 'content-type': 'text/html' } });
+    const result = await compressDynamic(accepting, small);
+    expect(result.headers.get('content-encoding')).toBeNull();
+    expect(await result.text()).toBe('<p>small</p>');
+  });
   it('never buffers or encodes an event stream', async () => {
     const stream = new Response(new ReadableStream({ start() { /* never ends */ } }), { headers: { 'content-type': 'text/event-stream' } });
     expect(await compressDynamic(accepting, stream)).toBe(stream);
