@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   const parsed = await parseContentInput({ markup: new URL(request.url).searchParams.get('mode') === 'blank' ? BLANK_REPORT_MARKUP : START_PLACEHOLDER_MARKUP }, {});
   if (parsed instanceof Response) return parsed; // unreachable: both starting documents are fixed and valid
 
-  const body = request.body ? await readJson(request) : {};
+  const body = await readJson(request, {allowEmpty:true});
   if (!body) return json({error:'invalid_json'},400);
   let row: Awaited<ReturnType<typeof createArtifact>>;
   try { row = await createArtifact(tokenId, ownerId, {

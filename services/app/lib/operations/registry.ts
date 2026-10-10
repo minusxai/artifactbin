@@ -26,7 +26,8 @@ import { canReadArtifact } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
 import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish/publish';
-import {parseArtifactDestination} from '@/lib/artifacts';
+import {parseArtifactDestination,transferArtifact} from '@/lib/artifacts';
+import {DatasetError} from '@/lib/datasets/errors';
 import { isParentRefusal, resolveParent } from '@/lib/artifacts/placement';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
 import { trackEvent } from '@/lib/platform/analytics';
@@ -382,6 +383,20 @@ const updateMetadataOp: Operation = {
  async run(ctx,input){const {id,...body}=input;return fromResponse(await updateMetadataFromBody(ctx.actor,String(id),body,ctx.base));},
 };
 
+const transferArtifactOp: Operation = {
+ name:'transfer_artifact',title:'Transfer artifact ownership',http:{method:'POST',path:'/api/artifacts/{id}/transfer'},
+ description:'Deliberately transfer an artifact or complete folder subtree (including trashed descendants) to Personal or a group where you are an editor. Requires current ownership. IDs/history remain; external dependencies or connected datasets can refuse transfer. A busy transfer returns 409 without changes; retry after the competing operation finishes. Defaults and ordinary edits never transfer ownership.',
+ input:{id:z.string(),destination:z.discriminatedUnion('type',[z.object({type:z.literal('personal')}).strict(),z.object({type:z.literal('group'),id:z.string().min(1)}).strict()])},
+ annotations:{},example:{input:{id:'aB3xK9',destination:{type:'group',id:'grp_team'}}},
+ errors:[NOT_FOUND,{status:403,code:'transfer_refused',fix:'Control the current owner and require editor membership in the destination group.'},{status:409,code:'transfer_conflict',fix:'Read the refusal: retry contention after other work finishes; include dependencies or retain their current owner.'}],
+ async run(ctx,input){
+  try{const destination=parseArtifactDestination(input.destination);if(!destination)return reply({error:'invalid_destination'},400);
+   const row=await transferArtifact(ctx.actor,String(input.id),destination);
+   return row?reply({id:row.id,owner:destination,group_id:row.group_id,user_id:row.user_id}):reply({error:'not_found'},404);
+  }catch(error){if(error instanceof DatasetError)return reply({error:error.status===409?'transfer_conflict':'transfer_refused',details:[error.message]},error.status);throw error;}
+ },
+};
+
 const revertArtifactOp: Operation = {
   name: 'revert_artifact',
   title: 'Revert to an archived version',
@@ -712,6 +727,6 @@ const queryResourceOp:Operation={
 export const OPERATIONS: Operation[] = [
   ...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...SESSION_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, updateMetadataOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
 ];

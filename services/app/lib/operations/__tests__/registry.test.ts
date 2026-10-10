@@ -35,7 +35,7 @@ describe('the registry is curated, not generated', () => {
     expect(OPERATIONS.map((o) => o.name).sort()).toEqual([
       'annotate', 'browser_session', 'change_artifact_membership', 'create_artifact', 'create_dataset_secret', 'delete_artifact', 'discover_dataset_source', 'edit_artifact', 'export_artifact', 'fork_artifact', 'get_artifact', 'get_artifact_members',
       'get_dataset_policy', 'get_notification_job', 'get_remote_session', 'get_version', 'list_artifacts', 'list_notification_jobs', 'list_remote_sessions', 'list_versions', 'mutate_dataset', 'preview_dataset_notebook', 'query_resource', 'refresh_asset', 'restore_artifact', 'retry_notification_job', 'revert_artifact',
-      'set_dataset_policy', 'terminate_remote_session', 'testuser_create', 'testuser_delete', 'testuser_list', 'update_artifact', 'update_metadata',
+      'set_dataset_policy', 'terminate_remote_session', 'testuser_create', 'testuser_delete', 'testuser_list', 'transfer_artifact', 'update_artifact', 'update_metadata',
     ]);
   });
 

@@ -150,7 +150,7 @@ it('uses nonblocking transfer locks and rolls back busy artifact or group owners
   }));
   try{
    const response=await f.move(id,{type:'group',id:'grp_ownership'});
-   expect(response.status).toBe(409);expect(await response.json()).toMatchObject({error:'transfer_refused',details:['Work is changing; retry ownership transfer']});
+   expect(response.status).toBe(409);expect(await response.json()).toMatchObject({error:'transfer_conflict',details:['Work is changing; retry ownership transfer']});
   }finally{spy.mockRestore();}
   expect(await getArtifactById(id)).toMatchObject({user_id:f.creator.id,group_id:null});
   expect((await f.db.query('SELECT id FROM ownership_transfers WHERE artifact_id=$1',[id])).rows).toHaveLength(0);

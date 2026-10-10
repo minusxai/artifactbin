@@ -18,6 +18,16 @@ async function owner(id:string|undefined){
  const db=await getDb();return(await db.query('SELECT user_id,group_id,creator_user_id FROM artifacts WHERE id=$1',[id])).rows[0];
 }
 describe('publication uses shared account destination through the real HTTP handler',()=>{
+ it('accepts a present but empty request stream from the HTTP server',async()=>{
+  const a=await account('empty-stream');const base=request('/api/start',{method:'POST',token:a.token});
+  const incoming=new Request(base.url,{method:'POST',headers:base.headers,body:''});
+  expect(incoming.body).not.toBeNull();expect((await start(incoming)).status).toBe(201);
+ });
+ it.each(['{','[]','null'])('refuses a nonempty invalid starter body %s',async raw=>{
+  const a=await account('invalid-body');const base=request('/api/start',{method:'POST',token:a.token});
+  const incoming=new Request(base.url,{method:'POST',headers:base.headers,body:raw});
+  expect((await start(incoming)).status).toBe(400);
+ });
  it('refuses malformed explicit starter destinations instead of ignoring them',async()=>{
   const a=await account('starter');
   const response=await start(request('/api/start',{method:'POST',token:a.token,json:{destination:{type:'personal',id:'unexpected'}}}));

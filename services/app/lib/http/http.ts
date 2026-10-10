@@ -48,10 +48,12 @@ export function unauthorized(request: Request): Response {
   );
 }
 
-/** Parse a JSON body; returns null on malformed/missing JSON (caller answers 400). */
-export async function readJson(request: Request): Promise<Record<string, unknown> | null> {
+/** Parse a JSON object; missing bodies are refused unless the route explicitly permits them. */
+export async function readJson(request: Request, options: {allowEmpty?: boolean} = {}): Promise<Record<string, unknown> | null> {
   try {
-    const body = await request.json();
+    const source = await request.text();
+    if (options.allowEmpty && !source.trim()) return {};
+    const body: unknown = JSON.parse(source);
     return body && typeof body === 'object' && !Array.isArray(body)
       ? (body as Record<string, unknown>)
       : null;

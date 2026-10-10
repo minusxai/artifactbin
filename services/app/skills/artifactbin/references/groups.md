@@ -26,7 +26,7 @@ CLI: `afbin push report.jsx --group <handle> --server [[ base ]]` resolves a gro
 
 HTTP new artifact creation accepts `destination: {"type":"personal"}` or `destination: {"type":"group","id":"<resolved group.id>"}`. Omit it to use the account/deployment default. Viewers cannot publish or edit group artifacts. Inaccessible saved groups are refused; they do not silently fall back to Personal.
 
-Transfers are separate authorized operations; changing a default, folder metadata or creator attribution is not a transfer. Preserve artifact IDs/history and dependency safety. Inspect the group/ownership API’s returned permissions and instructions before a deliberate transfer. Group IDs are distinct from user IDs and never become credential account IDs.
+For a deliberate transfer, use the browser’s Transfer ownership action, or authenticated HTTP `POST /api/artifacts/<id>/transfer` with `{"destination":{"type":"group","id":"<group.id>"}}` (Personal: `{"destination":{"type":"personal"}}`). There is no dedicated CLI transfer command. You must control the current owner and be an editor of the destination group. A folder transfers its whole subtree, including trashed descendants, atomically; IDs/history remain. External dependencies or connected datasets can refuse transfer. A busy transfer returns 409 without changing ownership; retry after the competing operation finishes. Changing defaults, folder metadata or creator attribution never transfers ownership. Group IDs are distinct from user IDs and never become credential account IDs.
 
 ## Company deployment
 
