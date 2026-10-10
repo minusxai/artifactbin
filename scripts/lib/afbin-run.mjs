@@ -28,7 +28,7 @@ import { buildAfbinDev } from './afbin-build.mjs';
 import { resolvePort } from './dev-env.mjs';
 
 /** The repository root, from this file. */
-export const ROOT = path.resolve(import.meta.dirname, '../..');
+const ROOT = path.resolve(import.meta.dirname, '../..');
 
 /** The bind port, by exactly the rule `npm run dev` follows. */
 export function afbinPort(env = process.env) { return resolvePort(env); }

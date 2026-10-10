@@ -42,7 +42,7 @@ export function hashFiles(hash, root, files) {
 /** Tracked sources are identified by git's index (blob ids, no file reads); only files that differ
  * from it (modified, deleted or untracked) and the explicit settings files are read. Generated outputs
  * are identified by their stat: every rebuild rewrites them. */
-export function fingerprint({ root, commands, env, refs = [] }) {
+function fingerprint({ root, commands, env, refs = [] }) {
   const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 256 << 20 });
   const hash = createHash('sha256');
   hash.update(JSON.stringify({ root, commands, env: Object.entries(env).sort(([a], [b]) => a.localeCompare(b)),

@@ -49,7 +49,7 @@ export const ISLANDS_BROWSER_IMPORTERS = [
   'services/app/lib/offline/compiled-sqlite.ts',
   'services/app/lib/offline/solid-entry.tsx',
 ];
-export const ISLANDS_BROWSER_LEAVES = [
+const ISLANDS_BROWSER_LEAVES = [
   'chart', 'contract', 'file-display', 'island-controller', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
   'live-update', 'module', 'morph/engine', 'person-face', 'rt', 'sqlite-engine', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
@@ -148,7 +148,7 @@ export const DEEP_MODULES = {
  * preview and team hosts), `browser` and `browser-connect` (the preview's two browser pages).
  * Paths without extension.
  */
-export const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server', 'services/app/lib/cli-toolkit/browser', 'services/app/lib/cli-toolkit/browser-connect'];
+const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server', 'services/app/lib/cli-toolkit/browser', 'services/app/lib/cli-toolkit/browser-connect'];
 const CLI_SOURCE = 'services/cli/src/';
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 

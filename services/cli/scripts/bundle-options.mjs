@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
  *
  * @type {import('esbuild').Plugin}
  */
-export const embedSqliteWasm = {
+const embedSqliteWasm = {
   name: 'embed-sqlite-wasm',
   setup(b) {
     const wasm = require.resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm');

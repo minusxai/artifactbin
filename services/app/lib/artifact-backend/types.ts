@@ -36,7 +36,7 @@ export type BackendFeature =
   | 'live';           // the live event stream
 
 /** Aborts a read whose answer nobody wants any more. */
-export interface RequestOptions { signal?: AbortSignal }
+interface RequestOptions { signal?: AbortSignal }
 
 /** The authoring head: GET /api/my/artifacts/<id>, as its browser readers use it. */
 export interface ArtifactHead {

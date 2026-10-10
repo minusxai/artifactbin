@@ -18,7 +18,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 /** The icon map's key for an author's spelling (kept equal to lib/story-ui/icon-contract iconGlyphKey). */
-export const iconGlyphKey = (name) => String(name).split(/[-_\s]+/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+const iconGlyphKey = (name) => String(name).split(/[-_\s]+/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
 
 /** One SVG's flat child elements as `[tag, attrs]` pairs, the shape lucide's own node data uses. */
 function parseSvgNodes(source) {

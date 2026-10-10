@@ -51,7 +51,7 @@ export function phone(sc) {
   sc.line('ink', 300, 60, 328, 53);
 }
 
-export function building(sc) {
+function building(sc) {
   sc.rect('shadow', 96, 56, 288, 154);
   sc.rect('ground', 96, 56, 288, 154);
   sc.rect('ink', 96, 56, 288, 154);
