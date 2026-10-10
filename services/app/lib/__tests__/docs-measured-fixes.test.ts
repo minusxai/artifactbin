@@ -36,7 +36,7 @@ const BASE = 'https://example.test';
 describe('the deck FRAME: the brief routes to it, the template file carries it', () => {
   it('the brief tells a genre author to read the template file BEFORE writing, naming the cost of skipping', () => {
     const sheet = buildQuickSheet(BASE);
-    const readTemplate = sheet.indexOf('Read `afbin help <page type>`');
+    const readTemplate = sheet.indexOf('Read your [page type]');
     expect(readTemplate).toBeGreaterThanOrEqual(0);
     expect(readTemplate).toBeLessThan(sheet.indexOf('## Example'));
     expect(sheet).toContain('references/templates-<name>.md');

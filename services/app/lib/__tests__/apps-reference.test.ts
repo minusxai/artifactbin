@@ -19,7 +19,7 @@ describe('the skill’s first page', () => {
   const bullets = sheet.split('\n').filter((line) => line.startsWith('- '));
 
   it('sends a request about several people to the apps reference before a data shape is chosen', () => {
-    const trigger = bullets.find((b) => b.includes('afbin help apps'));
+    const trigger = bullets.find((b) => b.includes('(references/apps.md)'));
     expect(trigger).toBeDefined();
     for (const word of ['shared', 'friends', 'team']) expect(trigger!.toLowerCase()).toContain(word);
   });
@@ -30,7 +30,7 @@ describe('the skill’s first page', () => {
     const writes = bullets.find((b) => b.includes('<Mutation>') && /live session/i.test(b));
     expect(writes).toBeDefined();
     expect(writes).toContain('--as guest');
-    expect(writes).toMatch(/afbin help live-sessions/);
+    expect(writes).toContain('(references/live-sessions.md)');
   });
 });
 

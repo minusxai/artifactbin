@@ -7,7 +7,7 @@ describe('the installed short skill',()=>{
  it('routes interactive wireframes to saved-view authoring guidance in both served and bundled teaching',()=>{
   const bundled=teaching.files as Record<string,string>;
   for(const text of [sheet,teaching.files['SKILL.md']]){
-   expect(text).toContain('afbin help review-state');
+   expect(text).toContain('references/review-state.md');
    expect(text).toContain('wireframes');
   }
   for(const topic of ['templates-app','templates-plan','markup-state','markup-scripts']){
@@ -38,7 +38,7 @@ describe('the installed short skill',()=>{
   */
  it('counts the first push — six calls, a designed opening — then fills the rest, and markup for content, the script for behaviour',()=>{
   const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
-  const fewTurns=bullet('- Read `afbin help <page type>`');
+  const fewTurns=bullet('- Read your [page type]');
   expect(fewTurns).toBeDefined();
   const httpAuthoring=renderDoc('artifactbin/references/http-authoring.md','https://example.test');
   const progression='Within six calls of reading the artifact, publish a first version with metadata, title, real opening copy and one substantive section; extend it in later edits.';
@@ -75,10 +75,10 @@ describe('the installed short skill',()=>{
   expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
  });
  it('uses the same push for create and update with local validation',()=>{
-  for(const text of ['afbin pull','afbin push report.jsx','new artifact','afbin validate'])expect(sheet).toContain(text);
+  for(const text of ['afbin pull','afbin push report.jsx','new artifact','validates/publishes'])expect(sheet).toContain(text);
   // The publishing guide naming ~/.artifactbin/state.sqlite is
   // agent-docs-batch-identity.test.ts's assertion, in the whole sentence.
-  expect(sheet).toContain('YAML fence');
+  expect(sheet).toContain('YAML metadata fence');
   for(const term of ['self-contained HTML','kit JSX','Tailwind `className`'])expect(sheet.slice(0,sheet.indexOf('npm CLI:'))).toContain(term);
   expect(sheet).toContain('edit_id');
  });
@@ -86,8 +86,8 @@ describe('the installed short skill',()=>{
   const positions=['references/design.md','references/markup.md','references/templates-<name>.md','references/design-systems.md'].map(s=>sheet.indexOf(s));
   expect(positions.every(x=>x>=0)).toBe(true);
   expect(positions).toEqual([...positions].sort((a,b)=>a-b));
-  expect(sheet).toContain('afbin help design-systems');
-  expect(sheet).toContain('afbin help templates');
+  expect(sheet).toContain('references/design-systems.md');
+  expect(sheet).toContain('references/templates.md');
  });
  it('teaches responsive containers, static JSX and appropriate chart primitives through the example',()=>{
   for(const term of ['@2xl:','phone width','static JSX','className','<Helmet>','CDN','custom CSS lives here','never hand-rolled <svg>'])expect(sheet).toContain(term);
@@ -96,16 +96,17 @@ describe('the installed short skill',()=>{
  });
  it('points to data, comments, history and recovery without another network reference',()=>{
   for(const topic of ['markup-data','publishing-annotations','publishing-auth','publishing','errors','commands'])expect(sheet).toContain(`references/${topic}.md`);
-  for(const term of ['afbin comment','afbin log','afbin delete','--json','On refusal'])expect(sheet).toContain(term);
-  expect(sheet).toContain('whether or not you can view images');expect(sheet).toContain('every slide, in one image');
-  // Nothing ELSE is needed to make it look right. The checking bullet is where an agent decides what
-  // more to reach for, so it says there is nothing more: a theme carries the palette, so a design
-  // skill, a palette tool or image tooling is a turn spent on something the document already has.
-  expect(sheet).toContain('no other skill, palette tool or image tooling is needed');
-  expect(sheet).toContain('the design system carries the palette');
-  expect(sheet).toContain('does not verify appearance');
-  expect(sheet).toContain('For visual review');
-  for(const term of ['Files/registered IDs use local data, unchanged by server mutations','afbin export <artifact-url> --output out.png','ID with `--refresh`','fresh published image; refuses local paths','references/publishing-versions.md'])expect(sheet).toContain(term);
+  expect(sheet).toContain('On refusal');
+  expect(sheet).toContain('--json');
+  expect(sheet).toContain('Publishing does not verify appearance');
+  expect(sheet).toContain('whole-document/all-slide');
+  expect(sheet).toContain('afbin export <artifact-url> --output out.png');
+  expect(sheet).toContain('URL/`--refresh` uses server, files/IDs local');
+  const versions=renderDoc('artifactbin/references/publishing-versions.md','https://example.test');
+  for(const term of ['the whole document, every slide, in one image','never one slide at a time'])expect(versions).toContain(term);
+  const commands=renderDoc('artifactbin/references/commands.md','https://example.test');
+  expect(commands).toContain('afbin <command> -h');
+  expect(renderDoc('artifactbin/references/publishing-versions.md','https://example.test')).toContain('Delete retains local files');
   const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');
   for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });

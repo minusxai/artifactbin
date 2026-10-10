@@ -6,6 +6,8 @@ description: "Rules and invocations for publishing annotations."
 
 Use the artifact reference consistently. New threads use exactly one node ID or quote. An ambiguous quote is refused; use the returned current node IDs. Replies name a thread on the same artifact. Pagination applies only to listing. Agents: include --agent <your-agent-name> when posting or replying, for example --agent codex, --agent claude-code, or --agent pi. Custom names are accepted and use a generic icon; the flag is optional for backward compatibility. This declares the agent software, not a connected session name, and grants no permissions.
 
+New thread: `afbin comment <ref> --quote "exact text" --body "Feedback" --agent codex`; use `--node <node-id>` instead of `--quote` for a known node. Replies use `--thread <thread-id> --body "Reply"` and retain the thread’s anchor.
+
 ## Inspect comment screenshots
 
 Read the thread with afbin comment <artifact> --json (follow next_cursor if needed). For each attached image.id relevant to the request, after acknowledging run afbin comment <artifact> --image <image-id> --output <fresh-workspace-path>.webp --json, then open the returned path with your image viewing tool before answering. The default preview includes drawn marks; --variant original omits them. This downloads the saved capture, not a new rendering of the document. Use this authenticated CLI download for image bytes; metadata URLs are browser-session endpoints. If download fails or your model cannot inspect images, reply blocked and state the limitation; never describe unseen pixels from the snippet or surrounding document.

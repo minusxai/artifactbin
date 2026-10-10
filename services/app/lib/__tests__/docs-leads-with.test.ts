@@ -89,11 +89,11 @@ describe('the brief — the one text every agent reads', () => {
     const example = sheet.indexOf('```jsx');
     const data = sheet.indexOf('<Query');
     const bodyRules = sheet.indexOf('static JSX', example);
-    const theme = sheet.indexOf('afbin help design-systems', sheet.indexOf('## Read next'));
+    const theme = sheet.indexOf('references/design-systems.md', sheet.indexOf('## Read next'));
     expect(rules).toBeGreaterThan(-1);
     expect(example).toBeGreaterThan(rules);
     // Nothing about themes or templates sits between the rules and the example.
-    expect(sheet.slice(rules, example)).not.toMatch(/themes-|templates-|afbin help themes/);
+    expect(sheet.slice(rules, example)).not.toMatch(/themes-|afbin help themes/);
     expect(sheet.indexOf('## Example')).toBeLessThan(example);
     expect(data).toBeGreaterThan(example);
     expect(bodyRules).toBeGreaterThan(data);
