@@ -469,12 +469,15 @@ export function createFrameSelectionActions({
     },
     setNodes(next) {
       nodes = next;
-      // A new version drawn in place under an open bubble: what it describes was classified against the last one.
-      // A selection is described again (or the bubble goes, when the version took the words away); a document menu
-      // named a block that may have moved, so it closes.
-      if (!toolbar || toolbar.hidden) return;
-      if (contextOpen) hide();
-      else showForSelection();
+      // New nodes (a version drawn in place): a document menu named a block that may have moved, so it closes. A
+      // live selection is described again — under an open bubble, or one made while nothing described it (no bubble
+      // then) — so it gets its bubble now, or loses it when the version took the words away. Never mid-drag: the
+      // release that ends the drag answers it.
+      if (contextOpen) { hide(); return; }
+      if (!capabilities.edit && !capabilities.annotate) return;
+      if (buttonHeld && !isCoarsePointer(win)) return;
+      const live = win.getSelection();
+      if ((toolbar && !toolbar.hidden) || (live && !live.isCollapsed && live.toString().trim())) showForSelection();
     },
     dispose() {
       hide();

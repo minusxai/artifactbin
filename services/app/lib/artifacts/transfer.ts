@@ -3,7 +3,7 @@ import {actorSubject,emit} from '../platform/events';
 import {notifyParent,parentOf} from './placement';
 import {generateInternalId} from '../platform/ids';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import type {TokenActor} from '../accounts/actors';
+import type {TokenActor} from '../accounts';
 import {getDb} from '../platform/db';
 import {DatasetError} from '../datasets/errors';
 import {catalogOf} from '../datasets/catalog';

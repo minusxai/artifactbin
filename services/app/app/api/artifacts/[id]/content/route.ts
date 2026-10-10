@@ -1,8 +1,7 @@
 import {tokenActorForRequest} from '@/lib/accounts';
-import {readableArtifact} from '@/lib/artifacts';
+import { getVersionFor, readableArtifact, refusingUnservable, servableDocument } from '@/lib/artifacts';
 /** Authenticated immutable content reads never use public serving/import paths. */
 import {withTokenAuth} from '@/lib/accounts';
-import {getVersionFor} from '@/lib/artifacts';
 import { canEdit } from '@artifactbin/contracts';
 import {serveStoredFile} from '@/lib/datasets/file-store';
 import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
@@ -10,7 +9,6 @@ import {serializeDatasetDefinition} from '@/lib/datasets/definition';
 import type {DatasetCatalog} from '@/lib/datasets/types';
 import {objectStore} from '@/lib/object-store';
 import {json} from '@/lib/http';
-import {refusingUnservable,servableDocument} from '@/lib/artifacts/servable';
 
 /** A reader's definition names the public relations only: no connection, no notebook. */
 const readableDefinition=(catalog:DatasetCatalog)=>serializeDatasetDefinition({

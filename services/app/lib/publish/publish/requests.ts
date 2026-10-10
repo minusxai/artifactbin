@@ -9,10 +9,8 @@
  */
 import { parseArtifactDestination, newArtifactDestination, ownsArtifact, applyEditFor, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, respondToEdit, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts/actors';
-import { parseAnnotationOperations } from '@/lib/document/annotation-edits';
-import { normalizeNodeIds } from '@/lib/document/node-ids';
-import { collectExternalAssetUrls } from '@/lib/document/external-images';
+import type { TokenActor } from '@/lib/accounts';
+import { parseAnnotationOperations, normalizeNodeIds, collectExternalAssetUrls } from '@/lib/document';
 import { prepareCatalog, catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { ServerRefLoader } from '@/lib/datasets/schema-loader';

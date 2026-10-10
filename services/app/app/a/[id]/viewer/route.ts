@@ -1,8 +1,7 @@
 import { canReadArtifact, compiledForRow, dataflowForRow, getArtifactById, holdableImports, viewerIdentityFor, type ArtifactRow } from '@/lib/artifacts';
-import type { RoleActor } from '@/lib/accounts/actors';
+import { type RoleActor, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
-import { sessionActor } from '@/lib/accounts';
 import { planOf } from '@/lib/compiled-page';
 import { anonymousAccessFacts } from '@/lib/publish/prepared';
 import type { ServedResults } from '@/lib/story-runtime/contract';

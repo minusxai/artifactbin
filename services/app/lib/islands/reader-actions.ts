@@ -1,6 +1,6 @@
 /** Applying a reader's light/dark choice to a document (the framed document's bridge, lib/islands/frame-bridge). */
-import { STORY_MODE_HOOK } from './contract';
-import { applyColorMode, persistReaderMode } from './reader-mode';
+import { STORY_MODE_HOOK } from '@/lib/story-runtime/contract';
+import { applyColorMode, persistReaderMode } from '@/lib/story-runtime/reader-mode';
 
 /**
  * Apply a reading choice from the local settings panel or the trusted parent's

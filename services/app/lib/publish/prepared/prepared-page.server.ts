@@ -32,12 +32,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getDb } from '@/lib/platform/db';
 import { archivedReadOnly, type ArchivedRender, artifactQuery, type ArtifactRow, declarationsForRow, holdableImports, LIVE_ARTIFACT_SQL, refDataForRow, savedMentionStates, servedRow, viewerIdentityFor } from '@/lib/artifacts';
-import type { Viewer, RoleActor } from '@/lib/accounts/actors';
+import type { Viewer, RoleActor } from '@/lib/accounts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { lookupWebAssets } from '../assets/web-assets';
-import { collectExternalAssetUrls } from '../../document/external-images';
+import { collectExternalAssetUrls, lazyCodeOf, type LazyCode, fixHtmlNesting } from '../../document';
 import { storedCompiledDataflow } from '@/lib/document/server';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';
 import { assetsPath, inlineStoryCss, inlineStoryNodes, mutatePath, queryPath, type StoryBaseCssRecipe, type StyleOverride, styleOverrides } from '@/lib/page-styles';
@@ -47,14 +47,12 @@ import {
   archiveSharedBuild, type CompilerBuild, createSpeculationRulesStore, inlineStoryElement, loadCompilerBuild,
   MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, type StoredCompile,
 } from '@/lib/compiled-page';
-import { lazyCodeOf, type LazyCode } from '../../document/lazy-code';
 import { readUrlValues } from '@/lib/dataflow/url-values';
 import { servedResultsFor } from './served-results.server';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { prepareWorkers } from './prepare-workers.server';
-import { fixHtmlNesting } from '../../document/nesting';
 
 /** Raise manually when older prepared pages cannot be read. */
 const PAGE_FORMAT = MIN_PAGE_FORMAT;

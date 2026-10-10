@@ -4,8 +4,8 @@
  */
 import { createHash } from 'node:crypto';
 import type { CommentChangesPage, CommentChangeEvent } from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts/actors';
-import { commentMonitorScope } from '@/lib/artifacts/access';
+import type { TokenActor } from '@/lib/accounts';
+import { commentMonitorScope } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform/db';
 import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 

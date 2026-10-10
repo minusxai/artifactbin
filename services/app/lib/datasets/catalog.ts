@@ -1,6 +1,6 @@
 import type {ContentObjects} from '@/lib/object-store/prepared-objects';
-import type { TokenActor } from '@/lib/accounts/actors';
-import type { StoredContent } from '@/lib/document/stored-content';
+import type { TokenActor } from '@/lib/accounts';
+import type { StoredContent } from '@/lib/document';
 import {json} from '@/lib/http/http';
 import {publishDataset} from '@/lib/datasets/data-tiers';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';

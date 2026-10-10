@@ -1,5 +1,5 @@
 /**
- * THE APP PAGE FOLLOWS ITS FRAME'S LINKS — the page half of lib/story-runtime/frame-bridge/links.
+ * THE APP PAGE FOLLOWS ITS FRAME'S LINKS — the page half of lib/islands/frame-links.
  *
  * A reader's click on a link to an app path inside the framed document arrives as STORY_NAVIGATE_MESSAGE
  * (`{ type, href }`). Only the frame's own window on the document's origin is heard, only a root-relative path on this

@@ -1,11 +1,11 @@
 import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuery, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, grantsOf, grantsPermitRead, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { collectRefUses } from '@/lib/dataflow/refs';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '@/lib/platform/analytics';
-import { sourceWithoutAnchors } from '@/lib/document/anchors';
+import { sourceWithoutAnchors } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../document/input';

@@ -1,8 +1,7 @@
-import { getVersionFor, versionToWire } from '@/lib/artifacts';
+import { getVersionFor, refusingUnservable, versionToWire } from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
 import { actorForArtifacts } from '@/lib/accounts';
 import { json, unauthorized } from '@/lib/http';
-import { refusingUnservable } from '@/lib/artifacts/servable';
 
 /** GET /api/my/artifacts/:id/versions/:version — owner-scoped version content. */
 export async function GET(request: Request, ctx: { params: Promise<{ id: string; version: string }> }) {

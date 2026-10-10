@@ -20,13 +20,13 @@
  * the rows carrying that stamp. The queries below state the rest.
  */
 import { trackEvent } from '@/lib/platform/analytics';
-import { LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifacts/access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import { LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifacts';
+import type { TokenActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform/db';
-import { artifactQuery } from '@/lib/artifacts/document';
-import { servableDocument } from '@/lib/artifacts/servable';
+import { artifactQuery } from '@/lib/artifacts';
+import { servableDocument } from '@/lib/artifacts';
 import { actorSubject, emit } from '@/lib/platform/events';
-import { ancestorsForMove, notifyParent, parentOf } from '@/lib/artifacts/placement';
+import { ancestorsForMove, notifyParent, parentOf } from '@/lib/artifacts';
 
 /** The row and everything under it — a document matches only itself. */
 const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';

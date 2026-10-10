@@ -1,5 +1,4 @@
-import {requestOrSessionActor,actorForArtifacts} from '@/lib/accounts/viewer';
-import {refusesCrossSite} from '@/lib/accounts/auth';
+import { actorForArtifacts, refusesCrossSite, requestOrSessionActor } from '@/lib/accounts';
 import {json,unauthorized} from '@/lib/http/http';
 import {DatasetError} from './errors';
 export async function datasetActor(request:Request){

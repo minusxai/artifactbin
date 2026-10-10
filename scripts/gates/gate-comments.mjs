@@ -429,7 +429,8 @@ async function ownerLeg(browser, { id, token }) {
     const loginAddress = new URL(stranger.url());
     check(loginAddress.pathname === '/login' && loginAddress.searchParams.get('callbackUrl')?.includes('intent=comment'),
       'a logged-out right-click Comment opens login with the return intent');
-    check(await stranger.getByRole('textbox', { name: 'Email', exact: true }).isVisible().catch(() => false),
+    // The login page is at its address before its form has drawn: wait for the form, as a person would.
+    check(await stranger.getByRole('textbox', { name: 'Email', exact: true }).waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false),
       'guest commenting requires email sign-in');
     await strangerCtx.close();
     await owner.close();
@@ -478,6 +479,8 @@ const run = async () => {
 const HOVER_REPLY_DOC = '<Helmet><title>Hover reply</title></Helmet>'
   + '<div data-design="tw" className="p-10"><h1>Margins</h1><p id="hover-target">Margins held at 21% this quarter.</p></div>';
 const HOVER_DRAFT = 'Answered from the hover card';
+/** Longer than two lines of the 288px card: the preview must clamp it to whole lines with an ellipsis. */
+const HOVER_ROOT = 'Is 21% the adjusted figure, or the reported one from before the one-off charges we booked in the third quarter of the year?';
 
 /**
  * REPLY FROM THE HOVER CARD: hover the marker, expand it, Tab from Resolve into the reply box, type,
@@ -492,13 +495,13 @@ async function hoverReplyLeg(browser, { id, token }) {
     await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
     await documentLocator(page).locator('#hover-target').waitFor({ timeout: 15000 });
     const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
-    const created = await page.evaluate(async ([docId, editId]) => {
+    const created = await page.evaluate(async ([docId, editId, rootBody]) => {
       const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ node_id: 'hover-target', edit_id: editId, body: 'is 21% the adjusted figure?' }),
+        body: JSON.stringify({ node_id: 'hover-target', edit_id: editId, body: rootBody }),
       });
       return res.status;
-    }, [id, head.edit_id]);
+    }, [id, head.edit_id, HOVER_ROOT]);
     check(created === 201, `the owner leaves a comment to answer from the hover card (${created})`);
     await page.reload({ waitUntil: 'load' });
     await documentLocator(page).locator('#hover-target').waitFor({ timeout: 15000 });
@@ -507,6 +510,28 @@ async function hoverReplyLeg(browser, { id, token }) {
     const card = page.locator('[data-annotation-id]');
     await marker.hover();
     await card.getByRole('button', { name: 'Reply', exact: true }).waitFor({ timeout: 8000 });
+    // WHOLE LINES: the clamped body shows two complete line boxes (no half line above the footer) and an ellipsis.
+    const lines = await until(() => card.evaluate(node => {
+      const own = node.getBoundingClientRect();
+      if (Math.abs(own.width - 288) > 1) return null; // still widening
+      const body = node.querySelector('[data-card-body]');
+      const foot = node.querySelector('[data-card-footer]');
+      const b = body.getBoundingClientRect(), f = foot.getBoundingClientRect();
+      const range = document.createRange(); range.selectNodeContents(body);
+      const rects = [...range.getClientRects()].filter(r => r.height > 0);
+      const visible = rects.filter(r => r.top < Math.min(b.bottom, own.bottom) - 0.5);
+      const style = getComputedStyle(body);
+      return {
+        // a line box that starts above the body's (or card's) bottom must end above it too: no half line
+        cut: visible.filter(r => r.bottom > b.bottom + 0.5 || r.bottom > own.bottom).length,
+        visibleLines: new Set(visible.map(r => Math.round(r.top))).size,
+        bodyBottom: b.bottom, footerTop: f.top, footerBottom: f.bottom, cardBottom: own.bottom,
+        display: style.display, clamp: style.webkitLineClamp, truncated: body.scrollHeight > body.clientHeight + 1,
+      };
+    }), value => value !== null, 4000);
+    check(lines && lines.cut === 0 && lines.visibleLines === 2 && lines.bodyBottom <= lines.footerTop + 0.5
+      && lines.footerBottom <= lines.cardBottom + 0.5 && lines.display !== 'block' && lines.clamp === '2' && lines.truncated,
+    `the hover card shows the body as whole lines with an ellipsis, clear of the footer (${JSON.stringify(lines)})`);
     const footer = await card.locator('[data-card-footer]').textContent();
     check(footer?.includes('1 message') && await card.getByRole('button', { name: 'Expand replies', exact: true }).count() === 0,
     'a one-message hover card shows its count as plain text');
@@ -591,7 +616,7 @@ async function imagePasteLeg(browser, { id, token }) {
     await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
     const frame = documentLocator(page);
     await frame.locator('#figure').waitFor({ timeout: 15000 });
-    // A file dropped on the document itself is refused inside the frame (frame-bridge/file-drops): the frame
+    // A file dropped on the document itself is refused inside the frame (lib/islands/frame-file-drops): the frame
     // never opens it in the document's place, and the words can still be selected and commented on below.
     const raw = await documentFrame(page);
     if (!raw) throw new Error('the document frame is missing');
@@ -917,8 +942,13 @@ async function liveSelectionLeg(browser, { id, token }) {
       selection.removeAllRanges(); selection.addRange(range);
       document.querySelector('#live-intro').dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     });
-    /** Select the words until the bubble offers Comment (the version's nodes may still be on their way). */
-    const bubble = () => until(async () => { await select(); return commentButton.isVisible(); }, (shown) => shown === true, 10000);
+    /** Select the words ONCE: the bubble must offer Comment for that selection (`write` has already waited for the nodes). */
+    const bubble = async () => { await select(); return commentButton.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false); };
+    // The explicit signal that a version AND its own nodes reached the document: the morph announces both in one task
+    // (lib/islands/morph/engine STORY_VERSION_DRAWN_EVENT), after the document's controller took them.
+    await raw.evaluate(() => document.addEventListener('mx:version-drawn', (event) => {
+      window.__gateDrawn = { editId: event.detail?.editId ?? null, nodes: Array.isArray(event.detail?.nodes) };
+    }));
     const rightClickPrevented = async () => {
       await raw.evaluate(() => window.addEventListener('contextmenu', (event) => {
         window.__gateLiveMenuPrevented = event.defaultPrevented;
@@ -935,7 +965,9 @@ async function liveSelectionLeg(browser, { id, token }) {
         body: JSON.stringify({ markup: liveSelectionDoc(n) }),
       });
       if (!put.ok) throw new Error(`version ${n} failed (${put.status}): ${await put.text()}`);
-      await until(shown, (now) => !!now && now !== before, 15000);
+      const drawn = await until(() => raw.evaluate(() => ({ shown: document.body.getAttribute('data-mx-live-edit'), drawn: window.__gateDrawn ?? null })),
+        (now) => !!now?.shown && now.shown !== before && now.drawn?.editId === now.shown && now.drawn.nodes === true, 20000);
+      if (!(drawn?.drawn?.editId === drawn?.shown && drawn?.drawn?.nodes)) throw new Error(`version ${n} was not drawn with its own nodes (${JSON.stringify(drawn)})`);
       await frame.locator(`#inserted-${n}`).waitFor();
     };
 
@@ -956,7 +988,9 @@ async function liveSelectionLeg(browser, { id, token }) {
     // A version lands while the bubble is open: its Comment names the paragraph where it is now, with the same words.
     check(await bubble(), 'live selection: the bubble is open before the next version');
     await write(4);
-    await until(() => commentButton.isVisible(), (visible) => visible === true, 5000);
+    const stillOpen = await commentButton.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false);
+    check(stillOpen, 'live selection: a bubble open when a version lands is still offered for the same words once its nodes arrive');
+    if (!stillOpen) return;
     await commentButton.click();
     await page.getByLabel('Annotation comment', { exact: true }).fill('Still the same words');
     await page.getByLabel('Save annotation', { exact: true }).click();

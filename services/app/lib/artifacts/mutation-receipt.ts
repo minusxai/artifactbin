@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {MutationInitiator,Queryable} from '@artifactbin/contracts';
 import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {getDb} from '../platform/db';
 
 export interface MutationReply {status:number;body:Record<string,unknown>}

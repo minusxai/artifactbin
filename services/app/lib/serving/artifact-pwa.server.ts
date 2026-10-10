@@ -1,12 +1,11 @@
 import sharp from 'sharp';
-import { graphNodes } from '../document';
-import { readPwaSettings, type PwaSettings } from '../document/head';
+import { graphNodes, readPwaSettings, type PwaSettings } from '../document';
 import { loadImage } from '@/lib/object-store/image-store';
-import { canReadArtifact, type ArtifactRow } from '../artifacts/access';
-import { getArtifactById } from '../artifacts/store';
-import { unservable } from '../artifacts/servable';
-import { referencedArtifactForRow } from '../artifacts/dataflow';
-import { sessionActor } from '../accounts/viewer';
+import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
+import { unservable } from '@/lib/artifacts';
+import { referencedArtifactForRow } from '@/lib/artifacts';
+import { sessionActor } from '../accounts';
 import { escapeAttr } from '@artifactbin/utils/escape';
 import { ID_RE } from '../platform/ids-shape';
 import { artifactAppPath, type ArtifactManifest } from './artifact-pwa';

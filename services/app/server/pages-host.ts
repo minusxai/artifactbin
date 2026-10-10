@@ -29,7 +29,7 @@
 import type { Context, MiddlewareHandler, Next } from 'hono';
 import { attachActor, readCookie } from '@artifactbin/utils';
 import { ANONYMOUS } from '@artifactbin/contracts';
-import { endPagesSession, exchangePagesTicket, PAGES_COOKIE, pagesSessionOf } from '@/lib/accounts/pages-sessions';
+import { endPagesSession, exchangePagesTicket, PAGES_COOKIE, pagesSessionOf } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
 import { idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_SESSION_PATH, pagesOriginFor, type PagesSite } from '@/lib/http/pages-origin';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';

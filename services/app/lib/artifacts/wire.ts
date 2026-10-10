@@ -1,13 +1,12 @@
 import {monitoringGuidance} from './monitoring-guidance';
 import {documentMutationReply,adaptMutationOperationReply} from './mutation-operation';
 import {parseDocumentUpdate} from '@artifactbin/contracts';
-import {GRAPH_POLICY,graphIntegrity,graphNodes,graphSource} from '../document/document-graph';
+import {GRAPH_POLICY, graphIntegrity, graphNodes, graphSource, parseAnnotationOperations} from '../document';
 import {readableArtifact} from './read-access';
 import {grantsOf,grantsPermitWrite} from '@/lib/artifacts/dataset-policy/grants';
 import type {MutationReceipt} from './mutation-receipt';
 import {parseSharingEntries} from '@artifactbin/utils';
 import {artifactState} from './state';
-import { parseAnnotationOperations } from '../document/annotation-edits';
 import {catalogOf} from '@/lib/datasets/catalog';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a
@@ -21,7 +20,7 @@ import {catalogOf} from '@/lib/datasets/catalog';
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import { ownsArtifact, canReadArtifact, canWriteDataset, type ArtifactRow } from './access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 import { getArtifactById, getArtifactFor, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { declarationsForRow, runDocumentMutation } from './dataflow';

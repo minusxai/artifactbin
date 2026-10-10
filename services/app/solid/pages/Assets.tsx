@@ -9,7 +9,7 @@ import ChevronRight from 'lucide-solid/icons/chevron-right';
 import Globe from 'lucide-solid/icons/globe';
 import Search from 'lucide-solid/icons/search';
 import type { AssetSelection, WorkspaceAssets } from '@/lib/workspace/inventory';
-import { displayTitle } from '@/lib/document/display-title';
+import { rowTitle } from '@/lib/document/display-title';
 import type { ShelfRow } from '@/lib/workspace/shelf';
 import { MicroLabel, PANEL, FormatBadge, timeAgo } from '../ui/ui';
 import { RowActions } from '../components/Shelf';
@@ -34,7 +34,7 @@ export function AssetsPage(): JSX.Element {
   const [removed, setRemoved] = createSignal<string[]>([]);
   createEffect(() => { const data = page.data(); const owner = session()?.user?.id; if (data && owner) setPrevious({ owner, data }); });
   const data = () => page.data() ?? (previous()?.owner === session()?.user?.id ? previous()?.data ?? null : null);
-  const assets = createMemo(() => (data()?.assets ?? []).filter(asset => !removed().includes(asset.id)).map(asset => ({ ...asset, title: displayTitle(asset) })));
+  const assets = createMemo(() => (data()?.assets ?? []).filter(asset => !removed().includes(asset.id)).map(asset => ({ ...asset, title: rowTitle(asset) })));
   const selected = () => selection();
   const toggle = (kind: 'formats' | 'visibilities', value: string) => setSelection((current) => ({ ...current, page: 0,
     [kind]: current[kind].includes(value) ? current[kind].filter((item) => item !== value) : [...current[kind], value],

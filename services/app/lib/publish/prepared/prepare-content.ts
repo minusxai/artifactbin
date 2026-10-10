@@ -1,7 +1,7 @@
 import { objectStore } from '@/lib/object-store';
 import { json } from '@/lib/http/http';
 import { parseContentInput, type ContentInputCtx } from '../document/input';
-import type { StoredContent } from '@/lib/document/stored-content';
+import type { StoredContent } from '@/lib/document';
 import { prepareObjects, type PreparedObject } from '@/lib/object-store/prepared-objects';
 
 export interface PreparedContent {

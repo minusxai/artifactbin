@@ -25,16 +25,14 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform/db';
 import { parseCookie } from '@/lib/http/http';
-import type { ArtifactRow } from '@/lib/artifacts/access';
-import { artifactQuery } from '@/lib/artifacts/document';
+import { artifactQuery, type ArtifactRow } from '@/lib/artifacts';
 import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/document/helmet';
 import {
-  CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, cspExtensionsOf, emptyCspExtensions, hasCspExtensions, mergeCspExtensions,
-  storedCspExtensions, subtractCspExtensions, type CspExtensions, type CspRequest,
-} from '@/lib/document/csp-extensions';
+  splitHelmet, CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, cspExtensionsOf, emptyCspExtensions, hasCspExtensions,
+  mergeCspExtensions, storedCspExtensions, subtractCspExtensions, type CspExtensions, type CspRequest,
+} from '@/lib/document';
 
-export type { CspExtensions, CspRequest } from '@/lib/document/csp-extensions';
+export type { CspExtensions, CspRequest } from '@/lib/document';
 
 /** Who is reading: an account, a token (a guest's publishes are its token's), or nobody. */
 export interface TrustViewer {

@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import type {RunnerService,RunnerCapabilities} from '@artifactbin/contracts';
 import {HOSTED_HARNESSES,HOSTED_TERMINAL_SIZE,type RemoteSessionInfo} from '../../../contracts/src/remote';
-import {sessionActor,isCookieCredential} from '../accounts/viewer';
+import { isCookieCredential, sessionActor } from '../accounts';
 import {json,readJson,isCrossSiteRequest} from '../http';
 import {RUNNER_SERVICE_URL} from '../platform/config';
 import {services} from '../platform/services';

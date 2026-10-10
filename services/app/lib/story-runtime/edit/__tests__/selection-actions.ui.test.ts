@@ -769,6 +769,33 @@ describe('a new version drawn in place under the selection actions', () => {
     expect(onAction).toHaveBeenCalledWith('annotate', expect.objectContaining({ path: '1', nodeId: 'lede' }));
   });
 
+  it('raises the bubble for a selection made before the version\'s nodes arrived, once they do', async () => {
+    drawV2();
+    // Selected in the window between the new DOM and its nodes: it describes nothing yet, so no bubble.
+    await selectText();
+    expect(bubbleVisible()).toBe(false);
+    // The nodes arrive with the words still selected: the bubble appears for them, with no new gesture.
+    actions.setNodes(v2.nodes);
+    expect(bubbleVisible()).toBe(true);
+    document.querySelector<HTMLButtonElement>('[aria-label="Comment on selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('annotate', expect.objectContaining({ path: '1', nodeId: 'lede' }));
+  });
+
+  it('never raises the bubble mid-drag when the nodes arrive, nor for a collapsed caret', async () => {
+    drawV2();
+    selectRange();
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    actions.setNodes(v2.nodes);
+    expect(bubbleVisible(), 'the release that ends the drag is the event to answer').toBe(false);
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+    expect(bubbleVisible()).toBe(true);
+    window.getSelection()!.collapseToStart();
+    document.dispatchEvent(new Event('selectionchange'));
+    actions.setNodes(v2.nodes);
+    expect(bubbleVisible()).toBe(false);
+  });
+
   it('re-describes a bubble that was open when the version arrived, so its action names the node where it is now', async () => {
     await selectText();
     expect(bubbleVisible()).toBe(true);

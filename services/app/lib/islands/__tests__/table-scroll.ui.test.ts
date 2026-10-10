@@ -5,19 +5,25 @@
  * tables too and ships no runtime), marks each overflowing table, and keeps
  * the mark honest as the reader scrolls it and as the viewport changes.
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { markScrollableTables } from '@/lib/islands/table-scroll';
 
 function table(scrollWidth: number, clientWidth: number): HTMLTableElement {
-  const t = document.createElement('table');
+  const t = doc.createElement('table');
   Object.defineProperty(t, 'scrollWidth', { value: scrollWidth, configurable: true });
   Object.defineProperty(t, 'clientWidth', { value: clientWidth, configurable: true });
-  document.body.appendChild(t);
+  doc.body.appendChild(t);
   return t;
 }
+/**
+ * Each case wires a document of its own (an iframe's): the shared islands jsdom keeps lib/islands/page's module-level
+ * wiring on the top document, and that listener would answer this file's events too.
+ */
+let doc: Document;
+beforeEach(() => { const frame = document.createElement('iframe'); document.body.appendChild(frame); doc = frame.contentDocument!; });
 /** Every watcher is disposed between cases — a leaked one marks the next test's tables. */
 let stop: (() => void) | null = null;
-const watch = () => { stop = markScrollableTables(document); return stop; };
+const watch = () => { stop = markScrollableTables(doc); return stop; };
 afterEach(() => { stop?.(); stop = null; document.body.innerHTML = ''; });
 
 describe('markScrollableTables', () => {
@@ -65,7 +71,7 @@ describe('markScrollableTables', () => {
     watch();
     expect(t.hasAttribute('data-mx-scrollable')).toBe(true);
     Object.defineProperty(t, 'clientWidth', { value: 1000, configurable: true });
-    window.dispatchEvent(new Event('resize'));
+    doc.defaultView!.dispatchEvent(new Event('resize'));
     expect(t.hasAttribute('data-mx-scrollable')).toBe(false);
   });
 });

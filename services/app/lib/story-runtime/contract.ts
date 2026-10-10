@@ -159,7 +159,7 @@ export interface StoryIslandData {
   /**
    * The SQLite engine's wasm, at the content-addressed URL the island build
    * records (public/islands/manifest.json), for a page that runs the queries
-   * over what its reader holds (dataflow.hold, lib/story-runtime/page-sqlite).
+   * over what its reader holds (dataflow.hold, lib/islands/page-sqlite).
    * Absent where nothing runs in the page.
    */
   sqliteWasm?: string;
@@ -213,6 +213,17 @@ export const STORY_ROOT_ID = 'mx-story-root';
  * ──────────────────────────────────────────────────────────────────────────── */
 /** The element ids and attributes the assembled page and the runtime agree on. */
 export const ISLAND_DATA_ID = 'mx-story-data';
+/**
+ * The story fragment's (`GET /a/:id/story`) own version's source nodes, as JSON — the nodes the page attached with,
+ * for the version the fragment draws. The morph (lib/islands/morph/engine) hands them on with STORY_VERSION_DRAWN_EVENT.
+ */
+export const STORY_NODES_ID = 'mx-story-nodes';
+/**
+ * Dispatched on the document by the morph in the SAME task it draws a new version: `{ editId, nodes }` (nodes null
+ * when the fragment carried none). Selections and comments are classified against these nodes, so no event between
+ * the new DOM and its nodes ever sees the two disagree.
+ */
+export const STORY_VERSION_DRAWN_EVENT = 'mx:version-drawn';
 /**
  * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
  * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
@@ -399,7 +410,7 @@ export interface StoryUrlValuesMessage { type: typeof STORY_URL_VALUES_MESSAGE; 
  * A document framed on its own origin → the app page: the reader followed a link to an APP path (root-relative, or
  * absolute on either origin), which would otherwise resolve against the document's origin. `{ type, href }`, `href`
  * a root-relative path with its query and hash. The app page performs the navigation on itself and answers
- * STORY_NAVIGATING_MESSAGE first; a frame that hears no answer takes the top itself (lib/story-runtime/frame-bridge/links).
+ * STORY_NAVIGATING_MESSAGE first; a frame that hears no answer takes the top itself (lib/islands/frame-links).
  */
 export const STORY_NAVIGATE_MESSAGE = 'mx:navigate';
 /** The app page → its framed document: "I am taking this navigation" (`{ type, href }`, the href it was asked for). */
@@ -861,7 +872,7 @@ interface StoryLinkKeyMessage { type: typeof STORY_LINK_KEY_MESSAGE; nonce: stri
  *   { type: 'mx:frame-bridge', key, payload }
  *
  * `key` is minted by the PAGE (its realm, its crypto) and sent in `attach`; the
- * frame's door (lib/story-runtime/frame-bridge/door, installed by lib/islands/page
+ * frame's door (lib/islands/frame-door, installed by lib/islands/page
  * BEFORE the author's script exists) is the only listener that ever sees an
  * envelope — it stops every one from reaching another listener — so the author's
  * script, which shares the frame's realm, never learns the key and cannot forge

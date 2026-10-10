@@ -3,9 +3,10 @@ import { getArtifactById } from './store';
 import type { StoredDocument } from '../document';
 import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
 import { hasDocumentEditorAccess } from './document-policy';
-import type { RoleActor, TokenActor, Viewer } from '@/lib/accounts/actors';
-import type { RequestActor } from '@/lib/accounts/viewer';
-import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/accounts/user-kinds';
+import {
+  ACCOUNT_REACH_SQL, isLinkOnlyActor, type RequestActor, type RoleActor, type TokenActor, userKindOf,
+  type Viewer,
+} from '@/lib/accounts';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb, type Queryable } from '../platform/db';
 import { canUseDataPolicy } from '@/lib/artifacts/dataset-policy';

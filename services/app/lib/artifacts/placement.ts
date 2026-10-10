@@ -19,7 +19,7 @@ import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 // row-loading seam, so every one of them names the trash gate: a trashed
 // folder is not somewhere to file into, and a trashed child is not listed.
 import { ownerPredicate, effectiveRole, roleWithoutLink, LIVE_ARTIFACT_SQL, type ArtifactRow } from './access';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import type { ArtifactFormat } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';

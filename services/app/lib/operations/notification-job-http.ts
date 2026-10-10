@@ -1,5 +1,4 @@
-import {requestOrSessionActor,actorForArtifacts} from '@/lib/accounts/viewer';
-import {refusesCrossSite} from '@/lib/accounts/auth';
+import { actorForArtifacts, refusesCrossSite, requestOrSessionActor } from '@/lib/accounts';
 import {json} from '@/lib/http/http';
 import {runOperation} from './http';
 

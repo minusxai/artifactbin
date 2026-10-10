@@ -7,8 +7,8 @@ vi.mock('../../artifacts', () => ({
     return row && { id, format: 'markup', deleted_at: null, version: 1, edit_id: 'e1', source: row.source };
   },
   canReadArtifact: async () => true,
+  declarationsForRow: async () => null,
 }));
-vi.mock('../../artifacts/dataflow', () => ({ declarationsForRow: async () => null }));
 
 import { resolveLambdaProgram } from '../resolve';
 

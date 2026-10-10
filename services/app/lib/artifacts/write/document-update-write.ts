@@ -8,11 +8,10 @@ import {documentAnnotationSql,annotationSqlInput,annotationSqlGuard} from './doc
  * identity maintenance share the artifact row lock and the same SQL statement. */
 import type {DocumentUpdate,Queryable} from '@artifactbin/contracts';
 import { ownerPredicate, type ArtifactRow, type Scope } from '../access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {hydrateArtifactDocument} from '../document';
-import {GRAPH_POLICY} from '../../document/document-graph';
+import {GRAPH_POLICY, newEditId} from '../../document';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
-import {newEditId} from '../../document/splice';
 import {DATA_SYNTAX_META} from '@/lib/dataflow/data-syntax';
 import {TABLES} from '../../platform/schema';
 /**

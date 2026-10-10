@@ -33,10 +33,10 @@
 import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
+import { createDocumentTransport } from './document-transport';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { STORY_DATA_HOOK, STORY_URL_VALUES_MESSAGE, type StoryUrlValuesMessage, ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/story-runtime/contract';
-import { frameAppOrigin } from '@/lib/story-runtime/frame-bridge/origin';
+import { frameAppOrigin } from './frame-origin';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
 import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './module';

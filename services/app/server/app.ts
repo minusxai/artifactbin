@@ -1,7 +1,7 @@
 import {getDeploymentState} from '@/lib/deployment';
 import {renderSetupInstaller} from '@/lib/serving/setup-installers';
 import { artifactAppPath } from '@/lib/serving';
-import { UnservableDocument } from '@/lib/artifacts/servable';
+import { type ArtifactRow, canReadArtifact, getArtifactById, roleFor, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
 import { loginRedirectTarget } from '@/lib/http';
 /**
@@ -32,14 +32,13 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
-import { canReadArtifact, getArtifactById, roleFor } from '@/lib/artifacts';
 import { ID_RE, verifyExportKey } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { SPA_PATHS } from '@/lib/http/app-pages';
 import { ownerUsername, sessionActor } from '@/lib/accounts';
-import { AGENT_COOKIE } from '@/lib/accounts/agent-session';
+import { AGENT_COOKIE } from '@/lib/accounts';
 import { canEdit } from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/platform';
@@ -52,7 +51,6 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
-import type { ArtifactRow } from '@/lib/artifacts';
 import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/publish/prepared';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
@@ -180,7 +178,7 @@ export const APP_INLINE_SCRIPT_HASHES = [
 function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; connect?: readonly string[] } = {}): string {
   return [
     // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
-    // reader's document runs its queries on (lib/story-runtime/page-sqlite) —
+    // reader's document runs its queries on (lib/islands/page-sqlite) —
     // and nothing else: no eval, no Function, no string timers.
     "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
     // Listing thumbnails redirect from /a/:id/export to the configured asset

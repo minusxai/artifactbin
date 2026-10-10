@@ -1,6 +1,6 @@
 import {parseCommentViewState} from '../../../../../../contracts/src/comment-view-state';
 import {createHash} from 'node:crypto';
-import {parseAnnotationRange,isAreaRange,refinementRange} from '@/lib/document/annotation-range';
+import {parseAnnotationRange, isAreaRange, refinementRange} from '@/lib/document';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import {readableArtifact} from '@/lib/artifacts';
 import { canAnnotate } from '@artifactbin/contracts';
@@ -15,12 +15,11 @@ import { canAnnotate } from '@artifactbin/contracts';
  */
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http';
-import { withTokenAuth } from '@/lib/accounts';
+import { type TokenActor, withTokenAuth } from '@/lib/accounts';
 import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 import { json, readJson } from '@/lib/http';
-import type { TokenActor } from '@/lib/accounts/actors';
 
 const STATUSES = new Set(['open', 'resolved', 'all']);
 

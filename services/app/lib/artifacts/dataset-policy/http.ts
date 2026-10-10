@@ -1,7 +1,7 @@
 import {getDb} from '@/lib/platform/db';
 import { getArtifactFor } from '@/lib/artifacts/store';
 import { editorScope } from '@/lib/artifacts/access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { getSharingFor } from '@/lib/artifacts/sharing';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { json, readJson } from '@/lib/http/http';

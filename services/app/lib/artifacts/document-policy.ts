@@ -1,4 +1,4 @@
-import type { VerifiedAccount } from '@/lib/accounts/actors';
+import type { VerifiedAccount } from '@/lib/accounts';
 
 /** Optional host-owned grant for editing markup documents; never ownership or dataset writes. */
 export type DocumentEditorPolicy = (account: VerifiedAccount) => boolean;

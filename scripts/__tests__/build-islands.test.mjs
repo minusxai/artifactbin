@@ -130,7 +130,7 @@ describe('buildIslands', () => {
       expect(all.some((input) => input.endsWith(name)), `${name} is in the build at all`).toBe(true);
       expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
     }
-    expect(modules.some(input => input.endsWith('story-runtime/frame-bridge/door.ts')), 'rt+boot needs the app origin, not the editor attachment door').toBe(false);
+    expect(modules.some(input => input.endsWith('islands/frame-door.ts')), 'rt+boot needs the app origin, not the editor attachment door').toBe(false);
     // The compiled reader merges classes at compile time: no reader runtime chunk carries a class merger.
     for (const pkg of ['tailwind-merge', 'class-variance-authority', 'clsx']) {
       expect(modules.some((input) => input.includes(`node_modules/${pkg}/`)), pkg).toBe(false);

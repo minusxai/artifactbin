@@ -68,3 +68,5 @@ export type { AnnotationAuthor, AnnotationCommentWire, AnnotationWireAuthor } fr
 export * from './deny';
 
 export * from "./groups";
+
+export { assetFormatOf, FILE_EXTENSIONS, fileContentType } from './file-types';

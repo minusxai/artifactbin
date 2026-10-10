@@ -16,14 +16,12 @@ import { readerDataflow } from '@/lib/dataflow/compiled-dataflow';
 import { type ArtifactRow, datasetsForDocument, declarationsForRow, servableDocument } from '@/lib/artifacts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { authorHandle } from '@/lib/accounts/users';
+import { authorHandle } from '@/lib/accounts';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import type { ArtifactLiveEvent } from '@/lib/story-runtime/contract';
-import { storyUpdateParts } from '../../document/update-parts';
-import { assetLookupFrom } from '../../document/asset-url';
+import { storyUpdateParts, assetLookupFrom, firstHeadingTitle } from '../../document';
 import { webAssetsForSource } from '../assets/web-assets';
-import { firstHeadingTitle } from '../../document/title';
 
 interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;

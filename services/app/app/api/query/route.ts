@@ -3,7 +3,7 @@ import { actorForArtifacts, sessionActor } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';
 import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
-import { validateHelmet } from '@/lib/document/head';
+import { validateHelmet } from '@/lib/document';
 import { parseQueryRequest } from '@/lib/http/query-request';
 import { resolveToken } from '@/lib/accounts';
 import {DatasetError} from '@/lib/datasets/errors';

@@ -7,7 +7,7 @@
  * - `cellAttrs` is the interpreter's table scope (story-ui/interpreter scopeProps with a tableCommentScope) over
  *   rt's row attributes: an author id becomes the row's instance id (`['table', owner, typeof key, key, column]`),
  *   the idrefs naming the column's ids follow it, and a durable row carries its comment target.
- * - `CellControl` keeps a draft per cell in ONE document-local session store (lib/story-runtime/cell-sessions),
+ * - `CellControl` keeps a draft per cell in ONE document-local session store (lib/islands/cell-sessions),
  *   so a draft survives the row re-rendering (a refresh, a sort, the virtual window moving). Committing writes
  *   the declared `<Mutation>` with the row and the draft as `$_value`; the cell is `aria-busy` and disabled while
  *   the write is in flight, and the server's refusal is shown beside it (`role="alert"`) with the draft kept. A
@@ -25,7 +25,7 @@ import { substituteRow } from '@/lib/jsx/row-scope';
 import { VIEWER_ID } from '@/lib/dataflow/builtins';
 import { refusalText } from '@artifactbin/contracts/sign-in-required';
 import { commentMetadata, instanceDomId } from '@/lib/story-ui/repeat-identity';
-import { createCellSessions, type CellSessions } from '@/lib/story-runtime/cell-sessions';
+import { createCellSessions, type CellSessions } from '../cell-sessions';
 import { rowAttrs } from './basic';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';

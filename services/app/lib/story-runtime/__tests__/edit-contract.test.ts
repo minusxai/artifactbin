@@ -13,9 +13,8 @@ import {
   STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,
   STORY_DOCUMENT_MESSAGE,
   STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
-  STORY_EDIT_FLUSH_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_HISTORY_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, isFrameBridgeEnvelope,
+  STORY_EDIT_FLUSH_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_HISTORY_MESSAGE,
 } from '../contract';
-import { FRAME_BRIDGE_MESSAGE } from '../frame-bridge/door';
 
 const NONCE = 'a'.repeat(32);
 const edit = (over: Record<string, unknown> = {}) => ({ type: STORY_TEXT_EDIT_MESSAGE, nonce: NONCE, path: '0.1', innerHtml: 'hi', ...over });
@@ -78,20 +77,12 @@ describe('annotation messages route like every other edit message', () => {
   });
 });
 
-describe('the keys a framed document forwards, and the bridge envelope', () => {
+describe('the keys a framed document forwards', () => {
   it('signs the forwarded keys like every other frame message', () => {
     for (const type of [STORY_EDIT_FLUSH_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_HISTORY_MESSAGE]) {
       expect(isEditFrameMessage({ type, nonce: NONCE }, NONCE), type).toBe(true);
       expect(isEditFrameMessage({ type }, NONCE), `${type} unsigned`).toBe(false);
       expect(isEditParentMessage({ type }), `${type} is not a parent command`).toBe(false);
-    }
-  });
-
-  it('names the envelope once: the door restates the contract value exactly', () => {
-    expect(FRAME_BRIDGE_MESSAGE).toBe(STORY_FRAME_BRIDGE_MESSAGE);
-    expect(isFrameBridgeEnvelope({ type: STORY_FRAME_BRIDGE_MESSAGE, key: 'k', payload: { kind: 'hello' } })).toBe(true);
-    for (const junk of [null, 'mx:frame-bridge', { type: STORY_FRAME_BRIDGE_MESSAGE }, { type: STORY_FRAME_BRIDGE_MESSAGE, payload: { kind: 1 } }, { type: 'mx:other', payload: { kind: 'hello' } }]) {
-      expect(isFrameBridgeEnvelope(junk)).toBe(false);
     }
   });
 });

@@ -1,5 +1,5 @@
 import { artifactPwaEnabled } from './artifact-pwa.server';
-import { membershipState } from '@/lib/artifacts/membership/membership';
+import { membershipState } from '@/lib/artifacts';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
@@ -18,11 +18,11 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * stylesheet. An owner or editor fetches those on the EDITOR door
  * (`?part=editor`) — prefetched on idle, so entering edit mode stays instant.
  */
-import { archivedVersionFor, servedRow } from '@/lib/artifacts/archived-version';
-import { UnservableDocument } from '@/lib/artifacts/servable';
+import { archivedVersionFor, servedRow } from '@/lib/artifacts';
+import { UnservableDocument } from '@/lib/artifacts';
 import { countOpenAnnotations } from '@/lib/annotations/store';
-import { canReadArtifact, roleFor } from '@/lib/artifacts/access';
-import { getArtifactFor, getArtifactById } from '@/lib/artifacts/store';
+import { canReadArtifact, roleFor } from '@/lib/artifacts';
+import { getArtifactFor, getArtifactById } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/workspace/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -30,21 +30,20 @@ import { verifyExportKey } from '@/lib/platform/export-read-key';
 import { baseUrl, json } from '@/lib/http/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform/ids';
-import { count, has } from '@/lib/accounts/relations';
+import {
+  actorForArtifacts, avatarUrl, browserSessionKind, count, getUserById, has, isBrowserSessionRequest,
+  issuePagesTicket, ownerUsername, sessionActor,
+} from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import {ARTIFACT_FORMATS, type ArtifactFormat, canAnnotate, canEdit, CARD_RENDER_GENERATION, isStartPlaceholder} from '@artifactbin/contracts';
 import {getGroupById} from '@/lib/groups';
 import { canonicalArtifactPath } from '@/lib/http/urls';
-import { getUserById, ownerUsername } from '@/lib/accounts/users';
-import { avatarUrl } from '@/lib/accounts/avatars';
-import { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, sessionActor } from '@/lib/accounts/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/publish/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { firstHeadingTitle } from '@/lib/document/head';
+import { firstHeadingTitle } from '@/lib/document';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { issuePagesTicket } from '@/lib/accounts/pages-sessions';
 import { pagesOriginFor, pagesSessionUrl, type PagesSite } from '../http/pages-origin';
 import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';

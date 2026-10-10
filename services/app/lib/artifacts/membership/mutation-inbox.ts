@@ -1,5 +1,5 @@
 import type {MutationInitiator,MutationNotificationActor,MutationNotificationView,NotificationSource,Queryable} from '@artifactbin/contracts';
-import {avatarUrl} from '@/lib/accounts/avatars';
+import { avatarUrl } from '@/lib/accounts';
 import {notificationSourcesReadable} from '../notification-authority';
 /** Private provenance stays here; every inbox and delivery consumer shares this projection. */
 export async function mutationNotificationInbox(db:Queryable,recipientId:string,onlyId:string|null):Promise<Array<MutationNotificationView & {source:null}>>{

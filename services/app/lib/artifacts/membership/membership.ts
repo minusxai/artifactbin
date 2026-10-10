@@ -1,6 +1,5 @@
-import {lockMembershipUsers} from '@/lib/accounts/membership-lock';
+import { JOIN_RELATIONS, lockMembershipUsers, type RoleActor, setRelationState } from '@/lib/accounts';
 import {artifactQuery} from '@/lib/artifacts/document';
-import {JOIN_RELATIONS,setRelationState} from '@/lib/accounts/relation-state';
 import {recordEvent} from '@/lib/notifications/events';
 import {DatasetError} from '@/lib/datasets/errors';
 import { readThrough } from '@/lib/artifacts/dataset-policy/grants';
@@ -8,7 +7,6 @@ import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirect
 import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
 import { getDb } from '@/lib/platform/db';
 import { effectiveRole, type ArtifactRow } from '../access';
-import type { RoleActor } from '@/lib/accounts/actors';
 import { getArtifactById } from '../store';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 import { can } from '../capabilities';

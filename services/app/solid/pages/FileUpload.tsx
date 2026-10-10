@@ -7,7 +7,7 @@ import AssetPageHeader from '../components/AssetPageHeader';
 import { FILE_ACTION as ACTION, FileViewer, extensionOf } from '../components/FileViewer';
 import { LINK } from '../ui/ui';
 import { formatFileSize } from '@/lib/islands/file-display';
-import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@/lib/document/file-types';
+import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@artifactbin/contracts';
 import { useSession } from '../lib/session';
 import { copyText } from '../lib/copy-text';
 

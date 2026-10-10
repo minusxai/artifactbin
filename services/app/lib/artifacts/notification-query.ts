@@ -9,7 +9,7 @@ import {platformValues} from '@/lib/dataflow';
 import {DataflowResultError} from '@/lib/dataflow/evaluate';
 import {getDb} from '@/lib/platform/db';
 import { tableForRef, acceptedMembers } from './dataflow';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import type {Row} from '@/lib/dataflow';
 export interface NotificationQueryDependencies {
  load(input:MutationNotificationJobInput):Promise<{

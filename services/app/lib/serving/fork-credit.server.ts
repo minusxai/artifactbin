@@ -1,6 +1,6 @@
-import { getArtifactById } from '@/lib/artifacts/store';
+import { getArtifactById } from '@/lib/artifacts';
 import { canonicalArtifactPath } from '@/lib/http/urls';
-import { ownerUsername } from '@/lib/accounts/users';
+import { ownerUsername } from '@/lib/accounts';
 
 /**
  * PROVENANCE, resolved per render and never written into the markup. A public source carries an href;

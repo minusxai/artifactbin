@@ -2,7 +2,7 @@ import { getDb } from '@/lib/platform/db';
 import { generateInternalId, ID_RE } from '@/lib/platform';
 import type { ArtifactRow } from './access';
 import { getArtifactById } from './store';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { dataflowForRow } from '@/lib/artifacts/dataflow';
 import { catalogOf } from '@/lib/datasets/catalog';
@@ -12,8 +12,7 @@ import { imageInsertAllowed } from '@/lib/datasets/image-upload-policy';
 import { storeImageContent } from '@/lib/datasets/data-tiers';
 import { objectStore } from '@/lib/object-store';
 import { IMAGE_CONTENT_TYPES } from '@/lib/object-store/image-store';
-import type { DatasetUploadResult } from '@artifactbin/contracts';
-import { assetFormatOf, fileContentType } from '@/lib/document/file-types';
+import { assetFormatOf, fileContentType, type DatasetUploadResult } from '@artifactbin/contracts';
 import { MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform/config';
 import { uploadedSha256, storeFileContent } from '@/lib/datasets/file-store';
 

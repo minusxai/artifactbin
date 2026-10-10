@@ -1,11 +1,11 @@
 /**
- * THE FRAME'S APP LINKS (lib/story-runtime/frame-bridge/links, installed by lib/islands/page in every framed document): a link to an app path inside a document framed on its
+ * THE FRAME'S APP LINKS (lib/islands/frame-links, installed by lib/islands/page in every framed document): a link to an app path inside a document framed on its
  * own origin asks the app page to follow it, and takes the top itself only when nobody answers. The frame's parent is
  * a real jsdom window (another iframe) whose postMessage records what the frame sent; the frame's `top` and `open`
  * are recorders, since jsdom navigates neither.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { appLinkPath, followAppLinks } from '@/lib/story-runtime/frame-bridge/links';
+import { appLinkPath, followAppLinks } from '@/lib/islands/frame-links';
 import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE } from '@/lib/story-runtime/contract';
 
 const APP = 'https://app.test';

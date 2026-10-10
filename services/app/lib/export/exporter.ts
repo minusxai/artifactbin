@@ -12,18 +12,17 @@ import { loadImage } from '@/lib/object-store/image-store';
 import { createHash } from 'node:crypto';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
 import { services } from '@/lib/platform/services';
-import { ArtifactRow } from '../artifacts/access';
-import { getArtifactById } from '../artifacts/store';
-import { referencedArtifactForRow } from '../artifacts/dataflow';
-import { declarationsOf } from '../document/head';
+import { ArtifactRow, getArtifactById, referencedArtifactForRow, VERSION_PARAM } from '@/lib/artifacts';
+import {
+  declarationsOf, SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
+  type SocialPreviewCrop,
+} from '../document';
 import { scriptModuleOrigins, scriptRenderAllowance } from './script-origins';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
-import { VERSION_PARAM } from '@/lib/artifacts/archived-version';
 import { mintExportKey } from '@/lib/platform/export-read-key';
 import { json } from '../http/http';
 import { objectStore } from '../object-store/index';
 import { urlSelection } from '@/lib/dataflow';
-import { SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage, type SocialPreviewCrop } from '../document/head';
 
 const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
 type ExportFormat = keyof typeof EXPORT_MIME;

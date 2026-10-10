@@ -81,6 +81,22 @@ async function hoveredCard(rows: AnnotationWire[]) {
   return { view, card };
 }
 
+describe('the hovered card shows whole lines only', () => {
+  it('clamps the body to two lines with an ellipsis, never shrinks it under the footer, and sizes the card to its content', async () => {
+    const long = { ...SINGLE, thread: [{ ...SINGLE.thread[0]!, body: 'QA dropped image on a freshly loaded page, and then the second sentence that runs on' }] };
+    const { card } = await hoveredCard([long]);
+    const body = within(card).getByText(/QA dropped image/);
+    // -webkit-line-clamp only clamps (and only draws its ellipsis) on a -webkit-box: no display utility may override it.
+    expect(body).toHaveClass('line-clamp-2', 'shrink-0');
+    expect(body).not.toHaveClass('block');
+    const footer = card.querySelector<HTMLElement>('[data-card-footer]')!;
+    expect(body.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.style.height).toBe('auto');
+    expect(card.style.minHeight).toBe('108px');
+    expect(card).toHaveClass('flex', 'flex-col');
+  });
+});
+
 describe('the card says plainly that it can be answered', () => {
   it('a one-message thread shows its count as text and a separate Reply button that opens and focuses the box', async () => {
     const { card } = await hoveredCard([SINGLE]);

@@ -1,15 +1,15 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
-import {artifactQuery} from '@/lib/artifacts/document';
+import {artifactQuery} from '@/lib/artifacts';
 import {recordEvent} from '../notifications/events';
 import {commentMentions} from './saved-mentions';
-import {MembershipError} from '@/lib/artifacts/membership/membership';
+import {MembershipError} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from '../remote/agents';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
 import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern } from '@artifactbin/contracts';
-import {completeMutationReceipt,type MutationReceipt} from '../artifacts/mutation-receipt';
+import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts';
 import type { CommentTarget } from '@/lib/story-ui/comment-target';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
@@ -24,16 +24,17 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts/access';
-import type { TokenActor } from '@/lib/accounts/actors';
-import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/document/anchors';
-import { avatarUrl } from '@/lib/accounts/avatars';
+import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
+import type { TokenActor } from '@/lib/accounts';
+import {
+  anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
+  type AnnotationRange, isAreaRange, isTargetRange, sourcePathToBodyPath,
+} from '@/lib/document';
+import { avatarUrl } from '@/lib/accounts';
 import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
 import { generateInternalId } from '@/lib/platform/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type AnnotationRange, isAreaRange, isTargetRange } from '@/lib/document/annotation-range';
-import { sourcePathToBodyPath } from '@/lib/document/edit-compose';
 
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */

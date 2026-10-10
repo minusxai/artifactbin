@@ -47,7 +47,7 @@
 import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
 import { type ArchivedRender, type ArtifactRow, holdableImports } from '@/lib/artifacts';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';

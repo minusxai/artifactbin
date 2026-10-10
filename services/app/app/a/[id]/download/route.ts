@@ -11,8 +11,7 @@ import { ID_RE } from '@/lib/platform';
 import { assembleArtifactFile, OFFLINE_FILE_MAX_BYTES, serverTiming, timed, type PhaseTimings } from '@/lib/offline/assemble.server';
 import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
-import {getArtifactById} from '@/lib/artifacts';
-import { refusingUnservable } from '@/lib/artifacts/servable';
+import { getArtifactById, refusingUnservable } from '@/lib/artifacts';
 import {GET as rawArtifact} from '../raw/route';
 
 /** A filename every OS accepts, from the document's title. */

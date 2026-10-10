@@ -9,7 +9,7 @@
  * Style order mirrors the engine's injection order (compiled Tailwind → bare typography floor →
  * fonts), author CSS last so it sees everything it may override.
  */
-import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
+import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from './chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface/task-checkbox-css';

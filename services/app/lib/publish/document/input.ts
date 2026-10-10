@@ -45,7 +45,7 @@ import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, parseProgramDefinition, TEXT_C
 
 import type { SourceRepair } from '@/lib/jsx/repair';
 
-import type { StoredContent } from '@/lib/document/stored-content';
+import type { StoredContent } from '@/lib/document';
 
 function tooLarge(value: string): Response | null {
   if (Buffer.byteLength(value, 'utf8') > MAX_DOCUMENT_BYTES) {

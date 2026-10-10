@@ -176,6 +176,23 @@ describe('module graph', () => {
       expect(check({ 'services/app/solid/Input.tsx': "import '@/lib/dataflow/scalar-input';\n" })).toMatch(/nothing outside imports any more[^\n]*\n  entry server$/);
       expect(violations).not.toMatch(/^ {2}entry $/m);
     });
+
+    it('holds lib/artifacts to its index alone: any deep import, alias or relative, is refused', () => {
+      const files = { 'services/app/lib/artifacts/index.ts': "export * from './store';\n", 'services/app/lib/artifacts/store.ts': '' };
+      // The real DEEP_MODULES table (the default): only lib/artifacts is in this tree, so only its row applies.
+      const run = extra => checkModuleGraph(scanModuleGraph(tree({ ...files, ...extra })), allowList([])).violations.join('\n');
+      expect(run({
+        'services/app/lib/publish/a.ts': "import { getArtifactById } from '@/lib/artifacts';\n",
+        'services/app/lib/runner/b.ts': "import type { ArtifactRow } from '../artifacts';\n",
+      })).toBe('');
+      const violations = run({
+        'services/app/lib/serving/c.ts': "import { getArtifactById } from '@/lib/artifacts/store';\n",
+        'services/app/lib/runner/d.ts': "import { getArtifactById } from '../artifacts/store';\n",
+      });
+      expect(violations).toContain("DEEP_MODULES['lib/artifacts']");
+      expect(violations).toContain('services/app/lib/serving/c.ts imports @/lib/artifacts/store');
+      expect(violations).toContain('services/app/lib/runner/d.ts imports ../artifacts/store');
+    });
   });
 
   describe('page rows as shipped (DEEP_MODULES)', () => {
@@ -194,6 +211,84 @@ describe('module graph', () => {
       expect(refused).toContain('services/app/lib/publish/a.ts imports @/lib/page-styles/inline-css');
       expect(refused).toContain('services/app/lib/offline/assemble.server.ts imports @/lib/page-styles/document-root');
       expect(check('lib/page-styles', { ...offline, 'services/app/lib/offline/file-html.ts': '', 'services/app/lib/offline/solid-entry.tsx': '' })).toMatch(/browser leaf document-root/);
+    });
+
+    it('lib/compiled-page: the index and its three heavy entries from anywhere, the leaves only from the offline file', () => {
+      const leaves = ['agent-discovery', 'carriers', 'story-element'];
+      const page = {
+        ...Object.fromEntries(['index', 'compiler', 'bundle.server', 'backfill.server', 'assembler', 'contract', ...leaves].map(file => [`services/app/lib/compiled-page/${file}.ts`, ''])),
+        'services/app/lib/offline/file-html.ts': leaves.map(leaf => `import '@/lib/compiled-page/${leaf}';`).join('\n'),
+        'services/app/server/app.ts': "import { agentDiscovery, assembleReaderPage } from '@/lib/compiled-page';\n",
+        'services/app/lib/publish/prepared/serve.server.ts': "export const ssr = () => import('@/lib/compiled-page/bundle.server');\n",
+        'services/app/lib/publish/prepared/draft-compile-worker.ts': "import { compilePage } from '@/lib/compiled-page/compiler';\n",
+        'scripts/compiled-backfill.ts': "import type { BackfillFilter } from '@/lib/compiled-page/backfill.server';\n",
+      };
+      expect(check('lib/compiled-page', page)).toBe('');
+      const refused = check('lib/compiled-page', {
+        ...page,
+        'services/app/server/routes.ts': "import { agentDiscovery } from '@/lib/compiled-page/agent-discovery';\n",
+        'services/app/lib/offline/assemble.server.ts': "import { withStoredCarriers } from '@/lib/compiled-page/carriers';\n",
+        'services/app/lib/publish/prepared/c.ts': "import type { CompiledPage } from '@/lib/compiled-page/contract';\nimport '../../compiled-page/assembler';\n",
+      });
+      for (const line of ['services/app/server/routes.ts imports @/lib/compiled-page/agent-discovery', 'services/app/lib/offline/assemble.server.ts imports @/lib/compiled-page/carriers',
+        'services/app/lib/publish/prepared/c.ts imports @/lib/compiled-page/contract', 'services/app/lib/publish/prepared/c.ts imports ../../compiled-page/assembler']) expect(refused).toContain(line);
+      expect(check('lib/compiled-page', { ...page, 'services/app/lib/offline/file-html.ts': "import '@/lib/compiled-page/carriers';\n" })).toMatch(/browser leaf agent-discovery\n  browser leaf story-element/);
+    });
+  });
+
+  describe('lib/accounts row as shipped (DEEP_MODULES)', () => {
+    const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
+    const accounts = {
+      'services/app/lib/accounts/index.ts': '', 'services/app/lib/accounts/tokens.ts': '', 'services/app/lib/accounts/viewer.ts': '', 'services/app/lib/accounts/actors.ts': '',
+      'services/app/lib/serving/a.ts': "import { sessionActor, type TokenActor } from '@/lib/accounts';\n",
+      'services/app/lib/workspace/b.ts': "import { LIVE_TOKEN_SQL } from '../accounts/tokens';\n",
+      'services/app/solid/pages/Profile.tsx': "import type { ProfileSocial } from '@/lib/accounts';\n",
+    };
+
+    it('passes the index from anywhere and tokens, the path a downstream deployment imports', () => {
+      expect(check(accounts)).toBe('');
+    });
+
+    it('refuses any other path, from server or browser code', () => {
+      const refused = check({
+        ...accounts,
+        'services/app/lib/runner.ts': "import { sessionActor } from './accounts/viewer';\n",
+        'services/app/lib/remote/c.ts': "import type { RoleActor } from '@/lib/accounts/actors';\n",
+        'services/app/solid/components/PageBar.tsx': "import { CHROME_IDENTITY } from '@/lib/accounts/chrome-identity';\n",
+      });
+      for (const line of ['services/app/lib/runner.ts imports ./accounts/viewer', 'services/app/lib/remote/c.ts imports @/lib/accounts/actors',
+        'services/app/solid/components/PageBar.tsx imports @/lib/accounts/chrome-identity']) expect(refused).toContain(line);
+    });
+  });
+
+  describe('lib/document row (rule 4, DEEP_MODULES)', () => {
+    const base = { 'services/app/lib/document/index.ts': '', 'services/app/lib/document/server.ts': '', 'services/app/lib/document/helmet.ts': '', 'services/app/lib/document/splice.ts': '' };
+    const check = files => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files })), allowList([])).violations.join('\n');
+    const refusal = /lib\/document is entered through @\/lib\/document from server code/;
+
+    it('passes server code through the index or server, and listed browser code through a listed leaf', () => {
+      expect(check({
+        'services/app/lib/publish/a.ts': "import { splitHelmet } from '@/lib/document';\nimport { COMPILED_DATAFLOW } from '../document/server';\n",
+        'services/app/lib/cli-toolkit/index.ts': "export { splitHelmet } from '../document';\n",
+        'services/app/solid/editor/Panel.tsx': "import { splitHelmet } from '@/lib/document/helmet';\n",
+        'services/app/lib/editor-engine/history.ts': "import type { EditRecord } from '../document/splice';\n",
+        'services/app/lib/offline/file-backend.ts': "import { declarationsOf } from '../document/helmet';\n",
+      })).not.toMatch(refusal);
+    });
+
+    it('refuses a leaf from server code, the index from browser code and a leaf from an unlisted file, naming each', () => {
+      const violations = check({
+        'services/app/lib/trust/document-trust.ts': "import { splitHelmet } from '@/lib/document/helmet';\n",
+        'services/app/solid/pages/Document.tsx': "import type { CspRequest } from '@/lib/document';\n",
+        'services/app/lib/offline/hosted-connect.ts': "import { graphSource } from '../document/helmet';\n",
+      });
+      expect(violations).toContain('services/app/lib/trust/document-trust.ts imports @/lib/document/helmet (server code imports @/lib/document)');
+      expect(violations).toContain('services/app/solid/pages/Document.tsx imports @/lib/document (browser-bundled code imports a leaf file, not the index)');
+      expect(violations).toContain('services/app/lib/offline/hosted-connect.ts imports ../document/helmet (server code imports @/lib/document)');
+    });
+
+    it('fails a listed browser leaf nothing imports any more', () => {
+      expect(check({ 'services/app/solid/editor/Panel.tsx': "import '@/lib/document/helmet';\n" })).toMatch(/lib\/document leaves no browser-bundled code imports any more[\s\S]*\n  query-notebook\n/);
     });
   });
 

@@ -13,8 +13,7 @@
  * The same read ACL as the page: a reader who may not read the document gets the uniform 404. Counted
  * per document and reader, like the document's other outbound fetching (lib/accounts/auth).
  */
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { refusingUnservable } from '@/lib/artifacts/servable';
+import { canReadArtifact, getArtifactById, refusingUnservable } from '@/lib/artifacts';
 import { documentFetchRateLimited, requestOrSessionActor } from '@/lib/accounts';
 import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -22,7 +21,7 @@ import { fetchWebResource, webIngestAllowsHttp } from '@/lib/web-ingest/fetch';
 import { servedRow } from '@/lib/serving';
 import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { cspExtensionsFor, declaredCspExtensions } from '@/lib/trust/document-trust';
-import { cspOriginMatches } from '@/lib/document/csp-extensions';
+import { cspOriginMatches } from '@/lib/document';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 
 /** The answer cap: what a script may pull through us in one call. */

@@ -17,7 +17,7 @@ import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
 import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
 import { resolveToken } from '@/lib/accounts';
 import {canUseDeploymentIdentity} from '@/lib/deployment';
-import { canAuthenticateUser } from '@/lib/accounts/user-kinds';
+import { canAuthenticateUser } from '@/lib/accounts';
 import { sessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish/document/input';
 import {parseArtifactDestination} from '@/lib/artifacts';
