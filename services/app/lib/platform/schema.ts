@@ -322,7 +322,7 @@ const ARTIFACT_SHARES: Table = {
   columns: [
     { name: 'artifact_id', type: 'TEXT', notNull: true },
     { name: 'email', type: 'TEXT', notNull: true }, // stored lowercase; matched against the session email
-    { name: 'role', type: 'TEXT', notNull: true, default: "'viewer'" }, // ShareRole (lib/share-roles); no CHECK, like every other enum column
+    { name: 'role', type: 'TEXT', notNull: true, default: "'viewer'" }, // ShareRole (@artifactbin/contracts sharing); no CHECK, like every other enum column
     { name: 'user_id', type: 'TEXT' }, // RESOLVED on first match (lib/artifacts resolveSharesFor); NULL = an invite nobody has matched yet
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],

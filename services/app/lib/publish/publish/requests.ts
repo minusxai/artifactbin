@@ -7,8 +7,8 @@
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import { CONTENT_FIELDS } from '@artifactbin/contracts';
-import { canReadArtifact, writerFor, type ArtifactRow, type DatasetAccess, type Visibility } from '@/lib/artifacts/access';
+import { type ArtifactRow, canReadArtifact, writerFor } from '@/lib/artifacts/access';
+import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { applyEditFor, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput } from '@/lib/artifacts/store';
 import { findDependentsFor, refLoaderForActor, rowToResolvedRef } from '@/lib/artifacts/dataflow';

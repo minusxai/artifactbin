@@ -1,6 +1,6 @@
 /** The artifacts module's interface: only what other modules import. */
 export { canReadArtifact, editorScope, effectiveRole, isOwner, linkRoleOf, roleFor } from './access';
-export type { ArtifactRow, Scope, Visibility } from './access';
+export type { ArtifactRow, Scope } from './access';
 export { can, capabilityGuard, capabilityRefusal } from './capabilities';
 export type { CapabilityActor } from './capabilities';
 export { CreationReplay } from './creation-ledger';
@@ -24,10 +24,7 @@ export { evaluateNotificationQuery, normalizeNotificationResult } from './notifi
 export type { NotificationQueryDependencies } from './notification-query';
 export { notificationJobStore } from './notification-runtime';
 export { readableArtifact } from './read-access';
-export { ANONYMOUS_CEILING, ROLE_ORDER, SHARE_ROLES, SHARE_ROLE_LABEL, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, shareRolesAtLeast } from './share-roles';
-export type { ArtifactRole, ShareRole } from './share-roles';
 export { getSharingFor, setAccessFor, updateSharing, updateSharingFor } from './sharing';
-export type { SharingPatch } from './sharing';
 export { artifactState } from './state';
 export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, commitNormalizedMarkup, committedHeadsSettled, createArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, setArtifactQuotaForTests, setMetadataFor, versionToWire } from './store';
 export type { ArtifactSummary } from './store';

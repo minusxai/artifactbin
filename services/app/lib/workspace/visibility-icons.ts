@@ -1,4 +1,4 @@
-import type { Visibility } from '@/lib/artifacts';
+import type { Visibility } from '@artifactbin/contracts';
 
 /** Lucide's icon node shape: `[tag, attributes]` pairs. */
 type IconNode = Array<[string, Record<string, string>]>;

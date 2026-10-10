@@ -3,7 +3,7 @@ import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/publish/pub
 import { forkOwner } from '@/lib/operations/registry';
 import { capabilityGuard } from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
-import { canRead } from '@/lib/artifacts';
+import { canRead } from '@artifactbin/contracts';
 import { ensureUserToken } from '@/lib/accounts';
 import { ownerUsername } from '@/lib/accounts';
 import { canonicalArtifactPath } from '@/lib/http';

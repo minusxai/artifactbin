@@ -8,7 +8,7 @@ import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from '../remote/agents';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
-import type {AnnotationAuthor,AnnotationCommentWire} from '@artifactbin/contracts';
+import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern } from '@artifactbin/contracts';
 import {completeMutationReceipt,type MutationReceipt} from '../artifacts/mutation-receipt';
 import type { CommentTarget } from '@/lib/story-ui/comment-target';
 /**
@@ -26,7 +26,6 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  */
 import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
-import { canGovern } from '@/lib/artifacts/share-roles';
 import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/document/anchors';
 import { avatarUrl } from '@/lib/accounts/avatars';
 import { getDb, type Queryable } from '@/lib/platform/db';
@@ -35,7 +34,6 @@ import { generateInternalId } from '@/lib/platform/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type AnnotationRange, isAreaRange, isTargetRange } from '@/lib/document/annotation-range';
 import { sourcePathToBodyPath } from '@/lib/document/edit-compose';
-import { annotationsChannel } from '@artifactbin/contracts';
 
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */

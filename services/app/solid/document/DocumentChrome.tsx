@@ -19,7 +19,7 @@ import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { loginHref } from '@/lib/http/login-href';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { sharingIconFor, VISIBILITY_ICON_NODES } from '@/lib/workspace/visibility-icons';
-import type { Visibility } from '@/lib/artifacts/access';
+import type { Visibility } from '@artifactbin/contracts';
 import { PageChrome, type Panel } from '../components/PageChrome';
 import { Tooltip } from '../ui/Tooltip';
 import { DocumentTitle } from '../components/PageBar';

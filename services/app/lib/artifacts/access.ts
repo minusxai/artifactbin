@@ -7,37 +7,8 @@ import type { RequestActor } from '@/lib/accounts/viewer';
 import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/accounts/user-kinds';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb, type Queryable } from '../platform/db';
-import { type ArtifactFormat } from '@artifactbin/contracts';
 import { canUseDataPolicy } from '@/lib/artifacts/dataset-policy';
-import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
-
-/**
- * The read ACL. 'public' = anyone with the link may read, and owned docs list
- * on the owner's profile root (/@handle);
- * 'unlisted' = reads exactly like public but never lists anywhere;
- * 'private' = the owner plus the emails in artifact_shares. Defaults at create
- * (createArtifact): anonymous → 'public', or 'unlisted' where the deployment
- * has not opened public; user-owned → 'unlisted' for image/dataset/pdf/file
- * and 'private' otherwise.
- */
-export type Visibility = 'public' | 'private' | 'unlisted';
-
-/**
- * The WRITE ACL, on DATASETS only — the sibling of `visibility`, and the
- * whole toggle behind writable data:
- *   'read'      — the default and every dataset that predates this. Documents
- *                 may only SELECT from it; a `<Mutation>` naming it is refused
- *                 at publish, and at every call besides.
- *   'readwrite' — documents the dataset's OWNER publishes may insert, update
- *                 and delete rows through a declared `<Mutation>`, for
- *                 everyone who can read those documents.
- * Two separate questions, deliberately: `visibility` is who may READ the
- * artifact itself, this is who may CHANGE it through a document. Neither
- * implies the other — a public dataset stays read-only unless its owner says
- * otherwise, and an unlisted one can be the writable table behind a poll.
- */
-export type DatasetAccess = 'read' | 'readwrite';
-export const DATASET_ACCESS: readonly DatasetAccess[] = ['read', 'readwrite'];
+import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
 export interface ArtifactRow {
   document?:StoredDocument|null;
@@ -172,7 +143,7 @@ export async function roleWithoutLink(
 
 /**
  * THE ONE ACCESS DECISION — what this actor may do with this row, as a single
- * value on the lattice (lib/share-roles). Read-access is `canRead` of it, the
+ * value on the lattice (@artifactbin/contracts sharing). Read-access is `canRead` of it, the
  * page chrome is `canEdit`/`canAnnotate` of it, and the reader/owner serving
  * split is a comparison against it.
  *
@@ -342,7 +313,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
  * The SQL MIRROR of the lattice: the owner, an account holding any share role
  * that reaches `min`, or the LINK. One generator rather than a hand-written
  * predicate per door, so "which roles may edit" is answered in the same place
- * for the statement and for the page (lib/share-roles shareRolesAtLeast).
+ * for the statement and for the page (@artifactbin/contracts shareRolesAtLeast).
  *
  * An anonymous token has no account to be named through, so it narrows to
  * bare ownership.

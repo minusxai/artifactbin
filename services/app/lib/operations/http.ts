@@ -5,7 +5,7 @@ import {refusingUnservable} from '@/lib/artifacts/servable';
 import {grantsOf,grantsPermitWrite} from '@/lib/artifacts/dataset-policy/grants';
 import {tokenActorForRequest} from '@/lib/accounts/viewer';
 import {readableArtifact} from '@/lib/artifacts/read-access';
-import {canAnnotate} from '@/lib/artifacts/share-roles';
+import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
 import {durableMutation} from '@/lib/artifacts/mutation-receipt';
 import { getArtifactFor, getArtifactById } from '@/lib/artifacts/store';
 import { canReadArtifact } from '@/lib/artifacts/access';
@@ -21,7 +21,6 @@ import {sessionOwnedBy} from '@/lib/remote/resource';
  */
 import { json, baseUrl } from '@/lib/http/http';
 import type { TokenActor } from '@/lib/accounts/actors';
-import type { AnnotationAuthor } from '@artifactbin/contracts';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
 
 /**
