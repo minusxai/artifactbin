@@ -10,6 +10,7 @@ export { mintExportKey, verifyExportKey } from './export-read-key';
 export type { EventObject, EventSubject } from './events';
 export { FILE_ID_LENGTH, ID_RE, generateFileId, generateInternalId, generateTokenId } from './ids';
 export { runWithRequest } from './request-context';
+export { measureQueries } from './query-stats';
 export { SCHEMA_STATEMENTS } from './schema';
 export { services, setServices } from './services';
 export type { Services } from './services';

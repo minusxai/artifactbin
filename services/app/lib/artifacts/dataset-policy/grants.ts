@@ -1,4 +1,4 @@
-import {getGroupRole} from '@/lib/groups';
+import {liveAccessFacts,type AccessFacts} from '@/lib/artifacts/access-facts';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {JOIN_RELATIONS} from '@/lib/accounts';
 import type { DatasetGrantContext, DatasetGrantPolicy, Queryable } from '@artifactbin/contracts';
@@ -16,12 +16,14 @@ export function grantsOf(row: Pick<ArtifactRow,'dataset_policy'>): DatasetGrantP
 const principalOf=(row:Pick<ArtifactRow,'user_id'|'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>)=>({userId:row.group_id?null:row.user_id,tokenId:row.group_id?null:row.token_id,groupId:row.group_id??null});
 export interface GrantDocument {id:string;editId:string}
 function owns(row:Pick<ArtifactRow,'user_id'|'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>,actor:RoleActor){return row.group_id ? actor.groupId===row.group_id : (row.user_id?!!actor.userId&&row.user_id===actor.userId:!!actor.tokenId&&row.token_id===actor.tokenId);}
-/** Called inside an optional existing transaction; never enqueues work on the outer database. */
-export async function readThrough(tx:Queryable,row:ArtifactRow,actor:RoleActor):Promise<boolean>{
- if(row.group_id&&await getGroupRole(actor.userId,row.group_id,tx))return true;
+/** The row fields a read decision consults. */
+export type ReadRow = Pick<ArtifactRow,'id'|'user_id'|'token_id'|'visibility'|'format'> & Partial<Pick<ArtifactRow,'group_id'|'dataset_policy'>>;
+/** Called inside an optional existing transaction; never enqueues work on the outer database. `facts` defaults to `tx`'s. */
+export async function readThrough(tx:Queryable,row:ReadRow,actor:RoleActor,facts:AccessFacts=liveAccessFacts(actor,tx)):Promise<boolean>{
+ if(row.group_id&&await facts.groupRole(row.group_id))return true;
  if(owns(row,actor)||row.visibility!=='private'||(row.format==='markup'&&hasDocumentEditorAccess(actor)))return true;
  if(!actor.userId)return false;
- return !!(await tx.query(`SELECT 1 FROM artifact_shares s WHERE s.artifact_id=$1 AND (s.user_id=$2 OR(s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$2)))`,[row.id,actor.userId])).rows.length;
+ return facts.sharedWith(row.id);
 }
 /** A saved, readable document plus accepted membership supplies artifact context for writes. */
 export async function grantContext(dataset:ArtifactRow,actor:RoleActor,document?:GrantDocument,tx?:Queryable):Promise<DatasetGrantContext>{
@@ -55,11 +57,11 @@ export async function assertGrantCommit(tx:Queryable,dataset:ArtifactRow,actor:R
 }
 
 /** Read grants use the actual caller and saved artifact; membership only gates mutations. */
-export async function grantsPermitRead(dataset:ArtifactRow,actor:RoleActor,document?:ArtifactRow,tx?:Queryable):Promise<boolean>{
+export async function grantsPermitRead(dataset:ReadRow,actor:RoleActor,document?:ReadRow,tx?:Queryable,given?:AccessFacts):Promise<boolean>{
  const policy=grantsOf(dataset);if(!policy)return false;
- const db=tx??await getDb();
+ const db=tx??await getDb(),facts=given??liveAccessFacts(actor,db);
  // Making a dataset private remains an audience ceiling, even with a public read grant.
- if(dataset.visibility==='private'&&!(await readThrough(db,dataset,actor)))return false;
- if(document&&!(await readThrough(db,document,actor)))return false;
- return datasetGrantAllows(policy,'read',{caller:actor,owner:principalOf(dataset),callerEditorGroupIds:actor.userId?(await db.query<{group_id:string}>("SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL FOR SHARE OF gm,g",[actor.userId])).rows.map(r=>r.group_id):[],...(document?{artifact:{id:document.id,owner:principalOf(document)}}:{})});
+ if(dataset.visibility==='private'&&!(await readThrough(db,dataset,actor,facts)))return false;
+ if(document&&!(await readThrough(db,document,actor,facts)))return false;
+ return datasetGrantAllows(policy,'read',{caller:actor,owner:principalOf(dataset),callerEditorGroupIds:await facts.editorGroupIds(),...(document?{artifact:{id:document.id,owner:principalOf(document)}}:{})});
 }

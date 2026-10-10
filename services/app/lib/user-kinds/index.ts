@@ -43,11 +43,8 @@ export async function authenticatingTestParent(userId:string,query?:Queryable):P
  return (await db.query<{parent_user_id:string}>(`SELECT u.parent_user_id FROM users u WHERE u.id=$1 AND ${LIVE_TESTUSER_WITH_PARENT_SQL}`,[userId])).rows[0]?.parent_user_id??null;
 }
 
-/** Is this user one of the kinds that reaches a stranger's document only through the LINK? */
-export async function isLinkOnlyActor(userId: string | null | undefined, query?: Queryable): Promise<boolean> {
-  const kind = await userKindOf(userId, query);
-  return kind === 'guest' || kind === 'testuser';
-}
+/** Is a user of this kind one that reaches a stranger's document only through the LINK? */
+export const isLinkOnlyKind = (kind: UserKind | null): boolean => kind === 'guest' || kind === 'testuser';
 
 /**
  * THE SANDBOX, in SQL: is this artifact owned by a test user?

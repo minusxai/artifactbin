@@ -6,6 +6,10 @@ import {services} from './services';
 export async function enqueueEvent(tx:Queryable,event:EventEnvelope):Promise<void>{
  await tx.query('INSERT INTO event_outbox(id,envelope) VALUES($1,$2::jsonb) ON CONFLICT DO NOTHING',[event.id,JSON.stringify(event)]);
 }
+/** Many envelopes in one statement, in order; the same rows `enqueueEvent` writes one at a time. */
+export async function enqueueEvents(tx:Queryable,events:readonly EventEnvelope[]):Promise<void>{
+ if(events.length)await tx.query("INSERT INTO event_outbox(id,envelope) SELECT e->>'id',e FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS t(e,n) ORDER BY n ON CONFLICT DO NOTHING",[JSON.stringify(events)]);
+}
 export function startEventPublisher(db:Db):()=>Promise<void>{
  let pending:Promise<void>|null=null;
  const flush=async()=>{

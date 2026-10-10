@@ -1,8 +1,9 @@
 /** Transaction-only authorization shared by query execution, result commit and disclosure. */
 import {getGroupRole} from '../groups';
 import {notificationRuleSourceIds,notificationRevision as hash} from '@/lib/notifications/context';
-import {hasExplicitNotificationMembership} from '@/lib/notifications/membership';
-import {grantsOf,grantsPermitRead,readThrough} from '@/lib/artifacts/dataset-policy/grants';
+import {explicitNotificationMemberships} from '@/lib/notifications/membership';
+import {grantsOf,grantsPermitRead,readThrough,type ReadRow} from '@/lib/artifacts/dataset-policy/grants';
+import {liveAccessFacts,preloadAccessFacts,type AccessFacts} from './access-facts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import type { ArtifactRow } from './access';
 import type { RoleActor } from '@/lib/accounts';
@@ -42,11 +43,21 @@ export async function notificationArtifactAuthority(tx:Queryable,id:string):Prom
  const shares=(await tx.query<Share>('SELECT user_id,email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
  return {row,shares,revision:hash([row.id,row.format,row.user_id,row.group_id,row.token_id,row.visibility,row.link_role,row.sharing_revision??0,row.policy_revision??0,row.dataset_policy??null,shares])};
 }
-async function sourceReadable(tx:Queryable,source:NotificationArtifactAuthority,document:NotificationArtifactAuthority,identity:Identity):Promise<boolean>{
- if(source.row.format!=='dataset'||!await readThrough(tx,document.row,identity.actor))return false;
- const connection=catalogOf(source.row)?.connection;
- if(connection){try{await resolveDatasetConnection(connection,undefined,source.row.id,tx);}catch(error){if(error instanceof DatasetError)throw denied();throw error;}}
- return grantsOf(source.row)?grantsPermitRead(source.row,identity.actor,document.row,tx):readThrough(tx,source.row,identity.actor);
+/**
+ * The fields readability consults: never the document graph, and `meta` (large on a document) only
+ * for datasets — a source that is not a dataset is unreadable whatever its metadata says.
+ */
+type ReadableArtifact = ReadRow & Pick<ArtifactRow,'meta'>;
+const READABLE_COLUMNS="id,token_id,user_id,group_id,format,visibility,link_role,dataset_policy,policy_revision,sharing_revision,CASE WHEN format='dataset' THEN meta END AS meta";
+/** A connection-backed source needs its bound credential; a missing or unreadable one revokes access. */
+async function connectionAvailable(tx:Queryable,row:ReadableArtifact):Promise<void>{
+ const connection=catalogOf(row)?.connection;
+ if(connection){try{await resolveDatasetConnection(connection,undefined,row.id,tx);}catch(error){if(error instanceof DatasetError)throw denied();throw error;}}
+}
+async function sourceReadable(tx:Queryable,source:{row:ReadableArtifact},document:{row:ReadRow},identity:Identity,facts:AccessFacts=liveAccessFacts(identity.actor,tx),connection:(row:ReadableArtifact)=>Promise<void>=row=>connectionAvailable(tx,row)):Promise<boolean>{
+ if(source.row.format!=='dataset'||!await readThrough(tx,document.row,identity.actor,facts))return false;
+ await connection(source.row);
+ return grantsOf(source.row)?grantsPermitRead(source.row,identity.actor,document.row,tx,facts):readThrough(tx,source.row,identity.actor,facts);
 }
 export async function notificationExecutionFence(tx:Queryable,input:MutationNotificationJobInput):Promise<MutationNotificationPlan['executionFence']>{
  const principal=await notificationPrincipal(tx,input.initiator.principal),document=await notificationArtifactAuthority(tx,input.origin.documentId);
@@ -61,7 +72,7 @@ export async function lockNotificationExecution(tx:Queryable,input:MutationNotif
  await notificationExecutionFence(tx,input);
 }
 /** Generic exposed schema and connection binding; row content/refresh timestamps are not authority. */
-export function notificationSourceSchema(authority:NotificationArtifactAuthority):string {
+export function notificationSourceSchema(authority:{row:Pick<ArtifactRow,'meta'>}):string {
  const catalog=catalogOf(authority.row);
  if(!catalog)throw new NotificationExecutionError('notification_schema_changed');
  const {kind,defaultSchema,connection,notebook,notebookSources}=catalog;
@@ -73,16 +84,41 @@ export async function notificationExecutionSource(tx:Queryable,input:MutationNot
  return {...source,receipt:{artifactId:id,authorityRevision:source.revision,schemaRevision:notificationSourceSchema(source)}};
 }
 export async function notificationSourcesReadable(tx:Queryable,documentId:string,recipientId:string,sources:NotificationSource[]):Promise<boolean>{
- try{
-  const user=await account(tx,recipientId);if(!user||user.kind==='guest'||!await hasExplicitNotificationMembership(tx,documentId,recipientId))return false;
-  const document=await notificationArtifactAuthority(tx,documentId),identity:Identity={actor:{userId:user.id,tokenId:null,email:user.email},kind:user.kind,revision:''};
-  if(document.row.format!=='markup'||!await readThrough(tx,document.row,identity.actor))return false;
-  for(const source of sources){
-   const authority=await notificationArtifactAuthority(tx,source.artifactId);
-   if(notificationSourceSchema(authority)!==source.schemaRevision||!await sourceReadable(tx,authority,document,identity))return false;
-  }
-  return true;
- }catch(error){if(error instanceof NotificationExecutionError)return false;throw error;}
+ return (await notificationSourcesReadableMany(tx,recipientId,[{documentId,sources}]))[0]===true;
+}
+/**
+ * May `recipientId` still read each saved notification — its document and every source behind it?
+ * The one decision for delivery, admission and the inbox, made for any number of items in a fixed
+ * number of statements (plus one credential check per distinct connection-backed source).
+ */
+export async function notificationSourcesReadableMany(tx:Queryable,recipientId:string,items:ReadonlyArray<{documentId:string;sources:NotificationSource[]}>):Promise<boolean[]>{
+ const user=await account(tx,recipientId);
+ if(!user||user.kind==='guest')return items.map(()=>false);
+ const members=await explicitNotificationMemberships(tx,items.map(item=>item.documentId),recipientId);
+ const ids=[...new Set(items.flatMap(item=>members.has(item.documentId)?[item.documentId,...item.sources.map(source=>source.artifactId)]:[]))];
+ const rows=new Map((ids.length?(await tx.query<ReadableArtifact>(`SELECT ${READABLE_COLUMNS} FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL`,[ids])).rows:[]).map(row=>[row.id,row]));
+ const identity:Identity={actor:{userId:user.id,tokenId:null,email:user.email},kind:user.kind,revision:''};
+ const facts=await preloadAccessFacts(tx,identity.actor,[...rows.values()]),connections=new Map<string,Promise<void>>();
+ const connection=(row:ReadableArtifact)=>{
+  let checked=connections.get(row.id);
+  if(!checked){checked=connectionAvailable(tx,row);checked.catch(()=>undefined);connections.set(row.id,checked);}
+  return checked;
+ };
+ const readable=async(documentId:string,sources:NotificationSource[]):Promise<boolean>=>{
+  try{
+   const document=rows.get(documentId);if(!document)throw denied();
+   if(document.format!=='markup'||!await readThrough(tx,document,identity.actor,facts))return false;
+   for(const source of sources){
+    const row=rows.get(source.artifactId);if(!row)throw denied();
+    if(notificationSourceSchema({row})!==source.schemaRevision||!await sourceReadable(tx,{row},{row:document},identity,facts,connection))return false;
+   }
+   return true;
+  }catch(error){if(error instanceof NotificationExecutionError)return false;throw error;}
+ };
+ const decided:boolean[]=[];
+ for(const item of items)decided.push(members.has(item.documentId)&&await readable(item.documentId,item.sources));
+ await facts.settle();
+ return decided;
 }
 async function admitRecipients(tx:Queryable,input:MutationNotificationJobInput,plan:MutationNotificationPlan,ids:string[]):Promise<string[]>{
  const admitted:string[]=[];

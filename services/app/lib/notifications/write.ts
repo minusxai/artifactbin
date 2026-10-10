@@ -2,12 +2,21 @@
 import {createHash} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts';
 import {envelope} from '../platform/events';
-import {enqueueEvent} from '../platform/event-outbox';
+import {enqueueEvent,enqueueEvents} from '../platform/event-outbox';
 export const notificationChannel=(userId:string)=>'inbox_'+createHash('sha256').update(userId).digest('hex').slice(0,32);
 interface NotificationInput {id:string;artifactId:string|null;recipientId:string;senderId:string;kind:string;userId?:string;source?:string|null;once?:boolean;revision?:number;firstUpdateId?:string;sourceEventId?:string;agentLabel?:string|null}
-export async function notificationChanged(tx:Queryable,id:string,recipientId:string,revision:number,kind:'updated'|'read'|'removed'):Promise<void>{
- await enqueueEvent(tx,envelope({kind:'user',id:recipientId},'notification_changed',{kind:'user',id:recipientId},{notification_id:id,revision,change:kind}));
+type NotificationChange='updated'|'read'|'removed';
+const changedEvent=(recipientId:string,id:string,revision:number,kind:NotificationChange)=>envelope({kind:'user',id:recipientId},'notification_changed',{kind:'user',id:recipientId},{notification_id:id,revision,change:kind});
+export async function notificationChanged(tx:Queryable,id:string,recipientId:string,revision:number,kind:NotificationChange):Promise<void>{
+ await enqueueEvent(tx,changedEvent(recipientId,id,revision,kind));
  await tx.query('SELECT pg_notify($1,$2)',[notificationChannel(recipientId),id]);
+}
+/** One recipient's many changes (read all): one event per notification, in one statement, and one wakeup. */
+export async function notificationsChanged(tx:Queryable,recipientId:string,changes:ReadonlyArray<{id:string;revision:number}>,kind:NotificationChange):Promise<void>{
+ const [first]=changes;if(!first)return;
+ await enqueueEvents(tx,changes.map(change=>changedEvent(recipientId,change.id,change.revision,kind)));
+ // NOTIFY is only a wakeup pointer (lib/platform/db listen): subscribers re-read, whatever the payload.
+ await tx.query('SELECT pg_notify($1,$2)',[notificationChannel(recipientId),first.id]);
 }
 export async function recordNotification(tx:Queryable,n:NotificationInput):Promise<void>{
  const result=await tx.query<{revision:number}>(`INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind,source,revision,first_update_id,source_event_id,agent_label)
