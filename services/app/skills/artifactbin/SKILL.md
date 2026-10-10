@@ -14,7 +14,7 @@ Setup: [[ base ]]/getting-started.md. Load skill or [[ base ]]/skills/artifactbi
 - Install CLI only when requested or needed for local preview/serve: [setup](references/npm-local.md).
 - `afbin status`: saved state (last observed, no login); `afbin auth status` is not a status command.
 - CLI chat: ask email, `afbin auth --email <email>`, ask code, `afbin auth --email <email> --otp <code>`. Automatic browser approval only on shared desktop/request. Reuse origin-scoped credentials ([auth](references/publishing-auth.md)); never mint or print tokens.
-- Group setup/defaults: [groups](references/groups.md); select the recipient’s group with `setup --server [[ base ]] --group <handle> --set-default`. New artifacts inherit destination; defaults never transfer existing artifacts.
+- [Groups](references/groups.md).
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit, `afbin push report.jsx`. For a new artifact: CLI or HTTP [authoring](references/http-authoring.md). Share its returned URL. [[ urlReplyRule ]]
 - Shared/friends/team/signup/vote/RSVP flows: read [apps](references/apps.md) BEFORE data shape: accounts, never typed names.
 - Read your [page type](references/templates.md); choose ONE design system. [[ progressiveAuthoringRule ]] Push confirms source acceptance; do not pull, diff or grep just to reconfirm it.

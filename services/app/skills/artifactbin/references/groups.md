@@ -1,6 +1,6 @@
 ---
 name: groups
-description: Group membership, recipient setup, deployment defaults and artifact ownership.
+description: Group setup, defaults and ownership.
 ---
 ## Read first
 

@@ -1,7 +1,14 @@
 import {normalizeOrigin} from '@artifactbin/contracts';
 
 export interface SetupInstructionOptions {serverOrigin:string;groupHandle?:string;setDefault?:boolean;}
-const quoted=(value:string)=>`'${value.replaceAll("'",`'"'"'`)}'`;
+const quoted=(value:string,windows=false)=>`'${windows?value.replaceAll("'","''"):value.replaceAll("'",`'"'"'`)}'`;
+export function setupSelectionFlags(options:{groupHandle?:string;setDefault?:boolean},windows=false):string{
+ return `${options.groupHandle?` --group ${quoted(options.groupHandle,windows)}`:''}${options.setDefault?' --set-default':''}`;
+}
+export function buildSetupCommand(options:SetupInstructionOptions,windows=false):string{
+ const origin=normalizeOrigin(options.serverOrigin);if(!origin)throw new Error('Setup instructions require a server origin.');
+ return `afbin setup --server ${quoted(origin,windows)}${setupSelectionFlags({...options,setDefault:options.setDefault??!!options.groupHandle},windows)}`;
+}
 /** Tokenless instructions for both deployment setup and group invitations. Browser-safe. */
 export function buildSetupInstructions(options:SetupInstructionOptions):string{
  const origin=normalizeOrigin(options.serverOrigin);
@@ -9,7 +16,7 @@ export function buildSetupInstructions(options:SetupInstructionOptions):string{
  if(options.groupHandle&&!/^[a-z0-9][a-z0-9_-]*$/i.test(options.groupHandle))throw new Error('Setup instructions require a group handle.');
  const group=options.groupHandle;
  const selectDefault=options.setDefault??!!group;
- const command=`afbin setup --server ${quoted(origin)}${group?` --group ${quoted(group)}`:''}${selectDefault?' --set-default':''}`;
+ const command=buildSetupCommand({...options,serverOrigin:origin,setDefault:selectDefault});
  return `Set up artifactbin for ${origin}${group?` and group ${group}`:''}. Read ${origin}/getting-started.md and use the artifactbin skill for this origin; reuse an installed skill and existing origin-scoped credentials.
 
 Use an installed runnable CLI: ${command}. For this requested setup, if afbin is missing, run ${command.replace(/^afbin /,'npx --yes @afbin/cli@latest ')} (PowerShell: npx.cmd in place of npx), then restart your coding agent to load the skill. Ordinary setup is auth-free; explicit group/default selection authenticates you first.
