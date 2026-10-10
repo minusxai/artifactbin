@@ -61,9 +61,9 @@ export async function loopbackAuthenticate(origin: string, options: LoopbackOpti
   let settled = false;
   http.on('request', (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', redirectUri);
-    if (req.method !== 'GET' || url.pathname !== CALLBACK_PATH) { respond(res, 404, 'Not found', 'Nothing here.'); return; }
+    if (req.method !== 'GET' || url.pathname !== CALLBACK_PATH) { void respond(res, 404, 'Not found', 'Nothing here.'); return; }
     // A callback for any other request (an old tab, another site) is ignored; this command keeps waiting.
-    if (settled || url.searchParams.get('state') !== state) { respond(res, 400, 'Sign-in not recognised', 'This sign-in does not belong to the waiting afbin command. Run afbin auth again if it is still waiting.'); return; }
+    if (settled || url.searchParams.get('state') !== state) { void respond(res, 400, 'Sign-in not recognised', 'This sign-in does not belong to the waiting afbin command. Run afbin auth again if it is still waiting.'); return; }
     const code = url.searchParams.get('code');
     settled = true;
     settle(code ? {code, response: res} : {error: url.searchParams.get('error') ?? 'invalid_response', response: res});
@@ -81,16 +81,16 @@ export async function loopbackAuthenticate(origin: string, options: LoopbackOpti
     while (!outcome && clock() < deadline) await Promise.race([callback, (options.sleep ?? sleep)(Math.min(1000, Math.max(0, deadline - clock())))]);
     if (!outcome) return null;
     if ('error' in outcome) {
-      respond(outcome.response, 400, 'Sign-in failed', 'Return to your terminal and run afbin auth again.');
+      await respond(outcome.response, 400, 'Sign-in failed', 'Return to your terminal and run afbin auth again.');
       throw new CliError('auth_failed', 'Browser sign-in failed.', 'Run afbin auth again.');
     }
     try {
       const connection = await redeem(server, outcome.code, verifier, redirectUri, request, clock);
       await saveConnection(connection, options.home ?? homedir(), {ARTIFACTBIN_HOME: configDir(options.home ?? homedir(), options.env)});
-      respond(outcome.response, 200, 'Signed in', 'Signed in — you can close this tab', 'Return to your terminal; the command is continuing.');
+      await respond(outcome.response, 200, 'Signed in', 'Signed in — you can close this tab', 'Return to your terminal; the command is continuing.');
       return connection;
     } catch (error) {
-      respond(outcome.response, 400, 'Sign-in failed', 'Return to your terminal and run afbin auth again.');
+      await respond(outcome.response, 400, 'Sign-in failed', 'Return to your terminal and run afbin auth again.');
       throw error;
     }
   } finally {
@@ -137,9 +137,11 @@ async function redeem(server: string, code: string, verifier: string, redirectUr
   return {server, token: data.access_token, refreshToken: data.refresh_token, clientId: data.client_id, expiresAt: clock() + data.expires_in * 1000};
 }
 
-function respond(response: ServerResponse, status: number, title: string, heading: string, detail = ''): void {
-  if (response.headersSent) return;
+/** Resolves once the page is handed to the socket, so closing the listener never cuts it short. */
+function respond(response: ServerResponse, status: number, title: string, heading: string, detail = ''): Promise<void> {
+  if (response.headersSent) return Promise.resolve();
   const escape = (text: string) => text.replace(/[&<>"]/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[ch]!);
   response.writeHead(status, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Referrer-Policy': 'no-referrer', Connection: 'close'});
   response.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><style>body{font:16px system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222;background:#fff}@media(prefers-color-scheme:dark){body{color:#eee;background:#111}}</style><h1>${escape(heading)}</h1>${detail ? `<p>${escape(detail)}</p>` : ''}`);
+  return new Promise(resolve => { response.once('finish', () => resolve()); response.once('close', () => resolve()); });
 }
