@@ -167,6 +167,24 @@ describe('the live morph', () => {
     expect($('lede')?.textContent).toBe('second');
     expect($('drawing')).toBe(drawing);
   });
+  it('a document on its own origin asks for its own surface: the standalone copy\'s sheets and design, never the app page\'s story', async () => {
+    // The framed document (APP__PAGES_HOST) is served as the standalone copy: its design on <html>, its sheets
+    // (data-mx-tw, data-mx-system). The app page's story carries one isolated sheet instead; drawing that into
+    // this page dropped the design from <html>, and its ground stopped at the content's height.
+    load(served({ edit: 'e1' }));
+    document.body.setAttribute('data-mx-live-direct', '');
+    start();
+    const fetch = answer(served({ edit: 'e2', lede: 'second' }));
+    await morphStory(window, { fetch, importModule: vi.fn() });
+    expect(fetch).toHaveBeenCalledWith('/a/doc1/story?surface=raw', expect.anything());
+    expect($('lede')?.textContent).toBe('second');
+
+    // A page that is not such a document keeps asking as before.
+    document.body.removeAttribute('data-mx-live-direct');
+    const again = answer(served({ edit: 'e3', lede: 'third' }));
+    await morphStory(window, { fetch: again, importModule: vi.fn() });
+    expect(again).toHaveBeenCalledWith('/a/doc1/story?surface=app', expect.anything());
+  });
   it('a static edit: every node keeps its identity, the text changes in place, the islands keep running', async () => {
     load(served({ edit: 'e1' }));
     const doc = start();
