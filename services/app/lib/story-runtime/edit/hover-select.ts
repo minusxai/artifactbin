@@ -117,6 +117,8 @@ interface HoverSelectOptions {
   /** Hand over half-typed text before a structural command runs. */
   commitActive: () => void;
   post: (message: Record<string, unknown>) => void;
+  /** An explicit text-focus request has landed; stale redraw caret recovery must yield. */
+  onTextFocus?: () => void;
 }
 
 /** Parts of a line and drawing parts: selectable, but never given block chrome. */
@@ -124,7 +126,7 @@ const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br'
 /** Chrome the document draws for itself (the deck rail, presenter view, node chrome). */
 const DOCUMENT_CHROME = `.mx-rail, .mx-present, ${NODE_CHROME_SELECTOR}`;
 
-export function createHoverSelect({ win, root, nodes, views, activePath, commitActive, post }: HoverSelectOptions): HoverSelect {
+export function createHoverSelect({ win, root, nodes, views, activePath, commitActive, post, onTextFocus }: HoverSelectOptions): HoverSelect {
   const doc = win.document;
   let selectedPath: string | null = null;
   let blockMode = false;
@@ -134,7 +136,8 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
   let restampFrame: number | null = null;
   let restampTimer: number | null = null;
   /** The latest select request; a waiting reveal gives way to any newer one. */
-  let selectRequest = 0;
+  let pendingSelect: MutationObserver | null = null;
+  const cancelPendingSelect = () => { pendingSelect?.disconnect(); pendingSelect = null; };
   const at = (path: string) => root.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
 
   const blockSelection = createBlockSelection(doc, root, (command) => post({ type: STORY_BLOCK_EDIT_MESSAGE, command }));
@@ -383,6 +386,8 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     });
   };
 
+  doc.addEventListener('pointerdown', cancelPendingSelect, true);
+  doc.addEventListener('keydown', cancelPendingSelect, true);
   doc.addEventListener('focusin', onFocusIn);
   doc.addEventListener('selectionchange', onSelectionChange);
   doc.addEventListener('click', onClick, true);
@@ -392,7 +397,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
   win.addEventListener('resize', onScroll, { passive: true });
 
   const select = (message: SelectMessage) => {
-    const request = ++selectRequest;
+    cancelPendingSelect();
     if (!message.path) {
       reportSelection(null);
       return;
@@ -412,7 +417,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     };
     const selectFound = (el: Element) => {
       const markdown = message.focusText ? markdownEditorFor(el) : undefined;
-      if (markdown) { reportSelection(describeWithQuote(el)); markdown.focus(); }
+      if (markdown) { onTextFocus?.(); reportSelection(describeWithQuote(el)); markdown.focus(); }
       else selectBlock(el);
     };
     const found = described();
@@ -422,17 +427,19 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
       if (found && message.reveal) bringIntoView(found);
       return;
     }
-    // Just inserted: the new document may not be drawn yet. Wait for it, briefly.
-    let tries = 0;
-    const wait = () => {
-      if (disposed || request !== selectRequest) return;
+    // Compilation and redraw are asynchronous. Follow readiness instead of expiring the request
+    // before the inserted region arrives; a newer request or user input owns focus from then on.
+    const observer = new MutationObserver(() => {
+      if (disposed) return;
       const late = described();
-      if (late) {
-        selectFound(late);
-        bringIntoView(late);
-      } else if (++tries < 60) win.setTimeout(wait, 25);
-    };
-    win.setTimeout(wait, 25);
+      if (!late) return;
+      cancelPendingSelect();
+      selectFound(late);
+      bringIntoView(late);
+    });
+    pendingSelect = observer;
+    observer.observe(root, { childList: true, subtree: true, attributes: true,
+      attributeFilter: [AST_PATH_ATTR, 'id', 'data-mx-lexical'] });
   };
 
   return {
@@ -462,6 +469,9 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     },
     dispose() {
       disposed = true;
+      cancelPendingSelect();
+      doc.removeEventListener('pointerdown', cancelPendingSelect, true);
+      doc.removeEventListener('keydown', cancelPendingSelect, true);
       if (restampFrame !== null) win.cancelAnimationFrame(restampFrame);
       if (restampTimer !== null) win.clearTimeout(restampTimer);
       chrome.dispose();

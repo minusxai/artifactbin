@@ -9,6 +9,7 @@ import {DatasetError} from '../datasets/errors';
 import {catalogOf} from '../datasets/catalog';
 import {ownerPredicate,type ArtifactRow} from './access';
 import {getGroupRole} from '../groups';
+import {assertTransferDependencies} from './transfer-dependencies';
 import type {Queryable} from '../platform/db';
 
 export async function transferArtifact(actor:TokenActor,id:string,destination:ArtifactDestination):Promise<ArtifactRow|null>{
@@ -36,14 +37,7 @@ export async function transferArtifact(actor:TokenActor,id:string,destination:Ar
   // credential migration contract exists, transferring them fails closed.
   if(closure.some(r=>catalogOf(r)?.kind==='postgres'))throw new DatasetError('Connected datasets cannot change owner',409);
   const ids=new Set(closure.map(r=>r.id));
-  const all=(await tx.query<ArtifactRow>("SELECT * FROM artifacts WHERE format IN ('markup','dataset','viz')")).rows;
-  const dependencies=(r:ArtifactRow)=>[...((r.meta.refs as Array<{id:string}>|undefined)??[]).map(ref=>ref.id),...(typeof r.meta.userScopeDocument==='string'?[r.meta.userScopeDocument]:[]),...[...JSON.stringify({source:r.source,document:r.document,meta:r.meta,dataset_policy:r.dataset_policy}).matchAll(/ref:([A-Za-z0-9]{6,12})/g)].map(m=>m[1]!)];
-  // Both inbound and outbound references must stay within the closure. Read
-  // link access does not imply that a new owner may execute an old binding.
-  for(const row of all){
-   if(dependencies(row).some(ref=>ids.has(row.id)!==ids.has(ref)))throw new DatasetError('Transfer includes dependencies outside the selected owner closure',409);
-   if(!ids.has(row.id)&&row.dataset_policy&&JSON.stringify(row.dataset_policy).match(/"artifact"\s*:/)&&closure.some(r=>JSON.stringify(row.dataset_policy).includes('"'+r.id+'"')))throw new DatasetError('Transfer would change a dataset grant outside the closure',409);
-  }
+  await assertTransferDependencies(tx,closure);
   const updated=await tx.query<ArtifactRow>(`UPDATE artifacts SET group_id=$2,user_id=$3,
     creator_user_id=COALESCE(creator_user_id,user_id),ancestor_ids=ancestor_ids[$4:cardinality(ancestor_ids)],updated_at=now(),
     sharing_revision=sharing_revision+1,policy_revision=policy_revision+1

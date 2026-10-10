@@ -237,6 +237,10 @@ export function createFrameEditSession({
     views,
     activePath: () => active?.path ?? null,
     commitActive: () => commitHost(active),
+    onTextFocus() {
+      pendingBookmark = historyBookmark = undefined;
+      historyLanded = undefined;
+    },
     post,
   });
 
@@ -527,6 +531,10 @@ export function createFrameEditSession({
           post({ type: STORY_COMMITTED_MESSAGE });
           break;
         case STORY_SELECT_MESSAGE:
+          if (message.focusText) {
+            pendingBookmark = historyBookmark = undefined;
+            historyLanded = undefined;
+          }
           selection.select(message);
           break;
         case STORY_SPOTLIGHT_MESSAGE:

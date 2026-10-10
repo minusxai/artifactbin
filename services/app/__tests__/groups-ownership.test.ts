@@ -165,3 +165,41 @@ it('uses nonblocking transfer locks and rolls back busy artifact or group owners
   for(const sql of queries.filter(sql=>/FOR (UPDATE|SHARE)/.test(sql)))expect(sql).toContain('NOWAIT');
  }
 });
+
+it('refuses inbound dependency representations without materializing unrelated artifact content',async()=>{
+ const f=await fixture(),id=await f.make({format:'folder',title:'Transfer target'});
+ const foreign=await f.make({markup:'<p>Unrelated</p>'});
+ await f.db.query("UPDATE artifacts SET meta='{\"refs\":{}}' WHERE id=$1",[foreign]);
+ const original=f.db.transaction.bind(f.db),queries:string[]=[];
+ const spy=vi.spyOn(f.db,'transaction').mockImplementation(fn=>original(tx=>fn({query:async(sql,values)=>{queries.push(sql);return tx.query(sql,values);}})));
+ try{expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);}finally{spy.mockRestore();}
+ expect(queries.some(sql=>/SELECT \* FROM artifacts WHERE format IN/.test(sql))).toBe(false);
+ expect((await f.move(id,{type:'personal'})).status).toBe(200);
+ const cases=[
+  {meta:{refs:[{id}]}},
+  {meta:{userScopeDocument:id}},
+  {source:`legacy ref:${id}`},
+  {document:{nested:[{value:`ref:${id}`}]}},
+  {document:{[`ref:${id}`]:'legacy key'}},
+  {meta:{nested:`ref:${id}`}},
+  {dataset_policy:{nested:`ref:${id}`}},
+  {dataset_policy:{version:2,allow:[{actions:['insert'],from:{artifact:id}}]}},
+ ];
+ for(const fields of cases){
+  await f.db.query('UPDATE artifacts SET source=$2,document=$3::jsonb,meta=$4::jsonb,dataset_policy=$5::jsonb WHERE id=$1',[foreign,fields.source??null,fields.document?JSON.stringify(fields.document):null,JSON.stringify(fields.meta??{}),fields.dataset_policy?JSON.stringify(fields.dataset_policy):null]);
+  const response=await f.move(id,{type:'group',id:'grp_ownership'});expect(response.status,JSON.stringify(fields)).toBe(409);
+  expect((await getArtifactById(id))?.user_id).toBe(f.creator.id);
+ }
+ // Greedy legacy tokenizer takes six through twelve characters, not a short prefix.
+ await f.db.query("UPDATE artifacts SET source=$2,document=NULL,meta='{}',dataset_policy=NULL WHERE id=$1",[foreign,`ref:${id}X`]);
+ expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);
+});
+
+it('preserves the twelve-character truncation of legacy ref tokens',async()=>{
+ const f=await fixture(),generated=await f.make({format:'folder',title:'Twelve character target'}),id='Abcdef123456';
+ await f.db.query('UPDATE artifacts SET id=$2 WHERE id=$1',[generated,id]);
+ const foreign=await f.make({markup:'<p>Legacy reference</p>'});
+ await f.db.query('UPDATE artifacts SET source=$2,document=NULL WHERE id=$1',[foreign,`ref:${id}Z`]);
+ expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(409);
+ expect((await getArtifactById(id))?.user_id).toBe(f.creator.id);
+});
