@@ -164,7 +164,9 @@ describe('AnnotationLayer', () => {
 
     fireEvent.mouseEnter(card);
     expect(card.style.width).toBe('288px');
-    expect(card.style.height).toBe('108px');
+    // The hovered card grows to whole lines of its content, never a fixed height that cuts the body mid-line.
+    expect(card.style.height).toBe('auto');
+    expect(card.style.minHeight).toBe('108px');
     expect(card.style.borderRadius).toBe('5px');
     expect(card).toHaveClass('bg-comment-hover');
     expect(screen.getByLabelText('vivek avatar').textContent).toBe('V');
