@@ -67,7 +67,7 @@ export {
 export type { AnnotationRange } from './annotation-range';
 export { canonicalQuote, canonicalText, isAreaRange, isTargetRange, parseAnnotationRange, parseRel, refinementRange } from './annotation-range';
 export type { AnchorEntry } from './anchors';
-export { ANNOTATION_ANCHOR_ATTR, anchorIndex, anchorKeyOf, snippetOf, sourceWithoutAnchors } from './anchors';
+export { anchorIndex, anchorKeyOf, snippetOf, sourceWithoutAnchors } from './anchors';
 export type { AnnotationReceipt, AnnotationRecord } from './annotation-edits';
 export { annotationEffects, parseAnnotationOperations } from './annotation-edits';
 export { isPersonMentionHref, personMentions } from './person-mentions';
