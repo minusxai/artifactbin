@@ -5,13 +5,9 @@ import type { ArtifactRow, Scope } from '../access';
 import type { TokenActor } from '@/lib/accounts';
 import {hydrateArtifactDocument} from '../document';
 import {graphAdmissionPlan,type GraphAdmission,type GraphAdmissionPlan} from './document-graph-admission';
-import {GRAPH_POLICY,type DocumentGraph} from '../../document/document-graph';
+import {GRAPH_POLICY, type DocumentGraph, type annotationEffects, type BatchChange, newEditId, type ProseOperation} from '../../document';
 import {graphPatchSql,graphSourceSql,graphReferencesSql} from './document-graph-sql';
-import type {annotationEffects} from '../../document/annotation-edits';
-import type {BatchChange} from '../../document/edit-batch';
-import {newEditId} from '../../document/splice';
 import {graphProseSql} from './document-graph-prose';
-import type {ProseOperation} from '../../document/document-prose';
 interface GraphCommitOptions {historyChanges?:{source:string;changes:BatchChange[]};archive?:'always'|'coalesce';history?:'whole'|'nodes';title?:string|null;description?:string|null;expectedEditId?:string;initialize?:{document:DocumentGraph;source:string};effects?:ReturnType<typeof annotationEffects>;visibility?:string;ancestorIds?:string[];access?:string;linkRole?:string|null;provenance?:'migration'|'authored'}
 export async function commitGraphOperation(db:Queryable,actor:TokenActor|null,scope:Scope,token:GraphAdmission,options:GraphCommitOptions={}):Promise<ArtifactRow|null>{
  return commitGraphMutation(db,actor,scope,graphAdmissionPlan(token),options);

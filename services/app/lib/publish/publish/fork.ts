@@ -5,7 +5,7 @@ import { collectRefUses } from '@/lib/dataflow/refs';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '@/lib/platform/analytics';
-import { sourceWithoutAnchors } from '@/lib/document/anchors';
+import { sourceWithoutAnchors } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../document/input';

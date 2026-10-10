@@ -23,7 +23,7 @@
 import { createHash } from 'node:crypto';
 import type { JsxAttribute, JsxNode } from '@/lib/jsx';
 import { refName, type TableResult } from '@/lib/dataflow/dataflow';
-import { CHART_VIZ_KINDS } from '@/lib/document/lazy-code';
+import { CHART_VIZ_KINDS } from '@/lib/document';
 import type { RefDataMap } from '@/lib/dataflow';
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';

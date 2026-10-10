@@ -17,7 +17,7 @@ import { type ArtifactRole, canEdit as canEditRole, canGovern } from '@artifactb
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
 import { formatFileSize } from '@/lib/islands/file-display';
-import { displayTitle } from '@/lib/document/display-title';
+import { rowTitle } from '@/lib/document/display-title';
 import type { ReaderForkedFrom } from '@/lib/serving/fork-credit.server';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
@@ -94,7 +94,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
   });
   const catalog = () => { const adopted = liveCatalog(); return adopted && adopted.version >= surface.version ? adopted.catalog : surface.catalog; };
 
-  const title = () => displayTitle({ title: live()?.title ?? surface.title });
+  const title = () => rowTitle({ title: live()?.title ?? surface.title });
   createEffect(() => { document.title = title(); });
   const content = () => live()?.dataPreview ?? surface.dataPreview;
   // The image renders from ./raw; a new version remounts it so the browser asks again.

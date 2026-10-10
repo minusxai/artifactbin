@@ -45,7 +45,7 @@ import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/dataflow';
 import { loadImage } from '@/lib/object-store/image-store';
 import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
-import { displayTitle } from '@/lib/document/head';
+import { displayTitle } from '@/lib/document';
 import { webAssetByHash, webAssetsForSource } from '@/lib/publish/assets/web-assets';
 import { offlineExtrasRef } from './bundle.server';
 import { ARTIFACT_FILE_FORMAT, sourceDigest, type ArtifactFile } from './file-format';

@@ -1,7 +1,6 @@
 /** Offline authoring uses the same guarded graph patch as the live editor. The baseline comes from an authenticated historical read, never from the offered HTML. */
 import type {DocumentUpdate,DocumentResourcePreparation} from '@artifactbin/contracts';
-import {graphSource} from '../document/document-graph';
-import {prepareClientDocument,attachAuthoringContext,type ClientDocumentSnapshot} from '../document/document-update-client';
+import {graphSource, prepareClientDocument, attachAuthoringContext, type ClientDocumentSnapshot} from '../document';
 import type {ArtifactFile} from './file-format';
 
 export function prepareHostedFileUpdate(file:ArtifactFile,base:ClientDocumentSnapshot & {markup:string}):DocumentUpdate {

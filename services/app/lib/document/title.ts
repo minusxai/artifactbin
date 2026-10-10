@@ -11,7 +11,7 @@
 
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
-import { displayTitle as displayHeadingTitle } from './display-title';
+import { rowTitle } from './display-title';
 export { UNTITLED } from './display-title';
 
 /** Longer than this is a paragraph, not a title — the heading text is truncated. */
@@ -63,7 +63,7 @@ export function firstHeadingTitle(source: string | null | undefined): string | n
  * carries it instead of the source it came from (lib/artifact-page).
  */
 export function displayTitle(row: { title?: string | null; source?: string | null; heading?: string | null }): string {
-  return displayHeadingTitle({ title: row.title, heading: row.title?.trim() ? null : row.source != null ? firstHeadingTitle(row.source) : row.heading });
+  return rowTitle({ title: row.title, heading: row.title?.trim() ? null : row.source != null ? firstHeadingTitle(row.source) : row.heading });
 }
 
 /**

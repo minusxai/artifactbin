@@ -1,6 +1,6 @@
 import {parseCommentViewState} from '../../../../../../contracts/src/comment-view-state';
 import {createHash} from 'node:crypto';
-import {parseAnnotationRange,isAreaRange,refinementRange} from '@/lib/document/annotation-range';
+import {parseAnnotationRange, isAreaRange, refinementRange} from '@/lib/document';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import {readableArtifact} from '@/lib/artifacts';
 import { canAnnotate } from '@artifactbin/contracts';

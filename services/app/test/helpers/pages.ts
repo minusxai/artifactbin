@@ -10,7 +10,7 @@ import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/ro
 import { getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
 import { publicOrigin } from '@/lib/http';
-import { displayTitle } from '@/lib/document/title';
+import { displayTitle } from '@/lib/document';
 
 type PageOutcome = { kind: 'render' | 'redirect' | 'notFound'; to?: string };
 

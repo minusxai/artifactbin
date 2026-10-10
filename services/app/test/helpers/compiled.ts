@@ -7,7 +7,7 @@
  */
 import type { DatasetColumn } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx';
-import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
+import { dataflowOf, splitHelmet } from '@/lib/document';
 import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/compile-dataflow';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 

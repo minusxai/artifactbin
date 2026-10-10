@@ -12,7 +12,7 @@
  * the override is a var block rather than a new theme — a document keeps its
  * theme's palette, radii and rules and changes only the face.
  */
-import type { HelmetContent } from '@/lib/document/helmet';
+import type { HelmetContent } from '@/lib/document';
 import { STORY_FONT_FAMILIES } from '@/lib/data/story/story-fonts';
 
 /** The three slots a document may override, in the order the head declares them. */

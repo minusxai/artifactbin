@@ -1,8 +1,7 @@
 /** The inert-text contract lowers directly to SQL. The database, not the client,
  * supplies the certified node, ancestry, revisions and UTF-16 history position. */
-import {inertProse,proseSource,type ProseOperation} from '../../document/document-prose';
+import {inertProse, proseSource, type ProseOperation, GRAPH_ROOT} from '../../document';
 import {MAX_DOCUMENT_BYTES} from '@artifactbin/contracts';
-import {GRAPH_ROOT} from '../../document/document-graph';
 export function graphProseSql(document:string,version:string,baseEditId:string,op:ProseOperation,initial:unknown[]){
  if(!inertProse(op.oldText)||!inertProse(op.newText)||!op.newText.length||op.oldText===op.newText||!Array.isArray(op.path)||op.path.length>258||op.path[0]!=='roots'||op.path.at(-1)!=='value')return null;
  const path:number[]=[];

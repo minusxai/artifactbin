@@ -19,26 +19,20 @@ export { parseJsx, repairJsxSource, serializeJsx } from '../jsx';
 export type { JsxElement, JsxNode } from '../jsx';
 
 // ---- Document model: the head (Helmet), node ids, validation and canonical source.
-export { dataflowOf, declarationsOf, splitHelmet } from '../document/helmet';
-export { nodeIndex, stampNodeIds } from '../document/node-ids';
-export { validateMarkupStructure } from '../document/local-validation';
-export { formatMarkupSource } from '../document/format-source';
-export { canonicalizeMarkup } from '../document/canonical-source';
-export { assetFormatOf, fileContentType } from '../document/file-types';
-export { socialPreviewCrop, socialPreviewImage } from '../document/social-preview';
+export {
+  assetFormatOf, canonicalizeMarkup, dataflowOf, declarationsOf, fileContentType, formatMarkupSource, nodeIndex, socialPreviewCrop, socialPreviewImage,
+  splitHelmet, stampNodeIds, validateMarkupStructure,
+} from '../document';
 
 // ---- Edit algebra: the document graph, its patches, update preparation and rebasing.
-export { createDocumentGraph, graphSource } from '../document/document-graph';
-export { applyGraphPatch } from '../document/document-graph-patch';
-export { documentAfterOperation } from '../document/document-update-history';
-export { prepareClientDocumentPublication } from '../document/document-update-client';
-export { rebaseEditBatch } from '../document/edit-batch';
-export { sourceChanges } from '../document/source-changes';
-export { sourcePathToBodyPath } from '../document/edit-compose';
+export {
+  applyGraphPatch, createDocumentGraph, documentAfterOperation, graphSource, prepareClientDocumentPublication, rebaseEditBatch, sourceChanges,
+  sourcePathToBodyPath,
+} from '../document';
 
 // ---- Comments: anchors (annotation ranges), authorship and local file comments.
-export { canonicalQuote, canonicalText, parseAnnotationRange } from '../document/annotation-range';
-export type { AnnotationRange } from '../document/annotation-range';
+export { canonicalQuote, canonicalText, parseAnnotationRange } from '../document';
+export type { AnnotationRange } from '../document';
 export { annotationAuthorForAgent } from '../annotations/author';
 export type { AnnotationWire } from '../annotations/store';
 export type { AnnotationAuthor, AnnotationCommentWire } from '@artifactbin/contracts';

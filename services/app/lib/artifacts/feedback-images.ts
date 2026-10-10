@@ -13,7 +13,7 @@ import { storeImageContent } from '@/lib/datasets/data-tiers';
 import { objectStore } from '@/lib/object-store';
 import { IMAGE_CONTENT_TYPES } from '@/lib/object-store/image-store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
-import { assetFormatOf, fileContentType } from '@/lib/document/file-types';
+import { assetFormatOf, fileContentType } from '@/lib/document';
 import { MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform/config';
 import { uploadedSha256, storeFileContent } from '@/lib/datasets/file-store';
 

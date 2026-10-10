@@ -2,8 +2,7 @@ import type {Queryable} from '@artifactbin/contracts';
 import type { RoleActor } from '@/lib/accounts';
 import type {ArtifactRow} from '../access';
 import {invitePeople} from './membership';
-import {isPersonMentionHref} from '@/lib/document/person-mentions';
-import {nodeIndex} from '@/lib/document/node-ids';
+import {isPersonMentionHref, nodeIndex} from '@/lib/document';
 /** Static authored links only; query results, User chips, imports and forks never notify. */
 export async function documentMentions(tx:Queryable,row:ArtifactRow,actor:RoleActor,previous=''){
  if(row.format!=='markup'||!row.source?.includes('/people/'))return;

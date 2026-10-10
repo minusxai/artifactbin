@@ -26,14 +26,15 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  */
 import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
 import type { TokenActor } from '@/lib/accounts';
-import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/document/anchors';
+import {
+  anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
+  type AnnotationRange, isAreaRange, isTargetRange, sourcePathToBodyPath,
+} from '@/lib/document';
 import { avatarUrl } from '@/lib/accounts';
 import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
 import { generateInternalId } from '@/lib/platform/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { canonicalQuote, canonicalText, parseAnnotationRange, parseRel, type AnnotationRange, isAreaRange, isTargetRange } from '@/lib/document/annotation-range';
-import { sourcePathToBodyPath } from '@/lib/document/edit-compose';
 
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */
