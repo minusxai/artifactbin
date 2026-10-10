@@ -5,6 +5,7 @@ import {POST as browserCreate} from '@/app/api/my/artifacts/route';
 import {POST as apiCreate} from '@/app/api/artifacts/route';
 import {POST as browserSession} from '@/app/api/browser-sessions/route';
 import {POST as internalMint} from '@/app/api/internal/tokens/route';
+import {POST as confirmSetup} from '@/app/api/deployment/setup/route';
 import {createUser,mintToken} from '@/lib/accounts';
 import {overrideSession} from '@/lib/accounts/session';
 import {overrideConfig} from '@/lib/platform/config';
@@ -14,6 +15,16 @@ import {getDb} from '@/lib/platform/db';
 useAppHarness();
 const company=()=>overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'mxmx_test_company_owner@example.com'});
 describe('company creation admission',()=>{
+ it('lets the designated browser owner confirm setup without a CLI token and preserves CSRF protection',async()=>{
+  company();const owner=await createUser({email:'mxmx_test_company_owner@example.com'});
+  await admitDeploymentIdentity({userId:owner.id,email:owner.email!,emailVerified:true});
+  const group=await createGroup(owner.id,{handle:'company-test',name:'Company'});
+  const actor={credential:'session' as const,userId:owner.id,email:owner.email!,emailVerified:true};
+  const body={group_id:group.id};
+  expect((await confirmSetup(request('/api/deployment/setup',{method:'POST',actor,origin:'https://stranger.example',json:body}))).status).toBe(403);
+  const response=await confirmSetup(request('/api/deployment/setup',{method:'POST',actor,origin:'same',json:body}));
+  expect(response.status).toBe(200);expect((await response.json()).setup_complete).toBe(true);
+ });
  it('refuses anonymous, legacy unclaimed bearer, and unadmitted verified browser creation before and after confirmation without issuing credentials',async()=>{
   company();
   const owner=await createUser({email:'mxmx_test_company_owner@example.com'});

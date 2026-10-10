@@ -22,13 +22,15 @@ export async function newArtifactDestination(actor:TokenActor,explicit?:Artifact
  const parent=parentId?(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[parentId])).rows[0]:undefined;
  if(parentId&&!parent)throw new DatasetError('Invalid parent',400);
  if(parent&&!parent.group_id&&(parent.user_id?parent.user_id!==actor.userId:parent.token_id!==actor.tokenId))throw new DatasetError('Invalid parent',400);
- let destination:ArtifactDestination;
- try{
-  const preference=actor.userId?(await getAccountPreferences(actor.userId)).default_destination:undefined;
-  const deployment_default=!explicit&&!parent&&(!preference||preference.type==='inherit')?await getDeploymentDefaultDestination():undefined;
-  destination=selectNewArtifactDestination({explicit,parent:parent?destinationOf(parent):undefined,preference,deployment_default});
+ const preference=actor.userId?(await getAccountPreferences(actor.userId)).default_destination:undefined;
+ let deployment_default:ArtifactDestination|undefined;
+ if(!explicit&&!parent&&(!preference||preference.type==='inherit')){
+  try{deployment_default=await getDeploymentDefaultDestination();}
+  catch(error){if(error instanceof DeploymentError)throw new DatasetError(error.message,error.status);throw error;}
  }
- catch(error){if(error instanceof DeploymentError)throw new DatasetError(error.message,error.status);throw new DatasetError('Destination conflicts with parent owner',400);}
+ let destination:ArtifactDestination;
+ try{destination=selectNewArtifactDestination({explicit,parent:parent?destinationOf(parent):undefined,preference,deployment_default});}
+ catch{throw new DatasetError('Destination conflicts with parent owner',400);}
  if(destination.type==='group'&&await getGroupRole(actor.userId,destination.id)!=='editor')throw new DatasetError('Destination requires group editor membership',403);
  return destination;
 }
