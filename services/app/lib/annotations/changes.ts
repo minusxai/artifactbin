@@ -7,7 +7,7 @@ import type { CommentChangesPage, CommentChangeEvent } from '@artifactbin/contra
 import type { TokenActor } from '@/lib/accounts/actors';
 import { annotationScope } from '@/lib/artifacts/access';
 import { getDb } from '@/lib/platform/db';
-import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/story/realtime/live';
+import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 
 export class InvalidCommentCursor extends Error {}
 export class CommentWaitCapacityError extends Error {}

@@ -1,6 +1,6 @@
 import {afterEach, expect, it, vi} from 'vitest';
 import { getDb } from '@/lib/platform/db';
-import * as live from '@/lib/story/realtime/live';
+import * as live from '@/lib/publish/realtime/live';
 import { createAnnotationFor, actOnAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import type { AnnotationAuthor, CommentChangesPage } from '@artifactbin/contracts';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
