@@ -112,7 +112,14 @@ const DOCUMENT_ENTRIES = [
 ];
 const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
 const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];
-const COMPILED_PAGE_ENTRIES = ['', 'agent-discovery', 'backfill.server', 'bundle.server', 'carriers', 'compiler', 'story-element'];
+/**
+ * lib/compiled-page: server code uses its index, or one of the three heavy entries the index must not
+ * carry (Babel, node:vm; their headers say why); the offline file's browser-bundled HTML writer imports
+ * three leaves.
+ */
+const COMPILED_PAGE_ENTRIES = ['', 'backfill.server', 'bundle.server', 'compiler'];
+const COMPILED_PAGE_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts'];
+const COMPILED_PAGE_BROWSER_LEAVES = ['agent-discovery', 'carriers', 'story-element'];
 /** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
 const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
 const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];
@@ -135,7 +142,7 @@ const DEEP_MODULES = {
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/dataflow': { entries: DATAFLOW_ENTRIES, browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES },
-  'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES },
+  'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES, browserImporters: ACCOUNTS_BROWSER_IMPORTERS, browserLeaves: ACCOUNTS_BROWSER_LEAVES },
 };

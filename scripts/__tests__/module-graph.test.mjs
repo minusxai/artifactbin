@@ -195,6 +195,28 @@ describe('module graph', () => {
       expect(refused).toContain('services/app/lib/offline/assemble.server.ts imports @/lib/page-styles/document-root');
       expect(check('lib/page-styles', { ...offline, 'services/app/lib/offline/file-html.ts': '', 'services/app/lib/offline/solid-entry.tsx': '' })).toMatch(/browser leaf document-root/);
     });
+
+    it('lib/compiled-page: the index and its three heavy entries from anywhere, the leaves only from the offline file', () => {
+      const leaves = ['agent-discovery', 'carriers', 'story-element'];
+      const page = {
+        ...Object.fromEntries(['index', 'compiler', 'bundle.server', 'backfill.server', 'assembler', 'contract', ...leaves].map(file => [`services/app/lib/compiled-page/${file}.ts`, ''])),
+        'services/app/lib/offline/file-html.ts': leaves.map(leaf => `import '@/lib/compiled-page/${leaf}';`).join('\n'),
+        'services/app/server/app.ts': "import { agentDiscovery, assembleReaderPage } from '@/lib/compiled-page';\n",
+        'services/app/lib/publish/prepared/serve.server.ts': "export const ssr = () => import('@/lib/compiled-page/bundle.server');\n",
+        'services/app/lib/publish/prepared/draft-compile-worker.ts': "import { compilePage } from '@/lib/compiled-page/compiler';\n",
+        'scripts/compiled-backfill.ts': "import type { BackfillFilter } from '@/lib/compiled-page/backfill.server';\n",
+      };
+      expect(check('lib/compiled-page', page)).toBe('');
+      const refused = check('lib/compiled-page', {
+        ...page,
+        'services/app/server/routes.ts': "import { agentDiscovery } from '@/lib/compiled-page/agent-discovery';\n",
+        'services/app/lib/offline/assemble.server.ts': "import { withStoredCarriers } from '@/lib/compiled-page/carriers';\n",
+        'services/app/lib/publish/prepared/c.ts': "import type { CompiledPage } from '@/lib/compiled-page/contract';\nimport '../../compiled-page/assembler';\n",
+      });
+      for (const line of ['services/app/server/routes.ts imports @/lib/compiled-page/agent-discovery', 'services/app/lib/offline/assemble.server.ts imports @/lib/compiled-page/carriers',
+        'services/app/lib/publish/prepared/c.ts imports @/lib/compiled-page/contract', 'services/app/lib/publish/prepared/c.ts imports ../../compiled-page/assembler']) expect(refused).toContain(line);
+      expect(check('lib/compiled-page', { ...page, 'services/app/lib/offline/file-html.ts': "import '@/lib/compiled-page/carriers';\n" })).toMatch(/browser leaf agent-discovery\n  browser leaf story-element/);
+    });
   });
 
   describe('CLI toolkit entry (rule 5)', () => {
