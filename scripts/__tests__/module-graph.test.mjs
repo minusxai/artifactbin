@@ -136,6 +136,48 @@ describe('module graph', () => {
     });
   });
 
+  describe('deep-module entries (rule 4, DEEP_MODULES)', () => {
+    const table = { 'lib/dataflow': { entries: ['', 'server'], browserImporters: ['services/app/solid/', 'services/app/lib/offline/solid-entry.tsx'], browserLeaves: ['scalar-input'] } };
+    const base = { 'services/app/lib/dataflow/index.ts': '', 'services/app/lib/dataflow/server.ts': '', 'services/app/lib/dataflow/scalar-input.ts': '', 'services/app/lib/dataflow/compile.ts': '' };
+    const used = { 'services/app/lib/publish/a.ts': "import '@/lib/dataflow/server';\n", 'services/app/solid/Input.tsx': "import '@/lib/dataflow/scalar-input';\n" };
+    const check = files => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files })), allowList([]), undefined, table).violations.join('\n');
+
+    it('passes an outside import of a listed entry, from server or browser-bundled code', () => {
+      expect(check({
+        ...used,
+        'services/app/lib/serving/b.ts': "import { x } from '@/lib/dataflow';\nimport type { Y } from '../dataflow/server.ts';\n",
+        'services/app/solid/Panel.tsx': "export const d = await import('@/lib/dataflow/index');\n",
+        'services/app/lib/dataflow/server.ts': "import './compile';\n",
+      })).toBe('');
+    });
+
+    it('refuses an outside deep import of an unlisted path, naming the file, the specifier and what to do', () => {
+      const violations = check({ ...used, 'services/app/lib/serving/c.ts': "import { compile } from '@/lib/dataflow/compile';\n" });
+      expect(violations).toContain('services/app/lib/serving/c.ts imports @/lib/dataflow/compile');
+      expect(violations).toContain("DEEP_MODULES['lib/dataflow']");
+      expect(violations).toContain('re-export the name from services/app/lib/dataflow/index.ts');
+    });
+
+    it('refuses a relative specifier that resolves to an unlisted path', () => {
+      const violations = check({ ...used, 'services/app/lib/publish/d.ts': "export type C = import('../dataflow/compile.ts').C;\n" });
+      expect(violations).toContain('services/app/lib/publish/d.ts imports ../dataflow/compile.ts');
+    });
+
+    it('passes a browser leaf only from a listed importer', () => {
+      expect(check({ ...used, 'services/app/lib/offline/solid-entry.tsx': "import '../dataflow/scalar-input';\n" })).toBe('');
+      const violations = check({ ...used, 'services/app/lib/serving/e.ts': "import { parseScalar } from '@/lib/dataflow/scalar-input';\n", 'services/app/lib/offline/compiled-boot.ts': "import '../dataflow/scalar-input';\n" });
+      expect(violations).toContain('services/app/lib/serving/e.ts imports @/lib/dataflow/scalar-input');
+      expect(violations).toContain('services/app/lib/offline/compiled-boot.ts imports ../dataflow/scalar-input');
+    });
+
+    it('reports a listed entry or browser leaf nothing outside imports any more, so the lists only shrink', () => {
+      const violations = check({ 'services/app/lib/publish/a.ts': "import '@/lib/dataflow/server';\n" });
+      expect(violations).toMatch(/lib\/dataflow[^\n]*nothing outside imports any more[^\n]*DEEP_MODULES\['lib\/dataflow'\][\s\S]*browser leaf scalar-input/);
+      expect(check({ 'services/app/solid/Input.tsx': "import '@/lib/dataflow/scalar-input';\n" })).toMatch(/nothing outside imports any more[^\n]*\n  entry server$/);
+      expect(violations).not.toMatch(/^ {2}entry $/m);
+    });
+  });
+
   describe('CLI toolkit entry (rule 5)', () => {
     const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
 
