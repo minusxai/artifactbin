@@ -8,6 +8,13 @@ import {GET as preferences,PUT as savePreferences} from '@/app/api/me/preference
 useAppHarness();
 const context=(params:Record<string,string>)=>({params:Promise.resolve(params)});
 describe('groups authenticated HTTP boundary',()=>{
+ it('serves verified browser sessions without an API token and refuses cross-site mutations',async()=>{
+  const owner=await mintAccountToken('browser_owner');
+  const actor={credential:'session' as const,userId:owner.userId!,email:'mxmx_test_browser_owner@example.com',emailVerified:true};
+  expect((await list(request('/api/groups',{actor}))).status).toBe(200);
+  expect((await create(request('/api/groups',{actor,method:'POST',origin:'same',json:{handle:'browser-team',name:'Browser'}}))).status).toBe(201);
+  expect((await create(request('/api/groups',{actor,method:'POST',origin:'https://other.test',json:{handle:'cross-site',name:'Cross site'}}))).status).toBe(403);
+ });
  it('creates, lists and resolves group handles, protecting private detail and editor writes',async()=>{
   const owner=await mintAccountToken('owner'),viewer=await mintAccountToken('viewer'),outsider=await mintAccountToken('outsider');
   const created=await create(request('/api/groups',{method:'POST',token:owner.token,json:{handle:'api-team',name:'API'}}));expect(created.status).toBe(201);const group=await created.json();

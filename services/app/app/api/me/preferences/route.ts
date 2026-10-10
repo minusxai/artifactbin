@@ -1,4 +1,4 @@
-import {groupRoute} from '@/lib/groups/http';
+import {groupRoute} from '@/lib/group-routes';
 import {getAccountPreferences,setAccountPreferences} from '@/lib/groups';
 import {json,readJson} from '@/lib/http';
 export const GET=groupRoute(async(_request,userId)=>json(await getAccountPreferences(userId)),true);

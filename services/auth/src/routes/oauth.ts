@@ -61,6 +61,7 @@ function page(title: string, body: string, status = 200, redirectUri = ''): Resp
 
 interface OAuthRoutesOptions {
   sessions: SessionStore;
+  admitIdentity?:(identity:{userId:string;email?:string;emailVerified?:boolean})=>Promise<boolean>;
   oauth: OAuthStore;
   pairing: DevicePairing;
   upstream: Upstream;
@@ -72,6 +73,7 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
   if (!grant.userId) throw new Error('Email account required');
   const identity = await o.sessions.identity?.(grant.userId);
   if (!identity?.email || !identity.emailVerified || identity.userId !== grant.userId) throw new Error('Verified email account required');
+  if(o.admitIdentity&&!await o.admitIdentity(identity))throw new Error('Deployment admission required');
   const expiresIn = ACCESS_TOKEN_TTL_SECONDS;
   const payload = { expiresInHours: expiresIn / 3600, audience: grant.resource, scope: grant.scope };
   // The INTERNAL mint: the app's only credential-issuing route, refused at

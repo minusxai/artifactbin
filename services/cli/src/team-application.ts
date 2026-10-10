@@ -2,7 +2,7 @@
  * OSS team composition reuses the shared login and identity; the app owns authorization. The app host
  * is a parameter (services/app/server/team-host passes createAppHost), so the CLI never imports the server.
  */
-import {canAuthenticateUser,EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS,setServices,type Db} from '../../app/lib/cli-toolkit/host.server';
+import {admitDeploymentIdentity,validateDeploymentConfiguration,canAuthenticateUser,EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS,setServices,type Db} from '../../app/lib/cli-toolkit/host.server';
 import {join} from 'node:path';
 import {createTokenReader} from '@artifactbin/utils';
 import {createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,createAuthHost,readEnv,sessionStoreOf} from '@artifactbin/auth';
@@ -36,13 +36,14 @@ export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string,
    const events=createEvents({db:queryable,schema:EVENTS_SCHEMA});setServices({events});
    const authSchema=readEnv(env,'AUTH__SCHEMA')??'auth',appSchema=readEnv(env,'APP__SCHEMA');
    await ensureAuthSchema(queryable,authSchema);
+   validateDeploymentConfiguration();
    const raw=db.raw();
    const human=await createHumanAuth({secret,baseURL:origin,schema:authSchema,secure:origin.startsWith('https:'),events,...loginProvidersOf(env),
     ...(raw.kind==='pglite'?{pglite:raw.instance}:{pool:raw.pool as import('pg').Pool}),
     mail:mailerForRuntime({apiKey:readEnv(env,'EMAIL__RESEND_API_KEY'),from:readEnv(env,'EMAIL__FROM')??'artifactbin <login@example.com>',publicBaseUrl:origin,devOutboxPath:readEnv(env,'EMAIL__DEV_OUTBOX_PATH')})});
    reader=createTokenReader({db:queryable,ttlMs:5000,admitBearer:token=>canAuthenticateUser(token.userId),...(appSchema?{schema:appSchema}:{})});
    // createAppHost supplies the real upstream after initialization; no HTTP hop or signed-header bypass.
-   identity={upstream:async()=>{throw new Error('Team host is not initialized.');},env,tokens:reader,sessions:sessionStoreOf(human),cookieSecret:secret,
+   identity={upstream:async()=>{throw new Error('Team host is not initialized.');},env,tokens:reader,sessions:sessionStoreOf(human),admitIdentity:admitDeploymentIdentity,cookieSecret:secret,
     secure:origin.startsWith('https:'),identityDb:queryable,appSchema,events};
   },identity:upstream=>{const composed=createAuthHost({...identity,upstream});return {fetch:request=>Promise.resolve(composed.fetch(request))};},
  });

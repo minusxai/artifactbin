@@ -14,9 +14,10 @@ let pg: PGlite;
 let auth: HumanAuth;
 let seenActor: unknown = null;
 
-const proxy = async (env: Record<string, string | undefined>): Promise<ReturnType<typeof assemble<any>>> => {
+const proxy = async (env: Record<string, string | undefined>, admitIdentity?:import('../src/parts').AuthOptions['admitIdentity']): Promise<ReturnType<typeof assemble<any>>> => {
   const options = await testAuthOptions({
     env,
+    admitIdentity,
     sessions: sessionStoreOf(auth),
     upstream: async (_request, actor) => { seenActor = actor; return new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }); },
   });
@@ -41,6 +42,25 @@ describe('the login door is open (the invite gate is retired)', () => {
     expect((await send(open)).status).toBe(200);
     expect(sent.map((m) => m.to)).toEqual(['i@example.com']);
   });
+});
+
+describe('company denied login',()=>{
+ it('withholds real verified OTP cookies and denies a captured existing session at device approval',async()=>{
+  const app=await proxy({},async()=>false);
+  const call=(path:string,body:unknown,cookie?:string)=>app.request(`${BASE}${path}`,{method:'POST',headers:{'content-type':'application/json',origin:BASE,...(cookie?{cookie}:{})},body:JSON.stringify(body)});
+  await call('/api/auth/email-otp/send-verification-otp',{email:'denied@example.com',type:'sign-in'});
+  const res=await call('/api/auth/sign-in/email-otp',{email:'denied@example.com',otp:sent.at(-1)!.otp!});
+  expect(res.status).toBe(403);expect(res.headers.getSetCookie()).toEqual([]);
+  expect(await res.json()).toEqual({error:'deployment_admission_required'});
+  // An existing verified login is checked too, including the device approval door.
+  const open=await proxy({});
+  const request=(path:string,body:unknown)=>open.request(`${BASE}${path}`,{method:'POST',headers:{'content-type':'application/json',origin:BASE},body:JSON.stringify(body)});
+  await request('/api/auth/email-otp/send-verification-otp',{email:'existing@example.com',type:'sign-in'});
+  const allowed=await request('/api/auth/sign-in/email-otp',{email:'existing@example.com',otp:sent.at(-1)!.otp!});
+  const cookie=allowed.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
+  expect((await app.request(`${BASE}/api/auth/get-session`,{headers:{cookie}})).status).toBe(403);
+  expect((await call('/oauth/device/approve',{user_code:'anything'},cookie)).status).toBe(403);
+ });
 });
 
 describe('a human through the identity host', () => {

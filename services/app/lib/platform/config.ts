@@ -440,3 +440,15 @@ export function resetConfigOverrides(): void {
   INTERNAL_SERVICE_SECRET = SETTING_DEFAULTS.internalServiceSecret; SQL_SERVICE_URL = SETTING_DEFAULTS.sqlServiceUrl; EVENTS_SERVICE_URL = SETTING_DEFAULTS.eventsServiceUrl;
   envOverrides.clear();
 }
+
+/** Explicit company bootstrap identity; changes never replace the persisted owner. */
+export function deploymentConfig():{mode:'public'|'company';ownerEmail:string|undefined} {
+ const mode=env('APP','DEPLOYMENT_MODE')??'public';
+ if(mode!=='public'&&mode!=='company')throw new Error('APP__DEPLOYMENT_MODE must be public or company.');
+ const ownerEmail=env('APP','DEPLOYMENT_OWNER_EMAIL')?.trim().toLowerCase();
+ if(mode==='company'&&(!ownerEmail||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)))throw new Error('Company deployment requires APP__DEPLOYMENT_OWNER_EMAIL.');
+ return {mode,ownerEmail};
+}
+export function deploymentAdmissionSettings():Record<string,string|undefined> {
+ return {AUTH__INVITE_ONLY:env('AUTH','INVITE_ONLY'),AUTH__ALLOWED_EMAIL_PATTERNS:env('AUTH','ALLOWED_EMAIL_PATTERNS')};
+}

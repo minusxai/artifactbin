@@ -1,3 +1,4 @@
+import {canUseDeploymentIdentity} from '../deployment';
 /**
  * Agent bearer tokens: prefix + 256 random bits, shown exactly once, only the
  * sha256 stored in a unique-indexed column, soft revoke via deleted_at —
@@ -159,7 +160,7 @@ export async function resolveToken(presented: string): Promise<ResolvedToken | n
     [sha256(presented)],
   );
   const row = r.rows[0];
-  return row && await canAuthenticateUser(row.user_id, db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
+  return row && await canUseDeploymentIdentity(row.user_id,db) && await canAuthenticateUser(row.user_id, db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
 }
 
 /** Remember a declared/observed agent harness for attribution on later stateless calls. */
@@ -187,7 +188,7 @@ export async function resolveTokenById(id: string): Promise<ResolvedToken | null
     [id],
   );
   const row = r.rows[0];
-  return row ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
+  return row && await canUseDeploymentIdentity(row.user_id,db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
 }
 
 /**

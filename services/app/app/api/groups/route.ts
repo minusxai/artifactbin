@@ -1,4 +1,4 @@
-import {groupRoute} from '@/lib/groups/http';
+import {groupRoute} from '@/lib/group-routes';
 import {createGroup,listGroups} from '@/lib/groups';
 import {json,readJson} from '@/lib/http';
 export const GET=groupRoute(async(_request,userId)=>json({groups:await listGroups(userId)}),true);
