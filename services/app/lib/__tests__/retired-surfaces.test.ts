@@ -23,8 +23,8 @@ import { renderTree, skillTree } from '@/lib/skills';
 import { buildQuickSheet } from '@/test/helpers/skill-docs';
 import { JSX_TIER_COMPONENTS } from '@/lib/publish/document/jsx-tier';
 import { CONTEXT_TAG, HELMET_TAG } from '@/lib/document/helmet';
-import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, VALUE_TAG } from '@/lib/dataflow/dataflow';
-import { QUERY_TAG } from '@/lib/dataflow/dataflow';
+import { parseDeclaration } from '@/lib/dataflow/dataflow';
+import { parseJsx, type JsxElement } from '@/lib/jsx';
 import teaching from '../../../cli/src/generated/teaching.json';
 
 const BASE = 'https://example.test';
@@ -123,7 +123,12 @@ describe('no teaching surface names a retired one', () => {
  * validation cannot drift apart.
  */
 describe('the components we promise to agents', () => {
-  const KNOWN = new Set<string>([...JSX_TIER_COMPONENTS, HELMET_TAG, CONTEXT_TAG, IMPORT_TAG, VALUE_TAG, QUERY_TAG, MUTATION_TAG, NOTIFY_TAG]);
+  const KNOWN = new Set<string>([...JSX_TIER_COMPONENTS, HELMET_TAG, CONTEXT_TAG]);
+  /** A Helmet data declaration's tag, as the declaration parser itself answers it. */
+  const declares = (name: string) => {
+    const parsed = parseJsx(`<${name} />`);
+    return parsed.ok && parseDeclaration(parsed.nodes[0] as JsxElement) !== null;
+  };
   const AGENT_FACING = ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/SKILL.md'];
   const rendered = (path: string) => renderTree(skillTree(), BASE).find(({ file }) => file.path === path)!.text;
   /** Capitalized JSX-shaped tags named in that prose: `<Name>`, `<Name …`, `</Name>`. */
@@ -131,7 +136,7 @@ describe('the components we promise to agents', () => {
 
   it.each(AGENT_FACING)('%s names only components that exist', (path) => {
     const named = componentsNamed(rendered(path));
-    expect(named.filter((name) => !KNOWN.has(name)), `${path} documents component(s) the registry does not have`).toEqual([]);
+    expect(named.filter((name) => !KNOWN.has(name) && !declares(name)), `${path} documents component(s) the registry does not have`).toEqual([]);
   });
 
   it('is actually looking at something (the scan cannot silently find nothing)', () => {

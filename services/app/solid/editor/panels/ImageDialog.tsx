@@ -20,7 +20,7 @@ import Link2 from 'lucide-solid/icons/link-2';
 import X from 'lucide-solid/icons/x';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { FeatureGate } from '@/solid/components/FeatureGate';
-import { imageRawUrl } from '@/lib/dataflow/ref-data';
+import { rawUrl } from '@/lib/dataflow/ref-data';
 import type { ChosenImage, ImageChoice } from '@/lib/artifact-backend/types';
 import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 
@@ -232,7 +232,7 @@ export default function ImageDialog(props: {
           <Show when={chosen()}>
             {(image) => (
               <figure class="flex justify-center rounded-md bg-raised p-2">
-                <img src={imageRawUrl(image().id, 1)} alt="Preview of the chosen image" class="max-h-48 max-w-full rounded object-contain" />
+                <img src={rawUrl(image().id, 1)} alt="Preview of the chosen image" class="max-h-48 max-w-full rounded object-contain" />
               </figure>
             )}
           </Show>

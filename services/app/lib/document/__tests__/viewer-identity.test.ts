@@ -8,8 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
 import { collectRefNameUses, type Dataflow } from '@/lib/dataflow';
-import { validateDataflow } from '@/lib/dataflow/dataflow';
-import { parseValueDecl } from '@/lib/dataflow/dataflow';
+import { parseDeclaration, validateDataflow } from '@/lib/dataflow/dataflow';
 import { PERSON_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
@@ -33,8 +32,8 @@ describe('$_me in markup', () => {
   });
 
   it('still cannot be declared by an author', () => {
-    const declared = parseValueDecl(nodes('<Value name="_me" type="string" />')[0] as never);
-    expect(declared.ok).toBe(false);
+    const declared = parseDeclaration(nodes('<Value name="_me" type="string" />')[0] as never);
+    expect(declared).toHaveProperty('errors');
   });
 });
 

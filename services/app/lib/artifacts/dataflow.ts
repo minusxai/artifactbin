@@ -7,7 +7,7 @@ import { JOIN_RELATIONS } from '../accounts';
 import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import { storedMediaReferences } from '../datasets/media-references';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
-import { type DataflowState, imageRawUrl, imageRefData, pdfRawUrl, EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';
+import { type DataflowState, imageRefData, rawUrl, EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';
 import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
 import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from './capabilities';
 import { pinMutationContext, type MutationReceipt } from './mutation-receipt';
@@ -780,7 +780,7 @@ export async function refDataForRow(
     } else if (r.format === 'image') {
       out[r.id] = imageRefData(r,opts.capture);
     } else if (r.format === 'file') {
-      out[r.id]={kind:'file',url:imageRawUrl(r.id,r.version)};
+      out[r.id]={kind:'file',url:rawUrl(r.id,r.version)};
     } else if (r.format === 'pdf') {
       // What the CARD says: where the file is, what it is called, how big it is
       // and how long. The name is the artifact's title (the author's, or the
@@ -788,7 +788,7 @@ export async function refDataForRow(
       const pm = r.meta as { bytes?: unknown; pages?: unknown } | null;
       out[r.id] = {
         kind: 'pdf',
-        url: pdfRawUrl(r.id, r.version),
+        url: rawUrl(r.id, r.version),
         name: displayTitle(r),
         bytes: typeof pm?.bytes === 'number' ? pm.bytes : 0,
         ...(typeof pm?.pages === 'number' ? { pages: pm.pages } : {}),
