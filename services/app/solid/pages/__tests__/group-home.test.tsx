@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
-import { MemoryRouter, Route } from '@solidjs/router';
+import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
 import { HomePage } from '../Home';
 import { CompanySetup } from '../CompanySetup';
@@ -24,4 +24,12 @@ it('requires explicit confirmation after selecting a company group',async()=>{
  render(()=> <CompanySetup deployment={{mode:'company',setup_complete:false,is_owner:true,default_group:null}} complete={complete}/>);
  await screen.findByRole('option',{name:'Team'});fireEvent.change(screen.getByRole('combobox',{name:'Company group'}),{target:{value:'g1'}});expect(fetcher.mock.calls.filter(([url])=>url.includes('/setup'))).toHaveLength(0);
  fireEvent.click(screen.getByRole('button',{name:'Confirm company setup'}));await waitFor(()=>expect(complete).toHaveBeenCalledOnce());expect(fetcher).toHaveBeenCalledWith('/api/deployment/setup',expect.objectContaining({method:'POST',body:JSON.stringify({group_id:'g1'})}));
+});
+
+it('retains explicit Personal recovery for an admitted account when the company default is deleted',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>Response.json(url.includes('/session')?session:url==='/api/deployment'?{mode:'company',setup_complete:false,is_owner:false,default_group:null}:url==='/api/me/preferences'?{default_destination:{type:'inherit'}}:{signedIn:true,accountId:'u1',artifacts:[],shared:[]})));
+ const history=createMemoryHistory();history.set({value:'/?personal=1',replace:true});
+ render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);
+ expect(await screen.findByRole('heading',{name:/create your first artifact/i})).toBeInTheDocument();
+ expect(screen.queryByText('Your deployment owner needs to finish setup before you can continue.')).toBeNull();
 });

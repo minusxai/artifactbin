@@ -3,6 +3,7 @@ import { createSignal, For, Show, type JSX } from 'solid-js';
 import type { GroupDetail, GroupRole } from '@artifactbin/contracts';
 import type { AccountWorkspaceCore } from '@/lib/workspace/dashboard';
 import { buildGroupSetupInstructions } from '@/lib/platform/setup-instructions';
+import { copyText } from '../lib/copy-text';
 import { apiRequest } from '../lib/api';
 import { usePageData } from '../lib/use-page-data';
 import Shelf from '../components/Shelf';
@@ -15,7 +16,7 @@ export function GroupPage(props: { identity: string }): JSX.Element {
  const [error,setError]=createSignal(''); const [copied,setCopied]=createSignal(false);
  const refresh=()=>{void detail.refresh(true);void shelf.refresh(true);};
  const makeDefault=async()=>{try {await apiRequest('/api/me/preferences','PUT',{default_destination:{type:'group',id:detail.data()!.group.id}});window.location.assign('/');}catch(e){setError(e instanceof Error?e.message:'Could not set default.');}};
- const copy=async()=>{try{await navigator.clipboard.writeText(buildGroupSetupInstructions({serverOrigin:window.location.origin,groupHandle:detail.data()!.group.handle}));setCopied(true);}catch{setError('Could not copy instructions.');}};
+ const copy=async()=>{try{if(await copyText(buildGroupSetupInstructions({serverOrigin:window.location.origin,groupHandle:detail.data()!.group.handle})))setCopied(true);else setError('Could not copy instructions.');}catch{setError('Could not copy instructions.');}};
  return <main class={HOME_WORKSPACE_COLUMN}><Show when={detail.data()} fallback={<div class="p-8"><Show when={detail.error()} fallback={<p role="status">Loading group…</p>}><p role="alert">This group is unavailable. Your default may no longer be accessible.</p><a href="/?personal=1">Open Personal</a><button type="button" onClick={()=>void detail.refresh(true)}>Retry group</button></Show></div>}>
  {value=><WorkspaceShell onCreated={refresh} groupId={value().group.id} canCreate={value().group.role==='editor'}><div class="workspace-page">
  <header class="mb-6"><a href="/?personal=1">Personal</a><h1 class="mt-3 text-3xl font-semibold">{value().group.name}</h1><p class="text-muted">@{value().group.handle}</p><p>{value().group.description}</p><div class="mt-3 flex gap-4"><button type="button" onClick={()=>void makeDefault()}>Use as Home</button><button type="button" onClick={()=>void copy()}>{copied()?'Instructions copied':'Copy agent setup'}</button></div></header>
