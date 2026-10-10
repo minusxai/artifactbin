@@ -3,6 +3,9 @@ import { createHash, randomBytes } from 'node:crypto';
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE,type Queryable} from '@artifactbin/contracts';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
+/** The first-party CLI's no-click loopback sign-in: a sentinel client id, never a registered row, and a one-minute code. */
+export const LOOPBACK_CLIENT_ID = 'afbin';
+export const LOOPBACK_CODE_TTL_MS = 60 * 1000;
 // Daily access tokens; longer-lived rotating refresh credentials preserve the connection.
 export const ACCESS_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -21,6 +24,18 @@ export function isAllowedRedirectUri(uri: string): boolean {
   if (url.hash || url.username || url.password) return false;
   if (url.protocol === 'https:') return true;
   return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
+}
+
+/**
+ * RFC 8252 loopback redirect for the first-party CLI, and nothing wider: plain HTTP to the IP literal
+ * 127.0.0.1 or [::1] with an explicit port and a path, written canonically (so an exact string
+ * comparison at exchange is meaningful). No `localhost`, no other host, no HTTPS, no query, no fragment.
+ */
+export function isLoopbackRedirectUri(uri: string): boolean {
+  let url: URL;
+  try { url = new URL(uri); } catch { return false; }
+  return url.href === uri && url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '[::1]')
+    && url.port !== '' && !url.username && !url.password && !url.search && !url.hash && uri.length <= 512;
 }
 
 export const isValidCodeChallenge = (value: string): boolean => /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -68,7 +83,7 @@ interface RefreshGrant {
 export interface OAuthStore {
   register(body: Record<string, unknown>): Promise<Record<string, unknown>>;
   client(clientId: string): Promise<OAuthClient | null>;
-  issueAuthorizationCode(grant: AuthorizationGrant, codeChallenge: string, now?: number): Promise<string>;
+  issueAuthorizationCode(grant: AuthorizationGrant, codeChallenge: string, now?: number, ttlMs?: number): Promise<string>;
   consumeAuthorizationCode(input: { code: string; clientId: string; redirectUri: string; resource: string; codeVerifier: string }, now?: number): Promise<AuthorizationGrant | null>;
   issueRefresh(grant: Omit<RefreshGrant, 'token'> & { accessTokenId: string }): Promise<string>;
   rotateRefresh(token: string, clientId: string, resource: string): Promise<RefreshGrant | null>;
@@ -128,12 +143,12 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
         redirectUris: Array.isArray(metadata.redirect_uris) ? metadata.redirect_uris.filter((uri): uri is string => typeof uri === 'string') : [],
       };
     },
-    async issueAuthorizationCode(grant, codeChallenge, now = Date.now()) {
+    async issueAuthorizationCode(grant, codeChallenge, now = Date.now(), ttlMs = AUTH_CODE_TTL_MS) {
       await sweep();
       const code = randomBytes(24).toString('base64url');
       await db.query(
         `INSERT INTO ${credentials} (kind, credential_hash, subject_id, payload, expires_at) VALUES ($1, $2, $3, $4, $5)`,
-        [AUTHORIZATION_CODE, hash(code), grant.userId, JSON.stringify({ client_id: grant.clientId, redirect_uri: grant.redirectUri, resource: grant.resource, scope: grant.scope, code_challenge: codeChallenge }), new Date(now + AUTH_CODE_TTL_MS).toISOString()],
+        [AUTHORIZATION_CODE, hash(code), grant.userId, JSON.stringify({ client_id: grant.clientId, redirect_uri: grant.redirectUri, resource: grant.resource, scope: grant.scope, code_challenge: codeChallenge }), new Date(now + Math.min(ttlMs, AUTH_CODE_TTL_MS)).toISOString()],
       );
       return code;
     },
@@ -211,8 +226,8 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
   };
 }
 
-export const createAuthCode = (store: OAuthStore, grant: AuthorizationGrant, codeChallenge: string, now = Date.now()): Promise<string> =>
-  store.issueAuthorizationCode(grant, codeChallenge, now);
+export const createAuthCode = (store: OAuthStore, grant: AuthorizationGrant, codeChallenge: string, now = Date.now(), ttlMs?: number): Promise<string> =>
+  store.issueAuthorizationCode(grant, codeChallenge, now, ttlMs);
 export const consumeAuthCode = (store: OAuthStore, input: { code: string; clientId: string; redirectUri: string; resource: string; codeVerifier: string }, now = Date.now()): Promise<AuthorizationGrant | null> =>
   store.consumeAuthorizationCode(input, now);
 
@@ -226,6 +241,9 @@ export const authServerMetadata = (base: string): Record<string, unknown> => ({
   scopes_supported: [ARTIFACT_SCOPE],
   code_challenge_methods_supported: ['S256'],
   token_endpoint_auth_methods_supported: ['none'],
+  // The afbin CLI's no-click sign-in (RFC 8252 loopback + PKCE). A CLI finding these absent keeps the device flow.
+  cli_loopback_authorization_endpoint: `${base}/oauth/loopback`,
+  cli_loopback_token_endpoint: `${base}/oauth/loopback/token`,
 });
 export const protectedResourceMetadata = (base: string): Record<string, unknown> => ({
   resource: `${base}${API_RESOURCE_PATH}`,

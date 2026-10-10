@@ -13,7 +13,7 @@ Direct integrations use email verification, not a browser-approval flow:
 
 All JSON calls send `Content-Type: application/json`. For the session-authenticated steps, send the selected server's `Origin`; do not put secrets in URLs, source files or logs. OTP sending retains the existing email rate limits and verification protections. Token responses use `Cache-Control: no-store`. A session response's cookies are credentials; keep the cookie jar private.
 
-CLI authentication deliberately has a different entry experience: `afbin auth` opens browser approval (email login required); `auth --email <email>` uses email OTP and a refreshable CLI device grant. Existing CLI capabilities remain usable through HTTP. A server cannot identify CLI versus curl from a User-Agent or caller-supplied header; this distinction is enforced at the token issuance door, not by pretending that valid CLI bearer requests are not HTTP requests.
+CLI authentication deliberately has a different entry experience: `afbin auth` opens the browser (a browser signed in on the same machine connects with no click; email login required); `auth --email <email>` uses email OTP and a refreshable CLI device grant. Existing CLI capabilities remain usable through HTTP. A server cannot identify CLI versus curl from a User-Agent or caller-supplied header; this distinction is enforced at the token issuance door, not by pretending that valid CLI bearer requests are not HTTP requests.
 
 ## Artifact operations
 

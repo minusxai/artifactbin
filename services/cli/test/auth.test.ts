@@ -54,7 +54,8 @@ test('afbin auth with no saved token runs the browser approval flow and saves th
   });
   assert.equal(code,0,output.join(''));
   assert.deepEqual(JSON.parse(output.join('')),{authenticated:true,server:origin});
-  assert.deepEqual(calls,['/api/server','/oauth/device','/oauth/device/token']);
+  // The loopback sign-in is asked for first; a server that does not advertise it keeps the device page.
+  assert.deepEqual(calls,['/api/server','/.well-known/oauth-authorization-server','/oauth/device','/oauth/device/token']);
   assert.equal((await loadConnection(origin,home,{}))?.token,'new_access');
  }finally{await rm(home,{recursive:true,force:true});}
 });
@@ -70,7 +71,8 @@ test('afbin auth --force runs browser approval over a valid saved token and repl
   });
   assert.equal(code,0,output.join(''));
   assert.deepEqual(JSON.parse(output.join('')),{authenticated:true,server:origin});
-  assert.deepEqual(calls,['/api/server','/oauth/device','/oauth/device/token']);
+  // The loopback sign-in is asked for first; a server that does not advertise it keeps the device page.
+  assert.deepEqual(calls,['/api/server','/.well-known/oauth-authorization-server','/oauth/device','/oauth/device/token']);
   assert.equal(opened,1);
   assert.equal((await loadConnection(origin,home,{}))?.token,'new_access');
  }finally{await rm(home,{recursive:true,force:true});}
@@ -171,7 +173,7 @@ describe('browser device approval', () => {
       assert.equal(connection.token,'mx_access');
       assert.deepEqual(await loadConnection(connection.server,home,{}),connection);
       assert.equal(calls.filter(x=>x==='/oauth/device').length,1);
-      assert.ok(calls.every(x=>x.startsWith('/oauth/')));
+      assert.ok(calls.every(x=>x.startsWith('/oauth/')||x==='/.well-known/oauth-authorization-server'),'no validation GET');
     } finally {await rm(home,{recursive:true,force:true});}
   });
 
@@ -219,9 +221,9 @@ describe('which origin the approval uses', () => {
       },
      });
      assert.equal(code,0);
-     // Three requests, ONE origin: the identity document, the pairing and the token exchange all
-     // go to the origin this command selected, and to nothing else.
-     assert.deepEqual(calls,[selected,selected,selected]);
+     // Four requests, ONE origin: the identity document, the loopback probe, the pairing and the token
+     // exchange all go to the origin this command selected, and to nothing else.
+     assert.deepEqual(calls,[selected,selected,selected,selected]);
      assert.equal(JSON.parse(output.join('')).server,selected);
     }finally{await rm(home,{recursive:true,force:true});}
    });

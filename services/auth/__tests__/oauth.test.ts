@@ -481,3 +481,135 @@ it('words the unavailable device page by cause: expired, already approved, denie
   expect(refused.status).toBe(400);
   expect(refused.html).toContain('Connection denied');
 });
+
+describe('the afbin CLI loopback sign-in (RFC 8252 + PKCE, no approval click)', () => {
+  const LOOPBACK = 'http://127.0.0.1:9987/callback';
+  const authorizeUrl = (redirectUri = LOOPBACK, extra: Record<string, string> = {}) => `/oauth/loopback?${new URLSearchParams({ redirect_uri: redirectUri, code_challenge: s256(verifier), code_challenge_method: 'S256', state: 'st', ...extra })}`;
+  const exchange = (body: Record<string, unknown>) => app.request('/oauth/loopback/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const codeFor = async (redirectUri = LOOPBACK) => {
+    const response = await app.request(authorizeUrl(redirectUri), { headers: asUser() });
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get('location')!);
+    expect(`${location.origin}${location.pathname}`).toBe(redirectUri);
+    expect(location.searchParams.get('state')).toBe('st');
+    return location.searchParams.get('code')!;
+  };
+
+  it('advertises the loopback endpoints beside the standard metadata', async () => {
+    const md = await (await app.request('/.well-known/oauth-authorization-server')).json() as Record<string, unknown>;
+    expect(md).toMatchObject({ cli_loopback_authorization_endpoint: `${BASE}/oauth/loopback`, cli_loopback_token_endpoint: `${BASE}/oauth/loopback/token` });
+  });
+
+  it('a signed-in browser is redirected straight back to the loopback with a one-minute, single-use code; the exchange issues what the device flow issues', async () => {
+    const code = await codeFor();
+    const ttl = await testDb().query("SELECT extract(epoch FROM expires_at - now())::int AS s FROM auth.credentials WHERE kind = 'authorization_code'");
+    expect(Number(ttl.rows[0]?.s)).toBeLessThanOrEqual(60);
+    session = null;
+    const response = await exchange({ code, code_verifier: verifier, redirect_uri: LOOPBACK });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const loopback = await response.json() as Record<string, unknown>;
+    // The device grant for the same account, for comparison.
+    const pair = await (await app.request('/oauth/device', { method: 'POST' })).json() as { user_code: string; device_code: string };
+    expect((await app.request('/oauth/device/approve', { method: 'POST', headers: { ...asUser(), origin: BASE }, body: new URLSearchParams({ user_code: pair.user_code }) })).status).toBe(200);
+    const device = await (await app.request('/oauth/device/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_code: pair.device_code }) })).json() as Record<string, unknown>;
+    expect(Object.keys(loopback).sort()).toEqual(Object.keys(device).sort());
+    expect(loopback).toMatchObject({ access_token: expect.stringMatching(/^mx_/), refresh_token: expect.stringMatching(/^mxr_/), client_id: expect.stringMatching(/^afbin_/), token_type: 'Bearer', expires_in: device.expires_in, scope: device.scope });
+    const row = async (token: unknown) => (await testDb().query('SELECT name, user_id, audience, scope FROM tokens WHERE token_hash = $1', [hashToken(String(token))])).rows[0];
+    expect(await row(loopback.access_token)).toEqual(await row(device.access_token));
+    const client = async (id: unknown) => (await testDb().query("SELECT metadata->>'client_name' AS name FROM auth.clients WHERE id = $1", [id])).rows[0];
+    expect(await client(loopback.client_id)).toEqual(await client(device.client_id));
+    const refreshed = await app.request('/oauth/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ grant_type: 'refresh_token', client_id: loopback.client_id, refresh_token: loopback.refresh_token, resource: RESOURCE }) });
+    expect(refreshed.status).toBe(200);
+    const reuse = await exchange({ code, code_verifier: verifier, redirect_uri: LOOPBACK });
+    expect(reuse.status).toBe(400);
+    expect(await reuse.json()).toMatchObject({ error: 'invalid_grant' });
+  });
+
+  it('accepts the IPv6 loopback literal', async () => {
+    const code = await codeFor('http://[::1]:9987/callback');
+    expect((await exchange({ code, code_verifier: verifier, redirect_uri: 'http://[::1]:9987/callback' })).status).toBe(200);
+  });
+
+  it('refuses every redirect that is not an http IP-literal loopback with a port, and issues no code', async () => {
+    for (const redirect of ['http://evil.example:9987/callback', 'https://127.0.0.1:9987/callback', 'https://client.example/cb', 'http://localhost:9987/callback',
+      'http://127.0.0.1/callback', 'http://127.0.0.1:9987/callback?next=x', 'http://127.0.0.1:9987/callback#x', 'http://user@127.0.0.1:9987/callback',
+      'http://127.0.0.2:9987/callback', 'http://[::2]:9987/callback', 'http://127.0.0.1.evil.example:9987/callback', 'http://0x7f.0.0.1:9987/callback', 'javascript:alert(1)', '']) {
+      const response = await app.request(authorizeUrl(redirect), { headers: asUser() });
+      expect(response.status, redirect).toBe(400);
+      expect(response.headers.get('location'), redirect).toBeNull();
+    }
+    expect((await testDb().query("SELECT 1 FROM auth.credentials WHERE kind = 'authorization_code'")).rows).toHaveLength(0);
+  });
+
+  it('refuses a missing or plain PKCE challenge', async () => {
+    for (const extra of [{ code_challenge: '' }, { code_challenge_method: 'plain' }, { code_challenge_method: '' }, { code_challenge: 'short' }] as Record<string, string>[]) {
+      const response = await app.request(authorizeUrl(LOOPBACK, extra), { headers: asUser() });
+      expect(response.status, JSON.stringify(extra)).toBe(400);
+      expect(response.headers.get('location')).toBeNull();
+    }
+  });
+
+  it('refuses a wrong verifier, a different redirect_uri, a missing verifier and an expired code', async () => {
+    const wrong = await exchange({ code: await codeFor(), code_verifier: 'w'.repeat(43), redirect_uri: LOOPBACK });
+    expect(await wrong.json()).toMatchObject({ error: 'invalid_grant' });
+    // Exact redirect_uri: another port of the same loopback is not the same target here.
+    const moved = await exchange({ code: await codeFor(), code_verifier: verifier, redirect_uri: 'http://127.0.0.1:9988/callback' });
+    expect(await moved.json()).toMatchObject({ error: 'invalid_grant' });
+    const otherPath = await exchange({ code: await codeFor(), code_verifier: verifier, redirect_uri: 'http://127.0.0.1:9987/other' });
+    expect(await otherPath.json()).toMatchObject({ error: 'invalid_grant' });
+    const missing = await exchange({ code: await codeFor(), redirect_uri: LOOPBACK });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toMatchObject({ error: 'invalid_request' });
+    const expired = await codeFor();
+    await testDb().query("UPDATE auth.credentials SET expires_at = now() - interval '1 second' WHERE kind = 'authorization_code' AND consumed_at IS NULL");
+    expect(await (await exchange({ code: expired, code_verifier: verifier, redirect_uri: LOOPBACK })).json()).toMatchObject({ error: 'invalid_grant' });
+    expect((await testDb().query('SELECT id FROM tokens')).rows).toHaveLength(0);
+  });
+
+  it('keeps loopback codes and third-party codes apart', async () => {
+    const loopbackCode = await codeFor();
+    const clientId = await register();
+    const viaStandard = await app.request('/oauth/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ grant_type: 'authorization_code', client_id: clientId, code: loopbackCode, code_verifier: verifier, redirect_uri: LOOPBACK, resource: RESOURCE }) });
+    expect(await viaStandard.json()).toMatchObject({ error: 'invalid_grant' });
+    const thirdParty = await approve(clientId);
+    expect(await (await exchange({ code: thirdParty, code_verifier: verifier, redirect_uri: REDIRECT })).json()).toMatchObject({ error: 'invalid_grant' });
+  });
+
+  it('sends a logged-out browser through login, then completes with no approval page', async () => {
+    const anonymous = await app.request(authorizeUrl());
+    expect(anonymous.status).toBe(302);
+    const login = new URL(anonymous.headers.get('location')!, BASE);
+    expect(login.pathname).toBe('/login');
+    const callback = login.searchParams.get('callbackUrl')!;
+    expect(callback).toBe(authorizeUrl());
+    const after = await app.request(callback, { headers: asUser() });
+    expect(after.status).toBe(302);
+    expect(new URL(after.headers.get('location')!).searchParams.get('code')).toBeTruthy();
+  });
+
+  it('afbin auth completes against a signed-in browser with no click and saves the connection the device flow saves', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'afbin-loopback-'));
+    const paths: string[] = [];
+    const request: typeof fetch = async (input, init) => { const req = new Request(input, init); paths.push(new URL(req.url).pathname); return app.fetch(req); };
+    let browser: Promise<{ status: number; text: string }> | undefined;
+    try {
+      const connection = await browserAuthenticate(BASE, { home, env: {}, interactive: false, fetch: request, notify: () => {}, open: async url => {
+        // The signed-in browser: the authorize page redirects to the CLI's own listener.
+        browser = (async () => {
+          const authorized = await app.request(url, { headers: asUser() });
+          const location = authorized.headers.get('location')!;
+          expect(new URL(location).hostname).toMatch(/^(127\.0\.0\.1|\[::1\])$/);
+          const landed = await fetch(location);
+          return { status: landed.status, text: await landed.text() };
+        })();
+      } });
+      expect(await browser).toMatchObject({ status: 200, text: expect.stringContaining('Signed in — you can close this tab') });
+      expect(paths).not.toContain('/oauth/device');
+      expect(paths).toContain('/oauth/loopback/token');
+      expect(connection).toMatchObject({ server: BASE, token: expect.stringMatching(/^mx_/), refreshToken: expect.stringMatching(/^mxr_/), clientId: expect.stringMatching(/^afbin_/), expiresAt: expect.any(Number) });
+      expect(await loadConnection(BASE, home, {})).toEqual(connection);
+      expect(await createTokenReader({ db: { query: testDb().query } }).byToken(connection.token)).toMatchObject({ userId: 'usr_1', audience: RESOURCE, scope: 'artifacts' });
+    } finally { await rm(home, { recursive: true, force: true }); }
+  });
+});

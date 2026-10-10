@@ -12,11 +12,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { atomicWrite, digest, privateDirectory, readOptional } from './files';
 import { loadConnection, normalizeServer, saveConnection, type Connection } from './config';
 import {withLock} from './state';
+import {AGENT_APPROVAL_WAIT_MS,loopbackAuthenticate} from './loopback-auth';
 
 interface Pending { artifactId?: string; connectionKey?: string; server: string; deviceCode: string; userCode: string; verificationUrl: string; expiresAt: number; interval: number }
 interface DeviceResponse { authorized?: boolean; device_code: string; user_code: string; verification_uri_complete: string; expires_in: number; interval: number }
-/** An unattended agent gives up polling for approval after this bound, failing fast with an actionable error instead of holding the full device-code window. */
-const AGENT_APPROVAL_WAIT_MS = 45_000;
 const EMAIL_AUTH_HINT = 'On a chat or phone, or if a browser is unavailable, run afbin auth --email <email> and ask the user for the code (add --server <origin> for another server).';
 export class ApprovalRequired extends Error {
   readonly code = 'approval_required';
@@ -62,9 +61,19 @@ export async function browserAuthenticate(origin:string,options:AuthOptions):Pro
  const home=options.home??homedir();
  return withLock(home,`auth:${server}`,async()=>{
   const saved=await loadConnection(server,home,{ARTIFACTBIN_HOME:configDir(home,options.env)});
+  // Artifact consent proves the OWNING browser may connect this artifact and replaces the saved
+  // connection: that decision stays an explicit click on the device page.
   if(options.artifactId)return deviceAuthenticate(server,{...options,connection:saved??undefined});
  if(saved&&!options.fresh&&saved.token!==options.rejectedToken&&(!saved.expiresAt||saved.expiresAt>(options.now??Date.now)()))return saved;
-  // The same browser approval supports guests in terminals and unattended agents.
+  // A browser on this machine that is already signed in connects with no click (loopback + PKCE).
+  // A kept pairing is collected first: it may already be approved on another device.
+  const pairingFile=join(configDir(home,options.env),`pairing-${digest(server).slice(0,16)}.json`);
+  if(options.fresh||!await keptPairing(pairingFile,server,options.now??Date.now)){
+   const connection=await loopbackAuthenticate(server,{home,env:options.env,interactive:options.interactive,aliases:options.aliases,fetch:options.fetch,now:options.now,sleep:options.sleep,
+    open:options.open??openBrowser,notify:options.notify??(message=>process.stderr.write(`${message}\n`))});
+   if(connection){await unlink(pairingFile).catch(()=>{});return connection;}
+  }
+  // Remote, headless or unanswered: the device page, approved on any device.
   return deviceAuthenticate(server,options);
  },{waitMs:300000});
 }
@@ -184,6 +193,10 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   }
   await unlink(file);
   throw new CliError('approval_expired','Browser approval timed out.',EMAIL_AUTH_HINT);
+}
+async function keptPairing(file:string,server:string,clock:()=>number):Promise<boolean>{
+ try{const raw=await readOptional(file);if(!raw)return false;const value=JSON.parse(raw.toString()) as Pending;return value.server===server&&Number.isFinite(value.expiresAt)&&value.expiresAt>clock();}
+ catch{return false;}
 }
 function validPending(value: Pending, server: string, approvalOrigins: readonly string[] = [server]): boolean {
   if (!value || value.server !== server || typeof value.deviceCode !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.deviceCode)
