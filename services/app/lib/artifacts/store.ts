@@ -1,8 +1,8 @@
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type Scope } from './access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type Scope } from './table';
 import type { TokenActor } from '@/lib/accounts';
-import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
+import { compiledForRow, isEmptyCompiled } from './row-compile';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import { commitDocumentUpdate, openAnnotationsSql } from './write/document-update-write';
@@ -15,7 +15,6 @@ import type { DocumentOperation } from '@artifactbin/contracts';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '@/lib/accounts';
 import { documentMentions } from './membership/document-mentions';
-import { grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import { claimArtifactId } from './identities';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
 import { validateUserContent, retainUserScope, resolveUserColumnScope } from '@/lib/datasets/user-fields';
@@ -43,7 +42,6 @@ import { emitHeadCommitted } from './after-commit';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
-import type { ServerRef, ServerRefLoader } from '@/lib/datasets/schema-loader';
 import type { DatasetColumn } from '@/lib/dataflow';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
@@ -304,11 +302,6 @@ async function insertArtifact(
   return created.rows[0];
 }
 
-export async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND group_id IS NULL AND token_id = $2 AND (user_id IS NULL OR user_id=(SELECT user_id FROM tokens WHERE tokens.id=$2)) AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
-}
-
 async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
   const db = await getDb();
   const r = await db.query<ArtifactSummary>(
@@ -316,16 +309,6 @@ async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
     [scope.val],
   );
   return r.rows;
-}
-
-/**
- * Unscoped read for the public serving paths (/a/<id> and its sub-routes).
- * The id is an ADDRESS, not a credential — whether this viewer may see the
- * row is the caller's decision (the visibility ACL), made before serving.
- */
-export async function getArtifactById(id: string): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id]);
 }
 
 interface VersionSummary {
@@ -365,7 +348,6 @@ async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void
 /** The two actor columns a write stamps, in the order every statement binds them. */
 const actorStamp = (actor: TokenActor): [string | null, string | null] => [actor.userId, actor.tokenId || null];
 
-const SHARES_PROJECTION="COALESCE((SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=artifacts.id),'[]'::jsonb) AS shares";
 export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Promise<{shares:ShareEntry[];sharing_revision:number}>{
  const normalized=[...new Map(shares.map(entry=>[entry.email.trim().toLowerCase(),entry.role])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([email,role])=>({email,role}));
  const current=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
@@ -378,10 +360,6 @@ export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Pr
  }
  const row=(await tx.query<{sharing_revision:number}>('SELECT sharing_revision FROM artifacts WHERE id=$1',[id])).rows[0];
  return {shares:normalized,sharing_revision:row.sharing_revision};
-}
-async function getArtifactScoped(scope: Scope, id: string): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  return loadArtifactDocument<ArtifactRow>(db,`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
 }
 
 /**
@@ -466,16 +444,6 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
 export function versionToWire(row: VersionContent): Record<string, unknown> {
   const { source, ...rest } = row;
   return { ...rest, markup: source };
-}
-
-/**
- * The head an EDITOR reads to edit (the CLI pull, the browser editor's load):
- * one the current code no longer reads throws UnservableDocument
- * (lib/artifacts/servable), so an author never edits a retired shape.
- */
-export async function getEditableArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
-  const row = await getArtifactFor(actor, id);
-  return row && servableDocument(row);
 }
 
 /**
@@ -921,48 +889,10 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     return {applied:true,row};
   }
 
-
   return json({error:'jsonb_operations_required',hint:'Prepare document_update from the graph returned by the last read. Use the current CLI or browser editor.'},400);
 }
 
 // ── The reference graph ──────────────────────────────────────────────────────
-
-/**
- * A ref target ANY caller may use: link-readable, exactly the anonymous
- * viewer's cut of canReadArtifact. Assets and documents routinely land under
- * different identities (two agent sessions each on their own anonymous token;
- * an unclaimed upload referenced from an account-owned doc), and anonymous
- * assets are born public — so ownership-scoping made "publish the image, then
- * reference it" fail for no reason the user could see. PRIVATE stays invisible
- * cross-identity: the same uniform "does not resolve" as a nonexistent id,
- * never an existence oracle.
- */
-export async function getLinkReadableArtifact(id: string): Promise<ArtifactRow | null> {
-  const row = await getArtifactById(id);
-  return row && (grantsOf(row)?await grantsPermitRead(row,{userId:null,tokenId:null}):row.visibility !== 'private') ? row : null;
-}
-
-/** Resolve a `ref:<id>`: the caller's own artifacts, then anything link-readable. */
-export function refLoaderFor(tokenId: string): ServerRefLoader {
-  return async (id: string): Promise<ServerRef | null> => {
-    // `owned` records WHICH branch answered: a read is happy either way, a
-    // <Mutation> is admitted only for the caller's own (lib/dataflow/refs).
-    const own = await getArtifact(tokenId, id);
-    const row = own ?? (await getLinkReadableArtifact(id));
-    if (!row) return null;
-    return rowToResolvedRef(row, !!own);
-  };
-}
-
-/** Same, scoped by account (the session-authed /api/my routes) before the link-readable fallback. */
-export function refLoaderForUser(userId: string): ServerRefLoader {
-  return async (id: string): Promise<ServerRef | null> => {
-    const own = await getArtifactFor({userId,tokenId:''}, id);
-    const row = own ?? (await getLinkReadableArtifact(id));
-    if (!row) return null;
-    return rowToResolvedRef(row, !!own);
-  };
-}
 
 /**
  * The byte quota as the publish door asks it: "is this caller already over?"
@@ -980,16 +910,6 @@ export function refLoaderForUser(userId: string): ServerRefLoader {
  */
 export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
   return () => assetByteQuotaExceeded(tokenId);
-}
-
-/** The actor's REACH: what they own, and what they are named editor on. */
-export function getArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
-  return getArtifactScoped(editorScope(actor), id);
-}
-
-/** What the actor OWNS — the read behind every owner-only surface (sharing, metadata, delete). */
-export function getOwnedArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
-  return getArtifactScoped(ownerScope(actor), id);
 }
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */

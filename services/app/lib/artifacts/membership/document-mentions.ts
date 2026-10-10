@@ -1,6 +1,6 @@
 import type {Queryable} from '@artifactbin/contracts';
 import type { RoleActor } from '@/lib/accounts';
-import type {ArtifactRow} from '../access';
+import type { ArtifactRow } from '../table';
 import {invitePeople} from './membership';
 import {isPersonMentionHref, nodeIndex} from '@/lib/document';
 /** Static authored links only; query results, User chips, imports and forks never notify. */

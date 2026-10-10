@@ -16,7 +16,7 @@
  *  - A listener is synchronous and owns its own async failures: a promise it starts must carry its
  *    own `.catch`, because the emitter does not wait for it and cannot see it reject.
  */
-import type { ArtifactRow } from './access';
+import type { ArtifactRow } from './table';
 
 /** What changed at the head beyond its content: `renderingChanged`, its stored rendering (diagrams drawn after it was prepared). */
 interface HeadChange { renderingChanged?: boolean }

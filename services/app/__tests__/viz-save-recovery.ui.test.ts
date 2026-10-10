@@ -20,7 +20,7 @@ import { request, useAppHarness } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as prepareRoute } from '@/app/api/artifacts/[id]/prepare/route';
-import { getArtifactById } from '@/lib/artifacts/store';
+import { getArtifactById } from '@/lib/artifacts/rows';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { readQuestionChart, updateQuestionChartInJsx } from '@/lib/data/story/story-viz';

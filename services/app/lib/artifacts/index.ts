@@ -5,10 +5,12 @@
  */
 
 /** Reads and access (every server caller): the row, the role decision and its scopes, the reader snapshot, the lookups, versions and listings, capabilities, views and the state digest. */
-export { canReadArtifact, ownsArtifact, commentMonitorScope, annotationScope, roleFor, effectiveRole, isOwner, editorScope, writerFor } from './access';
-export type { ArtifactRow, Scope } from './access';
+export { canReadArtifact, ownsArtifact, roleFor, effectiveRole, isOwner } from './access';
+export { commentMonitorScope, annotationScope, editorScope, writerFor } from './table';
+export type { ArtifactRow, Scope } from './table';
 export { readableArtifact, snapshotForReader, snapshotHeadFor } from './read-access';
-export { getArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived, versionToWire } from './store';
+export { getArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor } from './rows';
+export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived, versionToWire } from './store';
 export type { ArtifactSummary } from './store';
 export { can, capabilityGuard, capabilityRefusal } from './capabilities';
 export type { CapabilityActor } from './capabilities';
@@ -35,7 +37,9 @@ export type { DocumentEditorPolicy } from './document-policy';
 export { artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, respondToEdit, respondToMutate, sourceRepairsEcho } from './wire';
 
 /** Document dataflow (publish, offline, runner, operations, routes). */
-export { acceptedMembers, compiledForRow, dataflowForRow, dataflowRunsForRow, datasetResolverForActor, datasetsForDocument, declarationsForRow, findDependentsFor, holdImport, holdableImports, importsFingerprint, nameablePeople, refDataForRow, refLoaderForActor, referencedArtifactForRow, rowToResolvedRef, runDocumentDataflow, runDocumentMutation, viewerIdentityFor } from './dataflow';
+export { acceptedMembers, dataflowForRow, dataflowRunsForRow, datasetResolverForActor, datasetsForDocument, holdImport, holdableImports, importsFingerprint, nameablePeople, refDataForRow, referencedArtifactForRow, runDocumentDataflow, runDocumentMutation, viewerIdentityFor } from './dataflow';
+export { compiledForRow, declarationsForRow, refLoaderForActor, rowToResolvedRef } from './row-compile';
+export { findDependentsFor } from './dependents';
 export type { ImportCache } from './dataflow';
 
 /** Sharing, membership, placement and dataset grants. */
@@ -64,7 +68,7 @@ export { evaluateNotificationQuery } from './notification-query';
 export { notificationJobStore } from './notification-runtime';
 
 /** Table access, PROVISIONAL: callers that still query the artifacts table themselves. Narrowing this is its own redesign (workspace listings, trash, analytics, publish preparation); until then the debt stays visible here, in one place. */
-export { LIVE_ARTIFACT_SQL, ownerPredicate } from './access';
+export { LIVE_ARTIFACT_SQL, ownerPredicate } from './table';
 export { artifactQuery, loadArtifactDocument } from './document';
 
 /** Independent ownership destinations and atomic ownership transfer. */

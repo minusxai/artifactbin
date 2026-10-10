@@ -7,7 +7,7 @@ import type {TokenActor} from '../accounts';
 import {getDb} from '../platform/db';
 import {DatasetError} from '../datasets/errors';
 import {catalogOf} from '../datasets/catalog';
-import {ownerPredicate,type ArtifactRow} from './access';
+import { ownerPredicate, type ArtifactRow } from './table';
 import {getGroupRole} from '../groups';
 import {assertTransferDependencies} from './transfer-dependencies';
 import type {Queryable} from '../platform/db';

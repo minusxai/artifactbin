@@ -1,68 +1,31 @@
-import { canReadArtifact, canWriteDataset, ownerScope, ownsArtifact, type ArtifactRow, type Scope, type WriteRefusal, writerFor } from './access';
+import { canReadArtifact, ownsArtifact } from './access';
+import { type ArtifactRow, writerFor } from './table';
 import type { RoleActor, TokenActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactFor, getLinkReadableArtifact, refLoaderFor, refLoaderForUser } from './store';
+import { getArtifactById, getArtifactFor, getLinkReadableArtifact } from './rows';
+import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from './row-compile';
 import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
-import { artifactQuery } from './document';
 import { JOIN_RELATIONS } from '../accounts';
 import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
-import { storedMediaReferences } from '../datasets/media-references';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
-import { type DataflowState, imageRefData, rawUrl, EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';
+import { type DataflowState, imageRefData, rawUrl, isEmptyDataflow, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';
 import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
 import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from './capabilities';
 import { pinMutationContext, type MutationReceipt } from './mutation-receipt';
 import { notificationContextSnapshot } from '../notifications/context';
 import type { MutationNotificationJobInput, MutationInitiator } from '@artifactbin/contracts';
 import { catalogOf } from '@/lib/datasets/catalog';
-import { executeCatalog } from '@/lib/datasets/execute';
-import { DatasetError } from '@/lib/datasets/errors';
 import { getDb } from '../platform/db';
-import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
-import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { displayTitle, declarationsOf } from '../document';
-import { readCompiledDataflow } from '@/lib/document/server';
-import { compileWithLoader, type CompileResult } from '@/lib/dataflow/server';
-import type { ValidationError } from '@/lib/jsx';
-import { schemaLoaderFor, type ServerRef, type ServerRefLoader } from '@/lib/datasets/schema-loader';
-import { mutationPolicy } from '@/lib/artifacts/dataset-policy';
+import { compileWithLoader } from '@/lib/dataflow/server';
+import { schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets/schema-loader';
+import { canWriteDataset, mutationPolicy, type WriteRefusal } from './dataset-policy';
 import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
 import { runMutation } from '@/lib/sql/engine';
 import { sqlExtensions } from '@/lib/sql/extensions';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
 import { storedRowStats } from '@/lib/datasets/dataset-store';
-import { childrenTableFor, CHILDREN_COLUMNS } from './placement';
-import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
-
-export function refLoaderForActor(actor: TokenActor): ServerRefLoader {
-  if(actor.groupId)return async id=>{const own=await getArtifactFor(actor,id);const row=own??await getLinkReadableArtifact(id);return row?rowToResolvedRef(row,!!own):null;};
-  return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId);
-}
-
-/** A stored policy the publish door can analyze against, or nothing at all:
- * an unreadable policy is the write door's refusal to make, not a publish's. */
-function parsedDatasetPolicy(row: ArtifactRow): DatasetPolicy | undefined {
-  if (!row.dataset_policy) return undefined;
-  try { return parseDatasetAccessPolicy(row.dataset_policy); } catch { return undefined; }
-}
-
-export function rowToResolvedRef(row: ArtifactRow, owned = false): ServerRef {
-  const meta = (row.meta ?? {}) as { columns?: DatasetColumn[] };
-  const catalog = row.format === 'dataset' ? catalogOf(row) : null;
-  return {
-    id: row.id,
-    format: row.format,
-    validationState:{id:row.id,version:row.version,sharingRevision:row.sharing_revision??0,policyRevision:row.policy_revision??0},
-    owned,
-    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalog??undefined, datasetPolicy:parsedDatasetPolicy(row), query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => {
-      if(!catalog)throw new DatasetError(`Dataset source ref:${row.id} has no catalog or stored object key`);
-      return executeCatalog(catalog,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes});
-    } } : {}),
-    // A folder's shape is FIXED and computed, never stored — the compiler needs
-    // it to judge a <Query> over an <Import> of the folder (`<name>.rows`).
-    ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS } : {}),
-    ...(row.format === 'viz' ? { recipe: JSON.parse(row.source ?? '') } : {}),
-  };
-}
+import { childrenTableFor } from './placement';
+import type { RanDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 
 /**
  * Run one of a stored document's declared mutations. Everything a reader
@@ -106,7 +69,6 @@ export async function runDocumentMutation(
     if(!actor.userId&&!actor.tokenId)return {ok:false,reason:'policy_denied',code:SIGN_IN_REQUIRED,detail:'Sign in to run actions with notifications'};
     if(!receipt?.runId)return {ok:false,reason:'operation_key_required',detail:'Preserve an operation key for this action and its retries'};
   }
-
 
   /*
    * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
@@ -202,76 +164,6 @@ const readsViewer = (m: { reads: { builtins: string[] } }): boolean => m.reads.b
 /** The artifact's accepted members, oldest first — the `_members` table. */
 export async function acceptedMembers(artifactId: string): Promise<Row[]> {
   return (await (await getDb()).query<Row>(`SELECT user_id,joined_at::text FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND status='accepted' ORDER BY joined_at,user_id`,[artifactId])).rows;
-}
-
-/**
- * A document's compiled dataflow as the compiler answers it: the record its
- * publish stored, or — stale, missing, compiled by an older compiler — a fresh
- * compile under the document's own reach (the author's scope, as every read
- * resolves), with the compiler's errors when the source no longer compiles.
- * Null when there is nothing to compile: no source, or a source that does not parse.
- */
-async function compileResultForRow(row: CompilableRow): Promise<CompileResult | null> {
-  if (!row.source) return null;
-  return readCompiledDataflow(row.meta, row.source, schemaLoaderFor(refLoaderForActor(writerFor(row))), { extensions: sqlExtensions() });
-}
-type CompilableRow = Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id'>;
-
-/** {@link compileResultForRow} for callers that only act on a document that compiles: null otherwise. */
-export async function compiledForRow(stored: CompilableRow): Promise<CompiledDataflow | null> {
-  const result = await compileResultForRow(stored);
-  return result?.ok ? result.compiled : null;
-}
-
-/** Compile errors as publish reports them, one per line: each names its declaration. */
-const compileErrorText = (errors: ValidationError[]): string => errors.map((e) => e.message).join('\n');
-
-/**
- * The documents in the owner's scope that WRITE this dataset, with the
- * mutations they declare — what the share menu shows beside the toggle, so
- * turning writes off can say what will stop working. Same shape and scope as
- * `findDependents`, narrowed to declared writers.
- */
-export async function findWritersFor(actor: TokenActor, datasetId: string): Promise<Array<{ id: string; title: string | null; mutations: string[] }>> {
-  const dependents = await findDependentsFor(actor, datasetId);
-  const out: Array<{ id: string; title: string | null; mutations: string[] }> = [];
-  for (const dep of dependents) {
-    if (!dep.source) continue;
-    const flow = await compiledForRow(dep);
-    const names = (flow?.mutations ?? []).filter((m) => mutationTargetRef(flow!, m) === datasetId).map((m) => m.name);
-    if (names.length) out.push({ id: dep.id, title: dep.title, mutations: names });
-  }
-  return out;
-}
-
-/** Current stored dataset cells participate in the same owner-scoped deletion graph.
- * No persisted index: existing datasets and every write path are immediately covered.
- * Errors reading promised objects fail closed, rather than permitting unsafe deletion.
- */
-async function findDependentsScoped(scope: Scope, refId: string): Promise<ArtifactRow[]> {
-  const db = await getDb();
-  const image=(await getArtifactById(refId))?.format==='image';
-  const res = await artifactQuery<ArtifactRow>(db,
-    `SELECT * FROM artifacts WHERE ${scope.where('$1')} AND ${image ? "format IN ('markup','dataset')" : "format = 'markup' AND meta::text LIKE $2"}`,
-    image ? [scope.val] : [scope.val,`%"${refId}"%`],
-  );
-  const rows=res.rows as unknown as ArtifactRow[];
-  const targets=new Set([refId]);
-  const found=new Map<string,ArtifactRow>();
-  for(const row of rows){
-    if(row.format!=='dataset'||row.id===refId)continue;
-    if((await storedMediaReferences(row)).has(refId)){targets.add(row.id);found.set(row.id,row);}
-  }
-  for(const row of rows){
-    if(row.format!=='markup'||row.id===refId)continue;
-    const refs=(row.meta as {refs?:Array<{id:string}>}).refs??[];
-    if(refs.some(ref=>targets.has(ref.id)))found.set(row.id,row);
-  }
-  return [...found.values()];
-}
-
-export function findDependentsFor(actor: TokenActor, refId: string): Promise<ArtifactRow[]> {
-  return findDependentsScoped(ownerScope(actor), refId);
 }
 
 /**
@@ -425,39 +317,6 @@ async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state
  * names. On a production dashboard this was the difference between a ~100ms
  * render and an ~8ms one, and 231 KB of a 365 KB page.
  */
-/**
- * A DOCUMENT THAT CANNOT RUN, as state that has already run: its Values at
- * their defaults and every query answering why — so nothing runs, the reader
- * never fetches, and no query is ever silent. Declarations come from the
- * Helmet; only the Values are compiled. The cause: a document whose data half
- * does not compile (what it imports changed shape since publish, or its store
- * is unreachable): each query answers with its own compile errors, or the
- * document's when it has none — by declaration name, as publish would have
- * refused it.
- */
-async function unrunnableDataflow(row: Pick<ArtifactRow, 'source' | 'token_id' | 'user_id'>, answer: (query: QueryDecl) => string): Promise<RanDataflow | null> {
-  const declared = declarationsOf(row.source ?? '');
-  if (!declared || isEmptyDataflow(declared)) return null;
-  const compiled = await compileWithLoader({ ...EMPTY_DATAFLOW, values: declared.values }, schemaLoaderFor(refLoaderForActor(writerFor(row))), { extensions: sqlExtensions() });
-  const flow = compiled.ok ? compiled.compiled : EMPTY_COMPILED_DATAFLOW;
-  return { flow, state: { values: initialValues(flow), tables: initialTables(flow), errors: Object.fromEntries(declared.queries.map((q) => [q.name, answer(q)])) } };
-}
-
-/** A declaration's own compile errors (by source span), else the document's. */
-const errorsOf = (errors: ValidationError[]) => (declaration: { start: number; end: number }): string => {
-  const own = errors.filter((e) => e.start !== undefined && e.start >= declaration.start && (e.end ?? e.start) <= declaration.end);
-  return compileErrorText(own.length ? own : errors);
-};
-
-export async function declarationsForRow(row: CompilableRow): Promise<StoryIslandDataflow | null> {
-  let result: CompileResult | null;
-  // Loading what the document imports can fail too (the store is unreachable): that is said, not swallowed.
-  try { result = await compileResultForRow(row); }
-  catch (error) { return unrunnableDataflow(row, () => `The document's data could not be compiled: ${error instanceof Error ? error.message : String(error)}`); }
-  if (!result) return null;
-  if (!result.ok) return unrunnableDataflow(row, errorsOf(result.errors));
-  return isEmptyCompiled(result.compiled) ? null : { flow: result.compiled };
-}
 
 /**
  * A document DRAWS A PERSON — a conservative hint, not a parse.
@@ -690,9 +549,6 @@ async function importsFor(flow: CompiledDataflow, names: Iterable<string>, resol
   return out;
 }
 
-export const isEmptyCompiled = (flow: CompiledDataflow): boolean =>
-  !flow.imports.length && !flow.values.length && !flow.queries.length && !flow.mutations.length;
-
 /**
  * Compile and run the declarations of any markup SOURCE (a draft) over what
  * `resolve` admits, compiled under `load` (the same caller's reach). Null when
@@ -744,7 +600,6 @@ export async function datasetsForDocument(document: (Pick<ArtifactRow, 'id' | 'v
     return flow ? dataRefs(flow, flow.values.flatMap((v) => (v.source ? [v.source] : []))) : [];
   } catch { return []; }
 }
-
 
 /** Resolve an admitted asset using the document owner's normal reference scope. */
 export async function referencedArtifactForRow(row: ArtifactRow, id: string): Promise<ArtifactRow | null> {
