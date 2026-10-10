@@ -15,7 +15,7 @@
  * trashed heads, and the database dump taken before the backfills holds their bytes.
  */
 import { json } from '../http/http';
-import { hasCurrentDataSyntax } from '@/lib/dataflow/data-syntax';
+import { hasCurrentDataSyntax } from '@/lib/dataflow/server';
 
 const STATUS = 410;
 const CODE = 'unservable_document';

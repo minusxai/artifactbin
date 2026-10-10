@@ -13,7 +13,6 @@ import { describe, expect, it } from 'vitest';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
-import { findExternalSubresources } from '@/lib/dataflow/refs';
 
 const validate = (src: string) =>
   validateJsxSource(src, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS, 'no-inline-style');
@@ -45,14 +44,11 @@ describe('interactive elements a script can drive', () => {
    */
   it('refuses media it cannot serve self-contained — the URL gate, not the tag list', () => {
     expect(validate('<video src="data:video/mp4;base64,AAAA"></video>').length).toBeGreaterThan(0);
-    // An <img src> URL is served as written; every OTHER subresource position keeps the hard refusal:
-    expect(findExternalSubresources('<img srcSet="https://cdn.example/x.png 1x" />').length).toBeGreaterThan(0);
-    expect(findExternalSubresources('<div background="https://cdn.example/b.png" />').length).toBeGreaterThan(0);
+    // The subresource positions themselves: lib/dataflow/__tests__/external-subresources.test.ts.
   });
 
   it('allows an https <iframe>, and leaves its src out of the self-contained rule — a frame is not an import', () => {
     expect(validate('<iframe src="https://player.vimeo.com/video/76979871" title="Clip" allowfullscreen />')).toEqual([]);
-    expect(findExternalSubresources('<div><iframe src="https://player.vimeo.com/video/76979871" title="Clip" /></div>')).toEqual([]);
     expect(validate('<iframe src="http://player.vimeo.com/video/76979871" title="Clip" />').length).toBeGreaterThan(0);
   });
 

@@ -8,7 +8,7 @@ import {expect,it} from 'vitest';
 import {parseJsx} from '@/lib/jsx';
 import {splitHelmet} from '../helmet';
 import { parseQueryDecl, parseMutationDecl } from '@/lib/dataflow/dataflow';
-import {collectRefUses} from '@/lib/dataflow/refs';
+import { collectRefUses } from '@/lib/dataflow/references';
 const read=(source:string)=>{const p=parseJsx(source);if(!p.ok)throw Error('parse failed');return splitHelmet(p.nodes);};
 const element=(source:string)=>{const p=parseJsx(source);if(!p.ok||p.nodes[0]?.type!=='element')throw Error('parse failed');return p.nodes[0];};
 

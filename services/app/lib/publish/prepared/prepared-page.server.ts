@@ -47,7 +47,7 @@ import {
   archiveSharedBuild, type CompilerBuild, createSpeculationRulesStore, inlineStoryElement, loadCompilerBuild,
   MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, type StoredCompile,
 } from '@/lib/compiled-page';
-import { readUrlValues } from '@/lib/dataflow/url-values';
+import { readUrlValues } from '@/lib/dataflow';
 import { servedResultsFor } from './served-results.server';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';

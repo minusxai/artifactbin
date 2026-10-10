@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkDocumentData } from '../data/data-checks';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import type { RefLoader } from '@/lib/dataflow/refs';
+import type { DatasetColumn } from '@/lib/dataflow';
+import type { RefLoader } from '@/lib/dataflow/server';
 
 const DS = 'abc123';
 const columns: DatasetColumn[] = [

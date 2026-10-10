@@ -12,7 +12,7 @@ import {parseJsx} from '../jsx/parse';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {serializeJsx} from '../jsx/serialize';
 import {graphSelectors} from './document-graph-selectors';
-import {collectRefUses} from '@/lib/dataflow/refs';
+import { collectRefUses } from '@/lib/dataflow/references';
 import {inertProse,PROSE_HTML_PARENTS} from './document-prose';
 import {encodeDocumentNodes,decodeDocumentNodes} from './document-node-codec';
 

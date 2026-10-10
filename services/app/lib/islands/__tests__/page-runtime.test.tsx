@@ -10,8 +10,7 @@ import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/
 import type { RunAnswer } from '@/lib/story-runtime/dataflow-core';
 import { ACCESS_PENDING } from '@/lib/story-runtime/store';
 import { compiledOf } from '@/test/helpers/compiled';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import type { Row } from '@/lib/dataflow/dataflow';
+import type { CompiledDataflow, Row } from '@/lib/dataflow';
 
 const reads = (imports: string[], values: string[] = []) => ({ imports, queries: [], values, builtins: [] });
 const flow: CompiledDataflow = {

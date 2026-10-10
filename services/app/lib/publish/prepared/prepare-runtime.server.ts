@@ -1,4 +1,4 @@
-import { readerDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { readerDataflow, type RefDataMap } from '@/lib/dataflow';
 import type { PreparedStoryRuntime } from './prepared-runtime';
 import { storyBodyFor, assetLookupFrom, EMPTY_HELMET_CONTENT, type HelmetContent, type WebAssetBox } from '../../document';
 import { authorModuleNames, buildAuthorModule } from '@/lib/author-script/author-module.server';
@@ -8,7 +8,6 @@ import { documentFonts, firstScreenFonts, storyBaseCss, type StoryBaseCssRecipe 
 import { storySystemSheetCss } from '@/lib/data/story/story-system-sheets';
 import type { StoryIslandData, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import { mermaidImagesFor, type MermaidImageLookup } from '@/lib/mermaid-images/store';
-import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { loadCompilerBuild } from '@/lib/compiled-page';
 

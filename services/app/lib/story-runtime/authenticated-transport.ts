@@ -1,7 +1,6 @@
 import type { QueryTransport } from './store';
-import type { DataflowState } from '@/lib/dataflow/dataflow';
+import type { DataflowState, ImportTables } from '@/lib/dataflow';
 import { localZone } from '@/lib/dataflow/builtins';
-import type { ImportTables } from '@/lib/dataflow/compiled-flow';
 import type { PersonCard } from '@artifactbin/contracts';
 
 /** The authenticated page's existing query/mutation/assets doors, scoped to one document lifetime. */

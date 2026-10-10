@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { declarationsOf } from './helmet';
-import { isEmptyDataflow, scalarMatches } from '@/lib/dataflow/dataflow';
-import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import { compileWithLoader, type CompileOptions, type CompileResult, type SchemaLoader } from '@/lib/dataflow/compile-dataflow';
+import { isEmptyDataflow, scalarMatches, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from '@/lib/dataflow';
+import { compileWithLoader, type CompileOptions, type CompileResult, type SchemaLoader } from '@/lib/dataflow/server';
 
 /**
  * A MARKUP DOCUMENT'S COMPILED DATAFLOW, stored in `meta.parsedArtifact` beside

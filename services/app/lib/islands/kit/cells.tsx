@@ -20,9 +20,10 @@
  */
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
-import { controlOptions as optionsOf, type ControlOption as Option, refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/dataflow/dataflow';
-import { substituteRow } from '@/lib/jsx/row-scope';
+import { controlOptions as optionsOf, refName, resolveBindings, rowBound } from '@/lib/dataflow/dataflow';
+import type { ControlOption as Option, BindingSource, Row, Scalar } from '@/lib/dataflow';
 import { VIEWER_ID } from '@/lib/dataflow/builtins';
+import { substituteRow } from '@/lib/jsx/row-scope';
 import { refusalText } from '@artifactbin/contracts/sign-in-required';
 import { commentMetadata, instanceDomId } from '@/lib/story-ui/repeat-identity';
 import { createCellSessions, type CellSessions } from '../cell-sessions';

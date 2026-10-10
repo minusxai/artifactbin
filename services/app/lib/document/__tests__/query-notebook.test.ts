@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { queryCells, updateQuerySqlInJsx } from '@/lib/document/query-notebook';
-import type { DataflowState } from '@/lib/dataflow/dataflow';
+import type { DataflowState } from '@/lib/dataflow';
 import { compiledSource } from '@/test/helpers/compiled';
 
 const SALES_SQL = 'select region, sum(revenue) as revenue from "public"."rows" where region = $region group by 1';

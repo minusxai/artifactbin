@@ -1,4 +1,4 @@
-import { readerDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { readerDataflow } from '@/lib/dataflow';
 /**
  * THE LIVE FRAME — stateless and complete.
  *
@@ -33,7 +33,7 @@ interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' 
    * The declarations as a flow, rows deliberately absent (the client re-runs) —
    * except for a version that cannot run, whose queries' answers are its state.
    */
-  dataflow?: { flow: import('@/lib/dataflow/compiled-dataflow').CompiledDataflow; state?: import('@/lib/dataflow/dataflow').DataflowState };
+  dataflow?: { flow: import('@/lib/dataflow').CompiledDataflow; state?: import('@/lib/dataflow').DataflowState };
   /** The datasets this version reads or writes — what a relay must also follow. */
   datasets: string[];
 }

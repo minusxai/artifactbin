@@ -53,8 +53,8 @@ import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engin
 import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow } from '@/lib/artifacts/access';
 import type { RoleActor } from '@/lib/accounts';
 import { loadDatasetRows, storeDatasetRows } from '@/lib/datasets/dataset-store';
-import type {Scalar} from '@/lib/dataflow/dataflow';
 import { newEditId } from '../../document';
+import type { Scalar } from '@/lib/dataflow';
 import {mutationInvocation} from '@/lib/artifacts/mutation-invocation';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
 import { emitDatasetCommitted } from '../after-commit';

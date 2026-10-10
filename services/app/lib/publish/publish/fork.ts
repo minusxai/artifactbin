@@ -1,7 +1,8 @@
 import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuery, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, grantsOf, grantsPermitRead, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import type { TokenActor } from '@/lib/accounts';
-import { collectRefUses } from '@/lib/dataflow/refs';
+import { mutationTargetRef } from '@/lib/dataflow';
+import { collectRefUses } from '@/lib/dataflow/references';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import { trackEvent } from '@/lib/platform/analytics';
@@ -10,7 +11,6 @@ import { getDb } from '@/lib/platform/db';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../document/input';
 import { json } from '@/lib/http/http';
-import { mutationTargetRef } from '@/lib/dataflow/compiled-flow';
 import type { ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 

@@ -14,8 +14,8 @@ import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx
 import { parseJsxShared } from '@/lib/jsx/parse-shared';
 import { HELMET_TAG, splitHelmet } from './helmet';
 import { helmetOffset } from './edit-compose';
-import { QUERY_TAG, refName, type DataflowState, type QueryDecl, type TableResult } from '@/lib/dataflow/dataflow';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { QUERY_TAG, refName } from '@/lib/dataflow/dataflow';
+import type { DataflowState, QueryDecl, TableResult, CompiledDataflow } from '@/lib/dataflow';
 
 /** A body element that reads a declared table: `data="$name"` on an embed, `options="$name"` on a control. */
 export interface BoundEmbed {

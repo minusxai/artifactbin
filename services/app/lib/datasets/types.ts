@@ -1,6 +1,5 @@
 import type { ArtifactFormat } from '@artifactbin/contracts';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import type { Row } from '@/lib/dataflow/dataflow';
+import type { DatasetColumn, Row } from '@/lib/dataflow';
 
 /** Public, versioned catalog. Credentials never appear here. */
 export interface DatasetTable {

@@ -7,7 +7,7 @@ import { JOIN_RELATIONS } from '../accounts';
 import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import { storedMediaReferences } from '../datasets/media-references';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
-import type { DataflowState } from '@/lib/dataflow';
+import { type DataflowState, imageRawUrl, imageRefData, pdfRawUrl, EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';
 import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
 import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from './capabilities';
 import { pinMutationContext, type MutationReceipt } from './mutation-receipt';
@@ -19,30 +19,19 @@ import { DatasetError } from '@/lib/datasets/errors';
 import { getDb } from '../platform/db';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
-import { imageRawUrl, imageRefData, pdfRawUrl } from '@/lib/dataflow/ref-data';
 import { displayTitle, declarationsOf } from '../document';
 import { readCompiledDataflow } from '@/lib/document/server';
-import { EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar } from '@/lib/dataflow/dataflow';
-import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/dataflow/compiled-dataflow';
-import { compileWithLoader, type CompileResult } from '@/lib/dataflow/compile-dataflow';
+import { compileWithLoader, type CompileResult } from '@/lib/dataflow/server';
 import type { ValidationError } from '@/lib/jsx';
-import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/dataflow/compiled-flow';
-import { bindMutationRequest } from '@/lib/dataflow/mutation-request';
-import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/dataflow/placement';
-import { readerZone, VIEWER, VIEWER_ID } from '@/lib/dataflow/builtins';
-import type { MutationRequest } from '@/lib/dataflow';
 import { schemaLoaderFor, type ServerRef, type ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { mutationPolicy } from '@/lib/artifacts/dataset-policy';
 import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
 import { runMutation } from '@/lib/sql/engine';
 import { sqlExtensions } from '@/lib/sql/extensions';
-import { runLocalStateMutation, type LocalMutationResult } from '@/lib/dataflow/local-state';
-import { localTableOverrides } from '@/lib/dataflow/local-tables';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
 import { storedRowStats } from '@/lib/datasets/dataset-store';
 import { childrenTableFor, CHILDREN_COLUMNS } from './placement';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 
 export function refLoaderForActor(actor: TokenActor): ServerRefLoader {
   if(actor.groupId)return async id=>{const own=await getArtifactFor(actor,id);const row=own??await getLinkReadableArtifact(id);return row?rowToResolvedRef(row,!!own):null;};
@@ -770,9 +759,9 @@ export async function referencedArtifactForRow(row: ArtifactRow, id: string): Pr
 export async function refDataForRow(
   row: ArtifactRow,
   opts: { capture?: boolean } = {},
-): Promise<import('@/lib/dataflow/ref-data').RefDataMap> {
+): Promise<import('@/lib/dataflow').RefDataMap> {
   const meta = row.meta as { refs?: Array<{ id: string; kind: string }> };
-  const out: import('@/lib/dataflow/ref-data').RefDataMap = {};
+  const out: import('@/lib/dataflow').RefDataMap = {};
   // A dataset a <Query> reads is a ref (ownership, dependents) but NOT page
   // data: its rows go through the engine (dataflowForRow) and only the query's
   // RESULT reaches the document.

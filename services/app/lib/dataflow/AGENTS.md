@@ -8,8 +8,14 @@ the islands, the story runtime and the CLI.
 - It sits below the recorded cycle and imports only itself, `lib/jsx`, `lib/validation` (types),
   `@artifactbin/contracts`, `@artifactbin/utils` and `@artifactbin/sql`. `npm run validate` fails
   any edge back into the cycle; move the shared code down or invert the dependency instead.
-- `index.ts` is browser-safe; `server.ts` holds the compiler and the reference checks (node-only).
-  Browser-bundled code imports leaf files directly: the island and app bundlers cannot drop the rest of a barrel.
+- Three entries, the whole outside interface (`DEEP_MODULES` in `scripts/ci/module-graph.mjs` refuses
+  any other path): `index.ts` (browser-safe), `references.ts` (reference uses, read with the JSX
+  parser, kept out of the index so the islands never load it) and `server.ts` (the compiler, the
+  publish checks, node-only). Re-export only names something outside imports.
+- VALUE imports in the browser bundles' graphs (islands, app shell, offline) name a leaf
+  (`DATAFLOW_BROWSER_LEAVES`): a barrel import keeps every re-exported file (row 40.1: esbuild islands
+  +3.5 to +9.2 KB raw per kit, `sideEffects: false` did not help; rolldown app shell +10.3 KB before the
+  document frame). Types come from the index.
 - The compiler never reads process state. Its caller passes the composition's SQL extensions
   (`prepareCompile`/`compileWithLoader` `{ extensions }`, the server's `sqlExtensions()`); without
   them a `<Mutation>` calling one is refused.

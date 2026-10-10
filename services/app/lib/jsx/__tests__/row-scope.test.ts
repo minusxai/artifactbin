@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeRowScopes, parseRowRef, substituteRow } from '../row-scope';
-import { rewriteBuiltinFields } from '@/lib/dataflow/compile-dataflow';
+import { rewriteBuiltinFields } from '@/lib/dataflow/server';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 describe('row scope', () => {
   it('reads an exact $_row reference, and fills one or a template from the row', () => {

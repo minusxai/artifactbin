@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import type { Scalar, TableResult } from '@/lib/dataflow/dataflow';
+import type { Scalar, TableResult } from '@/lib/dataflow';
 
 interface ParityData { tables?: Record<string, TableResult>; values?: Record<string, Scalar> }
 

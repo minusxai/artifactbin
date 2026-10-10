@@ -8,7 +8,7 @@ import { IslandProvider } from '../context';
 import { FileUpload } from '../kit/upload/control';
 import { FileUpload as DeferredFileUpload } from '../kit/upload';
 import { PreviewFileUpload } from '../kit/static/preview-controls';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow';
 
 const flow: CompiledDataflow = { imports: [{ name: 'attachments', ref: 'Attach0001', tables: [] }], values: [
   {name:'refs',kind:'scalar',type:'string',default:'[]'}, {name:'uploading',kind:'scalar',type:'boolean',default:false},

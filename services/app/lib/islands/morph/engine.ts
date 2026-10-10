@@ -28,11 +28,11 @@ import { storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-f
 import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
 import { applyColorMode, readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
+import type { CompiledDataflow } from '@/lib/dataflow';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { ISLAND_DOCUMENT_KEY, LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
 import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR, LITERALS_ATTR, STORY_NODES_ID, STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
 
 const HK = 'data-hk';

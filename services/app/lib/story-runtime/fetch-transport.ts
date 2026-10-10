@@ -18,9 +18,8 @@
  */
 import { QUERY_REQUEST_PARAM } from './contract';
 import type { QueryTransport } from './store';
-import type { DataflowState, TableResult } from '@/lib/dataflow/dataflow';
+import type { DataflowState, TableResult, ImportTables } from '@/lib/dataflow';
 import { localZone } from '@/lib/dataflow/builtins';
-import type { ImportTables } from '@/lib/dataflow/compiled-flow';
 import type { PersonCard } from '@artifactbin/contracts';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -93,9 +92,9 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
      */
     ...(mutateUrl
       ? {
-        mutate: async (request: import('@/lib/dataflow/mutation-request').MutationRequest) => {
+        mutate: async (request: import('@/lib/dataflow').MutationRequest) => {
           const res = await post(mutateUrl, { tz: localZone(), ...request });
-          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; mutationRunId?:string; local?: import('@/lib/dataflow/local-state').LocalMutationResult; error?: string; detail?: string };
+          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; mutationRunId?:string; local?: import('@/lib/dataflow').LocalMutationResult; error?: string; detail?: string };
           if (!res.ok || !body.ok) throw new Error(body.detail ?? body.error ?? `write failed (${res.status})`);
           return { dataset: body.dataset ?? '', local: body.local, mutationRunId: body.mutationRunId };
         },

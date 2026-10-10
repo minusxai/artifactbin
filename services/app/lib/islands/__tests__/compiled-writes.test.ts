@@ -17,7 +17,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow';
 import type { IslandRef } from '@/lib/compiled-page/contract';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');

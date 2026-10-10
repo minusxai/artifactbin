@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {actorOf} from '@artifactbin/utils';
 import { adaptMutationOperationReply, type ArtifactRow, canReadArtifact, dataflowForRow, durableMutation, getArtifactById, mutationInitiator, runDocumentMutation } from '@/lib/artifacts';
-import {parseMutationRequest} from '@/lib/dataflow/mutation-request';
+import { parseMutationRequest } from '@/lib/dataflow';
 import {json} from '../http';
 const scalar=z.union([z.string(),z.number().finite(),z.boolean(),z.null()]);
 const query=z.object({values:z.record(z.string(),scalar),only:z.array(z.string()),localTables:z.record(z.string(),z.array(z.record(z.string(),scalar))).optional()}).strict();

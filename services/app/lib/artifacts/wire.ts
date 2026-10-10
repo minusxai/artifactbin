@@ -26,13 +26,9 @@ import { getArtifactById, getArtifactFor, type ArtifactSummary, type EditInput, 
 import { declarationsForRow, runDocumentMutation } from './dataflow';
 import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
-import type { Scalar } from '@/lib/dataflow';
-import { parseMutationRequest } from '@/lib/dataflow/mutation-request';
-import { bindParams, bindTypes, mutationTargetRef } from '@/lib/dataflow/compiled-flow';
-import { platformValues, rowField } from '@/lib/dataflow/builtins';
-import { rewriteBuiltinFields } from '@/lib/dataflow/compile-dataflow';
+import { type Scalar, parseMutationRequest, bindParams, bindTypes, mutationTargetRef, platformValues, rowField, imageRawUrl, pdfRawUrl } from '@/lib/dataflow';
+import { rewriteBuiltinFields } from '@/lib/dataflow/server';
 import { datasetCreateFields } from '@/lib/datasets/dataset-usage';
-import { imageRawUrl, pdfRawUrl } from '@/lib/dataflow/ref-data';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform/config';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json } from '@/lib/http/http';

@@ -22,8 +22,7 @@
  * Failure (§6): the islands keep the guest snapshot and the signed-in placeholder, and the request is
  * retried a few times with backoff; a 4xx is an answer (no access any more), not a failure to retry.
  */
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import type { Scalar } from '@/lib/dataflow/dataflow';
+import type { CompiledDataflow, Scalar } from '@/lib/dataflow';
 import { selectQueries } from '@/lib/dataflow/compiled-flow';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
 import type { ServedResults } from '@/lib/story-runtime/contract';

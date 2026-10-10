@@ -23,7 +23,8 @@ import { renderTree, skillTree } from '@/lib/skills';
 import { buildQuickSheet } from '@/test/helpers/skill-docs';
 import { JSX_TIER_COMPONENTS } from '@/lib/publish/document/jsx-tier';
 import { CONTEXT_TAG, HELMET_TAG } from '@/lib/document/helmet';
-import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG } from '@/lib/dataflow/dataflow';
+import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, VALUE_TAG } from '@/lib/dataflow/dataflow';
+import { QUERY_TAG } from '@/lib/dataflow/dataflow';
 import teaching from '../../../cli/src/generated/teaching.json';
 
 const BASE = 'https://example.test';

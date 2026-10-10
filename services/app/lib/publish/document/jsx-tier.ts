@@ -31,7 +31,7 @@ import { documentFonts, invalidFontFamilies } from '@/lib/page-styles';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '@/lib/document/server';
 import { buildLambdaModule } from '@/lib/author-script/program.server';
-import { EMPTY_COMPILED_DATAFLOW } from '@/lib/dataflow/compiled-dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/dataflow';
 import { validateIconNames } from '../assets/icon-validation.server';
 
 /** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
@@ -140,7 +140,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   // bound to a query checked against that query's result columns. ONE module
   // (lib/publish/data/data-checks) shared with the dataset-refresh warnings path.
   let refs: Array<{ id: string; kind: string }> = [];
-  let compiled: import('@/lib/dataflow/compiled-dataflow').CompiledDataflow | null = null;
+  let compiled: import('@/lib/dataflow').CompiledDataflow | null = null;
   if (ctx.loadRef) {
     const checked = await checkDocumentData(sanitized, ctx.loadRef);
     if (!checked.ok) return json({ error: checked.error, details: checked.details }, 400);

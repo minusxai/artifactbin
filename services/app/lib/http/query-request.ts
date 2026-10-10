@@ -8,8 +8,7 @@
 import { MAX_PEOPLE_IDS } from '@artifactbin/contracts';
 import { json } from './http';
 import { MAX_QUERY_ROWS } from '@/lib/platform/config';
-import type { Scalar, Row } from '@/lib/dataflow/dataflow';
-import { parseLocalTables } from '@/lib/dataflow/local-tables';
+import { type Scalar, type Row, parseLocalTables } from '@/lib/dataflow';
 
 export interface QueryRequest {
   localTables?: Record<string, Row[]>;

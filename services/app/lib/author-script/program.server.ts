@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type * as Esbuild from 'esbuild';
 import { transformAsync, type PluginObj } from '@babel/core';
 import { buildAuthorModule, type AuthorModuleNames } from './author-module.server';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow';
 
 const SOLID = ['batch', 'createEffect', 'createMemo', 'createRoot', 'createSignal', 'on', 'onCleanup', 'onMount', 'untrack'];
 let runtime: Promise<string> | undefined;

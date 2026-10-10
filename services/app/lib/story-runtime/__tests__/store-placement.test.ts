@@ -11,8 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadSqlite, SqliteDatabase } from '@artifactbin/sql/core';
 import { compiledOf } from '@/test/helpers/compiled';
-import type { Row, Scalar } from '@/lib/dataflow/dataflow';
-import type { MutationRequest } from '@/lib/dataflow/mutation-request';
+import type { Row, Scalar, MutationRequest } from '@/lib/dataflow';
 import { createPageEngine } from '../page-engine';
 import { createDataflowStore, type DataflowStore, type MutationAnswer, type QueryTransport } from '../store';
 

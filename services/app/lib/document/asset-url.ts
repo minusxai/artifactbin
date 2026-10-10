@@ -26,8 +26,8 @@
  */
 import { sha256Hex } from '@artifactbin/utils/sha256';
 import { IMAGE_SIZES } from '@/lib/dataflow/ref-data';
+import { imageReferenceId } from '@/lib/dataflow/image-source';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import {imageReferenceId} from '@/lib/dataflow/image-source';
 
 /**
  * What a `web_assets` row contributes to the markup: the box, the blur to show

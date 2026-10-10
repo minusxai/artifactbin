@@ -4,13 +4,10 @@ import {NotificationExecutionError} from '@/lib/notifications/errors';
 import {notificationQueryContext,notificationRuleSourceIds} from '@/lib/notifications/context';
 import {notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal} from './notification-authority';
 import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '@/lib/datasets/document-queries';
-import {selectQueries} from '@/lib/dataflow';
-import {platformValues} from '@/lib/dataflow';
-import {DataflowResultError} from '@/lib/dataflow/evaluate';
+import { selectQueries, platformValues, DataflowResultError, type Row } from '@/lib/dataflow';
 import {getDb} from '@/lib/platform/db';
 import { tableForRef, acceptedMembers } from './dataflow';
 import type { RoleActor } from '@/lib/accounts';
-import type {Row} from '@/lib/dataflow';
 export interface NotificationQueryDependencies {
  load(input:MutationNotificationJobInput):Promise<{
   executionFence:MutationNotificationPlan['executionFence'];members:Row[];actor:RoleActor;

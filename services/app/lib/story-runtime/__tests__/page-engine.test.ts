@@ -10,7 +10,7 @@ import { loadSqlite, SqliteDatabase } from '@artifactbin/sql/core';
 import { DISPLAY_ROWS } from '@artifactbin/contracts';
 import { compiledOf } from '@/test/helpers/compiled';
 import { runDataflow } from '@/lib/sql/run-dataflow';
-import { mutationRequestFor } from '@/lib/dataflow/mutation-request';
+import { mutationRequestFor } from '@/lib/dataflow/mutation-request-builder';
 import { createPageEngine } from '../page-engine';
 
 const COLUMNS = [{ name: 'id', type: 'string' as const }, { name: 'region', type: 'string' as const }, { name: 'revenue', type: 'number' as const }];
