@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '../platform/db';
 import {overrideConfig} from '../platform/config';
-import {admitDeploymentIdentity,canUseDeploymentIdentity,getDeploymentState,setupDeployment} from '../deployment';
+import {admitDeploymentIdentity,canUseDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment} from '../deployment';
 useAppHarness();
 const identity=(userId:string,email:string)=>({userId,email,emailVerified:true});
 describe('company admission',()=>{
@@ -18,16 +18,19 @@ describe('company admission',()=>{
  it('requires explicit live editor group and preserves admitted members after default deletion',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'false'});
   await admitDeploymentIdentity(identity('owner','owner@example.com'));
+  await expect(getDeploymentDefaultDestination()).rejects.toThrow('Default group unavailable');
   const db=await getDb();
   await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('group','team','Team','owner')");
   await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('group','owner','editor')");
   await expect(setupDeployment('visitor','group')).rejects.toThrow();
   await setupDeployment('owner','group');
+  expect(await getDeploymentDefaultDestination()).toEqual({type:'group',id:'group'});
   expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);
   expect((await db.query("SELECT role FROM group_members WHERE user_id='member'")).rows[0]).toEqual({role:'viewer'});
   await db.query("UPDATE groups SET deleted_at=now() WHERE id='group'");
   expect(await admitDeploymentIdentity({userId:'member'})).toBe(true);
   expect(await canUseDeploymentIdentity('member')).toBe(true);
+  await expect(getDeploymentDefaultDestination()).rejects.toThrow('Default group unavailable');
   expect(await canUseDeploymentIdentity('next')).toBe(false);
   expect(await admitDeploymentIdentity(identity('next','next@example.com'))).toBe(false);
  });

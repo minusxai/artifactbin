@@ -89,11 +89,11 @@ export function completeLoginMethods(source: Record<string, string | undefined>)
 
 export interface AdmissionPolicy {inviteOnly:boolean;matches:(email:string)=>boolean}
 /** Email rules are comma-separated exact addresses or simple * globs, never regex. */
-export function admissionPolicyOf(source:Record<string,string|undefined>):AdmissionPolicy {
- const value=readEnv(source,'AUTH__INVITE_ONLY')??'true';
+export function admissionPolicyOf(source:Record<string,string|undefined>,read:typeof readEnv=readEnv):AdmissionPolicy {
+ const value=read(source,'AUTH__INVITE_ONLY')??'true';
  if(value!=='true'&&value!=='false')throw new Error('AUTH__INVITE_ONLY must be true or false.');
- const patterns=(readEnv(source,'AUTH__ALLOWED_EMAIL_PATTERNS')??'*').split(',').map(p=>p.trim().toLowerCase());
- if(patterns.some(p=>!p||!/^[a-z0-9._+@*\-]+$/.test(p)||(p!=='*'&&(!p.includes('@')||p.split('@').length!==2))))throw new Error('AUTH__ALLOWED_EMAIL_PATTERNS must contain nonempty email addresses or simple email globs.');
+ const patterns=(read(source,'AUTH__ALLOWED_EMAIL_PATTERNS')??'*').split(',').map(p=>p.trim().toLowerCase());
+ if(patterns.some(p=>!p||!/^[a-z0-9._+@*\-]+$/.test(p)||(p!=='*'&&(!p.includes('@')||p.split('@').length!==2||p.split('@').some(part=>!part)))))throw new Error('AUTH__ALLOWED_EMAIL_PATTERNS must contain nonempty email addresses or simple email globs.');
  const rules=patterns.map(p=>new RegExp('^'+p.split('*').map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*')+'$'));
  return {inviteOnly:value==='true',matches:email=>rules.some(rule=>rule.test(email.trim().toLowerCase()))};
 }

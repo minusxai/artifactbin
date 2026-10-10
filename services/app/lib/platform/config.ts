@@ -449,6 +449,3 @@ export function deploymentConfig():{mode:'public'|'company';ownerEmail:string|un
  if(mode==='company'&&(!ownerEmail||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)))throw new Error('Company deployment requires APP__DEPLOYMENT_OWNER_EMAIL.');
  return {mode,ownerEmail};
 }
-export function deploymentAdmissionSettings():Record<string,string|undefined> {
- return {AUTH__INVITE_ONLY:env('AUTH','INVITE_ONLY'),AUTH__ALLOWED_EMAIL_PATTERNS:env('AUTH','ALLOWED_EMAIL_PATTERNS')};
-}

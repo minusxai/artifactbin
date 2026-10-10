@@ -1,13 +1,13 @@
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
 import {getDb,type Queryable} from '../platform/db';
-import {deploymentConfig,deploymentAdmissionSettings} from '../platform/config';
+import {deploymentConfig,env} from '../platform/config';
 import {admissionPolicyOf} from '@artifactbin/auth';
 interface State {owner_user_id:string|null;default_group_id:string|null;setup_complete:boolean}
 const ID='company';
 export class DeploymentError extends Error {constructor(public code:string,public status:number,message:string){super(message);}}
 export function validateDeploymentConfiguration():void {
- const config=deploymentConfig(),policy=admissionPolicyOf(deploymentAdmissionSettings());
+ const config=deploymentConfig(),policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  if(config.mode==='company'&&!policy.matches(config.ownerEmail!))throw new Error('APP__DEPLOYMENT_OWNER_EMAIL must match AUTH__ALLOWED_EMAIL_PATTERNS.');
 }
 async function state(db:Queryable,lock=false):Promise<State> {
@@ -24,7 +24,10 @@ export async function getDeploymentState(userId:string|null):Promise<DeploymentS
  return {mode,setup_complete:s.setup_complete&&!!default_group,is_owner:!!userId&&s.owner_user_id===userId,default_group};
 }
 export async function getDeploymentDefaultDestination():Promise<ArtifactDestination|undefined> {
- const s=await getDeploymentState(null);return s.mode==='company'&&s.setup_complete&&s.default_group?{type:'group',id:s.default_group.id}:undefined;
+ const s=await getDeploymentState(null);
+ if(s.mode==='public')return undefined;
+ if(!s.setup_complete||!s.default_group)throw new DeploymentError('default_group_unavailable',409,'Default group unavailable; deployment owner must confirm an editor group.');
+ return {type:'group',id:s.default_group.id};
 }
 export async function setupDeployment(userId:string,groupId:string):Promise<DeploymentState> {
  if(deploymentConfig().mode!=='company')throw new DeploymentError('company_required',400,'Company deployment required');
@@ -36,7 +39,7 @@ export async function setupDeployment(userId:string,groupId:string):Promise<Depl
 }
 export async function admitDeploymentIdentity(identity:{userId:string;email?:string;emailVerified?:boolean}):Promise<boolean> {
  const config=deploymentConfig();if(config.mode==='public')return true;
- const policy=admissionPolicyOf(deploymentAdmissionSettings());
+ const policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  const email=identity.email?.trim().toLowerCase(),db=await getDb();
  return db.transaction(async tx=>{
   const s=await state(tx,true);

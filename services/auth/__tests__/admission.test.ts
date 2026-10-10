@@ -6,7 +6,7 @@ describe('deployment admission boundary',()=>{
  it('validates email globs and booleans without regex semantics',()=>{
   const p=admissionPolicyOf({AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com,owner@other.com',AUTH__INVITE_ONLY:'false'});
   expect(p.inviteOnly).toBe(false);expect(p.matches('A@Example.com')).toBe(true);expect(p.matches('a@exampleXcom')).toBe(false);
-  for(const value of ['','[a-z]@example.com','*@example.com,'])expect(()=>admissionPolicyOf({AUTH__ALLOWED_EMAIL_PATTERNS:value})).toThrow();
+  for(const value of ['','[a-z]@example.com','*@example.com,','@acme.com','user@','*@'])expect(()=>admissionPolicyOf({AUTH__ALLOWED_EMAIL_PATTERNS:value})).toThrow();
   expect(()=>admissionPolicyOf({AUTH__INVITE_ONLY:'yes'})).toThrow();
  });
  it('rejects verified browser session before forwarding and prevents credential issuance',async()=>{
