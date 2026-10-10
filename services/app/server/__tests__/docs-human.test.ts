@@ -79,7 +79,7 @@ describe('docs addresses', () => {
     expect(text).toContain('Claude Code, Codex, Pi, and OpenCode');
     expect(text).toContain('use the artifactbin skill');
     expect(text).toContain('afbin help to discover everything you can do');
-    expect(text).toContain('browser approval automatically when needed');
+    expect(text).toContain('sign in through the browser automatically when needed; a browser already signed in on the same machine connects with no click');
     expect(text).toContain('direct HTTP clients use email authentication');
     expect(text).toContain('--server');
     expect(text).toContain('afbin pull');
