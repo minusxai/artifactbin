@@ -98,13 +98,30 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/story-runtime/store.ts',
 ];
 const DATAFLOW_BROWSER_LEAVES = ['mutation-request-builder', 'scalar-input'];
-const DOCUMENT_ENTRIES = [
-  '', 'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'csp-extensions', 'document-authoring-client',
-  'document-graph', 'document-graph-patch', 'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'file-types',
-  'helmet', 'nesting', 'person-mentions', 'server', 'social-preview', 'source-changes', 'splice', 'title', 'update-parts',
+/*
+ * lib/document: server code enters through its index or `server` (node-only); browser-bundled code
+ * imports a listed leaf instead, never the index (browserLeavesOnly), because the island and app
+ * bundlers cannot drop the rest of a barrel.
+ */
+const DOCUMENT_ENTRIES = ['', 'server'];
+const DOCUMENT_BROWSER_IMPORTERS = [
+  'services/app/solid/',
+  'services/app/lib/editor-engine/',
+  'services/app/lib/islands/',
+  'services/app/lib/story-runtime/',
+  'services/app/lib/annotations/markdown-lite.ts',
+  'services/app/lib/artifact-backend/browser-artifact-write.ts',
+  'services/app/lib/cli-toolkit/browser.ts',
+  'services/app/lib/offline/file-backend.ts',
+  'services/app/lib/offline/project-document.ts',
+  'services/app/lib/offline/snapshot-current.ts',
 ];
-const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
-const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];
+const DOCUMENT_BROWSER_LEAVES = [
+  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'csp-extensions', 'display-title', 'document-authoring-client',
+  'document-graph', 'document-graph-patch', 'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'file-types', 'helmet',
+  'nesting', 'person-mentions', 'pwa-settings', 'query-notebook', 'script-export-location', 'social-preview', 'source-changes', 'splice', 'table-catalog',
+  'title', 'update-parts',
+];
 /**
  * lib/compiled-page: server code uses its index, or one of the three heavy entries the index must not
  * carry (Babel, node:vm; their headers say why); the offline file's browser-bundled HTML writer imports
@@ -130,7 +147,7 @@ const DEEP_MODULES = {
   'lib/artifacts': { entries: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/dataflow': { entries: DATAFLOW_ENTRIES, browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
-  'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES },
+  'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES },
