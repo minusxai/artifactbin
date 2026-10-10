@@ -7,7 +7,7 @@
  */
 export type { CompileOptions, CompileResult, ImportSource, SchemaLoader } from './compile-dataflow';
 export { compileDataflow, compileWithLoader, prepareCompile, rewriteBuiltinFields } from './compile-dataflow';
-export type { BoundColumn, RefLoader, ReferenceValidationState, ResolvedRef } from './refs';
+export type { BoundColumn, RefLoader, ResolvedRef } from './refs';
 export { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal } from './refs';
 export { DATA_SYNTAX_META, hasCurrentDataSyntax } from './data-syntax';
 export { bindParameters, datasetSqlParams } from './sql-parameters';
