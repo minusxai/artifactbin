@@ -10,7 +10,7 @@ import {createArtifactFromBody,prepareDocumentAuthoringContext} from '@/lib/publ
 import {readFileOffer} from './offer';
 import {prepareHostedFileUpdate,prepareHostedFilePublication} from './hosted-connect';
 import {validateFileComments} from './comment-validation';
-import {nodeIndex} from '../document/node-ids';
+import {nodeIndex} from '../document';
 import {verifyHostedComments,offlineCommentBody} from './hosted-comments';
 import type {ArtifactFile} from './file-format';
 

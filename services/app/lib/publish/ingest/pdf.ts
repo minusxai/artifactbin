@@ -8,7 +8,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
 import { MAX_PDF_BYTES } from '@/lib/platform/config';
 import { json } from '@/lib/http/http';
 import { storePdfContent } from '@/lib/datasets/data-tiers';
-import type { StoredContent } from '@/lib/document/stored-content';
+import type { StoredContent } from '@/lib/document';
 import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 

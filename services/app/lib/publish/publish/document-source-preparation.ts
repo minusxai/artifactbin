@@ -4,11 +4,9 @@
 import {MAX_DOCUMENT_BYTES,type DocumentUpdate} from '@artifactbin/contracts';
 import { type ArtifactRow, editorScope, loadArtifactDocument, type PreparedMarkupWrite, writerFor } from '@/lib/artifacts';
 import type { TokenActor } from '@/lib/accounts';
-import {createDocumentGraph} from '@/lib/document/document-graph';
-import {stampNodeIds} from '@/lib/document/node-ids';
+import {createDocumentGraph, stampNodeIds, prepareClientDocumentPublication} from '@/lib/document';
 import {getDb} from '@/lib/platform/db';
 import {json} from '@/lib/http/http';
-import {prepareClientDocumentPublication} from '@/lib/document/document-update-client';
 import {prepareDocumentAuthoringContext} from './document-authoring-context';
 
 export async function prepareDocumentSource(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{

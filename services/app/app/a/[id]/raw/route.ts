@@ -33,11 +33,10 @@ import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store/pdf-st
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
-import { declaresMutations } from '@/lib/document/head';
+import { declaresMutations, displayTitle } from '@/lib/document';
 import { appendCspExtensions, assetsPath, buildDocumentCsp, documentStyleSheets, markupCsp, mutatePath, queryPath } from '@/lib/page-styles';
 import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { readUrlValues } from '@/lib/dataflow';
-import { displayTitle } from '@/lib/document/head';
 import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';

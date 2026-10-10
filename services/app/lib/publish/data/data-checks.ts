@@ -18,7 +18,7 @@ import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/
 import { importedTables } from '@/lib/datasets/catalog';
 import { schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { refName, isEmptyDataflow } from '@/lib/dataflow/dataflow';
-import { dataflowOf, splitHelmet } from '../../document/helmet';
+import { dataflowOf, splitHelmet } from '../../document';
 import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader } from '@/lib/dataflow/refs';
 import { compileDataflow, prepareCompile } from '@/lib/dataflow/compile-dataflow';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';

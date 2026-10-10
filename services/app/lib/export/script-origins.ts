@@ -10,9 +10,8 @@
  */
 import type { PageRequest } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx/parse';
-import { splitHelmet } from '@/lib/document/helmet';
+import { splitHelmet, cspExtensionsOf } from '@/lib/document';
 import { ESM_CDN_ORIGIN } from '@/lib/author-script/contract';
-import { cspExtensionsOf } from '@/lib/document/csp-extensions';
 
 /** Static `import … from '…'`, `export … from '…'`, bare `import '…'` and `import('…')` with a literal. */
 const SPECIFIERS = /\b(?:import|export)\s+(?:[^'"`;]*?\s+from\s*)?(['"])([^'"]+)\1|\bimport\s*\(\s*(['"])([^'"]+)\3\s*\)/g;

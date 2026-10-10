@@ -4,14 +4,11 @@
 import {MAX_DOCUMENT_BYTES,type DocumentOperation} from '@artifactbin/contracts';
 import {json} from '../../http/http';
 import {repairJsxSource} from '../../jsx/repair';
-import {canonicalizeMarkup} from '../../document/canonical-source';
-import {createDocumentGraph,graphNodes,graphSource,graphReferences,type DocumentGraph} from '../../document/document-graph';
-import {graphFromSource} from '../../document/document-graph-source';
-import {prepareGraphPatch,type GraphPatch} from '../../document/document-graph-patch';
-import {graphValidationScope} from '../../document/document-graph-scope';
-import {applyOperationsToNodes,DocumentOperationError} from '../../document/document-operation';
-import {stampNodeIds} from '../../document/node-ids';
-import type {StoredContent} from '../../document/stored-content';
+import {
+  canonicalizeMarkup, createDocumentGraph, graphNodes, graphSource, graphReferences, type DocumentGraph, graphFromSource,
+  prepareGraphPatch, type GraphPatch, graphValidationScope, applyOperationsToNodes, DocumentOperationError, stampNodeIds,
+  type StoredContent,
+} from '../../document';
 import type {ServerRefLoader} from '../../datasets/schema-loader';
 import type {SourceRepair} from '../../jsx/repair';
 import type {ReferenceValidationState,ResolvedRef} from '@/lib/dataflow/refs';

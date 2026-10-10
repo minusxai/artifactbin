@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DatasetAccessPolicy, DatasetGrantSelector, DatasetOperation } from '@artifactbin/contracts';
-import { displayTitle } from '@/lib/document/display-title';
+import { rowTitle } from '@/lib/document/display-title';
 
 type Actions = { policy: DatasetAccessPolicy | null; writtenBy: Array<{id: string; title: string | null; mutations: string[]}> };
 const operations: DatasetOperation[] = ['insert', 'update', 'delete'];
@@ -60,7 +60,7 @@ function SavedActions(props: {id: string}): JSX.Element {
         </section>
         <section><h3 class="font-semibold">Blocked functions</h3><p class="mt-1 text-muted">{policy().execution?.functions?.deny?.join(', ') || 'None'}</p></section>
       </>}</Show>
-      <section><h3 class="font-semibold">Connected apps</h3><ul class="mt-2 space-y-2"><For each={loaded().writtenBy} fallback={<li class="text-muted">No apps use these actions yet.</li>}>{app => <li><a class="text-accent underline" href={`/a/${app.id}`}>{displayTitle(app)}</a><span class="ml-2 text-muted">{app.mutations.join(', ')}</span></li>}</For></ul></section>
+      <section><h3 class="font-semibold">Connected apps</h3><ul class="mt-2 space-y-2"><For each={loaded().writtenBy} fallback={<li class="text-muted">No apps use these actions yet.</li>}>{app => <li><a class="text-accent underline" href={`/a/${app.id}`}>{rowTitle(app)}</a><span class="ml-2 text-muted">{app.mutations.join(', ')}</span></li>}</For></ul></section>
     </>}</Show>
   </>;
 }

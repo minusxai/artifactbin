@@ -41,7 +41,7 @@ import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/publish/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { firstHeadingTitle } from '@/lib/document/head';
+import { firstHeadingTitle } from '@/lib/document';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { pagesOriginFor, pagesSessionUrl, type PagesSite } from '../http/pages-origin';
 import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';

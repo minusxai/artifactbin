@@ -53,7 +53,7 @@ import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow } fro
 import type { RoleActor } from '@/lib/accounts';
 import { loadDatasetRows, storeDatasetRows } from '@/lib/datasets/dataset-store';
 import type {Scalar} from '@/lib/dataflow/dataflow';
-import { newEditId } from '../../document/splice';
+import { newEditId } from '../../document';
 import {mutationInvocation} from '@/lib/artifacts/mutation-invocation';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
 import { emitDatasetCommitted } from '../after-commit';

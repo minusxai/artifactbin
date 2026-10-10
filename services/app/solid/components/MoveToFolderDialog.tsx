@@ -9,7 +9,7 @@ import House from 'lucide-solid/icons/house';
 import Search from 'lucide-solid/icons/search';
 import Check from 'lucide-solid/icons/check';
 import { parentOfRow, type ShelfRow } from '@/lib/workspace/shelf';
-import { displayTitle } from '@/lib/document/display-title';
+import { rowTitle } from '@/lib/document/display-title';
 import { DialogShell } from '../ui/DialogShell';
 import { Button } from '../ui/ui';
 
@@ -26,7 +26,7 @@ export function MoveToFolderDialog(props: {
   const [error, setError] = createSignal('');
   const root: FolderNode = {id: null, name: 'Workspace', parent: null, children: []};
   const tree = createMemo(() => {
-    const nodes = new Map(props.folders.map(folder => [folder.id, {id: folder.id, name: displayTitle(folder), parent: parentOfRow(folder), children: []} as FolderNode]));
+    const nodes = new Map(props.folders.map(folder => [folder.id, {id: folder.id, name: rowTitle(folder), parent: parentOfRow(folder), children: []} as FolderNode]));
     const result = {...root, children: [] as FolderNode[]};
     for (const node of nodes.values()) (nodes.get(node.parent ?? '') ?? result).children.push(node);
     for (const node of [result, ...nodes.values()]) node.children.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}) || String(a.id).localeCompare(String(b.id)));

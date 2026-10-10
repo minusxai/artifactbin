@@ -99,11 +99,9 @@ const DATAFLOW_BROWSER_IMPORTERS = [
 ];
 const DATAFLOW_BROWSER_LEAVES = ['mutation-request-builder', 'scalar-input'];
 const DOCUMENT_ENTRIES = [
-  '', 'anchors', 'annotation-edits', 'annotation-range', 'annotations', 'asset-url', 'authoring-capabilities', 'body', 'canonical-source',
-  'csp-extensions', 'document-authoring-client', 'document-codec', 'document-graph', 'document-graph-patch', 'document-graph-scope',
-  'document-graph-source', 'document-operation', 'document-patch', 'document-prose', 'document-update-client', 'document-update-history',
-  'edit-batch', 'edit-compose', 'external-images', 'file-types', 'format-source', 'head', 'helmet', 'lazy-code', 'local-validation', 'nesting',
-  'node-ids', 'person-mentions', 'server', 'social-preview', 'source-changes', 'splice', 'stored-content', 'title', 'update-parts',
+  '', 'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'csp-extensions', 'document-authoring-client',
+  'document-graph', 'document-graph-patch', 'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'file-types',
+  'helmet', 'nesting', 'person-mentions', 'server', 'social-preview', 'source-changes', 'splice', 'title', 'update-parts',
 ];
 const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
 const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];

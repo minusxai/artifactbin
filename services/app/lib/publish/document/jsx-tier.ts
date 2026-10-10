@@ -15,12 +15,10 @@
  * component allowlist + STORY_HTML_TAGS + `no-inline-style` style policy, then
  * the compile.
  */
-import { validateMarkupStructure } from '../../document/local-validation';
+import { validateMarkupStructure, canonicalizeMarkup, splitHelmet, type StoredContent, cspExtensionsOf } from '../../document';
 import { repairJsxSource } from '@/lib/jsx/repair';
-import { canonicalizeMarkup } from '../../document/canonical-source';
-export {canonicalizeMarkup} from '../../document/canonical-source';
+export {canonicalizeMarkup} from '../../document';
 import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/document/helmet';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { authorModuleNames, buildAuthorModule, type AuthorModule } from '@/lib/author-script/author-module.server';
@@ -28,10 +26,8 @@ import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-
 import { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../../http/http';
 import { type ContentInputCtx } from './input';
-import type { StoredContent } from '@/lib/document/stored-content';
 import { MAX_DOCUMENT_BYTES } from '@artifactbin/contracts';
 import { documentFonts, invalidFontFamilies } from '@/lib/page-styles';
-import { cspExtensionsOf } from '../../document/csp-extensions';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '@/lib/document/server';
 import { buildLambdaModule } from '@/lib/author-script/program.server';

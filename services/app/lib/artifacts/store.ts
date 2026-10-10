@@ -5,7 +5,10 @@ import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/con
 import { artifactChannel } from '@artifactbin/contracts';
 import { commitDocumentUpdate, openAnnotationsSql } from './write/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
-import type { ProseOperation } from '../document';
+import {
+  type ProseOperation, sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId, type StringEdit,
+  nodeIndex, stampNodeIds,
+} from '../document';
 import type { DocumentOperation } from '@artifactbin/contracts';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '@/lib/accounts';
@@ -15,10 +18,8 @@ import { claimArtifactId } from './identities';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
 import { validateUserContent, retainUserScope, resolveUserColumnScope } from '@/lib/datasets/user-fields';
 import { userKindOf } from '@/lib/accounts';
-import { sourceChanges } from '../document/source-changes';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState } from './state';
-import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from '../document/annotation-edits';
 import type { AnnotationOperation } from '../editor-engine/annotation-map';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { claimPendingDatasetSecret, resolveDatasetConnection } from '@/lib/datasets/secrets';
@@ -35,9 +36,6 @@ import { generateFileId } from '../platform/ids';
 import { type ArtifactFormat } from '@artifactbin/contracts';
 import { json } from '../http/http';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import { newEditId } from '../document/splice';
-import type { StringEdit } from '../document';
-import { nodeIndex, stampNodeIds } from '../document/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } from '@/lib/document/server';
 import { emitHeadCommitted } from './after-commit';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/data-syntax';
