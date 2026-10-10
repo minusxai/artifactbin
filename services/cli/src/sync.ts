@@ -2,7 +2,7 @@ import {accountMismatch} from './account-diagnostic';
 import {observeDelivery} from './delivery-observer';
 import {createDocumentGraph,prepareClientDocumentPublication,canonicalizeMarkup,parseDatasetDefinition,stampNodeIds} from '../../app/lib/cli-toolkit';
 import {documentOutcomePresent} from './document-recovery';
-import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
+import type {ArtifactDestination,DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
 import {localIdentities} from './identities';
 import {referenceIds} from './preview/graph';
 import {inferColumns} from '@artifactbin/utils/shape';
@@ -37,7 +37,7 @@ import {parseResourceFile,readResourceSource,reconcileResource,resourceContent,s
  * never replaces a version 2 policy with a version 1 grant such as viewers-write.
  */
 const VERSION_2_FIX='A dataset pushed without --access or --policy keeps its default version 2 policy, which this flag cannot replace: put --policy viewers-write on the first push of a new dataset, or grant writes in this dataset\'s YAML policy (afbin help apps).';
-interface PushOptions {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
+interface PushOptions {destination?:ArtifactDestination;force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
 interface PushPlan {authoringBase?:Snapshot;confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
 const fieldMap:Record<string,string>={link:'linkRole',folder:'parent_id'};
 /**
@@ -113,7 +113,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   const id=file.document?.metadata.id??resource?.id??file.tracked?.id??registered;
   if(id&&conflicts[id]&&!options.force)throw new CliError('merge_conflict',`${file.path} has an unresolved conflict.`,'Run afbin status to see it. Resolve locally and push --force, or pull --force to accept remote content.',conflicts[id],3);
   const draftIdentity=!!id&&!file.tracked&&(!!registered||!!file.document)&&!(file.document?.metadata??resource)?.head_version&&!(file.document?.metadata??resource)?.edit_id&&!(file.document?.metadata??resource)?.state;
-  if(!id||draftIdentity){if(draftIdentity)Object.assign(input,{reserved_id:id});plans.push({file,source:resourceSource,body:input,mode:'create',...deferrable});continue;}
+  if(!id||draftIdentity){if(options.destination)Object.assign(input,{destination:options.destination});if(draftIdentity)Object.assign(input,{reserved_id:id});plans.push({file,source:resourceSource,body:input,mode:'create',...deferrable});continue;}
   if(!file.tracked){plans.push({file,body:{...input,...(file.document?.metadata.head_version!==undefined?{expectedVersion:file.document.metadata.head_version}:{}),...(file.document?.metadata.state?{expectedState:file.document.metadata.state}:{})},mode:'replace',id,...deferrable});continue;}
   const base=file.tracked.snapshot;
   const metadata=file.document?.metadata??resource;
