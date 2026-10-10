@@ -27,7 +27,7 @@ import { userKindOf } from './user-kinds';
 import { testUserSessionCount } from './testuser-sessions';
 
 /** `users.name` for a minted row: what pages show, and what a person recognises in the database. */
-export const TESTUSER_LABEL = 'Test user';
+const TESTUSER_LABEL = 'Test user';
 
 /** The token NAME, never the secret: `mxmx_test_` is the product's own prefix for disposable identities. */
 const TESTUSER_TOKEN_PREFIX = 'mxmx_test_';

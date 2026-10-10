@@ -16,12 +16,12 @@ interface ParsedNode {
 }
 
 /** An attribute test: present (`true`), equal to a string, or matching a pattern. */
-export type AttrMatch = Record<string, string | true | RegExp>;
+type AttrMatch = Record<string, string | true | RegExp>;
 
 /** A class list containing `name`, for an `AttrMatch` on `class`. */
 export const cls = (name: string): RegExp => new RegExp(`(?:^|\\s)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
 
-export class HtmlElement {
+class HtmlElement {
   readonly children: HtmlElement[] = [];
 
   constructor(private readonly node: ParsedNode, readonly parent: HtmlElement | null) {

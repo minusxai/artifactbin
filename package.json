@@ -60,6 +60,7 @@
     "babel-preset-solid": "1.9.15",
     "esbuild": "0.28.2",
     "jsdom": "30.0.1",
+    "knip": "6.37.0",
     "picomatch": "4.0.7",
     "playwright": "1.62.1",
     "sharp": "0.35.5",

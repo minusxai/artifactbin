@@ -12,7 +12,7 @@ import { TableNode, TableRowNode, TableCellNode, $isTableRowNode, $isTableCellNo
 import { markdownTransformers as transformers, prepareEditorMarkdown } from './transformers';
 import { markdownContent, markdownHref } from './content';
 type MarkdownBlock = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'bullet' | 'number' | 'code' | 'check' | 'hr' | 'table';
-export type MarkdownTableAction = 'row-before' | 'row-after' | 'column-before' | 'column-after' | 'delete-row' | 'delete-column' | 'delete-table';
+type MarkdownTableAction = 'row-before' | 'row-after' | 'column-before' | 'column-after' | 'delete-row' | 'delete-column' | 'delete-table';
 export interface MarkdownEditor {
   editor: LexicalEditor;
   flush(): void;

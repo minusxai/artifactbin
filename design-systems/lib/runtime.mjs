@@ -46,21 +46,21 @@ export function varsMap(spec, mode) {
  * `:root:where([data-theme])`, the dark hooks on `:root:where([data-theme].dark)`, every class under
  * `:where(:root[data-theme])` so an authored rule of the same class wins by coming later.
  */
-export function scoped(css, slug) {
+function scoped(css, slug) {
   css = css.replaceAll(`.dark .ds-${slug}`, `:root:where([data-theme="${slug}"].dark)`);
   css = css.replace(new RegExp(`\\.ds-${slug}(?=\\s*\\{)`, 'g'), `:root:where([data-theme="${slug}"])`);
   css = css.replaceAll(`.ds-${slug} `, `:where(:root[data-theme="${slug}"]) `);
   return css.replaceAll(`.ds-${slug}`, `:where(:root[data-theme="${slug}"])`);
 }
 
-export function systemCss(spec) {
+function systemCss(spec) {
   const slug = spec.slug;
   const own = filterBlock(spec.css ?? '', (l) => !PAGE_CHROME.some((c) => selectorOf(l).includes(c)));
   const kit = filterBlock(SKELETON_CSS.replaceAll('.ds-X', `.ds-${slug}`), (l) => ['.h-', '.ds-row', '.ds-tpl'].some((w) => selectorOf(l).includes(w)));
   return scoped([typeCss(spec), own, kit].join('\n'), slug);
 }
 
-export function entry(slug) {
+function entry(slug) {
   const S = loadSpec(slug);
   return {
     name: slug, label: S.name,

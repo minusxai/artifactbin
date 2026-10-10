@@ -11,6 +11,8 @@ const node = process.execPath;
 const commands = label === 'validate' && !args.length ? [
   [node, 'scripts/ci/check-residual-names.mjs'],
   [node, 'scripts/ci/module-graph.mjs'],
+  // Unused files, exports, types and dependencies (knip.config.js names the entry points); a stale entry fails too.
+  [node, 'node_modules/knip/bin/knip.js', '--no-progress', '--treat-config-hints-as-errors'],
   ...typeCheckCommands({ root: path.resolve('.'), node }),
 ] : label === 'test' ? [[node, 'scripts/ci/test-changed.mjs', ...args]] : null;
 try {

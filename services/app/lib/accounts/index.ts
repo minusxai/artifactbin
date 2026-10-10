@@ -9,7 +9,7 @@ export { confirmWelcome, profileWrites, syncProfile, welcomePending } from './pr
 export { seedOwnerJoin, setRelationState } from './relation-state';
 export { count, has, link, linked, unlink } from './relations';
 export { noteTestUserSession, testUserSessionCount } from './testuser-sessions';
-export { TESTUSER_LABEL, createTestUser, listTestUsers } from './testusers';
+export { createTestUser, listTestUsers } from './testusers';
 export { DEFAULT_TOKEN_TTL_MS, LIVE_TOKEN_SQL, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, TOUCH_INTERVAL_MS, ensureUserToken, listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus, touchToken } from './tokens';
 export { userKindOf } from './user-kinds';
 export { USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensById, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, ownerUsername, revokeUserToken, setUserEmail, setUsername, usernameFromEmail } from './users';

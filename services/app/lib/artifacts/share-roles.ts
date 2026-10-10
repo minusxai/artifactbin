@@ -73,25 +73,6 @@ export const capRole = (role: ArtifactRole, ceiling: ArtifactRole): ArtifactRole
 export const ANONYMOUS_CEILING: ArtifactRole = 'viewer';
 
 /**
- * What signing in would UNLOCK for whoever holds this link — the link's own
- * role when the ceiling is the only thing withholding it, else `none`.
- *
- * The exact inverse of the cap in effectiveRole, and it lives here so the two
- * cannot drift: the ceiling is what makes the refusal correct, and this is what
- * keeps it from being SILENT. An owner who sets a link to `can comment` has
- * invited whoever holds it; a guest who is shown nothing has been invited and
- * not told. The app page's bar offers /login when they ask to comment
- * (solid/pages/Document) — a door, never a capability. Nothing about who may
- * actually write changes until there is an account for a share to resolve to.
- *
- * `none` at or below the ceiling is the load-bearing half: a guest already
- * READS a public document, so a login offer there would be chrome with no
- * consequence on every public link in the product.
- */
-export const roleBehindLogin = (linkRole: ArtifactRole): ArtifactRole =>
-  (rankOf(linkRole) > rankOf(ANONYMOUS_CEILING) ? linkRole : 'none');
-
-/**
  * The four capability questions, answered in ONE place so the server door and
  * the UI hook that offers the control cannot drift apart.
  *

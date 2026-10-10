@@ -74,7 +74,7 @@ function documentViewProbe() {
 }
 
 /** The lab's throttling (scripts/ci/performance-loads.mjs `conditions`). */
-export const LAB_THROTTLE = { latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4 };
+const LAB_THROTTLE = { latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4 };
 
 /** Size samples per cell: the summary takes their median, so one late-landing chunk cannot move a target. */
 const SIZE_RUNS = 3;

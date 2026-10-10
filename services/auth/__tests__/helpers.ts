@@ -4,7 +4,6 @@ import { ensureAuthSchema } from '../src/schema';
 import type { AuthOptions } from '../src/parts';
 
 export { mintTestToken, testDb } from '@artifactbin/test-support/db';
-export { PAGE_HEADERS } from '@artifactbin/test-support/browser';
 
 /** Both sides' tables, idempotent — safe to call before anything exists. */
 async function ensureTestSchema(): Promise<void> {
