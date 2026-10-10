@@ -2,15 +2,13 @@ import { grantMutationPolicy } from '@artifactbin/utils';
 import { grantsOf, grantContext, grantsPermitWrite, type GrantDocument } from './grants';
 import {validateDatasetPolicyForRow} from '@/lib/datasets/policy/validation';
 import { policySession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
-import type {
-  DatasetAccessPolicy as DatasetPolicy,
-  DatasetMutationPolicy,
-} from '@artifactbin/contracts';
+import { canEdit, type DatasetAccessPolicy as DatasetPolicy, type DatasetMutationPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { getDb } from '@/lib/platform/db';
-import { groupMemberPredicate, editorScope, canWriteDataset, writerFor, canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
+import { canReadArtifact, effectiveRole } from '../access';
+import { editorScope, groupMemberPredicate, writerFor, type ArtifactRow } from '../table';
 import type { TokenActor, RoleActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactFor } from '@/lib/artifacts/store';
+import { getArtifactById, getArtifactFor } from '../rows';
 import { catalogOf } from '@/lib/datasets/catalog';
 
 /** One read-access fence for policy actions: sharing remains the only audience.
@@ -112,14 +110,10 @@ export async function mutationPolicy(
   if (!selected) throw new Error('No policy permits writes to this table');
   return selected;
 }
-export interface MutationDocument {
-  id: string;
-  editId: string;
-}
 export async function recheckMutation(
   dataset: ArtifactRow,
   actor: RoleActor,
-  document?: MutationDocument,
+  document?: GrantDocument,
 ): Promise<ArtifactRow> {
   const current = await getArtifactById(dataset.id);
   if(current && grantsOf(current)){
@@ -149,4 +143,21 @@ export async function recheckMutation(
       throw new Error('Document no longer has dataset access');
   }
   return current;
+}
+
+// ── Writable datasets ────────────────────────────────────────────────────────
+
+/** Why a write may not happen. Each names the fix; none is an existence oracle. */
+export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
+
+/** The dataset must allow writes AND the current actor must hold its editor role. */
+export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, declared: boolean | GrantDocument = false): Promise<WriteRefusal | null> {
+  if (dataset.format !== 'dataset') return 'not_a_dataset';
+  if(catalogOf(dataset)?.kind==='postgres')return 'dataset_read_only';
+  if(grantsOf(dataset))return await grantsPermitWrite(dataset,actor,typeof declared==='object'?declared:undefined)?null:'dataset_read_only';
+  // An unreachable dataset is reported as read-only, never as "not yours":
+  // the caller answers a uniform 404 for anything it could not resolve, and
+  // this one it could — the document names it, so its existence is not news.
+  if (!canEdit(await effectiveRole(dataset, actor)) && !(declared && await canUseDataPolicy(dataset, actor))) return 'dataset_read_only';
+  return dataset.access === 'readwrite' ? null : 'dataset_read_only';
 }

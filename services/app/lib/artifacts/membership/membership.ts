@@ -6,8 +6,9 @@ import { readThrough } from '@/lib/artifacts/dataset-policy/grants';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
 import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
 import { getDb } from '@/lib/platform/db';
-import { effectiveRole, type ArtifactRow } from '../access';
-import { getArtifactById } from '../store';
+import { effectiveRole } from '../access';
+import { type ArtifactRow } from '../table';
+import { getArtifactById } from '../rows';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 import { can } from '../capabilities';
 

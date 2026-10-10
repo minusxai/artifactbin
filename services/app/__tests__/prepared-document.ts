@@ -3,8 +3,9 @@ import {POST as operationRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {request} from './harness';
 /** Test authoring client: compile before calling the real service/route. Keeping
  * this explicit prevents fixture preparation reads from hiding commit queries. */
-import { getArtifactById, type EditInput } from '@/lib/artifacts/store';
-import { type ArtifactRow } from '@/lib/artifacts/access';
+import { getArtifactById } from '@/lib/artifacts/rows';
+import { type EditInput } from '@/lib/artifacts/store';
+import { type ArtifactRow } from '@/lib/artifacts/table';
 import {prepareDocumentAuthoringContext} from '@/lib/publish/publish';
 import {prepareClientDocumentUpdate,prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/document/document-update-client';
 export function documentEdit(row:ArtifactRow,change:ClientDocumentChange):EditInput {

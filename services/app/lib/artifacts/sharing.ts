@@ -1,7 +1,8 @@
-import { editorScope, ownerScope, type ArtifactRow, type Scope } from './access';
+import { editorScope, ownerScope, type ArtifactRow, type Scope } from './table';
 import type { TokenActor } from '@/lib/accounts';
-import { getArtifactFor, writeShares } from './store';
-import { findWritersFor } from './dataflow';
+import { getArtifactFor } from './rows';
+import { writeShares } from './store';
+import { findWritersFor } from './dependents';
 import { artifactQuery } from './document';
 import { grantsOf } from '@/lib/artifacts/dataset-policy/grants';
 import { catalogOf } from '@/lib/datasets/catalog';

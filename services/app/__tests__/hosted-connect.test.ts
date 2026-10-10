@@ -1,6 +1,7 @@
 import {describe,it,expect,vi} from 'vitest';
 import * as annotations from '@/lib/annotations';
 import * as artifactStore from '@/lib/artifacts/store';
+import * as artifactRows from '@/lib/artifacts/rows';
 import {useAppHarness,request} from './harness';
 import { createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -37,8 +38,8 @@ describe('hosted portable file handoff',()=>{
   }
   await online('Two','Online two');
   const captured=(await getArtifactById(row.id))!;
-  const read=artifactStore.getArtifactById;
-  const boundary=interleave?vi.spyOn(artifactStore,'getArtifactById').mockImplementationOnce(async(id)=>{
+  const read=artifactRows.getArtifactById;
+  const boundary=interleave?vi.spyOn(artifactRows,'getArtifactById').mockImplementationOnce(async(id)=>{
    const admitted=await read(id);
    await online('Online two','Online three');
    return admitted;

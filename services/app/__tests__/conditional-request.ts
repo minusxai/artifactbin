@@ -2,7 +2,7 @@
 import {documentPublicationBody,documentPublicationWithResources} from './prepared-document';
 import {POST as editRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {PATCH} from '@/app/api/artifacts/[id]/route';
-import { getArtifactById } from '@/lib/artifacts/store';
+import { getArtifactById } from '@/lib/artifacts/rows';
 import {artifactState} from '@/lib/artifacts/state';
 import {request,type RequestOptions} from './harness';
 export async function observedRequest(path:string,options:RequestOptions):Promise<Request>{

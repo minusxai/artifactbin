@@ -4,7 +4,7 @@
  */
 import { trackEvent } from '@/lib/platform/analytics';
 import { canReadArtifact } from './access';
-import { getArtifactById } from './store';
+import { getArtifactById } from './rows';
 import { isCrossSiteRequest } from '@/lib/http/http';
 import { sessionActor } from '@/lib/accounts';
 

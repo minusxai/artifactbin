@@ -1,12 +1,12 @@
 import type {MutationInput,MutationOutcome,SqlService} from '@artifactbin/contracts';
-import type { ArtifactRow } from './access';
+import type { ArtifactRow } from './table';
 import type { RoleActor } from '@/lib/accounts';
 import type {Db} from '@/lib/platform';
-import type {MutationDocument} from '@/lib/artifacts/dataset-policy';
+import type { GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
 export interface MutationContext {
  dataset:ArtifactRow;
  actor:RoleActor;
- document?:MutationDocument;
+ document?:GrantDocument;
  db:Db;
  recheckAccess:()=>Promise<void>;
 }
