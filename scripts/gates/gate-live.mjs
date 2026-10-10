@@ -402,6 +402,50 @@ async function agentProseMode() {
     await ctx.close();
   });
 }
+/**
+ * 5. A SHORT document's ground still fills the frame after a live version. The framed document is the standalone
+ * copy (its design on <html>, its own sheets); a version drawn in place from the app page's story once dropped both,
+ * and the ground stopped at the content's height with the rest of the frame white until a reload.
+ */
+async function agentGround() {
+  const { must, run } = lane(check, 'agent ground');
+  await run(async () => {
+    const start = await startDocument(BASE);
+    const short = (words) => `<Helmet><title>Short</title></Helmet><h1 id="short-h">Short document</h1><p id="short-p">${words}</p>`;
+    await put(start.token, start.id, { markup: short('the first version'), template: 'doc', theme: 'meridian' });
+    const { ctx, page, saw } = await readerOf(start, /the first version/);
+    must(saw, 'the reader saw the short document');
+    await sleep(1500);
+    /** What paints the bottom of the frame's viewport, and how far down that ground reaches. */
+    const ground = () => docEval(page, () => {
+      const html = document.documentElement;
+      const story = document.querySelector('[data-mx-inline-story]');
+      let painter = document.elementFromPoint(innerWidth / 2, innerHeight - 4);
+      while (painter && ['rgba(0, 0, 0, 0)', 'transparent'].includes(getComputedStyle(painter).backgroundColor)) painter = painter.parentElement;
+      return {
+        color: painter ? getComputedStyle(painter).backgroundColor : 'none: the browser\'s white canvas',
+        // <html>'s (or <body>'s) background paints the whole canvas; any other element's stops at its own box.
+        extent: !painter ? 0 : painter === html || painter === document.body ? innerHeight : Math.round(painter.getBoundingClientRect().bottom),
+        viewport: innerHeight,
+        content: Math.round(story?.getBoundingClientRect().bottom ?? 0),
+        theme: html.getAttribute('data-theme'),
+      };
+    });
+    const before = await ground();
+    must(before.content < before.viewport, `the document is shorter than the frame (${before.content} < ${before.viewport})`);
+    check(before.extent >= before.viewport && before.color !== 'none: the browser\'s white canvas',
+      `a fresh load paints the document's ground to the frame's bottom (${JSON.stringify(before)})`);
+    await put(start.token, start.id, { markup: short('THE SECOND VERSION') });
+    must(await docText(page, /THE SECOND VERSION/, 25000), 'the second version was drawn in place');
+    await sleep(1200);
+    const after = await ground();
+    check(after.color === before.color && after.extent >= after.viewport,
+      `after a live version the ground still fills the frame, as on a fresh load (${JSON.stringify(before)} → ${JSON.stringify(after)})`);
+    check(after.theme === before.theme, `the document keeps its design on <html> through the version (${before.theme} → ${after.theme})`);
+    await ctx.close();
+  });
+}
+
 // gate-live-reader's fifth leg ("an unknown document's stream is the uniform 404") was an HTTP fact with no browser
 // in it: live-events.test.ts "404s an unknown or malformed id, indistinguishably" asserts it on the route.
 
@@ -517,7 +561,7 @@ const started = Date.now();
 // the dataset page (/api/page/session) and the sharing controls never appeared — reproduced on a host server and in
 // the gate container, cause not yet established; the original sequential gate never met it.
 await shareLeg();
-await Promise.all([votesLeg(), agentHydrates(), agentProse(), agentMode(), agentProseMode(), watchedLeg(), readerLeg()]);
-check.note(`eight legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+await Promise.all([votesLeg(), agentHydrates(), agentProse(), agentMode(), agentProseMode(), agentGround(), watchedLeg(), readerLeg()]);
+check.note(`nine legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 await browser.close();
 check.done();

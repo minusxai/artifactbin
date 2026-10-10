@@ -29,7 +29,7 @@ import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
 import { applyColorMode, readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import { ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
+import { ISLAND_DOCUMENT_KEY, LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
@@ -66,7 +66,7 @@ interface MorphDependencies {
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
   /** Import a document module by URL (its `boot` runs on first import only). */
   importModule?: (url: string) => Promise<unknown>;
-  /** Which page asks; decided from the origin when absent (a `/raw` copy's is opaque). */
+  /** Which page asks; decided from the page when absent (an opaque `/raw` copy or a document on its own origin: `raw`). */
   surface?: StorySurface;
 }
 
@@ -79,7 +79,10 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   const root = doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
   const id = doc.body?.getAttribute(LIVE_ID_ATTR);
   if (!root || !id) throw refuse('the page has no live story');
-  const surface = options.surface ?? (win.origin === 'null' ? 'raw' : 'app');
+  // The surface this page was served as. A sandboxed `/raw` copy (opaque origin) and a document on its own origin
+  // (LIVE_DIRECT_ATTR: framed by the app page, or top level) are the standalone copy, with its design on <html> and
+  // its own sheets; only an app-origin page holding the story asks for the app page's story and its one sheet.
+  const surface = options.surface ?? (win.origin === 'null' || doc.body.hasAttribute(LIVE_DIRECT_ATTR) ? 'raw' : 'app');
 
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   const seam = running?.morph ?? null;
