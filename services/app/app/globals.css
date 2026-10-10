@@ -509,6 +509,12 @@ body {
 .comment-editor-tools.has-context .comment-editor-toolbar { justify-content: flex-end; }
 .comment-editor-toolbar button { flex-shrink: 0; }
 
+/* The hover card's reply box (AnnotationPreview): one line until it is focused or holds a draft. */
+[data-hover-reply] .comment-rich-editor { max-height: 30vh; padding: 8px 10px; font-size: 13px; }
+[data-hover-reply] .comment-rich-editor:has(> p:only-child > br:only-child)::before { inset-inline: 10px; }
+[data-hover-reply][data-compact='true'] .comment-rich-editor { min-height: 0; margin-bottom: 0; padding-block: 5px; }
+[data-hover-reply][data-compact='true'] :is(.comment-editor-tools, .comment-agents, [data-reply-actions]) { display: none; }
+
 /* Compact comment recipients share the editor's mention appearance and insertion path. */
 .comment-agents { display:flex; align-items:baseline; gap:8px; padding:6px 0 8px; font:11px/1.5 var(--font-sans); color:var(--color-muted); }
 .comment-agents-manage { display:inline-flex; flex-shrink:0; align-items:center; gap:2px; margin-left:auto; padding:2px 0; color:var(--color-muted); text-decoration:none; }

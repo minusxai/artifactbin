@@ -170,6 +170,19 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [hoverId, setHoverId] = createSignal<string | null>(null);
   let uiHoverId: string | null = null;
   const hoverUi = (id: string | null) => { uiHoverId = id; setHoverId(id); };
+  /** The hover card someone is replying from: it outlasts the mouse and other markers until put away. */
+  const [pinnedId, setPinnedId] = createSignal<string | null>(null);
+  /** The hover card that shows: the pinned one, else the one under the pointer. */
+  const previewId = () => pinnedId() ?? hoverId();
+  /** Unsent hover-card replies per thread, for this page session: closing a card never loses one. */
+  const [replyDrafts, setReplyDrafts] = createSignal<Record<string, string>>({});
+  const setReplyDraft = (id: string, value: string) => setReplyDrafts((current) => {
+    if ((current[id] ?? '') === value) return current;
+    const next = { ...current };
+    if (value) next[id] = value; else delete next[id];
+    return next;
+  });
+  const closePreview = () => batch(() => { setPinnedId(null); hoverUi(null); });
   const [viewStateRequest, setViewStateRequest] = createSignal(0);
   const [viewStateError, setViewStateError] = createSignal<{ id: string; message: string } | null>(null);
   const [missingTargets, setMissingTargets] = createSignal<Set<string>>(new Set());
@@ -398,7 +411,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       });
     const selected = selection();
     postToFrame({
-      type: STORY_ANNOTATIONS_MESSAGE, viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: hoverId(),
+      type: STORY_ANNOTATIONS_MESSAGE, viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: previewId(),
       selectedPath: selected?.path ?? null, selected, canComment: true, pick: pick(),
     } satisfies StoryAnnotationsMessage);
   });
@@ -675,6 +688,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const placed = createMemo(() => floating() ? positionedComments(floatingRows(), anchorRects(), markerRect(), viewport().height) : []);
   const placedIds = createMemo(() => placed().map((item) => item.annotation.id), undefined, { equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]) });
   const placement = (id: string) => placed().find((item) => item.annotation.id === id);
+  // A pinned card whose marker is gone (the rail opened, the thread resolved, it scrolled away) is put away; its draft stays.
+  createEffect(() => { const pinned = pinnedId(); if (pinned && !placedIds().includes(pinned)) setPinnedId(null); });
 
   const visibleResolved = createMemo(() => placed().filter((item) => item.top >= 0 && item.top + VIEW_COMMENT_COLLAPSED_H <= viewport().height).map((item) => item.annotation.id).join(','));
   const counting = createMemo(() => Object.values(recentResolved()).some((value) => value.remaining > 0));
@@ -836,8 +851,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           <For each={placedIds()}>{(id) => (
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={recentResolved()[id]?.remaining}
-                hovered={hoverId() === id} resolving={busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
-                onResolve={() => void resolveFromPreview(id)} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi} />
+                hovered={previewId() === id} resolving={busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
+                onResolve={() => void resolveFromPreview(id)} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
+                onReply={item().annotation.status === 'open' ? (body) => act(id, { reply: body }) : undefined}
+                backend={backend} artifactId={props.id} busy={busy()} draft={replyDrafts()[id] ?? ''} onDraftChange={(value) => setReplyDraft(id, value)}
+                pinned={pinnedId() === id} onPin={() => setPinnedId(id)} onClose={closePreview} />
             )}</Show>
           )}</For>
         </div>

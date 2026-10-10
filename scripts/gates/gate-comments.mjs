@@ -441,10 +441,10 @@ async function ownerLeg(browser, { id, token }) {
  * failed check, and the other lane still reports.
  */
 const run = async () => {
-  const [main, quote, md, fold, pick, targets, tableSelection, liveSelection] = await Promise.all([
+  const [main, quote, md, fold, pick, targets, tableSelection, liveSelection, hoverReply] = await Promise.all([
     publish(DOC), publish(QUOTE_DOC), publish(MD_DOC), publish(FOLD_DOC), publish(DOC),
     publish(commentTargetsMarkup, { title: 'Dynamic comment acceptance', visibility: 'unlisted' }),
-    publish(TABLE_SELECTION_DOC), publish(liveSelectionDoc(1)),
+    publish(TABLE_SELECTION_DOC), publish(liveSelectionDoc(1)), publish(HOVER_REPLY_DOC),
   ]);
   const browser = await launchChromium();
   const lane = async (name, legs) => {
@@ -460,6 +460,8 @@ const run = async () => {
       // pins that follow declarative items, then a block PICKED and an area drawn
       // then the selection bubble and document menu across live versions
       lane('pick lane', [[targetsLeg, targets], [pickLeg, pick], [liveSelectionLeg, liveSelection]]),
+      // the owner answers from the hover card without opening the sidebar
+      lane('hover reply lane', [[hoverReplyLeg, hoverReply]]),
     ]);
     // a long reply folds; a resolved card reads as resolved
     await lane('fold', [[foldLeg, fold]]);
@@ -467,6 +469,88 @@ const run = async () => {
     await browser.close();
   }
 };
+
+const HOVER_REPLY_DOC = '<Helmet><title>Hover reply</title></Helmet>'
+  + '<div data-design="tw" className="p-10"><h1>Margins</h1><p id="hover-target">Margins held at 21% this quarter.</p></div>';
+const HOVER_DRAFT = 'Answered from the hover card';
+
+/**
+ * REPLY FROM THE HOVER CARD: hover the marker, expand it, Tab from Resolve into the reply box, type,
+ * move the mouse away (the card stays: it is pinned), Escape (the draft waits on the marker), hover
+ * back (the draft is restored), send — the reply shows in the card at once and survives a reload.
+ */
+async function hoverReplyLeg(browser, { id, token }) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  try {
+    await becomeOwner(page, BASE, token);
+    await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    await documentLocator(page).locator('#hover-target').waitFor({ timeout: 15000 });
+    const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    const created = await page.evaluate(async ([docId, editId]) => {
+      const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_id: 'hover-target', edit_id: editId, body: 'is 21% the adjusted figure?' }),
+      });
+      return res.status;
+    }, [id, head.edit_id]);
+    check(created === 201, `the owner leaves a comment to answer from the hover card (${created})`);
+    await page.reload({ waitUntil: 'load' });
+    await documentLocator(page).locator('#hover-target').waitFor({ timeout: 15000 });
+
+    const marker = page.locator('[aria-label^="Open annotation conversation by"]');
+    const card = page.locator('[data-annotation-id]');
+    await marker.hover();
+    await card.getByRole('button', { name: 'Expand replies', exact: true }).click();
+    const field = page.getByRole('textbox', { name: 'Reply to annotation', exact: true });
+    await field.waitFor({ timeout: 8000 });
+    const resolve = page.getByRole('button', { name: 'Resolve thread', exact: true });
+    await resolve.focus();
+    await page.keyboard.press('Tab');
+    check(await field.evaluate(node => node.getRootNode().activeElement === node), 'Tab from Resolve lands in the hover reply box');
+    await page.keyboard.type(HOVER_DRAFT);
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(400);
+    check(await field.isVisible() && (await field.textContent()).includes(HOVER_DRAFT),
+      'moving the mouse away leaves the card with a draft open (pinned)');
+    const boxes = await card.evaluate(node => {
+      const reply = node.querySelector('[data-hover-reply]').getBoundingClientRect();
+      const own = node.getBoundingClientRect();
+      return { replyBottom: reply.bottom, cardBottom: own.bottom, replyTop: reply.top, cardTop: own.top };
+    });
+    check(boxes.replyBottom <= boxes.cardBottom + 1 && boxes.replyTop >= boxes.cardTop,
+      `the reply box sits inside the card, at its bottom (${JSON.stringify(boxes)})`);
+
+    await page.keyboard.press('Escape');
+    await until(() => field.count(), count => count === 0, 4000);
+    check(await page.getByRole('img', { name: 'Unsent reply draft', exact: true }).isVisible(),
+      'Escape with a draft closes the card and the marker says a draft is waiting');
+    await marker.hover();
+    await field.waitFor({ timeout: 8000 });
+    check((await field.textContent()).includes(HOVER_DRAFT), 'hovering the marker again restores the draft');
+
+    await page.getByRole('button', { name: 'Send reply', exact: true }).click();
+    const thread = await until(async () => {
+      const res = await fetch(`${BASE}/api/artifacts/${id}/annotations`, { headers: { Authorization: `Bearer ${token}` } });
+      return (await res.json()).annotations?.[0]?.thread ?? [];
+    }, rows => rows.length === 2, 8000);
+    check(thread?.[1]?.body === HOVER_DRAFT, 'the hover reply is saved on the thread');
+    await page.mouse.move(5, 5);
+    await until(() => card.getByRole('list', { name: 'Thread replies' }).textContent().catch(() => ''), text => text.includes(HOVER_DRAFT), 4000);
+    check((await card.getByRole('list', { name: 'Thread replies' }).textContent()).includes(HOVER_DRAFT)
+      && (await field.textContent()).trim() === '',
+    'the reply appears in the still-open card at once and the box empties');
+    check(await page.getByLabel('Annotation sidebar').count() === 0, 'replying from the hover card never opens the sidebar');
+
+    await page.reload({ waitUntil: 'load' });
+    await documentLocator(page).locator('#hover-target').waitFor({ timeout: 15000 });
+    await page.locator('[aria-label^="Open annotation conversation by"][aria-label$="2 messages"]').waitFor({ timeout: 8000 });
+    await page.locator('[aria-label^="Open annotation conversation by"]').hover();
+    await card.getByRole('button', { name: 'Expand replies', exact: true }).click();
+    check((await card.getByRole('list', { name: 'Thread replies' }).textContent()).includes(HOVER_DRAFT),
+      'after a reload the hover card shows the reply');
+  } finally { await ctx.close(); }
+}
 
 const TABLE_SELECTION_DOC = '<Helmet><title>Selected table rows</title></Helmet>'
   + '<div data-design="tw" className="p-10"><h1>Two selected rows</h1>'
