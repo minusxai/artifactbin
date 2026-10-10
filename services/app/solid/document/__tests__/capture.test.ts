@@ -23,8 +23,8 @@ it('stages a captured image with the captured edit revision and reuses the stage
   await capture.capture({ x: 1, y: 2, width: 40, height: 30 });
   expect(capture.required()).toBe(true);
   expect(capture.draft()).toBeTruthy();
-  expect(await capture.stage()).toBe('stage-1');
-  expect(await capture.stage()).toBe('stage-1');
+  expect(await capture.stage()).toEqual({ id: 'stage-1', editId: 'edit-1' });
+  expect(await capture.stage()).toEqual({ id: 'stage-1', editId: 'edit-1' });
   expect(upload).toHaveBeenCalledTimes(1);
   const form = upload.mock.calls[0]?.[0] as FormData;
   expect(JSON.parse(String(form.get('metadata')))).toMatchObject({ capturedEditId: 'edit-1', rect: { x: 1, y: 2, width: 40, height: 30 } });

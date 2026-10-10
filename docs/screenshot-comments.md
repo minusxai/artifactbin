@@ -7,6 +7,14 @@ the reader explicitly presses Select. The brush editor provides freehand strokes
 color, thickness and undo. The comment retains both its existing source-node anchor
 and an independently captured rectangle; cross-block drags are not clipped to the anchor.
 
+Any comment box also takes an image directly: paste one (a screenshot copied to the
+clipboard), drop an image file anywhere on the new-comment composer or a reply box, or
+use the always-present "Attach image" button. It replaces the draft's image (one image per
+comment, root or reply) and opens in the same brush editor. A clipboard holding text as well
+as a picture pastes as text. A file dropped elsewhere on the page is refused rather than opened,
+and so is one dropped on the framed document itself (`lib/story-runtime/frame-bridge/file-drops.ts`),
+unless something there claims it first.
+
 ## Boundaries
 
 - `lib/capture/screen.ts`: browser resources behind `beginCapture`, `capture`, `dispose`.
@@ -18,14 +26,21 @@ and an independently captured rectangle; cross-block drags are not clipped to th
   source change or timeout. Capture is invoked before asynchronous imports.
 - `solid/document/CommentCapture.ts`: draft lifecycle, explicit retry/upload/text-only recovery,
   captured revision and staged upload. The brush editor is a separate lazy chunk.
+- `solid/document/CommentImageAttach.tsx`: paste/drag/drop binding (capture phase, ahead of the
+  text editor), the Attach image control, the drop target and the draft view, shared by the
+  composer and `AnnotationReplyBox.tsx` (the one reply box: the rail thread and the hover card).
 - `comment-images.ts`: validated private raster stages, quota reservations, single-use
-  attachment consumption inside the root-comment transaction, and authorized reads.
+  attachment consumption inside the transaction that writes the root comment or the reply
+  (`attachment_id` with the `edit_id` it was staged against, which must still be the document's
+  head: a moved head is a 409 `stale`, a stage that is not usable a 400 `invalid_attachment`), and
+  authorized reads. An attached (not captured) image is staged against the current head at send.
+  Each comment of a thread carries its own `image` on the wire.
   Routes translate HTTP. Comment images are not independently public artifacts.
 
 The original crop, flattened preview and 480px thumbnail are decoded and re-encoded as
 WebP. Metadata includes image-coordinate brush strokes, captured edit ID and time,
-viewport and capture rectangle. Images are capped at 2048px / 4 megapixels; uploads at
-8MB per raster. Drafts survive upload or revision errors. A stale revision is refused;
+viewport and capture rectangle. Images are capped at 2048px / 4 megapixels (larger
+attached images are scaled down); attached files at PNG, JPEG or WebP up to 50 MB. Drafts survive upload or revision errors. A stale revision is refused;
 the reader can retake or explicitly choose a comment without a screenshot.
 
 Stage rows reserve all stored bytes against the uploader. Screenshot reservations

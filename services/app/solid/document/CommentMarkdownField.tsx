@@ -19,6 +19,7 @@ import { remoteMention } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
 import type { RemoteSessionInfo } from '../../../contracts/src/remote';
 import { canTagAgent, CommentMentionPicker, type MentionKeyboard } from './CommentMentionPicker';
+import { AttachImageButton, CommentImageDraftView, createImageDropTarget, ImageDropTarget, type CommentImageDraft } from './CommentImageAttach';
 
 /** ⌘B / ⌘I / ⌘E — the three every editor binds, and nothing beyond them. */
 const KEYS: Record<string, MdMarker> = { b: 'bold', i: 'italic', e: 'code' };
@@ -49,6 +50,10 @@ export interface CommentMarkdownFieldProps {
   placeholder?: string;
   /** Anything ABOVE the toolbar — the composer's breadcrumb, which says what is being commented on. */
   children?: JSX.Element;
+  /** This box takes one image (paste, drop, Attach image), drawn above it; absent: words only. */
+  image?: CommentImageDraft | null;
+  /** The comment is being sent: the image's brush holds still. */
+  busy?: boolean;
 }
 
 export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Element {
@@ -116,11 +121,15 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   });
   createEffect(()=>{const value=props.value;editor?.sync(value);});
   onCleanup(()=>editor?.destroy());
-  return <div class={`min-w-0 ${props.class??''}`}>
+  const drop = createImageDropTarget(() => props.image);
+  return <div ref={drop.ref} class={`relative min-w-0 ${props.class??''}`}>
+    <ImageDropTarget over={drop.over()} />
+    <Show when={props.image}>{image => <CommentImageDraftView image={image()} busy={props.busy} />}</Show>
     <div class="comment-editor-tools" classList={{'has-context': !!context()}}>
     <Show when={context()}><div class="comment-editor-context">{context()}</div></Show>
     <div role="toolbar" aria-label={`${props.label} formatting`} class="comment-editor-toolbar">
       <For each={TOOLBAR}>{tool=><Tooltip content={tool.hint}><button type="button" aria-label={tool.label} onMouseDown={event=>event.preventDefault()} onClick={()=>apply(tool.marker)} class={toolButton}><tool.Icon size={13} strokeWidth={1.8}/></button></Tooltip>}</For>
+      <Show when={props.image}>{image => <AttachImageButton image={image()} />}</Show>
     </div>
     </div>
     <Show when={linkOpen()}><div class="mb-2 flex gap-2"><input aria-label="Link URL" value={href()} onInput={event=>setHref(event.currentTarget.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();if(editor?.link(href()))setLinkOpen(false);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setLinkOpen(false);editor?.view.focus();}}} class="min-w-0 flex-1 rounded border border-edge bg-surface p-1 text-xs"/><button type="button" class="text-xs text-accent" onClick={()=>{if(editor?.link(href()))setLinkOpen(false);}}>Apply link</button></div></Show>

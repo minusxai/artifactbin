@@ -575,6 +575,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
     async actOnAnnotation(annotationId, action) {
       const thread = file.threads.find((t) => t.id === annotationId);
       if (!thread) throw new BackendRequestError('That comment is no longer in this file.', 404);
+      if (action.attachment_id) return refuse('commentImages');
       const at = now();
       let next: AnnotationWire = { ...thread };
       let localIds = file.localIds;

@@ -26,6 +26,7 @@ import { AuthorIdentity, CommentTimestamp, firstLine, previewText, ThreadContinu
 import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
 import { CommentScreenshot } from './CommentScreenshot';
+import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
 const threadClass = 'rounded-[6px] border border-edge bg-comment text-sm';
 const buttonClass = 'cursor-pointer rounded-[4px] border border-edge bg-raised px-2 py-1 text-muted hover:text-accent';
@@ -57,7 +58,8 @@ interface AnnotationThreadProps {
   isCommentFolded: (commentId: string) => boolean;
   onOpen: () => void;
   onHover: (id: string | null) => void;
-  onReply: (body: string) => Promise<boolean>;
+  /** A reply, with the image staged for it when it has one. */
+  onReply: (body: string, attachment?: CommentImageAttachment) => Promise<boolean>;
   onResolve: () => void;
   onReopen: () => void;
   onDelete: (commentId: string) => void;
@@ -86,7 +88,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     onCleanup(() => observer.disconnect());
   });
 
+  // The reply draft — words and image — belongs to the thread, so folding the thread away keeps it.
   const [reply, setReply] = createSignal('');
+  const replyImage = createCommentImageDraft();
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
@@ -242,7 +246,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
             }>
               <p class="truncate font-sans leading-snug text-fg/90">{firstLine(c().body)}</p>
             </Show>
-            <Show when={index() === 0 && props.a.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
+            <Show when={c().image ?? (index() === 0 ? props.a.image : undefined)}>{(image) => <CommentScreenshot image={image()} />}</Show>
             <Show when={newest() && !commentFolded() && props.open}><span data-notification-read-point class="block h-px" aria-hidden="true" /></Show>
           </li>;
         }}</For>
@@ -258,8 +262,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       <Show when={props.open && !props.resolved}>
         <div class="border-t border-edge bg-raised p-3">
           <AnnotationReplyBox backend={props.backend} artifactId={props.artifactId} busy={props.busy}
-            value={reply()} onChange={setReply} onSend={props.onReply}
-            actions={<button type="button" aria-label="Cancel reply" onClick={() => { setReply(''); props.onOpen(); }}
+            value={reply()} onChange={setReply} onSend={props.onReply} image={replyImage}
+            actions={<button type="button" aria-label="Cancel reply" onClick={() => { setReply(''); replyImage?.capture.reset(); props.onOpen(); }}
               class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>} />
         </div>
       </Show>

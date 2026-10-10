@@ -16,7 +16,7 @@ import { artifactToWire } from '../artifacts/wire';
 import { snapshotForReader, snapshotHeadFor } from '../artifacts/read-access';
 import { json } from '../http/http';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
-import { AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction } from './store';
+import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction } from './store';
 
 /**
  * The artifact GET's shape: the wire row plus the OPEN annotations inlined,
@@ -56,6 +56,11 @@ function parseAnnotationAction(body: Record<string, unknown>): AnnotationAction 
   else if (body.resolve !== undefined) return null;
   if (typeof body.reopen === 'boolean') action.reopen = body.reopen;
   else if (body.reopen !== undefined) return null;
+  if (body.attachment_id !== undefined) {
+    // An image rides only on a reply, with the revision it was staged against — the root's create contract.
+    if (!action.reply || typeof body.attachment_id !== 'string' || !/^cim_[a-z0-9]+$/.test(body.attachment_id) || typeof body.edit_id !== 'string' || !body.edit_id) return null;
+    action.attachmentId = body.attachment_id; action.attachmentEditId = body.edit_id;
+  }
   if (action.resolve && action.reopen) return null; // contradictory transitions
   if (!action.reply && !action.resolve && !action.reopen) return null; // an action that does nothing is malformed
   return action;
@@ -76,7 +81,7 @@ export async function respondToAnnotationAction(
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
   let wire;
   try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt,review);}
-  catch(error){if(error instanceof AnnotationRevisionError)return json({error:'annotation_conflict',current_revision:error.revision,hint:'Read the current conversation before retrying; no reply or state change was applied.'},409);if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
+  catch(error){if(error instanceof AnnotationAttachmentError)return error.reason==='stale'?json({error:'stale',message:error.message},409):json({error:'invalid_attachment',message:error.message},400);if(error instanceof AnnotationRevisionError)return json({error:'annotation_conflict',current_revision:error.revision,hint:'Read the current conversation before retrying; no reply or state change was applied.'},409);if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
   if (!wire) return json({ error: 'not_found' }, 404);
   if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);

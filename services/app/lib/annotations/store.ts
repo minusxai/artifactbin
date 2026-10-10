@@ -105,6 +105,16 @@ type CreateAnnotationRefusal =
   /** The document moved under the click — retry with fresh coords (the page is live). */
   | { refused: 'stale'; head: { editId: string; version: number } };
 
+/**
+ * A reply's image refused: `stale` when the document moved since the image was staged (the root's
+ * stale check), `invalid` when the stage is not this actor's to use (missing, someone else's, used, expired).
+ */
+export class AnnotationAttachmentError extends Error {
+  constructor(readonly reason: 'stale' | 'invalid') {
+    super(reason === 'stale' ? 'The document changed while you were replying; send again to attach the image.' : 'The image could not be attached; try again.');
+  }
+}
+
 export class AnnotationRevisionError extends Error {
   constructor(readonly revision:number){super('The annotation changed before this action.');}
 }
@@ -112,6 +122,9 @@ export class AnnotationRevisionError extends Error {
 export interface AnnotationAction {
   expectedRevision?: number;
   reply?: string;
+  /** A staged comment image this reply carries, and the revision it was staged against. Only with `reply`. */
+  attachmentId?: string;
+  attachmentEditId?: string;
   resolve?: boolean;
   reopen?: boolean;
 }
@@ -164,7 +177,7 @@ const notify = (q: Queryable, artifactId: string, annotationId: string) =>
 const ANNOTATIONS_READ =
   '(SELECT a.*, u.image_key AS author_image_key FROM annotations a LEFT JOIN users u ON u.id = a.author_user_id) annotations';
 
-const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => {
+const commentWire = (row: AnnotationRowDb, images: Map<string, CommentImageWire>): AnnotationCommentWire => {
   const kind = row.author_kind === 'agent' ? 'agent' : 'human';
   // Agents are drawn as their product; a token's account says nothing about whose face that is.
   const userId = kind === 'human' ? row.author_user_id : null;
@@ -180,6 +193,7 @@ const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => {
       image: userId ? avatarUrl({ id: userId, image_key: row.author_image_key }) : null,
     },
     created_at: row.created_at,
+    ...(images.has(row.id) ? { image: images.get(row.id) } : {}),
   };
 };
 
@@ -388,7 +402,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
       range,
       quote_found: quoteFound(anchored ? found : undefined, root.quote, range),
       remote_work:await remoteAgents.work(db,head.id,root.id),
-      thread: [commentWire(root), ...(byRoot.get(root.id) ?? []).map(commentWire)],
+      thread: [commentWire(root, images), ...(byRoot.get(root.id) ?? []).map((reply) => commentWire(reply, images))],
       created_at: root.created_at,
       resolved_at: root.resolved_at,
     };
@@ -491,6 +505,12 @@ export async function actOnAnnotationFor(
     const replyId='ann_'+generateInternalId();
     const replied = typeof action.reply === 'string' && action.reply.length > 0;
     if (replied) {
+      // The reply's image is consumed in the reply's own transaction, exactly as a root's is: single use, the uploader's, unexpired.
+      // Checked against the CURRENT head, exactly as a root comment's image is.
+      if (action.attachmentId) {
+        if (action.attachmentEditId !== row.edit_id) throw new AnnotationAttachmentError('stale');
+        if (!await consumeCommentImage(tx, actor, artifactId, action.attachmentId, replyId, row.edit_id)) throw new AnnotationAttachmentError('invalid');
+      }
       await tx.query(
         `INSERT INTO annotations
            (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote)
