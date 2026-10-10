@@ -7,6 +7,8 @@
  * these pin the protocol.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { $getSelection, $isRangeSelection } from 'lexical';
+import { markdownEditorFor } from '@/lib/markdown/editor';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { mountCompiledEditRegions } from '@/lib/story-runtime/edit/dom-mounter';
 import { morphDraftDom } from '@/lib/islands/morph/engine';
@@ -73,6 +75,23 @@ function drop(target: Element, file: File, clientY: number) {
 }
 
 describe('edit session', () => {
+  it.each(['before', 'after'])('keeps explicit inserted Markdown focus requested %s a redraw over the former prose caret', async timing => {
+    const { root } = await open('<p id="old1">Body text</p>', '<p id="old1" data-mx-ast="0">Body text</p>');
+    const old = root.querySelector('.ProseMirror') as HTMLElement;
+    old.focus();
+    const focus = () => session!.onParentMessage({ type: 'mx:select', path: '1', nodeId: 'New1', reveal: true, focusText: true });
+    if (timing === 'before') focus();
+    session!.unmountCompiledDom();
+    session!.setNodes(parseJsxOrThrow('<p id="old1">Body text</p><Markdown id="New1">{""}</Markdown>').nodes);
+    root.innerHTML = '<p id="old1" data-mx-ast="0">Body text</p><div id="New1" data-mx-ast="1" data-mx-markdown></div>';
+    await session!.mountCompiledDom();
+    if (timing === 'after') focus();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const markdown = markdownEditorFor(root.querySelector('[data-mx-lexical]')!)!;
+    expect(markdown.editor.getEditorState().read(() => $isRangeSelection($getSelection()))).toBe(true);
+    expect(document.activeElement).not.toBe(root.querySelector('.ProseMirror'));
+  });
+
   it('updates a doc outline from live source, including its title, without replacing the editor', async () => {
     const { root } = await open('<article id="doc"><h1 id="title"></h1><p id="body"></p></article>',
       '<div class="mx-reading"><nav class="mx-outline" hidden></nav><div class="mx-doc mx-doc--document"><article id="doc" data-mx-ast="0"><h1 id="title" data-mx-ast="0.0"></h1><p id="body" data-mx-ast="0.1"></p></article></div></div>');

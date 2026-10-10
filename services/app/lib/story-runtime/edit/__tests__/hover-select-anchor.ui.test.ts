@@ -48,6 +48,42 @@ it('starts a text selection in a newly inserted Markdown region when requested',
   hover.dispose(); editor.destroy();
 });
 
+it('focuses inserted Markdown after an asynchronous redraw outlasts the old polling window', async () => {
+  vi.useFakeTimers();
+  const nodes = parseJsxOrThrow('<Markdown id="New1">{""}</Markdown>').nodes;
+  const root = document.createElement('div');
+  document.body.append(root);
+  const hover = createHoverSelect({ win: window, root, nodes: () => nodes, views: { all: new Set(), last: null }, activePath: () => null, commitActive() {}, post() {} });
+  let editor: ReturnType<typeof mountMarkdownEditor> | undefined;
+  try {
+    hover.select({ type: 'mx:select', path: '0', nodeId: 'New1', reveal: true, focusText: true });
+    await vi.advanceTimersByTimeAsync(2000);
+    root.innerHTML = '<div id="New1" data-mx-ast="0" data-mx-markdown></div>';
+    const el = root.firstElementChild as HTMLElement;
+    editor = mountMarkdownEditor(el, { source: '', onChange() {} });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(editor.editor.getEditorState().read(() => $isRangeSelection($getSelection()))).toBe(true);
+    expect(hover.selectedPath()).toBe('0');
+  } finally {
+    hover.dispose(); editor?.destroy(); vi.useRealTimers();
+  }
+});
+
+it.each(['new selection', 'pointer', 'keyboard', 'dispose'])('cancels pending Markdown focus after %s', async action => {
+  const nodes = parseJsxOrThrow('<Markdown id="New1">{""}</Markdown>').nodes;
+  const root = document.createElement('div'); document.body.append(root);
+  const hover = createHoverSelect({ win: window, root, nodes: () => nodes, views: { all: new Set(), last: null }, activePath: () => null, commitActive() {}, post() {} });
+  hover.select({ type: 'mx:select', path: '0', nodeId: 'New1', reveal: true, focusText: true });
+  if (action === 'new selection') hover.select({ type: 'mx:select', path: null });
+  else if (action === 'dispose') hover.dispose();
+  else document.dispatchEvent(new Event(action === 'pointer' ? 'pointerdown' : 'keydown', { bubbles: true }));
+  root.innerHTML = '<div id="New1" data-mx-ast="0" data-mx-markdown></div>';
+  const editor = mountMarkdownEditor(root.firstElementChild as HTMLElement, { source: '', onChange() {} });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(editor.editor.getEditorState().read(() => $getSelection())).toBeNull();
+  hover.dispose(); editor.destroy();
+});
+
 it('does not capture a click selection from stale rendered identity at a reused AST path', () => {
   const nodes = parseJsxOrThrow('<div><p id="bug-10-report">Item 10 report</p><h3 id="bug-11-heading">11. Resolve from the hover preview</h3></div>').nodes;
   const root = document.createElement('div');
