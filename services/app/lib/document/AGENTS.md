@@ -10,8 +10,9 @@ artifact tables) is `lib/artifacts/write` and the publish pipeline stays in `lib
   `lib/story-ui`, `lib/validation`, `@artifactbin/contracts` and `@artifactbin/utils`. `npm run validate`
   fails any edge back into the cycle; move the shared code down or invert the dependency instead.
 - Two entries: `index.ts` (browser-safe) for all outside code that is not browser-bundled, and `server.ts`
-  (node-only: the compiled-dataflow record, node:crypto, zod). Browser-bundled code imports a listed leaf
-  file, never the index: the island and app bundlers cannot drop the rest of a barrel.
+  (node-only: the compiled-dataflow record, node:crypto, zod). Browser-bundled code imports values from a
+  listed leaf file, never the index: the island and app bundlers cannot drop the rest of a barrel. Its
+  `import type` may name the index (types are erased).
   `DEEP_MODULES['lib/document']` (`scripts/ci/module-graph.mjs`) lists the browser importers and leaves;
   any other outside path fails validate, and a leaf nothing imports must be removed.
 - Inversions that keep it below the cycle: `AnnotationOperation` is defined here and lib/editor-engine

@@ -5,7 +5,8 @@
  * `lib/<name>` (services/app/lib/<name>, or the single file lib/<name>.ts), `app/<dir>` (services/app/
  * <solid|server|app|web|src|scripts>) and `app-root` (anything else under services/app).
  * An edge is any import of non-test source — static, `export from`, dynamic import calls, CommonJS require calls and
- * `import("x")` types, type-only included — read with the TypeScript parser.
+ * `import("x")` types, type-only included — read with the TypeScript parser. Each import records whether it is
+ * type-only (`import type`, `export type`, every named specifier marked `type`, or an `import("x")` type).
  *
  * Five rules:
  *   1. no cycle may contain an entry point or the UI (ENTRY_OR_UI below);
@@ -13,9 +14,12 @@
  *   3. every edge inside a cycle is recorded in module-graph.allowed-cycles.json, and every recorded
  *      edge still is one — the list only shrinks, and a new back edge is a reviewed edit to it;
  *   4. a deep module (DEEP_MODULES below) is entered from outside only through its listed entries,
- *      and from listed browser-bundled code also through listed leaves; lib/islands is stricter (server
- *      code uses its index, browser code a leaf). A new deep import is a reviewed edit to the table,
- *      and every listed entry and leaf must still be imported, so the lists only shrink;
+ *      and from listed browser-bundled code also through listed leaves; browserLeavesOnly rows (lib/islands,
+ *      lib/document) are stricter (server code uses an entry, browser code a leaf). Browser-bundled code may
+ *      always import TYPES from an entry: types are erased, so a type-only import cannot change a bundle.
+ *      A serverOnly entry (lib/story-runtime's index) is refused to every row's browser importers for
+ *      values. A new deep import is a reviewed edit to the table, and every listed entry and leaf must
+ *      still be imported, so the lists only shrink;
  *   5. the CLI's source (services/cli/src) imports app code only through lib/cli-toolkit's entries
  *      (CLI_TOOLKIT_ENTRIES below), so every app name the CLI depends on is a reviewed re-export.
  *
@@ -60,8 +64,8 @@ const ISLANDS_BROWSER_LEAVES = [
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
 /*
- * lib/story-runtime's doors: its index (server-only, the compile-time reader chrome), contract, story-fragment, data
- * (server and single-bundle code, and type imports anywhere) and the four lazy edit/ chunks. Re-export entries grow
+ * lib/story-runtime's doors: its index (serverOnly: the compile-time reader chrome; the outline pulls in markdown),
+ * contract, story-fragment, data (server and single-bundle code, and type imports anywhere) and the four lazy edit/ chunks. Re-export entries grow
  * the island chunks (measured in row 40.2: esbuild reaches every file an entry re-exports), so browser-bundled code
  * imports values from the listed leaf files instead.
  */
@@ -133,8 +137,10 @@ const DATAFLOW_BROWSER_LEAVES = [
 ];
 /*
  * lib/document: server code enters through its index or `server` (node-only); browser-bundled code
- * imports a listed leaf instead, never the index (browserLeavesOnly), because the island and app
- * bundlers cannot drop the rest of a barrel.
+ * imports values from a listed leaf instead, never the index (browserLeavesOnly), because the island and
+ * app bundlers cannot drop the rest of a barrel. Its types come from the index (erased), except
+ * annotation-edits: re-pointing editor-engine/annotation-map's type import renames esbuild's minified
+ * identifiers in the frame-editor chunks (same raw sizes, different bytes and hashes), so it stays a leaf.
  */
 const DOCUMENT_ENTRIES = ['', 'server'];
 const DOCUMENT_BROWSER_IMPORTERS = [
@@ -150,10 +156,9 @@ const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/lib/offline/snapshot-current.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
-  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'csp-extensions', 'display-title', 'document-authoring-client',
-  'document-graph', 'document-graph-patch', 'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet',
-  'nesting', 'person-mentions', 'pwa-settings', 'query-notebook', 'script-export-location', 'social-preview', 'source-changes', 'splice', 'table-catalog',
-  'title', 'update-parts',
+  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'display-title', 'document-authoring-client', 'document-graph', 'document-graph-patch',
+  'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'person-mentions', 'pwa-settings',
+  'query-notebook', 'script-export-location', 'social-preview', 'source-changes', 'table-catalog', 'title', 'update-parts',
 ];
 /**
  * lib/compiled-page: server code uses its index, or one of the three heavy entries the index must not
@@ -172,13 +177,15 @@ const ACCOUNTS_ENTRIES = ['', 'tokens'];
  * Rule 4's table: module id (as moduleOf names it, under services/app/lib) → `entries` (paths under the
  * module directory without extension; `''` is the index), and optionally `browserImporters` (path
  * prefixes ending in `/`, or exact files) with the `browserLeaves` only they may import.
- * `browserLeavesOnly` (lib/islands) also refuses entries to browser-bundled code. A listed index is
- * never stale: it is the module's door even while nothing outside uses it.
+ * `browserLeavesOnly` (lib/islands, lib/document) also refuses entries to browser-bundled code for values.
+ * `serverOnly` lists entries no browser-bundled file (any row's browserImporters) may import for values.
+ * Type-only imports of an entry are allowed from anywhere: they are erased and cannot change a bundle.
+ * A listed index is never stale: it is the module's door even while nothing outside uses it.
  */
-const DEEP_MODULES = {
+export const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: [''] },
-  'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
+  'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, serverOnly: [''], browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },
@@ -224,19 +231,31 @@ function listSourceFiles(root) {
     && fs.existsSync(path.join(root, file)));
 }
 
-/** Scanner: every import specifier in each file, as `{ file, specifier }`. */
+/** `import type`/`export type`, or a clause whose named specifiers are all marked `type`: erased from every bundle. */
+function isTypeOnlyClause(node) {
+  if (ts.isImportDeclaration(node)) {
+    const clause = node.importClause;
+    if (!clause || clause.isTypeOnly) return Boolean(clause);
+    const named = clause.namedBindings;
+    return !clause.name && Boolean(named) && ts.isNamedImports(named) && named.elements.length > 0 && named.elements.every(element => element.isTypeOnly);
+  }
+  const clause = node.exportClause;
+  return node.isTypeOnly || (Boolean(clause) && ts.isNamedExports(clause) && clause.elements.length > 0 && clause.elements.every(element => element.isTypeOnly));
+}
+
+/** Scanner: every import specifier in each file, as `{ file, specifier, typeOnly }`. */
 function scanImports(root, files) {
   const found = [];
   for (const file of files) {
     const text = fs.readFileSync(path.join(root, file), 'utf8');
     const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : /\.(mjs|js)$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, kind);
-    const add = specifier => found.push({ file, specifier });
+    const add = (specifier, typeOnly) => found.push({ file, specifier, typeOnly });
     const visit = node => {
-      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) add(node.moduleSpecifier.text);
+      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) add(node.moduleSpecifier.text, isTypeOnlyClause(node));
       else if (ts.isCallExpression(node) && node.arguments.length && ts.isStringLiteralLike(node.arguments[0])
-        && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) add(node.arguments[0].text);
-      else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) add(node.argument.literal.text);
+        && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) add(node.arguments[0].text, false);
+      else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) add(node.argument.literal.text, true);
       ts.forEachChild(node, visit);
     };
     visit(source);
@@ -266,22 +285,30 @@ function resolveImport(fromFile, specifier) {
 
 const ISLANDS_ENTRY = { importers: ISLANDS_BROWSER_IMPORTERS, leaves: ISLANDS_BROWSER_LEAVES };
 
-/** Rule 4: every outside import into a DEEP_MODULES row that names neither an entry nor (from its browser importers) a leaf, and every listed path nothing imports. */
+const matchesImporter = (importers, file) => importers.some(entry => (entry.endsWith('/') ? file.startsWith(entry) : file === entry));
+
+/**
+ * Rule 4: every outside import into a DEEP_MODULES row that names neither an entry nor (from its browser importers) a leaf,
+ * every value import of a serverOnly entry from browser-bundled code (any row's importers), and every listed path nothing imports.
+ */
 function deepModuleViolations(graph, table) {
   const violations = [];
-  for (const [module, { entries, browserImporters = [], browserLeaves = [], browserLeavesOnly = false }] of Object.entries(table)) {
+  const bundled = Object.values(table).flatMap(row => row.browserImporters ?? []);
+  for (const [module, { entries, serverOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false }] of Object.entries(table)) {
     if (!graph.has(module)) continue;
     const dir = `services/app/${module}`;
-    const isBrowser = file => browserImporters.some(entry => (entry.endsWith('/') ? file.startsWith(entry) : file === entry));
-    const refused = [], used = new Set(), usedLeaves = new Set();
+    const refused = [], serverRefused = [], used = new Set(), usedLeaves = new Set();
     for (const [from, edges] of [...graph].sort(([a], [b]) => a.localeCompare(b))) {
       if (from === module) continue;
-      for (const { file, specifier } of edges.get(module) ?? []) {
+      for (const { file, specifier, typeOnly } of edges.get(module) ?? []) {
         const base = importPath(file, specifier).replace(/\/$/, '');
         const rel = base === dir ? '' : base.slice(dir.length + 1);
-        const browser = isBrowser(file), entry = entries.includes(rel), leaf = browser && browserLeaves.includes(rel);
-        if (browserLeavesOnly) {
-          if (!browser) { if (entry) used.add(rel); else refused.push(`  ${file} imports ${specifier} (server code imports @/${module})`); }
+        const browser = matchesImporter(browserImporters, file), entry = entries.includes(rel), leaf = browser && browserLeaves.includes(rel);
+        if (entry && !typeOnly && serverOnly.includes(rel) && matchesImporter(bundled, file)) {
+          used.add(rel);
+          serverRefused.push(`  ${file} imports ${specifier} (${rel ? `entry ${rel}` : 'the index'} is server-only)`);
+        } else if (browserLeavesOnly) {
+          if (!browser || (entry && typeOnly)) { if (entry) used.add(rel); else refused.push(`  ${file} imports ${specifier} (server code imports @/${module})`); }
           else if (entry) refused.push(`  ${file} imports ${specifier} (browser-bundled code imports a leaf file, not the index)`);
           else if (leaf) usedLeaves.add(rel);
           else refused.push(`  ${file} imports ${specifier} (${rel} is not in ${constantPrefix(module)}_BROWSER_LEAVES)`);
@@ -290,6 +317,7 @@ function deepModuleViolations(graph, table) {
         else refused.push(`  ${file} imports ${specifier} (${rel || 'the index'} is not ${browser ? 'an entry or browser leaf' : 'an entry'} of ${module})`);
       }
     }
+    if (serverRefused.length) violations.push(`${module}'s server-only entries are imported for values by browser-bundled code (serverOnly in DEEP_MODULES['${module}'], scripts/ci/module-graph.mjs; browser-bundled code is every row's browserImporters). Import the value from a browser entry or leaf, or import only types:`, ...serverRefused);
     const lists = browserLeavesOnly ? `${constantPrefix(module)}_BROWSER_IMPORTERS, ${constantPrefix(module)}_BROWSER_LEAVES` : `DEEP_MODULES['${module}']`;
     if (refused.length) violations.push(browserLeavesOnly
       ? `${module} is entered through @/${module} from server code and through a listed leaf from listed browser-bundled code (${lists} in scripts/ci/module-graph.mjs). Re-export a server-safe name from ${module}/index.ts, or list the browser use as a reviewed edit:`
@@ -322,7 +350,7 @@ function cliToolkitViolations(graph, entries) {
 /** Graph: Map<from, Map<to, [{ file, specifier }]>> over cross-module imports. */
 function buildModuleGraph(imports) {
   const graph = new Map();
-  for (const { file, specifier } of imports) {
+  for (const { file, specifier, typeOnly } of imports) {
     const from = moduleOf(file);
     if (!from) continue;
     if (!graph.has(from)) graph.set(from, new Map());
@@ -331,7 +359,7 @@ function buildModuleGraph(imports) {
     if (!graph.has(to)) graph.set(to, new Map());
     const edges = graph.get(from);
     if (!edges.has(to)) edges.set(to, []);
-    edges.get(to).push({ file, specifier });
+    edges.get(to).push({ file, specifier, typeOnly });
   }
   return graph;
 }

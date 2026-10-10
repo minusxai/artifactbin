@@ -2,7 +2,7 @@ import type { AnnotationOperation } from './annotation-map';
 /** Atomic source history. Reuses the persistence conflict kernel, including its refusal semantics. */
 import type { EditorBookmark } from './bookmark';
 import { rebaseEditBatch, type BatchChange } from '@/lib/document/edit-batch';
-import type {EditRecord} from '@/lib/document/splice';
+import type {EditRecord} from '@/lib/document';
 import {sourceChanges} from '../document/source-changes';
 export {sourceChanges} from '../document/source-changes';
 

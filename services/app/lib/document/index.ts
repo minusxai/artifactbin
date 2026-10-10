@@ -30,6 +30,7 @@ export { validateMarkupStructure } from './local-validation';
 export { fixHtmlNesting } from './nesting';
 
 // ---- Edits: splices, edit batches, source changes and prepared updates.
+export type { EditRecord } from './splice';
 export { newEditId } from './splice';
 export type { BatchChange, StringEdit } from './edit-batch';
 export { rebaseEditBatch } from './edit-batch';

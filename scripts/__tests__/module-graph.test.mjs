@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { checkModuleGraph, ISLANDS_BROWSER_IMPORTERS, moduleOf, recordAllowedCycles, scanModuleGraph } from '../ci/module-graph.mjs';
+import { checkModuleGraph, DEEP_MODULES, ISLANDS_BROWSER_IMPORTERS, moduleOf, recordAllowedCycles, scanModuleGraph } from '../ci/module-graph.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'ci', 'module-graph.mjs');
@@ -47,7 +47,23 @@ describe('module graph', () => {
     const root = tree({ ...libCycle, 'services/app/lib/b/__tests__/x.test.ts': "import '@/solid/y';\n", 'services/app/lib/b/z.test.ts': "import '@/solid/y';\n" });
     const graph = scanModuleGraph(root);
     expect([...graph.get('lib/b').keys()]).toEqual(['lib/a']);
-    expect(graph.get('lib/b').get('lib/a')[0]).toEqual({ file: 'services/app/lib/b/index.ts', specifier: '@/lib/a/types' });
+    expect(graph.get('lib/b').get('lib/a')[0]).toEqual({ file: 'services/app/lib/b/index.ts', specifier: '@/lib/a/types', typeOnly: true });
+  });
+
+  it('records whether an import is type-only: a type clause, every named specifier typed, or an import() type', () => {
+    const root = tree({
+      'services/app/lib/a/index.ts': '',
+      'services/app/lib/b/index.ts': [
+        "import type { A } from '@/lib/a/t1';", "import { type A, type B } from '@/lib/a/t2';", "export type { A } from '@/lib/a/t3';",
+        "export { type A } from '@/lib/a/t4';", "export type C = import('@/lib/a/t5').C;",
+        "import { type A, b } from '@/lib/a/v1';", "import a, { type B } from '@/lib/a/v2';", "import '@/lib/a/v3';", "import {} from '@/lib/a/v4';",
+        "export * from '@/lib/a/v5';", "export const d = await import('@/lib/a/v6');", "import * as ns from '@/lib/a/v7';",
+      ].join('\n'),
+    });
+    const edges = scanModuleGraph(root).get('lib/b').get('lib/a');
+    expect(Object.fromEntries(edges.map(({ specifier, typeOnly }) => [specifier.slice('@/lib/a/'.length), typeOnly]))).toEqual({
+      t1: true, t2: true, t3: true, t4: true, t5: true, v1: false, v2: false, v3: false, v4: false, v5: false, v6: false, v7: false,
+    });
   });
 
   it('fails a library cycle that the allow-list does not record, naming the edges', () => {
@@ -271,7 +287,7 @@ describe('module graph', () => {
         'services/app/lib/publish/a.ts': "import { splitHelmet } from '@/lib/document';\nimport { COMPILED_DATAFLOW } from '../document/server';\n",
         'services/app/lib/cli-toolkit/index.ts': "export { splitHelmet } from '../document';\n",
         'services/app/solid/editor/Panel.tsx': "import { splitHelmet } from '@/lib/document/helmet';\n",
-        'services/app/lib/editor-engine/history.ts': "import type { EditRecord } from '../document/splice';\n",
+        'services/app/lib/editor-engine/annotation-map.ts': "import type { AnnotationOperation } from '../document/annotation-edits';\n",
         'services/app/lib/offline/file-backend.ts': "import { declarationsOf } from '../document/helmet';\n",
       })).not.toMatch(refusal);
     });
@@ -279,7 +295,7 @@ describe('module graph', () => {
     it('refuses a leaf from server code, the index from browser code and a leaf from an unlisted file, naming each', () => {
       const violations = check({
         'services/app/lib/trust/document-trust.ts': "import { splitHelmet } from '@/lib/document/helmet';\n",
-        'services/app/solid/pages/Document.tsx': "import type { CspRequest } from '@/lib/document';\n",
+        'services/app/solid/pages/Document.tsx': "import { cspRequestOf } from '@/lib/document';\n",
         'services/app/lib/offline/hosted-connect.ts': "import { graphSource } from '../document/helmet';\n",
       });
       expect(violations).toContain('services/app/lib/trust/document-trust.ts imports @/lib/document/helmet (server code imports @/lib/document)');
@@ -287,8 +303,69 @@ describe('module graph', () => {
       expect(violations).toContain('services/app/lib/offline/hosted-connect.ts imports ../document/helmet (server code imports @/lib/document)');
     });
 
+    it('passes a type-only import of an entry from browser-bundled code, and still refuses a mixed or unlisted one', () => {
+      const types = {
+        'services/app/solid/pages/Document.tsx': "import type { CspRequest } from '@/lib/document';\nimport { type DocumentUpdate, type Body } from '../../lib/document/index.ts';\n",
+        'services/app/lib/editor-engine/history.ts': "export type { EditRecord } from '@/lib/document/server';\nexport type R = import('@/lib/document').R;\n",
+      };
+      expect(check(types)).not.toMatch(refusal);
+      const violations = check({
+        ...types,
+        'services/app/solid/pages/Mixed.tsx': "import { type CspRequest, cspRequestOf } from '@/lib/document';\n",
+        'services/app/solid/pages/Deep.tsx': "import type { Range } from '@/lib/document/range-internals';\n",
+      });
+      expect(violations).toContain('services/app/solid/pages/Mixed.tsx imports @/lib/document (browser-bundled code imports a leaf file, not the index)');
+      expect(violations).toContain('services/app/solid/pages/Deep.tsx imports @/lib/document/range-internals (range-internals is not in DOCUMENT_BROWSER_LEAVES)');
+      expect(violations).not.toContain('Document.tsx');
+      expect(violations).not.toContain('history.ts');
+    });
+
     it('fails a listed browser leaf nothing imports any more', () => {
       expect(check({ 'services/app/solid/editor/Panel.tsx': "import '@/lib/document/helmet';\n" })).toMatch(/lib\/document leaves no browser-bundled code imports any more[\s\S]*\n  query-notebook\n/);
+    });
+  });
+
+  describe('server-only entries (rule 4, serverOnly)', () => {
+    const table = {
+      'lib/story-runtime': { entries: ['', 'data'], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: ['store'] },
+      'lib/dataflow': { entries: [''], browserImporters: ['services/app/lib/islands/kit/'], browserLeaves: [] },
+    };
+    const base = {
+      'services/app/lib/story-runtime/index.ts': '', 'services/app/lib/story-runtime/data.ts': '', 'services/app/lib/story-runtime/store.ts': '', 'services/app/lib/dataflow/index.ts': '',
+      'services/app/lib/compiled-page/compiler.ts': "import { discoverOutline } from '@/lib/story-runtime';\nimport '@/lib/dataflow';\n",
+      'services/app/solid/Reader.tsx': "import { createStore } from '@/lib/story-runtime/store';\nimport type { Store } from '@/lib/story-runtime/data';\n",
+    };
+    const check = files => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files })), allowList([]), undefined, table).violations.join('\n');
+
+    it('passes the server-only entry for values from server code and for types from browser-bundled code', () => {
+      expect(check({
+        'services/app/solid/Outline.tsx': "import type { OutlineEntry } from '@/lib/story-runtime';\n",
+        'services/app/lib/islands/kit/rail.tsx': "export type R = import('../../story-runtime').OutlineEntry;\n",
+      })).toBe('');
+    });
+
+    it('refuses a value import of a server-only entry from any browser-bundled code, naming file and specifier', () => {
+      const violations = check({
+        'services/app/solid/Outline.tsx': "import { discoverOutline } from '@/lib/story-runtime';\n",
+        'services/app/solid/Lazy.tsx': "export const outline = () => import('../lib/story-runtime/index.ts');\n",
+        'services/app/lib/islands/kit/rail.tsx': "import { type OutlineEntry, renderOutlineRail } from '../../story-runtime';\n",
+      });
+      expect(violations).toContain("lib/story-runtime's server-only entries are imported for values by browser-bundled code");
+      expect(violations).toContain("serverOnly in DEEP_MODULES['lib/story-runtime']");
+      expect(violations).toContain('services/app/solid/Outline.tsx imports @/lib/story-runtime (the index is server-only)');
+      expect(violations).toContain('services/app/solid/Lazy.tsx imports ../lib/story-runtime/index.ts (the index is server-only)');
+      expect(violations).toContain('services/app/lib/islands/kit/rail.tsx imports ../../story-runtime (the index is server-only)');
+      expect(violations).not.toContain('compiler.ts');
+    });
+
+    it('holds the shipped lib/story-runtime index server-only', () => {
+      const shipped = files => checkModuleGraph(scanModuleGraph(tree({ 'services/app/lib/story-runtime/index.ts': '', ...files })), allowList([]), undefined,
+        { 'lib/story-runtime': (({ browserLeaves, ...row }) => row)(DEEP_MODULES['lib/story-runtime']) }).violations.join('\n');
+      const entries = DEEP_MODULES['lib/story-runtime'].entries.filter(entry => entry !== '').map(entry => [`services/app/lib/story-runtime/${entry}.ts`, '']);
+      const used = Object.fromEntries([...entries, ['services/app/lib/compiled-page/assembler.ts', DEEP_MODULES['lib/story-runtime'].entries.filter(entry => entry !== '').map(entry => `import '@/lib/story-runtime/${entry}';`).join('\n')]]);
+      expect(shipped({ ...used, 'services/app/web/outline.ts': "import type { OutlineEntry } from '@/lib/story-runtime';\n" })).toBe('');
+      expect(shipped({ ...used, 'services/app/web/outline.ts': "import { discoverOutline } from '@/lib/story-runtime';\n" }))
+        .toContain('services/app/web/outline.ts imports @/lib/story-runtime (the index is server-only)');
     });
   });
 
