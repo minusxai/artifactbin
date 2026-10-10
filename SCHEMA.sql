@@ -32,6 +32,160 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.groups (
+  id TEXT NOT NULL,
+  handle TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
+
+ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
+
+ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL;
+
+ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_handle ON app.groups (handle);
+
+CREATE TABLE IF NOT EXISTS app.group_members (
+  group_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, user_id)
+);
+
+ALTER TABLE app.group_members ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.group_members ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.group_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
+
+ALTER TABLE app.group_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_group_members_user ON app.group_members (user_id);
+
+CREATE TABLE IF NOT EXISTS app.group_invitations (
+  id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL,
+  invited_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS email TEXT NOT NULL;
+
+ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
+
+ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS invited_by TEXT NOT NULL;
+
+ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON app.group_invitations (group_id, email);
+
+CREATE TABLE IF NOT EXISTS app.group_links (
+  group_id TEXT NOT NULL,
+  linked_group_id TEXT NOT NULL,
+  PRIMARY KEY (group_id, linked_group_id)
+);
+
+ALTER TABLE app.group_links ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.group_links ADD COLUMN IF NOT EXISTS linked_group_id TEXT NOT NULL;
+
+CREATE TABLE IF NOT EXISTS app.account_preferences (
+  user_id TEXT NOT NULL,
+  default_destination JSONB NOT NULL DEFAULT '{"type":"inherit"}'::jsonb,
+  PRIMARY KEY (user_id)
+);
+
+ALTER TABLE app.account_preferences ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.account_preferences ADD COLUMN IF NOT EXISTS default_destination JSONB NOT NULL DEFAULT '{"type":"inherit"}'::jsonb;
+
+CREATE TABLE IF NOT EXISTS app.handle_reservations (
+  handle TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  PRIMARY KEY (handle)
+);
+
+ALTER TABLE app.handle_reservations ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
+
+ALTER TABLE app.handle_reservations ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.handle_reservations ADD COLUMN IF NOT EXISTS subject_id TEXT NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_handle_reservations_subject ON app.handle_reservations (kind, subject_id);
+
+CREATE TABLE IF NOT EXISTS app.deployment_state (
+  id TEXT NOT NULL,
+  owner_user_id TEXT,
+  default_group_id TEXT,
+  setup_complete BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.deployment_state ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.deployment_state ADD COLUMN IF NOT EXISTS owner_user_id TEXT;
+
+ALTER TABLE app.deployment_state ADD COLUMN IF NOT EXISTS default_group_id TEXT;
+
+ALTER TABLE app.deployment_state ADD COLUMN IF NOT EXISTS setup_complete BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS app.deployment_members (
+  user_id TEXT NOT NULL,
+  admitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id)
+);
+
+ALTER TABLE app.deployment_members ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.deployment_members ADD COLUMN IF NOT EXISTS admitted_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS app.ownership_transfers (
+  id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  previous_owner JSONB NOT NULL,
+  next_owner JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS actor_user_id TEXT NOT NULL;
+
+ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS previous_owner JSONB NOT NULL;
+
+ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS next_owner JSONB NOT NULL;
+
+ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_ownership_transfers_artifact ON app.ownership_transfers (artifact_id, created_at);
+
 CREATE TABLE IF NOT EXISTS app.runner_runs (
   id TEXT NOT NULL,
   owner TEXT NOT NULL,
@@ -907,6 +1061,8 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   id TEXT NOT NULL,
   token_id TEXT NOT NULL,
   user_id TEXT,
+  group_id TEXT,
+  creator_user_id TEXT,
   visibility TEXT NOT NULL DEFAULT 'public',
   dataset_policy JSONB,
   sharing_revision INTEGER NOT NULL DEFAULT 0,
@@ -937,6 +1093,10 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS user_id TEXT;
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS group_id TEXT;
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS creator_user_id TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'public';
 
