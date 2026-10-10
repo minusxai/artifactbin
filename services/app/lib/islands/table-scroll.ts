@@ -1,7 +1,7 @@
 /**
  * The scroll AFFORDANCE on a table wider than its column.
  *
- * Every served document makes each table its own scroll box (chrome-css
+ * Every served document makes each table its own scroll box (lib/page-styles/chrome-css
  * STORY_TABLE_CSS), so a wide table scrolls inside the column instead of
  * pushing the page sideways. What CSS cannot decide alone is whether a given
  * table actually overflows — that is a layout fact — and a scroll box with no

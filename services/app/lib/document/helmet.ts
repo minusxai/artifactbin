@@ -331,7 +331,7 @@ function withoutHelmets(nodes: JsxNode[]): JsxNode[] {
  * whole of it): a PRIVATE document that declares a query keeps its parent
  * page, because the page holds the session its queries need — the served
  * document's own transport is an anonymous GET of /a/<id>/query
- * (lib/story-runtime/document-transport), which a private document answers
+ * (lib/islands/document-transport), which a private document answers
  * with the uniform 404. Public documents fetch for themselves and keep their
  * top-level paint.
  *

@@ -178,7 +178,7 @@ export const APP_INLINE_SCRIPT_HASHES = [
 function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; connect?: readonly string[] } = {}): string {
   return [
     // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
-    // reader's document runs its queries on (lib/story-runtime/page-sqlite) —
+    // reader's document runs its queries on (lib/islands/page-sqlite) —
     // and nothing else: no eval, no Function, no string timers.
     "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
     // Listing thumbnails redirect from /a/:id/export to the configured asset

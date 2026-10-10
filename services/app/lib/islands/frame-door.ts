@@ -15,7 +15,7 @@
  * Framework-free, value-free imports only: it is part of every framed reader's `@mx/page` chunk.
  */
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '@/lib/story-runtime/contract';
-export { APP_ORIGIN_ATTR, frameAppOrigin } from './origin';
+export { APP_ORIGIN_ATTR, frameAppOrigin } from './frame-origin';
 
 /** lib/story-runtime/contract STORY_FRAME_BRIDGE_MESSAGE, restated so the reader chunk carries no contract value (door.test pins them equal). */
 export const FRAME_BRIDGE_MESSAGE = 'mx:frame-bridge';

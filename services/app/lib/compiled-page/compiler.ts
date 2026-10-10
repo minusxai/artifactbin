@@ -42,7 +42,7 @@ import { resolveRefProps } from '@/lib/dataflow/ref-data';
 import { substituteRow } from '@/lib/jsx/row-scope';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
-import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
+import { createPreviewPropsAllocator } from './preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { cn, peopleClasses, RECIPES } from '@/lib/islands';
 import type { GeneratedSources } from './codegen-safety';

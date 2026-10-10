@@ -25,7 +25,7 @@ const READER_ENTRIES = [
 ];
 
 /**
- * The page's SQLite engine (lib/story-runtime/page-sqlite): the core and the
+ * The page's SQLite engine (lib/islands/page-sqlite): the core and the
  * official wasm package behind it. Only a reader who holds data runs anything
  * in the page, so it is a lazy chunk on BOTH reader paths — never first paint.
  */

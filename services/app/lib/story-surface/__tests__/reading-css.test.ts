@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
-import { STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
+import { STORY_TABLE_CSS } from '@/lib/page-styles/chrome-css';
 import { storyBaseCss } from '@/lib/page-styles/story-base-css';
 
 describe('tables', () => {

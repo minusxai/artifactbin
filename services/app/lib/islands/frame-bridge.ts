@@ -26,13 +26,13 @@ import { writeUrlValues } from '@/lib/dataflow/url-values';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { ISLANDS_READY_EVENT, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
 import { createTrustedOverlayHost } from '@/lib/islands/trusted-overlay-host';
-import { applyReaderChoice } from '@/lib/story-runtime/reader-actions';
+import { applyReaderChoice } from './reader-actions';
 import {
   ISLAND_DATA_ID, READER_READY_ATTR,
   STORY_ADOPT_HOOK, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_HISTORY_MESSAGE, STORY_READER_MODE_MESSAGE,
   type FrameBridgeParentPayload, type IslandStoryController,
 } from '@/lib/story-runtime/contract';
-import type { FrameBridgeSession, FrameBridgeStartOptions } from '@/lib/story-runtime/frame-bridge/door';
+import type { FrameBridgeSession, FrameBridgeStartOptions } from './frame-door';
 
 type FetchResult = Extract<FrameBridgeParentPayload, { kind: 'fetch-result' }>;
 

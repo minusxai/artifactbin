@@ -591,7 +591,7 @@ async function imagePasteLeg(browser, { id, token }) {
     await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
     const frame = documentLocator(page);
     await frame.locator('#figure').waitFor({ timeout: 15000 });
-    // A file dropped on the document itself is refused inside the frame (frame-bridge/file-drops): the frame
+    // A file dropped on the document itself is refused inside the frame (lib/islands/frame-file-drops): the frame
     // never opens it in the document's place, and the words can still be selected and commented on below.
     const raw = await documentFrame(page);
     if (!raw) throw new Error('the document frame is missing');

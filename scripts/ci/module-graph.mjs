@@ -65,8 +65,8 @@ const ARTIFACTS_ENTRIES = [
   'read-access', 'servable', 'store', 'wire',
 ];
 const STORY_RUNTIME_ENTRIES = [
-  'authenticated-transport', 'chrome-css', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',
-  'page-bindings', 'preview-props', 'reader-mode', 'script-mount', 'slides', 'store', 'story-fragment',
+  'authenticated-transport', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',
+  'page-bindings', 'reader-mode', 'script-mount', 'slides', 'store', 'story-fragment',
 ];
 const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/solid/',
@@ -74,23 +74,22 @@ const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/lib/cli-toolkit/browser.ts',
   'services/app/lib/islands/boot.ts',
   'services/app/lib/islands/comment-state.ts',
+  'services/app/lib/islands/document-transport.ts',
   'services/app/lib/islands/frame-bridge.ts',
   'services/app/lib/islands/island-controller.ts',
-  'services/app/lib/islands/kit/basic.tsx',
-  'services/app/lib/islands/kit/cells.tsx',
   'services/app/lib/islands/live-update.ts',
   'services/app/lib/islands/module.ts',
   'services/app/lib/islands/morph/engine.ts',
   'services/app/lib/islands/page-runtime.ts',
+  'services/app/lib/islands/page-sqlite.ts',
   'services/app/lib/islands/page.ts',
   'services/app/lib/islands/sqlite-engine.ts',
   'services/app/lib/offline/compiled-sqlite.ts',
   'services/app/lib/offline/solid-entry.tsx',
 ];
 const STORY_RUNTIME_BROWSER_LEAVES = [
-  'anchor', 'anchor-restore', 'cell-sessions', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-transport', 'document-update',
-  'edit/dom-mounter', 'edit/session', 'fetch-transport', 'frame-bridge/door', 'frame-bridge/file-drops', 'frame-bridge/links', 'frame-bridge/origin', 'frame-bridge/parent',
-  'outline-nav', 'page-engine', 'page-sqlite', 'pristine', 'reader-actions', 'row-actions', 'sliced-parse', 'table-scroll',
+  'anchor', 'anchor-restore', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update', 'edit/dom-mounter', 'edit/session',
+  'fetch-transport', 'frame-bridge/parent', 'page-engine', 'pristine',
 ];
 const DATAFLOW_ENTRIES = [
   '', 'builtins', 'compile-dataflow', 'compiled-dataflow', 'compiled-flow', 'data-syntax', 'dataflow', 'dataset-shape', 'evaluate',
