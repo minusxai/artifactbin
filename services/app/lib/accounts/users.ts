@@ -9,6 +9,7 @@ import { getDb,type Queryable } from '../platform/db';
 import { emit } from '../platform/events';
 import { generateInternalId } from '../platform/ids';
 import { sha256 } from './tokens';
+import {reserveHandle,RESERVED_HANDLES} from '../platform/handles';
 
 /**
  * AN ACCOUNT ROW: a person with a login identity. The KIND is on every row now
@@ -61,10 +62,7 @@ export const USERNAME_RE = /^[a-z0-9_]{3,32}$/;
  * Impersonation hygiene, not route protection — the /@ prefix already keeps
  * user pages out of the app's namespace. Deliberately tiny.
  */
-const RESERVED_USERNAMES = new Set([
-  'admin', 'root', 'support', 'help', 'about', 'settings', 'security',
-  'artifactbin', 'artifact_bin', 'api', 'docs', 'mcp', 'oauth', 'a', 'login', 'tokens',
-]);
+const RESERVED_USERNAMES = RESERVED_HANDLES;
 
 const USERNAME_BASE_MAX = 20;
 const SUFFIX_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -107,12 +105,13 @@ export async function ensureUsername<T extends AnyUserRow>(user: T): Promise<T> 
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = `${usernameFromEmail(user.email)}_${randomSuffix()}`;
     try {
-      const r = await db.query<T>(
-        `UPDATE users SET username = $2 WHERE id = $1 AND username IS NULL RETURNING ${USER_COLS}`,
-        [user.id, candidate],
-      );
-      // A concurrent login may have assigned one first — that row wins.
-      return r.rows[0] ?? (await getUserById(user.id))! as T;
+      return await db.transaction(async tx=>{
+        const current=await getUserById(user.id,tx,true);
+        if(current?.username)return current as T;
+        await reserveHandle(tx,candidate,'user',user.id);
+        const r=await tx.query<T>(`UPDATE users SET username=$2 WHERE id=$1 AND username IS NULL RETURNING ${USER_COLS}`,[user.id,candidate]);
+        return r.rows[0]??user;
+      });
     } catch (error) {
       if ((error as { code?: string }).code === '23505') continue;
       throw error;
@@ -132,11 +131,14 @@ export async function setUsername(
 ): Promise<{ ok: true; username: string } | { error: 'invalid' | 'taken' }> {
   const username = requested.toLowerCase().trim();
   if (!USERNAME_RE.test(username) || RESERVED_USERNAMES.has(username)) return { error: 'invalid' };
-  const db = query??await getDb();
   try {
-    const r = await db.query('UPDATE users SET username = $2 WHERE id = $1', [userId, username]);
-    if (r.rowCount === 0) return { error: 'invalid' }; // unknown user — nothing to rename
-    return { ok: true, username };
+    const rename=async(tx:Queryable)=>{
+      if(!await getUserById(userId,tx,true))return {error:'invalid'} as const;
+      await reserveHandle(tx,username,'user',userId);
+      await tx.query('UPDATE users SET username=$2 WHERE id=$1',[userId,username]);
+      return {ok:true,username} as const;
+    };
+    return query?await rename(query):await (await getDb()).transaction(rename);
   } catch (error) {
     if (!query&&(error as { code?: string }).code === '23505') return { error: 'taken' };
     throw error;
@@ -248,7 +250,7 @@ async function claimWhere(
       // tell which, and re-claiming your own still backfills, because that step
       // is safe to repeat and must not be skipped.
       const backfilled = await tx.query(
-        'UPDATE artifacts SET user_id = $1 WHERE token_id = $2 AND user_id IS NULL',
+        'UPDATE artifacts SET user_id = $1 WHERE token_id = $2 AND user_id IS NULL AND group_id IS NULL',
         [userId, token.id],
       );
       await tx.query('UPDATE comment_images SET user_id=$1 WHERE token_id=$2 AND user_id IS NULL',[userId,token.id]);

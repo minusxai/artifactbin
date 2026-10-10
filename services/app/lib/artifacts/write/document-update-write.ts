@@ -61,7 +61,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const strip=update.effects.css?"-'parsedArtifact'-'compiledCss'-'cssCompileVersion'":"-'parsedArtifact'";
  const mention=documentMentionSql(actor,id,update.mentions,param,visibility,shares,!!options.dryRun);
  const resources=documentResourceSql(update.datasetBindings,param,!!options.dryRun);
- const ownerOnly=`(${hasParent}::boolean AND NOT EXISTS(SELECT 1 FROM locked WHERE ${owner.where(ownerValue)}))`;
+ const ownerOnly=`(${hasParent}::boolean AND NOT EXISTS(SELECT 1 FROM locked WHERE ${owner.where(ownerValue).replaceAll('artifacts.','locked.')}))`;
  const invalidParent=`(${hasParent}::boolean AND ${parent}::text IS NOT NULL AND NOT EXISTS(SELECT 1 FROM destination))`;
  // A patch that is current but would store a graph the reader cannot decode is told apart from a stale one: the
  // candidate is rebuilt only on the refusal path, and only when every dependency guard held.
@@ -80,7 +80,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
    AND sharing_revision=(SELECT sharing_revision FROM observed) ${options.dryRun?'':'FOR UPDATE OF artifacts'}
  ), destination AS MATERIALIZED (
   SELECT p.ancestor_ids||p.id AS ancestors FROM artifacts p,locked l WHERE ${hasParent}::boolean AND p.id=${parent}::text AND p.format='folder' AND p.deleted_at IS NULL
-   AND (CASE WHEN l.user_id IS NOT NULL THEN p.user_id=l.user_id ELSE p.token_id=l.token_id END)
+   AND (CASE WHEN l.group_id IS NOT NULL THEN p.group_id=l.group_id WHEN l.user_id IS NOT NULL THEN p.group_id IS NULL AND p.user_id=l.user_id ELSE p.group_id IS NULL AND p.user_id IS NULL AND p.token_id=l.token_id END)
    AND p.id<>l.id AND NOT l.id=ANY(p.ancestor_ids) AND cardinality(p.ancestor_ids)+1<6 ${options.dryRun?'':'FOR SHARE OF p'}
  ), ${mention.before} ${resources.before} transformed AS ${options.dryRun?'MATERIALIZED':'NOT MATERIALIZED'} (
   SELECT l.*,nx.next_document,a.archiving,
@@ -90,7 +90,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
    CROSS JOIN LATERAL (SELECT ${sql.expression} AS next_document OFFSET 0) nx
    CROSS JOIN LATERAL (SELECT (${whole}::boolean OR l.document_archived_at IS NULL OR l.document_archived_at<=now()-interval '120 seconds') AS archiving) a
   WHERE ${mention.guard} AND ${resources.guard} AND ${annotationSqlGuard(annotationOps)} AND (l.format='markup' OR(${replacement}::jsonb IS NOT NULL AND l.format<>'folder' AND l.dataset_policy IS NULL)) AND (${replacement}::jsonb IS NOT NULL OR d.document->>'policy'=${policy}) AND ${sql.guard} ${update.replacement?'':`AND ${sql.integrity('nx.next_document')}`} AND (NOT ${whole}::boolean OR l.version=${wholeVersion}::int)
-   AND (${visibility}::text IS DISTINCT FROM 'private' OR l.user_id IS NOT NULL)
+   AND (${visibility}::text IS DISTINCT FROM 'private' OR l.user_id IS NOT NULL OR l.group_id IS NOT NULL)
    AND (${sharing}::int IS NULL OR l.sharing_revision=${sharing}::int)
    AND (NOT ${hasParent}::boolean OR (l.ancestor_ids=${oldParent}::text[] AND (${parent}::text IS NULL OR EXISTS(SELECT 1 FROM destination))
     AND EXISTS(SELECT 1 FROM artifacts WHERE id=l.id AND ${owner.where(ownerValue)})))

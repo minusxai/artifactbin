@@ -6,7 +6,7 @@ import {parseDatabaseUrl} from '../../app/lib/cli-toolkit';
 // The auth service owns both questions: which settings amount to a login someone could COMPLETE,
 // and which origins the local outbox serves. Asking it keeps the refusals and the startup text true
 // to the mailer, and keeps the provider names spelled out in exactly one module.
-import {completeLoginMethods} from '../../auth/src/config';
+import {admissionPolicyOf,completeLoginMethods} from '../../auth/src/config';
 import {usesDevOutbox} from '../../auth/src/mail';
 // Only namespaces owned by the OSS host enter its process configuration.
 const teamModules=new Set(['APP','AUTH','EMAIL','ADMIN','ANALYTICS','ARTIFACTS','ASSETS','BROWSER','DATASET','EVENTS','EXPORT','FILES','IMAGES','INTERNAL','PDF','QUOTA','SQL','WEB_INGEST']);
@@ -52,6 +52,14 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
   let runner:URL;try{runner=new URL(operator.RUNNER__SERVICE_URL);}catch{throw new Error('Runner URL must be an absolute HTTP(S) URL.');}
   if(!['http:','https:'].includes(runner.protocol)||runner.username||runner.password||runner.search||runner.hash)throw new Error('Runner URL must be an HTTP(S) URL without credentials, query or fragment.');
   if((operator.CONTRACT__ACTOR_SECRET?.length??0)<32)throw new Error('Remote runner requires CONTRACT__ACTOR_SECRET of at least 32 characters, matching the controller.');
+ }
+ const mode=operator.APP__DEPLOYMENT_MODE??'public';
+ if(mode!=='public'&&mode!=='company')throw new Error('APP__DEPLOYMENT_MODE must be public or company.');
+ const policy=admissionPolicyOf(operator);
+ if(mode==='company'){
+  const owner=operator.APP__DEPLOYMENT_OWNER_EMAIL?.trim().toLowerCase();
+  if(!owner||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(owner))throw new Error('Company hosting requires APP__DEPLOYMENT_OWNER_EMAIL.');
+  if(!policy.matches(owner))throw new Error('APP__DEPLOYMENT_OWNER_EMAIL must match AUTH__ALLOWED_EMAIL_PATTERNS.');
  }
  const host=operator.APP__HOST?.trim()??'',port=overrides.port??Number(operator.APP__PORT);
  let url:URL;try{url=new URL(operator.APP__PUBLIC_BASE_URL??'');}catch{throw new Error('Team hosting requires APP__PUBLIC_BASE_URL.');}

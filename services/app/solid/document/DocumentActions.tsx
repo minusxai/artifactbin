@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { TransferOwnershipDialog } from '../components/TransferOwnershipDialog';
 import { createSignal, Show, type JSX } from 'solid-js';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import Pencil from 'lucide-solid/icons/pencil';
@@ -13,6 +14,7 @@ import { RefreshDocumentAssets } from './RefreshDocumentAssets';
 
 const ROW = 'flex w-full items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg';
 interface DocumentActionsProps {
+  groupId?:string|null;
   pwaEnabled?: boolean; membershipAvailable?: boolean;
   id: string; title: string; version: number; archived?: boolean;
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean;
@@ -28,6 +30,7 @@ interface DocumentActionsProps {
 }
 /** Controls own only panel state; the document page owns editing and annotation lifetimes. */
 export function DocumentActions(props: DocumentActionsProps): JSX.Element {
+  const [transferring,setTransferring]=createSignal(false);
   const [commentsOpen, setCommentsOpen] = createSignal(props.commentsOpen ?? false);
   const activeOwner = () => props.owner && !props.archived;
   const activeEditor = () => props.canEdit && !props.archived;
@@ -47,10 +50,12 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} />
     </section>
     <Show when={activeOwner()}><section aria-label="Owner actions" class="space-y-1"><h2 class="px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
+      <button type="button" class={ROW} aria-label={`Transfer ownership of ${props.title}`} onClick={()=>setTransferring(true)}>transfer ownership</button>
       <RefreshDocumentAssets id={props.id} />
       <DocumentSharing id={props.id} title={props.title} owner variant="menu" onOpen={props.onShare} />
       <Show when={props.onDeleted}><DeleteAction id={props.id} title={props.title} onDeleted={props.onDeleted!} /></Show>
     </section></Show>
     <Show when={!activeOwner() && activeEditor()}><DocumentSharing id={props.id} title={props.title} owner={false} editable variant="menu" onOpen={props.onShare} /></Show>
+    <Show when={transferring()}><TransferOwnershipDialog id={props.id} title={props.title} currentGroupId={props.groupId} onClose={()=>setTransferring(false)} onTransferred={()=>window.location.assign(`/a/${encodeURIComponent(props.id)}`)}/></Show>
   </div>;
 }

@@ -1,3 +1,4 @@
+import {groupDestination,setupDestination} from './group-destination';
 import {accountMismatch} from './account-diagnostic';
 import {rebindWorkspace} from './workspace-rebind';
 import {collectionFilters} from './collection-filters';
@@ -133,11 +134,19 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    // An installer served from a self-hosted origin runs `setup --server <origin>`: that origin becomes the default.
    // The default is stored as the deployment's CANONICAL origin when it publishes one, so an
    // installer served from a second hostname does not pin the folder to a name of the same server.
-   if(typeof flags.server==='string')await saveDefaultServer((await serverIdentity(flags.server,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})})).canonical,home,context.env);
+   let destinationSetup:Awaited<ReturnType<typeof setupDestination>>|undefined;
+   if(flags.group||flags['set-default']){
+    const selected=await serverIdentity(declaredServer,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})});
+    let credential=await loadConnectionFor(selected,home,context.env);
+    const authenticate=()=>browserAuthenticate(selected.canonical,{...context.auth,home,env:context.env,interactive,aliases:serverAddresses(selected),rejectedToken:credential?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
+    credential??=await authenticate();
+    const client=new HttpClient({connection:credential,home,env:context.env,fetch:context.fetch,aliases:serverAddresses(selected),authenticate});
+    destinationSetup=await setupDestination(client,{group:typeof flags.group==='string'?flags.group:undefined,personal:!!flags.personal,inherit:!!flags.inherit,setDefault:!!flags['set-default'],home,env:context.env});
+   }else if(typeof flags.server==='string')await saveDefaultServer((await serverIdentity(flags.server,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})})).canonical,home,context.env);
    const result=await setupSkills({home,cwd:context.cwd??process.cwd(),takeover:!!flags.takeover,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    const installed=await setupGlobal({home,env:context.env??process.env,noGlobal:!!flags['no-global'],...(context.installKind?{kind:context.installKind}:{}),...(context.npm?{npm:context.npm}:{})});
-   if(json){emit({...result,...installed});if(installed.global.status==='failed')stderr(`afbin command not installed: ${installed.global.reason}\n${manualInstallHint(installed.global.version)}\n`);}
-   else stdout(setupSummary(result.installations,style)+globalSummary(installed,style));
+   if(json){emit({...result,...installed,...(destinationSetup?{defaults:destinationSetup}:{})});if(installed.global.status==='failed')stderr(`afbin command not installed: ${installed.global.reason}\n${manualInstallHint(installed.global.version)}\n`);}
+   else stdout(setupSummary(result.installations,style)+globalSummary(installed,style)+(destinationSetup?`\n  ${destinationSetup.default_set?'Default saved':'Group verified'}: ${destinationSetup.server}\n`:''));
    return result.installations.some(item=>item.status==='conflict')?2:0;
   }
   // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
@@ -173,6 +182,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
   if(command==='mv'){await (await findLocalWorkspace(workspace.root)?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   const account=await accountPlan(workspace,parsed);
+  if(account&&command==='push'&&(flags.group||flags.personal))throw new CliError('unsupported_destination','Destination flags require artifact files without account profile or session operations.','Push the artifact files separately.');
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
   const changesWorkspaceBinding=command==='push'||command==='workspace'||command==='fork'||command==='delete'&&flags.type!=='comment'||command==='pull'&&flags.output!=='-';
   if(changesWorkspaceBinding&&!account?.manifest)await refuseForeignManagedWorkspace();
@@ -401,9 +411,10 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(command==='push'&&!account&&typeof flags['secret-env']==='string'){secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);if(secretBinding.dry_run){emit(secretBinding);return 0;}}
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account){
-   if(portable){emit(await publishLocalWorkspace(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined}));return 0;}
+   const destination=typeof flags.group==='string'?await groupDestination(client,flags.group,true):flags.personal?{type:'personal' as const}:undefined;
+   if(portable){emit(await publishLocalWorkspace(workspace,positionals,client,{destination,force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined}));return 0;}
    if(!flags['dry-run']){const selected=await inspectWorkspace(workspace,positionals.length?positionals:undefined);await addFiles(workspace,selected.filter(file=>file.bytes&&!file.tracked&&!file.document?.metadata.head_version&&!file.resource?.head_version).map(file=>resolve(workspace.root,file.path)),client);workspace=await loadWorkspace(workspace.cwd,home);}
-   const result=await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});
+   const result=await push(workspace,positionals,client,{destination,force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});
    // The moment the verification loop starts: after a publish, agents re-pulled, diffed, exported and
    // grepped their own document for 5–13 calls. Say it once, here.
    const published=!flags['dry-run']&&result.operations.some(op=>'status' in op&&op.status==='published');

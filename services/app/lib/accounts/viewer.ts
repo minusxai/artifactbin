@@ -1,3 +1,5 @@
+import {admitDeploymentIdentity} from '../deployment';
+import {acceptGroupInvitations} from '../groups';
 import {hostedRequestRefusal} from '@/lib/accounts/request-authority';
 /**
  * The auth() → Viewer bridge, in its own module ON PURPOSE: the serving
@@ -26,6 +28,7 @@ async function sessionViewer(request?: Request): Promise<Viewer> {
     const fromProxy = await proxyActor(request);
     if (fromProxy) return fromProxy.credential === 'session' ? fromProxy.viewer : null;
     const session = await auth();
+    if(session?.user?.id&&!await admitDeploymentIdentity({userId:session.user.id,email:session.user.email??undefined}))return null;
     return session?.user?.id ? { userId: session.user.id, email: session.user.email ?? null } : null;
   } catch {
     return null;
@@ -92,6 +95,7 @@ export function isBrowserSessionRequest(request: Request): boolean {
 async function proxyActor(request: Request | undefined): Promise<RequestActor | null> {
   const attached = attachedActor(request);
   if (attached) {
+    if(attached.viewer?.userId&&!await admitDeploymentIdentity({userId:attached.viewer.userId,email:attached.viewer.email??undefined,emailVerified:attached.viewer.emailVerified}))return NO_ACTOR;
     if (attached.credential === 'agent-cookie') {
       // Only the pages host creates token-backed browser cookies. Its WeakMap
       // mark cannot be supplied by a client; retain the cookie CSRF guard.
@@ -108,6 +112,7 @@ async function proxyActor(request: Request | undefined): Promise<RequestActor | 
     // The app's own row for this person follows the claims (lib/profiles) — created on first sight, updated on change.
     if (attached.credential === 'session' && attached.viewer?.userId) {
       await syncProfile({ userId: attached.viewer.userId, email: attached.viewer.email ?? undefined });
+      if(attached.viewer.emailVerified&&attached.viewer.email)await acceptGroupInvitations(attached.viewer.userId,attached.viewer.email);
       if (attached.viewer.emailVerified) await mergeGuestUsers(attached.viewer.userId, attached.heldTokenIds ?? []);
     }
     const carrying=request??currentRequest();
@@ -208,6 +213,7 @@ export async function syncProfileForToken(request: Request, scope: TokenActor): 
   if (!claimed.userId || !claimed.email) return;
   try {
     await syncProfile({ userId: claimed.userId, email: claimed.email });
+    if(claimed.emailVerified)await acceptGroupInvitations(claimed.userId,claimed.email);
   } catch (error) {
     /*
      * A SECOND identity for one address is a provisioning fault the lazy upsert

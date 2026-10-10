@@ -15,6 +15,8 @@ export type Viewer = (VerifiedAccount & { userId: string; email: string | null }
 
 /** Any credential the serving paths resolve, as the ids and address effectiveRole needs. */
 export interface RoleActor extends VerifiedAccount {
+  /** Saved owner context supplied by server code only. */
+  groupId?:string|null;
   userId: string | null;
   tokenId: string | null;
   /**
@@ -41,6 +43,8 @@ export interface RoleActor extends VerifiedAccount {
 // it: a user-owned token cannot have artifacts its user scope would miss.
 
 export interface TokenActor extends VerifiedAccount {
+  /** Server-only saved artifact owner for author reference resolution. Never request input. */
+  groupId?: string | null;
   tokenId: string;
   userId: string | null;
 }

@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { creationDestination } from '../lib/creation-destination';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { AssetWorkspace, type AssetSection } from '../datasets/AssetWorkspace';
 import WorkspaceShell from '../components/WorkspaceShell';
@@ -531,7 +532,9 @@ export function DatasetEditorPage({
         expectedVersion: version(),
         expectedState: state()
       } : {
-        visibility: session()?.user ? "private" : "unlisted"
+        visibility: session()?.user ? "private" : "unlisted",
+        destination: creationDestination(window.location.search),
+        parent_id: new URLSearchParams(window.location.search).get('parent_id')
       })
     });
     await onSaved?.();

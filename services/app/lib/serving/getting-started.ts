@@ -1,3 +1,6 @@
+import type {DeploymentState} from '@artifactbin/contracts';
+import {buildSetupInstructions,buildSetupCommand} from '../platform/setup-instructions';
+import {deploymentSetupOptions} from './setup-installers';
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
 
 const originOf=(base:string)=>base.replace(/\/$/,'');
@@ -15,8 +18,11 @@ type GuideBlock =
 
 /** One source for the human page, agent Markdown, and the compact installation panel.
  * Pure and browser-safe; the caller supplies its deployment origin. */
-export function gettingStarted(base: string) {
+export function gettingStarted(base: string, deployment?:DeploymentState) {
   const origin = base.replace(/\/+$/, '');
+  const setupOptions=deploymentSetupOptions(deployment);
+  const setupCommand=buildSetupCommand({serverOrigin:origin,...setupOptions}).replace(/^afbin /,'npx --yes @afbin/cli@latest ');
+  const windowsSetupCommand=buildSetupCommand({serverOrigin:origin,...setupOptions},true).replace(/^afbin /,'npx.cmd --yes @afbin/cli@latest ');
   const server = afbinServerFlag(origin);
   const sections: Array<{ id: string; title: string; blocks: GuideBlock[] }> = [
     { id: 'choose', title: 'Choose the available interface', blocks: [
@@ -26,7 +32,7 @@ export function gettingStarted(base: string) {
       { kind: 'text', text: 'For an explicitly requested CLI installation or local preview/serve, run one command for your platform. It reuses supported Node/npm or installs official Node LTS for your user, then installs afbin and the artifactbin skill for your coding agents. Open a new terminal after installation. Setup supports Claude Code, Codex, Pi, and OpenCode; choose which agents receive the skill.' },
       { kind: 'command', label: 'macOS / Linux', language: 'sh', text: afbinInstallCommand(origin) },
       { kind: 'command', label: 'Windows · PowerShell', language: 'powershell', text: afbinWindowsInstallCommand(origin) },
-      { kind: 'text', text: `Already have Node/npm? Run npx --yes @afbin/cli@latest setup${server} directly (PowerShell: npx.cmd --yes @afbin/cli@latest setup${afbinServerFlag(origin, true)}). For Node only, use ${origin}/chat/install-node.sh with bash and reopen your terminal, or run ${origin}/chat/install-node.ps1 inline in PowerShell.` },
+      { kind: 'text', text: `Already have Node/npm? Run ${deployment?.mode==='company'?setupCommand:`npx --yes @afbin/cli@latest setup${server}`} directly (PowerShell: ${deployment?.mode==='company'?windowsSetupCommand:`npx.cmd --yes @afbin/cli@latest setup${afbinServerFlag(origin, true)}`}). For Node only, use ${origin}/chat/install-node.sh with bash and reopen your terminal, or run ${origin}/chat/install-node.ps1 inline in PowerShell.` },
     ] },
     { id: 'http', title: 'Use HTTP without installing the CLI', blocks: [
       { kind: 'text', text: `Reuse an installed artifactbin skill for ${origin}. Otherwise download ${origin}/skills/artifactbin.zip and extract its artifactbin/ folder into your harness skill directory. Restart the harness so it loads SKILL.md. With no filesystem, read ${origin}/llms.txt and its topic links. Email sign-in and authenticated HTTP requests are in ${origin}/llms/http-api. Local preview, filesystem workspaces and npm scripts require CLI/shell access.` },
@@ -57,6 +63,12 @@ export function gettingStarted(base: string) {
       { kind: 'command', label: 'Publish your edit', language: 'sh', text: `afbin push artifact.jsx${server}` },
     ] },
   ];
+  if(deployment?.mode==='company')sections.splice(1,0,{id:'deployment',title:'Set up your deployment defaults',blocks:[
+    {kind:'text',text:buildSetupInstructions({serverOrigin:origin,...setupOptions})},
+    {kind:'command',label:'Recipient setup · macOS / Linux',language:'sh',text:setupCommand},
+    {kind:'command',label:'Recipient setup · Windows',language:'powershell',text:windowsSetupCommand},
+    ...(!deployment.setup_complete?[{kind:'text' as const,text:'The designated owner must sign in and confirm the deployment default group before teammates can join. This setup selects the server; account inheritance follows the group once it is confirmed.'}]:[]),
+  ]});
   return {
     title: 'Getting started',
     intro: 'Use the installed CLI or direct HTTP to create and edit artifacts. Reuse your skill and credentials.',
@@ -64,8 +76,8 @@ export function gettingStarted(base: string) {
   };
 }
 
-export function gettingStartedMarkdown(base: string): string {
-  const guide = gettingStarted(base);
+export function gettingStartedMarkdown(base: string,deployment?:DeploymentState): string {
+  const guide = gettingStarted(base,deployment);
   return `# ${guide.title}\n\n${guide.intro}\n\n` + guide.sections.map((section, index) =>
     `## ${index + 1}. ${section.title}\n\n` + section.blocks.map(block => block.kind === 'text' ? block.text
       : `${block.label}\n\n\`\`\`${block.language}\n${block.text}\n\`\`\``).join('\n\n'),

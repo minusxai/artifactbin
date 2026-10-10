@@ -148,7 +148,9 @@ const ARTIFACTS: Table = {
     // not a secret. The PK is what makes collisions retryable (23505).
     { name: 'id', type: 'TEXT', notNull: true },
     { name: 'token_id', type: 'TEXT', notNull: true }, // creating token (provenance + anon scope)
-    { name: 'user_id', type: 'TEXT' }, // owner; NULL until the creating token is claimed
+    { name: 'user_id', type: 'TEXT' }, // personal owner; NULL for token/group ownership
+    { name: 'group_id', type: 'TEXT' }, // independent group owner; never a user identity
+    { name: 'creator_user_id', type: 'TEXT' }, // immutable human creator attribution
     // The read ACL: 'public' = anyone with the link, and it lists on the
     // owner's profile; 'unlisted' = anyone with the link, listed nowhere;
     // 'private' = owner + artifact_shares emails. createArtifact always sets
@@ -945,7 +947,46 @@ const DOCUMENT_TRUST: Table = {
   {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
  ],primaryKey:['user_id','artifact_id'],
 };
-export const TABLES: Table[] = [...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+
+/** Independent group owners, shared handles, preferences and company admission state. */
+const GROUPS:Table={name:'groups',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'handle',type:'TEXT',notNull:true},
+ {name:'name',type:'TEXT',notNull:true},{name:'description',type:'TEXT',notNull:true,default:"''"},
+ {name:'created_by',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ {name:'deleted_at',type:'TIMESTAMPTZ'},
+],primaryKey:['id'],indexes:[{name:'idx_groups_handle',columns:['handle'],unique:true}]};
+const GROUP_MEMBERS:Table={name:'group_members',columns:[
+ {name:'group_id',type:'TEXT',notNull:true},{name:'user_id',type:'TEXT',notNull:true},
+ {name:'role',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['group_id','user_id'],indexes:[{name:'idx_group_members_user',columns:['user_id']}]};
+const GROUP_INVITATIONS:Table={name:'group_invitations',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'email',type:'TEXT',notNull:true},
+ {name:'role',type:'TEXT',notNull:true},{name:'invited_by',type:'TEXT',notNull:true},
+ {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['id'],indexes:[{name:'idx_group_invitations_email',columns:['group_id','email'],unique:true}]};
+const GROUP_LINKS:Table={name:'group_links',columns:[
+ {name:'group_id',type:'TEXT',notNull:true},{name:'linked_group_id',type:'TEXT',notNull:true},
+],primaryKey:['group_id','linked_group_id']};
+const ACCOUNT_PREFERENCES:Table={name:'account_preferences',columns:[
+ {name:'user_id',type:'TEXT',notNull:true},{name:'default_destination',type:'JSONB',notNull:true,default:"'{\"type\":\"inherit\"}'::jsonb"},
+],primaryKey:['user_id']};
+const HANDLE_RESERVATIONS:Table={name:'handle_reservations',columns:[
+ {name:'handle',type:'TEXT',notNull:true},{name:'kind',type:'TEXT',notNull:true},{name:'subject_id',type:'TEXT',notNull:true},
+],primaryKey:['handle'],indexes:[{name:'idx_handle_reservations_subject',columns:['kind','subject_id'],unique:true}]};
+const DEPLOYMENT_STATE:Table={name:'deployment_state',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'owner_user_id',type:'TEXT'},
+ {name:'default_group_id',type:'TEXT'},{name:'setup_complete',type:'BOOLEAN',notNull:true,default:'false'},
+],primaryKey:['id']};
+const DEPLOYMENT_MEMBERS:Table={name:'deployment_members',columns:[
+ {name:'user_id',type:'TEXT',notNull:true},{name:'admitted_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['user_id']};
+const OWNERSHIP_TRANSFERS:Table={name:'ownership_transfers',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'artifact_id',type:'TEXT',notNull:true},{name:'actor_user_id',type:'TEXT',notNull:true},
+ {name:'previous_owner',type:'JSONB',notNull:true},{name:'next_owner',type:'JSONB',notNull:true},
+ {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['id'],indexes:[{name:'idx_ownership_transfers_artifact',columns:['artifact_id','created_at']}]};
+
+export const TABLES: Table[] = [GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

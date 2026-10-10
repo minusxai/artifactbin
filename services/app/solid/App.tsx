@@ -24,6 +24,7 @@ const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.Doc
 const GettingStartedPage = lazy(() => import('./pages/GettingStarted').then((m) => ({ default: m.GettingStartedPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
 const ProfileAliasRoute = lazy(() => import('./pages/ProfileAlias').then((m) => ({ default: m.ProfileAliasRoute })));
+const GroupsPage = lazy(() => import('./pages/Groups').then(m=>({default:m.GroupsPage})));
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
 const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((m) => ({ default: m.ArtifactAddressRoute })));
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
@@ -47,7 +48,7 @@ function IntentPreload(): JSX.Element {
 
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
-  const workspaceRoute = () => ['/assets', '/trash', '/schedules', '/chat', '/notifications', '/account', '/docs-human', '/getting-started', '/datasets/new', '/files/new', '/programs/new'].includes(location.pathname);
+  const workspaceRoute = () => ['/groups', '/assets', '/trash', '/schedules', '/chat', '/notifications', '/account', '/docs-human', '/getting-started', '/datasets/new', '/files/new', '/programs/new'].includes(location.pathname);
   const servedDocument = !!servedDocumentFrame();
   const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
@@ -111,6 +112,7 @@ export function App(): JSX.Element {
       <Route path="/notifications" component={NotificationsPage} />
       <Route path="/account" component={AccountPage} />
       <Route path="/docs-human" component={DocsPage} />
+      <Route path="/groups" component={GroupsPage} />
       <Route path="/getting-started" component={GettingStartedPage} />
       <Route path="/:user" component={ProfilePage} />
       {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/ProfileAlias.tsx

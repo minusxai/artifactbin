@@ -65,7 +65,7 @@ export async function getSharingFor(actor: TokenActor, id: string): Promise<Shar
     visibility: row.visibility,
     linkRole: (row.link_role ?? 'viewer') as ShareRole,
     shares: shares.rows,
-    canPrivate: !!row.user_id,
+    canPrivate: !!(row.user_id||row.group_id),
     ...(row.format === 'dataset'
       ? { access: row.access, policyVersion:grantsOf(row)?2:1, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
       : {}),
@@ -105,7 +105,7 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
       visibility: patch.visibility ?? row.visibility,
       linkRole: patch.linkRole ?? row.link_role ?? 'viewer',
       shares: shares.rows,
-      canPrivate: !!row.user_id,
+      canPrivate: !!(row.user_id||row.group_id),
       ...(row.format === 'dataset' ? {access:patch.access ?? row.access,datasetKind:catalogOf(row)?.kind ?? 'stored'} : {}),
     } satisfies SharingState;
   });

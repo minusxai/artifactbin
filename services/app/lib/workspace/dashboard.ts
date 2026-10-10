@@ -5,6 +5,7 @@
  * shortcuts describe the account as a whole, so they are computed once here
  * and travel unchanged to either page.
  */
+import {getGroupRole} from '@/lib/groups';
 import { forkCountByUser, likeSummaryByUser, VIEW_SERIES_DAYS, viewSeriesByUser } from './analytics';
 import { count } from '@/lib/accounts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
@@ -18,11 +19,12 @@ import { workspaceDocumentsFor, workspaceStatsFor } from './inventory';
 // Discovery keeps the same ownership/share/trash gates as the general listings.
 export type WorkspaceSharedItem = Pick<SharedArtifactSummary, 'id' | 'title' | 'description' | 'format' | 'version' | 'visibility' | 'updated_at' | 'owner_username' | 'role'>;
 
-export async function accountWorkspaceCoreFor(userId: string, email?: string | null) {
+export async function accountWorkspaceCoreFor(userId: string, email?: string | null, groupId?:string) {
+  if(groupId && !(await getGroupRole(userId,groupId)))return null;
   const db = await getDb();
   const [artifacts, shared] = await Promise.all([
-    workspaceDocumentsFor(userId),
-    email ? db.query<WorkspaceSharedItem>(`SELECT a.id, a.title, a.description, a.format, a.version, a.visibility, a.updated_at, u.username AS owner_username, s.role
+    workspaceDocumentsFor(userId,groupId),
+    email && !groupId ? db.query<WorkspaceSharedItem>(`SELECT a.id, a.title, a.description, a.format, a.version, a.visibility, a.updated_at, u.username AS owner_username, s.role
       FROM artifacts a JOIN artifact_shares s ON s.artifact_id = a.id LEFT JOIN users u ON u.id = a.user_id
       WHERE s.email = $1 AND a.user_id IS DISTINCT FROM $2::text AND a.${LIVE_ARTIFACT_SQL}
       ORDER BY a.updated_at DESC LIMIT 200`, [email.toLowerCase().trim(), userId]) : { rows: [] },
@@ -76,10 +78,10 @@ export async function accountWorkspaceFor(userId: string, email?: string | null)
   const [core, { sparklines, ...insights }] = await Promise.all([
     accountWorkspaceCoreFor(userId, email), accountWorkspaceInsightsFor(userId),
   ]);
-  return { ...core, ...insights, artifacts: core.artifacts.map((row) => ({ ...row, views: insights.views[row.id] ?? 0, sparkline: sparklines[row.id] ?? null })) };
+  return { ...core, ...insights, artifacts: core!.artifacts.map((row) => ({ ...row, views: insights.views[row.id] ?? 0, sparkline: sparklines[row.id] ?? null })) };
 }
 
-export type AccountWorkspaceCore = Awaited<ReturnType<typeof accountWorkspaceCoreFor>>;
+export type AccountWorkspaceCore = NonNullable<Awaited<ReturnType<typeof accountWorkspaceCoreFor>>>;
 export type AccountWorkspaceInsights = Awaited<ReturnType<typeof accountWorkspaceInsightsFor>>;
 
 export type AccountWorkspace = Awaited<ReturnType<typeof accountWorkspaceFor>>;

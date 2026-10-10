@@ -126,7 +126,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
       // Nothing is written yet to comment on; a reader who may not comment is offered a way in.
       onComment={() => { if (!annotatable) window.location.assign(loginHref(window.location, 'comment')); }}
       onFork={() => setFork(true)} onShare={() => { if (owner) setSharingOpen(true); }} onEdit={openEditor} onMembership={() => setPanel('controls')}
-      controls={(close) => <DocumentActions id={id} title={title()} version={live()?.version ?? surface.version}
+      controls={(close) => <DocumentActions groupId={(surface as typeof surface & {group_id?:string|null}).group_id} id={id} title={title()} version={live()?.version ?? surface.version}
         owner={owner} canEdit={editable} canAnnotate={false} accountSession={accountSession()}
         like={answer.like ?? { liked: false, count: 0 }} onCommentsChange={() => {}}
         forkedFrom={surface.author?.forkedFrom ?? null} hideFork

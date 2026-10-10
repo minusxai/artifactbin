@@ -44,9 +44,9 @@ describe('isOwner', () => {
 
   it('an account-owned document is not owned by a browser holding another token', () => {
     expect(isOwner(row('usr_a', 'tok_1'), browser('tok_2'))).toBe(false);
-    // …and IS owned by a browser holding the very token that created it —
-    // the claimed-token-without-session case (the split-viewer bug).
-    expect(isOwner(row('usr_a', 'tok_1'), browser('tok_1'))).toBe(true);
+    // A creating token is provenance once an account owns the row.
+    // Credential resolution must supply the token account before this decision.
+    expect(isOwner(row('usr_a', 'tok_1'), browser('tok_1'))).toBe(false);
   });
 
   it('no credential owns nothing', () => {

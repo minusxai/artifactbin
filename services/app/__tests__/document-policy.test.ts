@@ -17,6 +17,8 @@ const options={actor:admin,origin:'same'};
 const path='/api/my/artifacts/abc123';
 const context={params:Promise.resolve({id:'abc123'})};
 beforeEach(async()=>{
+ // Session claims name persisted accounts; profile sync may already have cached them.
+ await (await harness.db()).query("INSERT INTO users(id,email,kind) VALUES ('usr_admin','admin@example.com','account'),('usr_other','other@example.com','account'),('usr_owner','owner@example.com','account')");
  setDocumentEditorPolicy(actor=>actor.userId==='usr_admin' && actor.emailVerified===true);
  await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,document,meta,format,visibility,edit_id) VALUES ('abc123','tok_owner','usr_owner','Private document',$1::jsonb,'{"dataSyntax":2}','markup','private','base-edit')`,[JSON.stringify(createDocumentGraph('<p id="intro">Before</p>',1))]);
 });

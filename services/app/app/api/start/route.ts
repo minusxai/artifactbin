@@ -13,10 +13,15 @@
 import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/serving';
-import { baseUrl, json, unauthorized } from '@/lib/http';
+import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
 import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
-import { canAuthenticateUser, resolveToken, sessionActor } from '@/lib/accounts';
+import { resolveToken } from '@/lib/accounts';
+import {canUseDeploymentIdentity} from '@/lib/deployment';
+import { canAuthenticateUser } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish/document/input';
+import {parseArtifactDestination} from '@/lib/artifacts';
+import {DatasetError} from '@/lib/datasets/errors';
 
 export async function POST(request: Request) {
   // A browser session takes precedence over an approved CLI bearer.
@@ -33,19 +38,26 @@ export async function POST(request: Request) {
   const actor = bearer ? null : await sessionActor(request);
   const ownerId = userId ?? bearer?.userId ?? actor?.viewer?.userId ?? null;
   const existingTokenId = bearer?.id ?? actor?.tokenId ?? '';
-  if (!await canAuthenticateUser(ownerId)) return unauthorized(request);
+  if (!await canUseDeploymentIdentity(ownerId)||!await canAuthenticateUser(ownerId)) return unauthorized(request);
   const tokenId = existingTokenId;
   const parsed = await parseContentInput({ markup: new URL(request.url).searchParams.get('mode') === 'blank' ? BLANK_REPORT_MARKUP : START_PLACEHOLDER_MARKUP }, {});
   if (parsed instanceof Response) return parsed; // unreachable: both starting documents are fixed and valid
 
-  const row = await createArtifact(tokenId, ownerId, {
+  const body = await readJson(request, {allowEmpty:true});
+  if (!body) return json({error:'invalid_json'},400);
+  let row: Awaited<ReturnType<typeof createArtifact>>;
+  try { row = await createArtifact(tokenId, ownerId, {
     ...parsed,
+    destination: parseArtifactDestination(body.destination),
     // NULL, not 'Untitled': unnamed must stay distinguishable from named-that,
     // because an unnamed document follows its own heading (lib/document/title.ts)
     // and an explicit title never does.
     title: null,
     description: null,
-  });
+  }); } catch(error) {
+    if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);
+    throw error;
+  }
 
   const base = baseUrl(request);
   const response = json(

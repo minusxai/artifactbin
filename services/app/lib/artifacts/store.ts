@@ -1,3 +1,5 @@
+import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
+import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type Scope } from './access';
 import type { TokenActor } from '@/lib/accounts';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
@@ -52,6 +54,7 @@ export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'user_id
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
+  destination?:ArtifactDestination;
   title?: string | null;
   description?: string | null;
   format: ArtifactFormat;
@@ -116,7 +119,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
   const dataset=(await artifactQuery<ArtifactRow>(tx,"SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
   const catalog=dataset?catalogOf(dataset):null;
   if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.includes('current'))))continue;
-  if(document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id)throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
+  if(document.group_id ? dataset.group_id!==document.group_id : dataset.group_id || (document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id))throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
   const columns=(cs:DatasetColumn[])=>resolveUserColumnScope(cs,document.id);
   const bound={...catalog,tables:catalog.tables.map(t=>({...t,columns:columns(t.columns)}))};
   let source=dataset.source;
@@ -158,6 +161,8 @@ export async function createArtifact(
    */
   atCreation: { reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
+  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination({tokenId,userId},input.destination,input.ancestor_ids?.at(-1));
+  input={...input,destination};
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source).source };
   }
@@ -211,6 +216,8 @@ async function insertArtifact(
   sourceIds: string[],
   atCreation: Parameters<typeof createArtifact>[3] = {},
 ): Promise<ArtifactRow> {
+  await assertOwnerPlacement(tx,{tokenId,userId,groupId:input.destination?.type==='group'?input.destination.id:null},input.ancestor_ids??[]);
+  await assertDestination(tx,{tokenId,userId},input.destination??{type:'personal'});
   if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
   await claimArtifactId(tx,id,{tokenId,userId},!!atCreation.reservedId);
   // A FORK carries its source's rows verbatim — a snapshot the forker may read,
@@ -242,8 +249,8 @@ async function insertArtifact(
   // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
   // always execute, so the log row lands even though nothing reads it.
   `WITH created AS (
-     INSERT INTO artifacts (id, token_id, user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision, document)
-     VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $18::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11, $12, $13, $14, $3, $2, $16::jsonb, $17::int, $18::jsonb) RETURNING *
+     INSERT INTO artifacts (id, token_id, user_id, group_id, creator_user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision, document)
+     VALUES ($1, $2, CASE WHEN $19::text IS NULL THEN $3 ELSE NULL END, $19, $3, $4, $5, $6, CASE WHEN $18::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11, $12, $13, $14, $3, $2, $16::jsonb, $17::int, $18::jsonb) RETURNING *
    ), genesis AS (
      INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, document_state)
      SELECT id, edit_id, 0, '', COALESCE($7::text, ''), 0, 0, $3, $2, jsonb_build_object('epoch',COALESCE(document->>'epoch',document#>>'{prose,epoch}'),'version',version) FROM created
@@ -286,6 +293,7 @@ async function insertArtifact(
     datasetPolicy ? JSON.stringify(datasetPolicy) : null,
     atCreation.datasetPolicy?.revision ?? 0,
     sourceStorage(input.format,input.source,!atCreation.forkedFrom).document,
+    input.destination?.type==='group'?input.destination.id:null,
   ],
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
@@ -298,12 +306,7 @@ async function insertArtifact(
 
 export async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
-  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND token_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
-}
-
-export async function getArtifactByUser(userId: string, id: string): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND user_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, userId]);
+  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND group_id IS NULL AND token_id = $2 AND (user_id IS NULL OR user_id=(SELECT user_id FROM tokens WHERE tokens.id=$2)) AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
 }
 
 async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
@@ -632,6 +635,7 @@ async function replaceScoped(
     if (current.dataset_policy && !(await tx.query('SELECT 1 FROM artifacts WHERE id=$1 AND '+ownerScope(actor).where('$2'), [id, ownerScope(actor).val])).rows.length) {
       return policyLocked('this dataset carries a write policy; only its owner may replace its content');
     }
+    if(input.ancestor_ids)await assertOwnerPlacement(tx,{tokenId:current.token_id,userId:current.user_id,groupId:current.group_id},input.ancestor_ids);
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true, reason:'state_conflict', currentVersion:current.version, currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
@@ -902,7 +906,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(!committed.applied&&committed.invalidParent)return json({error:'invalid_parent'},400);
     if(!committed.applied&&committed.invalidGraph)return json({error:'invalid_document_graph',hint:'The patch would store nodes whose children, parts or byte counts disagree. Prepare document_update from the current authoring graph with the shared compiler.'},400);
     if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
-    if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
+    if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id&&!committed.head.group_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
     if(!committed.applied)return {applied:false,reason:'doc_changed',head:headOf(committed.head)};
     if(committed.withheld){
@@ -1065,8 +1069,8 @@ export function getVersionFor(actor: TokenActor, id: string, version: number): P
  *
  * Only a caller that has verified an export key for THIS row may use it.
  */
-export function versionForCapture(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'>, version: number): Promise<VersionContent | null> {
-  return getVersionScoped(editorScope({ userId: row.user_id, tokenId: row.token_id }), row.id, version);
+export function versionForCapture(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, version: number): Promise<VersionContent | null> {
+  return getVersionScoped(editorScope({ userId: row.user_id, tokenId: row.token_id,groupId:row.group_id }), row.id, version);
 }
 
 export function revertArtifactFor(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
@@ -1099,6 +1103,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
     const current = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [id,scope.val])).rows[0];
     if (!current) return null;
     if(current.format==='markup')return null;
+    if(patch.ancestor_ids)await assertOwnerPlacement(tx,{tokenId:current.token_id,userId:current.user_id,groupId:current.group_id},patch.ancestor_ids);
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) return {conflict:true,currentVersion:current.version};
     if(patch.policy!==undefined&&current.policy_revision!==opts.expectedPolicyRevision)return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};

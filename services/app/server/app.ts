@@ -1,3 +1,5 @@
+import {getDeploymentState} from '@/lib/deployment';
+import {renderSetupInstaller} from '@/lib/serving/setup-installers';
 import { artifactAppPath } from '@/lib/serving';
 import { type ArtifactRow, canReadArtifact, getArtifactById, roleFor, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
@@ -623,16 +625,17 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return c.body(body);
   });
   // Compatibility URLs prepare Node and invoke npm; every deployment selects its own origin.
-  for (const installer of ['/install.sh', '/chat/install.sh']) app.get(installer, (c) => {
+  for (const installer of ['/install.sh', '/chat/install.sh']) app.get(installer, async (c) => {
     const script = readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');
-    const origin = baseUrl(c.req.raw).replace(/'/g, `'"'"'`);
-    return c.text(script.replace(/^ {2}origin=''$/m, () => `  origin='${origin}'`));
+    const deployment=await getDeploymentState(null);
+    c.header('cache-control',deployment.mode==='company'?'no-store':'public, max-age=300');
+    return c.text(renderSetupInstaller(script,baseUrl(c.req.raw),deployment,'sh'));
   });
-  app.get('/chat/install.ps1', c => {
+  app.get('/chat/install.ps1', async c => {
     const script=readFileSync(path.join(publicDir,'chat','install.ps1'),'utf8');
-    const origin=baseUrl(c.req.raw).replace(/'/g,"''");
-    const body=script.replace(/^\$Origin = '[^']*'$/m,()=>`$Origin = '${origin}'`);
-    c.header('content-type','text/plain; charset=utf-8');c.header('cache-control','public, max-age=300');c.header('x-content-type-options','nosniff');
+    const deployment=await getDeploymentState(null);
+    const body=renderSetupInstaller(script,baseUrl(c.req.raw),deployment,'powershell');
+    c.header('content-type','text/plain; charset=utf-8');c.header('cache-control',deployment.mode==='company'?'no-store':'public, max-age=300');c.header('x-content-type-options','nosniff');
     return c.body(body);
   });
   // Retired executable assets must not fall through to static storage.

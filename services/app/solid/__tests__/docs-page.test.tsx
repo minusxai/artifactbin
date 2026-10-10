@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, within } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
@@ -61,4 +61,14 @@ it.each(['Win32','MacIntel'])('shows executable Node preparation and npm instruc
     expect(screen.getByText(/reuses supported Node\/npm/)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('ExecutionPolicy Bypass');
   } finally { if(prior)Object.defineProperty(window.navigator,'platform',prior);else Reflect.deleteProperty(window.navigator,'platform'); }
+});
+
+
+it('company setup panel copies shared recipient defaults and preserves explicit Personal starter destination',async()=>{
+ const fetcher=vi.fn(async (url:string)=>url==='/api/deployment'?Response.json({mode:'company',setup_complete:true,is_owner:false,default_group:{id:'grp_team',handle:'company-team',name:'Company',description:'',role:null}}):new Promise<Response>(()=>{}));
+ vi.stubGlobal('fetch',fetcher);render(()=> <GetStarted destination={{type:'personal'}}/>);
+ await screen.findByRole('button',{name:'Copy deployment setup instructions'});
+ expect(document.body.textContent).toContain("--group 'company-team' --set-default");expect(document.body.textContent).toContain('PUT /api/me/preferences');expect(document.body.textContent).not.toContain('grp_team');
+ fireEvent.click(screen.getByRole('button',{name:'Create a live document for my agent'}));
+ expect(fetcher).toHaveBeenCalledWith('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:{type:'personal'}})});
 });

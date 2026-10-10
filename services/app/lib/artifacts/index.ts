@@ -5,7 +5,7 @@
  */
 
 /** Reads and access (every server caller): the row, the role decision and its scopes, the reader snapshot, the lookups, versions and listings, capabilities, views and the state digest. */
-export { canReadArtifact, roleFor, effectiveRole, isOwner, editorScope, annotationScope, writerFor } from './access';
+export { canReadArtifact, ownsArtifact, commentMonitorScope, annotationScope, roleFor, effectiveRole, isOwner, editorScope, writerFor } from './access';
 export type { ArtifactRow, Scope } from './access';
 export { readableArtifact, snapshotForReader, snapshotHeadFor } from './read-access';
 export { getArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived, versionToWire } from './store';
@@ -66,3 +66,7 @@ export { notificationJobStore } from './notification-runtime';
 /** Table access, PROVISIONAL: callers that still query the artifacts table themselves. Narrowing this is its own redesign (workspace listings, trash, analytics, publish preparation); until then the debt stays visible here, in one place. */
 export { LIVE_ARTIFACT_SQL, ownerPredicate } from './access';
 export { artifactQuery, loadArtifactDocument } from './document';
+
+/** Independent ownership destinations and atomic ownership transfer. */
+export {parseArtifactDestination,newArtifactDestination} from './ownership';
+export {transferArtifact} from './transfer';

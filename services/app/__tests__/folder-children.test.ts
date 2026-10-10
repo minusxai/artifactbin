@@ -100,7 +100,7 @@ describe('the children table', () => {
    * of their own listing — no private children, no counts. Found on the dev
    * walk, where every artifact belongs to an unclaimed token.
    */
-  it('an anonymous owner sees their OWN folder through its token: the numbers, which a stranger never gets', async () => {
+  it('a resolved account token sees its OWN folder and numbers, which a stranger never gets', async () => {
     const t = await mintToken('bare');
     const f = await create(t.token, { format: 'folder', title: 'Mine', visibility: 'unlisted' });
     // One PUBLIC child, so the two viewers see the same row and the only thing
@@ -110,7 +110,7 @@ describe('the children table', () => {
     const child = await create(t.token, { markup: '<p>open</p>', title: 'Open', visibility: 'public', parent_id: f.id });
     const quiet = await create(t.token, { markup: '<p>quiet</p>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
 
-    const mine = (await tableFor(f.id, { userId: null, tokenId: t.id, email: null })).rows as any[];
+    const mine = (await tableFor(f.id, { userId: t.userId, tokenId: t.id, email: t.email })).rows as any[];
     expect(mine.map((x) => x.id).sort()).toEqual([child.id, quiet.id].sort());
     const open = mine.find((x) => x.id === child.id);
     expect(typeof open.views).toBe('number');

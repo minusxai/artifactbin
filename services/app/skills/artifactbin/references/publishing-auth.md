@@ -21,3 +21,7 @@ Credentials use `~/.artifactbin/hosts/<hostname>/credentials.env` for HTTPS port
 A deployment may answer at more than one hostname — a marketing name that proxies to the app, or a previous name kept alive. afbin asks the origin you selected which addresses it answers at, and believes an alias only when the canonical origin's own answer names it: the two origins have to agree. A URL copied from either name then resolves to the same artifact, a folder tracked against one keeps working when the other is selected, and browser approval shown on either is accepted. Requests and credentials always go to the canonical origin of the server YOU selected — never to an origin a pasted URL named, and never to an alias; a pasted URL supplies its artifact id and nothing else. A server that publishes no addresses behaves exactly as before, with the two origins separate. Self-hosters list the extra origins in `APP__ALIAS_ORIGINS` on the deployment; `APP__PUBLIC_BASE_URL` stays the canonical one.
 
 `afbin serve --dir ./team --port 7445` initializes and runs an authenticated server in the foreground. Its directory owns settings, objects and the default PGLite database. `--db-url postgres://…` or `--db-url pglite://…` overrides only the application database. Server settings are separate from client defaults and per-host credentials. There is no managed self daemon.
+
+## Group and deployment defaults
+
+See [groups](groups.md) for recipient setup, account destination defaults and create-only publication.

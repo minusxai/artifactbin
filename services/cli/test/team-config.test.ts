@@ -237,6 +237,11 @@ test('first serve creates private persistent operator settings without client de
  const home=await mkdtemp(join(tmpdir(),'afbin-serve-init-'));
  try{
   const options={home,cwd:home,directory:'team',port:8123};
+  await assert.rejects(prepareServe(options),/APP__DEPLOYMENT_OWNER_EMAIL/);
+  const generated=join(home,'team','server.env');
+  const initial=await readFile(generated,'utf8');
+  assert.match(initial,/APP__DEPLOYMENT_MODE=company/);
+  await writeFile(generated,initial.replace('APP__DEPLOYMENT_OWNER_EMAIL=','APP__DEPLOYMENT_OWNER_EMAIL=owner@example.com'));
   const first=await prepareServe(options),bytes=await readFile(first.config,'utf8');
   assert.equal((await stat(first.config)).mode&0o777,0o600);
   assert.equal((await teamSettings(first.config,{},first.overrides)).port,8123);

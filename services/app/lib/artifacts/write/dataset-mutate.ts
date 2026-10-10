@@ -1,3 +1,4 @@
+import {groupMemberPredicate} from '../access';
 import {NotificationExecutionError} from '@/lib/notifications/errors';
 import {artifactQuery} from '@/lib/artifacts/document';
 import { grantsOf, assertGrantCommit } from '@/lib/artifacts/dataset-policy/grants';
@@ -218,15 +219,16 @@ export async function mutateDataset(
             ) AND ($20::boolean OR $16::text IS NULL OR EXISTS (
               SELECT 1 FROM artifacts d WHERE d.id=$16 AND d.edit_id=$17 AND d.deleted_at IS NULL
               AND (
-                (d.user_id IS NULL AND artifacts.token_id=d.token_id) OR
-                (d.user_id IS NOT NULL AND (artifacts.user_id=d.user_id OR
+                (d.group_id IS NOT NULL AND artifacts.group_id=d.group_id) OR
+                (d.group_id IS NULL AND d.user_id IS NULL AND artifacts.group_id IS NULL AND artifacts.user_id IS NULL AND artifacts.token_id=d.token_id) OR
+                (d.group_id IS NULL AND d.user_id IS NOT NULL AND ((artifacts.group_id IS NULL AND artifacts.user_id=d.user_id) OR
                   (artifacts.visibility<>'private' AND artifacts.link_role='editor') OR EXISTS (
                     SELECT 1 FROM artifact_shares writer_share WHERE writer_share.artifact_id=artifacts.id
                     AND writer_share.role='editor' AND (writer_share.user_id=d.user_id OR
                       (writer_share.user_id IS NULL AND writer_share.email=(SELECT email FROM users WHERE id=d.user_id)))
                   )))
               )
-              AND (d.visibility <> 'private' OR d.user_id=$12 OR d.token_id=$13 OR EXISTS (
+              AND (d.visibility <> 'private' OR (d.group_id IS NULL AND (d.user_id=$12 OR (d.user_id IS NULL AND d.token_id=$13))) OR ${groupMemberPredicate('$12',undefined,'d')} OR EXISTS (
                 SELECT 1 FROM artifact_shares s WHERE s.artifact_id=d.id AND
                 (s.user_id=$12 OR (s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$12)))
               ))

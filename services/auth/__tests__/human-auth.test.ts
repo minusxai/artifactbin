@@ -1,3 +1,5 @@
+import {createAuthHost} from '../src/parts';
+import {sessionStoreOf} from '../src/index';
 import {PGlite} from '@electric-sql/pglite';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
 import {eventName} from '@artifactbin/contracts';
@@ -104,6 +106,19 @@ describe('email OTP', () => {
 });
 
 describe('OIDC', () => {
+  it('denies a verified OIDC callback before returning its session cookie or redirect',async()=>{
+    nextProfile={id:'denied-oidc',email:'mxmx_test_denied_oidc@example.com',emailVerified:true};
+    const host=createAuthHost({upstream:async()=>new Response('{}'),env:{},tokens:{byToken:async()=>null,byId:async()=>null,invalidate:()=>{}},sessions:sessionStoreOf(auth),cookieSecret:'human-auth-secret'.padEnd(32,'0'),admitIdentity:async()=>false});
+    const start=await host.request('http://localhost:4794/api/auth/sign-in/social',{method:'POST',headers:{'content-type':'application/json',origin:'http://localhost:4794'},body:JSON.stringify({provider:'acme',callbackURL:'/'})});
+    const {url}=await start.json() as {url:string};
+    const stateCookie=cookieOf(start);
+    const provider=await fetch(url,{redirect:'manual'});
+    const response=await host.request(provider.headers.get('location')!,{headers:{cookie:stateCookie}});
+    expect(response.status).toBe(403);
+    expect(response.headers.getSetCookie()).toEqual([]);
+    expect(response.headers.get('location')).toBeNull();
+    expect(await response.json()).toEqual({error:'deployment_admission_required'});
+  });
   const oidcRoundTrip = async (profile: typeof nextProfile, cookie = '') => {
     nextProfile = profile;
     // In Better Auth 1.7 a generic provider registers into the core's social providers: sign-in is the core endpoint.

@@ -8,7 +8,7 @@ import type {
 } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { getDb } from '@/lib/platform/db';
-import { editorScope, canWriteDataset, writerFor, canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
+import { groupMemberPredicate, editorScope, canWriteDataset, writerFor, canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
 import type { TokenActor, RoleActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor } from '@/lib/artifacts/store';
 import { catalogOf } from '@/lib/datasets/catalog';
@@ -16,7 +16,7 @@ import { catalogOf } from '@/lib/datasets/catalog';
 /** One read-access fence for policy actions: sharing remains the only audience.
  * Identifiers/placeholders are owned by this module and its caller. */
 export function policyReaderSql(user = '$13', token = '$14'): string {
-  return `(artifacts.visibility<>'private' OR artifacts.user_id=${user} OR artifacts.token_id=${token}
+  return `(artifacts.visibility<>'private' OR (artifacts.group_id IS NULL AND (artifacts.user_id=${user} OR (artifacts.user_id IS NULL AND artifacts.token_id=${token}))) OR ${groupMemberPredicate(user)}
    OR EXISTS (SELECT 1 FROM artifact_shares policy_reader WHERE policy_reader.artifact_id=artifacts.id
      AND (policy_reader.user_id=${user} OR (policy_reader.user_id IS NULL AND
        policy_reader.email=(SELECT email FROM users WHERE id=${user})))))`;

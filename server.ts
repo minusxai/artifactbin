@@ -1,3 +1,4 @@
+import {admitDeploymentIdentity,validateDeploymentConfiguration} from './services/app/lib/deployment';
 /**
  * OSS single-process host: shared authentication wraps the app. SQL, browser
  * and events run locally unless their service URLs select HTTP implementations.
@@ -169,6 +170,7 @@ async function main(): Promise<void> {
   let human: Awaited<ReturnType<typeof createHumanAuth>> | undefined;
   let reader: ReturnType<typeof createTokenReader> | undefined;
   if (!appOnly) {
+    validateDeploymentConfiguration();
     /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
     authSecret = readEnv(env, 'AUTH__SECRET')!;
     const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
@@ -238,6 +240,7 @@ async function main(): Promise<void> {
       env,
       tokens: reader!,
       sessions: sessionStoreOf(human!),
+      admitIdentity:admitDeploymentIdentity,
       cookieSecret: authSecret!,
       secure: baseURL.startsWith('https://'),
       identityDb: queryable,

@@ -16,7 +16,7 @@ import { useConnectedAgentCount } from '../lib/connected-agents';
 import './workspace.css';
 
 /** Workspace navigation owns route links and creation; pages own their content and data. */
-export default function WorkspaceShell(props: { children: JSX.Element; parentId?: string | null; onCreated?: () => void }): JSX.Element {
+export default function WorkspaceShell(props: { children: JSX.Element; parentId?: string | null; onCreated?: () => void; groupId?: string; canCreate?: boolean; personal?: boolean }): JSX.Element {
   const location = useLocation();
   const inbox = useOptionalInbox();
   const { session } = useSession();
@@ -25,6 +25,8 @@ export default function WorkspaceShell(props: { children: JSX.Element; parentId?
   const agentStatus = () => `${agentCount()} active ${agentCount() === 1 ? 'agent' : 'agents'}`;
   const links = [
     { label: 'Artifacts', href: '/', Icon: FileText },
+    { label: 'Groups', href: '/groups', Icon: UserRound },
+    { label: 'Personal', href: '/?personal=1', Icon: UserRound },
     { label: 'Assets', href: '/assets', Icon: Database },
     { label: 'Trash', href: '/trash', Icon: Trash2 },
     { label: 'Schedules', href: '/schedules', Icon: CalendarClock },
@@ -33,7 +35,7 @@ export default function WorkspaceShell(props: { children: JSX.Element; parentId?
   const active = (href: string) => href === '/' ? location.pathname === '/' || Boolean(props.parentId) : location.pathname === href;
   return <div class="workspace-shell">
     <nav aria-label="Workspace" class="workspace-nav">
-      <WorkspaceCreate parentId={props.parentId} onCreated={props.onCreated ?? pageDataChanged} />
+      <Show when={props.canCreate !== false}><WorkspaceCreate parentId={props.parentId} groupId={props.groupId} personal={props.personal} onCreated={props.onCreated ?? pageDataChanged} /></Show>
       <p class="workspace-nav-label">Workspace</p>
       <div class="workspace-nav-links"><For each={links}>{({ label, href, Icon }, index) => <a href={href} aria-label={label} aria-current={active(href) ? 'page' : undefined} class={`workspace-nav-link ${index() === 3 ? 'workspace-nav-divider' : ''}`}><Icon size={17} stroke-width={1.6} /><span>{label}</span><Show when={href === '/notifications' && inbox?.state()?.unread}>{count => <span aria-label={`${count()} unread notifications`} class="workspace-count">{Number(count()) > 99 ? '99+' : count()}</span>}</Show></a>}</For>
         <a href="/chat" aria-label="Connected Agents" aria-current={active('/chat') ? 'page' : undefined} class="workspace-nav-link workspace-agent-link"><Terminal size={17} stroke-width={1.6} /><span class="workspace-agent-copy"><span>Connected Agents</span><Show when={agentCount() != null}><span class="workspace-agent-status" aria-label={agentStatus()}><span aria-hidden="true" class={`workspace-status-dot ${agentCount() ? 'is-connected' : ''}`} />{agentStatus()}</span></Show></span></a>

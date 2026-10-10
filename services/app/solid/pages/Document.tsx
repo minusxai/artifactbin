@@ -49,6 +49,7 @@ const SocialPreviewEditor = lazy(() => import('../document/SocialPreviewEditor')
 interface DocumentAnswer {
   role: ArtifactRole; kind: string;
   surface?: {
+    group_id?:string|null;
     id: string; title: string | null; format: string; version: number; editId?: string;
     openAnnotations?: number; accountSession?: boolean; anonSession?: boolean;
     runtime?: ServedStoryRuntime;
@@ -379,7 +380,7 @@ export function DocumentPage(): JSX.Element {
       titleSlot={() => editing() && !phone() && editorMounted()} titleHost={setTitleHost}
       panel={panel} setPanel={setPanel} mode={mode} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onEdit={() => act('edit')} onMembership={() => act('membership')}
-      controls={(close) => <DocumentActions pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
+      controls={(close) => <DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         owner={isOwner() && !editing()} canEdit={editable() && !editing()} canAnnotate={annotatable()} accountSession={accountSession()}
         like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { close(); setRailOpen(open); }}
         openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork={!phone()}

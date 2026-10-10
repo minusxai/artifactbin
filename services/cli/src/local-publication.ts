@@ -1,3 +1,4 @@
+import type {ArtifactDestination} from '@artifactbin/contracts';
 import {accountMismatch} from './account-diagnostic';
 import {prepareBindings,assertBindingInputs,installBindings,deliverBound,finalizeBindings,projectBindingConflicts} from './publication-binding';
 import {withLocalLock} from './local-workspace';
@@ -31,7 +32,7 @@ import {ARTIFACT_ID_PATTERN,type DocumentGraph} from '@artifactbin/contracts';
 import type {HttpClient} from './http';
 import {publishLocalComments} from './local-comment-publication';
 interface LocalPublicationResult {operations:Array<Record<string,unknown>>;dry_run?:boolean;local_only?:boolean;publication_copy?:string;local_source_preserved?:boolean}
-interface Options {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
+interface Options {destination?:ArtifactDestination;force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
 interface Input {localId?:string;bytes:string;hash:string;ids?:Record<string,string>}
 interface ImportedBaseline {artifactId:string;origin:string;base:{version:number;editId:string;source:string};source:string}
 function validImportedBaseline(baseline:ImportedBaseline):boolean{

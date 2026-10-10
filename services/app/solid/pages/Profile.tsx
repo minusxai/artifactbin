@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, lazy, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation, useParams } from '@solidjs/router';
 import { Folder, LayoutGrid, List, Search } from 'lucide-solid';
 import { canonicalArtifactPath } from '@/lib/http/urls';
@@ -14,8 +14,11 @@ import { usePageData } from '../lib/use-page-data';
 import { NotFoundPage } from './NotFound';
 import { apiFetch } from '../lib/api';
 
+// Group workspaces are a separate lazy browser chunk; artifact aliases stay reader-only.
+const GroupPage = lazy(() => import('./Group').then(m=>({default:m.GroupPage})));
+
 interface ProfileAnswer {
-  kind: 'public-profile' | 'redirect' | 'artifact';
+  kind: 'public-profile' | 'redirect' | 'artifact' | 'group';
   to?: string;
   handle?: string;
   owner?: { id: string; image: string | null };
@@ -33,7 +36,7 @@ export function ProfilePage(): JSX.Element {
     seed: () => takeBootstrap<ProfileAnswer>(location.pathname, 'profile'),
   });
   return <Show when={page.data()} fallback={<Show when={page.error()} fallback={<main aria-label="Loading page" role="status" class="mx-auto max-w-4xl px-4 py-10">Loading profile…</main>}><NotFoundPage /></Show>}>
-    {answer => <Show when={answer().kind === 'public-profile' && answer().handle} fallback={answer().kind === 'redirect' && answer().to ? <Navigate href={answer().to!} /> : <NotFoundPage />}>
+    {answer => <Show when={answer().kind !== 'group'} fallback={<GroupPage identity={answer().handle!}/>}><Show when={answer().kind === 'public-profile' && answer().handle} fallback={answer().kind === 'redirect' && answer().to ? <Navigate href={answer().to!} /> : <NotFoundPage />}>
       <main class="mx-auto max-w-4xl px-4 pt-10 pb-24">
         <Show when={page.error()}><button type="button" aria-label="Retry profile" onClick={() => void page.refresh(true)}>Could not refresh profile. Retry</button></Show>
         <header class="reveal mb-8">
@@ -44,7 +47,7 @@ export function ProfilePage(): JSX.Element {
         </header>
         <Show when={answer().files?.length} fallback={<p class="reveal font-mono text-sm text-muted"><span class="text-accent">$</span> nothing here yet<span class="caret text-accent">▍</span></p>}><ProfileShelf handle={answer().handle!} rows={answer().files!} /></Show>
       </main>
-    </Show>}
+    </Show></Show>}
   </Show>;
 }
 

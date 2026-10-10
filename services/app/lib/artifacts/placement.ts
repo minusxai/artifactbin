@@ -18,7 +18,7 @@ import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 // The hierarchy builds its own statements rather than going through the
 // row-loading seam, so every one of them names the trash gate: a trashed
 // folder is not somewhere to file into, and a trashed child is not listed.
-import { effectiveRole, roleWithoutLink, LIVE_ARTIFACT_SQL, type ArtifactRow } from './access';
+import { ownerPredicate, effectiveRole, roleWithoutLink, LIVE_ARTIFACT_SQL, type ArtifactRow } from './access';
 import type { RoleActor } from '@/lib/accounts';
 import type { ArtifactFormat } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -114,7 +114,7 @@ export async function selectChildren(
   const insider = canAnnotate(folderRole);
   const r = await db.query<ChildRow>(
     `SELECT id, title, format, cardinality(ancestor_ids)::int AS level, visibility, updated_at,
-            user_id, token_id, link_role, version,
+            user_id, group_id, token_id, link_role, version,
             (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
              WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
        FROM artifacts
@@ -166,8 +166,7 @@ export function parentOf(row: Pick<ArtifactRow, 'ancestor_ids'>): string | null 
 }
 
 /** The owner-scope predicate, the same rule every artifact write already uses. */
-const ownedBy = (owner: { userId: string | null; tokenId: string }) =>
-  (owner.userId ? { where: 'user_id = $2', val: owner.userId } : { where: 'token_id = $2', val: owner.tokenId });
+const ownedBy = (owner: { userId: string | null; tokenId: string;groupId?:string|null }) => {const scope=ownerPredicate(owner);return {where:scope.where('$2'),val:scope.val};};
 
 /**
  * Resolve a wire `parent_id` for a row about to be created or moved, AFTER the
@@ -259,6 +258,7 @@ interface ChildRow {
   visibility: ArtifactRow['visibility'];
   updated_at: string;
   user_id: string | null;
+  group_id?:string|null;
   token_id: string;
   link_role: ArtifactRow['link_role'];
   version: number;

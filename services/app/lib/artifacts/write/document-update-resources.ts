@@ -12,7 +12,7 @@ export function documentResourceSql(bindings:DocumentUpdate['datasetBindings'],p
   ORDER BY d.id ${dryRun?'':'FOR UPDATE OF d'}
  ), resource_ready AS MATERIALIZED (
   SELECT d.*,i.x FROM resource_locked d JOIN resource_inputs i ON d.id=i.x->>'id' CROSS JOIN locked l
-  WHERE (CASE WHEN l.user_id IS NOT NULL THEN d.user_id=l.user_id ELSE d.token_id=l.token_id END)
+  WHERE (CASE WHEN l.group_id IS NOT NULL THEN d.group_id=l.group_id WHEN l.user_id IS NOT NULL THEN d.group_id IS NULL AND d.user_id=l.user_id ELSE d.group_id IS NULL AND d.user_id IS NULL AND d.token_id=l.token_id END)
    AND (d.version=(i.x->>'version')::int OR d.meta->>'userScopeDocument'=l.id)
  ),`;
  const guard='(SELECT count(*) FROM resource_ready)=(SELECT count(*) FROM resource_inputs)';

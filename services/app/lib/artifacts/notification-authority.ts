@@ -1,4 +1,5 @@
 /** Transaction-only authorization shared by query execution, result commit and disclosure. */
+import {getGroupRole} from '../groups';
 import {notificationRuleSourceIds,notificationRevision as hash} from '@/lib/notifications/context';
 import {hasExplicitNotificationMembership} from '@/lib/notifications/membership';
 import {grantsOf,grantsPermitRead,readThrough} from '@/lib/artifacts/dataset-policy/grants';
@@ -18,7 +19,7 @@ interface Identity {actor:RoleActor;kind:string|null;revision:string}
 interface Share {user_id:string|null;email:string;role:string}
 interface NotificationArtifactAuthority {row:ArtifactRow;shares:Share[];revision:string}
 const denied=()=>new NotificationExecutionError('notification_access_revoked');
-const owner=(row:ArtifactRow,actor:RoleActor)=>row.user_id?row.user_id===actor.userId:row.token_id===actor.tokenId;
+const owner=(row:ArtifactRow,actor:RoleActor)=>!row.group_id&&(row.user_id?row.user_id===actor.userId:row.token_id===actor.tokenId);
 async function account(tx:Queryable,id:string):Promise<Account|null>{
  return (await tx.query<Account>("SELECT id,email,kind,expires_at FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now()) AND merged_into_user_id IS NULL",[id])).rows[0]??null;
 }
@@ -39,7 +40,7 @@ export async function notificationArtifactAuthority(tx:Queryable,id:string):Prom
  const row=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0];
  if(!row)throw denied();
  const shares=(await tx.query<Share>('SELECT user_id,email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
- return {row,shares,revision:hash([row.id,row.format,row.user_id,row.token_id,row.visibility,row.link_role,row.sharing_revision??0,row.policy_revision??0,row.dataset_policy??null,shares])};
+ return {row,shares,revision:hash([row.id,row.format,row.user_id,row.group_id,row.token_id,row.visibility,row.link_role,row.sharing_revision??0,row.policy_revision??0,row.dataset_policy??null,shares])};
 }
 async function sourceReadable(tx:Queryable,source:NotificationArtifactAuthority,document:NotificationArtifactAuthority,identity:Identity):Promise<boolean>{
  if(source.row.format!=='dataset'||!await readThrough(tx,document.row,identity.actor))return false;
@@ -110,7 +111,7 @@ async function canManageNotificationDocument(tx:Queryable,principal:MutationInit
  try{
   const identity=await notificationPrincipal(tx,principal),authority=await notificationArtifactAuthority(tx,documentId),{row,shares}=authority;
   if(row.format!=='markup')return false;
-  if(owner(row,identity.actor))return true;
+  if(owner(row,identity.actor)||row.group_id&&await getGroupRole(identity.actor.userId,row.group_id,tx)==='editor')return true;
   if(identity.kind!=='account')return false;
   return hasDocumentEditorAccess(identity.actor)||(row.visibility!=='private'&&row.link_role==='editor')||shares.some(share=>share.role==='editor'&&(share.user_id?share.user_id===identity.actor.userId:!!identity.actor.email&&share.email===identity.actor.email));
  }catch(error){if(error instanceof NotificationExecutionError)return false;throw error;}

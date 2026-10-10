@@ -17,6 +17,7 @@ export interface SessionStore {
 }
 export interface AuthOptions {
  upstream:Upstream;
+ admitIdentity?:(identity:SessionInfo)=>Promise<boolean>;
  env:Record<string,string|undefined>;
  tokens:TokenReader;
  sessions:SessionStore;
@@ -49,6 +50,7 @@ export function session(o: AuthOptions): Part<AuthEnv> {
         // A failed lookup is not a sign-out: never render this request as anonymous.
         return new Response(JSON.stringify({error:'session_unavailable'}),{status:503,headers:{'content-type':'application/json','cache-control':'no-store'}});
       }
+      if(admitted.userId&&o.admitIdentity&&!await o.admitIdentity({userId:admitted.userId,email:admitted.email,emailVerified:admitted.emailVerified}))return new Response(JSON.stringify({error:'deployment_admission_required'}),{status:403,headers:{'content-type':'application/json','cache-control':'no-store'}});
       const heldOwners = admitted.credential === 'session' && admitted.emailVerified
         ? await Promise.all((admitted.heldTokenIds ?? []).map(id => o.tokens.byId(id))) : [];
       c.set('actor', admitted);
@@ -133,7 +135,17 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
           void say(o.events, null, 'login_sent', { kind: 'user', id: email }, { email });
         }
       });
-      if (o.sessions.handler) a.all('/api/auth/*', (c) => o.sessions.handler!(c.req.raw));
+      if (o.sessions.handler) a.all('/api/auth/*', async c => {
+        const response=await o.sessions.handler!(c.req.raw);
+        if(!o.admitIdentity||response.status>=400)return response;
+        // Admission runs after Better Auth commits: never enqueue app SQL within its transaction.
+        const cookies=new Map((c.req.header('cookie')??'').split(';').map(value=>{const at=value.indexOf('=');return [value.slice(0,at).trim(),value.slice(at+1)] as const;}));
+        for(const cookie of response.headers.getSetCookie()){const pair=cookie.split(';')[0]!,at=pair.indexOf('=');cookies.set(pair.slice(0,at),pair.slice(at+1));}
+        const headers=new Headers(c.req.raw.headers);headers.set('cookie',[...cookies].map(([k,v])=>k+'='+v).join('; '));
+        const identity=await o.sessions.resolve(new Request(c.req.url,{headers}));
+        if(identity&&!await o.admitIdentity(identity))return new Response(JSON.stringify({error:'deployment_admission_required'}),{status:403,headers:{'content-type':'application/json','cache-control':'no-store'}});
+        return response;
+      });
     },
   };
 }
@@ -148,6 +160,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
       const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       mountOAuthRoutes(app, {
         sessions: o.sessions,
+        admitIdentity:o.admitIdentity,
         oauth: createOAuthStore(o.identityDb, schema, appSchema),
         pairing: createDevicePairing(o.identityDb, schema),
         upstream: o.upstream,

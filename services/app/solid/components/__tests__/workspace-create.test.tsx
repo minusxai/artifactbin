@@ -42,3 +42,15 @@ it('keeps a failed creation in the menu for retry without navigating', async () 
   expect(openDocument).not.toHaveBeenCalled();
   expect(screen.getByRole('menuitem', { name: 'Blank document' })).toBeEnabled();
 });
+
+it('preserves group destination in folder creation and asset editor links', async () => {
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({id:'folder2'})));
+ render(()=> <WorkspaceCreate groupId="g1" onCreated={()=>{}}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Create'}));
+ expect(screen.getByRole('menuitem',{name:'File'})).toHaveAttribute('href','/files/new?group_id=g1');
+ expect(screen.getByRole('menuitem',{name:'Dataset'})).toHaveAttribute('href','/datasets/new?group_id=g1');
+ fireEvent.click(screen.getByRole('menuitem',{name:'Folder'}));
+ fireEvent.input(screen.getByRole('textbox',{name:'Folder name'}),{target:{value:'Reports'}});
+ fireEvent.click(screen.getByRole('button',{name:'create folder'}));
+ await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/my/artifacts',expect.objectContaining({body:JSON.stringify({format:'folder',title:'Reports',parent_id:null,destination:{type:'group',id:'g1'}})})));
+});

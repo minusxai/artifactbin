@@ -32,7 +32,7 @@ export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Rec
   Object.assign(patch,{[key]:value});
  }
  if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
- const visibility=parseVisibilityValue(body.visibility,!!current.user_id);if(visibility instanceof Response)return visibility;if(visibility)patch.visibility=visibility;
+ const visibility=parseVisibilityValue(body.visibility,!!(current.user_id||current.group_id));if(visibility instanceof Response)return visibility;if(visibility)patch.visibility=visibility;
  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;if(link)patch.link_role=link;
  const access=parseAccessValue(body.access,current.format);if(access instanceof Response)return access;if(access)patch.access=access;
  const parent=parseParentField(body);if(parent instanceof Response)return parent;
