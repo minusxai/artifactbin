@@ -10,15 +10,13 @@
 
 // ---- Compiled page: compile a document and assemble the reader page, as the hosted app does.
 export { compilePage } from '../compiled-page/compiler';
-export { assembleReaderPage } from '../compiled-page/assembler';
-export { loadCompilerBuild } from '../compiled-page/build.server';
+export {
+  assembleReaderPage, bindModuleCode, type CompiledPage, type CompileInput, type CompilerBuild,
+  createModuleStore, createSpeculationRulesStore, loadCompilerBuild, SPECULATION_RULES_HEADER,
+  withStoredCarriers,
+} from '../compiled-page';
 export { loadSsrModule } from '../compiled-page/bundle.server';
-export { createModuleStore, createSpeculationRulesStore } from '../compiled-page/modules.server';
-export { bindModuleCode } from '../compiled-page/runtime-binding';
 export { documentStyleSheets } from '../page-styles';
-export { withStoredCarriers } from '../compiled-page/carriers';
-export { SPECULATION_RULES_HEADER } from '../compiled-page/contract';
-export type { CompileInput, CompiledPage, CompilerBuild } from '../compiled-page/contract';
 
 // ---- Story runtime: the prepared runtime, its island data and the document CSS.
 export { prepareStoryRuntime } from '../publish/prepared/prepare-runtime.server';

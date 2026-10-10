@@ -9,10 +9,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { transformAsync, type types as BabelTypes } from '@babel/core';
-import type { CompiledPage } from '@/lib/compiled-page/contract';
+import { type CompiledPage, createModuleStore, createTemplateResourceStore, ISLANDS_MANIFEST_PATH } from '@/lib/compiled-page';
 import { moduleToFunction } from '@/lib/compiled-page/bundle.server';
-import { ISLANDS_MANIFEST_PATH } from '@/lib/compiled-page/build.server';
-import { createModuleStore, createTemplateResourceStore } from '@/lib/compiled-page/modules.server';
 
 const TEMPLATE = /["']\/islands\/t\/([0-9a-f]{16})\.json["']/g;
 const OFFLINE_HALF = /^\/islands\/(offline-[0-9a-f]{16}\.json\.gzip)$/;

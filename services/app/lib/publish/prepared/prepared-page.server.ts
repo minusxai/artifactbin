@@ -48,18 +48,16 @@ import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './p
 import { assetsPath, inlineStoryCss, inlineStoryNodes, mutatePath, queryPath, type StoryBaseCssRecipe, type StyleOverride, styleOverrides } from '@/lib/page-styles';
 import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
-import { inlineStoryElement } from '@/lib/compiled-page/story-element';
+import {
+  archiveSharedBuild, type CompilerBuild, createSpeculationRulesStore, inlineStoryElement, loadCompilerBuild,
+  MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, type StoredCompile,
+} from '@/lib/compiled-page';
 import { lazyCodeOf, type LazyCode } from '../../document/lazy-code';
 import { readUrlValues } from '@/lib/dataflow/url-values';
 import { servedResultsFor } from './served-results.server';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
-import { archiveSharedBuild } from '@/lib/compiled-page/shared-builds.server';
-import type { CompilerBuild, StoredCompile } from '@/lib/compiled-page/contract';
-import { MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
 import { prepareWorkers } from './prepare-workers.server';
 import { fixHtmlNesting } from '../../document/nesting';
 

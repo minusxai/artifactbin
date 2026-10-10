@@ -3,7 +3,7 @@ import type { RoleActor } from '@/lib/accounts/actors';
 import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
 import { sessionActor } from '@/lib/accounts';
-import { planOf } from '@/lib/compiled-page/plan';
+import { planOf } from '@/lib/compiled-page';
 import { anonymousAccessFacts } from '@/lib/publish/prepared';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import { readUrlValues } from '@/lib/dataflow';

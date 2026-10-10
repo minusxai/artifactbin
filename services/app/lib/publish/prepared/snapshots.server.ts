@@ -54,7 +54,7 @@ import { getArtifactById } from '@/lib/artifacts/store';
 import { grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import { dataRefs } from '@/lib/dataflow/compiled-flow';
-import { planOf } from '@/lib/compiled-page/plan';
+import { type DataPlan, type DatasetAccessFacts, planOf } from '@/lib/compiled-page';
 import { getDb } from '@/lib/platform/db';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { Scalar } from '@/lib/dataflow';
@@ -63,7 +63,6 @@ import { preparedPageFor } from './prepared-page.server';
 import { drawSnapshotCharts } from './charts.server';
 import { prepareWorkers } from './prepare-workers.server';
 import type { ServedResults } from '@/lib/story-runtime/contract';
-import type { DataPlan, DatasetAccessFacts } from '@/lib/compiled-page/contract';
 import type { DrawnChart } from '@/lib/story-runtime/contract';
 
 /* ────────────────────────────────────────────────────────────────────────────

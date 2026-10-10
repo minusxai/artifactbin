@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
-import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
+import { retainedIslandFile } from '@/lib/compiled-page';
 import { loadOfflineHalf, packCompiledBrowserModule } from './compiled-bundle.server';
 import type { ArtifactFile } from './file-format';
 import type { ArtifactFileParts } from './file-html';
