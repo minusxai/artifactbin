@@ -33,6 +33,7 @@ import { ID_RE } from '@/lib/platform/ids';
 import { count, has } from '@/lib/accounts/relations';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { ARTIFACT_FORMATS, CARD_RENDER_GENERATION, isStartPlaceholder, type ArtifactFormat } from '@artifactbin/contracts';
+import { getGroupById } from '@/lib/groups';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { getUserById, ownerUsername } from '@/lib/accounts/users';
 import { avatarUrl } from '@/lib/accounts/avatars';
@@ -124,6 +125,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   if (!ARTIFACT_FORMATS.includes(artifact.format as ArtifactFormat)) return notFound();
 
   const role = await roleFor(artifact, actor);
+  const groupId=(artifact as typeof artifact & {group_id?:string|null}).group_id ?? null;
+  const ownerGroup=groupId?await getGroupById(groupId):null;
   const kind = await browserSessionKind(request, actor);
 
   /*
@@ -143,7 +146,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    * count and nothing to frame.
    */
   if (artifact.format === 'folder') {
-    const handle = await ownerUsername(artifact.user_id);
+    const handle = groupId ? ownerGroup?.handle ?? null : await ownerUsername(artifact.user_id);
     const [folder, workspace] = await Promise.all([
       folderPageFor(artifact, { userId: actor.viewer?.userId ?? null, email: actor.viewer?.email ?? null, tokenId: actor.tokenId ?? null }),
       role === 'owner' && actor.viewer?.userId
@@ -287,6 +290,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     pwaEnabled, membershipAvailable,
     captureKey: exporting ? key : null,
     id: artifact.id,
+    group_id: groupId,
     editId: artifact.edit_id,
     format: artifact.format,
     visibility: artifact.visibility,
@@ -337,7 +341,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
   const cspRequest = isDoc ? await cspRequestFor({ artifact: row, viewer: { userId: viewerId, tokenId: actor.tokenId }, request }) : null;
   const body = {
-    canonical: canonicalArtifactPath(artifact, authorUsername),
+    canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
     ...(cspRequest ? { cspRequest } : {}),
     description: row.description,
     role,

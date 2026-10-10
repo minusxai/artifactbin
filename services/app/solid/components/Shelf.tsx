@@ -21,12 +21,14 @@ import { Tooltip } from './Tooltip';
 import { ConfirmDialog } from './ConfirmDialog';
 import RowMenu from './RowMenu';
 import ShareLink from './ShareLink';
+import { TransferOwnershipDialog } from './TransferOwnershipDialog';
 import { MoveToFolderDialog } from './MoveToFolderDialog';
 import { apiFetch } from '../lib/api';
 
 type Actions = 'none' | 'share' | 'full';
 interface Props {
   rows: ShelfRow[];
+  groupId?: string | null;
   actions?: Actions;
   scopeParentId?: string | null;
   parentId?: string | null;
@@ -58,11 +60,12 @@ function ArtifactCover(props: { row: ShelfRow; showVisibility: boolean; children
   </div>;
 }
 
-export function RowActions(props: { row: ShelfRow; level: Actions; folders: ShelfRow[]; childCount: number; onRemoved: (id: string) => void; onChanged: () => void; showEdit?: boolean }): JSX.Element {
+export function RowActions(props: { row: ShelfRow; level: Actions; folders: ShelfRow[]; childCount: number; onRemoved: (id: string) => void; onChanged: () => void; showEdit?: boolean; groupId?: string | null }): JSX.Element {
   const [confirm, setConfirm] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [moving, setMoving] = createSignal(false);
+  const [transferring,setTransferring]=createSignal(false);
   const [sharing, setSharing] = createSignal(false);
   const [renaming, setRenaming] = createSignal(false);
   const [draft, setDraft] = createSignal('');
@@ -96,12 +99,14 @@ export function RowActions(props: { row: ShelfRow; level: Actions; folders: Shel
           { label: `Manage sharing for ${nameOf(props.row)}`, text: 'share', icon: () => <span>↗</span>, onSelect: () => setSharing(true) },
           ...(props.row.format === 'folder' ? [{ label: `Rename ${nameOf(props.row)}`, text: 'rename', icon: () => <Pencil size={12} />, onSelect: () => { setDraft(props.row.title ?? ''); setRenaming(true); } }] : []),
           { label: `Move ${nameOf(props.row)}`, text: 'move to folder', icon: () => <FolderInput size={12} />, onSelect: () => setMoving(true) },
+          { label: `Transfer ownership of ${nameOf(props.row)}`, text: 'transfer ownership', icon: () => <FolderInput size={12}/>, onSelect: () => setTransferring(true) },
           { label: `Delete ${nameOf(props.row)}`, text: props.childCount ? `delete (${props.childCount} inside)` : 'delete', icon: () => <Trash2 size={12} />, danger: true, onSelect: () => setConfirm(true) },
         ]} />
         <Show when={sharing()}><ShareLink artifactId={props.row.id} title={nameOf(props.row)} format={props.row.format} editable url={props.row.url} startOpen onClose={() => setSharing(false)} /></Show>
       </span>
     </Show>
     <Show when={moving()}><MoveToFolderDialog title={nameOf(props.row)} artifactId={props.row.id} currentParentId={parentId()} folders={props.folders} onMove={move} onClose={() => setMoving(false)} /></Show>
+    <Show when={transferring()}><TransferOwnershipDialog id={props.row.id} title={nameOf(props.row)} currentGroupId={props.groupId} onClose={()=>setTransferring(false)} onTransferred={()=>{setTransferring(false);props.onRemoved(props.row.id);pageDataChanged();}}/></Show>
     <Show when={confirm()}><ConfirmDialog title={`Delete ${nameOf(props.row)}?`} description={props.childCount ? `Delete ${nameOf(props.row)} and the ${props.childCount} item${props.childCount === 1 ? '' : 's'} inside it? They go to the trash, and you can restore them any time.` : `Delete ${nameOf(props.row)}? It goes to the trash, and you can restore it any time.`} action="Delete" confirmLabel="Confirm delete" danger busy={busy()} error={error()} onCancel={() => setConfirm(false)} onConfirm={() => void remove()} /></Show>
   </>;
 }
@@ -143,7 +148,7 @@ export default function Shelf(props: Props): JSX.Element {
     <Show when={shelf().folders.length}><section aria-label="Folders" class="relative z-20 mb-6"><div class="mb-2"><MicroLabel>folders</MicroLabel></div><ul class={view() === 'grid' ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'grid grid-cols-1 gap-3 sm:grid-cols-2'}><For each={shelf().folders}>{row => {
       const papers = () => all().filter(item => parentOfRow(item) === row.id && item.format === 'markup').slice(0, 5);
       return <li class={view() === 'grid' ? 'group relative rounded-md p-3 hover:bg-raised/60' : `group relative flex min-w-0 items-center gap-2 rounded-[6px] p-3 ${PANEL}`}>
-        <Show when={view() === 'grid'} fallback={<><FolderIcon size={15} class="shrink-0 text-accent" /><a href={row.url} rel="external" aria-label={`Open folder ${nameOf(row)}`} class="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg after:absolute after:inset-0">{nameOf(row)}</a><Show when={childCount(row.id)}><span class="font-mono text-[10px] text-faint">{childCount(row.id)}</span></Show><Show when={props.showVisibility !== false}><Visibility row={row} /></Show><RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={childCount(row.id)} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></>}>
+        <Show when={view() === 'grid'} fallback={<><FolderIcon size={15} class="shrink-0 text-accent" /><a href={row.url} rel="external" aria-label={`Open folder ${nameOf(row)}`} class="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg after:absolute after:inset-0">{nameOf(row)}</a><Show when={childCount(row.id)}><span class="font-mono text-[10px] text-faint">{childCount(row.id)}</span></Show><Show when={props.showVisibility !== false}><Visibility row={row} /></Show><RowActions groupId={props.groupId} row={row} level={props.actions ?? 'none'} folders={folders()} childCount={childCount(row.id)} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></>}>
           <div aria-label={`Preview of folder ${nameOf(row)}`} class="folder-cover">
             <a href={row.url} rel="external" aria-label={`Open folder ${nameOf(row)}`} class="absolute inset-0 z-[2] rounded-md focus-visible:outline-2 focus-visible:outline-accent" />
             <div class="folder-cover-tab"><span class="truncate font-mono text-[10px] tabular-nums">{childCount(row.id) ? `${childCount(row.id)} artifact${childCount(row.id) === 1 ? '' : 's'}` : 'empty folder'}</span></div>
@@ -151,7 +156,7 @@ export default function Shelf(props: Props): JSX.Element {
             <Show when={!papers().length}><div class="folder-cover-empty" aria-hidden="true"><Inbox size={28} /></div></Show>
             <Show when={props.showVisibility !== false && row.visibility}><span aria-label={`${nameOf(row)} is ${row.visibility}`} class="folder-cover-visibility absolute left-2 top-[27px] z-[3] rounded bg-slate-700/75 p-1 text-white"><Show when={row.visibility === 'public'} fallback={<Show when={row.visibility === 'private'} fallback={<EyeOff size={12} />}><Lock size={12} /></Show>}><Globe size={12} /></Show></span></Show>
             <div class="folder-cover-papers" style={{ '--paper-width': papers().length > 2 ? '48%' : '61%' }}><For each={papers()}>{(item, index) => <div class="folder-cover-paper" style={{ '--paper-position': index() / Math.max(1, papers().length - 1) }}><img src={`/a/${item.id}/export?format=jpg&mode=card&v=${item.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" /></div>}</For></div>
-            <div class="folder-cover-front"><span class="min-w-0 flex-1 truncate pr-2 font-mono text-[13px] font-semibold">{nameOf(row)}</span><span class="relative z-[3] ml-auto"><RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={childCount(row.id)} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></span></div>
+            <div class="folder-cover-front"><span class="min-w-0 flex-1 truncate pr-2 font-mono text-[13px] font-semibold">{nameOf(row)}</span><span class="relative z-[3] ml-auto"><RowActions groupId={props.groupId} row={row} level={props.actions ?? 'none'} folders={folders()} childCount={childCount(row.id)} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></span></div>
           </div>
         </Show>
       </li>;
@@ -164,10 +169,10 @@ export default function Shelf(props: Props): JSX.Element {
             <a href={row.url} rel="external" aria-label={`Open ${nameOf(row)}`} class="flex min-w-0 flex-1 items-center gap-2 font-mono text-sm font-medium text-fg hover:text-accent"><img src={`/a/${row.id}/export?format=jpg&mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`} alt="" width={24} height={24} loading="lazy" class="size-6 shrink-0 rounded-sm border border-edge bg-raised object-cover object-top" /><span class="truncate">{nameOf(row)}</span></a>
             <Show when={props.showVisibility !== false}><Visibility row={row} /></Show>
             <span class="font-mono text-[10px] text-faint">{timeAgo(row.updated_at)}</span>
-            <RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} />
+            <RowActions groupId={props.groupId} row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} />
           </>}>
             <ArtifactCover row={row} showVisibility={props.showVisibility !== false}>
-              <RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} />
+              <RowActions groupId={props.groupId} row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} />
             </ArtifactCover>
           </Show>
         </li>}</For>
