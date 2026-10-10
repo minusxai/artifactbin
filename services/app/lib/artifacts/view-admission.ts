@@ -6,7 +6,7 @@ import { trackEvent } from '@/lib/platform/analytics';
 import { canReadArtifact } from './access';
 import { getArtifactById } from './store';
 import { isCrossSiteRequest } from '@/lib/http/http';
-import { sessionActor } from '@/lib/accounts/viewer';
+import { sessionActor } from '@/lib/accounts';
 
 export async function recordArtifactView(request: Request, id: string): Promise<'accepted' | 'not_found' | 'forbidden'> {
   // Anonymous readers report too, so apply the origin check without requiring

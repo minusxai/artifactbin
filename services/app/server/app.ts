@@ -37,7 +37,7 @@ import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { SPA_PATHS } from '@/lib/http/app-pages';
 import { ownerUsername, sessionActor } from '@/lib/accounts';
-import { AGENT_COOKIE } from '@/lib/accounts/agent-session';
+import { AGENT_COOKIE } from '@/lib/accounts';
 import { canEdit } from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/platform';

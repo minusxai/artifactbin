@@ -27,7 +27,7 @@ import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations/store
 import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/artifacts/archived-version';
 import { acceptedMembers, dataflowForRow, dataflowRunsForRow, importsFingerprint, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ImportCache } from '@/lib/artifacts/dataflow';
 import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
-import type { RoleActor, TokenActor } from '@/lib/accounts/actors';
+import { getUserById, type RoleActor, type TokenActor } from '@/lib/accounts';
 import { getArtifactById, retainDownloadedVersion } from '@/lib/artifacts/store';
 import type { ImportTables } from '@/lib/dataflow';
 import { placeDataflow } from '@/lib/dataflow';
@@ -46,7 +46,6 @@ import type { DataflowState } from '@/lib/dataflow';
 import { loadImage } from '@/lib/object-store/image-store';
 import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
 import { displayTitle } from '@/lib/document/head';
-import { getUserById } from '@/lib/accounts/users';
 import { webAssetByHash, webAssetsForSource } from '@/lib/publish/assets/web-assets';
 import { offlineExtrasRef } from './bundle.server';
 import { ARTIFACT_FILE_FORMAT, sourceDigest, type ArtifactFile } from './file-format';

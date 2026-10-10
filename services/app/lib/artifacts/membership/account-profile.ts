@@ -2,10 +2,8 @@ import {createHash} from 'node:crypto';
 import {parseAccountResource} from '@artifactbin/utils/account-resource';
 import type {ProfileResource} from '@artifactbin/contracts';
 import {getDb,type Queryable} from '@/lib/platform/db';
-import {getUserById,isAccountRow,setUsername} from '@/lib/accounts/users';
-import {linked,replaceLinked} from '@/lib/accounts/relations';
+import { getUserById, isAccountRow, linked, replaceLinked, setUsername, type TokenActor } from '@/lib/accounts';
 import {readableArtifact} from '../read-access';
-import type { TokenActor } from '@/lib/accounts/actors';
 import {completeMutationReceipt,type MutationReceipt,type MutationReply} from '../mutation-receipt';
 
 export async function accountProfile(userId:string,query?:Queryable):Promise<ProfileResource|null>{

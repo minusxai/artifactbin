@@ -3,7 +3,7 @@
 import X from 'lucide-solid/icons/x';
 import { Show, type JSX } from 'solid-js';
 import logoUrl from '../../public/logo-128.png';
-import { CHROME_IDENTITY } from '@/lib/accounts/chrome-identity';
+import { CHROME_IDENTITY } from './chrome-identity';
 
 export function PageBar(props: { home?: string | null; logo?: JSX.Element; navigation: JSX.Element; mobileTitle?: string; actions: JSX.Element }): JSX.Element {
   return <header aria-label="Page bar" class="sticky top-0 z-40 flex h-11 items-center gap-2 max-[380px]:gap-1 max-[380px]:px-2 border-b border-edge bg-surface/85 px-3 backdrop-blur-md sm:gap-3">

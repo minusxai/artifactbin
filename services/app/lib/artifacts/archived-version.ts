@@ -29,9 +29,8 @@
  */
 import { getVersionFor, listVersionsFor, versionForCapture } from '@/lib/artifacts/store';
 import { type ArtifactRow } from '@/lib/artifacts/access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import { actorForArtifacts, requestOrSessionActor, type TokenActor } from '@/lib/accounts';
 import { servableDocument } from '@/lib/artifacts/servable';
-import { actorForArtifacts, requestOrSessionActor } from '@/lib/accounts/viewer';
 
 /** The parameter's name, in one place: the three doors and the export URL. */
 export const VERSION_PARAM = 'version';

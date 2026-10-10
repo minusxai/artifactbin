@@ -1,10 +1,10 @@
 /** Saved-mention effects in the document's existing statement. Authorization of
  * recipients remains server-owned even though document semantics are trusted. */
 import {PENDING_MEMBERSHIP_LIMIT,type DocumentUpdate} from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {envelope} from '../../platform/events';
 import {notificationChannel} from '../../notifications/write';
-import {JOIN_RELATIONS} from '../../accounts/relation-state';
+import { JOIN_RELATIONS } from '../../accounts';
 export function documentMentionSql(actor:TokenActor|null,id:string,mentions:DocumentUpdate['mentions'],param:(value:unknown)=>string,visibility:string,shares:string,dryRun:boolean){
  if(!mentions?.length)return {before:'',guard:'TRUE',after:'',refusal:'NULL::text'};
  const inputs=param(JSON.stringify(mentions.map(m=>{

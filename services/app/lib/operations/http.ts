@@ -1,6 +1,6 @@
-import {hostedAuthorization,hostedRefusal,hostedOperationCompleted} from '@/lib/accounts/request-authority';
+import {hostedAuthorization,hostedRefusal,hostedOperationCompleted} from '@/lib/accounts';
 import { adaptMutationOperationReply, canReadArtifact, durableMutation, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, MembershipError, mutationInitiator, normalizeMutationOperation, readableArtifact, refusingUnservable } from '@/lib/artifacts';
-import {tokenActorForRequest} from '@/lib/accounts/viewer';
+import {tokenActorForRequest} from '@/lib/accounts';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
 import {ownedArtifactState} from '@/lib/workspace/trash';
 import {sessionOwnedBy} from '@/lib/remote/resource';
@@ -13,7 +13,7 @@ import {sessionOwnedBy} from '@/lib/remote/resource';
  * pipeline).
  */
 import { json, baseUrl } from '@/lib/http/http';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
 
 /**

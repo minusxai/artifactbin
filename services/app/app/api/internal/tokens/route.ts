@@ -19,9 +19,7 @@
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE} from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
 import { agentContract } from '@/lib/serving';
-import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sourcedTokenName } from '@/lib/accounts';
-import { sessionActor } from '@/lib/accounts';
-import { canAuthenticateUser } from '@/lib/accounts/user-kinds';
+import { canAuthenticateUser, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sessionActor, sourcedTokenName } from '@/lib/accounts';
 
 export async function POST(request: Request) {
   // Only an ACCOUNT session binds the mint: the agent cookie names a token

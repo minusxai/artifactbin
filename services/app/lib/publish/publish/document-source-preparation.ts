@@ -3,7 +3,7 @@
  * /edits independently checks ownership and graph dependencies at commit. */
 import {MAX_DOCUMENT_BYTES,type DocumentUpdate} from '@artifactbin/contracts';
 import { type ArtifactRow, editorScope, loadArtifactDocument, type PreparedMarkupWrite, writerFor } from '@/lib/artifacts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {createDocumentGraph} from '@/lib/document/document-graph';
 import {stampNodeIds} from '@/lib/document/node-ids';
 import {getDb} from '@/lib/platform/db';

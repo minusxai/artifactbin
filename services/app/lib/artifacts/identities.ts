@@ -1,9 +1,9 @@
 /** Shared namespace for reserved and normally created identities. */
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {getDb,type Queryable} from '../platform/db';
 import {generateFileId} from '../platform/ids';
 import {CreationReplay} from './creation-ledger';
-import {matchesWorkspaceAccount} from '../accounts/guest-owner';
+import { matchesWorkspaceAccount } from '../accounts';
 const owner=(actor:TokenActor)=>actor.userId??actor.tokenId;
 export async function reserveIds(actor:TokenActor,batch:string,workspaceAccount?:string|null):Promise<string[]>{
  if(!/^[A-Za-z0-9_-]{16,128}$/.test(batch))throw new CreationReplay({status:400,body:{error:'invalid_batch'}});

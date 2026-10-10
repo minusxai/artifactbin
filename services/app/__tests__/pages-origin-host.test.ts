@@ -90,7 +90,7 @@ describe('the app page frames the document on its own origin', () => {
     const csp = res.headers.get('content-security-policy')!;
     expect(csp.split('; ').find((d) => d.startsWith('frame-src'))).toBe(`frame-src 'self' ${APEX} https://*.pages.example.test`);
     expect(csp.split('; ').find((d) => d.startsWith('script-src'))).not.toMatch(/blob:|https:/);
-    // Sign-out ends the pages session at the address the page names (lib/accounts/browser-session).
+    // Sign-out ends the pages session at the address the page names (solid/components/browser-session).
     expect(html).toContain(`<meta name="mx-pages-session" content="${APEX}/pages-session">`);
   });
 

@@ -4,7 +4,7 @@ import { Navigate, useLocation, useParams } from '@solidjs/router';
 import { Folder, LayoutGrid, List, Search } from 'lucide-solid';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/workspace/shelf';
-import type { ProfileSocial } from '@/lib/accounts/profile-social';
+import type { ProfileSocial } from '@/lib/accounts';
 import { refusedForSignIn } from '@artifactbin/contracts';
 import { loginHref } from '@/lib/http/login-href';
 import { pageDataChanged } from '@/solid/lib/page-data-events';

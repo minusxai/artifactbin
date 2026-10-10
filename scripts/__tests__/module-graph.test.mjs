@@ -219,6 +219,31 @@ describe('module graph', () => {
     });
   });
 
+  describe('lib/accounts row as shipped (DEEP_MODULES)', () => {
+    const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
+    const accounts = {
+      'services/app/lib/accounts/index.ts': '', 'services/app/lib/accounts/tokens.ts': '', 'services/app/lib/accounts/viewer.ts': '', 'services/app/lib/accounts/actors.ts': '',
+      'services/app/lib/serving/a.ts': "import { sessionActor, type TokenActor } from '@/lib/accounts';\n",
+      'services/app/lib/workspace/b.ts': "import { LIVE_TOKEN_SQL } from '../accounts/tokens';\n",
+      'services/app/solid/pages/Profile.tsx': "import type { ProfileSocial } from '@/lib/accounts';\n",
+    };
+
+    it('passes the index from anywhere and tokens, the path a downstream deployment imports', () => {
+      expect(check(accounts)).toBe('');
+    });
+
+    it('refuses any other path, from server or browser code', () => {
+      const refused = check({
+        ...accounts,
+        'services/app/lib/runner.ts': "import { sessionActor } from './accounts/viewer';\n",
+        'services/app/lib/remote/c.ts': "import type { RoleActor } from '@/lib/accounts/actors';\n",
+        'services/app/solid/components/PageBar.tsx': "import { CHROME_IDENTITY } from '@/lib/accounts/chrome-identity';\n",
+      });
+      for (const line of ['services/app/lib/runner.ts imports ./accounts/viewer', 'services/app/lib/remote/c.ts imports @/lib/accounts/actors',
+        'services/app/solid/components/PageBar.tsx imports @/lib/accounts/chrome-identity']) expect(refused).toContain(line);
+    });
+  });
+
   describe('CLI toolkit entry (rule 5)', () => {
     const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
 

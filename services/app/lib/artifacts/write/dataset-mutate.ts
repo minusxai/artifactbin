@@ -50,7 +50,7 @@ import { MAX_QUERY_ROWS } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
 import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow } from '@/lib/artifacts/access';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import { loadDatasetRows, storeDatasetRows } from '@/lib/datasets/dataset-store';
 import type {Scalar} from '@/lib/dataflow/dataflow';
 import { newEditId } from '../../document/splice';

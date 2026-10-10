@@ -11,7 +11,7 @@ import type { ReviewReceipt } from '../remote/agents';
 import { notifyRemoteComment } from '../remote/mentions';
 import type { MutationReceipt } from '../artifacts/mutation-receipt';
 import type { ArtifactRow } from '../artifacts/access';
-import type { TokenActor } from '../accounts/actors';
+import type { TokenActor } from '../accounts';
 import { artifactToWire } from '../artifacts/wire';
 import { snapshotForReader, snapshotHeadFor } from '../artifacts/read-access';
 import { json } from '../http/http';

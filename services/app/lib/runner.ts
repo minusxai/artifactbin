@@ -9,7 +9,7 @@ import type { Db } from './platform/db';
 import { z } from 'zod';
 import type { RunStart, RunnerJson, ScheduledExecution, ScheduleInput, SchedulerService } from '@artifactbin/contracts';
 import { actorOf, attachActor } from '@artifactbin/utils';
-import { actorForArtifacts, sessionActor, isCookieCredential } from './accounts/viewer';
+import { actorForArtifacts, sessionActor, isCookieCredential } from './accounts';
 import { canReadArtifact, getArtifactById } from './artifacts';
 import { OPERATIONS } from './operations/registry';
 import { runOperation } from './operations/http';

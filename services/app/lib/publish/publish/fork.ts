@@ -1,6 +1,6 @@
 import { afterCreated, type ArtifactInput, artifactQuery, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, grantsOf, grantsPermitRead, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
 import type { Visibility } from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { collectRefUses } from '@/lib/dataflow/refs';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';

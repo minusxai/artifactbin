@@ -1,5 +1,5 @@
 import type {RemoteSessionInfo} from '../../../contracts/src/remote';
-import {setHostedRequestAuthority} from '../accounts/request-authority';
+import { setHostedRequestAuthority } from '../accounts';
 import type { HostedRemoteAgent } from '@artifactbin/contracts';
 export type { HostedRemoteAgent } from '@artifactbin/contracts';
 let hosted: HostedRemoteAgent | undefined;

@@ -2,7 +2,7 @@
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import { applyEditFor, findDependentsFor, getArtifactFor, getOwnedArtifactFor, respondToEdit, updateMetadataFromBody } from '@/lib/artifacts';
 import {createArtifactFromBody,replaceArtifactWithBody} from './requests';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {json,baseUrl} from '@/lib/http/http';
 export async function preflightPublication(request:Request,actor:TokenActor,body:Record<string,unknown>):Promise<Response>{
  const input=body.input;

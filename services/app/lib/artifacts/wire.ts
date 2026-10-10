@@ -21,7 +21,7 @@ import {catalogOf} from '@/lib/datasets/catalog';
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import { canReadArtifact, canWriteDataset, type ArtifactRow } from './access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 import { getArtifactById, getArtifactFor, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { declarationsForRow, runDocumentMutation } from './dataflow';

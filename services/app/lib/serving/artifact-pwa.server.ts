@@ -6,7 +6,7 @@ import { canReadArtifact, type ArtifactRow } from '../artifacts/access';
 import { getArtifactById } from '../artifacts/store';
 import { unservable } from '../artifacts/servable';
 import { referencedArtifactForRow } from '../artifacts/dataflow';
-import { sessionActor } from '../accounts/viewer';
+import { sessionActor } from '../accounts';
 import { escapeAttr } from '@artifactbin/utils/escape';
 import { ID_RE } from '../platform/ids-shape';
 import { artifactAppPath, type ArtifactManifest } from './artifact-pwa';

@@ -30,7 +30,7 @@ import { urlHash } from '@/lib/document';
 import { collectExternalAssetUrls } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
-import { ownerUsername } from '@/lib/accounts/users';
+import { ownerUsername } from '@/lib/accounts';
 
 type DomainStatus = 'pending' | 'verified';
 /** One CAA property, as `tag value` (`issue letsencrypt.org`). `critical` is the issuer-critical flag. */

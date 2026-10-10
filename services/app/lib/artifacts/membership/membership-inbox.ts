@@ -1,12 +1,12 @@
 import {mutationNotificationInbox} from './mutation-inbox';
-import {JOIN_RELATIONS,dismissPendingRelations} from '@/lib/accounts/relation-state';
+import {JOIN_RELATIONS,dismissPendingRelations} from '@/lib/accounts';
 import {canAnnotate} from '@artifactbin/contracts';
 import {notificationChanged} from '@/lib/notifications/write';
 import {getDb} from '@/lib/platform/db';
 import {MembershipError} from './membership';
 import { getArtifactById } from '../store';
 import { effectiveRole } from '../access';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import {readThrough} from '@/lib/artifacts/dataset-policy/grants';
 export async function membershipInbox(actor:RoleActor,offset=0,onlyId:string|null=null){
  if(!actor.userId)throw new MembershipError('Sign in to see notifications');
