@@ -26,6 +26,36 @@ it('requires explicit confirmation after selecting a company group',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Confirm company setup'}));await waitFor(()=>expect(complete).toHaveBeenCalledOnce());expect(fetcher).toHaveBeenCalledWith('/api/deployment/setup',expect.objectContaining({method:'POST',body:JSON.stringify({group_id:'g1'})}));
 });
 
+it('shows the newly created company group when its option arrives after creation',async()=>{
+ let release!:()=>void;
+ const refreshed=new Promise<void>(resolve=>{release=resolve;});
+ let reads=0;
+ const fetcher=vi.fn(async(url:string,options?:RequestInit)=>{
+  if(url==='/api/groups'&&options?.method==='POST')return Response.json({...group,role:'editor'},{status:201});
+  if(url==='/api/groups'){
+   if(++reads===1)return Response.json({groups:[]});
+   await refreshed;
+   return Response.json({groups:[{...group,role:'editor'}]});
+  }
+  return Response.json({});
+ });
+ vi.stubGlobal('fetch',fetcher);const complete=vi.fn();
+ render(()=> <CompanySetup deployment={{mode:'company',setup_complete:false,is_owner:true,default_group:null}} complete={complete}/>);
+ await waitFor(()=>expect(reads).toBe(1));
+ fireEvent.input(screen.getByLabelText('Group name'),{target:{value:'Team'}});
+ fireEvent.input(screen.getByLabelText('Group handle'),{target:{value:'team'}});
+ fireEvent.submit(screen.getByRole('button',{name:'Create group'}).closest('form')!);
+ await waitFor(()=>expect(reads).toBe(2));
+ release();
+ await screen.findByRole('option',{name:'Team'});
+ expect(screen.getByRole('combobox',{name:'Company group'})).toHaveValue('g1');
+ expect(complete).not.toHaveBeenCalled();
+ expect(fetcher.mock.calls.filter(([url])=>url.includes('/setup'))).toHaveLength(0);
+ fireEvent.click(screen.getByRole('button',{name:'Confirm company setup'}));
+ await waitFor(()=>expect(complete).toHaveBeenCalledOnce());
+ expect(fetcher).toHaveBeenCalledWith('/api/deployment/setup',expect.objectContaining({body:JSON.stringify({group_id:'g1'})}));
+});
+
 it('retains explicit Personal recovery for an admitted account when the company default is deleted',async()=>{
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>Response.json(url.includes('/session')?session:url==='/api/deployment'?{mode:'company',setup_complete:false,is_owner:false,default_group:null}:url==='/api/me/preferences'?{default_destination:{type:'inherit'}}:{signedIn:true,accountId:'u1',artifacts:[],shared:[]})));
  const history=createMemoryHistory();history.set({value:'/?personal=1',replace:true});
