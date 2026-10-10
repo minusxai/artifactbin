@@ -60,6 +60,11 @@ describe('installable shared skill folder',()=>{
   expect(Buffer.byteLength(llmsText(base))).toBeLessThanOrEqual(8192);
   for(const file of skillTree().files.filter(file=>file.ref&&file.kind==='guide'))expect(Buffer.byteLength(publicGuideText(file.file.replace(/\.md$/,''),base)!),file.path).toBeLessThanOrEqual(8192);
  });
+ it('leaves room in the packaged data guide for origin expansion',()=>{
+  const files=skillPackageFiles(skillTree(),'https://app.artifactbin.dev');
+  expect(Buffer.byteLength(files['references/markup-data.md']!)).toBeLessThanOrEqual(7992);
+  expect(Buffer.byteLength(publicGuideText('markup-data','https://app.artifactbin.dev')!)).toBeLessThanOrEqual(7992);
+ });
  it('rejects arbitrary archive members and traversal',()=>{
   for(const name of ['../SKILL.md','scripts/other.mjs','/root/file','references/../secrets.md'])expect(()=>skillZip({[name]:'bad'})).toThrow('Unsupported skill member');
  });
