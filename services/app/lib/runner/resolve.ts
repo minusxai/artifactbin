@@ -1,5 +1,4 @@
-import {getArtifactById,canReadArtifact} from '../artifacts';
-import {declarationsForRow} from '../artifacts/dataflow';
+import { canReadArtifact, declarationsForRow, getArtifactById } from '@/lib/artifacts';
 import {EMPTY_COMPILED_DATAFLOW} from '@/lib/dataflow/compiled-dataflow';
 import {parseJsx} from '../jsx';
 import {splitHelmet,validateHelmet} from '../document/helmet';

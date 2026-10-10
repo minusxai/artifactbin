@@ -2,7 +2,7 @@ import {parseMarkdownLite,type MdNode,type MdInline} from './markdown-lite';
 import type {Queryable} from '@artifactbin/contracts';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts';
-import {invitePeople} from '@/lib/artifacts/membership/membership';
+import {invitePeople} from '@/lib/artifacts';
 import {isPersonMentionHref} from '../document/person-mentions';
 export async function commentMentions(tx:Queryable,row:ArtifactRow,actor:RoleActor,body:string,id:string){
  const ids:string[]=[];

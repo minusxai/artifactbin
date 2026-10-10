@@ -19,8 +19,7 @@
  */
 import { agentDiscovery, READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
-import { refusingUnservable } from '@/lib/artifacts/servable';
-import { canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, getArtifactById, refusingUnservable } from '@/lib/artifacts';
 import { trackEvent, verifyExportKey } from '@/lib/platform';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { baseUrl, parseByteRange } from '@/lib/http';

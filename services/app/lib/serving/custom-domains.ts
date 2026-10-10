@@ -1,4 +1,4 @@
-import {artifactQuery} from '../artifacts/document';
+import { artifactQuery, type ArtifactRow, canReadArtifact, LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
 /**
  * CUSTOM DOMAINS — one hostname an ACCOUNT serves its public documents at.
  *
@@ -25,7 +25,6 @@ import { createHmac } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { canReadArtifact, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts/access';
 import { urlHash } from '@/lib/document';
 import { collectExternalAssetUrls } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';

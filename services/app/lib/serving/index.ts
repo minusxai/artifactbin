@@ -3,7 +3,7 @@ export { agentContract } from './agent-contract';
 export { existingPaste } from './agent-copy';
 export { agentBlurb } from './agent-discovery';
 export { APP_SHELL_FONT_PRELOADS } from './app-fonts';
-export { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/artifacts/archived-version';
+export { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/artifacts';
 export { artifactPageAnswer, artifactPageResponse } from './artifact-page';
 export type { ArtifactPageAnswer } from './artifact-page';
 export { artifactAppIcon, artifactManifest, artifactPwaEnabled, readableApp, withArtifactAppHead } from './artifact-pwa.server';

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import { actorForArtifacts, browserActor, ownerUsername } from '../accounts';
 import { applyEditFor, durableMutation, getEditableArtifactFor, getVersionFor, respondToEdit, capabilityGuard } from '../artifacts';
 import type { TokenActor } from '@/lib/accounts';
-import {UnservableDocument} from '../artifacts/servable';
+import {UnservableDocument} from '@/lib/artifacts';
 import {actOnAnnotationFor,createAnnotationFor,listAnnotationsFor,type AnnotationWire} from '../annotations';
 import {baseUrl,json} from '../http';
 import {createArtifactFromBody,prepareDocumentAuthoringContext} from '@/lib/publish/publish';
