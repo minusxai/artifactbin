@@ -19,7 +19,7 @@ const proof = (args, env = {}) => run(process.execPath, ['--import', 'tsx', ...a
 });
 
 it('reserves draft identities across 12 concurrent CLI processes without duplicates or loss', async () => {
-  const { stdout } = await proof(['scripts/reserved-ids-local-proof.ts']);
+  const { stdout } = await proof(['scripts/__tests__/reserved-ids-local-proof.ts']);
   expect(stdout).toContain('PASS actual registration: 12 processes, 100 unique identities');
 }, 150_000);
 
@@ -42,7 +42,7 @@ describe.skipIf(!dockerAvailable)('reserved ids on pooled PostgreSQL (disposable
   afterAll(() => { if (container) execFileSync('docker', ['rm', '-f', container], { stdio: 'ignore' }); });
 
   it('replays one batch, keeps separate batches distinct and lets exactly one competing claim win', async () => {
-    const { stdout } = await proof(['-r', './scripts/register-yaml.cjs', 'scripts/reserved-ids-postgres-proof.ts'], {
+    const { stdout } = await proof(['-r', './scripts/register-yaml.cjs', 'scripts/__tests__/reserved-ids-postgres-proof.ts'], {
       NODE_ENV: 'production',
       DATABASE_URL: url,
       APP__PUBLIC_BASE_URL: 'http://app.lvh.me:7445',
