@@ -13,7 +13,7 @@ import { GET as viewerRoute } from '@/app/a/[id]/viewer/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import type { ViewerOverlay } from '@/lib/story-runtime/contract';
 
 const sessionUser = { id: '', email: '' };

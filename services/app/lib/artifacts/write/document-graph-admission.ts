@@ -1,7 +1,7 @@
 /** Publication capability for graph patches. The existing publisher validates the
  * affected semantic neighborhood; SQL consumes its exact node and membership
  * witnesses. Rendering caches are deliberately absent from the write contract. */
-import type {DocumentOperation} from '@artifactbin/contracts';
+import {MAX_DOCUMENT_BYTES,type DocumentOperation} from '@artifactbin/contracts';
 import {json} from '../../http/http';
 import {repairJsxSource} from '../../jsx/repair';
 import {canonicalizeMarkup} from '../../document/canonical-source';
@@ -14,7 +14,6 @@ import {stampNodeIds} from '../../document/node-ids';
 import type {StoredContent} from '../../document/stored-content';
 import type {ServerRefLoader} from '../../datasets/schema-loader';
 import type {SourceRepair} from '../../jsx/repair';
-import {MAX_CONTENT_BYTES} from '../../document/limits';
 import type {ReferenceValidationState,ResolvedRef} from '@/lib/dataflow/refs';
 
 /** What admission needs from the publish pipeline, supplied by the caller: the
@@ -67,7 +66,7 @@ async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,co
  const identity=stampNodeIds(source,{previousSource:graphSource(base.document),reservedIds:base.reservedIds});
  try{candidate=whole?createDocumentGraph(identity.source,base.version+1):graphFromSource(base.document,identity.source,base.version+1);}
  catch(error){if(error instanceof Error)return invalid(error.message);throw error;}
- if(candidate.bytes>MAX_CONTENT_BYTES)return json({error:'too_large',maxBytes:MAX_CONTENT_BYTES},413);
+ if(candidate.bytes>MAX_DOCUMENT_BYTES)return json({error:'too_large',maxBytes:MAX_DOCUMENT_BYTES},413);
  const scope=graphValidationScope(base.document,candidate);
  if(scope.errors.length)return invalid(scope.errors.join('; '));
  const references=new Map<string,ReferenceValidationState>(),loaded=new Map<string,Promise<ResolvedRef|null>>();

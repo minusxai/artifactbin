@@ -35,7 +35,7 @@ const ab = { modules: ['lib/a', 'lib/b'], edges: ['lib/a -> lib/b', 'lib/b -> li
 
 describe('module graph', () => {
   it('maps paths to modules', () => {
-    expect(moduleOf('services/app/lib/story/x/y.ts')).toBe('lib/story');
+    expect(moduleOf('services/app/lib/publish/x/y.ts')).toBe('lib/publish');
     expect(moduleOf('services/app/lib/runner.ts')).toBe('lib/runner');
     expect(moduleOf('services/app/solid/pages/Doc.tsx')).toBe('app/solid');
     expect(moduleOf('services/cli/src/index.ts')).toBe('pkg/cli');
@@ -82,12 +82,12 @@ describe('module graph', () => {
   it('fails a package that imports anything but contracts, utils or itself', () => {
     const root = tree({
       'services/auth/src/x.ts': "import { c } from '@artifactbin/contracts';\nimport { u } from '@artifactbin/utils/http';\nimport { q } from '@artifactbin/sql';\nimport './y';\n",
-      'services/auth/src/y.ts': "export const y = await import('../../app/lib/story/index.ts');\n",
+      'services/auth/src/y.ts': "export const y = await import('../../app/lib/publish/index.ts');\n",
       'services/cli/src/z.ts': "import '@/lib/cli-toolkit';\n",
     });
     const violations = checkModuleGraph(scanModuleGraph(root), allowList([])).violations.join('\n');
     expect(violations).toContain('pkg/auth -> pkg/sql');
-    expect(violations).toContain('pkg/auth -> lib/story');
+    expect(violations).toContain('pkg/auth -> lib/publish');
     expect(violations).not.toMatch(/-> pkg\/(contracts|utils)/);
     expect(violations).not.toContain('pkg/cli');
   });

@@ -41,7 +41,7 @@ import {paramSqlName} from '@artifactbin/contracts';
  * content-addressed (an idempotent write costs no object), the previous state
  * is archived into `artifact_versions` on the same coalescing rule text edits
  * use (so `revert` works on data), and the row's own channel is NOTIFYed, so
- * every open document reading this dataset re-queries (lib/story/realtime/live).
+ * every open document reading this dataset re-queries (lib/publish/realtime/live).
  * It lives in the artifacts write path: SQL on artifact tables plus receipts, emitting its
  * after-commit event (../after-commit) for whatever else must follow a committed write.
  */
@@ -273,7 +273,7 @@ export async function mutateDataset(
     if (row) {
       void trackEvent('mutate', row.id, { userId: row.user_id });
       // Committed: story's listener flags the guest snapshots that read this dataset and queues their heads'
-      // revalidation (lib/story/prepared/commit-hooks.server). Beside the NOTIFY, never awaited, never failing
+      // revalidation (lib/publish/prepared/commit-hooks.server). Beside the NOTIFY, never awaited, never failing
       // the write — freshness is decided on read by the marks, this only lets a head revalidate before anyone asks.
       emitDatasetCommitted(row.id);
       return { row, affected: out.affected, rowCount: out.rows.length,...(mutationRunId?{mutationRunId}:{}) };

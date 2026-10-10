@@ -529,7 +529,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
       const message = command as { type?: string; datasets?: unknown; mode?: unknown };
       if (message.type === STORY_DATA_MESSAGE && Array.isArray(message.datasets)) { controller.invalidate(message.datasets as string[]); return; }
       if (message.type === STORY_READER_MODE_MESSAGE && (message.mode === 'light' || message.mode === 'dark')) {
-        // The story root carries the document's mode as its class (lib/story/inline-story-html).
+        // The story root carries the document's mode as its class (lib/publish/inline-story-html).
         mode = message.mode;
         applyColorMode(root, mode);
         return;

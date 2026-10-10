@@ -5,7 +5,7 @@ import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notificat
 export type {NotificationDelivery} from '@/lib/notifications';
 import {startAppBackgroundTasks} from '@/lib/runtime';
 import {startDomainRecheck} from '@/lib/serving';
-import {startMermaidHarvester} from '@/lib/story/assets/mermaid-harvester';
+import {startMermaidHarvester} from '@/lib/publish/assets/mermaid-harvester';
 import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/artifacts';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
 import {useSqlExtensions} from '@/lib/sql/extensions';
@@ -70,7 +70,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  })()};
 }
 /** Explicit URL wins over a deployment factory. Missing authentication never falls back locally. */
-function externalHostedAgent(url:string,secret:string|undefined):Awaited<ReturnType<NonNullable<AppHostOptions['hostedAgent']>>>{
+export function externalHostedAgent(url:string,secret:string|undefined):Awaited<ReturnType<NonNullable<AppHostOptions['hostedAgent']>>>{
  if(!secret)throw Error('CONTRACT__ACTOR_SECRET required for remote hosted agent');
  const agent=hostedAgentClient(url,hostedAgentTransport(url,secret),hostedAgentDeliveryTransport(url,secret));
  return {agent,tick:externalHostedComments(agent,secret)};

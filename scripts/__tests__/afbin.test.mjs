@@ -239,7 +239,7 @@ describe('npm run afbin', () => {
       const ready = await hostRuntimeState(root);
       expect(ready.available, ready.reason).toBe(true);
 
-      const fixture = path.join(root, 'services/app/lib/story/__tests__/unrelated.test.ts');
+      const fixture = path.join(root, 'services/app/lib/publish/__tests__/unrelated.test.ts');
       await mkdir(path.dirname(fixture), { recursive: true });
       await writeFile(fixture, 'not a runtime input');
       await utimes(fixture, builtAt + 10, builtAt + 10);

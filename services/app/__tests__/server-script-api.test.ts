@@ -12,7 +12,7 @@ import {setServices} from '@/lib/platform/services';
 import {setLambdaProgramResolver} from '@/lib/runner';
 import {getArtifactById} from '@/lib/artifacts';
 import {prepareClientDocumentPublication} from '@/lib/document/document-update-client';
-import {prepareDocumentAuthoringContext} from '@/lib/story/publish';
+import {prepareDocumentAuthoringContext} from '@/lib/publish/publish';
 
 useAppHarness();
 afterEach(()=>{setLambdaProgramResolver(undefined);setServices({runner:undefined});});

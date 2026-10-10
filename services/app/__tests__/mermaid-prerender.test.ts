@@ -20,11 +20,11 @@ import { getDb, verifyExportKey } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { services, setServices } from '@/lib/platform';
 import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
-import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/story/assets/mermaid-harvester';
+import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/publish/assets/mermaid-harvester';
 import { MERMAID_RENDER_ENGINE } from '@/lib/mermaid-images/engine';
 import { documentEditBody } from './prepared-document';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { installStoryCommitHooks } from '@/lib/story/prepared/commit-hooks.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
+import { installStoryCommitHooks } from '@/lib/publish/prepared/commit-hooks.server';
 
 useAppHarness();
 // As the server does: committed heads are prepared, and a harvest's changed rendering re-prepares the head.

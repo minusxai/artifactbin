@@ -25,7 +25,7 @@ import { applyEditFor, versionToWire, getArtifactById, getVersionFor, listArtifa
 import { canReadArtifact } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
-import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/story/publish';
+import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish/publish';
 import { isParentRefusal, resolveParent } from '@/lib/artifacts/placement';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
 import { trackEvent } from '@/lib/platform/analytics';
@@ -563,7 +563,7 @@ const exportArtifactOp: Operation = {
  * The reach is the read ACL rather than ownership (the whole point: adapting
  * someone else's public document), so the miss is the same uniform 404 every
  * other operation answers. The copy is re-published as the FORKER
- * (lib/story/publish forkArtifact), which is why a refusal here can name a ref
+ * (lib/publish/publish forkArtifact), which is why a refusal here can name a ref
  * that was fine for the original owner and is not for you — it passes through
  * verbatim rather than copying a document that would be broken on arrival.
  */

@@ -1,4 +1,6 @@
 /** Trusted authoring clients prepare data, never SQL or authorization predicates. */
+
+/** The largest document source, in UTF-8 bytes: the publish door, the graph write, a prepared update and the skill guide all state this one number. */
 export const MAX_DOCUMENT_BYTES=2_000_000;
 export type DocumentTree={schema:1;kind:'jsx';roots:unknown[]}|{schema:1;kind:'source';source:string};
 export type JsonDocumentPatch=

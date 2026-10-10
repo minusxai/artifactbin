@@ -1,4 +1,4 @@
-import {renderSocialPreviewImage} from '../story/assets/social-preview-image.server';
+import {renderSocialPreviewImage} from '../publish/assets/social-preview-image.server';
 /** Export policy and adapters. The DB cache owns refresh coordination; the browser
  * owns readiness/capture/upload; the asset route streams immutable stored images.
  * Routes authorize the artifact before calling this module. */

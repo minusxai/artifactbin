@@ -1,6 +1,6 @@
 import { browserActor } from '@/lib/accounts';
 import { actorForArtifacts } from '@/lib/accounts';
-import { refreshAssetsFor } from '@/lib/story/publish';
+import { refreshAssetsFor } from '@/lib/publish/publish';
 import { unauthorized } from '@/lib/http';
 
 /**
@@ -8,7 +8,7 @@ import { unauthorized } from '@/lib/http';
  * the owner's own menu.
  *
  * The browser twin of the `refresh_asset` operation, over the SAME pipeline
- * (lib/story/publish refreshAssetsFor): a person clicking a row and an agent
+ * (lib/publish/publish refreshAssetsFor): a person clicking a row and an agent
  * calling the tool must not be able to mean different things. It differs only
  * in the credential — a session or the agent cookie, never a bearer token —
  * which is what makes it safe to reach from a page.

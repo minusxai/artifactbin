@@ -4,7 +4,7 @@ import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '../helmet';
 import { coversCspExtensions, cspExtensionsOf, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../csp-extensions';
 import { validateMarkupStructure } from '../local-validation';
-import { prepareJsx } from '../../story/document/jsx-tier';
+import { prepareJsx } from '../../publish/document/jsx-tier';
 import { buildDocumentCsp } from '@/lib/compiled-page/styles/document-csp';
 import { appendCspExtensions } from '@/lib/compiled-page/styles/markup-csp';
 

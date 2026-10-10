@@ -4,12 +4,12 @@
 import {GRAPH_POLICY,GRAPH_ROOT} from '../../document/document-graph';
 import type {GraphPatch} from '../../document/document-graph-patch';
 import {documentPatchStepSql} from '../../document/document-patch';
-import {MAX_CONTENT_BYTES} from '../../document/limits';
+import {MAX_DOCUMENT_BYTES} from '@artifactbin/contracts';
 
 export function graphPatchSql(document:string,version:string,patch:GraphPatch,initial:unknown[]):{expression:string;guard:string;integrity:(next:string)=>string;params:unknown[]} {
   const params=[...initial];
   const param=(value:unknown)=>{params.push(value);return `$${params.length}`;};
-  const reads=param(JSON.stringify(patch.reads)),inserted=param(JSON.stringify(patch.inserted)),removed=param(patch.removed),updated=param(JSON.stringify(patch.updated)),touched=param(patch.touched),delta=param(patch.byteDelta),base=param(patch.baseVersion),limit=param(MAX_CONTENT_BYTES),policy=param(GRAPH_POLICY);
+  const reads=param(JSON.stringify(patch.reads)),inserted=param(JSON.stringify(patch.inserted)),removed=param(patch.removed),updated=param(JSON.stringify(patch.updated)),touched=param(patch.touched),delta=param(patch.byteDelta),base=param(patch.baseVersion),limit=param(MAX_DOCUMENT_BYTES),policy=param(GRAPH_POLICY);
   const selections=param(JSON.stringify(patch.selections)),unitDeltas=param(JSON.stringify(patch.unitDeltas)),claims=param(JSON.stringify(patch.claims));
   const nodes=`(${document}->'nodes')`;
   // One node by path: `nodes->key` would first copy the whole node map (megabytes) out of the document, per reference.

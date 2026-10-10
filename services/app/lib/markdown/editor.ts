@@ -9,7 +9,7 @@ import { $convertFromMarkdownString, $convertToMarkdownString, $generateNodesFro
 import { HorizontalRuleNode, $createHorizontalRuleNode, $isHorizontalRuleNode } from '@lexical/extension';
 import { $insertNodeToNearestRoot } from '@lexical/utils';
 import { TableNode, TableRowNode, TableCellNode, $isTableRowNode, $isTableCellNode, $isTableSelection, $findTableNode, TableCellHeaderStates, INSERT_TABLE_COMMAND, registerTablePlugin, registerTableSelectionObserver, registerTableCellUnmergeTransform, setScrollableTablesActive, $insertTableRowAtSelection, $insertTableColumnAtSelection, $deleteTableRowAtSelection, $deleteTableColumnAtSelection } from '@lexical/table';
-import { markdownTransformers as transformers } from './transformers';
+import { markdownTransformers as transformers, prepareEditorMarkdown } from './transformers';
 import { markdownContent, markdownHref } from './content';
 type MarkdownBlock = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'bullet' | 'number' | 'code' | 'check' | 'hr' | 'table';
 export type MarkdownTableAction = 'row-before' | 'row-after' | 'column-before' | 'column-after' | 'delete-row' | 'delete-column' | 'delete-table';
@@ -77,11 +77,14 @@ export function mountMarkdownEditor(root: HTMLElement, options: MarkdownEditorOp
   root.dataset.mxLexical = '';
   setScrollableTablesActive(editor, true);
   editor.setRootElement(root);
-  const load = (source: string) => editor.update(() => {
+  const load = (source: string) => {
+    const prepared = prepareEditorMarkdown(source);
+    editor.update(() => {
     lastSelection = null;
-    $convertFromMarkdownString(source, transformers, undefined, false, true);
+    $convertFromMarkdownString(prepared.source, prepared.transformers, undefined, false, true);
     $setSelection(null);
-  }, { discrete: true, tag: 'markdown-source' });
+    }, { discrete: true, tag: 'markdown-source' });
+  };
   load(saved);
   const stampHeadings = () => {
     root.querySelectorAll('[data-mx-markdown-heading]').forEach(el => el.removeAttribute('data-mx-markdown-heading'));
@@ -198,7 +201,18 @@ export function mountMarkdownEditor(root: HTMLElement, options: MarkdownEditorOp
     link(href) { if (href !== null && !markdownHref(href)) return; update(() => $toggleLink(href)); },
     paste(text, kind) {
       if (kind === 'markdown' && markdownContent(text).errors.length) { options.onError?.('This Markdown contains unsupported content.'); return; }
-      update(() => { const selection = $getSelection(); if ($isRangeSelection(selection)) { if (kind === 'text') selection.insertRawText(text); else selection.insertNodes($generateNodesFromMarkdownString(text, transformers, false, true)); } });
+      update(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return;
+        if (kind === 'text') { selection.insertRawText(text); return; }
+        const prepared = prepareEditorMarkdown(text);
+        const nodes = $generateNodesFromMarkdownString(prepared.source, prepared.transformers, false, true);
+        if (nodes.length === 1 && $isCodeNode(nodes[0])) {
+          selection.removeText();
+          $insertNodeToNearestRoot(nodes[0]);
+        }
+        else selection.insertNodes(nodes);
+      });
     },
     selection() {
       return editor.getEditorState().read(() => {

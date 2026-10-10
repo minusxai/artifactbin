@@ -3,7 +3,7 @@ import type {DocumentOperation} from '@artifactbin/contracts';
 import {createDocumentGraph,graphSource} from '../../document/document-graph';
 import {prepareGraphOperation,prepareGraphSource,graphAdmissionPlan} from '../write/document-graph-admission';
 import {applyGraphPatch} from '../../document/document-graph-patch';
-import {publishJsx} from '@/lib/story/document/jsx-tier';
+import {publishJsx} from '@/lib/publish/document/jsx-tier';
 import {stampNodeIds} from '../../document/node-ids';
 const context={loadRef:async()=>null,publish:publishJsx};
 async function setup(source='<section id="root"><p id="a">Alpha</p><p id="b">Beta</p></section>'){

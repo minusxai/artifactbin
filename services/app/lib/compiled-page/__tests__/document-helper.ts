@@ -4,7 +4,7 @@ import { loadCompilerBuild } from '../build.server';
 import { compilePage } from '../compiler';
 import { loadSsrModule } from '../bundle.server';
 import type { AssembleHead, AssembleOverlay } from '../contract';
-import { prepareStoryParts, type PrepareStoryInput } from '@/lib/story/prepared/prepare-runtime.server';
+import { prepareStoryParts, type PrepareStoryInput } from '@/lib/publish/prepared/prepare-runtime.server';
 import { documentStyleSheets } from '@/lib/compiled-page/styles/document-styles';
 
 export interface DocumentCase extends PrepareStoryInput {

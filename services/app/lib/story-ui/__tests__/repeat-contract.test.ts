@@ -2,7 +2,7 @@ import { expect,it } from 'vitest';
 import { parseJsx,validateJsx } from '@/lib/jsx';
 import { collectRefNameUses } from '@/lib/dataflow/dataflow';
 import { keyedRowsError, validRowKey } from '../repeat-identity';
-import { publishJsx } from '@/lib/story/document/jsx-tier';
+import { publishJsx } from '@/lib/publish/document/jsx-tier';
 import { renderDoc } from '@/test/helpers/skill-docs';
 import { stampNodeIds } from '@/lib/document/node-ids';
 const source='<For id="orders" each={$orders} keyBy="order_id"><p id="customer">{$_row.customer}</p></For>';

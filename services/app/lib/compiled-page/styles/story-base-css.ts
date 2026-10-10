@@ -6,7 +6,7 @@
  * overrides its Helmet names).
  *
  * ONE writer for both sides. The server builds it when it prepares a version
- * (lib/story/prepared/prepare-runtime.server); the reader is sent only the RECIPE — a
+ * (lib/publish/prepared/prepare-runtime.server); the reader is sent only the RECIPE — a
  * handful of scalars and font records — and rebuilds the same bytes in the
  * lazy inline-CSS path when a live or editor update makes it re-isolate the
  * sheet (lib/story-runtime/InlineStoryRuntime). Same function, same inputs,
@@ -41,7 +41,7 @@ const STORY_ROOT_RULE = ':root { --mx-vh: 100vh; color: var(--foreground, Canvas
 
 /**
  * The fixed sheets a base sheet is made of: what a prepared page's stored stylesheet version hashes
- * (lib/story/prepared/css-version.server), so changing any of them re-prepares the stored pages that carry it.
+ * (lib/publish/prepared/css-version.server), so changing any of them re-prepares the stored pages that carry it.
  */
 export const STORY_BASE_SHEETS: readonly string[] = [STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_TASK_CHECKBOX_CSS, DOCUMENT_NAV_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS];
 

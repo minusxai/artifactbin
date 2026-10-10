@@ -3,7 +3,7 @@
  */
 import {GRAPH_ROOT,graphAncestors,type DocumentGraph,type DocumentGraphNode} from './document-graph';
 import {applyDocumentPatch,prepareDocumentPatch,type DocumentPatch} from './document-patch';
-import {MAX_DOCUMENT_BYTES as MAX_CONTENT_BYTES,type GraphPatch,type GraphRead,type GraphFacet} from '@artifactbin/contracts';
+import {MAX_DOCUMENT_BYTES,type GraphPatch,type GraphRead,type GraphFacet} from '@artifactbin/contracts';
 export type { GraphPatch, GraphFacet } from '@artifactbin/contracts';
 
 const canonical=(v:unknown):unknown=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)])):v;
@@ -76,7 +76,7 @@ export function applyGraphPatch(current:DocumentGraph,version:number,patch:Graph
   if(patch.reads.some(read=>current.nodes[read.key]?.[read.facet]!==read.version))return null;
   if(Object.keys(patch.inserted).some(key=>Object.hasOwn(current.nodes,key)))return null;
   const bytes=current.bytes+patch.byteDelta;
-  if(bytes<0||bytes>MAX_CONTENT_BYTES)return null;
+  if(bytes<0||bytes>MAX_DOCUMENT_BYTES)return null;
   return advanceGraph(structuredClone(current),version,patch);
 }
 

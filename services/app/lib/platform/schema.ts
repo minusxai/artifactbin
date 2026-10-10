@@ -570,7 +570,7 @@ const DATASET_RESULT_CACHE: Table = {
 
 /**
  * THE PREPARED PAGE — each document version compiled ONCE for the reader
- * (lib/story/prepared/prepared-page.server): its isolated stylesheet, its node tree and
+ * (lib/publish/prepared/prepared-page.server): its isolated stylesheet, its node tree and
  * the style values the CSS policy rewrote, its glyphs, fonts and lazy-code
  * manifest, its declared dataflow, and the anonymous server render. Derived and
  * disposable: one slot per head or archived version, overwritten whenever the
@@ -607,7 +607,7 @@ const PREPARED_PAGES: Table = {
 };
 
 /**
- * GUEST SNAPSHOTS (lib/story/prepared/snapshots.server) — a document version's
+ * GUEST SNAPSHOTS (lib/publish/prepared/snapshots.server) — a document version's
  * SHARED queries answered for the anonymous reader, keyed by the version slot,
  * a digest of its data plan and a digest of the inputs those queries read.
  * Freshness is decided on read by comparing `marks` (each dataset's mark taken

@@ -1,12 +1,12 @@
 /**
  * The document as a live frame — what a client fetches after a version ping.
  * Same read ACL as the page, `raw` and the stream (uniform 404); cached per
- * (id, edit_id) in lib/story/data/frame. CORS-open like `query`, since the served
+ * (id, edit_id) in lib/publish/data/frame. CORS-open like `query`, since the served
  * document (opaque origin) fetches it directly.
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/platform';
-import { liveFrameFor } from '@/lib/story/data/frame';
+import { liveFrameFor } from '@/lib/publish/data/frame';
 import { sessionActor } from '@/lib/accounts';
 
 /**

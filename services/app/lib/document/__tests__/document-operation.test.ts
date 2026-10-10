@@ -9,7 +9,7 @@ function applyDocumentOperations(source:string,operations:readonly DocumentOpera
  if(!parsed.ok)throw new DocumentOperationError(parsed.error,-1);
  return serializeJsx(applyOperationsToNodes(parsed.nodes,operations));
 }
-import {publishJsx} from '../../story/document/jsx-tier';
+import {publishJsx} from '../../publish/document/jsx-tier';
 const source='<section id="root"><p id="a">Alpha</p><p id="b">Beta</p></section>';
 describe('document operation algebra',()=>{
  it('composes text, attributes, insertion, movement and deletion in order',()=>{

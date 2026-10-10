@@ -135,7 +135,7 @@ From the repo root; keep this list current.
   (such as `compiled-page/compiler.ts`): run `npm run generate-story-ui-classes`
   and review the generated diff before final CI. FAST regression checks are
   `services/app/lib/story-ui/__tests__/recipe-classes.test.ts` and
-  `services/app/lib/story/__tests__/reader-sheet.test.ts`; type checking alone does not catch drift.
+  `services/app/lib/publish/__tests__/reader-sheet.test.ts`; type checking alone does not catch drift.
 - CLI releases: `npm run release:cli` in the CLI's PR, or the `Release afbin` dispatch (straight to
   main). `checks` refuses a CLI PR without a bump; a version-only diff packs npm and verifies native consumers; a tree PR
   CI passed is not re-tested on merge. [Steps](services/cli/README.md). Teaching is generated before

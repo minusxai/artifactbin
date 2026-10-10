@@ -8,7 +8,7 @@ import {getDb} from '@/lib/platform';
 import {encodeDocumentNodes} from '@/lib/document/document-node-codec';
 import {parseJsx} from '@/lib/jsx';
 import {getArtifactById,applyEditScoped,getVersionFor} from '@/lib/artifacts';
-import {forkArtifact} from '@/lib/story/publish';
+import {forkArtifact} from '@/lib/publish/publish';
 import {UnservableDocument} from '@/lib/artifacts/servable';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();

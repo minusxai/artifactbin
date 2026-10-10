@@ -29,7 +29,7 @@ import { setServices } from '@/lib/platform';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/serving';
 import { mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/document/asset-url';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';

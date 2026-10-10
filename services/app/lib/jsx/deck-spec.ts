@@ -3,7 +3,7 @@
  * deck.gl's own JSON dialect (`@@type`, `@@=` accessors) because agents already
  * write it. One module in lib/jsx, no deck.gl import: publish validation (./validate,
  * which `afbin validate` also runs offline), the column checks
- * (lib/story/data/data-checks) and the renderer (lib/viz/deck-engine-core) all
+ * (lib/publish/data/data-checks) and the renderer (lib/viz/deck-engine-core) all
  * read it, so what publish accepts is exactly what the engine builds. Boundary
  * ids are the static list in ./boundary-ids; their geometry stays in lib/viz.
  *

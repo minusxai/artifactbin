@@ -18,7 +18,7 @@ import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@artifactbin/cont
 import { resolveToken } from '@/lib/accounts';
 import { canAuthenticateUser } from '@/lib/accounts/user-kinds';
 import { sessionActor } from '@/lib/accounts';
-import { parseContentInput } from '@/lib/story/document/input';
+import { parseContentInput } from '@/lib/publish/document/input';
 
 export async function POST(request: Request) {
   // A browser session takes precedence over an approved CLI bearer.

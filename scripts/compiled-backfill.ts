@@ -69,7 +69,7 @@ async function main() {
   process.env.DATABASE_URL = db;
   // After the environment is set, as every server module here: an old contract OR an older stored stylesheet.
   if (values.stale) {
-    const { preparedCssVersion } = await import('@/lib/story/prepared/css-version.server');
+    const { preparedCssVersion } = await import('@/lib/publish/prepared/css-version.server');
     filters.unshift({ any: [{ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT }, { column: 'css_version', op: '!=', value: preparedCssVersion() }] });
   }
   // After the environment is set: lib/config reads it on first import.

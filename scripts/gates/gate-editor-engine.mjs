@@ -420,7 +420,7 @@ try {
   await doc().getByRole('checkbox', { name: 'Task completed' }).uncheck();
   await stored(s => /checked=\{false\}/.test(s), 'reopened checklist remains editable');
   await page.getByRole('button', { name: 'Exit edit mode' }).click();
-  const markdownFeatures = '- [ ] Open task\n- [ ] Next task\n\n---\n\n| Name | Value |\n| --- | --- |\n| Total | 42 |\n\n```ts\nconst answer: number = 42;\n```\n\nAfter table.';
+  const markdownFeatures = '- [ ] Open task\n- [ ] Next task\n\n---\n\n| Name | Value |\n| --- | --- |\n| Total | 42 |\n\n~~~~ts\nconst answer: number = 42;\n~~~~\n\nAfter table.';
   must((await api('', { method: 'PUT', body: JSON.stringify({ markup: `<article><Markdown id="features">{${JSON.stringify(markdownFeatures)}}</Markdown></article>` }) })).status === 200, 'the Markdown features fixture publishes');
   await page.goto('about:blank');
   await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
@@ -457,7 +457,7 @@ try {
   const highlightedCode = doc().locator('#features code.language-typescript');
   check(await highlightedCode.textContent() === 'const answer: number = 42;'
     && (await highlightedCode.locator('.mx-code-token-keyword').allTextContents()).includes('const'),
-    'the compiled reader restores language-tagged syntax tokens and exact code after saved Markdown edits');
+    'the compiled reader preserves tilde-fenced language, syntax tokens and exact code after saved Markdown edits');
   check(await highlightedCode.locator('.mx-code-token-keyword').first().evaluate(el => getComputedStyle(el).color)
     !== await highlightedCode.evaluate(el => getComputedStyle(el).color),
     'compiled reader syntax tokens receive their highlighting colors');

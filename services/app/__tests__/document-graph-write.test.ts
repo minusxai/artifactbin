@@ -11,7 +11,7 @@ import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditSc
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {createDocumentGraph} from '@/lib/document/document-graph';
 import {prepareGraphOperation} from '@/lib/artifacts/write/document-graph-admission';
-import {publishJsx} from '@/lib/story/document/jsx-tier';
+import {publishJsx} from '@/lib/publish/document/jsx-tier';
 import {commitGraphOperation} from '@/lib/artifacts/write/document-graph-write';
 useAppHarness();
 async function setup(){

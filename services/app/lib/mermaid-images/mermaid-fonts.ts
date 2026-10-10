@@ -14,12 +14,10 @@
  * would cost ~645KB gzipped (hb-subset and woff2 WebAssembly); the files are
  * already in the cache (Inter 73KB, JetBrains Mono 40KB, Noto Serif 14KB).
  */
-import { MERMAID_TEXT_RENDERING, planFontFiles, type FontFile } from '@/lib/mermaid-images/svg-text';
+import { MERMAID_TEXT_RENDERING, planFontFiles, unquote, type FontFile } from '@/lib/mermaid-images/svg-text';
 
 /** A face the page declares: its family, file, weight (or range) and range of characters. */
 interface PageFontFace extends FontFile { family: string }
-
-const unquote = (value: string) => value.trim().replace(/^["']|["']$/g, '');
 
 /** One @font-face's descriptors, from the parsed rule or from its source text. */
 function faceOf(get: (name: string) => string): PageFontFace | null {

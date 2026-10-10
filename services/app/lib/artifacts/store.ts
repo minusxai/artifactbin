@@ -194,7 +194,7 @@ export async function createArtifact(
 /** What a creation says to the rest of the system, AFTER its transaction committed. */
 export async function afterCreated(row: ArtifactRow, userId: string | null): Promise<void> {
   void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
-  // The first reader of a new document finds it prepared (story's listener, lib/story/prepared/commit-hooks.server).
+  // The first reader of a new document finds it prepared (story's listener, lib/publish/prepared/commit-hooks.server).
   if (row.format === 'markup') emitHeadCommitted(row.id);
   // Its diagrams are drawn to stored SVG in the background; nothing waits on it.
   void queueMermaidHarvest(row);
@@ -965,7 +965,7 @@ export function refLoaderForUser(userId: string): ServerRefLoader {
 /**
  * The byte quota as the publish door asks it: "is this caller already over?"
  *
- * A closure over the identity, so lib/story/document/input can guard a tier without
+ * A closure over the identity, so lib/publish/document/input can guard a tier without
  * knowing who is publishing. The
  * subject is the ACCOUNT when the token has one — a cap keyed on the token
  * alone is bypassed by minting a second one — which lib/asset-quota decides,
@@ -974,7 +974,7 @@ export function refLoaderForUser(userId: string): ServerRefLoader {
  * Its ABSENCE is also what tells the byte tiers they are being previewed:
  * every other ctx member degrades to "do less", and storing the bytes IS what
  * publishing an image or a PDF is, so those two refuse by name instead of
- * quietly working for free (lib/story/document/input).
+ * quietly working for free (lib/publish/document/input).
  */
 export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
   return () => assetByteQuotaExceeded(tokenId);

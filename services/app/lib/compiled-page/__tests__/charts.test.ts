@@ -10,7 +10,7 @@ import path from 'node:path';
 import { drawChart, drawSnapshotCharts } from '../charts.server';
 import { DRAWING_CLASS } from '@/lib/islands/chart';
 import { STORY_UI_RECIPE_BASE, STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
-import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
 import { questionEnvelope } from '@/lib/viz/chart-envelope';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVegaView, resolveEnvelopeSpec, toVegaSpec } from '@/lib/viz/render-vega';

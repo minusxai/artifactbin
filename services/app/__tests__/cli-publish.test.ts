@@ -17,7 +17,7 @@ import { parseDocument, writeDocument } from '../../cli/src/document';
 import type {LocalHtmlOptions} from '../../cli/src/local-html-options';
 import {readArtifactFileHtml} from '@/lib/offline/offer';
 import {artifactFileName} from '@artifactbin/utils';
-import { publishJsx } from '@/lib/story/document/jsx-tier';
+import { publishJsx } from '@/lib/publish/document/jsx-tier';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
 import { createUser } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';

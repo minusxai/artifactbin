@@ -2,7 +2,7 @@ import { viewersWritePolicy } from '@artifactbin/utils';
 /**
  * The policy AS THE ENGINE READS IT — pure, DB-free, and shared by the two
  * doors that must agree: a click (mutationPolicy, next door) and a publish
- * (lib/story/data/data-checks, which may not reach the database layer at all).
+ * (lib/publish/data/data-checks, which may not reach the database layer at all).
  *
  * One role writes under a data policy: `viewer`. Everything else about the
  * grant is the policy document's own.

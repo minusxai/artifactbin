@@ -25,7 +25,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintExportKey } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
-import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
+import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';
 
