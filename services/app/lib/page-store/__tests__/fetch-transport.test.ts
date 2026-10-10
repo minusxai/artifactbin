@@ -6,10 +6,10 @@ import {createAuthenticatedTransport} from '../authenticated-transport';
  * store puts on the affected queries.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
+import { createFetchTransport } from '@/lib/page-store/fetch-transport';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
-import { uploadDatasetFile } from '@/lib/story-runtime/file-upload';
-import { uploadDatasetImage } from '@/lib/story-runtime/image-upload';
+import { uploadDatasetFile } from '@/lib/page-store/file-upload';
+import { uploadDatasetImage } from '@/lib/page-store/image-upload';
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 const requestOf = (f: ReturnType<typeof vi.fn>) => {

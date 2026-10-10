@@ -20,16 +20,16 @@
  */
 import { batch, createSignal as solidCreateSignal, untrack, type JSX, type SignalOptions } from 'solid-js';
 import { createComponent, render } from 'solid-js/web';
-import type { DataflowStore } from '@/lib/story-runtime/data';
+import type { DataflowStore } from '@/lib/page-store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/dataflow';
 import { PAGE_GLOBAL } from '@/lib/author-script/contract';
-import { bindPage, type PageBindings, type MutationFn } from '@/lib/story-runtime/page-bindings';
+import { bindPage, type PageBindings, type MutationFn } from '@/lib/page-store/page-bindings';
 import { MountScope, commentSignal, commentStateKey } from './comment-state';
 import { registerCommentState } from '@/lib/story-runtime/comment-state';
 import { setCommentStateTransaction } from '@/lib/story-runtime/comment-state-io';
 import { COMMENT_VALUES_KEY } from '../../../contracts/src/comment-view-state';
-export { bindPage, type PageBindings, type MutationFn, type QueryAccessor, type ValueSetter } from '@/lib/story-runtime/page-bindings';
+export { bindPage, type PageBindings, type MutationFn, type QueryAccessor, type ValueSetter } from '@/lib/page-store/page-bindings';
 const bareName = (ref: string): string => (typeof ref === 'string' && ref.startsWith('$') ? ref.slice(1) : String(ref));
 
 

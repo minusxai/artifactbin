@@ -1,6 +1,6 @@
 /** The self-contained, DOM-free runtime shipped as lambda-page-runtime.js beside a server bundle. */
 import { createRoot } from 'solid-js';
-import { bindPage, createDataflowStore, type MutationAnswer, type RunAnswer } from '@/lib/story-runtime/data';
+import { bindPage, createDataflowStore, type MutationAnswer, type RunAnswer } from '@/lib/page-store';
 import type { CompiledDataflow } from '@/lib/dataflow';
 
 // The author and bindings MUST use this same Solid graph, never a second bundled instance.

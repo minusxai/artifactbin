@@ -8,7 +8,7 @@
  * waits for the live stream to tell this document about its own write.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { ACCESS_PENDING, createDataflowStore, type QueryTransport,type StoreWriteEvent } from '@/lib/story-runtime/store';
+import { ACCESS_PENDING, createDataflowStore, type QueryTransport,type StoreWriteEvent } from '@/lib/page-store/store';
 import type { DataflowState, Scalar, MutationRequest } from '@/lib/dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 

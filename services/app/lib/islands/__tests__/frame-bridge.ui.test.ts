@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { compiledOf } from '@/test/helpers/compiled';
-import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore } from '@/lib/page-store/store';
 import { installIslandDocument } from '@/lib/islands/handover';
 import type { IslandDocument } from '@/lib/islands/contract';
 

@@ -133,7 +133,7 @@ async function held(artifact: ArtifactRow, name: string, viewer: RoleActor | nul
 
 /**
  * `{people}` — the cards of the people a reader's page computed results name
- * (lib/story-runtime/store asks once per id). Decided for THIS door's viewer
+ * (lib/page-store/store asks once per id). Decided for THIS door's viewer
  * (lib/artifacts nameablePeople): an id it may not name is simply absent.
  */
 async function named(artifact: ArtifactRow, ids: string[], viewer: RoleActor | null, extra: Record<string, string>, authorize?: () => Promise<void>): Promise<Response> {

@@ -1,10 +1,10 @@
 /**
- * The store's two Phase 2 seams (lib/story-runtime/store): the write lifecycle every write reports
+ * The store's two Phase 2 seams (lib/page-store/store): the write lifecycle every write reports
  * (`subscribeWrites`, what the islands' status feed is built on) and another door's answer landing at
  * the versions it was asked at (`expectAnswer`, the viewer overlay's).
  */
 import { describe, expect, it, vi } from 'vitest';
-import { ACCESS_PENDING, createDataflowStore, type StoreWriteEvent } from '@/lib/story-runtime/store';
+import { ACCESS_PENDING, createDataflowStore, type StoreWriteEvent } from '@/lib/page-store/store';
 import type { CompiledDataflow } from '@/lib/dataflow';
 
 const reads = (r: Partial<CompiledDataflow['queries'][number]['reads']> = {}) => ({ imports: [], queries: [], values: [], builtins: [], ...r });

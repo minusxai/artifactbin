@@ -28,7 +28,7 @@ import { parseJsx } from '@/lib/jsx/parse';
 import { serializeJsx } from '@/lib/jsx/serialize';
 import type { JsxElement, JsxNode } from '@/lib/jsx/types';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
-import type { QueryTransport } from '@/lib/story-runtime/data';
+import type { QueryTransport } from '@/lib/page-store';
 import { canonicalQuote, canonicalText } from '@/lib/document/annotation-range';
 import { isWebUrl } from '@/lib/document/asset-url';
 import { EMPTY_DATAFLOW, isEmptyDataflow } from '@/lib/dataflow/dataflow';

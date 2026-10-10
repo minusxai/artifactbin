@@ -3,7 +3,7 @@
 import { For, Show, createEffect, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { DEFAULT_UPLOAD_MAX_BYTES, type DatasetUploadResult } from '@artifactbin/contracts';
 import { refName } from '@/lib/dataflow/dataflow';
-import { bindPage } from '@/lib/story-runtime/page-bindings';
+import { bindPage } from '@/lib/page-store/page-bindings';
 import { useIsland } from '../../context';
 
 type Props = Record<string, unknown>;

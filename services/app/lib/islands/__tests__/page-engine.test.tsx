@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * THE PAGE'S OWN SQLITE ENGINE ON A COMPILED PAGE (lib/islands/boot + the standalone lib/islands/sqlite-engine,
- * docs/phase2-architecture.md §2.3) — today's page engine (lib/story-runtime/page-engine) behind the
+ * docs/phase2-architecture.md §2.3) — today's page engine (lib/page-store/page-engine) behind the
  * island runtime, exactly as today's reader runs it:
  *
  * - loaded behind the first paint (the snapshot's rows are on screen; nothing waits on the engine);
@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { compiledOf } from '@/test/helpers/compiled';
-import type { PageEngine } from '@/lib/story-runtime/page-engine';
+import type { PageEngine } from '@/lib/page-store/page-engine';
 import type { Row } from '@/lib/dataflow';
 import { boot } from '../boot';
 import { useIsland } from '../context';

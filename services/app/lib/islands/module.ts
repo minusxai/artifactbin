@@ -4,7 +4,7 @@
  * either reaches both. Framework-free; types only from ./boot.
  */
 import type { Component } from 'solid-js';
-import type { PageEngine } from '@/lib/story-runtime/data';
+import type { PageEngine } from '@/lib/page-store';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import type { IslandEntry, IslandModule } from './boot';
 

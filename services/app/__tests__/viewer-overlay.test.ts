@@ -10,7 +10,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as viewerRoute } from '@/app/a/[id]/viewer/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
-import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
+import { createFetchTransport } from '@/lib/page-store/fetch-transport';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

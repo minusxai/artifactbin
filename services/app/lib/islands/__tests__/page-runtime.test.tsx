@@ -6,9 +6,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEffect, createRoot, For } from 'solid-js';
 import { bindPage, mountComponents, pageProxyUrl, type PageBindings } from '../page-runtime';
-import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
-import type { RunAnswer } from '@/lib/story-runtime/dataflow-core';
-import { ACCESS_PENDING } from '@/lib/story-runtime/store';
+import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/page-store/store';
+import type { RunAnswer } from '@/lib/page-store/dataflow-core';
+import { ACCESS_PENDING } from '@/lib/page-store/store';
 import { compiledOf } from '@/test/helpers/compiled';
 import type { CompiledDataflow, Row } from '@/lib/dataflow';
 

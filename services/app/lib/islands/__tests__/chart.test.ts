@@ -46,7 +46,7 @@ describe('loadChart', () => {
 describe('the default runtime without a loader (the SSR render)', () => {
   it('refuses to draw rather than loading Vega', async () => {
     const { createIslandRuntime } = await import('../rt');
-    const { createDataflowStore } = await import('@/lib/story-runtime/store');
+    const { createDataflowStore } = await import('@/lib/page-store/store');
     const rt = createIslandRuntime({}, (df) => createDataflowStore(df));
     await expect(rt.context.loadChart()).rejects.toThrow(/browser/);
   });

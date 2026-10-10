@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWriteStatusFeed } from '../writes';
 import { SAVED_STATUS_TTL_MS } from '../contract';
-import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore } from '@/lib/page-store/store';
 import type { CompiledDataflow } from '@/lib/dataflow';
 
 const flow: CompiledDataflow = {

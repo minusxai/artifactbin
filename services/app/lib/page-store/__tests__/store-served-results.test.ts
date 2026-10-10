@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadSqlite } from '@artifactbin/sql/core';
 import { compiledOf } from '@/test/helpers/compiled';
 import type { Row, Scalar } from '@/lib/dataflow';
-import type { ServedResults } from '../contract';
+import type { ServedResults } from '@/lib/story-runtime/contract';
 import { createPageEngine } from '../page-engine';
 import { createDataflowStore, type DataflowStore, type QueryTransport } from '../store';
 

@@ -2,7 +2,7 @@
  * The document module and kit chunks stay exactly the published compiled code;
  * only the boundary to network doors and page engines changes here.
  */
-import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore } from '@/lib/page-store/store';
 import type { JsxNode } from '@/lib/jsx';
 import { createIslandRuntime, hydrateIsland } from '@/lib/islands/rt';
 import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from '@/lib/islands/module';

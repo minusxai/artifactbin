@@ -25,7 +25,7 @@ path (`/raw` stays, no separate runtime).
 One owner per module. Contracts (types and narrow interfaces) are in
 `services/app/lib/compiled-page/contract.ts` (server side) and `services/app/lib/islands/contract.ts`
 (browser side). Both are framework-free: `solid-js` is not a dependency of main and the reader runtime
-is typed against the framework-free store (`lib/story-runtime/store`), never against Solid.
+is typed against the framework-free store (`lib/page-store/store`), never against Solid.
 
 | Module | Path | Responsibility |
 |--------|------|----------------|
@@ -194,7 +194,7 @@ it). Stored pages are served unchanged, so the format is a stored contract: chan
 `error(name)`, `setValue(name, value, { debounce })`, `mutate(request)`, `viewer()`
 (`StoryViewer | null` — the signed-in hint first, the full identity after the overlay lands),
 `people()`, `writes` (the status feed), `drawings` (the version's stored Mermaid drawings),
-`subscribe(fn)`. All of it is the document store's vocabulary (`lib/story-runtime/store`); the Solid bridge is an implementation
+`subscribe(fn)`. All of it is the document store's vocabulary (`lib/page-store/store`); the Solid bridge is an implementation
 detail behind `IslandContext`.
 
 Reactive markup (`$x`, `$_row.f`, conditionals, `<For>`) is data: the compiler emits the parser's

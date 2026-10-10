@@ -2,14 +2,14 @@
  * THE ISLAND RUNTIME — Phase 2's browser-side contracts (docs/phase2-architecture.md §4, §7).
  *
  * Types and constants only, browser-safe and framework-free: an island is
- * typed against the existing framework-free document store (lib/story-runtime/store),
+ * typed against the existing framework-free document store (lib/page-store/store),
  * and the Solid bridge that feeds it is an implementation detail of rt.ts.
  * The SPA (Solid) and the islands (Solid) share ONE store and ONE document
  * element; this file is where they agree on the handle.
  *
  * Owners: rt.ts / boot.ts (w2-runtime), kit/* (w2-kit-*), viewer + writes (w3-viewer-writes), handover (w3-handover).
  */
-import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/data';
+import type { DataflowStore, MutationAnswer } from '@/lib/page-store';
 import type { Scalar, TableResult, MutationRequest } from '@/lib/dataflow';
 import type { ServedResults, StoryViewer } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';

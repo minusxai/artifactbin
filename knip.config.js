@@ -58,8 +58,8 @@ export default {
         // The deployment's @artifactbin/app entry points (minusxai/artifactbin-server tsconfig paths).
         'server/host.ts', 'lib/platform/{config,db}.ts', 'lib/accounts/tokens.ts', 'lib/artifacts/{mutation-invocation,document-policy}.ts',
         // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)
-        // and an `import('./managed-assets')` type in an interface method (lib/story-runtime/store.ts).
-        'lib/mermaid-images/mermaid-render.ts', 'lib/story-runtime/managed-assets.ts',
+        // and an `import('./managed-assets')` type in an interface method (lib/page-store/store.ts).
+        'lib/mermaid-images/mermaid-render.ts', 'lib/page-store/managed-assets.ts',
         // Bundled whole by scripts/gates/gate-offline-file.mjs for its writer and messages.
         'lib/offline/{file-html,file-format}.ts',
         // Test fixtures run as their own tsx processes by the tests beside them.

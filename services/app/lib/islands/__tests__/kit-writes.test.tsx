@@ -20,7 +20,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createComputed, createRoot, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { createIslandRuntime, declarationsOf } from '../rt';
-import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import { createDataflowStore, type QueryTransport } from '@/lib/page-store/store';
 import { compiledOf } from '@/test/helpers/compiled';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
@@ -31,7 +31,7 @@ import { Segmented } from '../kit/controls';
 import { Select, loadSelectPopup } from '../kit/select';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../kit/dialog';
 import type { IslandContext } from '../contract';
-import type { DataflowStore } from '@/lib/story-runtime/store';
+import type { DataflowStore } from '@/lib/page-store/store';
 import type { CompiledDataflow, Scalar } from '@/lib/dataflow';
 
 const flow = (values: Array<{ name: string; default: Scalar }> = []): CompiledDataflow => ({

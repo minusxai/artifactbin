@@ -38,7 +38,7 @@ import {
   ACCESS_FAILED, ACCESS_PENDING, accessUnavailable, accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople, versionsNow,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,
 } from './dataflow-core';
-import type { ServedResults } from './contract';
+import type { ServedResults } from '@/lib/story-runtime/contract';
 import { graphOfCompiled, heldSource, NOW_SOURCE } from './runtime-graph';
 import type { Optimistic, PageEngine } from './page-engine';
 
@@ -83,7 +83,7 @@ export interface QueryTransport {
   page(values: Record<string, Scalar>, name: string, page: TablePage, localTables?: Record<string, Row[]>): Promise<TableResult>;
   /**
    * Every row of one import the document declares, by its name, for the
-   * page's own engine (lib/story-runtime/page-engine); rejects when this door's
+   * page's own engine (lib/page-store/page-engine); rejects when this door's
    * viewer may not hold it. Absent on a transport that cannot ask (the relay,
    * a capture): the page then runs nothing itself.
    */
@@ -268,7 +268,7 @@ interface CreateStoreOptions {
    */
   frozenValues?: Readonly<Record<string, string>> | null;
   /**
-   * The page's own engine (lib/story-runtime/page-engine) and who is reading
+   * The page's own engine (lib/page-store/page-engine) and who is reading
    * (`$_me.id`). With it, every node the reader's holdings allow
    * (StoryIslandDataflow.hold, lib/dataflow/placement) runs in the page once the
    * page holds what it reads, and only the rest goes through the transport.

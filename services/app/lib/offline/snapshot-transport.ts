@@ -11,7 +11,7 @@
  *  - `page` slices the same rows; there is no `mutate` (the store then shows
  *    its existing cannot-save state) and no `importImage`.
  */
-import type { QueryTransport } from '@/lib/story-runtime/data';
+import type { QueryTransport } from '@/lib/page-store';
 import type { DataflowState, Scalar, TableResult, CompiledDataflow } from '@/lib/dataflow';
 import { queriesReadingValues } from '@/lib/dataflow/compiled-flow';
 import { OFFLINE_FILTER_REASON, type ArtifactFileSnapshot } from './file-format';
