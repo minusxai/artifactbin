@@ -302,6 +302,7 @@ export function DocumentPage(): JSX.Element {
       id, framed, nodes: page.surface?.runtime?.data.nodes ?? [],
       editId: () => editorSeed()?.edit_id ?? editorPart()?.editId ?? page.surface?.editId ?? '',
       source: () => editorSeed()?.markup ?? editorPart()?.source ?? null,
+      version: live, reading: () => lifecycle.phase() === 'reading',
     });
     // The document's links to app paths take this page (another document by a full load, an app page by the router).
     const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });

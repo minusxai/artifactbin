@@ -40,7 +40,11 @@ vi.mock('@/lib/islands/island-controller', () => ({
 import { openFrameDoor, FRAME_BRIDGE_MESSAGE, frameAppOrigin, APP_ORIGIN_ATTR } from '../door';
 import { startFrameBridge } from '@/lib/islands/frame-bridge';
 import { createFrameBridgeParent, relayedRequest, urlValuesOf } from '../parent';
-import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
+import { createFramedStory } from '@/solid/document/create-framed-story';
+import { createRoot, createSignal } from 'solid-js';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import type { JsxNode } from '@/lib/jsx/types';
+import { STORY_ADOPT_HOOK, STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
 
 const APP = 'https://app.test';
 const PAGES = 'https://6869.pages.test';
@@ -437,6 +441,51 @@ describe('the frame bridge', () => {
     await tick();
     expect(made.controllers.length).toBe(2);
     expect(events).toEqual([]);
+  });
+
+  it('hands the frame\'s controller every new version\'s nodes the page\'s stream delivers while reading, and a document that loads again starts on the newest', async () => {
+    // The framed document draws a new version itself (its own live stream); comments and selections there are
+    // classified against the nodes its controller holds, which only the page can bring up to date.
+    const { frame, frameWin } = framedPair();
+    openDoor(frameWin);
+    const nodes = (markup: string): JsxNode[] => parseJsxOrThrow(markup).nodes;
+    const v1 = nodes('<p id="lede">The lede.</p>');
+    const v2 = nodes('<h2 id="added">New</h2><p id="lede">The lede.</p>');
+    const v3 = nodes('<h2 id="added">New</h2><h3 id="more">More</h3><p id="lede">The lede.</p>');
+    const [version, setVersion] = createSignal<{ editId: string; nodes?: JsxNode[] } | null>(null);
+    const [reading, setReading] = createSignal(true);
+    const story = createRoot((dispose) => {
+      cleanups.push(dispose);
+      return createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, nodes: v1, editId: () => 'e1', source: () => null, version, reading });
+    });
+    await settle(() => story.nonce() !== null);
+    const first = made.controllers[0]!;
+    expect(first.input.nodes).toEqual(v1);
+    // The frame's controller draws versions for the document it runs in, not for an app page that adopted it.
+    expect(first.input.adopted).toBe(false);
+
+    setVersion({ editId: 'e2', nodes: v2 });
+    await settle(() => first.updates.length > 0);
+    expect(first.updates).toEqual([{ type: STORY_DOCUMENT_MESSAGE, nodes: v2 }]);
+    // The same version again (a wake re-read) is not sent twice; a frame without nodes (another tier) sends nothing.
+    setVersion({ editId: 'e2', nodes: v2 });
+    setVersion({ editId: 'e2b' });
+    await tick(); await tick();
+    expect(first.updates.length).toBe(1);
+
+    // While the editor holds the document its own drafts draw it: a version then waits for reading again.
+    setReading(false);
+    setVersion({ editId: 'e3', nodes: v3 });
+    await tick(); await tick();
+    expect(first.updates.length).toBe(1);
+    setReading(true);
+    await settle(() => first.updates.length > 1);
+    expect(first.updates[1]).toEqual({ type: STORY_DOCUMENT_MESSAGE, nodes: v3 });
+
+    // The document loads again (a reload the morph fell back to, a consent grant): its new controller starts on v3.
+    frameWin.parent.postMessage({ type: FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } }, APP);
+    await settle(() => made.controllers.length > 1);
+    expect(made.controllers[1]!.input.nodes).toEqual(v3);
   });
 
   it('reads the app origin the server wrote on the document, else its own URL origin', () => {

@@ -204,6 +204,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       id: attach.id, editId: () => context.editId, initialSource: () => context.source,
       // The standalone copy's own fragment: this document wears its sheets, not the app page's.
       appFetch, fragmentSurface: 'raw',
+      // A version is drawn into this document as its own live stream draws one: its title and design are its own.
+      adopted: false,
     });
     controller.selectionReady();
     const unsubscribe = controller.subscribe((event) => post({ kind: 'event', event }));

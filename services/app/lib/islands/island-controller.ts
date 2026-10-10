@@ -125,6 +125,11 @@ export interface IslandControllerInput {
   appFetch?: (path: string, init: RequestInit) => Promise<Response>;
   /** Which page's story fragment the saved version is drawn from after Done: the app page's (default) or the standalone copy's. */
   fragmentSurface?: StorySurface;
+  /**
+   * The app page holds this document (default): a new version leaves the page's title and design alone. A framed
+   * document (lib/islands/frame-bridge) is its own page and takes the version's, as its own live stream does.
+   */
+  adopted?: boolean;
 }
 
 /** The app page's own requests: same-origin, with its session, never cached. */
@@ -142,7 +147,7 @@ const RESTORE_DELAY_MS = 250;
 /** A draft that must redraw the document waits until typing has paused this long: the typed region is never redrawn under the caret. */
 export const TYPING_QUIET_MS = 1000;
 
-export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource, appFetch = sameOriginFetch(win), fragmentSurface = 'app' }: IslandControllerInput): IslandStoryController {
+export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource, appFetch = sameOriginFetch(win), fragmentSurface = 'app', adopted = true }: IslandControllerInput): IslandStoryController {
   let nodes = served;
   /**
    * The version on screen (the live edit id the page's body names) when `nodes` last described it. The document's
@@ -682,7 +687,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
       // The version's source nodes, for the comments and selections classified against them — re-stamped
       // once the morph has drawn the version they describe.
       if (command.nodes) nodes = command.nodes;
-      void updateCompiledStory(win, { mode: () => mode, adopted: true }).then(() => {
+      void updateCompiledStory(win, { mode: () => mode, adopted }).then(() => {
         if (disposed) return;
         nodesDescribeShown();
         annotate?.setNodes(nodes);
