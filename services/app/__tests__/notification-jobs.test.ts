@@ -3,7 +3,7 @@ import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artif
 import {useAppHarness} from './harness';
 import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import {getDb} from '@/lib/platform';
-import { notificationAuthority } from '@/lib/artifacts';
+import { notificationAuthority } from '@/lib/document-data';
 import {seedOwnerJoin} from '@/lib/accounts';
 import {createNotificationJobStore,type NotificationJobAuthority} from '@/lib/notifications';
 useAppHarness();

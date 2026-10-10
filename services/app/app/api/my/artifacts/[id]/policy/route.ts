@@ -1,7 +1,7 @@
 import { browserActor } from '@/lib/accounts';
 import { actorForArtifacts } from '@/lib/accounts';
 import { unauthorized } from '@/lib/http';
-import { datasetPolicyRequest } from '@/lib/artifacts';
+import { datasetPolicyRequest } from '@/lib/document-data';
 async function handle(
   request: Request,
   ctx: { params: Promise<{ id: string }> },

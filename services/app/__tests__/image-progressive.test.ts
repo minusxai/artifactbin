@@ -15,7 +15,8 @@ import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { getArtifactById, refDataForRow } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
+import { refDataForRow } from '@/lib/document-data';
 import { objectStore } from '@/lib/object-store';
 
 

@@ -5,7 +5,7 @@ import type {Db} from '@/lib/platform';
 import {startEventPublisher} from '../platform/event-outbox';
 import {createNotificationWorker} from '../notifications/worker';
 import {createNotificationJobStore} from '../notifications/jobs';
-import { evaluateNotificationQuery, notificationAuthority } from '@/lib/artifacts';
+import { evaluateNotificationQuery, notificationAuthority } from '@/lib/document-data';
 export async function startAppBackgroundTasks(db:Db):Promise<()=>Promise<void>>{
  let waking:Promise<void>|undefined;
  const timer=setInterval(()=>{if(!waking)waking=wakeManagedAgents(db,services().runner).catch(()=>{}).finally(()=>{waking=undefined;});},1000);timer.unref();

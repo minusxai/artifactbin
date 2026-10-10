@@ -1,7 +1,8 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {actorOf} from '@artifactbin/utils';
-import { adaptMutationOperationReply, type ArtifactRow, canReadArtifact, dataflowForRow, durableMutation, getArtifactById, mutationInitiator, runDocumentMutation } from '@/lib/artifacts';
+import { type ArtifactRow, canReadArtifact, durableMutation, getArtifactById } from '@/lib/artifacts';
+import { adaptMutationOperationReply, dataflowForRow, mutationInitiator, runDocumentMutation } from '@/lib/document-data';
 import { parseMutationRequest } from '@/lib/dataflow';
 import {json} from '../http';
 const scalar=z.union([z.string(),z.number().finite(),z.boolean(),z.null()]);

@@ -7,7 +7,8 @@
  * Each dataset channel is paired with the id the document names (channels are
  * lowercased, ids are not), and the annotations channel is granted beside them.
  */
-import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { datasetsForDocument } from '@/lib/document-data';
 import { ID_RE } from '@/lib/platform';
 import { annotationsChannel, artifactChannel } from '@artifactbin/contracts';
 import { sessionActor } from '@/lib/accounts';

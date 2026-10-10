@@ -149,7 +149,7 @@ export async function createArtifact(
    *                resetting the role would be incoherent.
    *   datasetPolicy— the stored write policy, copied WITH the dataset it
    *                governs (a fork of an app copies both). Every other route to
-   *                a policy is lib/artifacts/dataset-policy `setDatasetPolicy`, which
+   *                a policy is the document data module's `setDatasetPolicy`, which
    *                needs the row to exist first; a copy has no "first".
    *   tx         — run inside the caller's OPEN transaction instead of opening
    *                one. The caller then owns the post-commit effects

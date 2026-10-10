@@ -1,6 +1,7 @@
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
-import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/artifacts';
-import { canReadArtifact, getArtifactById, runDocumentMutation } from '@/lib/artifacts';
+import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
+import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { runDocumentMutation } from '@/lib/document-data';
 import { refusesCrossSite } from '@/lib/accounts';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';

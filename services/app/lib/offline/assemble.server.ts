@@ -25,7 +25,7 @@ import { isCompileFailure, loadCompilerBuild, withStoredCarriers } from '@/lib/c
 import path from 'node:path';
 import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations/store';
 import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/artifacts';
-import { acceptedMembers, dataflowForRow, dataflowRunsForRow, importsFingerprint, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ImportCache } from '@/lib/artifacts';
+import { acceptedMembers, dataflowForRow, dataflowRunsForRow, importsFingerprint, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ImportCache } from '@/lib/document-data';
 import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts';
 import { getUserById, type RoleActor, type TokenActor } from '@/lib/accounts';
 import { getArtifactById, retainDownloadedVersion } from '@/lib/artifacts';
@@ -240,7 +240,7 @@ const OFFLINE_VARIANTS_PREFIX = 'offline-variants';
 
 /**
  * What the variants are a function of: the document version served, the downloader's scope, the
- * accepted members, the data of every import (content-addressed, lib/artifacts importsFingerprint),
+ * accepted members, the data of every import (content-addressed, lib/document-data importsFingerprint),
  * the caps and the queries that need the server. Null when any of it cannot be pinned (a connected
  * database, a query that reads the clock), so those documents recompute every time.
  */
@@ -328,7 +328,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   /*
    * WHAT THE FILE CAN RUN ITSELF: every import the downloader may hold travels
    * whole, decided by the same rule and the same door check as a reader's page
-   * (lib/artifacts holdableImports), and the file's own SQLite engine runs
+   * (lib/document-data holdableImports), and the file's own SQLite engine runs
    * every query over them live. Only the rest — a connected database, data
    * the downloader may not hold — is precomputed below.
    */
@@ -364,7 +364,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   /*
    * WHO THE FILE MAY NAME. Its own runs show people no server run named, and
    * it can ask no door later, so it carries every card a reader's page could
-   * ask its door for (lib/artifacts nameablePeople, for the downloader); the
+   * ask its door for (lib/document-data nameablePeople, for the downloader); the
    * run's own cards stand beside them.
    */
   const named = Object.keys(held).length ? await timed(timings, 'people', () => nameablePeople(row, actor)) : {};

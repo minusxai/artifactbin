@@ -25,7 +25,7 @@ import { readEvents } from '@/__tests__/sse';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
-import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
+import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { createAppServer } from '@/server/app';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';

@@ -8,7 +8,7 @@ import {POST as tableQuery} from '@/app/a/[id]/tables/route';
 import {GET as getArtifact} from '@/app/api/artifacts/[id]/route';
 import {POST as mutateRows} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
-import {runDocumentDataflow} from '@/lib/artifacts';
+import { runDocumentDataflow } from '@/lib/document-data';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 

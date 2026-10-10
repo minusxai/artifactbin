@@ -46,7 +46,8 @@
  */
 import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
-import { type ArchivedRender, type ArtifactRow, holdableImports } from '@/lib/artifacts';
+import { type ArchivedRender, type ArtifactRow } from '@/lib/artifacts';
+import { holdableImports } from '@/lib/document-data';
 import type { RoleActor } from '@/lib/accounts';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults } from '@/lib/story-runtime/contract';
@@ -81,7 +82,7 @@ export interface CompiledReaderRequest {
   /** Where the page queries, writes and fetches its overlay; null on a capture. */
   doors: AssembleOverlay['doors'];
   /**
-   * The reader whose holdings the page's own SQLite engine answers for (lib/artifacts holdableImports,
+   * The reader whose holdings the page's own SQLite engine answers for (lib/document-data holdableImports,
    * IslandPageData.hold): the one the page's query door answers — the app page's request actor, `/raw`'s
    * anonymous reader (`null`), as the page's reader rules decide it. Absent: the page holds nothing.
    */

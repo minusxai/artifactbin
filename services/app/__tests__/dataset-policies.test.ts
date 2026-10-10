@@ -9,7 +9,7 @@ import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { GET as query } from '@/app/a/[id]/query/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
-import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
+import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { request, useAppHarness } from './harness';
 useAppHarness();

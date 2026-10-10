@@ -26,7 +26,7 @@ export interface QueryRequest {
   hold?: string;
   /**
    * Instead of a run: the cards of the people these ids name, for results the
-   * reader's page computed itself (lib/artifacts nameablePeople decides who).
+   * reader's page computed itself (lib/document-data nameablePeople decides who).
    */
   people?: string[];
 }

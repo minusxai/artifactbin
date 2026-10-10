@@ -1,6 +1,6 @@
 import type {MutationInitiator, MutationOperationRequest, MutationOperationSuccess, Queryable} from '@artifactbin/contracts';
 import type { TokenActor } from '@/lib/accounts';
-import {completeMutationReceipt,type MutationReceipt,type MutationReply} from './mutation-receipt';
+import { completeMutationReceipt, type MutationReceipt, type MutationReply } from '@/lib/artifacts';
 
 /** Only explicit caller inputs belong in the fingerprint; server defaults are pinned separately. */
 export function normalizeMutationOperation(request:MutationOperationRequest):MutationOperationRequest{

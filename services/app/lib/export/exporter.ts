@@ -12,7 +12,8 @@ import { loadImage } from '@/lib/object-store/image-store';
 import { createHash } from 'node:crypto';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
 import { services } from '@/lib/platform/services';
-import { ArtifactRow, getArtifactById, referencedArtifactForRow, VERSION_PARAM } from '@/lib/artifacts';
+import { ArtifactRow, getArtifactById, VERSION_PARAM } from '@/lib/artifacts';
+import { referencedArtifactForRow } from '@/lib/document-data';
 import {
   declarationsOf, SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
   type SocialPreviewCrop,

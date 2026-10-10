@@ -1,5 +1,5 @@
 /**
- * Dataset-bound uploads (lib/artifacts/feedback-images) through the real page and bearer doors: the flow,
+ * Dataset-bound uploads (lib/document-data/dataset-files/feedback-images) through the real page and bearer doors: the flow,
  * replay protection, the ACL rechecked on every read and before the receipt commits. Merged from
  * lib/artifacts/__tests__/feedback-images.test.ts, which asserted the service's edge cases over doubles.
  * The image, file and picture headers are media-headers.test.ts's rows.
@@ -7,7 +7,7 @@
 import { claimToken, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { updateSharingFor, changeMembership } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
+import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as uploadImage } from '@/app/a/[id]/datasets/[datasetId]/images/route';
 import { GET as readImage } from '@/app/a/[id]/datasets/[datasetId]/images/[imageId]/route';

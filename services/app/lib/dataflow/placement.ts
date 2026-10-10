@@ -3,7 +3,7 @@
  * page holds, or on the server exactly as before. Decided per node from the
  * compiled graph (lib/dataflow/compiled-dataflow `reads`) and one serve-time fact
  * the island carries: the imports THIS reader may hold in full
- * (StoryIslandDataflow.hold, computed by lib/artifacts holdableImportsFor).
+ * (StoryIslandDataflow.hold, computed by lib/document-data holdableImports).
  *
  * A query runs in the browser iff it runs on SQLite, every import it reads is
  * held, every query it reads runs in the browser, and it does not read the

@@ -1,5 +1,6 @@
 /** Ephemeral server compile for an editor's unsaved source. */
-import { getArtifactById, dataflowForRow, declarationsForRow, refDataForRow, roleFor } from '@/lib/artifacts';
+import { getArtifactById, declarationsForRow, roleFor } from '@/lib/artifacts';
+import { dataflowForRow, refDataForRow } from '@/lib/document-data';
 import { readUrlValues } from '@/lib/dataflow';
 import { collectRefUses } from '@/lib/dataflow/references';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';

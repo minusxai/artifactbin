@@ -10,7 +10,8 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { getArtifactById, refDataForRow } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
+import { refDataForRow } from '@/lib/document-data';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
 

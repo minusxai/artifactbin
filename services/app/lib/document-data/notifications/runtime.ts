@@ -2,7 +2,7 @@
 import type {MutationNotificationJobStore} from '@artifactbin/contracts';
 import {getDb} from '@/lib/platform/db';
 import {createNotificationJobStore} from '@/lib/notifications/jobs';
-import {notificationAuthority} from './notification-authority';
+import {notificationAuthority} from './authority';
 
 export async function notificationJobStore():Promise<MutationNotificationJobStore>{
  return createNotificationJobStore({db:await getDb(),authority:notificationAuthority});

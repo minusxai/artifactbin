@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { POST as mutateDataset } from '@/app/api/artifacts/[id]/mutate/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
+import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
 

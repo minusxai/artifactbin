@@ -191,7 +191,8 @@ const ACCOUNTS_ENTRIES = ['', 'tokens'];
  */
 export const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/artifacts': { entries: ['', 'table'] },
+  'lib/artifacts': { entries: ['', 'table'], serverOnly: ['', 'table'] },
+  'lib/document-data': { entries: [''], serverOnly: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, serverOnly: [''], browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },

@@ -13,7 +13,8 @@
  * wakeup converges on the next event with no cursor bookkeeping.
  */
 import { trackEvent } from '@/lib/platform';
-import { canReadArtifact, datasetsForDocument, getArtifactById, isOwner, roleFor } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, isOwner, roleFor } from '@/lib/artifacts';
+import { datasetsForDocument } from '@/lib/document-data';
 import { isDocumentFormat } from '@/lib/publish/document/input';
 import { canAnnotate } from '@artifactbin/contracts';
 import { authorHandle, sessionActor } from '@/lib/accounts';
@@ -57,7 +58,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * THE DOCUMENT'S DATASETS, WATCHED BESIDE THE DOCUMENT ITSELF.
    *
    * A dataset write is a version on the DATASET's row and a NOTIFY on the
-   * DATASET's channel (lib/artifacts/write/dataset-mutate) — nothing about the document
+   * DATASET's channel (lib/document-data/dataset-mutate) — nothing about the document
    * changes, so the stream above would never mention it and every chart built
    * on that data would sit stale until someone reloaded. So this stream also
    * listens on each dataset the document reads or writes, and forwards a small

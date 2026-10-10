@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
-import { applyEditFor, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, membershipInbox, membershipState, mentionCandidates, parseShareEntries, roleFor as requestRoleFor, updateMembershipInbox, updateSharingFor } from '@/lib/artifacts';
+import { applyEditFor, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, membershipState, mentionCandidates, parseShareEntries, roleFor as requestRoleFor, updateSharingFor } from '@/lib/artifacts';
+import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { committedHeadsSettled } from '@/lib/artifacts/store';
 import { linkRoleOf } from '@/lib/artifacts/access';

@@ -6,7 +6,8 @@
 import { describe, expect, it } from 'vitest';
 import { DELETE as deleteRoute, GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { dataflowForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
+import { dataflowForRow, refDataForRow } from '@/lib/document-data';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

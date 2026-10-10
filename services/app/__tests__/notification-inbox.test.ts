@@ -1,6 +1,6 @@
 import {seedOwnerJoin} from '@/lib/accounts';
-import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/artifacts/notification-authority';
-import { membershipInbox, updateMembershipInbox } from '@/lib/artifacts';
+import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/document-data/notifications/authority';
+import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness,request,setSession} from './harness';
 import {PATCH as patchInbox} from '@/app/api/my/people/route';

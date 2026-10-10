@@ -704,7 +704,7 @@ describe('the compiled page behaves like today', () => {
  * `hold` and `sqliteWasm`), decided as today's reader decides them (lib/publish/prepare-runtime readerIslandData):
  *
  * - `hold`: the imports this page may hold in full, for the door the page queries through
- *   (lib/artifacts holdableImports) — the app page's reader (a guest, or the signed-in account that owns
+ *   (lib/document-data holdableImports) — the app page's reader (a guest, or the signed-in account that owns
  *   the dataset); `/raw`, whose door is credential-free, the anonymous reader's;
  * - `sqliteWasm`: the engine's content-addressed wasm (today's runtime build), only when there is
  *   something to hold.
