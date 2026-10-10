@@ -1,4 +1,6 @@
 /** Ownership transfer is one atomic closure update, independent of content history. */
+import {actorSubject,emit} from '../platform/events';
+import {notifyParent,parentOf} from './placement';
 import {generateInternalId} from '../platform/ids';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import type {TokenActor} from '../accounts/actors';
@@ -11,7 +13,8 @@ import {assertDestination} from './ownership';
 export async function transferArtifact(actor:TokenActor,id:string,destination:ArtifactDestination):Promise<ArtifactRow|null>{
  if(!actor.userId)throw new DatasetError('Sign in to transfer ownership',403);
  const db=await getDb();
- return db.transaction(async tx=>{
+ let changed:ArtifactRow[]=[];let previousParent:string|null=null;
+ const result=await db.transaction(async tx=>{
   // Placement and creation both write this table. The closure cannot gain a
   // child or change its owner between discovery and commit, including trash.
   await tx.query('LOCK TABLE artifacts IN SHARE ROW EXCLUSIVE MODE');
@@ -22,6 +25,7 @@ export async function transferArtifact(actor:TokenActor,id:string,destination:Ar
   await assertDestination(tx,actor,destination);
   const closure=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 OR ancestor_ids @> ARRAY[$1] ORDER BY id FOR UPDATE',[id])).rows;
   if(closure.some(r=>r.group_id!==target.group_id||r.user_id!==target.user_id||(!target.group_id&&!target.user_id&&r.token_id!==target.token_id)))throw new DatasetError('Folder contains work with a different owner',409);
+  previousParent=parentOf(target);
   const groupId=destination.type==='group'?destination.id:null;
   const userId=destination.type==='personal'?actor.userId:null;
   if(target.group_id===groupId&&target.user_id===userId)return target;
@@ -41,7 +45,15 @@ export async function transferArtifact(actor:TokenActor,id:string,destination:Ar
     creator_user_id=COALESCE(creator_user_id,user_id),ancestor_ids=ancestor_ids[$4:cardinality(ancestor_ids)],updated_at=now(),
     sharing_revision=sharing_revision+1,policy_revision=policy_revision+1
     WHERE id=ANY($1::text[]) RETURNING *`,[[...ids],groupId,userId,target.ancestor_ids.length+1]);
+  changed=updated.rows;
   await tx.query('INSERT INTO ownership_transfers(id,artifact_id,actor_user_id,previous_owner,next_owner) VALUES($1,$2,$3,$4::jsonb,$5::jsonb)',['tr_'+generateInternalId(),id,actor.userId,JSON.stringify(target.group_id?{type:'group',id:target.group_id}:{type:'personal',id:target.user_id}),JSON.stringify(destination)]);
   return updated.rows.find(r=>r.id===id)!;
  });
+ if(result&&changed.length){
+  // Wake existing ACL subscribers only after committed ownership is visible.
+  await db.query("SELECT pg_notify('artifact_' || lower(id),edit_id) FROM artifacts WHERE id=ANY($1::text[])",[changed.map(row=>row.id)]);
+  await notifyParent(previousParent);await notifyParent(parentOf(result));
+  await emit(actorSubject(actor),'sharing_changed',{kind:'artifact',id},{visibility:result.visibility,link_role:result.link_role});
+ }
+ return result;
 }

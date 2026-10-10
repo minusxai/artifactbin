@@ -1,4 +1,4 @@
-import {afterEach,expect,it} from 'vitest';
+import {afterEach,expect,it,vi} from 'vitest';
 import {useAppHarness,request,mintAccountToken} from './harness';
 import {createUser} from '@/lib/accounts';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
@@ -8,6 +8,7 @@ import {POST as transfer} from '@/app/api/artifacts/[id]/transfer/route';
 import {effectiveRole,ownsArtifact,canWriteDataset} from '@/lib/artifacts/access';
 import {getArtifactById,getOwnedArtifactFor} from '@/lib/artifacts/store';
 import {accountWorkspaceCoreFor} from '@/lib/workspace/dashboard';
+import {subscribeToArtifact} from '@/lib/publish/realtime/live';
 import {datasetGrantAllows,defaultDatasetGrants} from '@artifactbin/utils';
 import {selectChildren} from '@/lib/artifacts/placement';
 import {canReadArtifact} from '@/lib/artifacts/access';
@@ -105,4 +106,22 @@ it('compares dataset and published artifact group principals without treating a 
  expect(datasetGrantAllows(policy,'insert',{caller,owner,artifact:{id:'doc123',owner:{...owner}}})).toBe(true);
  expect(datasetGrantAllows(policy,'insert',{caller,owner,artifact:{id:'doc123',owner:{groupId:'other_group',userId:null,tokenId:null}}})).toBe(false);
  expect(datasetGrantAllows(policy,'insert',{caller,owner})).toBe(false);
+});
+
+it('wakes existing artifact ACL subscribers only after transferred ownership is committed',async()=>{
+ const f=await fixture(),id=await f.make({markup:'<p>Private</p>',visibility:'private'});
+ expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);
+ let observed:string|null|undefined;
+ const stop=await subscribeToArtifact(id,()=>{void getArtifactById(id).then(row=>{observed=row?.user_id;});});
+ try{expect((await f.move(id,{type:'personal'},f.b.token)).status).toBe(200);await vi.waitFor(()=>expect(observed).toBe(f.editor.id));}
+ finally{await stop();}
+});
+
+it('supports a verified browser account transfer without a bearer or token ID and preserves CSRF',async()=>{
+ const f=await fixture(),id=await f.make({markup:'<p>Browser</p>'});
+ const actor={credential:'session' as const,userId:f.creator.id,email:f.creator.email!,emailVerified:true};
+ const body={destination:{type:'group',id:'grp_ownership'}};
+ const response=await transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',actor,origin:'same',json:body}),{params:Promise.resolve({id})});expect(response.status,await response.clone().text()).toBe(200);
+ const denied=await transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',actor,origin:'https://other.example',json:{destination:{type:'personal'}}}),{params:Promise.resolve({id})});expect(denied.status).toBe(403);
+ expect((await getArtifactById(id))?.group_id).toBe('grp_ownership');
 });
