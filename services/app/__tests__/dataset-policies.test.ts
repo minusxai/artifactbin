@@ -3,16 +3,11 @@ import { createUser } from '@/lib/accounts';
 import { it, expect, vi } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
-import { artifactState } from '@/lib/artifacts';
+import { artifactState, getArtifactById, replaceArtifactFor, updateSharingFor } from '@/lib/artifacts';
+import { setAccessFor } from '@/lib/artifacts/sharing';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { GET as query } from '@/app/a/[id]/query/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
-import {
-  getArtifactById,
-  replaceArtifactFor,
-  setAccessFor,
-  updateSharingFor,
-} from '@/lib/artifacts';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

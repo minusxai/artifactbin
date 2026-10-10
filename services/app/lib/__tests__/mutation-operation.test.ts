@@ -1,5 +1,6 @@
 import {expect,it} from 'vitest';
-import {adaptMutationOperationReply,documentMutationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/artifacts';
+import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/artifacts';
+import { documentMutationReply } from '@/lib/artifacts/mutation-operation';
 it('adapts one domain outcome consistently without exposing its internal edit identity',()=>{
  const saved=documentMutationReply({datasetId:'data',datasetEditId:'edit',version:2,affected:0,rowCount:3,mutationRunId:'opaque-run'});
  expect(adaptMutationOperationReply(saved,'browser')).toEqual({status:200,body:{ok:true,dataset:'data',version:2,affected:0,rowCount:3,mutationRunId:'opaque-run'}});

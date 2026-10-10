@@ -46,10 +46,8 @@
  * rather than a cold start.
  */
 import { createHash } from 'node:crypto';
-import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
+import { type ArtifactRow, canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';
 import type { RoleActor, Viewer } from '@/lib/accounts/actors';
-import { dataflowForRow } from '@/lib/artifacts/dataflow';
-import { getArtifactById } from '@/lib/artifacts/store';
 import { getDb } from '@/lib/platform/db';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';

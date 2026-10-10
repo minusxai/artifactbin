@@ -13,7 +13,7 @@
  * Listeners are synchronous and own their failures (the after-commit contract): the warm-up queue swallows its
  * own, and the invalidation carries its own `.catch`.
  */
-import { onDatasetCommitted, onHeadCommitted } from '@/lib/artifacts/after-commit';
+import { onDatasetCommitted, onHeadCommitted } from '@/lib/artifacts';
 import { enableBackgroundRestyles, warmPreparedPage } from './prepared-page.server';
 import { snapshotStore } from './snapshots.server';
 

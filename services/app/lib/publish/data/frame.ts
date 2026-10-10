@@ -13,8 +13,7 @@ import { readerDataflow } from '@/lib/dataflow/compiled-dataflow';
  * Cached by (id, edit_id): a document with two hundred readers costs one
  * build per version, not one per connection.
  */
-import type { ArtifactRow } from '@/lib/artifacts';
-import { datasetsForDocument, declarationsForRow } from '@/lib/artifacts/dataflow';
+import { type ArtifactRow, datasetsForDocument, declarationsForRow, servableDocument } from '@/lib/artifacts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { authorHandle } from '@/lib/accounts/users';
@@ -24,7 +23,6 @@ import type { ArtifactLiveEvent } from '@/lib/story-runtime/contract';
 import { storyUpdateParts } from '../../document/update-parts';
 import { assetLookupFrom } from '../../document/asset-url';
 import { webAssetsForSource } from '../assets/web-assets';
-import { servableDocument } from '@/lib/artifacts/servable';
 import { firstHeadingTitle } from '../../document/title';
 
 interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {

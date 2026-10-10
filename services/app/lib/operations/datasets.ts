@@ -5,7 +5,7 @@ import {discoverPostgres,queryPostgres} from '@/lib/datasets/postgres';
 import {compileNotebookSql} from '@/lib/datasets/notebook';
 import {DatasetError} from '@/lib/datasets/errors';
 import type {DatasetCatalog,DatasetNotebook} from '@/lib/datasets/types';
-import { getArtifactFor } from '@/lib/artifacts/store';
+import { getArtifactFor } from '@/lib/artifacts';
 import {connectionShape,secretTargetShape} from '@/lib/datasets/input';
 const target=secretTargetShape;
 const connection=connectionShape;

@@ -1,7 +1,8 @@
 /** CI-only: exercise the actual allocator and claim transaction on pooled Postgres. */
 import assert from 'node:assert/strict';
 import {getDb} from '@/lib/platform';
-import {reserveIds,claimArtifactId} from '@/lib/artifacts';
+import { reserveIds } from '@/lib/artifacts';
+import { claimArtifactId } from '@/lib/artifacts/identities';
 const db=await getDb();
 try{
  assert.equal(db.raw().kind,'pg','This proof must never silently run on PGLite');

@@ -11,7 +11,8 @@ import { PATCH as patchMineRoute, PUT as putMineRoute } from '@/app/api/my/artif
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { getArtifactById, updateSharing } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
+import { updateSharing } from '@/lib/artifacts/sharing';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
