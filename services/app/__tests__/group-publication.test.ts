@@ -4,6 +4,7 @@ import {createUser} from '@/lib/accounts';
 import {createGroup,setGroupMember,removeGroupMember,setAccountPreferences} from '@/lib/groups';
 import {getDb} from '@/lib/platform/db';
 import {POST as publish} from '@/app/api/artifacts/route';
+import {POST as start} from '@/app/api/start/route';
 useAppHarness();
 async function account(name:string){
  const user=await createUser({email:`mxmx_test_group_publication_${name}@example.com`});
@@ -17,6 +18,19 @@ async function owner(id:string|undefined){
  const db=await getDb();return(await db.query('SELECT user_id,group_id,creator_user_id FROM artifacts WHERE id=$1',[id])).rows[0];
 }
 describe('publication uses shared account destination through the real HTTP handler',()=>{
+ it('refuses malformed explicit starter destinations instead of ignoring them',async()=>{
+  const a=await account('starter');
+  const response=await start(request('/api/start',{method:'POST',token:a.token,json:{destination:{type:'personal',id:'unexpected'}}}));
+  expect(response.status).toBe(400);
+ });
+ it('keeps an explicitly Personal starter personal even with a saved group default',async()=>{
+  const a=await account('starter');const group=await createGroup(a.user.id,{handle:'starter-group',name:'Starter group'});
+  await setAccountPreferences(a.user.id,{type:'group',id:group.id});
+  const grouped=await start(request('/api/start',{method:'POST',token:a.token}));
+  expect(grouped.status).toBe(201);expect(await owner((await grouped.json()).id)).toMatchObject({group_id:group.id});
+  const personal=await start(request('/api/start',{method:'POST',token:a.token,json:{destination:{type:'personal'}}}));
+  expect(personal.status).toBe(201);expect(await owner((await personal.json()).id)).toMatchObject({group_id:null,user_id:a.user.id});
+ });
  it('applies the saved group to new documents and permits explicit personal publication',async()=>{
   const a=await account('owner');const group=await createGroup(a.user.id,{handle:'publishing',name:'Publishing'});
   await setAccountPreferences(a.user.id,{type:'group',id:group.id});
