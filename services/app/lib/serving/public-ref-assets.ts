@@ -1,5 +1,4 @@
-import { canReadArtifact } from '@/lib/artifacts/access';
-import { getArtifactById } from '@/lib/artifacts/store';
+import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/platform/ids';
 import type { WebAssetKind } from '@/lib/publish/assets/web-assets';
 import { serveStoredFile } from '@/lib/datasets/file-store';

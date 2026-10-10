@@ -8,7 +8,7 @@
 import type { Hono } from 'hono';
 import { emit } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
-import { UnservableDocument } from '@/lib/artifacts/servable';
+import { UnservableDocument } from '@/lib/artifacts';
 import { ROUTES, type RouteEntry } from './routes.generated';
 
 type Handler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response> | Response;

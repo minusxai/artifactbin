@@ -59,11 +59,6 @@ const ISLANDS_BROWSER_LEAVES = [
  * from anywhere; a browser leaf is a path only browser-bundled code imported, allowed only from that
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
-const ARTIFACTS_ENTRIES = [
-  '', 'access', 'archived-version', 'asset-quota', 'dataflow', 'dataset-policy/http', 'document', 'feedback-images', 'file-upload-http',
-  'membership/membership', 'mutation-operation', 'mutation-receipt', 'notification-authority', 'notification-query', 'placement',
-  'read-access', 'servable', 'store', 'wire',
-];
 const STORY_RUNTIME_ENTRIES = [
   'authenticated-transport', 'chrome-css', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',
   'page-bindings', 'preview-props', 'reader-mode', 'script-mount', 'slides', 'store', 'story-fragment',
@@ -134,7 +129,7 @@ const ACCOUNTS_ENTRIES = ['', 'tokens'];
  */
 const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/artifacts': { entries: ARTIFACTS_ENTRIES },
+  'lib/artifacts': { entries: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/dataflow': { entries: DATAFLOW_ENTRIES, browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES },

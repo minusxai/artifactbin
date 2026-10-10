@@ -1,10 +1,9 @@
 import { sessionActor, refusesCrossSite } from '@/lib/accounts';
 import { DatasetError } from '@/lib/datasets/errors';
-import { uploadDatasetImage } from '@/lib/artifacts/feedback-images';
+import { canReadArtifact, getArtifactById, uploadDatasetImage } from '@/lib/artifacts';
 import { MAX_IMAGE_BYTES } from '@/lib/platform/config';
 import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 
 const headers={'Cache-Control':'no-store','Vary':'Origin'};
 export async function POST(request:Request,ctx:{params:Promise<{id:string;datasetId:string}>}) {

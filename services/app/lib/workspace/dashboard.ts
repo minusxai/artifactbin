@@ -7,7 +7,7 @@
  */
 import { forkCountByUser, likeSummaryByUser, VIEW_SERIES_DAYS, viewSeriesByUser } from './analytics';
 import { count } from '@/lib/accounts';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/access';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform/db';
 import type { SharedArtifactSummary } from './';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';

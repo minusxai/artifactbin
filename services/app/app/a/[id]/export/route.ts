@@ -2,8 +2,7 @@
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/platform';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
-import { refusingUnservable } from '@/lib/artifacts/servable';
-import { canReadArtifact, getArtifactById, roleFor } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, refusingUnservable, roleFor } from '@/lib/artifacts';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { exportImageResponse } from '@/lib/export';
 import { baseUrl, json } from '@/lib/http';

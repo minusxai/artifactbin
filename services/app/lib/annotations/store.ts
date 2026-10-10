@@ -1,15 +1,15 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
-import {artifactQuery} from '@/lib/artifacts/document';
+import {artifactQuery} from '@/lib/artifacts';
 import {recordEvent} from '../notifications/events';
 import {commentMentions} from './saved-mentions';
-import {MembershipError} from '@/lib/artifacts/membership/membership';
+import {MembershipError} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from '../remote/agents';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
 import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern } from '@artifactbin/contracts';
-import {completeMutationReceipt,type MutationReceipt} from '../artifacts/mutation-receipt';
+import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts';
 import type { CommentTarget } from '@/lib/story-ui/comment-target';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
@@ -24,7 +24,7 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts/access';
+import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
 import type { TokenActor } from '@/lib/accounts';
 import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/document/anchors';
 import { avatarUrl } from '@/lib/accounts';

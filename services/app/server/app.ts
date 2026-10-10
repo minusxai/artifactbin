@@ -1,5 +1,5 @@
 import { artifactAppPath } from '@/lib/serving';
-import { UnservableDocument } from '@/lib/artifacts/servable';
+import { type ArtifactRow, canReadArtifact, getArtifactById, roleFor, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
 import { loginRedirectTarget } from '@/lib/http';
 /**
@@ -30,7 +30,6 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
-import { canReadArtifact, getArtifactById, roleFor } from '@/lib/artifacts';
 import { ID_RE, verifyExportKey } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
@@ -50,7 +49,6 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
-import type { ArtifactRow } from '@/lib/artifacts';
 import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/publish/prepared';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
