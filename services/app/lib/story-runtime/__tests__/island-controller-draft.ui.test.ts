@@ -52,6 +52,10 @@ const editSession = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () => editSession.session }));
 vi.mock('@/lib/story-runtime/edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
+const selectionActions = vi.hoisted(() => ({ nodes: [] as unknown[][] }));
+vi.mock('@/lib/story-runtime/edit/selection-actions', () => ({
+  createFrameSelectionActions: () => ({ update() {}, setNodes: (nodes: unknown[]) => { selectionActions.nodes.push(nodes); }, dispose() {} }),
+}));
 
 import { createIslandController, holdChartDrawings } from '@/lib/islands/island-controller';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
@@ -635,5 +639,43 @@ describe('island controller: the editor opens on the document on screen', () => 
     await settle(() => editSession.mounts > mounts);
     expect(editSession.nodes).toBe(served);
     controller.dispose();
+  });
+
+  it('classifies selections against a drawn version\'s own nodes from the task it lands in, and the page\'s only when none came', async () => {
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    document.body.append(root);
+    document.body.setAttribute(LIVE_EDIT_ATTR, 'e1');
+    const nodes = (tag: string) => [{ type: 'element', tag, attributes: [], children: [], isComponent: false }] as never[];
+    const [v1, v2, stale, v3] = [nodes('h1'), nodes('h2'), nodes('h6'), nodes('h3')];
+    const controller = createIslandController({
+      win: window, root, islands: null, nodes: v1, id: 'doc', editId: () => 'e1', initialSource: () => null, portal: { current: document.createElement('div') },
+    });
+    selectionActions.nodes.length = 0;
+    controller.send({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await settle(() => selectionActions.nodes.length > 0);
+    expect(selectionActions.nodes.at(-1)).toBe(v1);
+
+    // The morph (lib/islands/morph/engine) announces the version it drew, with its own nodes: taken at once.
+    document.body.setAttribute(LIVE_EDIT_ATTR, 'e2');
+    document.dispatchEvent(new CustomEvent('mx:version-drawn', { detail: { editId: 'e2', nodes: v2 } }));
+    expect(selectionActions.nodes.at(-1), 'in the same task as the new DOM').toBe(v2);
+    // The page's copy of a version, arriving after: the drawn version's own nodes stand.
+    liveUpdate.updateCompiledStory.mockClear();
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: stale });
+    await settle(() => liveUpdate.updateCompiledStory.mock.calls.length > 0);
+    await tick(); await tick();
+    expect(selectionActions.nodes.at(-1)).toBe(v2);
+    // An announcement for a version that is not the one shown is not believed.
+    document.dispatchEvent(new CustomEvent('mx:version-drawn', { detail: { editId: 'e9', nodes: stale } }));
+    expect(selectionActions.nodes.at(-1)).toBe(v2);
+
+    // A version shown with no nodes of its own (a fragment that carried none): the page's nodes fill in.
+    document.body.setAttribute(LIVE_EDIT_ATTR, 'e3');
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: v3 });
+    await settle(() => selectionActions.nodes.at(-1) === v3);
+    expect(selectionActions.nodes.at(-1)).toBe(v3);
+    controller.dispose();
+    document.body.removeAttribute(LIVE_EDIT_ATTR);
   });
 });

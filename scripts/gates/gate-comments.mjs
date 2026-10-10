@@ -429,7 +429,8 @@ async function ownerLeg(browser, { id, token }) {
     const loginAddress = new URL(stranger.url());
     check(loginAddress.pathname === '/login' && loginAddress.searchParams.get('callbackUrl')?.includes('intent=comment'),
       'a logged-out right-click Comment opens login with the return intent');
-    check(await stranger.getByRole('textbox', { name: 'Email', exact: true }).isVisible().catch(() => false),
+    // The login page is at its address before its form has drawn: wait for the form, as a person would.
+    check(await stranger.getByRole('textbox', { name: 'Email', exact: true }).waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false),
       'guest commenting requires email sign-in');
     await strangerCtx.close();
     await owner.close();
@@ -826,8 +827,13 @@ async function liveSelectionLeg(browser, { id, token }) {
       selection.removeAllRanges(); selection.addRange(range);
       document.querySelector('#live-intro').dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     });
-    /** Select the words until the bubble offers Comment (the version's nodes may still be on their way). */
-    const bubble = () => until(async () => { await select(); return commentButton.isVisible(); }, (shown) => shown === true, 10000);
+    /** Select the words ONCE: the bubble must offer Comment for that selection (`write` has already waited for the nodes). */
+    const bubble = async () => { await select(); return commentButton.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false); };
+    // The explicit signal that a version AND its own nodes reached the document: the morph announces both in one task
+    // (lib/islands/morph/engine STORY_VERSION_DRAWN_EVENT), after the document's controller took them.
+    await raw.evaluate(() => document.addEventListener('mx:version-drawn', (event) => {
+      window.__gateDrawn = { editId: event.detail?.editId ?? null, nodes: Array.isArray(event.detail?.nodes) };
+    }));
     const rightClickPrevented = async () => {
       await raw.evaluate(() => window.addEventListener('contextmenu', (event) => {
         window.__gateLiveMenuPrevented = event.defaultPrevented;
@@ -844,7 +850,9 @@ async function liveSelectionLeg(browser, { id, token }) {
         body: JSON.stringify({ markup: liveSelectionDoc(n) }),
       });
       if (!put.ok) throw new Error(`version ${n} failed (${put.status}): ${await put.text()}`);
-      await until(shown, (now) => !!now && now !== before, 15000);
+      const drawn = await until(() => raw.evaluate(() => ({ shown: document.body.getAttribute('data-mx-live-edit'), drawn: window.__gateDrawn ?? null })),
+        (now) => !!now?.shown && now.shown !== before && now.drawn?.editId === now.shown && now.drawn.nodes === true, 20000);
+      if (!(drawn?.drawn?.editId === drawn?.shown && drawn?.drawn?.nodes)) throw new Error(`version ${n} was not drawn with its own nodes (${JSON.stringify(drawn)})`);
       await frame.locator(`#inserted-${n}`).waitFor();
     };
 
@@ -865,7 +873,9 @@ async function liveSelectionLeg(browser, { id, token }) {
     // A version lands while the bubble is open: its Comment names the paragraph where it is now, with the same words.
     check(await bubble(), 'live selection: the bubble is open before the next version');
     await write(4);
-    await until(() => commentButton.isVisible(), (visible) => visible === true, 5000);
+    const stillOpen = await commentButton.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false);
+    check(stillOpen, 'live selection: a bubble open when a version lands is still offered for the same words once its nodes arrive');
+    if (!stillOpen) return;
     await commentButton.click();
     await page.getByLabel('Annotation comment', { exact: true }).fill('Still the same words');
     await page.getByLabel('Save annotation', { exact: true }).click();

@@ -50,10 +50,12 @@ interface Served {
   /** The column wrapper's id (a whole-document write can mint it anew). */
   wrapper?: string;
   moduleData?: unknown[];
+  /** The version's source nodes, as the story fragment carries them (STORY_NODES_ID). */
+  nodes?: unknown[];
 }
 
 /** A compiled page as the assembler writes it (the parts the morph reads). */
-function served({ edit, lede = 'the first version', extra = '', islands = [['s0-', 'A', 'A'], ['s1-', 'B', 'B']], module = '/islands/d/aaaaaaaaaaaaaaaa.js', boot: bootUrl = '/islands/boot-1111.js', mode = 'light', sheets = { 'data-mx-tw': '.p-10{padding:2.5rem}' }, title = 'Live', region = 'All', wrapper = 'w', moduleData }: Served): string {
+function served({ edit, lede = 'the first version', extra = '', islands = [['s0-', 'A', 'A'], ['s1-', 'B', 'B']], module = '/islands/d/aaaaaaaaaaaaaaaa.js', boot: bootUrl = '/islands/boot-1111.js', mode = 'light', sheets = { 'data-mx-tw': '.p-10{padding:2.5rem}' }, title = 'Live', region = 'All', wrapper = 'w', moduleData, nodes }: Served): string {
   const islandHtml = islands.map(([rid, id, label]) => `<div data-hk="${rid}0000" id="${id}" data-mx-ast="2.${id}"><b>${label}:${region}</b></div>`).join('');
   return `<!doctype html><html class="${mode}"><head><title>${title}</title>`
     + (module ? `<link rel="modulepreload" href="${module}" crossorigin><link rel="modulepreload" href="${bootUrl}" crossorigin>` : '')
@@ -64,6 +66,7 @@ function served({ edit, lede = 'the first version', extra = '', islands = [['s0-
     + `<h1 id="h" data-mx-ast="0.0">Live</h1><p id="lede" data-mx-ast="0.1">${lede}</p>${extra}<section id="s" data-mx-ast="0.2">${islandHtml}</section><p id="tail" data-mx-ast="0.3">tail</p>`
     + '</div></div></div>'
     + (module ? `<script type="application/json" id="mx-story-data">${JSON.stringify({ values: { region }, results: null, signedIn: false, mermaidImages: {}, readOnly: null, edit, ...(moduleData ? { moduleData } : {}) })}</script><script type="module" src="/islands/page-1.js" crossorigin></script><script type="module" src="${module}" crossorigin></script>` : '<script type="module" src="/islands/page-1.js" crossorigin></script>')
+    + (nodes ? `<script type="application/json" id="mx-story-nodes">${JSON.stringify(nodes)}</script>` : '')
     + '</body></html>';
 }
 
@@ -184,6 +187,28 @@ describe('the live morph', () => {
     const again = answer(served({ edit: 'e3', lede: 'third' }));
     await morphStory(window, { fetch: again, importModule: vi.fn() });
     expect(again).toHaveBeenCalledWith('/a/doc1/story?surface=app', expect.anything());
+  });
+  it('hands the drawn version\'s own nodes to the page in the same task the new DOM lands, and nothing when the fragment has none', async () => {
+    // Selections and comments are classified against these nodes: a task between the new DOM and its nodes is a
+    // window where a selection describes nothing (no bubble, the browser's menu on a right-click).
+    load(served({ edit: 'e1' }));
+    start();
+    const nodes = [{ type: 'element', tag: 'p', attributes: [], children: [], isComponent: false }];
+    const seen: Array<{ editId: unknown; nodes: unknown; lede: string | null; shown: string | null }> = [];
+    const listen = (event: Event) => {
+      const detail = (event as CustomEvent<{ editId: unknown; nodes: unknown }>).detail;
+      seen.push({ editId: detail.editId, nodes: detail.nodes, lede: $('lede')?.textContent ?? null, shown: document.body.getAttribute('data-mx-live-edit') });
+    };
+    document.addEventListener('mx:version-drawn', listen);
+    try {
+      await morph(window, { fetch: answer(served({ edit: 'e2', lede: 'second', nodes })), importModule: vi.fn() });
+      expect(seen).toEqual([{ editId: 'e2', nodes, lede: 'second', shown: 'e2' }]);
+      // A version the page already shows draws nothing, so it announces nothing.
+      await morph(window, { fetch: answer(served({ edit: 'e2', lede: 'second', nodes })), importModule: vi.fn() });
+      expect(seen.length).toBe(1);
+      await morph(window, { fetch: answer(served({ edit: 'e3', lede: 'third' })), importModule: vi.fn() });
+      expect(seen[1]).toEqual({ editId: 'e3', nodes: null, lede: 'third', shown: 'e3' });
+    } finally { document.removeEventListener('mx:version-drawn', listen); }
   });
   it('a static edit: every node keeps its identity, the text changes in place, the islands keep running', async () => {
     load(served({ edit: 'e1' }));

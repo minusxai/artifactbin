@@ -26,7 +26,7 @@ import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
 import {
   STORY_ANNOTATIONS_MESSAGE, type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE,
   STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECT_MESSAGE, isEditParentMessage,
-  STORY_EDIT_MODE_MESSAGE,
+  STORY_EDIT_MODE_MESSAGE, STORY_VERSION_DRAWN_EVENT,
 } from '@/lib/story-runtime/contract';
 
 type Movable = HTMLElement & { moveBefore?: (node: Node, child: Node | null) => void };
@@ -157,6 +157,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const shownVersion = () => win.document.body?.getAttribute(LIVE_EDIT_ATTR) ?? null;
   let nodesVersion = shownVersion();
   const nodesDescribeShown = () => { nodesVersion = shownVersion(); };
+  /** The version `nodes` are KNOWN to describe: one the morph drew and announced with its own nodes; null otherwise. */
+  let nodesDrawnFor: string | null = null;
   /** The reader's own mode, as the app last set it: a new version never stomps it. */
   let mode: 'light' | 'dark' | null = null;
   let disposed = false;
@@ -384,7 +386,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     disposeChangedDraftIslands(root, stableIds, stablePaths, keepTree);
     morphDraftDom(root, pending.root, stableIds, stablePaths, keptEditors);
     await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors, keepTree);
-    nodes = pending.nodes;
+    nodes = pending.nodes; nodesDrawnFor = null;
     nodesDescribeShown();
     lastDrawn = after;
     shown = { module: versionModuleUrl(pending.document), source: pending.source };
@@ -421,7 +423,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     const before = lastDrawn ?? (shownSource ? parse(shownSource)?.nodes : undefined) ?? nodes;
     if (!edit.reconcileDraft(before, after, next, null, { sync: edit.canApplyDraft(), beforeSource: shownSource ?? undefined, afterSource })) return false;
     shownSource = afterSource;
-    nodes = next;
+    nodes = next; nodesDrawnFor = null;
     nodesDescribeShown();
     lastDrawn = after;
     edit.setNodes(nodes);
@@ -477,7 +479,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
       // chart is re-hydrated and none redraws.
       const alreadyShown = !!shown && shown.source !== null && shown.source === restoreSource && !!shown.module === !!versionModuleUrl(next);
       if (alreadyShown) {
-        if (nextNodes) nodes = nextNodes;
+        if (nextNodes) { nodes = nextNodes; nodesDrawnFor = null; }
         annotate?.setNodes(nodes);
         selection?.setNodes(nodes);
       } else {
@@ -508,6 +510,21 @@ export function createIslandController({ win, root, islands, nodes: served, port
       wait.reject(error);
     });
   };
+  /**
+   * A version drawn in place (lib/islands/morph/engine, whoever asked for it — this document's own live stream or the
+   * page's update below) announces its own nodes in the task it lands: selections and comments take them there, so
+   * none is ever classified against another version's. An announcement for a version not on screen is not believed.
+   */
+  const onVersionDrawn = (event: Event) => {
+    const detail = (event as CustomEvent<{ editId?: unknown; nodes?: unknown }>).detail;
+    if (disposed || !detail || !Array.isArray(detail.nodes) || typeof detail.editId !== 'string' || detail.editId !== shownVersion()) return;
+    nodes = detail.nodes as JsxNode[];
+    nodesDrawnFor = detail.editId;
+    nodesDescribeShown();
+    annotate?.setNodes(nodes);
+    selection?.setNodes(nodes);
+  };
+  win.document.addEventListener(STORY_VERSION_DRAWN_EVENT, onVersionDrawn);
   const onFocusOut = () => { queueMicrotask(() => { void applyDraft(); }); };
   win.document.addEventListener('focusout', onFocusOut, true);
   const onInput = () => { lastInputAt = win.performance.now(); };
@@ -572,7 +589,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
           const baseline = initialSource();
           const current = stale && parts && assets && baseline !== null ? parts.storyUpdatePartsShared(baseline, assets.isWebUrl) : null;
           if (current) {
-            nodes = current.nodes;
+            nodes = current.nodes; nodesDrawnFor = null;
             nodesDescribeShown();
             annotate?.setNodes(nodes);
             selection?.setNodes(nodes);
@@ -684,11 +701,11 @@ export function createIslandController({ win, root, islands, nodes: served, port
         restoreRead(command.nodes);
         return;
       }
-      // The version's source nodes, for the comments and selections classified against them — re-stamped
-      // once the morph has drawn the version they describe.
-      if (command.nodes) nodes = command.nodes;
+      // The morph announces the version it draws with that version's own nodes (onVersionDrawn). The page's copy
+      // fills in only when the version on screen came with none of its own — never over the nodes it did bring.
       void updateCompiledStory(win, { mode: () => mode, adopted }).then(() => {
-        if (disposed) return;
+        if (disposed || !command.nodes || nodesDrawnFor === shownVersion()) return;
+        nodes = command.nodes; nodesDrawnFor = null;
         nodesDescribeShown();
         annotate?.setNodes(nodes);
         selection?.setNodes(nodes);
@@ -711,6 +728,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
       edit?.dispose(); edit = null;
       if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer);
       win.document.removeEventListener('focusout', onFocusOut, true);
+      win.document.removeEventListener(STORY_VERSION_DRAWN_EVENT, onVersionDrawn);
       for (const type of ['beforeinput', 'input', 'compositionupdate'] as const) root.removeEventListener(type, onInput, true);
       nextCompile = null;
     },

@@ -46,6 +46,8 @@ import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
 import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
 import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/contract';
 import type { StorySurface } from '@/lib/story-runtime/story-fragment';
+import { STORY_NODES_ID } from '@/lib/story-runtime/contract';
+import { scriptJson } from '@artifactbin/utils/escape';
 import { compiledPageFor, domainFooter } from '@/lib/publish/prepared';
 import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';
 import { cspExtensionsFor } from '@/lib/trust/document-trust';
@@ -389,7 +391,10 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
             // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
             ...(pages ? { carried: pages.carried ?? null } : { request }),
           });
-          return new Response(answer.html, {
+          // A fragment carries its version's own source nodes: the morph hands them to the document's selections and
+          // comments in the task it draws the version, so neither is ever classified against another version.
+          const html = fragment ? withVersionNodes(answer.html, prepared.page.data.nodes) : answer.html;
+          return new Response(html, {
             status: 200,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
@@ -440,4 +445,11 @@ export async function HEAD(request: Request, ctx: { params: Promise<{ id: string
   // Cancel rather than leak: an unread stream holds its file handle open.
   await res.body?.cancel().catch(() => {});
   return new Response(null, { status: res.status, headers: new Headers(res.headers) });
+}
+
+/** The fragment's version nodes (STORY_NODES_ID), as inert JSON at the end of its body. */
+function withVersionNodes(html: string, nodes: unknown): string {
+  const script = `<script type="application/json" id="${STORY_NODES_ID}">${scriptJson(nodes)}</script>`;
+  const end = html.lastIndexOf('</body>');
+  return end === -1 ? html + script : html.slice(0, end) + script + html.slice(end);
 }
