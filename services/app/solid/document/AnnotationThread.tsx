@@ -17,15 +17,14 @@ import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
+import { remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
 import { Tooltip } from '../components/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
 import { AuthorIdentity, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
+import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
-import { CommentSubmitHint } from './CommentMarkdown';
-import { CommentMarkdownField } from './LazyCommentField';
 import { CommentScreenshot } from './CommentScreenshot';
 
 const threadClass = 'rounded-[6px] border border-edge bg-comment text-sm';
@@ -88,8 +87,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   });
 
   const [reply, setReply] = createSignal('');
-  let sending = false;
-  const [replyError, setReplyError] = createSignal('');
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
@@ -99,17 +96,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     return props.canDeleteAny === true
       || (userId !== undefined && userId !== null && comment.author.user_id === userId)
       || props.backend.canDeleteLocalAnnotation?.(comment.id) === true;
-  };
-
-  // ONE send for the button and for ⌘↵ — the field owns the key, the thread owns whether there is anything to send.
-  const sendReply = async () => {
-    if (props.busy || sending || !hasReplyText(reply())) return;
-    sending = true; setReplyError('');
-    try {
-      if (!await props.onReply(reply())) throw new Error('Could not send reply. Your draft is saved here.');
-      setReply('');
-    } catch { setReplyError('Could not send reply. Your draft is saved here.'); }
-    finally { sending = false; }
   };
 
   createEffect(() => {
@@ -271,18 +257,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       </Show>
       <Show when={props.open && !props.resolved}>
         <div class="border-t border-edge bg-raised p-3">
-          <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
-            label="Reply to annotation" quickAgents
-            value={reply()} onChange={setReply} onSubmit={() => void sendReply()}
-             rows={3} />
-          <Show when={replyError()}><p role="alert" class="text-xs text-red-500">{replyError()}</p></Show>
-          <div class="flex items-center justify-end gap-2">
-            <CommentSubmitHint action="reply" />
-            <button type="button" aria-label="Cancel reply" onClick={() => { setReply(''); props.onOpen(); }}
-              class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>
-            <button type="button" aria-label="Send reply" disabled={props.busy || !hasReplyText(reply())} onClick={() => void sendReply()}
-              class="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40">reply</button>
-          </div>
+          <AnnotationReplyBox backend={props.backend} artifactId={props.artifactId} busy={props.busy}
+            value={reply()} onChange={setReply} onSend={props.onReply}
+            actions={<button type="button" aria-label="Cancel reply" onClick={() => { setReply(''); props.onOpen(); }}
+              class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>} />
         </div>
       </Show>
       <Show when={props.open && props.resolved}>

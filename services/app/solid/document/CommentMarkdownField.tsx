@@ -45,6 +45,8 @@ export interface CommentMarkdownFieldProps {
   backend?: ArtifactBackend;
   artifactId?: string;
   quickAgents?: boolean;
+  /** Overrides the empty field's hint. */
+  placeholder?: string;
   /** Anything ABOVE the toolbar — the composer's breadcrumb, which says what is being commented on. */
   children?: JSX.Element;
 }
@@ -92,7 +94,7 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   const canMention = () => !props.backend || !(props.backend.unavailable('remoteSessions') && props.backend.unavailable('mentions'));
   const apply = (marker:MdMarker) => { if(marker==='link'){setLinkOpen(value=>!value);return;} editor?.format(marker); };
   onMount(() => {
-    const placeholder = canMention() ? 'Protip: Use @ to tag friends or agents' : 'Write a comment ...';
+    const placeholder = props.placeholder ?? (canMention() ? 'Protip: Use @ to tag friends or agents' : 'Write a comment ...');
     editor=mountCommentEditor(mount,{value:()=>props.value,label:props.label,placeholder,onChange:props.onChange,
       onMention:query=>setMention(canMention()&&props.backend?query:null),
       onKey:event=>{
