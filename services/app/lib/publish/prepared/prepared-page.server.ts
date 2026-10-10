@@ -32,7 +32,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getDb } from '@/lib/platform/db';
 import { archivedReadOnly, type ArchivedRender, artifactQuery, type ArtifactRow, declarationsForRow, holdableImports, LIVE_ARTIFACT_SQL, refDataForRow, savedMentionStates, servedRow, viewerIdentityFor } from '@/lib/artifacts';
-import type { Viewer, RoleActor } from '@/lib/accounts/actors';
+import type { Viewer, RoleActor } from '@/lib/accounts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';

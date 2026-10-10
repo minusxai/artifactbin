@@ -16,7 +16,7 @@ import { readerDataflow } from '@/lib/dataflow/compiled-dataflow';
 import { type ArtifactRow, datasetsForDocument, declarationsForRow, servableDocument } from '@/lib/artifacts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { authorHandle } from '@/lib/accounts/users';
+import { authorHandle } from '@/lib/accounts';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import type { ArtifactLiveEvent } from '@/lib/story-runtime/contract';

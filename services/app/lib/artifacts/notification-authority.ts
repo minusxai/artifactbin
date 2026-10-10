@@ -4,7 +4,7 @@ import {hasExplicitNotificationMembership} from '@/lib/notifications/membership'
 import {grantsOf,grantsPermitRead,readThrough} from '@/lib/artifacts/dataset-policy/grants';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import type { ArtifactRow } from './access';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import {hasDocumentEditorAccess} from './document-policy';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {PUBLIC_BASE_URL} from '@/lib/platform/config';

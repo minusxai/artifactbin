@@ -1,5 +1,5 @@
 import type {Queryable} from '@artifactbin/contracts';
-import type {RoleActor} from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import type {ArtifactRow} from '../access';
 import {invitePeople} from './membership';
 import {isPersonMentionHref} from '@/lib/document/person-mentions';

@@ -40,4 +40,4 @@ export { renderSocialPreviewImage } from '../publish/assets/social-preview-image
 export { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } from '../platform/config';
 export { setServices } from '../platform/services';
 export type { Db } from '../platform/db';
-export { canAuthenticateUser } from '../accounts/user-kinds';
+export { canAuthenticateUser } from '../accounts';

@@ -25,9 +25,9 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
 import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts/access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/document/anchors';
-import { avatarUrl } from '@/lib/accounts/avatars';
+import { avatarUrl } from '@/lib/accounts';
 import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
 import { generateInternalId } from '@/lib/platform/ids';

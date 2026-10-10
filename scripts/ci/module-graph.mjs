@@ -123,12 +123,8 @@ const COMPILED_PAGE_BROWSER_LEAVES = ['agent-discovery', 'carriers', 'story-elem
 /** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
 const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
 const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];
-const ACCOUNTS_ENTRIES = [
-  '', 'actors', 'agent-session', 'auth', 'avatars', 'guest-owner', 'membership-lock', 'pages-sessions', 'relation-state', 'relations',
-  'request-authority', 'session', 'testuser-sessions', 'testusers', 'tokens', 'user-kinds', 'users', 'viewer',
-];
-const ACCOUNTS_BROWSER_IMPORTERS = ['services/app/solid/'];
-const ACCOUNTS_BROWSER_LEAVES = ['browser-session', 'chrome-identity', 'profile-social'];
+/** lib/accounts: its index, and tokens, which a downstream deployment imports by path (__tests__/downstream-exports.test.ts). */
+const ACCOUNTS_ENTRIES = ['', 'tokens'];
 /**
  * Rule 4's table: module id (as moduleOf names it, under services/app/lib) → `entries` (paths under the
  * module directory without extension; `''` is the index), and optionally `browserImporters` (path
@@ -144,7 +140,7 @@ const DEEP_MODULES = {
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES },
   'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
-  'lib/accounts': { entries: ACCOUNTS_ENTRIES, browserImporters: ACCOUNTS_BROWSER_IMPORTERS, browserLeaves: ACCOUNTS_BROWSER_LEAVES },
+  'lib/accounts': { entries: ACCOUNTS_ENTRIES },
 };
 /**
  * Rule 5's entries, one per CLI bundle: `index` (the afbin process), `host.server` (its packaged

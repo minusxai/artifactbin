@@ -9,7 +9,7 @@ import type {
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { getDb } from '@/lib/platform/db';
 import { editorScope, canWriteDataset, writerFor, canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
-import type { TokenActor, RoleActor } from '@/lib/accounts/actors';
+import type { TokenActor, RoleActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor } from '@/lib/artifacts/store';
 import { catalogOf } from '@/lib/datasets/catalog';
 

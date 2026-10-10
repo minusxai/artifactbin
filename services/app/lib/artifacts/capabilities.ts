@@ -31,7 +31,7 @@ import { json } from '../http/http';
 import { canRead, canEdit } from '@artifactbin/contracts';
 import { effectiveRole, ownsArtifact, type ArtifactRow } from './access';
 import { getArtifactById } from './store';
-import { userKindOf } from '../accounts/user-kinds';
+import { userKindOf } from '../accounts';
 
 /** Who is acting: the ids a request already carries, nothing more. */
 export interface CapabilityActor {

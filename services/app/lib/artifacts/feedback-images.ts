@@ -2,7 +2,7 @@ import { getDb } from '@/lib/platform/db';
 import { generateInternalId, ID_RE } from '@/lib/platform';
 import type { ArtifactRow } from './access';
 import { getArtifactById } from './store';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { dataflowForRow } from '@/lib/artifacts/dataflow';
 import { catalogOf } from '@/lib/datasets/catalog';

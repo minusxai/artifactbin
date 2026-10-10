@@ -2,7 +2,7 @@ import {createCipheriv,createDecipheriv,createHash,randomBytes} from 'node:crypt
 import {AUTH_SECRET} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import type {Queryable} from '@artifactbin/contracts';
-import type { TokenActor, RoleActor } from '@/lib/accounts/actors';
+import type { TokenActor, RoleActor } from '@/lib/accounts';
 import type {DatasetConnection,PostgresConfig} from './types';
 import {DatasetError} from './errors';
 

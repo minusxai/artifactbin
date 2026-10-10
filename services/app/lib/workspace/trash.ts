@@ -21,7 +21,7 @@
  */
 import { trackEvent } from '@/lib/platform/analytics';
 import { LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifacts/access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform/db';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { servableDocument } from '@/lib/artifacts/servable';

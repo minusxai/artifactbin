@@ -6,7 +6,7 @@
  * TESTUSER_OPERATIONS halfway through that cycle.
  */
 import { TESTUSER_LIMITS } from '@artifactbin/contracts';
-import { closeTestUserSessions, testUserSessionCount } from '@/lib/accounts/testuser-sessions';
+import { closeTestUserSessions, testUserSessionCount } from '@/lib/accounts';
 import { eraseMutationNotifications, lockMutationNotificationAuthority } from '@/lib/notifications/mutation-notifications';
 import { expireCommentImagesFor, sweepCommentImages } from '@/lib/annotations/comment-images';
 import { objectStore } from '@/lib/object-store';

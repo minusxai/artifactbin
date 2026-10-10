@@ -6,7 +6,7 @@
  * and travel unchanged to either page.
  */
 import { forkCountByUser, likeSummaryByUser, VIEW_SERIES_DAYS, viewSeriesByUser } from './analytics';
-import { count } from '@/lib/accounts/relations';
+import { count } from '@/lib/accounts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/access';
 import { getDb } from '@/lib/platform/db';
 import type { SharedArtifactSummary } from './';

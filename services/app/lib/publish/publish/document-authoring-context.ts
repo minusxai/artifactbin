@@ -6,7 +6,7 @@ import {retainUserScope} from '@/lib/datasets/user-fields';
 import {MAX_DOCUMENT_BYTES,type DocumentResourcePreparation} from '@artifactbin/contracts';
 import {getDb} from '@/lib/platform/db';
 import { editorScope, refLoaderForActor } from '@/lib/artifacts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {json} from '@/lib/http/http';
 import {prepareJsx} from '../document/jsx-tier';
 export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{

@@ -9,7 +9,7 @@
  */
 import { applyEditFor, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, respondToEdit, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import { parseAnnotationOperations } from '@/lib/document/annotation-edits';
 import { normalizeNodeIds } from '@/lib/document/node-ids';
 import { collectExternalAssetUrls } from '@/lib/document/external-images';

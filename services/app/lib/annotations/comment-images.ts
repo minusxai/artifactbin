@@ -2,7 +2,7 @@
 import sharp from 'sharp';
 import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentImageWire} from '../../../contracts/src/comment-image';
 import { annotationScope } from '../artifacts/access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {getDb,type Queryable} from '../platform/db';
 import {objectStore} from '../object-store/index';
 import {generateInternalId} from '../platform/ids';

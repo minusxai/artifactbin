@@ -6,7 +6,7 @@
 import { getDb } from '@/lib/platform/db';
 import { canRead } from '@artifactbin/contracts';
 import { effectiveRole, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts/access';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { RoleActor } from '@/lib/accounts';
 import { selectChildren, type Viewer } from '@/lib/artifacts/placement';
 import type { ShelfRow } from './shelf';
 

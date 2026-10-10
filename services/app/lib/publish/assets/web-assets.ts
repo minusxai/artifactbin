@@ -30,10 +30,10 @@ import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
 import { assetUrlFor, canonicalAssetUrl, urlHash } from '@/lib/document/asset-url';
-import { docAssetImportRateLimited } from '@/lib/accounts/auth';
+import { docAssetImportRateLimited } from '@/lib/accounts';
 import { collectExternalAssetUrls } from '@/lib/document/external-images';
 import { assetByteQuotaExceeded } from '@/lib/artifacts';
-import { webIngestRateLimited } from '@/lib/accounts/auth';
+import { webIngestRateLimited } from '@/lib/accounts';
 
 /** What kind of asset a caller expects the URL to hold — the sniff, the cap and the optimiser follow it. */
 export type WebAssetKind = 'image' | 'font' | 'pdf' | 'script' | 'binary';

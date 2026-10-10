@@ -2,7 +2,7 @@ import {artifactState} from './state';
 import {respondToEdit,artifactToWire,committedOpenAnnotations,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
 import { applyEditFor, getArtifactFor, getOwnedArtifactFor, isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
 import { writerFor } from './access';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { TokenActor } from '@/lib/accounts';
 import {resolveParent,isParentRefusal} from './placement';
 import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
 import {json} from '../http/http';

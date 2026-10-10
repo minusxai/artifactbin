@@ -30,20 +30,19 @@ import { verifyExportKey } from '@/lib/platform/export-read-key';
 import { baseUrl, json } from '@/lib/http/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform/ids';
-import { count, has } from '@/lib/accounts/relations';
+import {
+  actorForArtifacts, avatarUrl, browserSessionKind, count, getUserById, has, isBrowserSessionRequest,
+  issuePagesTicket, ownerUsername, sessionActor,
+} from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { ARTIFACT_FORMATS, type ArtifactFormat, canAnnotate, canEdit, CARD_RENDER_GENERATION, isStartPlaceholder } from '@artifactbin/contracts';
 import { canonicalArtifactPath } from '@/lib/http/urls';
-import { getUserById, ownerUsername } from '@/lib/accounts/users';
-import { avatarUrl } from '@/lib/accounts/avatars';
-import { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, sessionActor } from '@/lib/accounts/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/publish/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { firstHeadingTitle } from '@/lib/document/head';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { issuePagesTicket } from '@/lib/accounts/pages-sessions';
 import { pagesOriginFor, pagesSessionUrl, type PagesSite } from '../http/pages-origin';
 import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';

@@ -11,7 +11,6 @@ import path from 'node:path';
 import { developmentPagesHosts, developmentViteOptions } from './services/app/lib/runtime/dev-vite';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
-import { canAuthenticateUser } from './services/app/lib/accounts/user-kinds';
 import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/auth';
 
 async function main(): Promise<void> {
@@ -58,6 +57,7 @@ async function main(): Promise<void> {
     || (dev ? randomBytes(32).toString('base64url') : undefined);
 
   const { getDb } = await import('@/lib/platform/db');
+  const { canAuthenticateUser } = await import('@/lib/accounts');
   const { createAppServer } = await import('@/server/app');
 
   // An image built without an engine or a browser needs to be told where they
