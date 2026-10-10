@@ -7,7 +7,7 @@
  * island build records (StoryIslandData.sqliteWasm), cached `immutable`; the
  * offline file hands in a reader of its embedded bytes instead.
  */
-import type { PageCore } from '@/lib/story-runtime/page-engine';
+import type { PageCore } from '@/lib/story-runtime/data';
 
 /** Where the wasm comes from: a URL on this origin, or the bytes the page already carries (read on demand). */
 export type WasmSource = string | (() => Promise<Uint8Array>);

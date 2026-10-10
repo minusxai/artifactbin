@@ -11,7 +11,7 @@
  */
 import type { Scalar, TableResult } from '@/lib/dataflow/dataflow';
 import type { MutationRequest } from '@/lib/dataflow/mutation-request';
-import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/store';
+import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/data';
 import type { ServedResults, StoryViewer } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { ColumnType, PersonCard } from '@artifactbin/contracts';

@@ -5,7 +5,7 @@
  */
 import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import type { PageEngine } from '@/lib/story-runtime/page-engine';
+import type { PageEngine } from '@/lib/story-runtime/data';
 import type { IslandEntry, IslandModule } from './boot';
 
 /** Every shape a compiled module hands `boot`: a bare `ISLANDS` list, a one-tree `{ TREE, FLOW }`, or the full module. */

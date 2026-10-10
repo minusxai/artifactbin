@@ -59,32 +59,25 @@ const ISLANDS_BROWSER_LEAVES = [
  * from anywhere; a browser leaf is a path only browser-bundled code imported, allowed only from that
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
-const STORY_RUNTIME_ENTRIES = [
-  'authenticated-transport', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',
-  'page-bindings', 'reader-mode', 'script-mount', 'slides', 'store', 'story-fragment',
-];
+/*
+ * lib/story-runtime's doors: its index (server-only, the compile-time reader chrome), contract, story-fragment, data
+ * (server and single-bundle code, and type imports anywhere) and the four lazy edit/ chunks. Re-export entries grow
+ * the island chunks (measured in row 40.2: esbuild reaches every file an entry re-exports), so browser-bundled code
+ * imports values from the listed leaf files instead.
+ */
+const STORY_RUNTIME_ENTRIES = ['', 'contract', 'story-fragment', 'data', 'edit/annotate', 'edit/dom-mounter', 'edit/selection-actions', 'edit/session'];
 const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/web/',
+  'services/app/lib/islands/',
+  'services/app/lib/artifact-backend/http.ts',
   'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/islands/boot.ts',
-  'services/app/lib/islands/comment-state.ts',
-  'services/app/lib/islands/document-transport.ts',
-  'services/app/lib/islands/frame-bridge.ts',
-  'services/app/lib/islands/island-controller.ts',
-  'services/app/lib/islands/live-update.ts',
-  'services/app/lib/islands/module.ts',
-  'services/app/lib/islands/morph/engine.ts',
-  'services/app/lib/islands/page-runtime.ts',
-  'services/app/lib/islands/page-sqlite.ts',
-  'services/app/lib/islands/page.ts',
-  'services/app/lib/islands/sqlite-engine.ts',
-  'services/app/lib/offline/compiled-sqlite.ts',
-  'services/app/lib/offline/solid-entry.tsx',
+  'services/app/lib/page-styles/document-root.ts',
+  'services/app/lib/offline/compiled-boot.ts',
 ];
 const STORY_RUNTIME_BROWSER_LEAVES = [
-  'anchor', 'anchor-restore', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update', 'edit/dom-mounter', 'edit/session',
-  'fetch-transport', 'frame-bridge/parent', 'page-engine', 'pristine',
+  'anchor', 'anchor-restore', 'authenticated-transport', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update',
+  'fetch-transport', 'frame-bridge/parent', 'page-bindings', 'page-engine', 'reader-mode', 'store',
 ];
 const DATAFLOW_ENTRIES = [
   '', 'builtins', 'compile-dataflow', 'compiled-dataflow', 'compiled-flow', 'data-syntax', 'dataflow', 'dataset-shape', 'evaluate',

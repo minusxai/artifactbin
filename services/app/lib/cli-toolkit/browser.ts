@@ -25,7 +25,7 @@ export {
 } from '../story-runtime/contract';
 export type { StoryController, StoryDocumentUpdate } from '../story-runtime/contract';
 export { isStoryDocumentUpdate } from '../story-runtime/document-update';
-export type { RuntimeChannel } from '../story-runtime/pristine';
+export type { RuntimeChannel } from '../story-runtime/contract';
 export type { FrameEditSession } from '../story-runtime/edit/session';
 export type { FrameSelectionActions } from '../story-runtime/edit/selection-actions';
 export type { FrameAnnotateSession } from '../story-runtime/edit/annotate';

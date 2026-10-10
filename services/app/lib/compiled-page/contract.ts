@@ -23,7 +23,7 @@ import type { CompiledDataflow, CompiledReads } from '@/lib/dataflow/compiled-da
 import type { Scalar } from '@/lib/dataflow/dataflow';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { OutlineEntry } from '@/lib/story-runtime/outline';
+import type { OutlineEntry } from '@/lib/story-runtime';
 import type { DrawnChart, ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { AgentDiscovery } from './agent-discovery';

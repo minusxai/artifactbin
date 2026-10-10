@@ -10,6 +10,8 @@ import type { BlockEdit } from '@/lib/editor-engine/block-edit';
  */
 import type { AnnotationRange } from '@/lib/document/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
+// The pristine channel's shape (lib/story-runtime/pristine), for the frame's edit chunks and their loaders.
+export type { RuntimeChannel } from './pristine';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';

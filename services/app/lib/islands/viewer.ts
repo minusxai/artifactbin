@@ -27,7 +27,7 @@ import type { Scalar } from '@/lib/dataflow/dataflow';
 import { selectQueries } from '@/lib/dataflow/compiled-flow';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
 import type { ServedResults } from '@/lib/story-runtime/contract';
-import type { DataflowStore } from '@/lib/story-runtime/store';
+import type { DataflowStore } from '@/lib/story-runtime/data';
 import type { IslandContext, IslandPageData, IslandViewer } from './contract';
 import type { ViewerOverlay } from '@/lib/story-runtime/contract';
 

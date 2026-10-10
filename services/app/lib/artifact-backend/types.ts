@@ -22,7 +22,7 @@ import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphP
 import type { AnnotationWire } from '@/lib/annotations';
 import type { DataflowState } from '@/lib/dataflow/dataflow';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing, StoryIslandDataflow } from '@/lib/story-runtime/contract';
-import type { QueryTransport } from '@/lib/story-runtime/store';
+import type { QueryTransport } from '@/lib/story-runtime/data';
 import type { RemoteSessionInfo } from '../../../contracts/src/remote';
 
 /** Features a backend may not offer. Online, every one is available. */

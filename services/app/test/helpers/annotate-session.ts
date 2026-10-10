@@ -9,7 +9,7 @@
 import { vi } from 'vitest';
 import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import { STORY_ANNOTATION_LAYOUT_MESSAGE, type StoryAnnotationsMessage } from '@/lib/story-runtime/contract';
-import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
+import type { RuntimeChannel } from '@/lib/story-runtime/contract';
 
 export const NONCE = 'l'.repeat(32);
 export const PIN = { id: 'ann_1', path: '0', key: 'anchor_1' };

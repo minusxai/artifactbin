@@ -19,7 +19,7 @@
  * `post` the `$` params alone (lib/story-runtime/contract STORY_URL_VALUES_MESSAGE), which boot sends to the page.
  */
 import { readUrlValues, urlValueParams, writeUrlValues } from '@/lib/dataflow/url-values';
-import type { DataflowStore } from '@/lib/story-runtime/store';
+import type { DataflowStore } from '@/lib/story-runtime/data';
 
 /** ~150ms: long enough to swallow a drag, short enough that a click feels answered. */
 const URL_SYNC_DEBOUNCE_MS = 150;
