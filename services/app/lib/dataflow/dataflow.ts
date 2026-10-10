@@ -43,7 +43,7 @@ import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
  * it (`<Query source="ref:<id>">`).
  */
 export const IMPORT_TAG = 'Import';
-export const VALUE_TAG = 'Value';
+const VALUE_TAG = 'Value';
 export const QUERY_TAG = 'Query';
 /**
  * `<Mutation name>{`insert into bookings.rows … values ($a)`}</Mutation>` — a
@@ -645,6 +645,34 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   }
   const reset = typeof resetAttr?.json === 'string' ? resetAttr.json.trim().split(/\s+/).filter(Boolean) : [];
   return { ok: true, decl: { name, sql, ...(expected ? { expectedAffected: expected.json as number } : {}), ...(reset.length ? { reset } : {}), start: el.start, end: el.end } };
+}
+
+/** One Helmet data declaration, parsed, by kind. */
+export type Declaration =
+  | { kind: 'import'; decl: ImportDecl }
+  | { kind: 'value'; decl: ValueDecl }
+  | { kind: 'query'; decl: QueryDecl }
+  | { kind: 'mutation'; decl: MutationDecl }
+  | { kind: 'notify'; decl: NotifyDecl };
+
+const declared = <K extends Declaration['kind'], D>(kind: K, parsed: ParseDeclResult<D>): { kind: K; decl: D } | { errors: ValidationError[] } =>
+  parsed.ok ? { kind, decl: parsed.decl } : { errors: parsed.errors };
+
+/**
+ * The data declaration a Helmet child is: `{ kind, decl }`, `{ errors }` when it is one but malformed,
+ * or null when its tag declares nothing (lib/document/helmet.ts walks the Helmet; this module owns
+ * which tags declare data and each one's grammar).
+ */
+export function parseDeclaration(el: JsxElement): Declaration | { errors: ValidationError[] } | null {
+  if (!el.isComponent) return null;
+  switch (el.tag) {
+    case IMPORT_TAG: return declared('import', parseImportDecl(el));
+    case VALUE_TAG: return declared('value', parseValueDecl(el));
+    case QUERY_TAG: return declared('query', parseQueryDecl(el));
+    case MUTATION_TAG: return declared('mutation', parseMutationDecl(el));
+    case NOTIFY_TAG: return declared('notify', parseNotifyDecl(el));
+    default: return null;
+  }
 }
 
 // ── the reference graph ─────────────────────────────────────────────────────

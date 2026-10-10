@@ -34,8 +34,8 @@
  */
 import { parseJsx, type JsxElement, type JsxNode, type ValidationError } from '@/lib/jsx';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
-import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseNotifyDecl, parseQueryDecl, parseValueDecl } from '@/lib/dataflow/dataflow';
-import type { Dataflow, ImportDecl, MutationDecl, NotifyDecl, QueryDecl, ValueDecl } from '@/lib/dataflow';
+import { carriesRef, parseDeclaration } from '@/lib/dataflow/dataflow';
+import type { Dataflow } from '@/lib/dataflow';
 
 export const HELMET_TAG = 'Helmet';
 export const CONTEXT_TAG = 'Context';
@@ -58,14 +58,14 @@ export interface HelmetContent {
   /** `<meta name content>` pairs in authored order; names are unique. */
   meta: HelmetMeta[];
   /** `<Import>` declarations in authored order (lib/dataflow/dataflow.ts). */
-  imports: ImportDecl[];
+  imports: Dataflow['imports'];
   /** `<Value>` declarations in authored order (lib/dataflow/dataflow.ts). */
-  values: ValueDecl[];
+  values: Dataflow['values'];
   /** `<Query>` declarations in authored order (lib/dataflow/dataflow.ts). */
-  queries: QueryDecl[];
+  queries: Dataflow['queries'];
   /** `<Mutation>` declarations in authored order (lib/dataflow/dataflow.ts). */
-  mutations: MutationDecl[];
-  notifications?: NotifyDecl[];
+  mutations: Dataflow['mutations'];
+  notifications?: Dataflow['notifications'];
 }
 
 export interface HelmetSplit {
@@ -87,15 +87,6 @@ export function declarationsOf(source: string): Dataflow | null {
 /** The data declarations of a split Helmet, as one `Dataflow`. */
 export const dataflowOf = (content: HelmetContent): Dataflow =>
   ({ imports: content.imports, values: content.values, queries: content.queries, mutations: content.mutations, ...(content.notifications?.length ? { notifications: content.notifications } : {}) });
-
-/** The DATA declarations a Helmet may repeat (lib/dataflow/dataflow.ts owns their shapes). */
-const DATA_TAGS: Record<string, (el: JsxElement) => { ok: true; decl: ImportDecl | ValueDecl | QueryDecl | MutationDecl | NotifyDecl } | { ok: false; errors: ValidationError[] }> = {
-  [IMPORT_TAG]: parseImportDecl,
-  [VALUE_TAG]: parseValueDecl,
-  [QUERY_TAG]: parseQueryDecl,
-  [MUTATION_TAG]: parseMutationDecl,
-  [NOTIFY_TAG]: parseNotifyDecl,
-};
 
 /** Children that may appear at most ONCE and carry a text payload. */
 const SINGLETON_TAGS = ['title', 'style', 'script'] as const;
@@ -192,9 +183,9 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
     // grammar here only knows they exist and repeat). Graph-level rules —
     // duplicate names, undeclared `$refs`, cycles — involve the body and run
     // in publishJsx's always-on pass, not here.
-    if (child.type === 'element' && child.isComponent && DATA_TAGS[child.tag]) {
-      const parsed = DATA_TAGS[child.tag](child);
-      if (!parsed.ok) errors.push(...parsed.errors);
+    const declaration = child.type === 'element' ? parseDeclaration(child) : null;
+    if (declaration) {
+      if ('errors' in declaration) errors.push(...declaration.errors);
       continue;
     }
     if (child.type !== 'element' || !(CHILD_TAGS as readonly string[]).includes(child.tag.toLowerCase()) || child.isComponent) {
@@ -278,11 +269,14 @@ function helmetContent(helmet: JsxElement): HelmetContent {
     if (child.type !== 'element') continue;
     if (child.isComponent) {
       if (child.tag === CONTEXT_TAG) content.context ??= contextRef(child) ?? undefined;
-      if (child.tag === IMPORT_TAG) { const p = parseImportDecl(child); if (p.ok) content.imports.push(p.decl); }
-      else if (child.tag === VALUE_TAG) { const p = parseValueDecl(child); if (p.ok) content.values.push(p.decl); }
-      else if (child.tag === QUERY_TAG) { const p = parseQueryDecl(child); if (p.ok) content.queries.push(p.decl); }
-      else if (child.tag === MUTATION_TAG) { const p = parseMutationDecl(child); if (p.ok) content.mutations.push(p.decl); }
-      else if (child.tag === NOTIFY_TAG) { const p = parseNotifyDecl(child); if (p.ok) (content.notifications ??= []).push(p.decl); }
+      const declaration = parseDeclaration(child);
+      if (declaration && 'kind' in declaration) {
+        if (declaration.kind === 'import') content.imports.push(declaration.decl);
+        else if (declaration.kind === 'value') content.values.push(declaration.decl);
+        else if (declaration.kind === 'query') content.queries.push(declaration.decl);
+        else if (declaration.kind === 'mutation') content.mutations.push(declaration.decl);
+        else (content.notifications ??= []).push(declaration.decl);
+      }
       continue;
     }
     const tag = child.tag.toLowerCase();

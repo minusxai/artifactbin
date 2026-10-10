@@ -207,7 +207,7 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
 
 /**
  * The bytes a post embeds. An uploaded image renders as `/a/<id>/raw?v=<n>[&w=]`
- * (lib/dataflow/ref-data imageRawUrl), a web image as our copy at `/assets/<sha>`
+ * (lib/dataflow/ref-data rawUrl), a web image as our copy at `/assets/<sha>`
  * (lib/document/asset-url). Each is served only when one of the owner's public
  * posts embeds it, through the app's own handler, to a guest.
  *

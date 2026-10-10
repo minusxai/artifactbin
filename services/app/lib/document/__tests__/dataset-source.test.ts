@@ -7,7 +7,7 @@
 import {expect,it} from 'vitest';
 import {parseJsx} from '@/lib/jsx';
 import {splitHelmet} from '../helmet';
-import { parseQueryDecl, parseMutationDecl } from '@/lib/dataflow/dataflow';
+import { parseDeclaration } from '@/lib/dataflow/dataflow';
 import { collectRefUses } from '@/lib/dataflow/references';
 const read=(source:string)=>{const p=parseJsx(source);if(!p.ok)throw Error('parse failed');return splitHelmet(p.nodes);};
 const element=(source:string)=>{const p=parseJsx(source);if(!p.ok||p.nodes[0]?.type!=='element')throw Error('parse failed');return p.nodes[0];};
@@ -23,21 +23,21 @@ it('declares an import under its own name, independently of the SQL that reads i
 
 it('keeps source= on a connected-database query, and refuses it on a mutation, pointing at <Import>',()=>{
  expect(read('<Helmet><Query name="q" source="ref:pg0001">{`select * from public.orders`}</Query></Helmet>').content.queries[0]).toMatchObject({source:'pg0001'});
- const m=parseMutationDecl(element('<Mutation name="edit" source="ref:abc123">{`update rows set n=2`}</Mutation>'));
- expect(m.ok).toBe(false);
- if(!m.ok)expect(JSON.stringify(m.errors)).toContain('<Import');
+ const m=parseDeclaration(element('<Mutation name="edit" source="ref:abc123">{`update rows set n=2`}</Mutation>'));
+ expect(m).toHaveProperty('errors');
+ expect(JSON.stringify(m)).toContain('<Import');
 });
 
 it('names source in the supported query attribute guidance', () => {
- const result = parseQueryDecl(element('<Query name="q" source="ref:abc123" unsupported="x">{`select * from public.rows`}</Query>'));
- expect(result.ok).toBe(false);
- if (!result.ok) expect(JSON.stringify(result.errors)).toContain('source=');
+ const result = parseDeclaration(element('<Query name="q" source="ref:abc123" unsupported="x">{`select * from public.rows`}</Query>'));
+ expect(result).toHaveProperty('errors');
+ expect(JSON.stringify(result)).toContain('source=');
 });
 
 it('rejects a bare source ID with the canonical replacement in the diagnostic', () => {
- const result = parseQueryDecl(element('<Query name="q" source="abc123">{`select * from public.rows`}</Query>'));
- expect(result.ok).toBe(false);
- if (!result.ok) expect(JSON.stringify(result.errors)).toContain('ref:abc123');
+ const result = parseDeclaration(element('<Query name="q" source="abc123">{`select * from public.rows`}</Query>'));
+ expect(result).toHaveProperty('errors');
+ expect(JSON.stringify(result)).toContain('ref:abc123');
 });
 
 it('refuses an import without a name or a ref, and an import with children', () => {

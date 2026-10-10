@@ -26,7 +26,7 @@ import { getArtifactById, getArtifactFor, type ArtifactSummary, type EditInput, 
 import { declarationsForRow, runDocumentMutation } from './dataflow';
 import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
-import { type Scalar, parseMutationRequest, bindParams, bindTypes, mutationTargetRef, platformValues, rowField, imageRawUrl, pdfRawUrl } from '@/lib/dataflow';
+import { type Scalar, parseMutationRequest, bindParams, bindTypes, mutationTargetRef, platformValues, rowField, rawUrl } from '@/lib/dataflow';
 import { rewriteBuiltinFields } from '@/lib/dataflow/server';
 import { datasetCreateFields } from '@/lib/datasets/dataset-usage';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform/config';
@@ -414,11 +414,11 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     // Where the BYTES are, for a caller that must render the image before it
     // has re-read the document (lib/dataflow/ref-data owns the shape, so this
     // cannot drift from the render path).
-    ...(row.format === 'image' ? { rawUrl: imageRawUrl(row.id, row.version) } : {}),
+    ...(row.format === 'image' ? { rawUrl: rawUrl(row.id, row.version) } : {}),
     // Same for a PDF, plus the two facts a <File> card shows: an agent that has
     // just uploaded one can write the card without re-reading anything.
-    ...(row.format === 'file' ? { rawUrl: imageRawUrl(row.id, row.version), filename: meta.filename, contentType: meta.contentType, bytes: meta.bytes } : {}),
-    ...(row.format === 'pdf' ? { rawUrl: pdfRawUrl(row.id, row.version), bytes: meta.bytes ?? 0, ...(meta.pages ? { pages: meta.pages } : {}) } : {}),
+    ...(row.format === 'file' ? { rawUrl: rawUrl(row.id, row.version), filename: meta.filename, contentType: meta.contentType, bytes: meta.bytes } : {}),
+    ...(row.format === 'pdf' ? { rawUrl: rawUrl(row.id, row.version), bytes: meta.bytes ?? 0, ...(meta.pages ? { pages: meta.pages } : {}) } : {}),
   };
 }
 

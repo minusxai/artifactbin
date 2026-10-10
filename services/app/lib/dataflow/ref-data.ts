@@ -59,7 +59,7 @@ export type ImageAssetAnswer = {url:string; image?:ImageRefData} | {refused:stri
 /** Shared projection for literal and runtime-resolved images; caller owns authorization. */
 export function imageRefData(row:{id:string;version:number;meta:unknown},capture=false):ImageRefData {
   const im=row.meta as {width?:unknown;height?:unknown;placeholder?:unknown;smallObjectKey?:unknown;smallWidth?:unknown}|null;
-  return {kind:'image',url:imageRawUrl(row.id,row.version),
+  return {kind:'image',url:rawUrl(row.id,row.version),
     ...(typeof im?.width==='number'&&typeof im?.height==='number'?{width:im.width,height:im.height}:{}),
     ...(typeof im?.placeholder==='string'&&im.placeholder.startsWith('data:')?{blur:im.placeholder}:{}),
     ...(!capture&&typeof im?.smallWidth==='number'&&typeof im?.smallObjectKey==='string'?{smallUrl:imageVariantUrl(row.id,row.version,im.smallWidth),smallWidth:im.smallWidth}:{}),
@@ -67,19 +67,18 @@ export function imageRefData(row:{id:string;version:number;meta:unknown},capture
 }
 
 /**
- * Where an image artifact's BYTES live — the one place this shape is written.
- *
- * `/raw` is the bytes; `/a/<id>` is the HTML page, which an <img> loads to
- * 0×0. `?v=<version>` changes when the bytes do, which is what lets /raw serve
- * them immutable. Both the render-time ref map (refDataForRow) and the create
- * echo the editor inserts from call this, so an image inserted live and one
- * rendered from storage can never point at different URLs.
+ * Where an uploaded artifact's BYTES live (an image, a PDF, a file) — the one place this shape is
+ * written. `/raw` is the bytes; `/a/<id>` is the HTML page, which an <img> loads to 0×0 and a link
+ * opens as a page. `?v=<version>` changes when the bytes do, which is what lets /raw serve them
+ * immutable. The render-time ref map (refDataForRow), a <File> card's link and the create echo the
+ * editor inserts from all call this, so a freshly created artifact and one rendered from storage can
+ * never point at different addresses.
  */
-export const imageRawUrl = (id: string, version: number): string => `/a/${id}/raw?v=${version}`;
+export const rawUrl = (id: string, version: number): string => `/a/${id}/raw?v=${version}`;
 
 /** Where the narrow copy of the same image artifact lives: the same bytes, `?w=` apart. */
 const imageVariantUrl = (id: string, version: number, width: number): string =>
-  `${imageRawUrl(id, version)}&w=${width}`;
+  `${rawUrl(id, version)}&w=${width}`;
 
 /**
  * What the browser should assume an image is laid out at before any CSS has
@@ -90,15 +89,6 @@ const imageVariantUrl = (id: string, version: number, width: number): string =>
  * column, and two numbers would be two answers to one question.
  */
 export const IMAGE_SIZES = '(max-width: 640px) 100vw, 768px';
-
-/**
- * Where a PDF artifact's BYTES are — the same address shape as an image's, and
- * for the same reason: `/a/<id>` is a page, `/raw` is the file, and `?v=` is
- * what lets the file be served immutable. A <File> card's link and the create
- * echo both come from here, so a card and a freshly created file can never
- * point at different addresses.
- */
-export const pdfRawUrl = (id: string, version: number): string => `/a/${id}/raw?v=${version}`;
 
 /**
  * `src="ref:<id>"` on an <img> → the referenced image artifact's same-origin

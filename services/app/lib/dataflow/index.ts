@@ -19,8 +19,7 @@ export type {
 } from './compiled-dataflow';
 export { EMPTY_COMPILED_DATAFLOW, readerDataflow } from './compiled-dataflow';
 
-// Reference syntax (`$name`, bindings, controls) and the declarations' shapes.
-export type { ImportDecl, MutationDecl, NotifyDecl, ValueDecl } from './dataflow';
+// Reference syntax (`$name`, bindings, controls) and the declarations.
 export {
   carriesRef, collectRefNameUses, controlOptions, EMPTY_DATAFLOW, isEmptyDataflow, REF_ATTRS, refName, scalarMatches,
 } from './dataflow';
@@ -57,7 +56,7 @@ export { DataflowResultError, evaluateDataflow, evaluateDataflowMany } from './e
 
 // Reference media (`ref:` images and files).
 export type { ImageAssetAnswer, ImageRefData, RefDataMap } from './ref-data';
-export { imageRawUrl, imageRefData, pdfRawUrl, resolveRefProps } from './ref-data';
+export { imageRefData, rawUrl, resolveRefProps } from './ref-data';
 export { imageReferenceId } from './image-source';
 export { REFERENCE_POSITIONS } from './reference-positions';
 
