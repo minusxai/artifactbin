@@ -103,7 +103,7 @@ const preferred = (files: File[]) => files.find((file) => (COMMENT_IMAGE_TYPES a
  * (a spreadsheet's cells, a selection of a web page) is text; a copied file whose only text is its
  * own name is the file.
  */
-export function clipboardImage(data: DataTransfer | null | undefined): File | null {
+function clipboardImage(data: DataTransfer | null | undefined): File | null {
   if (!data) return null;
   const file = preferred(filesOf(data).filter((candidate) => candidate.type.startsWith('image/')));
   if (!file) return null;
@@ -115,7 +115,7 @@ export function clipboardImage(data: DataTransfer | null | undefined): File | nu
  * Paste, drag and drop on `element`. A file dragged anywhere else on the page while the box is up is
  * refused rather than opened: the browser would otherwise navigate away from the draft.
  */
-export function bindImageAttach(element: HTMLElement, draft: CommentImageDraft, setOver: (over: boolean) => void): () => void {
+function bindImageAttach(element: HTMLElement, draft: CommentImageDraft, setOver: (over: boolean) => void): () => void {
   let depth = 0;
   const settle = () => { depth = 0; setOver(false); };
   const take = (event: Event) => { event.preventDefault(); event.stopPropagation(); };
