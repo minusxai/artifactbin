@@ -78,7 +78,7 @@ export async function applyHostedOffer(request:Request,value:unknown):Promise<Re
  const {file}=readFileOffer(value);validateFileComments(file);const input=value as {mode?:unknown;operationId?:unknown},actor=await actorOf(request);if(actor instanceof Response)return actor;
  if(input.mode!=='update'&&input.mode!=='copy')return json({error:'Choose explicitly between applying to the original and creating an independent copy.'},400);
  const copy=input.mode==='copy';
- if(copy&&file.threads.some(thread=>thread.image))return json({error:'This discussion contains attached screenshots. Keep the original file; hosted independent copies cannot transfer those attachments automatically.'},409);
+ if(copy&&file.threads.some(thread=>thread.image||thread.thread.some(comment=>comment.image)))return json({error:'This discussion contains attached screenshots. Keep the original file; hosted independent copies cannot transfer those attachments automatically.'},409);
  const base=copy?null:await baseline(actor,file);
  if(!copy&&!base)return json({error:'The original baseline is unavailable or edit access changed. Nothing was applied.'},409);
  if(!copy)verifyHostedComments(file,await listAnnotationsFor(actor,file.artifactId,{status:'all'})??[]);

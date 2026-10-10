@@ -3,7 +3,6 @@
  * comparisons the probe reports — shape diffs (kit-parity `shapeOf`/`diffShapes`, what a reader would notice)
  * and byte diffs (token by token, each classified by its cause).
  */
-import { createHash } from 'node:crypto';
 import { loadCompilerBuild } from '../../build.server';
 import type { CompileInput } from '../../contract';
 import { prepareStoryParts } from '@/lib/publish/prepared/prepare-runtime.server';
@@ -34,8 +33,6 @@ export async function inputOf(doc: CorpusDoc): Promise<CompileInput> {
   const flow = declared.imports.length || declared.values.length || declared.queries.length ? await compiledFlow(declared, body) : null;
   return { nodes: runtime.data.nodes, colorMode: 'light', template: doc.template, chrome: true, glyphs: runtime.data.glyphs, refData: {}, flow, build: loadCompilerBuild().id };
 }
-
-export const sha = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 16);
 
 interface HtmlNode { nodeName: string; tagName?: string; value?: string; data?: string; attrs?: Array<{ name: string; value: string; namespace?: string }>; childNodes?: HtmlNode[]; content?: { childNodes: HtmlNode[] } }
 interface DomEntry { path: string; value: string; scriptPayload: boolean }

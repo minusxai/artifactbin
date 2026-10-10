@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import type { JSX } from 'solid-js';
 import type { Component } from 'solid-js';
-import { LINK } from './ui';
+import { LINK } from '../ui/ui';
 
 export default function AssetPageHeader(props: {
   icon: Component<{ size?: number }>;

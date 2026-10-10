@@ -10,7 +10,7 @@ import UserRound from 'lucide-solid/icons/user-round';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { useOptionalInbox } from '../lib/notifications';
 import WorkspaceCreate from './WorkspaceCreate';
-import { Avatar } from './Avatar';
+import { Avatar } from '../ui/Avatar';
 import { useSession } from '../lib/session';
 import { useConnectedAgentCount } from '../lib/connected-agents';
 import './workspace.css';

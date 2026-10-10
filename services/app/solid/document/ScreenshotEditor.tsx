@@ -4,14 +4,18 @@ import type { CapturedImage } from '@/lib/capture/contract';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke } from '../../../contracts/src/comment-image';
 import Check from 'lucide-solid/icons/check';
 import Undo2 from 'lucide-solid/icons/undo-2';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 
 const COLORS = [['Red', '#ef4444'], ['Orange', '#f59e0b'], ['Blue', '#3b82f6'], ['Green', '#22c55e'], ['Black', '#171717'], ['White', '#ffffff']] as const;
 export interface ScreenshotDrawing { preview: Blob; strokes: BrushStroke[] }
 interface ScreenshotEditorProps {
   image: CapturedImage; initialStrokes: BrushStroke[];
   exportRef: { current: (() => Promise<ScreenshotDrawing>) | null };
-  busy: boolean; onRetake: () => void;
+  busy: boolean;
+  /** Capture again (the area tool); absent for an attached image, which has nothing to retake. */
+  onRetake?: () => void;
+  /** Drop the image from the draft. */
+  onRemove?: () => void;
 }
 
 /** A static image plus bounded vector strokes — undo never retains pixel snapshots, and export waits for submission. */
@@ -72,7 +76,7 @@ export function ScreenshotEditor(props: ScreenshotEditorProps): JSX.Element {
   onCleanup(() => { props.exportRef.current = null; });
   return <div aria-label="Screenshot editor" class="mb-4 overflow-hidden rounded-xl border border-edge bg-surface">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-3 border-b border-edge px-3 py-3">
-      <div class="flex items-center gap-2" role="group" aria-label="Brush colors">
+      <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Brush colors">
         <For each={COLORS}>{([name, value]) =>
           <Tooltip content={name}><button type="button" aria-label={`${name} brush`} aria-pressed={color() === value} onClick={() => setColor(value)}
             class={`flex h-7 w-7 items-center justify-center rounded-full border shadow-sm transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${color() === value ? 'ring-2 ring-fg ring-offset-2 ring-offset-panel' : 'border-black/15'}`}
@@ -107,7 +111,10 @@ export function ScreenshotEditor(props: ScreenshotEditorProps): JSX.Element {
     <Show when={error()}><p role="alert" class="border-t border-edge px-6 py-3 text-sm text-danger">{error()}</p></Show>
     <div class="flex items-center justify-between gap-3 border-t border-edge px-3 py-2 text-xs text-muted">
       <span>{ready() ? 'Draw on the image or write below.' : 'Loading screenshot…'}</span>
-      <button type="button" disabled={props.busy} onClick={props.onRetake} class="shrink-0 font-medium hover:text-fg disabled:opacity-40">Retake screenshot</button>
+      <span class="flex shrink-0 items-center gap-3">
+        <Show when={props.onRemove}><button type="button" disabled={props.busy} onClick={() => props.onRemove?.()} class="font-medium hover:text-fg disabled:opacity-40">Remove image</button></Show>
+        <Show when={props.onRetake}><button type="button" disabled={props.busy} onClick={() => props.onRetake?.()} class="font-medium hover:text-fg disabled:opacity-40">Retake screenshot</button></Show>
+      </span>
     </div>
   </div>;
 }

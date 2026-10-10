@@ -15,7 +15,7 @@
  * queries, a notebook model, a manual refresh and notifications, never leaking a credential or a hidden value)
  * left for services/app/lib/datasets/__tests__/postgres-routes.test.ts (the real routes against a disposable
  * server, `integration`), the dataset editor's own suite (solid/pages/__tests__/dataset-editor-*.test.tsx) and
- * solid/components/__tests__/dataset-catalog-view.test.tsx — so this gate needs no Docker and runs in a gate
+ * solid/datasets/__tests__/dataset-catalog-view.test.tsx — so this gate needs no Docker and runs in a gate
  * container like any other.
  *
  * What else left, and where it lives now (row 36): a bad column refused at publish as invalid_sql naming the query

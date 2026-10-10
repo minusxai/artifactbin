@@ -1,3 +1,4 @@
+import type { CommentImageWire } from './comment-image';
 import type { RemoteColor } from './remote';
 
 /** Who wrote a comment. Ownership is an ACL relationship, not an author kind. */
@@ -36,4 +37,6 @@ export interface AnnotationCommentWire {
   body: string;
   author: AnnotationWireAuthor;
   created_at: string;
+  /** The one image this comment carries — a root's or a reply's own. */
+  image?: CommentImageWire;
 }

@@ -17,7 +17,6 @@ const { fit: FIT, heads: TPL_HEADS, noFit: NO_FIT, record: RECORD, losses: LOSSE
 const RATING = ['avoid', 'good', 'best'];
 
 // ---------------------------------------------------------------- css helpers (./css-blocks.mjs)
-export { PAGE_CHROME, selectorOf, filterBlock };
 
 /** The system's own classes, less the page chrome, the svg vocabulary and the page-type overrides. */
 const componentCss = (spec) => filterBlock(spec.css ?? '', (l) => !isChrome(l) && !selectorOf(l).includes('-svg-') && !selectorOf(l).includes('.ds-tpl'));
@@ -248,5 +247,3 @@ export function writeSkill(slugs = ROSTER) {
     return { path: file, bytes: Buffer.byteLength(text) };
   });
 }
-
-export { SKELETON_CSS };

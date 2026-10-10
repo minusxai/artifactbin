@@ -19,9 +19,9 @@ const brotli = promisify(zlib.brotliCompress);
 const gzip = promisify(zlib.gzip);
 
 /** Text-like content worth compressing. woff2, images and archives are already compressed. */
-export const PRECOMPRESSIBLE = /\.(?:js|mjs|css|json|wasm|svg|map|txt|html)$/;
+const PRECOMPRESSIBLE = /\.(?:js|mjs|css|json|wasm|svg|map|txt|html)$/;
 /** The encodings a sibling may carry, by file suffix. */
-export const SIBLINGS = ['.br', '.gz'];
+const SIBLINGS = ['.br', '.gz'];
 /** Below this, the headers outweigh any saving. */
 const MIN_BYTES = 256;
 

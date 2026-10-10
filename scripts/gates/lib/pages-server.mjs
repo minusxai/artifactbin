@@ -21,7 +21,7 @@ import { PAGES_BROWSER_ARGS, PAGES_HOST } from './browser.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 /** The DNS label a document id rides as (lib/http/pages-origin pagesLabel). */
-export const pagesLabel = (id) => Buffer.from(id, 'utf8').toString('hex');
+const pagesLabel = (id) => Buffer.from(id, 'utf8').toString('hex');
 
 const freePort = () => new Promise((resolve, reject) => {
   const probe = net.createServer();

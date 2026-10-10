@@ -4,7 +4,7 @@ import Check from 'lucide-solid/icons/check';
 import Copy from 'lucide-solid/icons/copy';
 import { existingPaste } from '@/lib/serving/agent-copy';
 import { copyText } from '../lib/copy-text';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 
 /** A token-free handoff for this artifact, kept in the app chrome rather than its content. */
 export function CopyAgentButton(props: { id: string; template?: string | null }): JSX.Element {

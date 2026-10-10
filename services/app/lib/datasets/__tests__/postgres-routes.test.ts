@@ -2,7 +2,7 @@
  * AN EXTERNAL POSTGRESQL SOURCE THROUGH THE REAL ROUTES — the data-journey gate's PostgreSQL leg, moved here: a
  * disposable server, the app's own handlers on the harness, and no browser (the dataset editor's controls are the
  * solid/pages/__tests__/dataset-editor-*.test.tsx suite's; the catalog view's schema browser and refresh line are
- * solid/components/__tests__/dataset-catalog-view.test.tsx's).
+ * solid/datasets/__tests__/dataset-catalog-view.test.tsx's).
  *
  * A SELECT-only role is discovered, saved behind a secret, exposed column by column, read by a stranger through the
  * dataset and through a document's sourced query, refused every forged query, modelled through a notebook whose

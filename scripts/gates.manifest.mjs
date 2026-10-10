@@ -73,7 +73,7 @@ export const GATE_SPECS = Object.freeze([
   // The slow-network rebind leg was dropped (it repeated the refused-switch leg).
   { name: 'viz-editor', needsMail: true, serialGroup: 'clipboard', seconds: 57, timeoutMs: 150_000 },
   // One journey: the former annotations and comment-targets gates (two lanes in one browser, the fold leg alone).
-  { name: 'comments', needsMail: false, seconds: 19, timeoutMs: 60_000 },
+  { name: 'comments', needsMail: false, serialGroup: 'clipboard', seconds: 19, timeoutMs: 60_000 },
   // One scenario: the link role's delivery to a signed-in stranger and a logged-out visitor (the named-people walk
   // left for vitest and jsdom). 5s in the eight-gate container run, from 14s in the container measure above (was 21s).
   { name: 'collab-roles', needsMail: true, seconds: 8, timeoutMs: 60_000 },

@@ -1,13 +1,13 @@
 /* @jsxImportSource solid-js */
 /**
  * Editor menus that escape the scrolling
- * toolbar (solid/components/Popover, the framework-free Radix popper placement) while staying
+ * toolbar (solid/ui/Popover, the framework-free Radix popper placement) while staying
  * reachable: pointer actions preserve the document range (onMouseDown prevented on the trigger), and
  * the panel does not steal focus on open.
  */
 import type { JSX } from 'solid-js';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
-import { Popover } from '@/solid/components/Popover';
+import { Popover } from '@/solid/ui/Popover';
 
 export function StoryToolbarMenu(props: {
   label: string;

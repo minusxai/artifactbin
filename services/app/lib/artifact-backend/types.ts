@@ -36,7 +36,7 @@ export type BackendFeature =
   | 'live';           // the live event stream
 
 /** Aborts a read whose answer nobody wants any more. */
-export interface RequestOptions { signal?: AbortSignal }
+interface RequestOptions { signal?: AbortSignal }
 
 /** The authoring head: GET /api/my/artifacts/<id>, as its browser readers use it. */
 export interface ArtifactHead {
@@ -172,6 +172,9 @@ interface LiveHandlers {
   onWake?: () => void;
 }
 
+/** A reply and/or a state transition; a reply may carry the comment image staged for it. */
+export interface AnnotationActionBody { reply?: string; resolve?: boolean; reopen?: boolean; attachment_id?: string; edit_id?: string }
+
 export interface ArtifactBackend {
   /** 'offline' inside a downloaded file. */
   readonly mode: 'online' | 'offline';
@@ -217,7 +220,8 @@ export interface ArtifactBackend {
   listAnnotations(status?: 'open' | 'resolved', options?: RequestOptions): Promise<AnnotationWire[]>;
   /** Rejects with a BackendRequestError (`signInRequired` for a guest). */
   createAnnotation(body: Record<string, unknown>, idempotencyKey: string): Promise<AnnotationWire>;
-  actOnAnnotation(annotationId: string, body: { reply?: string; resolve?: boolean; reopen?: boolean }): Promise<AnnotationWire>;
+  /** A reply may carry one staged comment image (`attachment_id`, with the `edit_id` it was staged against). */
+  actOnAnnotation(annotationId: string, body: AnnotationActionBody): Promise<AnnotationWire>;
   /** Optional exact permission hint for comments stored in an offline file. The backend still enforces it on delete. */
   canDeleteLocalAnnotation?(annotationId: string): boolean;
   deleteAnnotation(annotationId: string): Promise<void>;

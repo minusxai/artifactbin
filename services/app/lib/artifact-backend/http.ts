@@ -213,7 +213,13 @@ export function createHttpBackend(id: string): ArtifactBackend {
     },
     async actOnAnnotation(annotationId, body) {
       const res = await fetch(`${mine}/annotations/${annotationId}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
-      if (!res.ok) throw new BackendRequestError(`Could not update this comment (${res.status})`, res.status);
+      if (!res.ok) {
+        const refusal = await res.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+        const code = typeof refusal?.error === 'string' ? refusal.error : undefined;
+        // A reply's image refusals say what happened; everything else stays the generic sentence.
+        const attachment = (code === 'invalid_attachment' || code === 'stale') && typeof refusal?.message === 'string';
+        throw new BackendRequestError(attachment ? String(refusal!.message) : `Could not update this comment (${res.status})`, res.status, false, code);
+      }
       return (await res.json()) as AnnotationWire;
     },
     async deleteAnnotation(annotationId) {

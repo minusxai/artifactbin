@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
-import { Button, PANEL } from './ui';
-import { ConfirmDialog } from './ConfirmDialog';
+import { Button, PANEL } from '../ui/ui';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { apiFetch } from '../lib/api';
 
 interface Claimable { tokenId: string; titles: string[]; artifacts: number }

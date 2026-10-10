@@ -37,9 +37,9 @@ import Plug from 'lucide-solid/icons/plug';
 import History from 'lucide-solid/icons/rotate-ccw-clock';
 import Settings from 'lucide-solid/icons/settings';
 import { closeOnEscape } from '@/solid/lib/close-on-escape';
-import { FORM_INPUT, FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON } from '@/solid/components/FormControls';
-import { DialogShell } from '@/solid/components/DialogShell';
-import { Tooltip } from '@/solid/components/Tooltip';
+import { FORM_INPUT, FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON } from '@/solid/ui/FormControls';
+import { DialogShell } from '@/solid/ui/DialogShell';
+import { Tooltip } from '@/solid/ui/Tooltip';
 
 declare const __AFBIN_APP_CSS__: string;
 declare global { interface Window { __afbinOfflineReady?: Promise<void>; } }

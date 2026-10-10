@@ -20,7 +20,7 @@ import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { ARTIFACT_STARTERS, artifactStarter } from '@/lib/workspace/artifact-starters';
 import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';
 import { openDocument } from '../lib/document-navigation';
-import { DialogShell } from '@/solid/components/DialogShell';
+import { DialogShell } from '@/solid/ui/DialogShell';
 import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
 import { apiFetch } from '../lib/api';
 

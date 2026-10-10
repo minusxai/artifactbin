@@ -24,12 +24,12 @@ export { evaluateNotificationQuery, normalizeNotificationResult } from './notifi
 export type { NotificationQueryDependencies } from './notification-query';
 export { notificationJobStore } from './notification-runtime';
 export { readableArtifact } from './read-access';
-export { ANONYMOUS_CEILING, ROLE_ORDER, SHARE_ROLES, SHARE_ROLE_LABEL, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, roleBehindLogin, shareRolesAtLeast } from './share-roles';
+export { ANONYMOUS_CEILING, ROLE_ORDER, SHARE_ROLES, SHARE_ROLE_LABEL, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, shareRolesAtLeast } from './share-roles';
 export type { ArtifactRole, ShareRole } from './share-roles';
 export { getSharingFor, setAccessFor, updateSharing, updateSharingFor } from './sharing';
 export type { SharingPatch } from './sharing';
 export { artifactState } from './state';
 export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, commitNormalizedMarkup, committedHeadsSettled, createArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, setArtifactQuotaForTests, setMetadataFor, versionToWire } from './store';
-export type { ArtifactSummary, EditOutcome } from './store';
+export type { ArtifactSummary } from './store';
 export { recordArtifactView } from './view-admission';
 export { artifactSummaryToWire, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, respondToEdit } from './wire';

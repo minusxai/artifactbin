@@ -3,7 +3,7 @@ import type { Side } from './popper';
 
 /**
  * THE TOOLTIP'S TIMING, ONCE — shared by the reader kit's Tooltip (./disclosure) and the app's
- * (solid/components/Tooltip), so both follow Radix's provider as one: open on hover after the delay
+ * (solid/ui/Tooltip), so both follow Radix's provider as one: open on hover after the delay
  * (300ms; at once within 100ms of any tooltip closing), at once on focus; close on Escape and when
  * any other tooltip opens. Type-only popper import: the kit keeps placement a lazy chunk.
  */

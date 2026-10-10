@@ -15,7 +15,7 @@ import MessageSquare from 'lucide-solid/icons/message-square';
 import PanelRightClose from 'lucide-solid/icons/panel-right-close';
 import PanelRightOpen from 'lucide-solid/icons/panel-right-open';
 import SlidersHorizontal from 'lucide-solid/icons/sliders-horizontal';
-import { Tooltip } from '@/solid/components/Tooltip';
+import { Tooltip } from '@/solid/ui/Tooltip';
 import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 
 export type EditPanelTab = 'selection' | 'history' | 'comments';

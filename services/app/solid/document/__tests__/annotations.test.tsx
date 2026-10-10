@@ -13,7 +13,7 @@ import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { AnnotationLayer } from '../AnnotationLayer';
 import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE } from '@/lib/story-runtime/contract';
 import { personHue } from '@/lib/islands/person-face';
-import { Avatar } from '../../components/Avatar';
+import { Avatar } from '../../ui/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AuthorIdentity, positionedComments } from '../AnnotationPreview';
 import {

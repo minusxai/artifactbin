@@ -1,8 +1,13 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { beginCapture } from '@/lib/capture/screen';
 import { CaptureError, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture/contract';
-import type { BrushStroke, CommentImageMetadata } from '../../../contracts/src/comment-image';
+import { COMMENT_IMAGE_LIMITS, type BrushStroke, type CommentImageMetadata } from '../../../contracts/src/comment-image';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+
+/** What the server stores (lib/annotations/comment-images decodes exactly these). */
+export const COMMENT_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+const TYPE_MESSAGE = 'Attach a PNG, JPEG or WebP image.';
+const SIZE_MESSAGE = `This image is larger than ${Math.round(COMMENT_IMAGE_LIMITS.bytes / 1_000_000)} MB.`;
 
 interface Draft { image: CapturedImage; preview: Blob; strokes: BrushStroke[]; editId: string }
 const messages: Record<string, string> = {
@@ -24,7 +29,7 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string |
   const revision = typeof editId === 'function' ? editId : () => editId;
   let session: CaptureSession | null = null;
   let generation = 0;
-  let staged: { draft: Draft; preview: Blob; id: string } | null = null;
+  let staged: { draft: Draft; preview: Blob; id: string; editId: string } | null = null;
   const [draft, setDraft] = createSignal<Draft | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [required, setRequired] = createSignal(false);
@@ -82,10 +87,12 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string |
     const mine = ++generation;
     session?.dispose(); session = null; setBusy(true); setError('');
     try {
-      if (file.size > 8 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Use a PNG, JPEG or WebP up to 8 MB.');
+      if (!(COMMENT_IMAGE_TYPES as readonly string[]).includes(file.type)) throw new Error(TYPE_MESSAGE);
+      if (file.size > COMMENT_IMAGE_LIMITS.bytes) throw new Error(SIZE_MESSAGE);
       const bitmap = await createImageBitmap(file);
       try {
-        const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height), Math.sqrt(4000000 / (bitmap.width * bitmap.height)));
+        // Larger pictures are scaled into the stored bounds rather than refused: a Retina screenshot is the common case.
+        const scale = Math.min(1, COMMENT_IMAGE_LIMITS.edge / Math.max(bitmap.width, bitmap.height), Math.sqrt(COMMENT_IMAGE_LIMITS.pixels / (bitmap.width * bitmap.height)));
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
         canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
@@ -97,18 +104,25 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string |
     } catch (cause) { if (mine === generation) setError(cause instanceof Error ? cause.message : 'Could not read this image.'); }
     finally { if (mine === generation) setBusy(false); }
   };
-  const stage = async (drawing?: { preview: Blob; strokes: BrushStroke[] }) => {
+  /**
+   * Upload the draft as drawn, once per drawing and revision. A captured screenshot is a picture of the
+   * revision it was taken at; an attached image is of no revision, so it is staged against the CURRENT one.
+   */
+  const stage = async (drawing?: { preview: Blob; strokes: BrushStroke[] }): Promise<{ id: string; editId: string } | undefined> => {
     const current = draft();
     if (!current) return undefined;
     const preview = drawing?.preview ?? current.preview;
-    if (staged?.draft === current && staged.preview === preview) return staged.id;
-    const metadata: CommentImageMetadata = { v: 1, capturedEditId: current.editId, capturedAt: current.image.capturedAt, method: current.image.method, width: current.image.width, height: current.image.height, rect: current.image.rect, viewport: current.image.viewport, strokes: drawing?.strokes ?? current.strokes };
+    const editId = current.image.method === 'upload' ? revision() ?? current.editId : current.editId;
+    if (staged?.draft === current && staged.preview === preview && staged.editId === editId) return { id: staged.id, editId };
+    const metadata: CommentImageMetadata = { v: 1, capturedEditId: editId, capturedAt: current.image.capturedAt, method: current.image.method, width: current.image.width, height: current.image.height, rect: current.image.rect, viewport: current.image.viewport, strokes: drawing?.strokes ?? current.strokes };
     const form = new FormData();
     form.set('original', current.image.blob, 'original.png'); form.set('preview', preview, 'preview.png');
     form.set('metadata', JSON.stringify(metadata));
     const result = await backend.uploadCommentImage(form);
-    staged = { draft: current, preview, id: result.id };
-    return result.id;
+    staged = { draft: current, preview, id: result.id, editId };
+    return { id: result.id, editId };
   };
-  return { draft, busy, required, error, reset, start, capture, upload, stage, skip: reset };
+  /** The server refused the stage (used, expired, another revision): the next send uploads afresh. */
+  const unstage = () => { staged = null; };
+  return { draft, busy, required, error, reset, start, capture, upload, stage, unstage, skip: reset };
 }

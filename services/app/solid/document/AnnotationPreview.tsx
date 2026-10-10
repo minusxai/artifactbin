@@ -6,19 +6,28 @@
  * their ACCOUNT id picks), an agent is its product mark. The floating marks are one identity per
  * open thread at its anchor's y over the document's right edge; one widens into a preview on hover
  * or focus, where it can open the rail or resolve an open thread without leaving the document.
+ * Expanded, the preview ends in the thread's reply box; focusing it or leaving a draft in it PINS the
+ * card, which then stays until it is sent from, closed, escaped, or clicked away from while empty.
  */
 import { createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { StoryEditRect } from '@/lib/story-runtime/contract';
 import Check from 'lucide-solid/icons/check';
+import PenLine from 'lucide-solid/icons/pen-line';
+import X from 'lucide-solid/icons/x';
+import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
-import { Avatar } from '../components/Avatar';
-import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeIcon } from '../components/brand-icons';
-import { Tooltip } from '../components/Tooltip';
+import { Avatar } from '../ui/Avatar';
+import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeIcon } from '../ui/brand-icons';
+import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
+import { AnnotationReplyBox } from './AnnotationReplyBox';
+import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
+import { CommentScreenshot } from './CommentScreenshot';
+import { preloadCommentField } from './LazyCommentField';
 
 type Author = AnnotationCommentWire['author'];
 
@@ -29,6 +38,8 @@ export const VIEW_COMMENT_COLLAPSED_H = 36;
 const VIEW_COMMENT_EXPANDED_H = 108;
 const VIEW_COMMENT_GAP = 6;
 export const VIEW_COMMENT_INSET = 12;
+/** What an expanded card with a reply box needs below its top; a marker lower than this lifts the card. */
+const VIEW_COMMENT_REPLY_ROOM = 360;
 
 /** Offline, a name is a label someone typed, not a profile to visit. */
 export const CommentsOffline = createContext(false);
@@ -179,9 +190,43 @@ export function AnnotationPreview(props: {
   /** Room taken on the right (the edit panel): the mark sits beside it, never under it. */
   rightInset?: number;
   onOpen: () => void; onHover: (id: string | null) => void; onResolve?: () => void;
+  /** Saves a reply to this thread; absent (no permission, or not open) the card has no reply box. */
+  onReply?: (body: string, attachment?: CommentImageAttachment) => Promise<boolean>;
+  /** The reply box's field looks people and agents up here. */
+  backend?: ArtifactBackend; artifactId?: string; busy?: boolean;
+  /** This thread's unsent reply; the layer keeps it so closing the card cannot lose it. */
+  draft?: string; onDraftChange?: (value: string) => void;
+  /** Pinned, the card ignores the mouse leaving and other markers; only `onClose` puts it away. */
+  pinned?: boolean; onPin?: () => void; onClose?: () => void;
 }): JSX.Element {
+  let article!: HTMLElement;
   const [repliesExpanded, setRepliesExpanded] = createSignal(false);
   const [continuation, setContinuation] = createSignal<HTMLButtonElement>();
+  const canReply = () => Boolean(props.onReply && props.backend && props.artifactId);
+  // The reply's image lives with the card (its marker), so collapsing the box keeps it, as the layer keeps the words.
+  const replyImage = createCommentImageDraft();
+  const hasDraft = () => Boolean(props.draft?.trim());
+  const [replyFocused, setReplyFocused] = createSignal(false);
+  // A waiting draft, or a pinned card, opens straight to the reply box.
+  createEffect(() => { if (props.hovered && (props.pinned || (canReply() && hasDraft()))) setRepliesExpanded(true); });
+  createEffect(() => { if (props.hovered && repliesExpanded() && canReply()) void preloadCommentField().catch(() => {}); });
+  // PINNED: Escape and a click outside while empty close it; a draft survives either way.
+  createEffect(() => {
+    if (!props.pinned) return;
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') props.onClose?.(); };
+    const outside = (event: PointerEvent) => { if (!event.composedPath().includes(article) && !hasDraft()) props.onClose?.(); };
+    window.addEventListener('keydown', escape);
+    document.addEventListener('pointerdown', outside, true);
+    onCleanup(() => { window.removeEventListener('keydown', escape); document.removeEventListener('pointerdown', outside, true); });
+  });
+  /** No hover on a touch screen: a tap opens the card already pinned; the next tap opens the rail. */
+  let touched = false;
+  let replyBox!: HTMLDivElement;
+  /** Sent: the card stays, the new reply shows above the box, and the box keeps the focus for the next one. */
+  const keepReplying = () => requestAnimationFrame(() => {
+    replyBox?.querySelector<HTMLElement>('[role="textbox"]')?.focus();
+    article.scrollTop = article.scrollHeight;
+  });
   // The preview owns the delay; leaving or unmounting always cancels it.
   createEffect(() => {
     if (!props.hovered) { setRepliesExpanded(false); return; }
@@ -205,7 +250,10 @@ export function AnnotationPreview(props: {
   const working = () => activeAgents().length > 0;
   const compactWidth = () => messages() > 9 ? VIEW_COMMENT_MANY_W : messages() > 1 ? VIEW_COMMENT_COUNTED_W : VIEW_COMMENT_COLLAPSED_W;
   const radius = () => props.hovered ? '5px' : '50% 50% 50% 3px';
-  return <article
+  const expanded = () => props.hovered && repliesExpanded();
+  // A card with a reply box near the viewport's bottom lifts until the box fits under it.
+  const top = () => expanded() && canReply() ? `max(${VIEW_COMMENT_INSET}px, min(${props.top}px, calc(100dvh - ${VIEW_COMMENT_REPLY_ROOM}px)))` : `${props.top}px`;
+  return <article ref={article}
     onMouseEnter={() => props.onHover(props.row.id)}
     onMouseLeave={() => props.onHover(null)}
     onFocusIn={() => props.onHover(props.row.id)}
@@ -216,18 +264,26 @@ export function AnnotationPreview(props: {
     style={{
       position: 'fixed',
       outline: work() ? `2px solid ${agentNameColor(work()!.name)}` : undefined,
-      top: `${props.top}px`,
+      top: top(),
       right: `${(props.rightInset ?? 0) + VIEW_COMMENT_INSET}px`,
       width: `${props.hovered ? 288 : compactWidth()}px`,
       'max-width': `calc(100vw - ${(props.rightInset ?? 0) + VIEW_COMMENT_INSET * 2}px)`,
       height: props.hovered ? (repliesExpanded() ? 'auto' : `${VIEW_COMMENT_EXPANDED_H}px`) : `${VIEW_COMMENT_COLLAPSED_H}px`,
-      'max-height': props.hovered && repliesExpanded() ? `calc(100dvh - ${props.top + VIEW_COMMENT_INSET}px)` : undefined,
-      'overflow-y': props.hovered && repliesExpanded() ? 'auto' : undefined,
+      'max-height': expanded() ? `calc(100dvh - ${VIEW_COMMENT_INSET}px - ${top()})` : undefined,
+      'overflow-y': expanded() ? 'auto' : undefined,
       'border-radius': radius(),
     }}>
-    <button type="button" aria-label={`Open annotation conversation by ${label()}, ${messages()} message${messages() === 1 ? '' : 's'}`} onClick={() => props.onOpen()}
+    <button type="button" aria-label={`Open annotation conversation by ${label()}, ${messages()} message${messages() === 1 ? '' : 's'}`} 
+      onPointerDown={(event) => { touched = event.pointerType === 'touch'; }}
+      onClick={() => {
+        if (touched && !props.pinned && props.onPin) { setRepliesExpanded(true); props.onHover(props.row.id); props.onPin(); return; }
+        props.onOpen();
+      }}
       class="absolute inset-0 z-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent" style={{ 'border-radius': radius() }} />
     <Show when={unread()}><span aria-label="Unread reply" class="pointer-events-none absolute right-0 top-0 z-10 h-2 w-2 rounded-full bg-accent" /></Show>
+    <Show when={!props.hovered && canReply() && hasDraft()}>
+      <span role="img" aria-label="Unsent reply draft" class="pointer-events-none absolute bottom-0 left-0 z-10 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-bg"><PenLine size={8} strokeWidth={2.5} /></span>
+    </Show>
     <Show when={props.row.status === 'resolved'}><span aria-label="Resolved" class="pointer-events-none absolute bottom-0 right-0 z-10 text-xs text-accent">✓</span></Show>
     <Show when={work()}>{(current) => <span class="sr-only">{remoteWorkLabel(current())}{agents().length > 1 ? ` · ${agents().length} agents` : null}</span>}</Show>
     <Show when={props.hovered && agents().length > 1}><span class="absolute right-2 top-1 text-[10px] text-muted">{agents().length} agents</span></Show>
@@ -259,23 +315,47 @@ export function AnnotationPreview(props: {
                 </button>
               </Tooltip>
             </Show>
+            <Show when={props.pinned}>
+              <Tooltip content="close">
+                <button type="button" aria-label="Close comment preview" onClick={(event) => { event.stopPropagation(); props.onClose?.(); }}
+                  class="inline-flex h-6 w-6 items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"><X size={13} strokeWidth={1.8} /></button>
+              </Tooltip>
+            </Show>
           </span>
         </span>
+        {/* Next after Resolve for the keyboard, last on screen: the thread's own reply box, stuck to the card's bottom. */}
+        <Show when={repliesExpanded() && canReply()}>
+          {/* Native focus listeners: a move from Resolve into the box stays inside the trusted shadow root, and
+              a focus event whose target and relatedTarget share that root never reaches the document's delegation. */}
+          <div ref={replyBox} data-hover-reply data-compact={replyFocused() || hasDraft() ? 'false' : 'true'}
+            on:focusin={() => { setReplyFocused(true); props.onPin?.(); }}
+            on:focusout={(event) => {
+              const next = event.relatedTarget as Node | null;
+              if (replyBox.contains(next)) return;
+              setReplyFocused(false);
+              if (props.pinned && !article.contains(next) && !hasDraft()) props.onClose?.();
+            }}
+            class="pointer-events-auto sticky bottom-0 z-20 order-last -mx-3 -mb-2.5 mt-2 border-t border-edge bg-comment-hover px-3 pb-2.5 pt-2 font-sans text-xs">
+            <AnnotationReplyBox backend={props.backend!} artifactId={props.artifactId!} busy={props.busy ?? false} rows={2} placeholder="Reply…"
+              value={props.draft ?? ''} onChange={(value) => props.onDraftChange?.(value)} onSend={(body, attachment) => props.onReply!(body, attachment)} onSent={keepReplying} image={replyImage} />
+          </div>
+        </Show>
         <span class="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
         <Show when={props.resolveError}><span role="alert" class="mt-1 font-mono text-[10px] text-danger">{props.resolveError}</span></Show>
         <span class="mt-auto flex items-center justify-between font-mono text-[10px] text-faint">
-          <Show when={messages() > 1} fallback={<ThreadContinuation thread={props.row.thread} />}>
+          <Show when={messages() > 1 || canReply()} fallback={<ThreadContinuation thread={props.row.thread} />}>
             <button ref={setContinuation} type="button" aria-label="Expand replies" aria-expanded={repliesExpanded()} onClick={() => setRepliesExpanded(true)}
               class="pointer-events-auto cursor-pointer rounded-sm text-left hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"><ThreadContinuation thread={props.row.thread} /></button>
           </Show>
           <span class="transition-colors group-hover:text-accent">open →</span>
         </span>
-        <Show when={repliesExpanded()}>
+        <Show when={repliesExpanded() && messages() > 1}>
           <span role="list" aria-label="Thread replies" class="pointer-events-auto mt-2 flex flex-col gap-3 border-t border-edge pt-2">
             <For each={props.row.thread.slice(1)}>{(reply) => (
               <span role="listitem" class="block">
                 <AuthorIdentity author={reply.author} />
                 <span class="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
+                <Show when={reply.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
               </span>
             )}</For>
           </span>

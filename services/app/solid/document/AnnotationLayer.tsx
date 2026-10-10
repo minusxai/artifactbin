@@ -21,14 +21,14 @@
  */
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { useLocation } from '@solidjs/router';
-import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import Camera from 'lucide-solid/icons/camera';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import SquareDashedMousePointer from 'lucide-solid/icons/square-dashed-mouse-pointer';
 import X from 'lucide-solid/icons/x';
 import type { AnnotationWire } from '@/lib/annotations/store';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { AnnotationActionBody, ArtifactBackend } from '@/lib/artifact-backend/types';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/annotations/comment-folds';
@@ -41,26 +41,24 @@ import {
   STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE,
   type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection,
 } from '@/lib/story-runtime/contract';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { FeatureGate } from '../components/FeatureGate';
-import { createIsPhoneViewport } from '../components/MobileSheet';
-import { Tooltip } from '../components/Tooltip';
+import { createIsPhoneViewport } from '../ui/MobileSheet';
+import { Tooltip } from '../ui/Tooltip';
 import { createForegroundComposer } from '../components/TrustedUi';
 import { beginComposerPointerDrag, clampComposerPosition, positionedComposer, type ComposerPoint } from './AnnotationComposerPosition';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';
 import { RailChrome } from './AnnotationRail';
 import { AnnotationThread } from './AnnotationThread';
 import { createCommentCapture } from './CommentCapture';
+import { CommentImagesProvider, createCommentImageDraft, createImageDropTarget, ImageDropTarget, preloadScreenshotEditor } from './CommentImageAttach';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { PersonMentionProvider } from './PersonMention';
-import type { ScreenshotDrawing } from './ScreenshotEditor';
 
-// The brush is its own chunk, preloaded when Screenshot is pressed. Native permission stays in the
-// eager capture module so it keeps the user gesture. It renders under its OWN Suspense boundary:
-// the nearest one otherwise is the app's, and a first render would put the whole page on hold.
-const ScreenshotEditor = lazy(() => import('./ScreenshotEditor').then((module) => ({ default: module.ScreenshotEditor })));
-const loadScreenshotEditor = () => ScreenshotEditor.preload();
+// The brush is its own chunk (CommentImageAttach), preloaded when Screenshot is pressed. Native
+// permission stays in the eager capture module so it keeps the user gesture.
+const loadScreenshotEditor = preloadScreenshotEditor;
 
 export interface AnnotationLayerProps {
   id: string;
@@ -131,7 +129,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   /** Screenshots are stored by the backend; without that a comment carries none, and says why. */
   const imagesUnavailable = backend.unavailable('commentImages');
   const capture = createCommentCapture(backend, () => props.editId);
-  const screenshotExport: { current: (() => Promise<ScreenshotDrawing>) | null } = { current: null };
+  // The composer's one image: the area tool's capture, or one pasted, dropped or attached. Retake is
+  // for a capture; an attached image has nothing to retake.
+  const composerImage = createCommentImageDraft({ backend, editId: () => props.editId, capture,
+    retake: () => (capture.draft()?.image.method === 'upload' ? undefined : () => void beginScreenshot()) })!;
+  const composerDrop = createImageDropTarget(() => composerImage);
   let mutation = { signature: '', key: '' };
   const postToFrame = (message: unknown) => { if (props.runtimeRef) sendDocument({ runtimeRef: props.runtimeRef }, message); };
 
@@ -170,6 +172,19 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [hoverId, setHoverId] = createSignal<string | null>(null);
   let uiHoverId: string | null = null;
   const hoverUi = (id: string | null) => { uiHoverId = id; setHoverId(id); };
+  /** The hover card someone is replying from: it outlasts the mouse and other markers until put away. */
+  const [pinnedId, setPinnedId] = createSignal<string | null>(null);
+  /** The hover card that shows: the pinned one, else the one under the pointer. */
+  const previewId = () => pinnedId() ?? hoverId();
+  /** Unsent hover-card replies per thread, for this page session: closing a card never loses one. */
+  const [replyDrafts, setReplyDrafts] = createSignal<Record<string, string>>({});
+  const setReplyDraft = (id: string, value: string) => setReplyDrafts((current) => {
+    if ((current[id] ?? '') === value) return current;
+    const next = { ...current };
+    if (value) next[id] = value; else delete next[id];
+    return next;
+  });
+  const closePreview = () => batch(() => { setPinnedId(null); hoverUi(null); });
   const [viewStateRequest, setViewStateRequest] = createSignal(0);
   const [viewStateError, setViewStateError] = createSignal<{ id: string; message: string } | null>(null);
   const [missingTargets, setMissingTargets] = createSignal<Set<string>>(new Set());
@@ -398,7 +413,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       });
     const selected = selection();
     postToFrame({
-      type: STORY_ANNOTATIONS_MESSAGE, viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: hoverId(),
+      type: STORY_ANNOTATIONS_MESSAGE, viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: previewId(),
       selectedPath: selected?.path ?? null, selected, canComment: true, pick: pick(),
     } satisfies StoryAnnotationsMessage);
   });
@@ -475,7 +490,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     onCleanup(unsubscribe);
   });
 
-  const act = async (annId: string, body: { reply?: string; resolve?: boolean; reopen?: boolean }) => {
+  /** One thread write; rejects with the backend's refusal (a reply's box shows which), `act` turns that into false. */
+  const actOrThrow = async (annId: string, body: AnnotationActionBody) => {
     setBusy(true);
     try {
       const wire = await backend.actOnAnnotation(annId, body);
@@ -511,8 +527,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         }
       });
       return true;
-    } catch { return false; } finally { setBusy(false); }
+    } finally { setBusy(false); }
   };
+  const act = (annId: string, body: AnnotationActionBody) => actOrThrow(annId, body).catch(() => false);
   const resolveFromPreview = async (id: string) => {
     setAmbientResolveError(null);
     if (!await act(id, { resolve: true })) setAmbientResolveError({ id, message: 'Could not resolve this thread. Try again.' });
@@ -565,21 +582,19 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     setBusy(true);
     setFailure(null);
     try {
-      const shot = capture.draft();
-      if (shot && !screenshotExport.current) throw new Error('The screenshot is still loading. Please try again.');
-      const attachmentId = await capture.stage(shot ? await screenshotExport.current!() : undefined);
+      const attachment = await composerImage.stage();
       const body = draft();
-      const signature = JSON.stringify([subject, body, attachmentId]);
+      const signature = JSON.stringify([subject, body, attachment?.attachment_id]);
       if (mutation.signature !== signature) mutation = { signature, key: runtimeId() };
       let wire: AnnotationWire;
       try {
         // The exact words ride along when there are any; a caret comment carries neither key.
         wire = await backend.createAnnotation({
           node_id: subject.nodeId, body,
-          ...(attachmentId ? { attachment_id: attachmentId, edit_id: shot!.editId } : {}),
+          ...(attachment ?? {}),
           ...(subject.quote ? { quote: subject.quote } : {}),
           ...(subject.range ? { range: subject.range } : {}),
-          ...(subject.viewState ? { view_state: subject.viewState, edit_id: shot?.editId ?? props.editId } : {}),
+          ...(subject.viewState ? { view_state: subject.viewState, edit_id: attachment?.edit_id ?? props.editId } : {}),
         }, mutation.key);
       } catch (error) {
         if (!(error instanceof BackendRequestError)) throw error;
@@ -675,6 +690,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const placed = createMemo(() => floating() ? positionedComments(floatingRows(), anchorRects(), markerRect(), viewport().height) : []);
   const placedIds = createMemo(() => placed().map((item) => item.annotation.id), undefined, { equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]) });
   const placement = (id: string) => placed().find((item) => item.annotation.id === id);
+  // A pinned card whose marker is gone (the rail opened, the thread resolved, it scrolled away) is put away; its draft stays.
+  createEffect(() => { const pinned = pinnedId(); if (pinned && !placedIds().includes(pinned)) setPinnedId(null); });
 
   const visibleResolved = createMemo(() => placed().filter((item) => item.top >= 0 && item.top + VIEW_COMMENT_COLLAPSED_H <= viewport().height).map((item) => item.annotation.id).join(','));
   const counting = createMemo(() => Object.values(recentResolved()).some((value) => value.remaining > 0));
@@ -817,13 +834,13 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       onReopen: () => void act(id, { reopen: true }),
     } : {
       onOpen: () => openThread(id),
-      onReply: (body: string) => act(id, { reply: body }),
+      onReply: (body: string, attachment?: { attachment_id: string; edit_id: string }) => actOrThrow(id, { reply: body, ...attachment }),
       onResolve: () => void act(id, { resolve: true }),
       onReopen: () => {},
     }),
   });
 
-  return <PersonMentionProvider artifactId={props.id} backend={backend}>
+  return <CommentImagesProvider backend={backend} editId={() => props.editId}><PersonMentionProvider artifactId={props.id} backend={backend}>
     <CommentsOffline.Provider value={backend.mode === 'offline'}>
       <style ref={chromeAnchor}>{CAPTURE_CHROME_CSS}</style>
       <Show when={capture.busy() && !selection()}>
@@ -836,8 +853,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           <For each={placedIds()}>{(id) => (
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={recentResolved()[id]?.remaining}
-                hovered={hoverId() === id} resolving={busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
-                onResolve={() => void resolveFromPreview(id)} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi} />
+                hovered={previewId() === id} resolving={busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
+                onResolve={() => void resolveFromPreview(id)} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
+                onReply={item().annotation.status === 'open' ? (body, attachment) => actOrThrow(id, { reply: body, ...attachment }) : undefined}
+                backend={backend} artifactId={props.id} busy={busy()} draft={replyDrafts()[id] ?? ''} onDraftChange={(value) => setReplyDraft(id, value)}
+                pinned={pinnedId() === id} onPin={() => setPinnedId(id)} onClose={closePreview} />
             )}</Show>
           )}</For>
         </div>
@@ -859,8 +879,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
       {/* Drafts belong to the thing being discussed; the saved conversation moves to the rail. */}
       <Show when={selection() && composerPosition() && !pick()}>
-        <section ref={(element) => { composerElement = element; }} data-capture-chrome role="dialog" aria-label="Annotation composer" class={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
+        <section ref={(element) => { composerElement = element; composerDrop.ref(element); }} data-capture-chrome role="dialog" aria-label="Annotation composer" class={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
           style={{ left: `${composerPosition()!.left}px`, top: `${composerPosition()!.top}px`, width: `${composerPosition()!.width}px`, 'max-height': `calc(100vh - ${composerPosition()!.top + VIEW_COMMENT_INSET}px)` }}>
+          {/* A file dragged anywhere over the composer is its image (CommentImageAttach). */}
+          <ImageDropTarget over={composerDrop.over()} />
           <div class="flex items-center gap-2 border-b border-edge px-3 py-2.5">
             <span class="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-accent"><MessageSquare size={12} strokeWidth={1.8} /></span>
             <span class="text-xs font-semibold text-fg">Add comment</span>
@@ -873,11 +895,6 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           </div>
           <div class="p-3">
             <Show when={capture.busy()}><div role="status" class="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} class="animate-spin" />Preparing screenshot…</div></Show>
-            <Show when={capture.draft()} keyed>{(shot) => (
-              <Suspense fallback={<div role="status" class="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} class="animate-spin" />Loading screenshot…</div>}>
-                <ScreenshotEditor image={shot.image} initialStrokes={shot.strokes} exportRef={screenshotExport} busy={busy()} onRetake={() => void beginScreenshot()} />
-              </Suspense>
-            )}</Show>
             <Show when={capture.required() && !capture.draft() && !capture.busy()}>
               <div class="mb-3 space-y-3 rounded-lg border border-edge bg-surface p-3 text-xs">
                 <p role="alert" class="leading-relaxed text-muted">{capture.error() || 'A screenshot is required for this selection.'}</p>
@@ -887,11 +904,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
                 <button type="button" class="text-muted underline underline-offset-4 hover:text-fg" onClick={() => capture.skip()}>Continue without screenshot</button>
               </div>
             </Show>
-            <Show when={props.editId && imagesUnavailable}>
-              <div class="mb-3"><FeatureGate reason={imagesUnavailable}>{(gate) => <button type="button" class="rounded-lg border border-edge bg-panel px-3 py-2 text-xs font-medium disabled:opacity-50" {...gate}>Attach screenshot</button>}</FeatureGate></div>
-            </Show>
             <CommentMarkdownField backend={backend} artifactId={props.id}
-              label="Annotation comment" quickAgents
+              label="Annotation comment" quickAgents image={composerImage} busy={busy()}
               value={draft()} onChange={setDraft} onSubmit={submitDraft}
 
               rows={2} autoFocus={!capture.busy()}>
@@ -962,5 +976,5 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           onCancel={() => { if (!confirmBusy()) setDeleting(null); }} onConfirm={() => void confirmDelete()} />
       </Show>
     </CommentsOffline.Provider>
-  </PersonMentionProvider>;
+  </PersonMentionProvider></CommentImagesProvider>;
 }

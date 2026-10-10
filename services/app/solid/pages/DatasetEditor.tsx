@@ -1,18 +1,18 @@
 /* @jsxImportSource solid-js */
 import { creationDestination } from '../lib/creation-destination';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
-import { AssetWorkspace, type AssetSection } from '../components/AssetWorkspace';
+import { AssetWorkspace, type AssetSection } from '../datasets/AssetWorkspace';
 import WorkspaceShell from '../components/WorkspaceShell';
-import StepHeader from "../components/StepHeader";
+import StepHeader from "../datasets/StepHeader";
 import { DocumentSharing } from '../document/DocumentSharing';
-import { DatasetImport } from '../components/DatasetImport';
-import { DatasetPolicies } from "../components/DatasetPolicies";
+import { DatasetImport } from '../datasets/DatasetImport';
+import { DatasetPolicies } from "../datasets/DatasetPolicies";
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import { Navigate, useParams } from "@solidjs/router";
 import { ChevronDown, ChevronRight, Plus, Play, Code2 } from "lucide-solid";
-import { Button, Input, PANEL } from "../components/ui";
-import { CatalogRows, DatasetExplorer, type CatalogPreview, type CatalogQuery } from "../components/DatasetCatalogView";
-import { DatasetWhitelist, type SourceDraft } from "../components/DatasetWhitelist";
+import { Button, Input, PANEL } from "../ui/ui";
+import { CatalogRows, DatasetExplorer, type CatalogPreview, type CatalogQuery } from "../datasets/DatasetCatalogView";
+import { DatasetWhitelist, type SourceDraft } from "../datasets/DatasetWhitelist";
 import { parseDatasetDefinition, serializeDatasetDefinition } from "@/lib/datasets/definition";
 import type { CatalogInput, DatasetCatalog, DatasetConnection, DiscoveredTable, NotebookCell } from "@/lib/datasets/types";
 import type { DatasetColumn } from "@/lib/dataflow/dataset-shape";

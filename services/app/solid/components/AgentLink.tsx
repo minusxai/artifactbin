@@ -2,8 +2,8 @@
 import type { ArtifactDestination } from '@artifactbin/contracts';
 import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Check, Copy, Loader2 } from 'lucide-solid';
-import { Tooltip } from './Tooltip';
-import { LINK } from './ui';
+import { Tooltip } from '../ui/Tooltip';
+import { LINK } from '../ui/ui';
 import { copyText } from '../lib/copy-text';
 
 interface StartResponse { id: string; url: string; prompt?: string; error?: string }

@@ -4,7 +4,4 @@
  * `AnnotationOperation` is defined here (as the wire's `DocumentAnnotationOperation`); lib/editor-engine
  * imports it downward. Browser-bundled code imports the leaf files directly.
  */
-export type { AnnotationRange } from './annotation-range';
-export { areaTarget, boxFromRects, canonicalQuote, canonicalText, findNearest, formatRel, isAreaRange, isTargetRange, parseAnnotationRange, parseRel, rectFromBox, refinementRange } from './annotation-range';
-export type { AnnotationOperation, AnnotationReceipt } from './annotation-edits';
-export { annotationEffects, parseAnnotationOperations } from './annotation-edits';
+export { isAreaRange, parseAnnotationRange, refinementRange } from './annotation-range';

@@ -3,7 +3,7 @@ import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
 import { isMutationNotification, type InboxItem, type MemberNotificationItem } from '@/lib/notifications/inbox';
 import type { MutationNotificationView } from '@artifactbin/contracts';
-import { timeAgo } from './ui';
+import { timeAgo } from '../ui/ui';
 import { useInbox } from '../lib/notifications';
 import { apiFetch } from '../lib/api';
 

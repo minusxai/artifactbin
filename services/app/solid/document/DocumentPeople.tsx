@@ -2,7 +2,7 @@
 import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from 'solid-js';
 import Users from 'lucide-solid/icons/users';
 import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
-import { Button, Input } from '../components/ui';
+import { Button, Input } from '../ui/ui';
 import { apiFetch } from '../lib/api';
 import { primeShared, sharedRequest } from '@/lib/http/shared-request';
 type Person = { user_id: string; username: string; name: string | null };

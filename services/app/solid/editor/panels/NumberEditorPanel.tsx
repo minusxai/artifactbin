@@ -13,7 +13,7 @@
  * pick must be expressible without restating the binding.
  */
 import { createEffect, createSignal, on, Show, type JSX } from 'solid-js';
-import { SelectMenu } from '@/solid/components/SelectMenu';
+import { SelectMenu } from '@/solid/ui/SelectMenu';
 import BoundQuery from '../BoundQuery';
 import type { TableChoice } from '@/lib/document/table-catalog';
 import { NUMBER_AGGS, type NumberEmbedBinding, type NumberEmbedEdit } from '@/lib/data/story/story-number';

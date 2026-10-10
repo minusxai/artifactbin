@@ -85,9 +85,9 @@ import QueryNotebookPanel from './panels/QueryNotebookPanel';
 import ImageDialog, { IMAGE_ACCEPT, type ChosenImage, type ImageChoice } from './panels/ImageDialog';
 import ThemePicker, { ModeChip, TemplateChip } from './ThemePicker';
 import { VersionHistory } from '../document/VersionHistory';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 import { FeatureGate } from '../components/FeatureGate';
-import MobileSheet, { createIsPhoneViewport } from '../components/MobileSheet';
+import MobileSheet, { createIsPhoneViewport } from '../ui/MobileSheet';
 import { copyText } from '../lib/copy-text';
 import { recoverableDraft } from './recoverable-draft';
 
