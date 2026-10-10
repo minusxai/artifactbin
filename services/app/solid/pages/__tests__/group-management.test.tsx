@@ -13,9 +13,9 @@ it('viewer can search people and open profiles without management controls',()=>
  expect(screen.queryByRole('button',{name:'Invite person'})).not.toBeInTheDocument();
 });
 it('keeps last-editor refusal visible and preserves member role',async()=>{
- vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'At least one editor must remain.'},{status:409})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'last_editor'},{status:409})));
  render(()=> <GroupManagement detail={detail} refresh={()=>{}} />);
  fireEvent.change(screen.getByRole('combobox',{name:'Role for Alice'}),{target:{value:'viewer'}});
- await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('At least one editor'));
+ await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('Keep at least one editor'));
  expect(screen.getByRole('combobox',{name:'Role for Alice'})).toHaveValue('editor');
 });

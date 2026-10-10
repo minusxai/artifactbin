@@ -34,7 +34,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
     const artifact = await getArtifactById(file.id);
     if (artifact && (await canReadArtifact(artifact, viewer))) {
       const groupId=(artifact as ArtifactSummary & {group_id?:string|null}).group_id;
-      const canonical = canonicalArtifactPath(artifact, groupId ? (await getGroupById(groupId))?.handle : await ownerUsername(artifact.user_id));
+      const canonical = canonicalArtifactPath(artifact, groupId ? (await getGroupById(groupId))?.handle ?? null : await ownerUsername(artifact.user_id));
       const requested = `/@${handle}${path.length ? '/' + path.join('/') : ''}`;
       if (requested !== canonical) return json({ kind: 'redirect', to: canonical });
       return json({ kind: 'artifact', id: artifact.id });
