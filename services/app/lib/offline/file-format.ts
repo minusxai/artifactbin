@@ -16,7 +16,7 @@
  * this file is trusted by the server: a sync re-validates all of it.
  */
 import type { AnnotationWire } from '@/lib/annotations';
-import type { CompiledPage } from '@/lib/compiled-page/contract';
+import type { CompiledPage } from '@/lib/compiled-page';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { DataflowState, Scalar, TableResult } from '@/lib/dataflow/dataflow';
 import type { ImportTables } from '@/lib/dataflow/compiled-flow';

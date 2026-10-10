@@ -60,19 +60,13 @@ import { readUrlValues } from '@/lib/dataflow';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { DOMAIN_FOOTER_CSS } from '@/lib/page-styles';
 import { DOMAIN_FOOTER_TEXT } from '@artifactbin/contracts/domain-footer';
-import { assembleReaderPage } from '@/lib/compiled-page/assembler';
-import { withStoredCarriers } from '@/lib/compiled-page/carriers';
-import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { unresolvedSpecifiers } from '@/lib/compiled-page/runtime-binding';
-import { retainedBuild } from '@/lib/compiled-page/shared-builds.server';
-
 import {
-  COMPILE_INLINE_BUDGET_MS, isCompileFailure,
-  MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT,
-  type AssembleHead, type AssembleInput, type AssembleOverlay, type CompiledPage, type CompilerBuild,
-  type ReaderFallbackReason, type StoredCompile,
-} from '@/lib/compiled-page/contract';
-import { planOf } from '@/lib/compiled-page/plan';
+  type AssembleHead, type AssembleInput, type AssembleOverlay, assembleReaderPage, COMPILE_INLINE_BUDGET_MS,
+  type CompiledPage, type CompilerBuild, isCompileFailure, loadCompilerBuild, MIN_HANDOVER_CONTRACT,
+  MIN_PAGE_FORMAT, planOf, type ReaderFallbackReason, retainedBuild, type StoredCompile,
+  unresolvedSpecifiers, withStoredCarriers,
+} from '@/lib/compiled-page';
+
 import { anonymousAccessFacts, SNAPSHOT_MAX_AGE_MS, snapshotKeyFor, snapshotStore, type DataSnapshot, type SnapshotKey } from './snapshots.server';
 
 /** What one admitted request decides about its compiled render. Nothing here is stored. */

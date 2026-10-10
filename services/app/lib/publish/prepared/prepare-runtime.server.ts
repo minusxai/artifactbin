@@ -13,7 +13,7 @@ import { mermaidImagesFor, type MermaidImageLookup } from '@/lib/mermaid-images/
 import type { WebAssetBox } from '../../document/asset-url';
 import type { RefDataMap } from '@/lib/dataflow/ref-data';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { loadCompilerBuild } from '@/lib/compiled-page';
 
 /** Inputs still used by the app's editor preparation and the offline file. */
 export interface PrepareStoryInput {

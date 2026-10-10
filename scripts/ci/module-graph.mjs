@@ -115,10 +115,7 @@ const DOCUMENT_ENTRIES = [
 ];
 const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
 const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];
-const COMPILED_PAGE_ENTRIES = [
-  'agent-discovery', 'assembler', 'backfill.server', 'build.server', 'bundle.server', 'carriers', 'compiler', 'contract',
-  'modules.server', 'plan', 'runtime-binding', 'shared-builds.server', 'speculation', 'story-element',
-];
+const COMPILED_PAGE_ENTRIES = ['', 'agent-discovery', 'backfill.server', 'bundle.server', 'carriers', 'compiler', 'story-element'];
 /** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
 const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
 const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];

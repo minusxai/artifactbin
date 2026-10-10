@@ -30,7 +30,7 @@ import { LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands';
 import { AUTHOR_VENDOR_EXPORTS } from '@/lib/author-script/contract';
 import { renderOutlineRail } from '@/lib/story-runtime/outline-view';
 import { CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, STORY_ROOT_ID, type DrawnChart } from '@/lib/story-runtime/contract';
-import { inlineStoryElement } from '@/lib/compiled-page/story-element';
+import { inlineStoryElement } from './story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { DOCUMENT_ROOT_CSS, documentRootAttributes, fontPreloadTags } from '@/lib/page-styles';
 import {

@@ -17,7 +17,7 @@
  *   opaque origin, so author JS cannot read the human UI's localStorage even
  *   though it is same-host. Verified live: reading localStorage throws.
  */
-import {agentDiscovery} from '@/lib/compiled-page/agent-discovery';
+import { agentDiscovery, READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
 import { refusingUnservable } from '@/lib/artifacts/servable';
 import { canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';
@@ -44,7 +44,6 @@ import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
 import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
-import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/contract';
 import type { StorySurface } from '@/lib/story-runtime/story-fragment';
 import { compiledPageFor, domainFooter } from '@/lib/publish/prepared';
 import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';

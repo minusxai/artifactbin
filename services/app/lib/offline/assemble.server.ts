@@ -21,7 +21,7 @@
  * made an absolute link to its live copy.
  */
 import { readFile } from 'node:fs/promises';
-import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { isCompileFailure, loadCompilerBuild, withStoredCarriers } from '@/lib/compiled-page';
 import path from 'node:path';
 import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations/store';
 import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/artifacts/archived-version';
@@ -38,9 +38,7 @@ import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import type { JsxNode } from '@/lib/jsx';
 import { savedMentionStates } from '@/lib/artifacts/membership/membership';
-import { isCompileFailure } from '@/lib/compiled-page/contract';
 import { loadSsrModule } from '@/lib/compiled-page/bundle.server';
-import { withStoredCarriers } from '@/lib/compiled-page/carriers';
 import { preparedPageFor } from '@/lib/publish/prepared/prepared-page.server';
 import { objectStore } from '@/lib/object-store';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';

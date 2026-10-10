@@ -1,4 +1,8 @@
-/** Select document versions by recorded build metadata, then ask the running app to recompile them. */
+/**
+ * Select document versions by recorded build metadata, then ask the running app to recompile them.
+ * A SEPARATE ENTRY (@/lib/compiled-page/backfill.server) for scripts/compiled-backfill alone: no server
+ * code uses it, so the index does not carry it.
+ */
 import { READER_MODE_HEADER } from './contract';
 
 interface BackfillDb { query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: R[] }> }

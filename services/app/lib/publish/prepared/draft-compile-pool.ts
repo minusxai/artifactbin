@@ -8,7 +8,7 @@
  */
 import { Worker } from 'node:worker_threads';
 import type { PrepareStoryInput } from './prepare-runtime.server';
-import type { CompileInput, CompiledPage, CompilerBuild } from '@/lib/compiled-page/contract';
+import type { CompileInput, CompiledPage, CompilerBuild } from '@/lib/compiled-page';
 import type { JsxNode } from '@/lib/jsx';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { SnapshotChartOptions } from './charts.server';

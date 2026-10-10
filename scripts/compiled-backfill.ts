@@ -43,7 +43,6 @@
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { BackfillFilter, BackfillColumn, BackfillSelector } from '@/lib/compiled-page/backfill.server';
-import { MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
 
 async function main() {
   const { values } = parseArgs({ options: {
@@ -69,7 +68,9 @@ async function main() {
   process.env.DATABASE_URL = db;
   // After the environment is set, as every server module here: an old contract OR an older stored stylesheet.
   if (values.stale) {
-    const { preparedCssVersion } = await import('@/lib/publish/prepared/css-version.server');
+    const [{ preparedCssVersion }, { MIN_HANDOVER_CONTRACT }] = await Promise.all([
+      import('@/lib/publish/prepared/css-version.server'), import('@/lib/compiled-page'),
+    ]);
     filters.unshift({ any: [{ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT }, { column: 'css_version', op: '!=', value: preparedCssVersion() }] });
   }
   // After the environment is set: lib/config reads it on first import.

@@ -22,6 +22,9 @@
  * runtime with lib/jsx/reactive. `codegen-safety.ts structureIndependent` is the proof.
  *
  * Pure and deterministic for one input.
+ *
+ * A SEPARATE ENTRY (@/lib/compiled-page/compiler), never re-exported by the index: it loads Babel, and
+ * a server or CLI start that only serves stored pages must not (prepared-page.server imports it lazily).
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
