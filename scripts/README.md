@@ -11,9 +11,17 @@ program has no row here or a row names a file that is gone or is now only a libr
 same change as the file.
 
 **Run by** names the caller: an `npm run` script (root `package.json` unless a workspace is named), a
-workflow job (`ci.yml`, `page-speed.yml`), another script, an agent, or a person by hand. Paths a
-downstream deployment runs (`gate-cli-conformance.mjs`, `build/build-islands.mjs`, `gates.mjs`,
-`gate-container.mjs`, `ci/ci.mjs`) are a contract: move them only with a paired downstream change.
+workflow job (`ci.yml`, `page-speed.yml`), another script, an agent, or a person by hand.
+`scripts/__tests__/script-paths.test.mjs` fails when a workflow or package script names a `scripts/` path
+that is not in the tree.
+
+Paths another repository runs, copies or imports are a contract: move them only with a paired change
+there. artifactbin-server runs or sparse-checks-out `lib/ci-plan.mjs`, `lib/ci-artifact-wait.mjs`,
+`lib/ci-elapsed.mjs`, `ci/ci.mjs`, `ci/npm-provenance.mjs`, `ci/npm-driver.mjs`,
+`ci/link-npm-acceptance.mjs`, `ci/npm-acceptance/`, `gate-cli-conformance.mjs` and
+`build/build-islands.mjs`; the evals repository imports `lib/dev-env.mjs`, `lib/shard.mjs` and
+`lib/{credential,env,slug}.ts`, and mirrors `lib/dev-runner.mjs`. Where each is used, and the check that
+fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 
 ## Dev and agent tooling
 
@@ -49,7 +57,7 @@ downstream deployment runs (`gate-cli-conformance.mjs`, `build/build-islands.mjs
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/gates.mjs` | Run the journey gates as a set: servers, shards, manifest bijection (`gates.manifest.mjs`). | `npm run test:gates`, `ci.yml`, downstream |
+| `scripts/gates.mjs` | Run the journey gates as a set: servers, shards, manifest bijection (`gates.manifest.mjs`). | `npm run test:gates`, `ci.yml` |
 | `scripts/gate-container.mjs` | Run named gates in a Linux container built and served as CI does. | by hand, agents (pre-merge only) |
 
 ## Journey gates
