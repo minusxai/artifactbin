@@ -189,7 +189,7 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
  * with nothing to say so). `fit-content` makes it hug its rows by default; an
  * author's `w-full` still wins, because a utility outranks `:where`. The fade
  * is the affordance — shown on a table that CAN scroll (marked by
- * lib/story-runtime/table-scroll from the every-document entry) and dropped
+ * lib/islands/table-scroll from the every-document entry) and dropped
  * once the reader reaches the last column, where nothing is hidden any more.
  */
 export const STORY_TABLE_CSS = `

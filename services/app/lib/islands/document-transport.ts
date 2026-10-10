@@ -12,8 +12,8 @@
  *
  * Pure over a window-shaped argument so it is testable without a browser.
  */
-import { createFetchTransport, type FetchLike, type FetchTransportOptions } from './fetch-transport';
-import type { QueryTransport } from './store';
+import { createFetchTransport, type FetchLike, type FetchTransportOptions } from '@/lib/story-runtime/fetch-transport';
+import type { QueryTransport } from '@/lib/story-runtime/store';
 
 interface DocumentWindow {
   parent: unknown;

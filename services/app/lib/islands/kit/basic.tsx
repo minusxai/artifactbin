@@ -13,7 +13,7 @@ import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
 import { commentMetadata, instanceDomId } from '@/lib/story-ui/repeat-identity';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/icon-contract';
 
-import { createRowActions } from '@/lib/story-runtime/row-actions';
+import { createRowActions } from '../row-actions';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
 
 // Mirrors lib/jsx/validate hasDangerousScheme without importing the validator into the browser kit.
@@ -110,7 +110,7 @@ const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Objec
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : 'that did not save');
 
 /**
- * Each document's row actions (the former RowActionsContext, lib/story-runtime/row-actions): a row's write
+ * Each document's row actions (the former RowActionsContext, lib/islands/row-actions): a row's write
  * in flight, and its refusal, belong to the document, so they outlive the button — a row reordered,
  * filtered or scrolled out of a virtual window and back is still busy, and a second click writes nothing.
  */

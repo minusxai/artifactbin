@@ -37,9 +37,9 @@ vi.mock('@/lib/islands/island-controller', () => ({
   },
 }));
 
-import { openFrameDoor, FRAME_BRIDGE_MESSAGE, frameAppOrigin, APP_ORIGIN_ATTR } from '../door';
+import { openFrameDoor, FRAME_BRIDGE_MESSAGE, frameAppOrigin, APP_ORIGIN_ATTR } from '../frame-door';
 import { startFrameBridge } from '@/lib/islands/frame-bridge';
-import { createFrameBridgeParent, relayedRequest, urlValuesOf } from '../parent';
+import { createFrameBridgeParent, relayedRequest, urlValuesOf } from '@/lib/story-runtime/frame-bridge/parent';
 import { createFramedStory } from '@/solid/document/create-framed-story';
 import { createRoot, createSignal } from 'solid-js';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';

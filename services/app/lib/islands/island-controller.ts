@@ -19,7 +19,7 @@ import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
 import { updateCompiledStory } from '@/lib/islands/live-update';
-import { nextTask, PARSE_SLICE_MS, parseHtmlInSlices } from '@/lib/story-runtime/sliced-parse';
+import { nextTask, PARSE_SLICE_MS, parseHtmlInSlices } from './sliced-parse';
 import { storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';

@@ -17,7 +17,7 @@ import type {ImageAssetAnswer} from '@/lib/dataflow/ref-data';
  * result lands for every query whose inputs have not moved since it was asked,
  * whichever run it came from. The store never knows how a query runs: the
  * served document GETs its own query url when it is the page and relays
- * through the parent when it has one (document-transport.ts); the edit canvas
+ * through the parent when it has one (lib/islands/document-transport); the edit canvas
  * fetches the owner path directly. Without a transport, values still change
  * (controls stay live) and tables stay as rendered.
  *

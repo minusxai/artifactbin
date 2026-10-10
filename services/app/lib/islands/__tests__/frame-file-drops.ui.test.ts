@@ -1,10 +1,10 @@
 /**
- * A FILE DROPPED ON A FRAMED DOCUMENT (frame-bridge/file-drops): an unclaimed file drag is refused so the frame
+ * A FILE DROPPED ON A FRAMED DOCUMENT (lib/islands/frame-file-drops): an unclaimed file drag is refused so the frame
  * never opens the file in the document's place; whatever claims a drop first (the editor, an author's drop zone,
  * a native file input) still gets it, a text drag is untouched, and so is the reader's selection.
  */
 import { afterEach, expect, it } from 'vitest';
-import { refuseFileNavigation } from '../file-drops';
+import { refuseFileNavigation } from '../frame-file-drops';
 
 const transfer = (types: string[]) => ({ types, files: [], dropEffect: 'move' }) as unknown as DataTransfer;
 const drag = (target: EventTarget, type: 'dragover' | 'drop', types = ['Files']) => {

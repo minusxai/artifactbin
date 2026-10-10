@@ -9,7 +9,7 @@
  *   performs the `<Mutation>` with `set=` applied first and `args=` resolved at the click, busy while
  *   it is in flight, and a refusal is shown in a `role="alert"`.
  * - In a `<For>` row the button writes with the row, and refuses without a durable row key; its write in
- *   flight and its refusal are the DOCUMENT's (today's RuntimeRowAction over lib/story-runtime/row-actions),
+ *   flight and its refusal are the DOCUMENT's (today's RuntimeRowAction over lib/islands/row-actions),
  *   so a row re-rendered meanwhile is still busy and a second click writes nothing.
  * - The runtime's context answers the write checks (`mutationUnavailable`, `mutating`) reactively.
  * - `<DialogContent run>` is a form performing the mutation on submit: disabled with the reason for a

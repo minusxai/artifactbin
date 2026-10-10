@@ -4,7 +4,7 @@
  * reader is framed on its OWN origin, where it calls its doors directly with its pages cookie.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
+import { createDocumentTransport } from '@/lib/islands/document-transport';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 
 const win = (parent: unknown) => {
