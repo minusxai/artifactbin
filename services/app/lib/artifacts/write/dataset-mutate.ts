@@ -1,7 +1,6 @@
-import {groupMemberPredicate} from '../access';
 import {NotificationExecutionError} from '@/lib/notifications/errors';
 import {artifactQuery} from '@/lib/artifacts/document';
-import { grantsOf, assertGrantCommit } from '@/lib/artifacts/dataset-policy/grants';
+import { grantsOf, assertGrantCommit, type GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
 import {artifactState} from '@/lib/artifacts/state';
@@ -11,7 +10,7 @@ import {notificationJobStore} from '@/lib/artifacts/notification-runtime';
 import {lockNotificationExecution} from '@/lib/artifacts/notification-authority';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
-import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/artifacts/dataset-policy';
+import { canWriteDataset, mutationPolicy, recheckMutation, canUseDataPolicy, policyReaderSql } from '@/lib/artifacts/dataset-policy';
 import {catalogOf,importedTables} from '@/lib/datasets/catalog';
 import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
 import {loadSqlite} from '@artifactbin/sql/core';
@@ -50,7 +49,7 @@ import { trackEvent } from '@/lib/platform/analytics';
 import { MAX_QUERY_ROWS } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
-import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow } from '@/lib/artifacts/access';
+import { LIVE_ARTIFACT_SQL, editorScope, groupMemberPredicate, type ArtifactRow } from '@/lib/artifacts/table';
 import type { RoleActor } from '@/lib/accounts';
 import { loadDatasetRows, storeDatasetRows } from '@/lib/datasets/dataset-store';
 import { newEditId } from '../../document';
@@ -120,7 +119,7 @@ export async function mutateDataset(
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string;notificationJob?:MutationNotificationJobInput} = {},
+  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:GrantDocument;receipt?:MutationReceipt;expectedState?:string;notificationJob?:MutationNotificationJobInput} = {},
 ): Promise<MutationApplied | MutationRefused> {
   if(Object.hasOwn(params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
   const db = await getDb();

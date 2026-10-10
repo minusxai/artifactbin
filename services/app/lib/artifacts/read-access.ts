@@ -1,7 +1,8 @@
 import {grantsOf,grantsPermitRead} from '@/lib/artifacts/dataset-policy/grants';
-import { effectiveRole, type ArtifactRow } from './access';
+import { effectiveRole } from './access';
+import { type ArtifactRow } from './table';
 import type { TokenActor } from '@/lib/accounts';
-import { getArtifactById, getEditableArtifactFor } from './store';
+import { getArtifactById, getEditableArtifactFor } from './rows';
 import {servableDocument} from './servable';
 import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
 import {publicCatalogOf} from '../datasets/catalog';

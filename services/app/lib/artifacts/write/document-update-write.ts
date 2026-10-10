@@ -7,7 +7,7 @@ import {documentAnnotationSql,annotationSqlInput,annotationSqlGuard} from './doc
  * SQL or authorization predicates. Permissions, dependency guards, history and
  * identity maintenance share the artifact row lock and the same SQL statement. */
 import type {DocumentUpdate,Queryable} from '@artifactbin/contracts';
-import { ownerPredicate, type ArtifactRow, type Scope } from '../access';
+import { ownerPredicate, type ArtifactRow, type Scope } from '../table';
 import type { TokenActor } from '@/lib/accounts';
 import {hydrateArtifactDocument} from '../document';
 import {GRAPH_POLICY, newEditId} from '../../document';

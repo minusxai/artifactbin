@@ -5,7 +5,7 @@ import {explicitNotificationMemberships} from '@/lib/notifications/membership';
 import {grantsOf,grantsPermitRead,readThrough,type ReadRow} from '@/lib/artifacts/dataset-policy/grants';
 import {liveAccessFacts,preloadAccessFacts,type AccessFacts} from './access-facts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
-import type { ArtifactRow } from './access';
+import type { ArtifactRow } from './table';
 import type { RoleActor } from '@/lib/accounts';
 import {hasDocumentEditorAccess} from './document-policy';
 import {catalogOf} from '@/lib/datasets/catalog';

@@ -29,8 +29,9 @@
 import type { Capability } from '@artifactbin/contracts';
 import { json } from '../http/http';
 import { canRead, canEdit } from '@artifactbin/contracts';
-import { effectiveRole, ownsArtifact, type ArtifactRow } from './access';
-import { getArtifactById } from './store';
+import { effectiveRole, ownsArtifact } from './access';
+import { type ArtifactRow } from './table';
+import { getArtifactById } from './rows';
 import { userKindOf } from '../accounts';
 
 /** Who is acting: the ids a request already carries, nothing more. */
