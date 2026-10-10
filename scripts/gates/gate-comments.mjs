@@ -504,9 +504,15 @@ async function hoverReplyLeg(browser, { id, token }) {
     const marker = page.locator('[aria-label^="Open annotation conversation by"]');
     const card = page.locator('[data-annotation-id]');
     await marker.hover();
-    await card.getByRole('button', { name: 'Expand replies', exact: true }).click();
+    await card.getByRole('button', { name: 'Reply', exact: true }).waitFor({ timeout: 8000 });
+    const footer = await card.locator('[data-card-footer]').textContent();
+    check(footer?.includes('1 message') && await card.getByRole('button', { name: 'Expand replies', exact: true }).count() === 0,
+    'a one-message hover card shows its count as plain text');
+    await card.getByRole('button', { name: 'Reply', exact: true }).click();
     const field = page.getByRole('textbox', { name: 'Reply to annotation', exact: true });
     await field.waitFor({ timeout: 8000 });
+    check(await until(() => field.evaluate(node => node.getRootNode().activeElement === node), focused => focused === true, 4000),
+      'the card\'s Reply button opens the reply box with the caret in it');
     const resolve = page.getByRole('button', { name: 'Resolve thread', exact: true });
     await resolve.focus();
     await page.keyboard.press('Tab');
