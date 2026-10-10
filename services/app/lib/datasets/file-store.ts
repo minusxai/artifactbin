@@ -5,7 +5,8 @@ import { Readable } from 'node:stream';
 import { MAX_FILE_BYTES } from '@/lib/platform/config';
 import { json } from '@/lib/http/http';
 import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
-import { type StoredContent, fileContentType, FILE_EXTENSIONS } from '@/lib/document';
+import type { StoredContent } from '@/lib/document';
+import { fileContentType, FILE_EXTENSIONS } from '@artifactbin/contracts';
 
 interface FileMeta {
   objectKey: string;
