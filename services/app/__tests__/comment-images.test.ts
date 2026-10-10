@@ -117,3 +117,54 @@ it('serves annotated pixels through bearer auth and preserves attachment access 
  await (await getDb()).query('UPDATE annotations SET deleted_at=now() WHERE id=$1',[annotation.id]);
  expect((await read(s.token.token)).status).toBe(404);
 });
+
+import {POST as answerComment} from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
+describe('a reply carries its own image',()=>{
+ const reply=(s:Awaited<ReturnType<typeof setup>>,root:string,json:Record<string,unknown>,actor:typeof s.browserActor=s.browserActor)=>
+  answerComment(request(`/api/my/artifacts/${s.doc.id}/annotations/${root}`,{method:'POST',actor,json}),{params:Promise.resolve({id:s.doc.id,annId:root})});
+ const thread=async(s:Awaited<ReturnType<typeof setup>>)=>{
+  const created=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{node_id:'capture',body:'Root without an image'}}),params(s.doc.id));
+  expect(created.status,await created.clone().text()).toBe(201);return (await created.json()).id as string;
+ };
+ it('attaches a staged image to the reply alone, readable with the document and gone with the reply',async()=>{
+  const s=await setup();const root=await thread(s);
+  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,method:'upload'});if(stage instanceof Response)throw new Error(await stage.text());
+  const answered=await reply(s,root,{reply:'Here is what I see',attachment_id:stage.id,edit_id:s.doc.edit_id});
+  expect(answered.status,await answered.clone().text()).toBe(200);
+  const wire=await answered.json();
+  expect(wire.image).toBeUndefined();
+  expect(wire.thread[0].image).toBeUndefined();
+  expect(wire.thread[1]).toMatchObject({body:'Here is what I see',image:{id:stage.id,width:100,height:50,thumbnailUrl:expect.stringContaining(stage.id)}});
+  expect(await readCommentImage(s.actor,s.doc.id,stage.id,'thumbnail')).not.toBeNull();
+  const stranger=await mintToken('agent');expect(await readCommentImage({tokenId:stranger.id,userId:stranger.userId},s.doc.id,stage.id,'preview')).toBeNull();
+  // Single use: the same stage cannot ride a second reply, and the refused reply is not written.
+  expect((await reply(s,root,{reply:'Again',attachment_id:stage.id,edit_id:s.doc.edit_id})).status).toBe(400);
+  const replies=(await (await getDb()).query('SELECT id FROM annotations WHERE root_id=$1 AND deleted_at IS NULL',[root])).rows;
+  expect(replies).toHaveLength(1);
+  await (await getDb()).query('UPDATE annotations SET deleted_at=now() WHERE id=$1',[wire.thread[1].id]);
+  expect(await readCommentImage(s.actor,s.doc.id,stage.id,'preview')).toBeNull();
+ });
+ it('refuses an image without a reply, without its revision, or staged by someone else',async()=>{
+  const s=await setup();const root=await thread(s);
+  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
+  expect((await reply(s,root,{resolve:true,attachment_id:stage.id,edit_id:s.doc.edit_id})).status).toBe(400);
+  expect((await reply(s,root,{reply:'No revision',attachment_id:stage.id})).status).toBe(400);
+  expect((await reply(s,root,{reply:'Wrong revision',attachment_id:stage.id,edit_id:'other-edit'})).status).toBe(409);
+  const other=await createUser({email:'mxmx_test_replyimage@example.com',name:'Reply image'});
+  await (await getDb()).query('UPDATE comment_images SET user_id=$2 WHERE id=$1',[stage.id,other.id]);
+  expect((await reply(s,root,{reply:'Not mine',attachment_id:stage.id,edit_id:s.doc.edit_id})).status).toBe(400);
+  expect((await (await getDb()).query<{annotation_id:string|null}>('SELECT annotation_id FROM comment_images WHERE id=$1',[stage.id])).rows[0].annotation_id).toBeNull();
+  expect((await (await getDb()).query('SELECT id FROM annotations WHERE root_id=$1',[root])).rows).toHaveLength(0);
+ });
+ it('re-checks the image against the current document at save, as a root comment does',async()=>{
+  const s=await setup();const root=await thread(s);
+  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,method:'upload'});if(stage instanceof Response)throw new Error(await stage.text());
+  const db=await getDb();await db.query("UPDATE artifacts SET edit_id='moved-head' WHERE id=$1",[s.doc.id]);
+  const refused=await reply(s,root,{reply:'Stale image',attachment_id:stage.id,edit_id:s.doc.edit_id});
+  expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'stale',message:expect.stringContaining('send again')});
+  expect((await db.query<{annotation_id:string|null}>('SELECT annotation_id FROM comment_images WHERE id=$1',[stage.id])).rows[0].annotation_id).toBeNull();
+  expect((await db.query('SELECT id FROM annotations WHERE root_id=$1',[root])).rows).toHaveLength(0);
+  // Naming the moved head does not launder a stage made against the old one.
+  expect((await reply(s,root,{reply:'Stale image',attachment_id:stage.id,edit_id:'moved-head'})).status).toBe(400);
+ });
+});

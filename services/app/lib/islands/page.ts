@@ -27,6 +27,7 @@ import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryScrollMessage, ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 import { frameAppOrigin, openFrameDoor } from '@/lib/story-runtime/frame-bridge/door';
 import { followAppLinks } from '@/lib/story-runtime/frame-bridge/links';
+import { refuseFileNavigation } from '@/lib/story-runtime/frame-bridge/file-drops';
 import { startIslandLive } from './live';
 import { LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR } from './contract';
 
@@ -97,6 +98,8 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   if (framed) stops.push(openFrameDoor(win, frameAppOrigin(doc, win), () => import('./frame-editor')));
   // A link to an app path takes the app page, never the frame on the document's origin (frame-bridge/links).
   if (framed) stops.push(followAppLinks(win, frameAppOrigin(doc, win)));
+  // A file dropped on the document never navigates the frame away from it (frame-bridge/file-drops).
+  if (framed) stops.push(refuseFileNavigation(win));
   if (framed && !direct) {
     stops.push(relayFrameScroll(win, doc));
     return () => { for (const stop of stops.splice(0)) stop(); };

@@ -32,6 +32,7 @@ import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { DOCUMENT_FRAME, documentFrame, documentLocator } from './lib/page-facts.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 import { expect } from 'playwright/test';
+import sharp from 'sharp';
 import { commentTargetsMarkup } from '../fixtures/comment-targets.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -441,10 +442,10 @@ async function ownerLeg(browser, { id, token }) {
  * failed check, and the other lane still reports.
  */
 const run = async () => {
-  const [main, quote, md, fold, pick, targets, tableSelection, liveSelection, hoverReply] = await Promise.all([
+  const [main, quote, md, fold, pick, targets, tableSelection, liveSelection, hoverReply, images] = await Promise.all([
     publish(DOC), publish(QUOTE_DOC), publish(MD_DOC), publish(FOLD_DOC), publish(DOC),
     publish(commentTargetsMarkup, { title: 'Dynamic comment acceptance', visibility: 'unlisted' }),
-    publish(TABLE_SELECTION_DOC), publish(liveSelectionDoc(1)), publish(HOVER_REPLY_DOC),
+    publish(TABLE_SELECTION_DOC), publish(liveSelectionDoc(1)), publish(HOVER_REPLY_DOC), publish(DOC),
   ]);
   const browser = await launchChromium();
   const lane = async (name, legs) => {
@@ -457,6 +458,8 @@ const run = async () => {
       // the owner's loop (select → rail → agent resolve live → comment mid-edit → a stranger sees nothing),
       // then the comment that keeps the exact words, then an agent's reply read as markdown
       lane('owner lane', [[ownerLeg, main], [quoteLeg, quote], [markdownLeg, md], [tableSelectionLeg, tableSelection]]),
+      // a screenshot pasted and dropped into a new comment, another pasted into a reply, both through a reload
+      lane('image lane', [[imagePasteLeg, images]]),
       // pins that follow declarative items, then a block PICKED and an area drawn
       // then the selection bubble and document menu across live versions
       lane('pick lane', [[targetsLeg, targets], [pickLeg, pick], [liveSelectionLeg, liveSelection]]),
@@ -549,6 +552,134 @@ async function hoverReplyLeg(browser, { id, token }) {
     await card.getByRole('button', { name: 'Expand replies', exact: true }).click();
     check((await card.getByRole('list', { name: 'Thread replies' }).textContent()).includes(HOVER_DRAFT),
       'after a reload the hover card shows the reply');
+  } finally { await ctx.close(); }
+}
+
+/**
+ * A SCREENSHOT INTO A COMMENT, the compiled way: words selected in the frame open the composer; a PNG
+ * dragged over it shows the drop target and dropping it opens the brush editor; a pasted screenshot
+ * (the clipboard event a Cmd+V of a macOS screenshot fires) replaces it and the typed words stay; the
+ * comment saves; a reply takes its own pasted image; and both come back from the server after a reload.
+ * Only real browser events reach the composer: a ClipboardEvent and DragEvents carrying a DataTransfer.
+ */
+async function imagePasteLeg(browser, { id, token }) {
+  const holds = (promise) => promise.then(() => true, () => false);
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const png = async (width, height, rgb) => (await sharp({ create: { width, height, channels: 3, background: rgb } }).png().toBuffer()).toString('base64');
+  const [dropped, pasted, replied, carded] = await Promise.all([png(120, 80, { r: 30, g: 30, b: 220 }), png(200, 100, { r: 220, g: 30, b: 30 }), png(160, 90, { r: 30, g: 160, b: 30 }), png(140, 70, { r: 200, g: 160, b: 20 })]);
+  /** Fire `types` at the element as a user's paste or drag would, with a PNG in the transfer. */
+  const send = (locator, types, base64, name) => locator.evaluate((element, { types, base64, name }) => {
+    const transfer = () => { const data = new DataTransfer(); data.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name, { type: 'image/png' })); return data; };
+    for (const type of types) {
+      const event = type === 'paste'
+        ? new ClipboardEvent('paste', { clipboardData: transfer(), bubbles: true, cancelable: true, composed: true })
+        : new DragEvent(type, { dataTransfer: transfer(), bubbles: true, cancelable: true, composed: true });
+      element.dispatchEvent(event);
+    }
+  }, { types, base64, name });
+  try {
+    await becomeOwner(page, BASE, token);
+    await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    const frame = documentLocator(page);
+    await frame.locator('#figure').waitFor({ timeout: 15000 });
+    // A file dropped on the document itself is refused inside the frame (frame-bridge/file-drops): the frame
+    // never opens it in the document's place, and the words can still be selected and commented on below.
+    const raw = await documentFrame(page);
+    if (!raw) throw new Error('the document frame is missing');
+    const frameUrl = raw.url();
+    const refused = await raw.evaluate((base64) => {
+      const target = document.querySelector('#figure');
+      return ['dragover', 'drop'].map((type) => {
+        const data = new DataTransfer();
+        data.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], 'dropped.png', { type: 'image/png' }));
+        const event = new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        return event.defaultPrevented;
+      });
+    }, dropped);
+    check(refused.every(Boolean) && raw.url() === frameUrl, `a file dropped on the framed document is refused, not opened (${refused})`);
+    const bubble = frame.getByRole('button', { name: 'Comment on selected text', exact: true });
+    await until(async () => {
+      await frame.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
+      return bubble.isVisible().catch(() => false);
+    }, (v) => v === true, 15000);
+    await bubble.click();
+    const composer = page.getByRole('dialog', { name: 'Annotation composer', exact: true });
+    const field = composer.getByLabel('Annotation comment', { exact: true });
+    await field.waitFor();
+    await field.fill('the chart renders blank here');
+    const canvas = composer.getByLabel('Screenshot drawing canvas');
+
+    const before = new URL(page.url()).pathname;
+    await send(composer, ['dragenter', 'dragover'], dropped, 'dropped.png');
+    check(await holds(expect(composer.getByText('Drop image to attach')).toBeVisible()), 'a file dragged over the composer shows its drop target');
+    await send(composer, ['drop'], dropped, 'dropped.png');
+    check(await holds(expect(canvas).toHaveAttribute('width', '120', { timeout: 15000 })), 'a dropped image opens in the composer\'s brush editor');
+    check(await composer.getByText('Drop image to attach').count() === 0, 'the drop target clears after the drop');
+    check(new URL(page.url()).pathname === before, 'dropping a file never navigates away from the document');
+
+    await send(field, ['paste'], pasted, 'image.png');
+    check(await holds(expect(canvas).toHaveAttribute('width', '200', { timeout: 15000 })), 'a pasted screenshot replaces the draft\'s image');
+    await expect(canvas).toHaveAttribute('aria-busy', 'false');
+    check((await field.textContent()) === 'the chart renders blank here', 'pasting an image leaves the typed words alone');
+    await composer.getByRole('button', { name: 'Save annotation', exact: true }).click();
+    check(await holds(composer.waitFor({ state: 'hidden', timeout: 15000 })), 'the comment with a pasted screenshot saves');
+
+    await openArtifactControls(page);
+    await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
+    await dismissControls(page);
+    const reply = page.getByLabel('Reply to annotation', { exact: true }).first();
+    if (!await reply.isVisible().catch(() => false)) await page.getByRole('button', { name: 'Open annotation thread' }).first().click();
+    await reply.waitFor();
+    await reply.fill('same on the second chart');
+    await send(reply, ['paste'], replied, 'image.png');
+    const replyCanvas = page.getByLabel('Annotation sidebar').getByLabel('Screenshot drawing canvas');
+    check(await holds(expect(replyCanvas).toHaveAttribute('width', '160', { timeout: 15000 })), 'a screenshot pasted into a reply opens in its brush editor');
+    await expect(replyCanvas).toHaveAttribute('aria-busy', 'false');
+    await page.getByRole('button', { name: 'Send reply', exact: true }).click();
+    check(await holds(expect(replyCanvas).toHaveCount(0, { timeout: 15000 })), 'the reply with a pasted screenshot sends');
+
+    // The hover card's reply box is the same box: a screenshot pasted there rides its reply too.
+    await page.getByRole('button', { name: 'Close comments', exact: true }).click();
+    const marker = page.locator('[aria-label^="Open annotation conversation by"]');
+    const hoverCard = page.locator('[data-annotation-id]');
+    await marker.hover();
+    await hoverCard.getByRole('button', { name: 'Expand replies', exact: true }).click();
+    const cardField = hoverCard.getByRole('textbox', { name: 'Reply to annotation', exact: true });
+    await cardField.waitFor({ timeout: 8000 });
+    await cardField.fill('and from the hover card');
+    await send(cardField, ['paste'], carded, 'image.png');
+    const cardCanvas = hoverCard.getByLabel('Screenshot drawing canvas');
+    check(await holds(expect(cardCanvas).toHaveAttribute('width', '140', { timeout: 15000 })), 'a screenshot pasted into the hover card reply opens in its brush editor');
+    await expect(cardCanvas).toHaveAttribute('aria-busy', 'false');
+    await hoverCard.getByRole('button', { name: 'Send reply', exact: true }).click();
+    check(await holds(expect(cardCanvas).toHaveCount(0, { timeout: 15000 })), 'the hover card reply with a pasted screenshot sends');
+
+    const saved = await until(async () => (await (await fetch(`${BASE}/api/artifacts/${id}/annotations`, { headers: { Authorization: `Bearer ${token}` } })).json()).annotations,
+      (rows) => rows?.[0]?.thread?.length === 3, 10000);
+    const [root, answer, fromCard] = saved?.[0]?.thread ?? [];
+    check(root?.image?.width === 200 && answer?.image?.width === 160 && fromCard?.image?.width === 140
+      && root?.body.includes('the chart renders blank here') && answer?.body.includes('same on the second chart') && fromCard?.body.includes('and from the hover card'),
+      `the comment and both replies each keep their own image (${JSON.stringify([root?.image?.width, answer?.image?.width, fromCard?.image?.width])})`);
+
+    await page.reload({ waitUntil: 'load' });
+    await frame.locator('#figure').waitFor({ timeout: 15000 });
+    await page.locator(COMMENT_GLYPH).click();
+    const threadCard = page.getByLabel('Annotation thread', { exact: true }).first();
+    await threadCard.waitFor();
+    if (await threadCard.getByRole('button', { name: 'Open annotation thread' }).count()) await threadCard.getByRole('button', { name: 'Open annotation thread' }).click();
+    const thumbnails = threadCard.getByRole('img', { name: 'Screenshot attached to comment' });
+    check(await holds(expect(thumbnails).toHaveCount(3, { timeout: 10000 })), 'after a reload the thread shows the comment\'s image and both replies\'');
+    check(await holds(expect.poll(() => thumbnails.evaluateAll((images) => images.map((img) => img.complete && img.naturalWidth > 0)), { timeout: 10000 }).toEqual([true, true, true])),
+      'every persisted thumbnail loads');
+    await page.getByRole('button', { name: 'Close comments', exact: true }).click();
+    await marker.hover();
+    await hoverCard.getByRole('button', { name: 'Expand replies', exact: true }).click();
+    const cardThumbnails = hoverCard.getByRole('list', { name: 'Thread replies' }).getByRole('img', { name: 'Screenshot attached to comment' });
+    check(await holds(expect(cardThumbnails).toHaveCount(2, { timeout: 10000 })), 'after a reload the hover card shows each reply\'s image');
+    check(await holds(expect.poll(() => cardThumbnails.evaluateAll((images) => images.every((img) => img.complete && img.naturalWidth > 0)), { timeout: 10000 }).toBe(true)),
+      'the hover card thumbnails load');
   } finally { await ctx.close(); }
 }
 

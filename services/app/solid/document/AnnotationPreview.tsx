@@ -25,6 +25,8 @@ import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeI
 import { Tooltip } from '../components/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { AnnotationReplyBox } from './AnnotationReplyBox';
+import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
+import { CommentScreenshot } from './CommentScreenshot';
 import { preloadCommentField } from './LazyCommentField';
 
 type Author = AnnotationCommentWire['author'];
@@ -189,7 +191,7 @@ export function AnnotationPreview(props: {
   rightInset?: number;
   onOpen: () => void; onHover: (id: string | null) => void; onResolve?: () => void;
   /** Saves a reply to this thread; absent (no permission, or not open) the card has no reply box. */
-  onReply?: (body: string) => Promise<boolean>;
+  onReply?: (body: string, attachment?: CommentImageAttachment) => Promise<boolean>;
   /** The reply box's field looks people and agents up here. */
   backend?: ArtifactBackend; artifactId?: string; busy?: boolean;
   /** This thread's unsent reply; the layer keeps it so closing the card cannot lose it. */
@@ -201,6 +203,8 @@ export function AnnotationPreview(props: {
   const [repliesExpanded, setRepliesExpanded] = createSignal(false);
   const [continuation, setContinuation] = createSignal<HTMLButtonElement>();
   const canReply = () => Boolean(props.onReply && props.backend && props.artifactId);
+  // The reply's image lives with the card (its marker), so collapsing the box keeps it, as the layer keeps the words.
+  const replyImage = createCommentImageDraft();
   const hasDraft = () => Boolean(props.draft?.trim());
   const [replyFocused, setReplyFocused] = createSignal(false);
   // A waiting draft, or a pinned card, opens straight to the reply box.
@@ -333,7 +337,7 @@ export function AnnotationPreview(props: {
             }}
             class="pointer-events-auto sticky bottom-0 z-20 order-last -mx-3 -mb-2.5 mt-2 border-t border-edge bg-comment-hover px-3 pb-2.5 pt-2 font-sans text-xs">
             <AnnotationReplyBox backend={props.backend!} artifactId={props.artifactId!} busy={props.busy ?? false} rows={2} placeholder="Reply…"
-              value={props.draft ?? ''} onChange={(value) => props.onDraftChange?.(value)} onSend={(body) => props.onReply!(body)} onSent={keepReplying} />
+              value={props.draft ?? ''} onChange={(value) => props.onDraftChange?.(value)} onSend={(body, attachment) => props.onReply!(body, attachment)} onSent={keepReplying} image={replyImage} />
           </div>
         </Show>
         <span class="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
@@ -351,6 +355,7 @@ export function AnnotationPreview(props: {
               <span role="listitem" class="block">
                 <AuthorIdentity author={reply.author} />
                 <span class="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
+                <Show when={reply.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
               </span>
             )}</For>
           </span>

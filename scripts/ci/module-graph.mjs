@@ -92,7 +92,7 @@ export const STORY_RUNTIME_BROWSER_IMPORTERS = [
 ];
 export const STORY_RUNTIME_BROWSER_LEAVES = [
   'anchor', 'anchor-restore', 'cell-sessions', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-transport', 'document-update',
-  'edit/dom-mounter', 'edit/session', 'fetch-transport', 'frame-bridge/door', 'frame-bridge/links', 'frame-bridge/origin', 'frame-bridge/parent',
+  'edit/dom-mounter', 'edit/session', 'fetch-transport', 'frame-bridge/door', 'frame-bridge/file-drops', 'frame-bridge/links', 'frame-bridge/origin', 'frame-bridge/parent',
   'outline-nav', 'page-engine', 'page-sqlite', 'pristine', 'reader-actions', 'row-actions', 'sliced-parse', 'table-scroll',
 ];
 export const DATAFLOW_ENTRIES = [
