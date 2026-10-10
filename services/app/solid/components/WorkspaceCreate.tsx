@@ -27,7 +27,7 @@ import { apiFetch } from '../lib/api';
 const ITEM = 'group flex w-full cursor-pointer items-center gap-2.5 rounded-[4px] px-2.5 py-2 text-left font-mono text-[11.5px] text-fg no-underline hover:bg-accent-soft hover:text-accent';
 const TYPE_ICONS = { doc: FileText, editorial: Newspaper, deck: Presentation, dashboard: LayoutDashboard, plan: ListChecks, landing: PanelTop, scrolly: ScrollText, app: AppWindow } satisfies Record<StoryTemplateName, typeof FileText>;
 type Kind = 'folder';
-export default function WorkspaceCreate(props: { onCreated: () => void; parentId?: string | null }): JSX.Element {
+export default function WorkspaceCreate(props: { onCreated: () => void; parentId?: string | null; groupId?: string; personal?: boolean }): JSX.Element {
   const [open, setOpen] = createSignal(false);
   const [typesOpen, setTypesOpen] = createSignal(false);
   let artifactButton!: HTMLButtonElement;
@@ -52,11 +52,12 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
       event.preventDefault(); event.stopPropagation(); setTypesOpen(false); artifactButton.focus();
     }
   };
+  const creationHref = (path:string) => { const params=new URLSearchParams();if(props.parentId)params.set('parent_id',props.parentId);if(props.groupId)params.set('group_id',props.groupId);else if(props.personal)params.set('personal','1');return `${path}${params.size?'?'+params.toString():''}`;};
   const createArtifact = async (template: StoryTemplateName) => {
     if (busy()) return;
     setBusy(true); setError('');
     try {
-      const response = await apiFetch('/api/my/artifacts', 'POST', artifactStarter(template, props.parentId));
+      const response = await apiFetch('/api/my/artifacts', 'POST', { ...artifactStarter(template, props.parentId), ...(props.groupId ? {destination:{type:'group',id:props.groupId}} : props.personal ? {destination:{type:'personal'}} : {}) });
       if (!response.ok) throw new Error('create failed');
       const body = await response.json() as { id?: string };
       if (!body.id) throw new Error('missing artifact');
@@ -70,7 +71,7 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
     event.preventDefault();
     const title = name().trim(); if (!title || busy()) return;
     setBusy(true); setError('');
-    const response = await apiFetch('/api/my/artifacts', 'POST', { format: 'folder', title, parent_id: props.parentId ?? null }).catch(() => null);
+    const response = await apiFetch('/api/my/artifacts', 'POST', { format: 'folder', title, parent_id: props.parentId ?? null, ...(props.groupId ? {destination:{type:'group',id:props.groupId}} : props.personal ? {destination:{type:'personal'}} : {}) }).catch(() => null);
     setBusy(false);
     if (!response?.ok) { setError('Could not create the folder. Try again.'); return; }
     pageDataChanged(); props.onCreated(); setDialog(null); setName('');
@@ -87,8 +88,8 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
         </div></div></Show>
       </div>
       <button type="button" role="menuitem" class={ITEM} onMouseEnter={() => setTypesOpen(false)} onClick={() => choose('folder')}><FolderPlus size={14} />Folder</button>
-      <a role="menuitem" href="/programs/new" class={ITEM} onMouseEnter={() => setTypesOpen(false)}><FilePlus2 size={14} />Program</a>
-      <div class="mt-1 border-t border-edge pt-1" onMouseEnter={() => setTypesOpen(false)}><span class="block px-2.5 pt-1.5 pb-1 font-mono text-[9.5px] uppercase tracking-[0.14em] text-faint">assets</span><a role="menuitem" href={props.parentId ? `/files/new?parent_id=${encodeURIComponent(props.parentId)}` : '/files/new'} class={ITEM}><FileUp size={14} />File</a><a role="menuitem" href="/datasets/new" class={ITEM}><DatabasePlus size={14} />Dataset</a></div>
+      <a role="menuitem" href={creationHref('/programs/new')} class={ITEM} onMouseEnter={() => setTypesOpen(false)}><FilePlus2 size={14} />Program</a>
+      <div class="mt-1 border-t border-edge pt-1" onMouseEnter={() => setTypesOpen(false)}><span class="block px-2.5 pt-1.5 pb-1 font-mono text-[9.5px] uppercase tracking-[0.14em] text-faint">assets</span><a role="menuitem" href={creationHref('/files/new')} class={ITEM}><FileUp size={14} />File</a><a role="menuitem" href={creationHref('/datasets/new')} class={ITEM}><DatabasePlus size={14} />Dataset</a></div>
     </div></Show>
     <Show when={dialog()}>{kind => <Portal mount={document.body}><DialogShell onClose={() => setDialog(null)} initialFocus="[autofocus]"><div class="fixed inset-0 z-[100] flex items-center justify-center p-3"><button type="button" aria-label="Close create dialog by clicking outside" onClick={() => setDialog(null)} class="absolute inset-0 bg-black/45" /><div role="dialog" aria-modal="true" aria-label="Create new folder" class="relative z-10 w-full max-w-md rounded-[9px] border border-edge-bright bg-surface shadow-2xl"><header class="flex items-center justify-between border-b border-edge p-4"><h2 class="font-mono text-sm font-semibold">New {kind()}</h2><button type="button" aria-label="Close create dialog" onClick={() => setDialog(null)}>×</button></header><form onSubmit={event => void createFolder(event)} class="p-5"><label for="workspace-folder-name" class="block font-mono text-xs">Folder name</label><input id="workspace-folder-name" autofocus required value={name()} onInput={event => setName(event.currentTarget.value)} class="mt-2 w-full rounded border border-edge bg-bg p-2 font-mono text-xs" /><Show when={error()}><p role="alert" class="text-danger">{error()}</p></Show><div class="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setDialog(null)}>cancel</button><button type="submit" disabled={!name().trim() || busy()} class="rounded bg-accent px-3 py-1 text-bg">{busy() ? 'creating…' : 'create folder'}</button></div></form></div></div></DialogShell></Portal>}</Show>
   </div>;

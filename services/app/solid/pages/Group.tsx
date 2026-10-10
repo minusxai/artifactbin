@@ -1,0 +1,38 @@
+/* @jsxImportSource solid-js */
+import { createSignal, For, Show, type JSX } from 'solid-js';
+import type { GroupDetail, GroupRole } from '@artifactbin/contracts';
+import type { AccountWorkspaceCore } from '@/lib/workspace/dashboard';
+import { buildGroupSetupInstructions } from '@/lib/platform/setup-instructions';
+import { apiRequest } from '../lib/api';
+import { usePageData } from '../lib/use-page-data';
+import Shelf from '../components/Shelf';
+import WorkspaceShell from '../components/WorkspaceShell';
+import { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';
+
+export function GroupPage(props: { identity: string }): JSX.Element {
+ const detail=usePageData<GroupDetail>(()=>`/api/groups/${encodeURIComponent(props.identity)}`);
+ const shelf=usePageData<AccountWorkspaceCore>(()=>`/api/page/home?part=core&groupId=${encodeURIComponent(detail.data()?.group.id ?? '')}`,{enabled:()=>!!detail.data()});
+ const [error,setError]=createSignal(''); const [copied,setCopied]=createSignal(false);
+ const refresh=()=>{void detail.refresh(true);void shelf.refresh(true);};
+ const makeDefault=async()=>{try {await apiRequest('/api/me/preferences','PUT',{default_destination:{type:'group',id:detail.data()!.group.id}});window.location.assign('/');}catch(e){setError(e instanceof Error?e.message:'Could not set default.');}};
+ const copy=async()=>{try{await navigator.clipboard.writeText(buildGroupSetupInstructions({serverOrigin:window.location.origin,groupHandle:detail.data()!.group.handle}));setCopied(true);}catch{setError('Could not copy instructions.');}};
+ return <main class={HOME_WORKSPACE_COLUMN}><Show when={detail.data()} fallback={<div class="p-8"><Show when={detail.error()} fallback={<p role="status">Loading group…</p>}><p role="alert">This group is unavailable. Your default may no longer be accessible.</p><a href="/?personal=1">Open Personal</a><button type="button" onClick={()=>void detail.refresh(true)}>Retry group</button></Show></div>}>
+ {value=><WorkspaceShell onCreated={refresh} groupId={value().group.id} canCreate={value().group.role==='editor'}><div class="workspace-page">
+ <header class="mb-6"><a href="/?personal=1">Personal</a><h1 class="mt-3 text-3xl font-semibold">{value().group.name}</h1><p class="text-muted">@{value().group.handle}</p><p>{value().group.description}</p><div class="mt-3 flex gap-4"><button type="button" onClick={()=>void makeDefault()}>Use as Home</button><button type="button" onClick={()=>void copy()}>{copied()?'Instructions copied':'Copy agent setup'}</button></div></header>
+ <Show when={error()}><p role="alert">{error()}</p></Show>
+ <section aria-label="Group artifacts"><h2 class="mb-3 text-lg">Files and folders</h2><Show when={shelf.data()} fallback={<Show when={shelf.error()} fallback={<p role="status">Loading artifacts…</p>}><p role="alert">Could not load group artifacts. <button type="button" onClick={()=>void shelf.refresh(true)}>Retry artifacts</button></p></Show>}>{rows=><Shelf rows={rows().artifacts} actions={value().group.role==='editor'?'full':'share'} assets={false} scopeParentId={null}/>}</Show></section>
+ <GroupManagement detail={value()} refresh={refresh}/>
+ </div></WorkspaceShell>}
+ </Show></main>;
+}
+
+/** Membership edits use server-confirmed state. Refusals, including the last editor, stay visible. */
+export function GroupManagement(props:{detail:GroupDetail;refresh:()=>void}):JSX.Element {
+ const [query,setQuery]=createSignal(''); const [email,setEmail]=createSignal(''); const [role,setRole]=createSignal<GroupRole>('viewer'); const [link,setLink]=createSignal(''); const [error,setError]=createSignal(''); const [busy,setBusy]=createSignal(false);
+ const editor=()=>props.detail.group.role==='editor'; const root=()=>`/api/groups/${props.detail.group.id}`;
+ const mutate=async(path:string,method:'POST'|'PUT'|'DELETE',body?:unknown)=>{if(busy())return;setBusy(true);setError('');try{await apiRequest(path,method,body);props.refresh();}catch(e){setError(e instanceof Error?e.message:'Could not update group.');}finally{setBusy(false);}};
+ const members=()=>props.detail.members.filter(p=>`${p.name??''} ${p.username??''}`.toLowerCase().includes(query().trim().toLowerCase()));
+ return <div class="mt-8 space-y-8"><Show when={error()}><p role="alert">{error()}</p></Show><section aria-label="Group people"><h2 class="text-lg">People</h2><input type="search" aria-label="Search people" placeholder="Search people" value={query()} onInput={e=>setQuery(e.currentTarget.value)} class="my-3 w-full rounded border border-edge p-2"/><ul><For each={members()}>{person=><li class="flex items-center gap-4 border-b border-edge py-3"><Show when={person.username} fallback={<span>{person.name??'Member'}</span>}><a href={`/@${encodeURIComponent(person.username!)}`}>{person.name??person.username}</a></Show><Show when={editor()} fallback={<span>{person.role}</span>}><select aria-label={`Role for ${person.name??person.username??'member'}`} value={person.role} disabled={busy()} onChange={e=>{const select=e.currentTarget;const next=select.value;select.value=person.role;void mutate(`${root()}/members/${person.user_id}`,'PUT',{role:next});}}><option value="editor">Editor</option><option value="viewer">Viewer</option></select><button type="button" disabled={busy()} aria-label={`Remove ${person.name??person.username??'member'}`} onClick={()=>void mutate(`${root()}/members/${person.user_id}`,'DELETE')}>Remove</button></Show></li>}</For></ul>
+ <Show when={editor()}><form class="mt-4 flex flex-wrap gap-3" onSubmit={e=>{e.preventDefault();void mutate(`${root()}/invitations`,'POST',{email:email(),role:role()});}}><input type="email" required aria-label="Invitation email" placeholder="Email address" value={email()} onInput={e=>setEmail(e.currentTarget.value)}/><select aria-label="Invitation role" value={role()} onChange={e=>setRole(e.currentTarget.value as GroupRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button disabled={busy()} type="submit">Invite person</button></form><ul><For each={props.detail.invitations}>{invite=><li class="flex gap-3 py-2">{invite.email} · {invite.role}<button type="button" disabled={busy()} aria-label={`Cancel invitation to ${invite.email}`} onClick={()=>void mutate(`${root()}/invitations/${invite.id}`,'DELETE')}>Cancel invitation</button></li>}</For></ul></Show></section>
+ <section aria-label="Linked groups"><h2 class="text-lg">Linked groups</h2><p class="text-sm text-muted">Links help you navigate. Each group keeps its own membership and access.</p><ul><For each={props.detail.linked_groups}>{group=><li class="flex gap-3 py-2"><a href={`/@${group.handle}`}>{group.name}</a><Show when={editor()}><button type="button" disabled={busy()} aria-label={`Unlink ${group.name}`} onClick={()=>void mutate(`${root()}/links/${group.id}`,'DELETE')}>Unlink</button></Show></li>}</For></ul><Show when={editor()}><form class="mt-3 flex gap-3" onSubmit={async e=>{e.preventDefault();setError('');try{const group=await apiRequest<GroupDetail>(`/api/groups/${encodeURIComponent(link())}`);await mutate(`${root()}/links/${group.group.id}`,'PUT');}catch(err){setError(err instanceof Error?err.message:'Group unavailable.');}}}><input required aria-label="Linked group handle" placeholder="Group handle" value={link()} onInput={e=>setLink(e.currentTarget.value)}/><button type="submit" disabled={busy()}>Link group</button></form></Show></section></div>;
+}

@@ -15,6 +15,7 @@ import { json } from '@/lib/http';
 import { profileSocial } from '@/lib/accounts';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 import { listPublicArtifactsByUser } from '@/lib/workspace';
+import { getGroupById, getGroupDetail } from '@/lib/groups';
 import { sessionActor } from '@/lib/accounts';
 
 const decoded = (segment: string): string => { try { return decodeURIComponent(segment); } catch { return segment; } };
@@ -32,7 +33,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   if (file) {
     const artifact = await getArtifactById(file.id);
     if (artifact && (await canReadArtifact(artifact, viewer))) {
-      const canonical = canonicalArtifactPath(artifact, await ownerUsername(artifact.user_id));
+      const groupId=(artifact as ArtifactSummary & {group_id?:string|null}).group_id;
+      const canonical = canonicalArtifactPath(artifact, groupId ? (await getGroupById(groupId))?.handle : await ownerUsername(artifact.user_id));
       const requested = `/@${handle}${path.length ? '/' + path.join('/') : ''}`;
       if (requested !== canonical) return json({ kind: 'redirect', to: canonical });
       return json({ kind: 'artifact', id: artifact.id });
@@ -43,6 +45,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   // is no listing below the handle any more, so it is the uniform 404 — the
   // same answer an unreadable id-path falls through to.
   if (path.length > 0) return notFound();
+  const group = await getGroupDetail(viewer?.userId ?? null, handle);
+  if (group) return json({kind:'group',handle:group.group.id},200,{'Cache-Control':'no-store'});
   const owner = await getUserByUsername(handle);
   if (!owner) return notFound();
   // A profile is the same public index for its owner and every visitor.

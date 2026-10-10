@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { creationDestination } from '../lib/creation-destination';
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
 import { Check, Copy, FileUp } from 'lucide-solid';
@@ -56,7 +57,7 @@ export function FileUploadPage(): JSX.Element {
           : { file: { filename: selected.file.name, contentType, base64 } };
       const response = await fetch('/api/my/artifacts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...content, title: title().trim() || selected.file.name, parent_id: parentId }),
+        body: JSON.stringify({ ...content, title: title().trim() || selected.file.name, parent_id: parentId, destination: creationDestination(window.location.search) }),
       }).catch(() => null);
       if (!response) { setError('Upload failed. Check your connection and try again.'); return; }
       const data = (await response.json().catch(() => ({}))) as { id?: string; details?: string[]; maxBytes?: number };

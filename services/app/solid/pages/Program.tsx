@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { creationDestination } from '../lib/creation-destination';
 import {createSignal,createEffect,onCleanup,Show,type JSX} from 'solid-js';
 import type {ProgramDefinition,RunSnapshot} from '@artifactbin/contracts';
 import {runtimeId as newRequestId} from '@artifactbin/utils/runtime-id';
@@ -42,7 +43,7 @@ export function ProgramPage(props:{artifactId?:string;owner?:boolean}={}):JSX.El
  });
  const save=async(event:SubmitEvent)=>{event.preventDefault();if(busy()||!canManage())return;setBusy(true);setError('');setNotice('');try{
   let program:ProgramDefinition;try{program=JSON.parse(source());}catch{throw Error('Program must be valid JSON.');}
-  const artifact=await apiRequest<ProgramWire>(id()?`/api/my/artifacts/${id()}`:'/api/my/artifacts',id()?'PUT':'POST',{title:title(),program,...(id()?{expectedVersion:version(),expectedState:state()}:{visibility:'private'})});setId(artifact.id);setVersion(artifact.version);setState(artifact.state);setDirty(false);setNotice('Program saved.');pageDataChanged();
+  const artifact=await apiRequest<ProgramWire>(id()?`/api/my/artifacts/${id()}`:'/api/my/artifacts',id()?'PUT':'POST',{title:title(),program,...(id()?{expectedVersion:version(),expectedState:state()}:{visibility:'private',destination:creationDestination(window.location.search),parent_id:new URLSearchParams(window.location.search).get('parent_id')})});setId(artifact.id);setVersion(artifact.version);setState(artifact.state);setDirty(false);setNotice('Program saved.');pageDataChanged();
  }catch(error){setError(error instanceof Error?error.message:'Could not save program.');}finally{setBusy(false);}};
  const invoke=async()=>{if(!id()||busy())return;setBusy(true);setError('');try{
   const requestId=pendingRunId??newRequestId();pendingRunId=requestId;
