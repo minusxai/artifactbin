@@ -33,7 +33,7 @@ import { ISLAND_DOCUMENT_KEY, LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RE
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
 import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR, LITERALS_ATTR } from '@/lib/story-runtime/contract';
+import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR, LITERALS_ATTR, STORY_NODES_ID, STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
 
 const HK = 'data-hk';
 /** Sheets that belong to one version and may be absent from the next (lib/page-styles/document-styles, the assembler). */
@@ -181,6 +181,9 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
     else doc.body.append(doc.importNode(data, true));
   }
   if (nextEdit) doc.body.setAttribute(LIVE_EDIT_ATTR, nextEdit);
+  // The version is on screen: its own nodes go to the document's selections and comments in this same task, before
+  // any await below — no selection, scroll or right-click ever sees the new DOM with the last version's nodes.
+  doc.dispatchEvent(new CustomEvent(STORY_VERSION_DRAWN_EVENT, { detail: { editId: nextEdit, nodes: versionNodesOf(next) } }));
 
   if (seam) {
     // Kept islands answer to their new render ids from here on.
@@ -243,6 +246,16 @@ function firstVisibleId(root: Element, win: Window): { id: string; top: number }
     .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
   const first = candidates[0];
   return first ? { id: first.id, top: first.getBoundingClientRect().top } : null;
+}
+
+/** The fragment's own version nodes (STORY_NODES_ID), or null when it carries none. */
+function versionNodesOf(next: Document): unknown[] | null {
+  try {
+    const nodes = JSON.parse(next.getElementById(STORY_NODES_ID)?.textContent || 'null') as unknown;
+    return Array.isArray(nodes) ? nodes : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The version's author script, as its data island names it (IslandPageData.authorScript), or null. */

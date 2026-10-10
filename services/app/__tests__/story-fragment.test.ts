@@ -67,6 +67,22 @@ describe('the story fragment', () => {
     expect(doc.getElementById('mx-story-root')).not.toBeNull();
   });
 
+  it('carries the version\'s own source nodes on both surfaces, which the page itself does not', async () => {
+    // The morph hands them to the document's selections and comments in the task it draws the version
+    // (lib/islands/morph/engine STORY_VERSION_DRAWN_EVENT): never a window classified against another version.
+    const { id } = await publish({ title: 'Kit', markup: fixture('kit.jsx') });
+    for (const surface of ['raw', 'app'] as const) {
+      const doc = parse(await (await story(id, '?reader=compiled', surface)).text());
+      const carried = doc.getElementById('mx-story-nodes');
+      expect(carried?.getAttribute('type'), surface).toBe('application/json');
+      const nodes = JSON.parse(carried!.textContent!) as Array<{ type: string }>;
+      expect(Array.isArray(nodes) && nodes.length > 0, surface).toBe(true);
+      expect(nodes.some((node) => node.type === 'element'), surface).toBe(true);
+    }
+    const page = parse(await (await rawRoute(request(`/a/${id}/raw?reader=compiled`), params(id))).text());
+    expect(page.getElementById('mx-story-nodes'), 'the page attaches with them from the app page instead').toBeNull();
+  });
+
   it('is never a view (the page it updates already was one)', async () => {
     const { id } = await publish({ title: 'Prose', markup: fixture('prose.jsx') });
     await story(id, '?reader=compiled');

@@ -214,6 +214,17 @@ export const STORY_ROOT_ID = 'mx-story-root';
 /** The element ids and attributes the assembled page and the runtime agree on. */
 export const ISLAND_DATA_ID = 'mx-story-data';
 /**
+ * The story fragment's (`GET /a/:id/story`) own version's source nodes, as JSON — the nodes the page attached with,
+ * for the version the fragment draws. The morph (lib/islands/morph/engine) hands them on with STORY_VERSION_DRAWN_EVENT.
+ */
+export const STORY_NODES_ID = 'mx-story-nodes';
+/**
+ * Dispatched on the document by the morph in the SAME task it draws a new version: `{ editId, nodes }` (nodes null
+ * when the fragment carried none). Selections and comments are classified against these nodes, so no event between
+ * the new DOM and its nodes ever sees the two disagree.
+ */
+export const STORY_VERSION_DRAWN_EVENT = 'mx:version-drawn';
+/**
  * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
  * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
  * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
