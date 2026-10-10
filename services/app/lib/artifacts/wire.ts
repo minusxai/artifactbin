@@ -20,9 +20,9 @@ import {catalogOf} from '@/lib/datasets/catalog';
  * shared behaviour is the module, so both paths validate the same fields and
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
-import { DATASET_ACCESS, ownsArtifact, canReadArtifact, canWriteDataset, type ArtifactRow, type DatasetAccess, type Visibility } from './access';
+import { ownsArtifact, canReadArtifact, canWriteDataset, type ArtifactRow } from './access';
 import type { TokenActor } from '@/lib/accounts/actors';
-import { SHARE_ROLES, type ShareEntry, type ShareRole } from './share-roles';
+import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 import { getArtifactById, getArtifactFor, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { declarationsForRow, runDocumentMutation } from './dataflow';
 import { isMutationRefused, mutateDataset } from './write/dataset-mutate';

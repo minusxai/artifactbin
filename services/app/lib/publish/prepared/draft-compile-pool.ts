@@ -11,7 +11,7 @@ import type { PrepareStoryInput } from './prepare-runtime.server';
 import type { CompileInput, CompiledPage, CompilerBuild } from '@/lib/compiled-page/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { ServedResults } from '@/lib/story-runtime/contract';
-import type { SnapshotChartOptions } from '@/lib/compiled-page/charts.server';
+import type { SnapshotChartOptions } from './charts.server';
 import type { DrawnChart } from '@/lib/story-runtime/contract';
 
 /** One job a thread runs: a draft preview, a version's compile, or a snapshot's drawn charts. */
@@ -28,7 +28,7 @@ export interface DraftCompilePool {
   compile(input: PrepareStoryInput): Promise<string>;
   /** A version's compiled page (lib/compiled-page/compiler `compilePage`). */
   compilePage(input: CompileInput, build: CompilerBuild): Promise<CompiledPage>;
-  /** A snapshot's server-drawn charts (lib/compiled-page/charts.server `drawSnapshotCharts`). */
+  /** A snapshot's server-drawn charts (lib/publish/prepared/charts.server `drawSnapshotCharts`). */
   drawCharts(nodes: JsxNode[], results: Pick<ServedResults, 'tables' | 'errors'>, options: SnapshotChartOptions): Promise<Record<string, DrawnChart>>;
   close(): Promise<void>;
 }

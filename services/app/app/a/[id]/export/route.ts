@@ -8,7 +8,7 @@ import { requestOrSessionActor } from '@/lib/accounts';
 import { exportImageResponse } from '@/lib/export';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { canEdit } from '@/lib/artifacts';
+import { canEdit } from '@artifactbin/contracts';
 
 /**
  * `delivery: 'bytes'` is for a caller that cannot follow the redirect to the

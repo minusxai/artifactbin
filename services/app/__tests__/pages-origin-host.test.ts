@@ -17,7 +17,7 @@ import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
 import { framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { ARTIFACT_SCOPE } from '@artifactbin/contracts';
-import { buildDocumentCsp } from '@/lib/compiled-page/styles/document-csp';
+import { buildDocumentCsp } from '@/lib/page-styles/document-csp';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { POST as grantRoute } from '@/app/api/trust/route';
 import { createAppServer } from '../server/app';

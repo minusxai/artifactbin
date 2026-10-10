@@ -178,6 +178,25 @@ describe('module graph', () => {
     });
   });
 
+  describe('page rows as shipped (DEEP_MODULES)', () => {
+    // The shipped table, unmodified: a row whose module is absent from the tree is skipped.
+    const check = (module, files) => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
+
+    it('lib/page-styles: server code through the index, only the offline file\'s browser code through document-root', () => {
+      const offline = {
+        'services/app/lib/page-styles/index.ts': '', 'services/app/lib/page-styles/document-root.ts': '', 'services/app/lib/page-styles/inline-css.ts': '',
+        'services/app/lib/offline/file-html.ts': "import { documentRootAttributes } from '@/lib/page-styles/document-root';\n",
+        'services/app/lib/offline/solid-entry.tsx': "import '../page-styles/document-root';\n",
+        'services/app/lib/publish/prepared/serve.server.ts': "import { DOMAIN_FOOTER_CSS } from '@/lib/page-styles';\n",
+      };
+      expect(check('lib/page-styles', offline)).toBe('');
+      const refused = check('lib/page-styles', { ...offline, 'services/app/lib/publish/a.ts': "import '@/lib/page-styles/inline-css';\n", 'services/app/lib/offline/assemble.server.ts': "import '@/lib/page-styles/document-root';\n" });
+      expect(refused).toContain('services/app/lib/publish/a.ts imports @/lib/page-styles/inline-css');
+      expect(refused).toContain('services/app/lib/offline/assemble.server.ts imports @/lib/page-styles/document-root');
+      expect(check('lib/page-styles', { ...offline, 'services/app/lib/offline/file-html.ts': '', 'services/app/lib/offline/solid-entry.tsx': '' })).toMatch(/browser leaf document-root/);
+    });
+  });
+
   describe('CLI toolkit entry (rule 5)', () => {
     const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
 

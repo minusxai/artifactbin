@@ -1,6 +1,6 @@
 /**
  * The third-party sources a document may load — one list for both of its policies: on its own origin
- * (lib/compiled-page/styles/document-csp) and as the sandboxed `/raw` copy (lib/compiled-page/styles/markup-csp). Named
+ * (lib/page-styles/document-csp) and as the sandboxed `/raw` copy (lib/page-styles/markup-csp). Named
  * hosts, never `https:`. A reader-kit leaf in lib/story-ui: the interpreter asks it too (`needsFrameReferrer`).
  */
 /** The ES module CDNs an author script may import from (`import x from 'https://esm.sh/…'`). */

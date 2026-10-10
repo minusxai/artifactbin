@@ -6,7 +6,7 @@
  * request. Everything in that work that belongs to the VERSION is done once
  * here and stored (app.prepared_pages):
  *
- *   - the isolated stylesheet (exactly what lib/compiled-page/styles/inline-css produces) and
+ *   - the isolated stylesheet (exactly what lib/page-styles/inline-css produces) and
  *     the node tree with the style values that policy rewrote (style-overrides);
  *   - glyphs, fonts, the resolved colour mode, the lazy-code manifest, the
  *     declared dataflow and the pinned compiled page.
@@ -45,16 +45,13 @@ import { lookupWebAssets } from '../assets/web-assets';
 import { collectExternalAssetUrls } from '../../document/external-images';
 import { storedCompiledDataflow } from '@/lib/document/server';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';
-import { inlineStoryCss, inlineStoryNodes } from '@/lib/compiled-page/styles/inline-css';
-import { styleOverrides, type StyleOverride } from '@/lib/compiled-page/styles/style-overrides';
+import { assetsPath, inlineStoryCss, inlineStoryNodes, mutatePath, queryPath, type StoryBaseCssRecipe, type StyleOverride, styleOverrides } from '@/lib/page-styles';
 import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { lazyCodeOf, type LazyCode } from '../../document/lazy-code';
-import { assetsPath, mutatePath, queryPath } from '@/lib/compiled-page/styles/markup-csp';
 import { readUrlValues } from '@/lib/dataflow/url-values';
 import { servedResultsFor } from './served-results.server';
-import type { StoryBaseCssRecipe } from '@/lib/compiled-page/styles/story-base-css';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';

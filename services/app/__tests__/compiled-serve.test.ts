@@ -31,7 +31,7 @@ import { objectStore } from '@/lib/object-store';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { backfillCompiledPages, matchesBackfillFilters, type BackfillOptions, type BackfillSelector } from '@/lib/compiled-page/backfill.server';
 import { preparedCssVersion, stylesheetVersion } from '@/lib/publish/prepared/css-version.server';
-import { STORY_BASE_SHEETS } from '@/lib/compiled-page/styles/story-base-css';
+import { STORY_BASE_SHEETS } from '@/lib/page-styles/story-base-css';
 import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-system-sheets';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';

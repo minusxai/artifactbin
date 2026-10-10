@@ -1,9 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import type { DatasetAccess, Visibility } from '@/lib/artifacts/access';
-import type { SharingPatch } from '@/lib/artifacts/sharing';
-import type { ShareEntry, ShareRole } from '@/lib/artifacts/share-roles';
+import type { DatasetAccess, ShareEntry, ShareRole, SharingPatch, Visibility } from '@artifactbin/contracts';
 import { DialogShell } from '@/solid/ui/DialogShell';
 import { copyText } from '../lib/copy-text';
 import { apiFetch } from '../lib/api';

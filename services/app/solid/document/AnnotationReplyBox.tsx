@@ -34,6 +34,8 @@ export interface AnnotationReplyBoxProps {
   onSent?: () => void;
   rows?: number;
   placeholder?: string;
+  /** Put the caret in the field as it mounts (someone pressed a Reply that opened it). */
+  autoFocus?: boolean;
   /** What sits beside Send — the rail's cancel. */
   actions?: JSX.Element;
   /**
@@ -73,7 +75,7 @@ export function AnnotationReplyBox(props: AnnotationReplyBoxProps): JSX.Element 
     <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
       label="Reply to annotation" quickAgents placeholder={props.placeholder} image={image} busy={props.busy || sending()}
       value={props.value} onChange={props.onChange} onSubmit={() => void send()}
-      rows={props.rows ?? 3} />
+      rows={props.rows ?? 3} autoFocus={props.autoFocus} />
     <Show when={error()}><p role="alert" class="text-xs text-red-500">{error()}</p></Show>
     <div data-reply-actions class="flex items-center justify-end gap-2">
       <CommentSubmitHint action="reply" />

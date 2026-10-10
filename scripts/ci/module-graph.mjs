@@ -63,10 +63,8 @@ const ARTIFACTS_ENTRIES = [
   '', 'access', 'after-commit', 'archived-version', 'asset-quota', 'capabilities', 'creation-ledger', 'dataflow', 'dataset-policy/grants',
   'dataset-policy/http', 'document', 'feedback-images', 'file-upload-http', 'identities', 'membership/membership', 'metadata-wire',
   'mutation-operation', 'mutation-receipt', 'notification-authority', 'notification-query', 'notification-runtime', 'placement',
-  'read-access', 'servable', 'share-roles', 'state', 'store', 'wire',
+  'read-access', 'servable', 'state', 'store', 'wire',
 ];
-const ARTIFACTS_BROWSER_IMPORTERS = ['services/app/solid/'];
-const ARTIFACTS_BROWSER_LEAVES = ['sharing'];
 const STORY_RUNTIME_ENTRIES = [
   'authenticated-transport', 'chrome-css', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',
   'page-bindings', 'preview-props', 'reader-mode', 'script-mount', 'slides', 'store', 'story-fragment',
@@ -116,11 +114,12 @@ const DOCUMENT_ENTRIES = [
 const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
 const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];
 const COMPILED_PAGE_ENTRIES = [
-  'agent-discovery', 'assembler', 'backfill.server', 'build.server', 'bundle.server', 'carriers', 'charts.server', 'compiler', 'contract',
-  'modules.server', 'plan', 'runtime-binding', 'shared-builds.server', 'speculation', 'story-element', 'styles', 'styles/document-fonts',
-  'styles/document-root', 'styles/document-styles', 'styles/first-screen-fonts', 'styles/inline-css', 'styles/markup-csp',
-  'styles/story-base-css', 'styles/style-overrides',
+  'agent-discovery', 'assembler', 'backfill.server', 'build.server', 'bundle.server', 'carriers', 'compiler', 'contract',
+  'modules.server', 'plan', 'runtime-binding', 'shared-builds.server', 'speculation', 'story-element',
 ];
+/** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
+const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
+const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];
 const ACCOUNTS_ENTRIES = [
   '', 'actors', 'agent-session', 'auth', 'avatars', 'guest-owner', 'membership-lock', 'pages-sessions', 'relation-state', 'relations',
   'request-authority', 'session', 'testuser-sessions', 'testusers', 'tokens', 'user-kinds', 'users', 'viewer',
@@ -136,11 +135,12 @@ const ACCOUNTS_BROWSER_LEAVES = ['browser-session', 'chrome-identity', 'profile-
  */
 const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/artifacts': { entries: ARTIFACTS_ENTRIES, browserImporters: ARTIFACTS_BROWSER_IMPORTERS, browserLeaves: ARTIFACTS_BROWSER_LEAVES },
+  'lib/artifacts': { entries: ARTIFACTS_ENTRIES },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/dataflow': { entries: DATAFLOW_ENTRIES, browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES },
   'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES },
+  'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES, browserImporters: ACCOUNTS_BROWSER_IMPORTERS, browserLeaves: ACCOUNTS_BROWSER_LEAVES },
 };
 /**

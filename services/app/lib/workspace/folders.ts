@@ -5,7 +5,7 @@
  */
 import {getGroupById} from '@/lib/groups';
 import { getDb } from '@/lib/platform/db';
-import { canRead } from '@/lib/artifacts/share-roles';
+import { canRead } from '@artifactbin/contracts';
 import { effectiveRole, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts/access';
 import type { RoleActor } from '@/lib/accounts/actors';
 import { selectChildren, type Viewer } from '@/lib/artifacts/placement';

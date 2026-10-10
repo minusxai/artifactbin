@@ -17,7 +17,7 @@ import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
 import { NotFoundPage } from './NotFound';
 import type { AnnotationWire } from '@/lib/annotations/store';
-import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/artifacts/share-roles';
+import { ARTIFACT_ID_PATTERN, type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
 import { DocumentActions } from '../document/DocumentActions';
 import { CspConsentBar } from '../document/CspConsentBar';
 import type { CspRequest } from '@/lib/document/csp-extensions';
@@ -35,12 +35,10 @@ import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '
 import { EditEntryChrome } from '../editor/EditEntryChrome';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
-import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
 import type { EditorArtifact } from '../editor/InPlaceEditor';
 import { TrustedUi } from '../components/TrustedUi';
 import type { Panel } from '../components/PageChrome';
 import { DocumentChrome } from '../document/DocumentChrome';
-import type { Visibility } from '@/lib/artifacts/access';
 
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). */
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;

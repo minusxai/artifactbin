@@ -1,5 +1,7 @@
 /** Trusted authoring clients prepare data, never SQL or authorization predicates. */
 
+import type {ShareEntry,ShareRole,Visibility} from './sharing';
+
 /** The largest document source, in UTF-8 bytes: the publish door, the graph write, a prepared update and the skill guide all state this one number. */
 export const MAX_DOCUMENT_BYTES=2_000_000;
 export type DocumentTree={schema:1;kind:'jsx';roots:unknown[]}|{schema:1;kind:'source';source:string};
@@ -28,7 +30,7 @@ export type DocumentAnnotationOperation={id:string;kind:'map';maps:DocumentIdent
 export interface DocumentResourcePreparation {datasetBindings?:Array<{id:string;version:number;source:string|null;meta:Record<string,unknown>}>}
 export interface DocumentUpdate extends Pick<DocumentResourcePreparation,'datasetBindings'> {
  mentions?:Array<{nodeId:string;userId:string}>;
- settings?:{visibility?:'private'|'unlisted'|'public';linkRole?:'viewer'|'commenter'|'editor';parentId?:string|null;shares?:Array<{email:string;role:'viewer'|'commenter'|'editor'}>};
+ settings?:{visibility?:Visibility;linkRole?:ShareRole;parentId?:string|null;shares?:ShareEntry[]};
  expectedSharingRevision?:number;
  expectedParentIds?:string[];
  annotationOps?:DocumentAnnotationOperation[];

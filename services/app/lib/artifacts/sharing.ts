@@ -1,4 +1,4 @@
-import { editorScope, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type Visibility } from './access';
+import { editorScope, ownerScope, type ArtifactRow, type Scope } from './access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { getArtifactFor, writeShares } from './store';
 import { findWritersFor } from './dataflow';
@@ -7,7 +7,7 @@ import { grantsOf } from '@/lib/artifacts/dataset-policy/grants';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb } from '../platform/db';
 import { actorSubject, emit } from '../platform/events';
-import { type ShareEntry, type ShareRole } from './share-roles';
+import { type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 
 /**
  * Open (or close) a dataset for writes — metadata only, exactly like a folder
@@ -70,15 +70,6 @@ export async function getSharingFor(actor: TokenActor, id: string): Promise<Shar
       ? { access: row.access, policyVersion:grantsOf(row)?2:1, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
       : {}),
   };
-}
-
-/** What the sharing surface may change, all optional — absent means untouched. */
-export interface SharingPatch {
-  visibility?: Visibility;
-  shares?: ShareEntry[];
-  access?: DatasetAccess;
-  /** What the link grants. Stored even while `private`, where `linkRoleOf` ignores it — so flipping back to a link-readable tier restores the choice rather than silently resetting it. */
-  linkRole?: ShareRole;
 }
 
 /**

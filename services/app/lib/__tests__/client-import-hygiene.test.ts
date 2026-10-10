@@ -5,7 +5,7 @@
  * lib/db and lib/analytics into the client bundle behind it — a build error
  * the unit suite cannot see, because vitest resolves the import happily. This reads the
  * sources and refuses the shape itself: from these modules a client file may
- * import `type`s and nothing else. The pure homes (lib/share-roles,
+ * import `type`s and nothing else. The pure homes (@artifactbin/contracts,
  * lib/story-runtime/contract, …) exist precisely so it never has to.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';

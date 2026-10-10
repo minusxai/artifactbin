@@ -1,6 +1,6 @@
 import {newArtifactDestination} from '@/lib/artifacts';
-import type {ArtifactDestination} from '@artifactbin/contracts';
-import { type ArtifactRow, type Visibility } from '@/lib/artifacts/access';
+import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
+import type {ArtifactRow} from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { afterCreated, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, type ArtifactInput } from '@/lib/artifacts/store';
 import { compiledForRow, refLoaderForActor, rowToResolvedRef } from '@/lib/artifacts/dataflow';

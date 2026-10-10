@@ -2,7 +2,7 @@
  * GET /a/:id/fetch?url=<https url> — A DOCUMENT'S SCRIPT REACHES ANOTHER HOST THROUGH US.
  *
  * A document on its own origin (APP__PAGES_HOST) may connect to its own doors and the module CDNs, and
- * nowhere else (lib/compiled-page/styles/document-csp): its reader's address never leaves for a host the reader
+ * nowhere else (lib/page-styles/document-csp): its reader's address never leaves for a host the reader
  * did not choose. A host the document DECLARES (`<meta name="csp-connect">` in this version's Helmet,
  * lib/document/csp-extensions) and this reader TRUSTS (they published it, or allowed it on the consent
  * bar: lib/trust/document-trust `cspExtensionsFor`) is reached here instead, by this server, under the open-web fetch guard every other server-side URL fetch uses

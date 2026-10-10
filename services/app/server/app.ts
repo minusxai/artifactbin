@@ -35,7 +35,7 @@ import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/
 import { SPA_PATHS } from '@/lib/http/app-pages';
 import { ownerUsername, sessionActor } from '@/lib/accounts';
 import { AGENT_COOKIE } from '@/lib/accounts/agent-session';
-import { canEdit } from '@/lib/artifacts';
+import { canEdit } from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/platform';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
@@ -60,7 +60,7 @@ import { linkedStylesheets } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
-import { fontPreloadTags } from '@/lib/compiled-page/styles';
+import { fontPreloadTags } from '@/lib/page-styles';
 import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';

@@ -1,6 +1,6 @@
 import {mutationNotificationInbox} from './mutation-inbox';
 import {JOIN_RELATIONS,dismissPendingRelations} from '@/lib/accounts/relation-state';
-import {canAnnotate} from '../share-roles';
+import {canAnnotate} from '@artifactbin/contracts';
 import {notificationChanged} from '@/lib/notifications/write';
 import {getDb} from '@/lib/platform/db';
 import {MembershipError} from './membership';

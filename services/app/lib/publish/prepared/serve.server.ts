@@ -58,7 +58,7 @@ import { recompilePage, type PreparedPage } from './prepared-page.server';
 import { SERVED_RESULTS_BUDGET_MS, tokenOf } from './served-results.server';
 import { readUrlValues } from '@/lib/dataflow';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { DOMAIN_FOOTER_CSS } from '@/lib/compiled-page/styles';
+import { DOMAIN_FOOTER_CSS } from '@/lib/page-styles';
 import { DOMAIN_FOOTER_TEXT } from '@artifactbin/contracts/domain-footer';
 import { assembleReaderPage } from '@/lib/compiled-page/assembler';
 import { withStoredCarriers } from '@/lib/compiled-page/carriers';
@@ -67,13 +67,13 @@ import { unresolvedSpecifiers } from '@/lib/compiled-page/runtime-binding';
 import { retainedBuild } from '@/lib/compiled-page/shared-builds.server';
 
 import {
-  COMPILE_INLINE_BUDGET_MS, isCompileFailure, SNAPSHOT_MAX_AGE_MS,
+  COMPILE_INLINE_BUDGET_MS, isCompileFailure,
   MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT,
-  type AssembleHead, type AssembleInput, type AssembleOverlay, type CompiledPage, type CompilerBuild, type DataSnapshot,
-  type ReaderFallbackReason, type SnapshotKey, type StoredCompile,
+  type AssembleHead, type AssembleInput, type AssembleOverlay, type CompiledPage, type CompilerBuild,
+  type ReaderFallbackReason, type StoredCompile,
 } from '@/lib/compiled-page/contract';
 import { planOf } from '@/lib/compiled-page/plan';
-import { anonymousAccessFacts, snapshotKeyFor, snapshotStore } from './snapshots.server';
+import { anonymousAccessFacts, SNAPSHOT_MAX_AGE_MS, snapshotKeyFor, snapshotStore, type DataSnapshot, type SnapshotKey } from './snapshots.server';
 
 /** What one admitted request decides about its compiled render. Nothing here is stored. */
 export interface CompiledReaderRequest {
@@ -400,7 +400,7 @@ const classOf = (node: Located): string | undefined => node.attrs?.find((a) => a
 /** The deck's framework-free behaviour chunk (the compiler's `DECK_BEHAVIOR`). */
 const DECK_BEHAVIOR = '@mx/deck';
 
-/** A DOMAIN POST's one line of attribution (its style: lib/compiled-page/styles/document-styles DOMAIN_FOOTER_CSS). */
+/** A DOMAIN POST's one line of attribution (its style: lib/page-styles/document-styles DOMAIN_FOOTER_CSS). */
 export const domainFooter = (href: string): { html: string; css: string } => ({
   html: `<footer data-mx-domain-footer="">${DOMAIN_FOOTER_TEXT} <a href="${escapeHtml(href)}" rel="noopener">artifactbin</a></footer>`,
   css: DOMAIN_FOOTER_CSS,

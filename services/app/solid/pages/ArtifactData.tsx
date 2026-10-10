@@ -13,8 +13,7 @@
  * (`/api/page/artifact/<id>`) — a version frame carries rows, not catalog definitions.
  */
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import type { ArtifactRole } from '@/lib/artifacts/share-roles';
-import { canEdit as canEditRole, canGovern } from '@/lib/artifacts/share-roles';
+import { type ArtifactRole, canEdit as canEditRole, canGovern } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
 import { formatFileSize } from '@/lib/islands/file-display';

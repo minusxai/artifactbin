@@ -20,7 +20,7 @@
  *    own policy. Those have no door. `<form>` is denied for a different
  *    reason, below. `<iframe>` is NOT here: an https player or page is
  *    ordinary vocabulary (lib/jsx/validate `iframeErrors`), framed under the
- *    document's own `frame-src` (lib/compiled-page/styles/document-csp).
+ *    document's own `frame-src` (lib/page-styles/document-csp).
  *
  * Every stored document has passed this gate, so the save-time check covers
  * the whole corpus.
@@ -29,7 +29,7 @@
  *
  * Denied at SAVE, like every tag in the list, so no stored document carries one
  * whatever renders it later. The served document's CSP independently sets
- * `form-action 'none'` (lib/compiled-page/styles/markup-csp.ts), so the tag would be inert
+ * `form-action 'none'` (lib/page-styles/markup-csp.ts), so the tag would be inert
  * there too; the controls a form would group (`button`, `input`, `select` …)
  * are each allowed on their own and are driven from the `<Helmet>` script,
  * which is what the rejection tells the author (lib/jsx/validate.ts).

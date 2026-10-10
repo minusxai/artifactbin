@@ -1,6 +1,6 @@
 /**
  * The same-origin map-tile proxy path. A served document may only load images
- * from 'self' (lib/compiled-page/styles/markup-csp: `img-src 'self' data: blob:`), so the
+ * from 'self' (lib/page-styles/markup-csp: `img-src 'self' data: blob:`), so the
  * point-map street basemap cannot reference Carto's CDN directly — it fetches
  * `/tiles/<style>/{z}/{x}/{y}.png` on the document's own origin instead, and
  * this module is the one mapping from that path onto the Carto upstream.

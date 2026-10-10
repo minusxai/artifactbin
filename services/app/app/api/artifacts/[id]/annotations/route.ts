@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {parseAnnotationRange,isAreaRange,refinementRange} from '@/lib/document/annotation-range';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import {readableArtifact} from '@/lib/artifacts';
-import {canAnnotate} from '@/lib/artifacts';
+import { canAnnotate } from '@artifactbin/contracts';
 /**
  * GET /api/artifacts/:id/annotations — the annotation list, anchors in
  * CURRENT coordinates. `?status=open` (default) | `resolved` | `all`.

@@ -5,7 +5,7 @@ import { compilePage } from '../compiler';
 import { loadSsrModule } from '../bundle.server';
 import type { AssembleHead, AssembleOverlay } from '../contract';
 import { prepareStoryParts, type PrepareStoryInput } from '@/lib/publish/prepared/prepare-runtime.server';
-import { documentStyleSheets } from '@/lib/compiled-page/styles/document-styles';
+import { documentStyleSheets } from '@/lib/page-styles/document-styles';
 
 export interface DocumentCase extends PrepareStoryInput {
   head?: AssembleHead | null;

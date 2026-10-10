@@ -6,7 +6,7 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { markupCsp } from '@/lib/compiled-page/styles/markup-csp';
+import { markupCsp } from '@/lib/page-styles/markup-csp';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
