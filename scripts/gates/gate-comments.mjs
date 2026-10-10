@@ -479,6 +479,8 @@ const run = async () => {
 const HOVER_REPLY_DOC = '<Helmet><title>Hover reply</title></Helmet>'
   + '<div data-design="tw" className="p-10"><h1>Margins</h1><p id="hover-target">Margins held at 21% this quarter.</p></div>';
 const HOVER_DRAFT = 'Answered from the hover card';
+/** Longer than two lines of the 288px card: the preview must clamp it to whole lines with an ellipsis. */
+const HOVER_ROOT = 'Is 21% the adjusted figure, or the reported one from before the one-off charges we booked in the third quarter of the year?';
 
 /**
  * REPLY FROM THE HOVER CARD: hover the marker, expand it, Tab from Resolve into the reply box, type,
@@ -493,13 +495,13 @@ async function hoverReplyLeg(browser, { id, token }) {
     await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
     await documentLocator(page).locator('#hover-target').waitFor({ timeout: 15000 });
     const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
-    const created = await page.evaluate(async ([docId, editId]) => {
+    const created = await page.evaluate(async ([docId, editId, rootBody]) => {
       const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ node_id: 'hover-target', edit_id: editId, body: 'is 21% the adjusted figure?' }),
+        body: JSON.stringify({ node_id: 'hover-target', edit_id: editId, body: rootBody }),
       });
       return res.status;
-    }, [id, head.edit_id]);
+    }, [id, head.edit_id, HOVER_ROOT]);
     check(created === 201, `the owner leaves a comment to answer from the hover card (${created})`);
     await page.reload({ waitUntil: 'load' });
     await documentLocator(page).locator('#hover-target').waitFor({ timeout: 15000 });
@@ -508,6 +510,28 @@ async function hoverReplyLeg(browser, { id, token }) {
     const card = page.locator('[data-annotation-id]');
     await marker.hover();
     await card.getByRole('button', { name: 'Reply', exact: true }).waitFor({ timeout: 8000 });
+    // WHOLE LINES: the clamped body shows two complete line boxes (no half line above the footer) and an ellipsis.
+    const lines = await until(() => card.evaluate(node => {
+      const own = node.getBoundingClientRect();
+      if (Math.abs(own.width - 288) > 1) return null; // still widening
+      const body = node.querySelector('[data-card-body]');
+      const foot = node.querySelector('[data-card-footer]');
+      const b = body.getBoundingClientRect(), f = foot.getBoundingClientRect();
+      const range = document.createRange(); range.selectNodeContents(body);
+      const rects = [...range.getClientRects()].filter(r => r.height > 0);
+      const visible = rects.filter(r => r.top < Math.min(b.bottom, own.bottom) - 0.5);
+      const style = getComputedStyle(body);
+      return {
+        // a line box that starts above the body's (or card's) bottom must end above it too: no half line
+        cut: visible.filter(r => r.bottom > b.bottom + 0.5 || r.bottom > own.bottom).length,
+        visibleLines: new Set(visible.map(r => Math.round(r.top))).size,
+        bodyBottom: b.bottom, footerTop: f.top, footerBottom: f.bottom, cardBottom: own.bottom,
+        display: style.display, clamp: style.webkitLineClamp, truncated: body.scrollHeight > body.clientHeight + 1,
+      };
+    }), value => value !== null, 4000);
+    check(lines && lines.cut === 0 && lines.visibleLines === 2 && lines.bodyBottom <= lines.footerTop + 0.5
+      && lines.footerBottom <= lines.cardBottom + 0.5 && lines.display !== 'block' && lines.clamp === '2' && lines.truncated,
+    `the hover card shows the body as whole lines with an ellipsis, clear of the footer (${JSON.stringify(lines)})`);
     const footer = await card.locator('[data-card-footer]').textContent();
     check(footer?.includes('1 message') && await card.getByRole('button', { name: 'Expand replies', exact: true }).count() === 0,
     'a one-message hover card shows its count as plain text');

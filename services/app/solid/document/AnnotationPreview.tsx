@@ -267,7 +267,7 @@ export function AnnotationPreview(props: {
     onFocusOut={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) props.onHover(null); }}
     data-annotation-id={props.row.id}
     data-hovered={props.hovered ? 'true' : undefined}
-    class={`${working() ? 'motion-safe:animate-pulse' : ''} group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${props.hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
+    class={`${working() ? 'motion-safe:animate-pulse' : ''} group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${props.hovered ? 'z-10 flex flex-col border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
     style={{
       position: 'fixed',
       outline: work() ? `2px solid ${agentNameColor(work()!.name)}` : undefined,
@@ -275,7 +275,9 @@ export function AnnotationPreview(props: {
       right: `${(props.rightInset ?? 0) + VIEW_COMMENT_INSET}px`,
       width: `${props.hovered ? 288 : compactWidth()}px`,
       'max-width': `calc(100vw - ${(props.rightInset ?? 0) + VIEW_COMMENT_INSET * 2}px)`,
-      height: props.hovered ? (repliesExpanded() ? 'auto' : `${VIEW_COMMENT_EXPANDED_H}px`) : `${VIEW_COMMENT_COLLAPSED_H}px`,
+      // Hovered, the card is as tall as its content (whole lines: a fixed height cut the body mid-line), at least the preview's.
+      height: props.hovered ? 'auto' : `${VIEW_COMMENT_COLLAPSED_H}px`,
+      'min-height': props.hovered && !repliesExpanded() ? `${VIEW_COMMENT_EXPANDED_H}px` : undefined,
       'max-height': expanded() ? `calc(100dvh - ${VIEW_COMMENT_INSET}px - ${top()})` : undefined,
       'overflow-y': expanded() ? 'auto' : undefined,
       'border-radius': radius(),
@@ -309,7 +311,7 @@ export function AnnotationPreview(props: {
       </span>
     </Show>
     <Show when={first() && props.hovered}>
-      <span class="pointer-events-none relative z-10 flex h-full animate-[rise_.12s_ease-out] flex-col">
+      <span class="pointer-events-none relative z-10 flex shrink-0 grow animate-[rise_.12s_ease-out] flex-col">
         <span class="flex items-center justify-between gap-2">
           <AuthorIdentity author={first()!.author} />
           <span class="pointer-events-auto relative z-10 flex shrink-0 items-center gap-2">
@@ -343,7 +345,7 @@ export function AnnotationPreview(props: {
               value={props.draft ?? ''} onChange={(value) => props.onDraftChange?.(value)} onSend={(body, attachment) => props.onReply!(body, attachment)} onSent={keepReplying} image={replyImage} autoFocus={replyRequested()} />
           </div>
         </Show>
-        <span class="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
+        <span data-card-body class="mb-1 mt-1.5 line-clamp-2 shrink-0 font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
         <Show when={props.resolveError}><span role="alert" class="mt-1 font-mono text-[10px] text-danger">{props.resolveError}</span></Show>
         {/* The count (and "+N more", which expands the replies) on the left; Reply and the way to the rail on the right. */}
         <span data-card-footer class={`mt-auto flex min-h-[22px] items-center justify-between gap-2 font-mono text-[10px] text-faint ${repliesExpanded() ? 'pt-2' : ''}`}>
