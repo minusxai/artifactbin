@@ -5,7 +5,7 @@
  * prepare threads the request thread keeps answering, and the answers are the ones it would compute.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { drawSnapshotCharts } from '@/lib/compiled-page/charts.server';
+import { drawSnapshotCharts } from '../charts.server';
 import { compilePage } from '@/lib/compiled-page/compiler';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { heavyChartsMarkup } from '@/lib/publish/fixtures/heavy-prepare';

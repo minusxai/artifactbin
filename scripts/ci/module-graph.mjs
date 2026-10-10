@@ -116,11 +116,12 @@ const DOCUMENT_ENTRIES = [
 const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
 const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];
 const COMPILED_PAGE_ENTRIES = [
-  'agent-discovery', 'assembler', 'backfill.server', 'build.server', 'bundle.server', 'carriers', 'charts.server', 'compiler', 'contract',
-  'modules.server', 'plan', 'runtime-binding', 'shared-builds.server', 'speculation', 'story-element', 'styles', 'styles/document-fonts',
-  'styles/document-root', 'styles/document-styles', 'styles/first-screen-fonts', 'styles/inline-css', 'styles/markup-csp',
-  'styles/story-base-css', 'styles/style-overrides',
+  'agent-discovery', 'assembler', 'backfill.server', 'build.server', 'bundle.server', 'carriers', 'compiler', 'contract',
+  'modules.server', 'plan', 'runtime-binding', 'shared-builds.server', 'speculation', 'story-element',
 ];
+/** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
+const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
+const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];
 const ACCOUNTS_ENTRIES = [
   '', 'actors', 'agent-session', 'auth', 'avatars', 'guest-owner', 'membership-lock', 'pages-sessions', 'relation-state', 'relations',
   'request-authority', 'session', 'testuser-sessions', 'testusers', 'tokens', 'user-kinds', 'users', 'viewer',
@@ -141,6 +142,7 @@ const DEEP_MODULES = {
   'lib/dataflow': { entries: DATAFLOW_ENTRIES, browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES },
   'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES },
+  'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES, browserImporters: ACCOUNTS_BROWSER_IMPORTERS, browserLeaves: ACCOUNTS_BROWSER_LEAVES },
 };
 /**

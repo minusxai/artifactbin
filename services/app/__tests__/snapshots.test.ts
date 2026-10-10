@@ -25,8 +25,7 @@ import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { planOf } from '@/lib/compiled-page/plan';
 import { updateSharingFor } from '@/lib/artifacts';
 import { installStoryCommitHooks } from '@/lib/publish/prepared/commit-hooks.server';
-import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/publish/prepared/snapshots.server';
-import { SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS } from '@/lib/compiled-page/contract';
+import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS, snapshotKeyFor, snapshotStore } from '@/lib/publish/prepared/snapshots.server';
 
 const harness = useAppHarness();
 beforeEach(() => setSession(null));

@@ -60,21 +60,78 @@ import { DatasetError } from '@/lib/datasets/errors';
 import type { Scalar } from '@/lib/dataflow';
 import { marksOf } from './served-results.server';
 import { preparedPageFor } from './prepared-page.server';
-import { drawSnapshotCharts } from '@/lib/compiled-page/charts.server';
+import { drawSnapshotCharts } from './charts.server';
 import { prepareWorkers } from './prepare-workers.server';
 import type { ServedResults } from '@/lib/story-runtime/contract';
-import {
-  SNAPSHOT_INPUT_SETS_PER_ARTIFACT,
-  SNAPSHOT_MAX_AGE_MS,
-  type DataPlan,
-  type DataSnapshot,
-  type DatasetAccessFacts,
-  type SnapshotKey,
-  type SnapshotRead,
-  type SnapshotSlot,
-  type SnapshotStore,
-} from '@/lib/compiled-page/contract';
+import type { DataPlan, DatasetAccessFacts } from '@/lib/compiled-page/contract';
 import type { DrawnChart } from '@/lib/story-runtime/contract';
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Snapshots
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export type SnapshotSlot = 'head' | `v:${number}`;
+
+export interface SnapshotKey {
+  artifactId: string;
+  slot: SnapshotSlot;
+  /** Digest of the DataPlan: a republish that changes a query misses. */
+  planKey: string;
+  /** Canonical digest of the values of every `keysSnapshot` input (defaults, or a request's URL `$` values). */
+  inputsKey: string;
+}
+
+export interface DataSnapshot {
+  key: SnapshotKey;
+  /** The mark of every dataset in `DataPlan.datasets`, taken BEFORE the run (served-results.server marksOf shape). */
+  marks: Readonly<Record<string, string>>;
+  /** The membership revision when the plan reads `_members`. */
+  membersMark?: string;
+  /** The shared queries' answers, as the query route answers them to the anonymous door. */
+  results: ServedResults;
+  drawings: Readonly<Record<string, DrawnChart>>;
+  computedAt: number;
+  /** The compiler build the plan came from (a plan digest is per build). */
+  build: string;
+}
+
+/** A snapshot served while a revalidation runs may be this old (the owner's accepted staleness). */
+export const SNAPSHOT_MAX_AGE_MS = 10 * 60 * 1000;
+/** Non-default input sets snapshotted per artifact before the cold path answers instead (open question Q2). */
+export const SNAPSHOT_INPUT_SETS_PER_ARTIFACT = 16;
+
+interface SnapshotRead {
+  snapshot: DataSnapshot;
+  /** Marks (datasets and the document) equal to the current ones, and inside SNAPSHOT_MAX_AGE_MS. */
+  fresh: boolean;
+}
+
+/**
+ * The snapshot store (below, w1-snapshots; table `app.data_snapshots`).
+ * Freshness is decided on READ by comparing marks — the correctness rule; the
+ * write hook is an optimisation that lets the head revalidate before anyone asks.
+ */
+export interface SnapshotStore {
+  /** The stored snapshot and whether it is fresh; null when none is stored. Never runs a query. */
+  get(key: SnapshotKey): Promise<SnapshotRead | null>;
+  put(snapshot: DataSnapshot): Promise<void>;
+  /**
+   * A dataset was written: mark exactly the snapshots whose plan lists it and
+   * queue their revalidation. Returns the keys it marked. Called by the write
+   * path after commit, beside its NOTIFY.
+   */
+  invalidate(datasetId: string): Promise<SnapshotKey[]>;
+  /**
+   * Re-run the shared queries at this key's inputs with anonymous admission
+   * (the same run as `POST /a/:id/query`), draw the charts, store and return
+   * the new snapshot; null when the version cannot be snapshotted any more.
+   * `recipe` is the plan and input values the key was made from, when the
+   * caller holds them (else the store's own record of the key), and the
+   * compiler build the plan came from, which the snapshot records (else the
+   * build already stored for the key).
+   */
+  revalidate(key: SnapshotKey, recipe?: { plan: DataPlan; values: Record<string, Scalar>; build?: string }): Promise<DataSnapshot | null>;
+}
 
 /**
  * The compiler build a snapshot records until the compiled page carries one

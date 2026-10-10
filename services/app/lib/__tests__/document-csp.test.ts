@@ -1,10 +1,10 @@
 /**
- * The policy a document carries on its OWN origin (lib/compiled-page/styles/document-csp): what a framed
+ * The policy a document carries on its OWN origin (lib/page-styles/document-csp): what a framed
  * document may load, call and be framed by. Its origin is unique, so it needs no `sandbox`; the app
  * page goes back to its strict policy (lib/__tests__/app-page-csp).
  */
 import { describe, expect, it } from 'vitest';
-import { buildDocumentCsp } from '@/lib/compiled-page/styles/document-csp';
+import { buildDocumentCsp } from '@/lib/page-styles/document-csp';
 import { FRAME_HOSTS } from '@/lib/story-ui/document-sources';
 
 const SELF = 'https://416233784b39.pages.example.com';

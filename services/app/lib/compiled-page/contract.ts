@@ -12,10 +12,11 @@
  *   compiler.ts         compilePage            w2-compiler
  *   modules.server.ts   ModuleStore            w1-assembler
  *   plan.ts             planOf                 w1-planners
- *   snapshots.server.ts SnapshotStore          w1-snapshots
- *   charts.server.ts    drawn charts           w1-planners
  *   assembler.ts        assembleReaderPage     w1-assembler
  *   links.ts            linkHintsOf            w1-planners
+ *
+ * The guest snapshots a version is served from and the charts drawn into them are
+ * lib/publish/prepared's (snapshots.server SnapshotStore, charts.server).
  */
 import type { JsxNode } from '@/lib/jsx';
 import type { CompiledDataflow, CompiledReads } from '@/lib/dataflow/compiled-dataflow';
@@ -328,73 +329,6 @@ export interface DataPlan {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Snapshots
- * ──────────────────────────────────────────────────────────────────────────── */
-
-export type SnapshotSlot = 'head' | `v:${number}`;
-
-export interface SnapshotKey {
-  artifactId: string;
-  slot: SnapshotSlot;
-  /** Digest of the DataPlan: a republish that changes a query misses. */
-  planKey: string;
-  /** Canonical digest of the values of every `keysSnapshot` input (defaults, or a request's URL `$` values). */
-  inputsKey: string;
-}
-
-export interface DataSnapshot {
-  key: SnapshotKey;
-  /** The mark of every dataset in `DataPlan.datasets`, taken BEFORE the run (served-results.server marksOf shape). */
-  marks: Readonly<Record<string, string>>;
-  /** The membership revision when the plan reads `_members`. */
-  membersMark?: string;
-  /** The shared queries' answers, as the query route answers them to the anonymous door. */
-  results: ServedResults;
-  drawings: Readonly<Record<string, DrawnChart>>;
-  computedAt: number;
-  /** The compiler build the plan came from (a plan digest is per build). */
-  build: string;
-}
-
-/** A snapshot served while a revalidation runs may be this old (the owner's accepted staleness). */
-export const SNAPSHOT_MAX_AGE_MS = 10 * 60 * 1000;
-/** Non-default input sets snapshotted per artifact before the cold path answers instead (open question Q2). */
-export const SNAPSHOT_INPUT_SETS_PER_ARTIFACT = 16;
-
-export interface SnapshotRead {
-  snapshot: DataSnapshot;
-  /** Marks (datasets and the document) equal to the current ones, and inside SNAPSHOT_MAX_AGE_MS. */
-  fresh: boolean;
-}
-
-/**
- * The snapshot store (snapshots.server.ts, w1-snapshots; table `app.data_snapshots`).
- * Freshness is decided on READ by comparing marks — the correctness rule; the
- * write hook is an optimisation that lets the head revalidate before anyone asks.
- */
-export interface SnapshotStore {
-  /** The stored snapshot and whether it is fresh; null when none is stored. Never runs a query. */
-  get(key: SnapshotKey): Promise<SnapshotRead | null>;
-  put(snapshot: DataSnapshot): Promise<void>;
-  /**
-   * A dataset was written: mark exactly the snapshots whose plan lists it and
-   * queue their revalidation. Returns the keys it marked. Called by the write
-   * path after commit, beside its NOTIFY.
-   */
-  invalidate(datasetId: string): Promise<SnapshotKey[]>;
-  /**
-   * Re-run the shared queries at this key's inputs with anonymous admission
-   * (the same run as `POST /a/:id/query`), draw the charts, store and return
-   * the new snapshot; null when the version cannot be snapshotted any more.
-   * `recipe` is the plan and input values the key was made from, when the
-   * caller holds them (else the store's own record of the key), and the
-   * compiler build the plan came from, which the snapshot records (else the
-   * build already stored for the key).
-   */
-  revalidate(key: SnapshotKey, recipe?: { plan: DataPlan; values: Record<string, Scalar>; build?: string }): Promise<DataSnapshot | null>;
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
  * The viewer overlay (after paint)
  * ──────────────────────────────────────────────────────────────────────────── */
 
@@ -428,7 +362,7 @@ export interface AssembleOverlay {
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
   signedIn: boolean;
-  /** Where the page queries, writes and fetches its overlay (lib/compiled-page/styles/markup-csp paths); absent on a capture. */
+  /** Where the page queries, writes and fetches its overlay (lib/page-styles/markup-csp paths); absent on a capture. */
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string; direct?: true } | null;
   /** A capture's verified image import door, even though it has no query or mutation door. */
   assetsUrl?: string;
@@ -462,8 +396,12 @@ export interface AssembleInput {
   title: string;
   theme: string | null;
   colorMode: 'light' | 'dark';
-  /** The guest snapshot for these inputs, or null (the cold path ran inside its budget, or nothing is servable). */
-  snapshot: DataSnapshot | null;
+  /**
+   * What the assembler reads of the guest snapshot for these inputs (lib/publish/prepared/snapshots.server
+   * DataSnapshot): its answers and its server-drawn charts. Null when the cold path ran inside its budget,
+   * or nothing is servable.
+   */
+  snapshot: { results: ServedResults; drawings: Readonly<Record<string, DrawnChart>> } | null;
   overlay: AssembleOverlay;
   /** Where the shared chunks are (the manifest), so the assembler emits `modulepreload`s and the boot import. */
   build: CompilerBuild;
@@ -492,7 +430,7 @@ export interface AssembleInput {
   footer?: { html: string; css: string } | null;
   /**
    * A document served BY ITSELF (`/raw`, a domain post, a capture) carries the standalone
-   * document's stylesheets, byte for byte (lib/compiled-page/styles/document-styles), in place of `css`: the story is
+   * document's stylesheets, byte for byte (lib/page-styles/document-styles), in place of `css`: the story is
    * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.
    */
   sheets?: ReadonlyArray<{ attr: string; css: string }> | null;

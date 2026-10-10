@@ -16,7 +16,7 @@ import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-fil
 import { connectPreview, previewServerOrigin } from './preview-connect';
 import { unranQueriesOf } from './snapshot-current';
 import { projectDocument, sameSourceContent } from './project-document';
-import { applyDocumentRootAppearance } from '@/lib/compiled-page/styles/document-root';
+import { applyDocumentRootAppearance } from '@/lib/page-styles/document-root';
 import { configureTrustedUiStyles } from '@/lib/islands/trusted-ui-styles';
 import { TrustedUi } from '@/solid/components/TrustedUi';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';

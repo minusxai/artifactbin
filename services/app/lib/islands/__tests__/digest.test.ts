@@ -1,12 +1,12 @@
 /**
  * The browser rows digest (lib/islands/digest) agrees with the one the server stores on a drawn
- * chart (lib/compiled-page/charts.server rowsDigest), so an island can tell a current drawing from a
+ * chart (lib/publish/prepared/charts.server rowsDigest), so an island can tell a current drawing from a
  * stale one without loading Vega.
  */
 import { describe, expect, it } from 'vitest';
 import { rowsDigest } from '../digest';
 import { drawingIsCurrent } from '../chart';
-import { rowsDigest as serverRowsDigest } from '@/lib/compiled-page/charts.server';
+import { rowsDigest as serverRowsDigest } from '@/lib/publish/prepared/charts.server';
 
 const rows = [{ region: 'West', n: 41, at: '2026-09-28T00:00:00Z', ok: true, none: null }, { region: 'Ōsaka "quoted" </script>', n: -1.5, at: null, ok: false, none: null }];
 

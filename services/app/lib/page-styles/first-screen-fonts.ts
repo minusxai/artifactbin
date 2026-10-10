@@ -20,7 +20,7 @@
  *   - em, i, cite, dfn, var, address, `italic`, and the tags a theme sets
  *     italic (manuscript's blockquote) ask for the italic file where the family
  *     ships one; `not-italic` undoes it.
- * Each slot resolves to the document's own `font-*` meta (lib/compiled-page/styles/document-fonts)
+ * Each slot resolves to the document's own `font-*` meta (lib/page-styles/document-fonts)
  * or the theme's family; a themeless document paints the system stacks. Only
  * a bundled family is preloaded, and only its latin file — the other subsets are
  * unicode-range lazy, and a Google family's files are named by its own stylesheet.

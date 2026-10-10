@@ -1,6 +1,6 @@
 /**
  * What a document asks of the network beyond the default document policy, declared in its Helmet the
- * way fonts are (lib/compiled-page/styles/document-fonts):
+ * way fonts are (lib/page-styles/document-fonts):
  *
  *   <meta name="csp-connect" content="https://api.open-meteo.com https://api.example.com" />
  *   <meta name="csp-script"  content="https://cdn.plot.ly" />

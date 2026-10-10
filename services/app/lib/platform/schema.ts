@@ -449,7 +449,7 @@ const CODES: Table = {
 
 // RETIRED TABLE — `webfonts`, the family → copied-faces index of the retired
 // font-copying pipeline. A document's font metas now emit a Google Fonts
-// `@import` (lib/compiled-page/styles/document-fonts); nothing reads or writes it. Boot
+// `@import` (lib/page-styles/document-fonts); nothing reads or writes it. Boot
 // DDL is additive-only, so an older database keeps the table; a fresh one never creates it.
 
 /**

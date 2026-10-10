@@ -3,7 +3,7 @@ import { assembleReaderPage } from '@/lib/compiled-page/assembler';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { loadSsrModule } from '@/lib/compiled-page/bundle.server';
 import { compilePage } from '@/lib/compiled-page/compiler';
-import { documentStyleSheets } from '@/lib/compiled-page/styles/document-styles';
+import { documentStyleSheets } from '@/lib/page-styles';
 import { prepareStoryParts, type PrepareStoryInput } from '@/lib/publish/prepared/prepare-runtime.server';
 
 /** The caller admits the editor and supplies its current source and data. Nothing here is persisted. */
