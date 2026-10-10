@@ -3,7 +3,7 @@ import { transform } from 'esbuild';
 import { describe, expect, it, vi } from 'vitest';
 import { buildLambdaModule } from '../program.server';
 import type { CompiledDataflow } from '@/lib/dataflow';
-import type { RunAnswer } from '@/lib/story-runtime/dataflow-core';
+import type { RunAnswer } from '@/lib/page-store/dataflow-core';
 
 const flow: CompiledDataflow = {
   imports: [{ name: 'd', ref: 'DS1234', tables: [{ name: 'rows', columns: [{ name: 'month', type: 'string' }] }] }],

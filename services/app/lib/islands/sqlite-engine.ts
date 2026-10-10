@@ -1,6 +1,6 @@
 /**
  * THE PAGE'S OWN SQLITE ENGINE, for a compiled page (docs/phase2-architecture.md §2.3): the page
- * engine (lib/story-runtime/page-engine — the SQLite core over the imports this reader holds, the
+ * engine (lib/page-store/page-engine — the SQLite core over the imports this reader holds, the
  * dataflow evaluator, the optimistic overlay) over the wasm loader (lib/islands/page-sqlite
  * `sqliteFrom`), unchanged.
  *
@@ -9,7 +9,7 @@
  * (IslandPageData `hold` and `sqliteWasm`), behind the first paint. The shared runtime's closure never
  * carries it.
  */
-import { createPageEngine, type PageEngine, type PageEngineSource } from '@/lib/story-runtime/page-engine';
+import { createPageEngine, type PageEngine, type PageEngineSource } from '@/lib/page-store/page-engine';
 import { sqliteFrom, type WasmSource } from './page-sqlite';
 
 /**

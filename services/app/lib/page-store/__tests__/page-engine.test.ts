@@ -1,5 +1,5 @@
 /**
- * THE PAGE'S OWN ENGINE (lib/story-runtime/page-engine): the SQLite core over
+ * THE PAGE'S OWN ENGINE (lib/page-store/page-engine): the SQLite core over
  * the imports this reader holds, answering exactly what the server would —
  * the same evaluator (lib/dataflow/evaluate), the same binding, the same
  * display window — plus the optimistic overlay a held write rides on until

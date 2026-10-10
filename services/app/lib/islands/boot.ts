@@ -6,7 +6,7 @@
  *   boot({ ISLANDS, FLOW });
  *
  * 1. reads the page data island (`#mx-story-data`, contract `IslandPageData`);
- * 2. starts the EXISTING store (lib/story-runtime/store) over the EXISTING document transport,
+ * 2. starts the EXISTING store (lib/page-store/store) over the EXISTING document transport,
  *    seeded from the snapshot's `results` and the reader's URL `values`;
  * 3. hydrates every island in place under the story root (rt `hydrateIsland`);
  * 4. installs the `IslandDocument` on the story root (handover.ts) for the SPA to adopt;
@@ -32,9 +32,9 @@
  */
 import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/dataflow';
-import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore } from '@/lib/page-store/store';
 import { createDocumentTransport } from './document-transport';
-import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
+import { createFetchTransport } from '@/lib/page-store/fetch-transport';
 import { STORY_DATA_HOOK, STORY_URL_VALUES_MESSAGE, type StoryUrlValuesMessage, ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/story-runtime/contract';
 import { frameAppOrigin } from './frame-origin';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
@@ -125,7 +125,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   const data = readPageData(doc);
   const flow = module.FLOW ?? null;
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
-  // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
+  // doors that read it. A guest page keeps the anonymous GET door (lib/page-store/fetch-transport).
   // A document on its OWN origin (APP__PAGES_HOST) calls its absolute doors directly, framed or not,
   // with its pages cookie (`credentials: 'include'`).
   const direct = !!data.direct && !!data.queryUrl;

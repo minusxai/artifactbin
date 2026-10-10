@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { createDocumentTransport } from '@/lib/islands/document-transport';
-import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
+import { createFetchTransport } from '@/lib/page-store/fetch-transport';
 
 const win = (parent: unknown) => {
   const self = { parent: null as unknown };

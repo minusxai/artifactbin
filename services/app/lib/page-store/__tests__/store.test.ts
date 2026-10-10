@@ -4,7 +4,7 @@
  * continuous input) → merged results, with superseded answers dropped. framework-free.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import { createDataflowStore, type QueryTransport } from '@/lib/page-store/store';
 import type { DataflowState, Scalar } from '@/lib/dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 

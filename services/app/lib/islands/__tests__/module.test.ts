@@ -1,7 +1,7 @@
 /** The island module's shared assembly: what boot and the offline file's boot both build from a module. */
 import { describe, expect, it, vi } from 'vitest';
 import type { Component } from 'solid-js';
-import type { PageEngine } from '@/lib/story-runtime/page-engine';
+import type { PageEngine } from '@/lib/page-store/page-engine';
 import { lazyEngine, normalizeIslandModule } from '../module';
 
 const engineStub = (): PageEngine => ({

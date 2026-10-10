@@ -1,7 +1,7 @@
 /**
  * THE PAGE'S OWN ENGINE — the SQLite core (`@artifactbin/sql/core`, the same
  * wasm and functions the server runs) over the imports this reader holds, in
- * memory, on the main thread. The store (lib/story-runtime/store) sends it the
+ * memory, on the main thread. The store (lib/page-store/store) sends it the
  * nodes placed in the browser (lib/dataflow/placement) and the server the rest.
  *
  * It answers what the server would, by running the SAME code: the dataflow

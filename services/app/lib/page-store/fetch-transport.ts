@@ -16,7 +16,7 @@
  * origin (APP__PAGES_HOST) calls its absolute doors with its pages cookie,
  * framed by the app page or not (lib/islands/boot). framework-free.
  */
-import { QUERY_REQUEST_PARAM } from './contract';
+import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from './store';
 import type { DataflowState, TableResult, ImportTables } from '@/lib/dataflow';
 import { localZone } from '@/lib/dataflow/builtins';

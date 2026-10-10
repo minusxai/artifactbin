@@ -1,6 +1,6 @@
 /**
  * WHAT THE RUNTIME CORE RUNS ON: a document's data half as a dependency graph
- * (lib/story-runtime/dataflow-core). Values are what the reader sets, sources
+ * (lib/page-store/dataflow-core). Values are what the reader sets, sources
  * are what changes elsewhere (a dataset, the membership, the viewer), and
  * every query and mutation names what it reads by kind.
  *
@@ -19,7 +19,7 @@ const VIEWER_SOURCE = VIEWER;
 /** The source the clock is: advanced once a minute, so only the readers of `$_now` re-run. */
 export const NOW_SOURCE = '_now';
 /**
- * The page's own copy of a dataset (lib/story-runtime/page-engine): a write
+ * The page's own copy of a dataset (lib/page-store/page-engine): a write
  * applied to it optimistically re-runs the queries the page answers from it,
  * and nothing that asks the server, which has not heard of the write yet.
  */

@@ -60,7 +60,7 @@ vi.mock('@/lib/story-runtime/edit/selection-actions', () => ({
 import { createIslandController, holdChartDrawings } from '@/lib/islands/island-controller';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
 import { storyUpdateParts } from '@/lib/document/update-parts';
-import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
+import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import { createEditDraftSender, DRAFT_IDLE_MS } from '@/solid/editor/edit-draft';
 import { TYPING_QUIET_MS } from '@/lib/islands/island-controller';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';

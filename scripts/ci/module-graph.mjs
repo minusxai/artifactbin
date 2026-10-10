@@ -65,24 +65,31 @@ const ISLANDS_BROWSER_LEAVES = [
  */
 /*
  * lib/story-runtime's doors: its index (serverOnly: the compile-time reader chrome; the outline pulls in markdown),
- * contract, story-fragment, data (server and single-bundle code, and type imports anywhere) and the four lazy edit/ chunks. Re-export entries grow
- * the island chunks (measured in row 40.2: esbuild reaches every file an entry re-exports), so browser-bundled code
- * imports values from the listed leaf files instead.
+ * contract, story-fragment and the four lazy edit/ chunks. Re-export entries grow the island chunks (measured in row
+ * 40.2: esbuild reaches every file an entry re-exports), so browser-bundled code imports values from the listed leaf
+ * files instead.
  */
-const STORY_RUNTIME_ENTRIES = ['', 'contract', 'story-fragment', 'data', 'edit/annotate', 'edit/dom-mounter', 'edit/selection-actions', 'edit/session'];
+const STORY_RUNTIME_ENTRIES = ['', 'contract', 'story-fragment', 'edit/annotate', 'edit/dom-mounter', 'edit/selection-actions', 'edit/session'];
 const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/web/',
   'services/app/lib/islands/',
-  'services/app/lib/artifact-backend/http.ts',
   'services/app/lib/cli-toolkit/browser.ts',
   'services/app/lib/page-styles/document-root.ts',
-  'services/app/lib/offline/compiled-boot.ts',
 ];
 const STORY_RUNTIME_BROWSER_LEAVES = [
-  'anchor', 'anchor-restore', 'authenticated-transport', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update',
-  'fetch-transport', 'frame-bridge/parent', 'page-bindings', 'page-engine', 'reader-mode', 'store',
+  'anchor', 'anchor-restore', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update', 'frame-bridge/parent', 'reader-mode',
 ];
+/*
+ * lib/page-store, the document's data store: its index for server and single-bundle code (the Lambda page runtime) and
+ * type imports anywhere; browser-bundled code imports values from the listed leaf files, for the same reason.
+ */
+const PAGE_STORE_BROWSER_IMPORTERS = [
+  'services/app/lib/islands/',
+  'services/app/lib/artifact-backend/http.ts',
+  'services/app/lib/offline/compiled-boot.ts',
+];
+const PAGE_STORE_BROWSER_LEAVES = ['authenticated-transport', 'fetch-transport', 'page-bindings', 'page-engine', 'store'];
 /**
  * lib/dataflow's browser leaves. Both bundlers keep a barrel's re-exported files: the island build
  * (esbuild) splits by FILE reachability (row 40.1: +3.5 to +9.2 KB raw per kit closure, +6.9 KB on
@@ -118,12 +125,12 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/offline/file-backend.ts',
   'services/app/lib/offline/snapshot-current.ts',
   'services/app/lib/offline/snapshot-transport.ts',
-  'services/app/lib/story-runtime/authenticated-transport.ts',
-  'services/app/lib/story-runtime/dataflow-core.ts',
-  'services/app/lib/story-runtime/fetch-transport.ts',
-  'services/app/lib/story-runtime/page-engine.ts',
-  'services/app/lib/story-runtime/runtime-graph.ts',
-  'services/app/lib/story-runtime/store.ts',
+  'services/app/lib/page-store/authenticated-transport.ts',
+  'services/app/lib/page-store/dataflow-core.ts',
+  'services/app/lib/page-store/fetch-transport.ts',
+  'services/app/lib/page-store/page-engine.ts',
+  'services/app/lib/page-store/runtime-graph.ts',
+  'services/app/lib/page-store/store.ts',
   'services/app/lib/story-ui/data-table.ts',
   'services/app/lib/story-ui/interpreter-primitives.ts',
   'services/app/lib/viz/chart-envelope.ts',
@@ -186,6 +193,7 @@ export const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, serverOnly: [''], browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
+  'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },

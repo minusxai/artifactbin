@@ -1,5 +1,5 @@
 /**
- * lib/story-runtime's DATA entry: the document's dataflow store, its transports' shape, the page engine and the
+ * lib/page-store's index: the document's dataflow store, its transports' shape, the page engine and the
  * author-facing page bindings. For server and single-bundle code (the Lambda page runtime) and for TYPE imports
  * anywhere. Browser-bundled code imports these values from their own files: a re-export here makes every chunk that
  * imports it reach all of them (measured, row 40.2), so the island chunks would grow.

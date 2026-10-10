@@ -21,8 +21,8 @@ import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import type { IslandRef } from '@/lib/compiled-page/contract';
-import { createDataflowStore } from '@/lib/story-runtime/store';
-import type { DataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore } from '@/lib/page-store/store';
+import type { DataflowStore } from '@/lib/page-store/store';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const SOURCE = '<Helmet><Value name="region" type="string" default="West" /></Helmet><div id="w"><h2 id="h">Static heading</h2><p id="r">{$region}</p><p id="after">Static after</p></div>';

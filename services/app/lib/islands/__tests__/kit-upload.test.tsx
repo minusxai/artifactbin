@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
-import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
-import { bindPage } from '@/lib/story-runtime/page-bindings';
+import { createDataflowStore, type QueryTransport } from '@/lib/page-store/store';
+import { bindPage } from '@/lib/page-store/page-bindings';
 import { createIslandRuntime } from '../rt';
 import { IslandProvider } from '../context';
 import { FileUpload } from '../kit/upload/control';

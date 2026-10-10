@@ -6,7 +6,7 @@
  * two of them may agree privately on a second one. Framework-free on purpose:
  * `solid-js` is a dependency of the island build, never of the server's type
  * graph, and the reader runtime is typed against the existing framework-free store
- * (lib/story-runtime/store), not against Solid.
+ * (lib/page-store/store), not against Solid.
  *
  * Owners (one per module; see the parallel plan):
  *   compiler.ts         compilePage            w2-compiler

@@ -12,7 +12,7 @@ import { createStore } from 'solid-js/store';
 import { createIslandRuntime, Repeat, When } from '../rt';
 import { rowAttrs } from '../kit/basic';
 import { IslandProvider, useIsland } from '../context';
-import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore } from '@/lib/page-store/store';
 import type { CompiledDataflow } from '@/lib/dataflow';
 
 const flow: CompiledDataflow = {

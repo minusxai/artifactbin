@@ -91,7 +91,7 @@ type MutationBinding =
 /**
  * THE SIGNATURE AT THE DOOR — shared by the server's write door
  * (lib/artifacts runDocumentMutation) and the reader's page when it computes a
- * local write itself (lib/story-runtime/page-engine), so a press is judged by
+ * local write itself (lib/page-store/page-engine), so a press is judged by
  * one rule wherever it runs.
  *
  * Every argument is typed by the declaration it is filled from, so a value of

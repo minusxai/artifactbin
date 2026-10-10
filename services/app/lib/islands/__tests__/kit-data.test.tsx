@@ -18,13 +18,13 @@ import { type TableResult, type CompiledDataflow, initialTables, initialValues, 
 import { rowsDigest } from '../digest';
 import { DRAWING_CLASS } from '../chart';
 import { createIslandRuntime } from '../rt';
-import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/page-store/store';
 import { Button } from '../kit/basic';
 import { compiledOf } from '@/test/helpers/compiled';
 import { runDataflow } from '@/lib/sql/run-dataflow';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { loadSqlite } from '@artifactbin/sql/core';
-import { createPageEngine } from '@/lib/story-runtime/page-engine';
+import { createPageEngine } from '@/lib/page-store/page-engine';
 
 const monthly: TableResult = { rows: [{ month: '2025-01-01', revenue: 120, units: 3 }, { month: '2025-02-01', revenue: 160, units: 4 }], columns: [{ name: 'month', type: 'date' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] };
 const regions: TableResult = { rows: [{ region: 'East' }, { region: 'West' }], columns: [{ name: 'region', type: 'string' }] };

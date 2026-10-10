@@ -3,7 +3,7 @@
  * THE ISLAND RUNTIME (`@mx/rt`, docs/phase2-architecture.md §2.3, §4.1): what every compiled island
  * of one document runs on. Generated islands also import kit helpers when their markup needs them.
  *
- * - The document's data is the EXISTING framework-free store (lib/story-runtime/store), bridged into
+ * - The document's data is the EXISTING framework-free store (lib/page-store/store), bridged into
  *   one Solid store per document with `reconcile`, so a result that changes one cell re-runs only
  *   the computations that read that cell. Islands read it through `IslandContext` (contract.ts),
  *   provided to every island by `hydrateIsland`; the bridge is this file's detail.
@@ -26,7 +26,7 @@ import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/jsx/row-scope';
 import { keyedRowsError } from '@/lib/story-ui/row-key';
 import type { CompiledDataflow, DataflowState, Row, Scalar, TableResult } from '@/lib/dataflow';
-import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
+import { ACCESS_PENDING, type DataflowStore } from '@/lib/page-store/store';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { PersonCard } from '@artifactbin/contracts';
@@ -49,7 +49,7 @@ export {
 } from 'solid-js/web';
 /** For the SSR module's `render(data)`, which builds the same runtime without a transport. */
 export { IslandProvider } from './context';
-export { createDataflowStore } from '@/lib/story-runtime/store';
+export { createDataflowStore } from '@/lib/page-store/store';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The store bridge

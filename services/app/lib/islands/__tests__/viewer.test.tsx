@@ -14,7 +14,7 @@ import { SAVED_STATUS_TTL_MS } from '../contract';
 import { hasViewerScope, VIEWER_OVERLAY_RETRY_MS } from '../viewer';
 import { createWriteStatusFeed } from '../writes';
 import { installStatus } from '../kit/status';
-import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore } from '@/lib/page-store/store';
 import type { CompiledDataflow, CompiledQuery } from '@/lib/dataflow';
 
 const query = (name: string, reads: Partial<CompiledQuery['reads']> = {}): CompiledQuery => ({

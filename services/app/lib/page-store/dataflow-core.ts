@@ -1,11 +1,11 @@
 /**
  * THE RUNTIME STORE'S DECISIONS, AS A PURE REDUCER: `(state, event) → { state,
- * effects }`. The store (lib/story-runtime/store) is the shell around it — it
+ * effects }`. The store (lib/page-store/store) is the shell around it — it
  * owns the transport, the timer, the listeners and the promises — and every
  * question of what is current, what to run and which answer to keep is
  * answered here, where a test can replay any interleaving without a clock.
  *
- * NODES AND VERSIONS. The graph (lib/story-runtime/runtime-graph) has inputs
+ * NODES AND VERSIONS. The graph (lib/page-store/runtime-graph) has inputs
  * (scalar and table values), sources (dataset ids, `_members`, the viewer) and
  * computed nodes: every query, and one write check per dataset mutation ("may
  * this viewer run it now"). Every node has a version, bumped from one clock
@@ -25,7 +25,7 @@ import type { DataflowState, Row, Scalar, TableResult } from '@/lib/dataflow';
 import { checkedLocalRows } from '@/lib/dataflow/local-tables';
 import { graphDefaults, graphInlineTables, type GraphReads, type RuntimeGraph } from './runtime-graph';
 import type { MutationAnswer } from './store';
-import { ACCESS_PENDING, type ServedResults } from './contract';
+import { ACCESS_PENDING, type ServedResults } from '@/lib/story-runtime/contract';
 
 /** What one run answers: rows and errors for its queries, and the write checks. */
 export type RunAnswer = Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess' | 'userOptions' | 'people'>;
@@ -85,7 +85,7 @@ export type CoreEvent =
   | { type: 'writeFailed'; id: number; name: string; error: unknown; answer?: never }
   /** Something the shell owns changed (the transport): readers must look again. */
   | { type: 'touch' }
-  /** Cards for people the page's own results name (lib/story-runtime/store asks the door). */
+  /** Cards for people the page's own results name (lib/page-store/store asks the door). */
   | { type: 'people'; people: Record<string, PersonCard> }
   | { type: 'dispose' };
 

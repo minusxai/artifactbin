@@ -5,11 +5,11 @@
  * leaves on its own: it stays until the reader retries it (the same MutationRequest, re-issued
  * through the store) or dismisses it.
  *
- * Built on the store's own write lifecycle (lib/story-runtime/store `subscribeWrites`), so a write
+ * Built on the store's own write lifecycle (lib/page-store/store `subscribeWrites`), so a write
  * from any caller — an island, the author's script, the SPA — is reported the same way.
  * Framework-free; the indicator (kit/status.tsx) and boot's `writes` event read it.
  */
-import type { DataflowStore, StoreWriteEvent } from '@/lib/story-runtime/data';
+import type { DataflowStore, StoreWriteEvent } from '@/lib/page-store';
 import { SAVED_STATUS_TTL_MS, type WriteStatus, type WriteStatusFeed } from './contract';
 
 export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusFeed {

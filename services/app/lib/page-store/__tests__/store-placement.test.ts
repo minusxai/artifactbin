@@ -1,7 +1,7 @@
 /**
  * ONE SCHEDULING STEP, TWO PLACES. The store splits the core's "compute these
  * nodes at these versions" by placement (lib/dataflow/placement): what the page
- * holds runs in the page engine (lib/story-runtime/page-engine), everything
+ * holds runs in the page engine (lib/page-store/page-engine), everything
  * else through the existing transport — and until the page holds its imports,
  * everything goes to the server, so the first paint never waits on the engine.
  * Writes: a held dataset write shows at once and the server decides; a

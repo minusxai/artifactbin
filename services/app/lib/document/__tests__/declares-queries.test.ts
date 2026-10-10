@@ -12,7 +12,7 @@
  *    merely talks about queries must still get its top-level paint;
  *  - a `<Value>` alone does NOT count: a bound control moves the value, and
  *    with no query depending on it nothing re-runs — no transport is needed
- *    (lib/story-runtime/store only calls the transport for dirty QUERIES);
+ *    (lib/page-store/store only calls the transport for dirty QUERIES);
  *  - source that does not parse declares nothing (the renderer shows it as
  *    escaped text), and must never throw here — this runs on every read.
  */

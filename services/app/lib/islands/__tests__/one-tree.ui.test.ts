@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import * as rt from '../rt';
-import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore } from '@/lib/page-store/store';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import type { Component } from 'solid-js';
