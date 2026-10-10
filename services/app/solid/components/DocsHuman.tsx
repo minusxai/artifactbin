@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /** The human docs — the tour of the product. */
 import FlowSchematic from './FlowSchematic';
-import { FormatBadge, LINK } from './ui';
+import { FormatBadge, LINK } from '../ui/ui';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import DesignSystemSpecimen from './DesignSystemSpecimen';
 

@@ -2,8 +2,8 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import GitFork from 'lucide-solid/icons/git-fork';
 import { loginHref } from '@/lib/http/login-href';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Tooltip } from '../components/Tooltip';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Tooltip } from '../ui/Tooltip';
 
 type Dataset = { id: string; title: string | null };
 function copiedDatasetsNote(datasets: Dataset[]): string | null {

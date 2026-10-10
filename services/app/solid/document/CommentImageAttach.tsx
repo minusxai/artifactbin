@@ -21,7 +21,7 @@ import ImagePlus from 'lucide-solid/icons/image-plus';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { FeatureGate } from '../components/FeatureGate';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 import { COMMENT_IMAGE_TYPES, createCommentCapture } from './CommentCapture';
 import type { ScreenshotDrawing } from './ScreenshotEditor';
 

@@ -19,7 +19,7 @@ import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
 import { AuthorIdentity, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';

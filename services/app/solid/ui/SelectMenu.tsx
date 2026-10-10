@@ -2,7 +2,7 @@
 /**
  * The house dropdown, terminal-graphite chrome for what a native
  * <select> draws with OS widgets. Same contract — a trigger button over an anchored, portalled panel
- * (solid/components/Popover) — and the same anatomy: a listbox, not a menu, so `aria-selected` and the
+ * (solid/ui/Popover) — and the same anatomy: a listbox, not a menu, so `aria-selected` and the
  * check mark always mean something, and a caller that needs "no value" passes it as an explicit option.
  */
 import { createSignal, For, Show, type JSX } from 'solid-js';

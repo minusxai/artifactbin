@@ -3,7 +3,7 @@ import { createSignal, onCleanup, Show } from 'solid-js';
 import Download from 'lucide-solid/icons/download';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { consumeInstall, currentInstall, subscribeInstall } from '@/lib/serving/pwa-install';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 /** Native discovery needs a full document navigation, not a client route transition. */
 export function InstallArtifactLink(props: { id: string; class?: string; beforeNavigate?: () => Promise<boolean> }) {

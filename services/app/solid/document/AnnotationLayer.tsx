@@ -41,10 +41,10 @@ import {
   STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE,
   type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection,
 } from '@/lib/story-runtime/contract';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { FeatureGate } from '../components/FeatureGate';
-import { createIsPhoneViewport } from '../components/MobileSheet';
-import { Tooltip } from '../components/Tooltip';
+import { createIsPhoneViewport } from '../ui/MobileSheet';
+import { Tooltip } from '../ui/Tooltip';
 import { createForegroundComposer } from '../components/TrustedUi';
 import { beginComposerPointerDrag, clampComposerPosition, positionedComposer, type ComposerPoint } from './AnnotationComposerPosition';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';

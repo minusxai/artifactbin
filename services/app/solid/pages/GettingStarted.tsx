@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { For, type JSX } from 'solid-js';
 import { gettingStarted } from '@/lib/serving/getting-started';
-import { CopyBlock } from '../components/CopyBlock';
-import { LINK } from '../components/ui';
+import { CopyBlock } from '../ui/CopyBlock';
+import { LINK } from '../ui/ui';
 
 export function GettingStartedPage(): JSX.Element {
   const guide = gettingStarted(window.location.origin);

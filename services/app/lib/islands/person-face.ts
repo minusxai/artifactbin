@@ -2,7 +2,7 @@
  * HOW A PERSON IS DRAWN — the rules, once.
  *
  * A face is drawn by two renderers that cannot share a component: the app's
- * chrome (`solid/components/Avatar`) and the document kit (`lib/islands/kit`
+ * chrome (`solid/ui/Avatar`) and the document kit (`lib/islands/kit`
  * user image, rendered on the server and hydrated inside a document). They share THIS
  * module instead, so the same person is the same colour, the same letter and
  * the same fallback wherever they appear.

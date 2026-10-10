@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
-import { Button } from './ui';
+import { Button } from '../ui/ui';
 
 interface PathMapping { path: string; artifactId: string }
 interface DocumentOption { id: string; title: string }

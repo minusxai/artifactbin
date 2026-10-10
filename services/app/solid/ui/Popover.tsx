@@ -3,7 +3,7 @@
  * A click-toggle popover anchored to its trigger and portalled out of the document flow — the Solid
  * counterpart of a Radix popover. A scrolling toolbar or a clipped rail must not clip the panel (the same
  * reason AnchoredPanel gives for its own portal), so it is placed with the framework-free Radix popper
- * model the islands and solid/components/Tooltip already use, and portalled to the trusted UI host
+ * model the islands and solid/ui/Tooltip already use, and portalled to the trusted UI host
  * when the page has one, else <body>.
  *
  * The caller owns `open`; this owns placement and dismissal through the kit's one popup contract

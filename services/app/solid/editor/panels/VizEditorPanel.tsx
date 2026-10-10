@@ -20,7 +20,7 @@
  * flat scale — wrong without looking wrong.
  */
 import { createEffect, createSignal, For, on, Show, type JSX } from 'solid-js';
-import { SelectMenu } from '@/solid/components/SelectMenu';
+import { SelectMenu } from '@/solid/ui/SelectMenu';
 import BoundQuery from '../BoundQuery';
 import type { TableChoice } from '@/lib/document/table-catalog';
 import {

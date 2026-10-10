@@ -10,7 +10,7 @@
  */
 import { Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import MobileSheet from '../components/MobileSheet';
+import MobileSheet from '../ui/MobileSheet';
 import { RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 
 export function RailChrome(props: {

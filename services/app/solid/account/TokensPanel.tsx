@@ -2,8 +2,8 @@
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { Ban } from 'lucide-solid';
 import { usePageData } from '../lib/use-page-data';
-import { Button, PANEL, TABLE_ROW } from './ui';
-import { ConfirmDialog } from './ConfirmDialog';
+import { Button, PANEL, TABLE_ROW } from '../ui/ui';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface UserTokenView { id: string; name: string | null; status: 'active' | 'expired' | 'revoked'; created_at: string; deleted_at: string | null; expires_at: string | null; last_used_at: string | null }
 function relativeTime(iso: string | null): string { if (iso === null) return 'never'; const delta = new Date(iso).getTime() - Date.now(); const magnitude = Math.abs(delta); const [amount, unit] = magnitude < 3600000 ? [Math.max(1, Math.floor(magnitude / 60000)), 'm'] : magnitude < 86400000 ? [Math.floor(magnitude / 3600000), 'h'] : [Math.floor(magnitude / 86400000), 'd']; return delta > 0 ? `in ${amount}${unit}` : `${amount}${unit} ago`; }

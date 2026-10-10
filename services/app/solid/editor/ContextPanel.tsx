@@ -5,7 +5,7 @@ import ExternalLink from 'lucide-solid/icons/external-link';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/serving/document-frame';
 import { contextDocumentId } from '@/lib/document/context';
-import { FORM_PRIMARY_BUTTON } from '../components/FormControls';
+import { FORM_PRIMARY_BUTTON } from '../ui/FormControls';
 
 export default function ContextPanel(props: { id: string | null; backend: ArtifactBackend; onChange: (id: string | null) => void }): JSX.Element {
   const offline = () => props.backend.mode === 'offline';

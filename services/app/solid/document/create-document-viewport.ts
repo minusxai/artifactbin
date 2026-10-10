@@ -1,6 +1,6 @@
 /** Reserve the shared bars and desktop comment rail around an in-document surface. */
 import { createEffect, onCleanup, onMount } from 'solid-js';
-import { createIsPhoneViewport } from '../components/MobileSheet';
+import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 
 export function createDocumentViewport(input: { barHeight: () => number; editing: () => boolean; commentsOpen: () => boolean }): void {

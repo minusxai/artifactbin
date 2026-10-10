@@ -51,8 +51,8 @@ import { selectionToolbarPlan } from '@/solid/lib/selection-toolbar';
 import type { MarkdownBlockKind, MarkdownTableAction, StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { ComposableFormatEdit } from '@/lib/document/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
-import { SelectMenu } from '@/solid/components/SelectMenu';
-import { Tooltip } from '@/solid/components/Tooltip';
+import { SelectMenu } from '@/solid/ui/SelectMenu';
+import { Tooltip } from '@/solid/ui/Tooltip';
 import { nodeName } from '@/lib/story-ui/node-names';
 
 const MARKDOWN_BLOCK_OPTIONS: Array<{ value: MarkdownBlockKind; label: string }> = [

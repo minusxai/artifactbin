@@ -14,7 +14,7 @@ import List from 'lucide-solid/icons/list';
 import type { MdMarker } from '@/lib/annotations/markdown-lite';
 import { commentDocument, mountCommentEditor, type MentionQuery } from './comment-editor';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 import { remoteMention } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
 import type { RemoteSessionInfo } from '../../../contracts/src/remote';

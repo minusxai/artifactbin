@@ -86,7 +86,7 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
   Use `mxmx_test_*` accounts for disposable browser flows; read local OTPs with `npm run dev:otp`,
   never a public app endpoint.
 - UI tests use accessible names; label controls. Tooltips use
-  `solid/components/Tooltip.tsx`, not native `title` tooltips.
+  `solid/ui/Tooltip.tsx`, not native `title` tooltips.
 - Tests use real handlers on isolated state; reset database/limiter between cases.
   Merge gates use deterministic third-party fixtures; live-provider checks are separate.
 - Generate routes/schemas/CSS candidate lists; never hand-edit. Review diffs.
