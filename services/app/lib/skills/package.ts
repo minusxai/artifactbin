@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {renderTree,skillFileWithFrontmatter} from './serve';
 import type {SkillTree} from './tree';
-export const SKILL_SCRIPT_FILES=['scripts/credentials.mjs','scripts/watch-comments.mjs'] as const;
+const SKILL_SCRIPT_FILES=['scripts/credentials.mjs','scripts/watch-comments.mjs'] as const;
 export function skillPackageFiles(tree:SkillTree,base:string,root=path.resolve(process.cwd(),'skills/artifactbin')):Record<string,string>{
  const files=Object.fromEntries(renderTree(tree,base).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]));
  for(const name of SKILL_SCRIPT_FILES)files[name]=readFileSync(path.join(root,name),'utf8');

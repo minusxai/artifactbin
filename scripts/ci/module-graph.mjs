@@ -59,19 +59,19 @@ const ISLANDS_BROWSER_LEAVES = [
  * from anywhere; a browser leaf is a path only browser-bundled code imported, allowed only from that
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
-export const ARTIFACTS_ENTRIES = [
+const ARTIFACTS_ENTRIES = [
   '', 'access', 'after-commit', 'archived-version', 'asset-quota', 'capabilities', 'creation-ledger', 'dataflow', 'dataset-policy/grants',
   'dataset-policy/http', 'document', 'feedback-images', 'file-upload-http', 'identities', 'membership/membership', 'metadata-wire',
   'mutation-operation', 'mutation-receipt', 'notification-authority', 'notification-query', 'notification-runtime', 'placement',
   'read-access', 'servable', 'share-roles', 'state', 'store', 'wire',
 ];
-export const ARTIFACTS_BROWSER_IMPORTERS = ['services/app/solid/'];
-export const ARTIFACTS_BROWSER_LEAVES = ['sharing'];
-export const STORY_RUNTIME_ENTRIES = [
+const ARTIFACTS_BROWSER_IMPORTERS = ['services/app/solid/'];
+const ARTIFACTS_BROWSER_LEAVES = ['sharing'];
+const STORY_RUNTIME_ENTRIES = [
   'authenticated-transport', 'chrome-css', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',
   'page-bindings', 'preview-props', 'reader-mode', 'script-mount', 'slides', 'store', 'story-fragment',
 ];
-export const STORY_RUNTIME_BROWSER_IMPORTERS = [
+const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/web/',
   'services/app/lib/cli-toolkit/browser.ts',
@@ -90,43 +90,43 @@ export const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/lib/offline/compiled-sqlite.ts',
   'services/app/lib/offline/solid-entry.tsx',
 ];
-export const STORY_RUNTIME_BROWSER_LEAVES = [
+const STORY_RUNTIME_BROWSER_LEAVES = [
   'anchor', 'anchor-restore', 'cell-sessions', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-transport', 'document-update',
   'edit/dom-mounter', 'edit/session', 'fetch-transport', 'frame-bridge/door', 'frame-bridge/links', 'frame-bridge/origin', 'frame-bridge/parent',
   'outline-nav', 'page-engine', 'page-sqlite', 'pristine', 'reader-actions', 'row-actions', 'sliced-parse', 'table-scroll',
 ];
-export const DATAFLOW_ENTRIES = [
+const DATAFLOW_ENTRIES = [
   '', 'builtins', 'compile-dataflow', 'compiled-dataflow', 'compiled-flow', 'data-syntax', 'dataflow', 'dataset-shape', 'evaluate',
   'image-source', 'local-state', 'local-tables', 'mutation-request', 'number-aggregation', 'number-format', 'placement', 'query-values',
   'ref-data', 'reference-positions', 'refs', 'server', 'sql-parameters', 'url-values',
 ];
-export const DATAFLOW_BROWSER_IMPORTERS = [
+const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/islands/kit/controls.tsx',
   'services/app/lib/islands/kit/select.tsx',
   'services/app/lib/story-runtime/store.ts',
 ];
-export const DATAFLOW_BROWSER_LEAVES = ['mutation-request-builder', 'scalar-input'];
-export const DOCUMENT_ENTRIES = [
+const DATAFLOW_BROWSER_LEAVES = ['mutation-request-builder', 'scalar-input'];
+const DOCUMENT_ENTRIES = [
   '', 'anchors', 'annotation-edits', 'annotation-range', 'annotations', 'asset-url', 'authoring-capabilities', 'body', 'canonical-source',
   'csp-extensions', 'document-authoring-client', 'document-codec', 'document-graph', 'document-graph-patch', 'document-graph-scope',
   'document-graph-source', 'document-operation', 'document-patch', 'document-prose', 'document-update-client', 'document-update-history',
   'edit-batch', 'edit-compose', 'external-images', 'file-types', 'format-source', 'head', 'helmet', 'lazy-code', 'local-validation', 'nesting',
   'node-ids', 'person-mentions', 'server', 'social-preview', 'source-changes', 'splice', 'stored-content', 'title', 'update-parts',
 ];
-export const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
-export const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];
-export const COMPILED_PAGE_ENTRIES = [
+const DOCUMENT_BROWSER_IMPORTERS = ['services/app/solid/'];
+const DOCUMENT_BROWSER_LEAVES = ['context', 'display-title', 'pwa-settings', 'query-notebook', 'script-export-location', 'table-catalog'];
+const COMPILED_PAGE_ENTRIES = [
   'agent-discovery', 'assembler', 'backfill.server', 'build.server', 'bundle.server', 'carriers', 'charts.server', 'compiler', 'contract',
   'modules.server', 'plan', 'runtime-binding', 'shared-builds.server', 'speculation', 'story-element', 'styles', 'styles/document-fonts',
   'styles/document-root', 'styles/document-styles', 'styles/first-screen-fonts', 'styles/inline-css', 'styles/markup-csp',
   'styles/story-base-css', 'styles/style-overrides',
 ];
-export const ACCOUNTS_ENTRIES = [
+const ACCOUNTS_ENTRIES = [
   '', 'actors', 'agent-session', 'auth', 'avatars', 'guest-owner', 'membership-lock', 'pages-sessions', 'relation-state', 'relations',
   'request-authority', 'session', 'testuser-sessions', 'testusers', 'tokens', 'user-kinds', 'users', 'viewer',
 ];
-export const ACCOUNTS_BROWSER_IMPORTERS = ['services/app/solid/'];
-export const ACCOUNTS_BROWSER_LEAVES = ['browser-session', 'chrome-identity', 'profile-social'];
+const ACCOUNTS_BROWSER_IMPORTERS = ['services/app/solid/'];
+const ACCOUNTS_BROWSER_LEAVES = ['browser-session', 'chrome-identity', 'profile-social'];
 /**
  * Rule 4's table: module id (as moduleOf names it, under services/app/lib) → `entries` (paths under the
  * module directory without extension; `''` is the index), and optionally `browserImporters` (path
@@ -134,7 +134,7 @@ export const ACCOUNTS_BROWSER_LEAVES = ['browser-session', 'chrome-identity', 'p
  * `browserLeavesOnly` (lib/islands) also refuses entries to browser-bundled code. A listed index is
  * never stale: it is the module's door even while nothing outside uses it.
  */
-export const DEEP_MODULES = {
+const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: ARTIFACTS_ENTRIES, browserImporters: ARTIFACTS_BROWSER_IMPORTERS, browserLeaves: ARTIFACTS_BROWSER_LEAVES },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },

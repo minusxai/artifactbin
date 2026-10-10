@@ -23,7 +23,7 @@ export default {
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
         // proofs spawned by their tests, the offline gate's preview build and the backfill.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-residual-names.mjs', 'scripts/gate-container.mjs',
-        'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/reserved-ids-{local,postgres}-proof.ts',
+        'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/__tests__/reserved-ids-{local,postgres}-proof.ts',
         'scripts/build/build-preview-gate-inputs.mjs', 'scripts/compiled-backfill.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',
@@ -100,6 +100,8 @@ export default {
     'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'] },
     'services/events': { entry: ['src/server.ts'] },
     'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'] },
+    // The skill's standalone helpers, compiled by name (services/cli/scripts/compile-teaching.ts).
+    'services/utils': { entry: ['src/{credential-helper,comment-watch-helper}.ts'] },
   },
   ignoreWorkspaces: ['docs/proposals/runner-validation'],
   ignoreIssues: {

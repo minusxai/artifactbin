@@ -1,7 +1,7 @@
 import {basename} from 'node:path';
 export const COMMENT_IMAGE_INSTRUCTIONS='Read the thread with afbin comment <artifact> --json (follow next_cursor if needed). For each attached image.id relevant to the request, after acknowledging run afbin comment <artifact> --image <image-id> --output <fresh-workspace-path>.webp --json, then open the returned path with your image viewing tool before answering. The default preview includes drawn marks; --variant original omits them. This downloads the saved capture, not a new rendering of the document. Use this authenticated CLI download for image bytes; metadata URLs are browser-session endpoints. If download fails or your model cannot inspect images, reply blocked and state the limitation; never describe unseen pixels from the snippet or surrounding document.';
 
-export const REMOTE_EDITING_INSTRUCTIONS='For editing requests, update and publish the artifact before reporting completion or resolving; a reply alone is not completion. For questions, answer directly without unsolicited edits.';
+const REMOTE_EDITING_INSTRUCTIONS='For editing requests, update and publish the artifact before reporting completion or resolving; a reply alone is not completion. For questions, answer directly without unsolicited edits.';
 const COMMENT_IMAGE_REMINDER='For relevant comment images, use afbin comment <artifact> --image <image-id> --output <fresh-workspace-path>.webp --json, then inspect with your image viewing tool before answering (default includes drawn marks). If unavailable, report blocked; never describe unseen pixels.';
 
 export const REMOTE_REVIEW_POLICY=`You are a remote artifactbin reviewer. Follow the repository and harness instructions and existing permission policy.

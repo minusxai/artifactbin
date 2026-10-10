@@ -5,4 +5,3 @@ const encoded=(script:string)=>['-NoProfile','-NonInteractive','-EncodedCommand'
 export function browserCommand(url:string,platform:NodeJS.Platform=process.platform):{file:string;args:string[]} {
  return platform==='win32'?{file:'powershell.exe',args:encoded(`Start-Process -FilePath ${quote(url)}`)}:{file:platform==='darwin'?'open':'xdg-open',args:[url]};
 }
-export {protectWindowsDirectory} from '@artifactbin/utils/node/private-directory';
