@@ -193,13 +193,14 @@ describe('module graph', () => {
       expect(violations).not.toMatch(/^ {2}entry $/m);
     });
 
-    it('holds lib/artifacts to its index alone: any deep import, alias or relative, is refused', () => {
-      const files = { 'services/app/lib/artifacts/index.ts': "export * from './store';\n", 'services/app/lib/artifacts/store.ts': '' };
+    it('holds lib/artifacts to its index and table entries: any other deep import, alias or relative, is refused', () => {
+      const files = { 'services/app/lib/artifacts/index.ts': "export * from './store';\n", 'services/app/lib/artifacts/store.ts': '', 'services/app/lib/artifacts/table.ts': '' };
       // The real DEEP_MODULES table (the default): only lib/artifacts is in this tree, so only its row applies.
       const run = extra => checkModuleGraph(scanModuleGraph(tree({ ...files, ...extra })), allowList([])).violations.join('\n');
       expect(run({
         'services/app/lib/publish/a.ts': "import { getArtifactById } from '@/lib/artifacts';\n",
         'services/app/lib/runner/b.ts': "import type { ArtifactRow } from '../artifacts';\n",
+        'services/app/lib/workspace/t.ts': "import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';\n",
       })).toBe('');
       const violations = run({
         'services/app/lib/serving/c.ts': "import { getArtifactById } from '@/lib/artifacts/store';\n",

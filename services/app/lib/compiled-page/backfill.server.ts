@@ -3,6 +3,7 @@
  * A SEPARATE ENTRY (@/lib/compiled-page/backfill.server) for scripts/compiled-backfill alone: no server
  * code uses it, so the index does not carry it.
  */
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import { READER_MODE_HEADER } from './contract';
 
 interface BackfillDb { query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: R[] }> }
@@ -58,7 +59,7 @@ const keyOf = (id: string, slot: string): string => `${id}\0${slot}`;
 
 async function targetsOf(db: BackfillDb, all: boolean, limit: number): Promise<BackfillTarget[]> {
   const heads = (await db.query<{ id: string; version: number }>(
-    `SELECT id, version FROM artifacts WHERE format = 'markup' AND deleted_at IS NULL ORDER BY updated_at DESC, id LIMIT $1`, [limit],
+    `SELECT id, version FROM artifacts WHERE format = 'markup' AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC, id LIMIT $1`, [limit],
   )).rows.map((r) => ({ id: r.id, version: Number(r.version), head: true }));
   if (!all) return heads;
   const archived = (await db.query<{ id: string; version: number }>(

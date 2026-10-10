@@ -1,4 +1,4 @@
-import {artifactQuery} from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifacts/table';
 import {observedRequest,patchMetadata} from '@/__tests__/conditional-request';
 import { getDb } from '@/lib/platform';
 /**

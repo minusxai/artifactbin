@@ -1,5 +1,5 @@
 import {documentEditBody,restoreDocument} from './prepared-document';
-import {artifactQuery} from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifacts/table';
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
