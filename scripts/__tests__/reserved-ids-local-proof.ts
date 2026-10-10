@@ -6,10 +6,10 @@ import {join} from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
-import {State,HOME_SCOPE} from '../services/cli/src/state';
-import {HttpClient} from '../services/cli/src/http';
-import {loadWorkspace} from '../services/cli/src/workspace';
-import {addFiles} from '../services/cli/src/identities';
+import {State,HOME_SCOPE} from '../../services/cli/src/state';
+import {HttpClient} from '../../services/cli/src/http';
+import {loadWorkspace} from '../../services/cli/src/workspace';
+import {addFiles} from '../../services/cli/src/identities';
 const origin='http://127.0.0.1:7445',account='local-proof';
 if(process.argv[2]){
  const root=process.argv[2],worker=process.argv[3];
