@@ -7,7 +7,7 @@ export function groupRoute(handler:(request:Request,userId:string,params:Record<
   if(!userId)return json({error:'account_required'},403);
   try{return await handler(request,userId,params);}catch(error){if(error instanceof GroupError)return json({error:error.code},error.status);throw error;}
  };
- const bearer=withTokenAuth((request,{userId,params})=>run(request,userId,params),{readOnly});
+ const bearer=withTokenAuth((request,{userId,credential,params})=>credential==='bearer'?run(request,userId,params):Promise.resolve(json({error:'auth_required'},401)),{readOnly});
  return async(request:Request,context?:{params:Promise<Record<string,string>>}):Promise<Response>=>{
   // Explicit bearer always wins and cannot fall back to browser authority.
   if(request.headers.has('authorization'))return bearer(request,context);

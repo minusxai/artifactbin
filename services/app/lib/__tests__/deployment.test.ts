@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
-import {getDb} from '../platform/db';
+import {getDb,type Queryable} from '../platform/db';
 import {overrideConfig} from '../platform/config';
 import {admitDeploymentIdentity,canUseDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment} from '../deployment';
 useAppHarness();
@@ -23,6 +23,9 @@ describe('company admission',()=>{
   await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('group','team','Team','owner')");
   await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('group','owner','editor')");
   await expect(setupDeployment('visitor','group')).rejects.toThrow();
+  await db.query("UPDATE group_members SET role='viewer' WHERE group_id='group' AND user_id='owner'");
+  await expect(setupDeployment('owner','group')).rejects.toThrow('editor membership');
+  await db.query("UPDATE group_members SET role='editor' WHERE group_id='group' AND user_id='owner'");
   await setupDeployment('owner','group');
   expect(await getDeploymentDefaultDestination()).toEqual({type:'group',id:'group'});
   expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);
@@ -47,6 +50,21 @@ describe('company admission',()=>{
   expect((await db.query("SELECT id FROM group_invitations WHERE id='invite'")).rows).toEqual([]);
   expect(await admitDeploymentIdentity(identity('outsider','outside@other.com'))).toBe(false);
   expect(await admitDeploymentIdentity(identity('elsewhere','elsewhere@example.com'))).toBe(false);
+ });
+ it('locks live group snapshots within setup and admission transactions (structural SQL contract)',async()=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'false'});
+  await admitDeploymentIdentity(identity('owner','owner@example.com'));
+  const db=await getDb();
+  await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('locked','locked','Locked','owner')");
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('locked','owner','editor')");
+  const transaction=db.transaction.bind(db),reads:string[]=[];
+  db.transaction=async<T>(fn:(tx:Queryable)=>Promise<T>):Promise<T>=>transaction(tx=>fn({query:async<R>(sql:string,params?:unknown[])=>{
+   if(sql.includes('FROM groups g'))reads.push(sql);
+   return tx.query<R>(sql,params);
+  }}));
+  try{await setupDeployment('owner','locked');expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);}
+  finally{db.transaction=transaction;}
+  expect(reads).toHaveLength(2);for(const sql of reads)expect(sql).toContain('FOR UPDATE OF g');
  });
  it('serializes competing owner binds and never gives a changed email the owner ID',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});

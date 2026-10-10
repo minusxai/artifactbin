@@ -14,9 +14,9 @@ async function state(db:Queryable,lock=false):Promise<State> {
  await db.query('INSERT INTO deployment_state(id) VALUES ($1) ON CONFLICT DO NOTHING',[ID]);
  return (await db.query<State>('SELECT owner_user_id,default_group_id,setup_complete FROM deployment_state WHERE id=$1'+(lock?' FOR UPDATE':''),[ID])).rows[0]!;
 }
-async function group(db:Queryable,id:string|null,userId:string|null):Promise<GroupSummary|null> {
+async function group(db:Queryable,id:string|null,userId:string|null,lock=false):Promise<GroupSummary|null> {
  if(!id)return null;
- return (await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role FROM groups g LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE g.id=$1 AND g.deleted_at IS NULL',[id,userId])).rows[0]??null;
+ return (await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role FROM groups g LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE g.id=$1 AND g.deleted_at IS NULL'+(lock?' FOR UPDATE OF g':''),[id,userId])).rows[0]??null;
 }
 export async function getDeploymentState(userId:string|null):Promise<DeploymentState> {
  const {mode}=deploymentConfig();if(mode==='public')return {mode,setup_complete:true,is_owner:false,default_group:null};
@@ -33,7 +33,7 @@ export async function setupDeployment(userId:string,groupId:string):Promise<Depl
  if(deploymentConfig().mode!=='company')throw new DeploymentError('company_required',400,'Company deployment required');
  const db=await getDb();await db.transaction(async tx=>{
   const s=await state(tx,true);if(s.owner_user_id!==userId)throw new DeploymentError('deployment_owner_required',403,'Deployment owner required');
-  const g=await group(tx,groupId,userId);if(g?.role!=='editor')throw new DeploymentError('default_group_unavailable',403,'Default group requires editor membership');
+  const g=await group(tx,groupId,userId,true);if(g?.role!=='editor')throw new DeploymentError('default_group_unavailable',403,'Default group requires editor membership');
   await tx.query('UPDATE deployment_state SET default_group_id=$2,setup_complete=true WHERE id=$1',[ID,groupId]);
  });return getDeploymentState(userId);
 }
@@ -50,7 +50,7 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
    await tx.query('UPDATE deployment_state SET owner_user_id=$2 WHERE id=$1',[ID,identity.userId]);
    await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
   }
-  if(!s.setup_complete||!policy.matches(email)||!await group(tx,s.default_group_id,null))return false;
+  if(!s.setup_complete||!policy.matches(email)||!await group(tx,s.default_group_id,null,true))return false;
   const invitation=(await tx.query<{role:'editor'|'viewer'}>('SELECT role FROM group_invitations WHERE group_id=$1 AND lower(email)=$2 FOR UPDATE',[s.default_group_id,email])).rows[0];
   if(policy.inviteOnly&&!invitation)return false;
   await tx.query("INSERT INTO group_members(group_id,user_id,role) VALUES ($1,$2,$3) ON CONFLICT (group_id,user_id) DO UPDATE SET role=CASE WHEN group_members.role='editor' THEN 'editor' ELSE excluded.role END",[s.default_group_id,identity.userId,invitation?.role??'viewer']);

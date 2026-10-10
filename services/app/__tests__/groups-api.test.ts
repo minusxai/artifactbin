@@ -12,6 +12,10 @@ describe('groups authenticated HTTP boundary',()=>{
   const owner=await mintAccountToken('browser_owner');
   const actor={credential:'session' as const,userId:owner.userId!,email:'mxmx_test_browser_owner@example.com',emailVerified:true};
   expect((await list(request('/api/groups',{actor}))).status).toBe(200);
+  for(const authorization of ['Basic anything','Bearer ','']){
+   expect((await list(request('/api/groups',{actor:{...actor,tokenId:owner.id},headers:{authorization}}))).status).toBe(401);
+   expect((await create(request('/api/groups',{actor:{...actor,tokenId:owner.id},method:'POST',origin:'same',headers:{authorization},json:{handle:'invalid-header',name:'Refused'}}))).status).toBe(401);
+  }
   expect((await create(request('/api/groups',{actor,method:'POST',origin:'same',json:{handle:'browser-team',name:'Browser'}}))).status).toBe(201);
   expect((await create(request('/api/groups',{actor,method:'POST',origin:'https://other.test',json:{handle:'cross-site',name:'Cross site'}}))).status).toBe(403);
  });
