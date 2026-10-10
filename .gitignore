@@ -73,3 +73,6 @@ services/app/public/libraries/
 services/app/skills/artifactbin/scripts/credentials.mjs
 
 services/app/skills/artifactbin/scripts/watch-comments.mjs
+
+# Untracked artifactbin page sources kept at the root: afbin tracks them by path and refuses paths outside the workspace; knip honours this file.
+/*.jsx
