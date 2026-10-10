@@ -16,6 +16,7 @@ import { existingPaste } from '@/lib/serving';
 import { baseUrl, json, unauthorized } from '@/lib/http';
 import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
 import { resolveToken } from '@/lib/accounts';
+import {canUseDeploymentIdentity} from '@/lib/deployment';
 import { canAuthenticateUser } from '@/lib/accounts/user-kinds';
 import { sessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish/document/input';
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
   const actor = bearer ? null : await sessionActor(request);
   const ownerId = userId ?? bearer?.userId ?? actor?.viewer?.userId ?? null;
   const existingTokenId = bearer?.id ?? actor?.tokenId ?? '';
-  if (!await canAuthenticateUser(ownerId)) return unauthorized(request);
+  if (!await canUseDeploymentIdentity(ownerId)||!await canAuthenticateUser(ownerId)) return unauthorized(request);
   const tokenId = existingTokenId;
   const parsed = await parseContentInput({ markup: new URL(request.url).searchParams.get('mode') === 'blank' ? BLANK_REPORT_MARKUP : START_PLACEHOLDER_MARKUP }, {});
   if (parsed instanceof Response) return parsed; // unreachable: both starting documents are fixed and valid
