@@ -80,14 +80,20 @@ const STORY_RUNTIME_BROWSER_LEAVES = [
   'fetch-transport', 'frame-bridge/parent', 'page-bindings', 'page-engine', 'reader-mode', 'store',
 ];
 /**
- * lib/dataflow's browser leaves: the island build splits by FILE reachability (esbuild), so a value
- * import through the index puts every re-exported file's code in that island's closure (measured on
- * row 40.1: +3.5 to +9.2 KB raw per kit closure, +6.9 KB on @mx/rt). Value imports from the island
- * graph name a leaf; their types and everything else use the entries.
+ * lib/dataflow's browser leaves. Both bundlers keep a barrel's re-exported files: the island build
+ * (esbuild) splits by FILE reachability (row 40.1: +3.5 to +9.2 KB raw per kit closure, +6.9 KB on
+ * @mx/rt) and the app build (rolldown) moved 25 KB of dataflow into a chunk the shell loads before
+ * the document frame (+10.3 KB app shell JS, page-speed). Value imports from the island and app graphs
+ * name a leaf; their types and everything else use the entries.
  */
 const DATAFLOW_BROWSER_IMPORTERS = [
+  'services/app/lib/data/story/story-number.ts',
+  'services/app/lib/data/story/story-viz.ts',
   'services/app/lib/document/asset-url.ts',
+  'services/app/lib/document/document-graph-selectors.ts',
   'services/app/lib/document/helmet.ts',
+  'services/app/lib/document/local-validation.ts',
+  'services/app/lib/document/query-notebook.ts',
   'services/app/lib/islands/frame-bridge.ts',
   'services/app/lib/islands/kit/basic.tsx',
   'services/app/lib/islands/kit/cells.tsx',
@@ -105,18 +111,24 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/islands/morph/engine.ts',
   'services/app/lib/islands/url-sync.ts',
   'services/app/lib/islands/viewer.ts',
+  'services/app/lib/offline/file-backend.ts',
   'services/app/lib/offline/snapshot-current.ts',
   'services/app/lib/offline/snapshot-transport.ts',
+  'services/app/lib/story-runtime/authenticated-transport.ts',
   'services/app/lib/story-runtime/dataflow-core.ts',
   'services/app/lib/story-runtime/fetch-transport.ts',
   'services/app/lib/story-runtime/page-engine.ts',
   'services/app/lib/story-runtime/runtime-graph.ts',
   'services/app/lib/story-runtime/store.ts',
   'services/app/lib/story-ui/data-table.ts',
+  'services/app/lib/story-ui/interpreter-primitives.ts',
   'services/app/lib/viz/chart-envelope.ts',
+  'services/app/solid/document/create-framed-story.ts',
+  'services/app/solid/editor/panels/ImageDialog.tsx',
+  'services/app/solid/lib/format.ts',
 ];
 const DATAFLOW_BROWSER_LEAVES = [
-  'builtins', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
+  'builtins', 'compiled-dataflow', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
   'mutation-request', 'mutation-request-builder', 'number-aggregation', 'number-format', 'placement', 'ref-data', 'scalar-input', 'url-values',
 ];
 /*

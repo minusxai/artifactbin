@@ -3,7 +3,8 @@ import { parseJsx, serializeJsx, validateJsxSource } from '../index';
 import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { stampNodeIds, nodeIndex } from '@/lib/document/node-ids';
 import { collectRefUses } from '@/lib/dataflow/references';
-import { collectRefNameUses, validateDataflow } from '@/lib/dataflow';
+import { collectRefNameUses } from '@/lib/dataflow';
+import { validateDataflow } from '@/lib/dataflow/dataflow';
 import { splitHelmet, hoistHelmet } from '@/lib/document/helmet';
 import {applyDomEditsToJsx, removeJsxNodeAtPath} from '@/lib/data/story/jsx-edit';
 

@@ -14,7 +14,7 @@
  * remounted canvas must never corrupt a story body.
  */
 import type { JsonValue } from '@/lib/jsx/types';
-import { refName } from '@/lib/dataflow';
+import { refName } from '@/lib/dataflow/dataflow';
 import { parseJsx } from '@/lib/jsx';
 import { resolveJsxNodeAtPath, setStaticJsxAttr, updateJsxElementAtPath } from './jsx-edit';
 

@@ -12,9 +12,10 @@ the islands, the story runtime and the CLI.
   any other path): `index.ts` (browser-safe), `references.ts` (reference uses, read with the JSX
   parser, kept out of the index so the islands never load it) and `server.ts` (the compiler, the
   publish checks, node-only). Re-export only names something outside imports.
-- The island graph's VALUE imports name a leaf (`DATAFLOW_BROWSER_LEAVES`): esbuild places split code
-  by which entries reach a file, so a barrel import puts every re-exported file in that island's
-  closure (row 40.1: +3.5 to +9.2 KB raw per kit; `sideEffects: false` did not help). Types come from the index.
+- VALUE imports in the browser bundles' graphs (islands, app shell, offline) name a leaf
+  (`DATAFLOW_BROWSER_LEAVES`): a barrel import keeps every re-exported file (row 40.1: esbuild islands
+  +3.5 to +9.2 KB raw per kit, `sideEffects: false` did not help; rolldown app shell +10.3 KB before the
+  document frame). Types come from the index.
 - The compiler never reads process state. Its caller passes the composition's SQL extensions
   (`prepareCompile`/`compileWithLoader` `{ extensions }`, the server's `sqlExtensions()`); without
   them a `<Mutation>` calling one is refused.

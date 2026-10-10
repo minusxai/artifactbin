@@ -4,10 +4,10 @@
  * question asked of one, and the evaluator that runs one against a SQL service. Code outside this
  * module imports it from here, from `./references` (the parser-backed reference uses) or from
  * `./server` (node-only); scripts/ci/module-graph.mjs DEEP_MODULES refuses any other path, except
- * that the island graph's VALUE imports name a leaf (DATAFLOW_BROWSER_LEAVES): esbuild splits the
- * islands by which entries reach a FILE, so a value import through this barrel puts every file it
- * re-exports into that island's closure (+3.5 to +9.2 KB raw per kit, measured; `sideEffects: false`
- * does not change it). Types are erased, so the island graph imports them from here.
+ * that VALUE imports in the browser bundles' graphs name a leaf (DATAFLOW_BROWSER_LEAVES): a value
+ * import through this barrel keeps every file it re-exports (measured: esbuild's island splitting,
+ * +3.5 to +9.2 KB raw per kit, `sideEffects: false` does not change it; rolldown's app build, +10.3 KB
+ * of app shell JS before the document frame). Types are erased, so browser code imports them from here.
  */
 
 // The vocabulary: scalars, rows and tables, the declarations and the compiled record.
@@ -22,13 +22,12 @@ export { EMPTY_COMPILED_DATAFLOW, readerDataflow } from './compiled-dataflow';
 // Reference syntax (`$name`, bindings, controls) and the declarations' shapes.
 export type { ImportDecl, MutationDecl, NotifyDecl, ValueDecl } from './dataflow';
 export {
-  ARGS_ATTR, bindingMap, carriesRef, collectRefNameUses, controlOptions, EMPTY_DATAFLOW, isEmptyDataflow, QUERY_TAG, REF_ATTRS,
-  refName, rowBound, scalarMatches, SET_ATTR, validateDataflow,
+  carriesRef, collectRefNameUses, controlOptions, EMPTY_DATAFLOW, isEmptyDataflow, REF_ATTRS, refName, scalarMatches,
 } from './dataflow';
 export { coerceScalarInput } from './scalar-input';
 
 // Built-ins: the platform's own inputs and tables, and the reader's zone.
-export { BUILTIN_INPUTS, BUILTIN_TABLES, localZone, platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from './builtins';
+export { BUILTIN_INPUTS, BUILTIN_TABLES, platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from './builtins';
 
 // Questions asked of a compiled dataflow.
 export type { ImportTables } from './compiled-flow';
@@ -49,7 +48,7 @@ export { runLocalStateMutation } from './local-state';
 export { LocalStateInputError, localTableOverrides, parseLocalTables } from './local-tables';
 
 // URL values and query values.
-export { readUrlValues, urlSelection, withUrlValuesOf } from './url-values';
+export { readUrlValues, urlSelection } from './url-values';
 export { validateQueryValues } from './query-values';
 
 // The evaluator: runs a compiled dataflow's queries against a SQL service (contracts and siblings only).
@@ -64,5 +63,3 @@ export { REFERENCE_POSITIONS } from './reference-positions';
 
 // Number display.
 export type { NumberAgg } from './number-aggregation';
-export { NUMBER_AGGS } from './number-aggregation';
-export { numberFormatter } from './number-format';

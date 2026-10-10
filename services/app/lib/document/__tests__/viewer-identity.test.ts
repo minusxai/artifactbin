@@ -7,7 +7,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
-import { collectRefNameUses, validateDataflow, type Dataflow } from '@/lib/dataflow';
+import { collectRefNameUses, type Dataflow } from '@/lib/dataflow';
+import { validateDataflow } from '@/lib/dataflow/dataflow';
 import { parseValueDecl } from '@/lib/dataflow/dataflow';
 import { PERSON_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { validateJsxSource } from '@/lib/jsx';
