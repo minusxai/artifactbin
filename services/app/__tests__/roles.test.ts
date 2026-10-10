@@ -167,9 +167,20 @@ describe('linkRoleOf — what the address alone grants, the column with visibili
 type Asked = Parameters<typeof effectiveRole>[1];
 const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked, ArtifactRole]>>]> = [
   ['a bare token owns what it created — an anonymous owner is still an owner', async () => {
-    const token = await mintToken('anon');
+    const token = await mintToken('anon', null);
     const row = await createArtifact(token.id, token.userId, { format: 'markup', source: SOURCE, meta: {}, visibility: 'unlisted', title: 't' });
     return [['its token', row, { userId: null, tokenId: token.id }, 'owner'], ['another token', row, { userId: null, tokenId: 'tok_someone_else' }, 'viewer']];
+  }],
+  ['claimed account ownership requires resolved identity, never the creating token alone', async () => {
+    const owner = await account('mxmx_test_claimed_owner@example.com');
+    const privateRow = await docOf(owner, 'private');
+    const publicRow = await docOf(owner, 'public');
+    return [
+      ['resolved owner token', privateRow, { userId: owner.user.id, tokenId: owner.token.id }, 'owner'],
+      ['bare creating token, private', privateRow, { userId: null, tokenId: owner.token.id }, 'none'],
+      ['bare creating token, public link', publicRow, { userId: null, tokenId: owner.token.id }, 'viewer'],
+      ['other account with creating token', privateRow, { userId: 'usr_other', tokenId: owner.token.id }, 'none'],
+    ];
   }],
   ['a named share grants exactly its role on a private document', async () => {
     const owner = await account('mxmx_test_owner@example.com');
@@ -793,7 +804,8 @@ describe('editors through every door', () => {
       const row = await head(w.doc.id);
       expect(await requestRoleFor(row, { viewer: { userId: w.owner.id, email: w.owner.email }, tokenId: null, credential: 'session' })).toBe('owner');
       expect(await requestRoleFor(row, { viewer: { userId: w.bob.id, email: null }, tokenId: w.tb.id, credential: 'bearer' })).toBe('editor');
-      expect(await requestRoleFor(row, { viewer: null, tokenId: w.ta.id, credential: 'agent-cookie' })).toBe('owner');
+      expect(await requestRoleFor(row, { viewer: { userId: w.owner.id, email: w.owner.email }, tokenId: w.ta.id, credential: 'bearer' })).toBe('owner');
+      expect(await requestRoleFor(row, { viewer: null, tokenId: w.ta.id, credential: 'agent-cookie' })).toBe('viewer');
       expect(await requestRoleFor(row, { viewer: null, tokenId: w.anon.id, credential: 'agent-cookie' })).toBe('viewer');
       expect(await requestRoleFor(row, { viewer: null, tokenId: null, credential: 'none' })).toBe('viewer');
     });
@@ -988,7 +1000,8 @@ describe('editors through every door', () => {
       await inviteEditor(w);
       const row = await head(w.doc.id);
       expect(await roleFor(row, { userId: w.owner.id, tokenId: null })).toBe('owner');
-      expect(await roleFor(row, { userId: null, tokenId: w.ta.id })).toBe('owner');
+      expect(await roleFor(row, { userId: w.owner.id, tokenId: w.ta.id })).toBe('owner');
+      expect(await roleFor(row, { userId: null, tokenId: w.ta.id })).toBe('viewer');
       expect(await roleFor(row, { userId: w.bob.id, tokenId: null })).toBe('editor');
       expect(await roleFor(row, { userId: w.bob.id, tokenId: w.tb.id })).toBe('editor');
       expect(await roleFor(row, { userId: w.carol.id, tokenId: null }), 'a public link grants a view').toBe('viewer');
