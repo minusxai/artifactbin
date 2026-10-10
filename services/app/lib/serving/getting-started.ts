@@ -53,7 +53,7 @@ export function gettingStarted(base: string, deployment?:DeploymentState) {
       { kind: 'command', label: 'Connect to an existing artifact', language: 'sh', text: `afbin auth 'ARTIFACT_URL'${server}` },
       { kind: 'text', text: 'Starting something new? Connect to your account first, then create and push a JSX file.' },
       { kind: 'command', label: 'Connect to your account', language: 'sh', text: `afbin auth${server}` },
-      { kind: 'text', text: 'Server commands also request browser approval automatically when needed. In automation, add --yes --json and open the returned approval URL to continue. Guest browser approval is supported by the CLI; direct HTTP clients use email authentication.' },
+      { kind: 'text', text: 'Server commands also sign in through the browser automatically when needed; a browser already signed in on the same machine connects with no click. In automation, add --yes --json and open the returned approval URL to continue. Guest browser approval is supported by the CLI; direct HTTP clients use email authentication.' },
     ] },
     { id: 'edit', title: 'Make your first edit', blocks: [
       { kind: 'text', text: 'Pull the supplied artifact into a local file, edit it, and push it back to the same link. Preserve its identity and selected page type. Push validates the file before publishing.' },

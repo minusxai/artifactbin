@@ -13,7 +13,10 @@ import {
   consumeAuthCode,
   createAuthCode,
   isAllowedRedirectUri,
+  isLoopbackRedirectUri,
   isValidCodeChallenge,
+  LOOPBACK_CLIENT_ID,
+  LOOPBACK_CODE_TTL_MS,
   isValidCodeVerifier,
   ARTIFACT_SCOPE,
   type OAuthStore,
@@ -89,6 +92,19 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
   const body = await res.json().catch(() => null) as { id?: string; token?: string } | null;
   if (!body?.id || !body.token) throw new Error('oauth exchange: the app minted no token');
   return { id: body.id, token: body.token, expiresIn };
+}
+
+/**
+ * The CLI connection both CLI doors issue (device approval and the loopback sign-in): its own
+ * public client, an API-scoped access token minted for the account, and a rotating refresh grant.
+ */
+async function issueCliConnection(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string }): Promise<Record<string, unknown>> {
+  const client = await o.oauth.register({ client_name: 'artifactbin CLI', redirect_uris: ['http://127.0.0.1/callback'] });
+  const clientId = String(client.client_id);
+  const scoped = { ...grant, scope: ARTIFACT_SCOPE };
+  const minted = await mintFor(o, request, scoped);
+  const refreshToken = await o.oauth.issueRefresh({ ...scoped, clientId, accessTokenId: minted.id });
+  return { access_token: minted.token, refresh_token: refreshToken, client_id: clientId, token_type: 'Bearer', expires_in: minted.expiresIn, scope: ARTIFACT_SCOPE };
 }
 
 /** The app remains the sole authority for ownership and per-artifact grants. */
@@ -208,18 +224,56 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     if (result.status !== 'approved') return reply({ error: result.status === 'pending' ? 'authorization_pending' : result.status === 'denied' ? 'access_denied' : 'expired_token' }, 400);
     if (result.target && !result.approvedBy) return reply({ error: 'access_denied' }, 400);
     try {
-      const client = await o.oauth.register({ client_name: 'artifactbin CLI', redirect_uris: ['http://127.0.0.1/callback'] });
-      const clientId = String(client.client_id);
       if (result.target && !(await artifactPermission(o, c.req.raw, result.approvedBy!, result.target.artifactId)).canApprove) return reply({ error: 'access_denied' }, 400);
       const currentOwner = result.approvedBy ? await browserOwner(o, c.req.raw, result.approvedBy) : null;
-      const grant = { userId: currentOwner?.actor.userId ?? result.userId, resource: resource(c.req.raw), scope: ARTIFACT_SCOPE };
-      const minted = await mintFor(o, c.req.raw, grant);
-      const refreshToken = await o.oauth.issueRefresh({ ...grant, clientId, accessTokenId: minted.id });
-      return reply({ access_token: minted.token, refresh_token: refreshToken, client_id: clientId,
-        token_type: 'Bearer', expires_in: minted.expiresIn, scope: ARTIFACT_SCOPE });
+      return reply(await issueCliConnection(o, c.req.raw, { userId: currentOwner?.actor.userId ?? result.userId, resource: resource(c.req.raw) }));
     } catch {
       return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin auth to start a new approval.' }, 503);
     }
+  });
+
+  /*
+   * THE CLI LOOPBACK SIGN-IN (RFC 8252 + PKCE). `afbin auth` on this machine listens on 127.0.0.1 or
+   * [::1] and opens this page; a browser already signed in here is sent straight back to that listener
+   * with a one-minute, single-use code bound to the account, the PKCE challenge and the exact redirect.
+   * No approval click: only a process on the browser's own machine receives the redirect, and only the
+   * holder of the PKCE verifier redeems it. Anything but an IP-literal loopback redirect is refused.
+   * Artifact-scoped consent (`afbin auth <artifact>`) and remote machines keep the device page.
+   */
+  app.get('/oauth/loopback', async (c) => {
+    const q = new URL(c.req.url).searchParams;
+    const redirectUri = q.get('redirect_uri') ?? '';
+    const codeChallenge = q.get('code_challenge') ?? '';
+    const state = q.get('state') ?? '';
+    const problem =
+      !isLoopbackRedirectUri(redirectUri) ? 'This sign-in must return to the afbin command on this computer.'
+      : q.get('code_challenge_method') !== 'S256' || !isValidCodeChallenge(codeChallenge) ? 'Invalid PKCE code challenge.'
+      : !/^[A-Za-z0-9_-]{1,128}$/.test(state) ? 'Invalid state.'
+      : null;
+    if (problem) return page('artifactbin — error', `<h1>Can’t sign in</h1><p class="err">${escapeHtml(problem)}</p><p>Run afbin auth again.</p>`, 400);
+    const actor = c.get('actor') ?? ANONYMOUS;
+    if (actor.credential !== 'session' || !actor.userId) {
+      return new Response(null, { status: 302, headers: { Location: `/login?callbackUrl=${encodeURIComponent(`/oauth/loopback?${q.toString()}`)}`, ...NO_STORE } });
+    }
+    let owner: Actor;
+    try { owner = (await browserOwner(o, c.req.raw, actor)).actor; }
+    catch { return page('artifactbin — error', '<h1>Can’t sign in</h1><p class="err">This browser’s account could not be connected.</p>', 403); }
+    const code = await createAuthCode(o.oauth, { userId: owner.userId!, clientId: LOOPBACK_CLIENT_ID, redirectUri, resource: resource(c.req.raw), scope: ARTIFACT_SCOPE }, codeChallenge, Date.now(), LOOPBACK_CODE_TTL_MS);
+    const target = new URL(redirectUri);
+    target.searchParams.set('code', code);
+    target.searchParams.set('state', state);
+    return new Response(null, { status: 302, headers: { Location: target.href, 'Referrer-Policy': 'no-referrer', ...NO_STORE } });
+  });
+  app.post('/oauth/loopback/token', async (c) => {
+    const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE } });
+    const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body || typeof body.code !== 'string' || typeof body.code_verifier !== 'string' || typeof body.redirect_uri !== 'string'
+      || !isValidCodeVerifier(body.code_verifier) || !isLoopbackRedirectUri(body.redirect_uri)) return reply({ error: 'invalid_request' }, 400);
+    const grant = await consumeAuthCode(o.oauth, { code: body.code, clientId: LOOPBACK_CLIENT_ID, redirectUri: body.redirect_uri, resource: resource(c.req.raw), codeVerifier: body.code_verifier });
+    // consumeAuthCode spends the code first; the redirect must then match exactly, port included.
+    if (!grant?.userId || grant.redirectUri !== body.redirect_uri) return reply({ error: 'invalid_grant', error_description: 'Invalid, expired, or already-used code.' }, 400);
+    try { return reply(await issueCliConnection(o, c.req.raw, { userId: grant.userId, resource: grant.resource })); }
+    catch { return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin auth again.' }, 503); }
   });
 
   app.options('/oauth/register', () => new Response(null, { status: 204, headers: { ...CORS } }));

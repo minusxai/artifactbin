@@ -1,7 +1,9 @@
 # Ownership: the CLI connects, the account owns
 
-- **The one door**: `afbin` opens browser approval the first time a command needs the server (run
-  `afbin auth` to do it deliberately). The person approving logs in with email; the connection
+- **The one door**: `afbin` opens browser sign-in the first time a command needs the server (run
+  `afbin auth` to do it deliberately). A browser already signed in on the same machine connects with no
+  click (loopback redirect + PKCE); otherwise the person logs in with email, or approves a code on the
+  device page from a remote machine; the connection
   then belongs to their account, and so does everything it publishes. No agent-facing surface issues a credential:
   there is no public mint, no token page, and no surface that asks a person to paste one. (An operator
   holding the deployment's `ADMIN__SECRET` can mint for operational use; without it that door is a 404.)

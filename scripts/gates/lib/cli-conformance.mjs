@@ -45,7 +45,9 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
   // an unavailable OS browser now correctly fails authentication before polling.
   const launcher = join(root, 'browser-launcher');
   await mkdir(launcher);
-  for (const command of ['open', 'xdg-open']) await writeFile(join(launcher, command), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  // It records what the CLI opened, so this leg can play the signed-in browser for a loopback sign-in.
+  const openedLog = join(root, 'opened.log');
+  for (const command of ['open', 'xdg-open']) await writeFile(join(launcher, command), `#!/bin/sh\nprintf '%s\\n' "$1" >> '${openedLog}'\nexit 0\n`, { mode: 0o755 });
   const env = { ...process.env, PATH: `${launcher}:${process.env.PATH ?? ''}`, HOME: root, ARTIFACTBIN_HOME: home, ARTIFACTBIN_URL: BASE, CLI__AUTO_UPDATE: '0' };
   delete env.ARTIFACTBIN_TOKEN;
   delete env.ARTIFACTBIN_REFRESH_TOKEN;
@@ -72,6 +74,18 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
       if (approved || checking) return;
       checking = true;
       try {
+        // The no-click path: a browser already signed in follows the loopback sign-in page straight
+        // back to the CLI's own listener. Older candidate CLIs pair through the device page below.
+        const opened = (await readFile(openedLog, 'utf8').catch(() => '')).split('\n').find(line => line.includes('/oauth/loopback?'));
+        if (opened) {
+          const authorized = await fetch(opened, { headers: { Cookie: browserCookie }, redirect: 'manual' });
+          assert.equal(authorized.status, 302);
+          const landed = await fetch(authorized.headers.get('location'));
+          assert.equal(landed.status, 200);
+          assert.match(await landed.text(), /Signed in/);
+          approved = true;
+          return;
+        }
         const files = await readdir(home).catch(() => []);
         const file = files.find(name => /^pairing-.*\.json$/.test(name));
         if (!file) return;
@@ -91,7 +105,7 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
     finally { clearTimeout(deadline); if (timer) clearInterval(timer); }
     if (approvalError) throw approvalError;
     assert.equal(code, expected, `${args[0]} exit mismatch: ${output.slice(-1600)} ${diagnostic.slice(-300)}`);
-    if (approve) assert.ok(approved, 'CLI requested real device approval');
+    if (approve) assert.ok(approved, 'CLI requested real browser sign-in or device approval');
     return JSON.parse(output.trim());
   }
   /** One acceptance scenario: its asserts are the verdict, and a failure does not stop the next scenario. */
@@ -102,7 +116,7 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
   const { step, run } = lane(check, 'cli');
   try {
     await run(async () => {
-      await step('CLI device login through host authentication', () => invoke(['auth'], { approve: true }));
+      await step('CLI browser login through host authentication', () => invoke(['auth'], { approve: true }));
       const profile = createHash('sha256').update(BASE).digest('hex').slice(0, 16);
       const saved = await readFile(join(home, 'hosts', profile, 'credentials.env'), 'utf8');
       const token = saved.match(/^ARTIFACTBIN_TOKEN=(.+)$/m)?.[1];

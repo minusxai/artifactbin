@@ -17,7 +17,7 @@ One row per command `dispatch.ts` routes. Handler modules are listed in the orde
 | Command | Handler modules | Notes |
 |---|---|---|
 | `add` | `local-workspace.ts` | `registerLocalFiles` |
-| `auth` | `browser-auth.ts`, `email-auth.ts` | browser approval; `--email` OTP login |
+| `auth` | `browser-auth.ts`, `loopback-auth.ts`, `email-auth.ts` | no-click loopback sign-in, else device approval; `--email` OTP login |
 | `comment` | `local-comments-command.ts`, `read-commands.ts` | local folder first, then `commentCommand` |
 | `config` | `config.ts` | `setClientDefault`, inline `get` |
 | `delete` | `account-workspace.ts`, `delete.ts` | resources through the account plan; `--type comment` through `deleteComments` |
@@ -96,6 +96,7 @@ What `dispatch.ts` calls to do a command's work.
 | `version.ts` | `CLI_VERSION`. |
 | `version-order.ts` | Release ordering for updates and skill installs. |
 | `browser-auth.ts` | Browser consent and bounded polling. |
+| `loopback-auth.ts` | No-click browser sign-in: loopback listener, PKCE, code exchange. |
 | `email-auth.ts` | Two-step OTP login. |
 | `server-identity.ts` | Who the selected server is, across its hostnames. |
 | `setup.ts` | Offline setup: skill selection before any write. |

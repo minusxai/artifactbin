@@ -83,7 +83,8 @@ scoped to their original host; users switching from the old apex host must authe
 on the new host. `afbin config set host https://app.artifactbin.dev` updates a saved
 host preference.
 
-Authentication opens browser approval and saves credentials privately in `~/.artifactbin/hosts/<origin-id>/credentials.env`.
+Authentication opens the browser — one already signed in on this machine connects with no click, through a
+loopback redirect with PKCE — and saves credentials privately in `~/.artifactbin/hosts/<origin-id>/credentials.env`.
 Skill setup supports Claude Code, Codex, pi and OpenCode and remembers your choices. The npm package includes versioned local skill bundles.
 
 ```sh
@@ -160,8 +161,11 @@ email OTP and returns `otp_required` (exit 2); ask the user for the code, then r
 Pass the same `--server <origin>` to both commands for another server. This explicitly selects the
 email account, replacing saved credentials only after successful authentication.
 
-If browser launch fails, authentication exits immediately with `browser_unavailable`. Browser
-approval waits at most 45 seconds in automation, or the five-minute pairing window interactively.
+Over SSH, when the browser cannot open, when the server predates loopback sign-in, or when no sign-in
+arrives within 45 seconds in automation (five minutes interactively), the CLI falls back to the device
+page, where a code is approved with a click on any device. If browser launch fails there too,
+authentication exits immediately with `browser_unavailable`. Device approval waits at most 45 seconds
+in automation, or the fifteen-minute pairing window interactively.
 The waiting message and timeout errors recommend email login; retry the original command after
 signing in.
 
