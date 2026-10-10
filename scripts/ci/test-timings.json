@@ -188,7 +188,6 @@
    "services/app/__tests__/relations.test.ts": 1615,
    "services/app/__tests__/remote-review.test.ts": 5634,
    "services/app/__tests__/remote-sessions.test.ts": 1403,
-   "services/app/__tests__/retire-shims.test.ts": 1113,
    "services/app/__tests__/roles.test.ts": 19988,
    "services/app/__tests__/row-image-binding.test.ts": 2467,
    "services/app/__tests__/runner-api.test.ts": 1049,

@@ -16,7 +16,7 @@ import { parseJsx } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 
 /** The retired anchor attribute. Its value is an OPAQUE key — never comment text. */
-export const ANNOTATION_ANCHOR_ATTR = 'data-annotation-anchor';
+const ANNOTATION_ANCHOR_ATTR = 'data-annotation-anchor';
 
 /**
  * The source with EVERY anchor attribute removed, each with its leading space.

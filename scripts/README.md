@@ -130,4 +130,3 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/compiled-backfill.ts` | Recompile selected stored document versions on a running server. | an operator, by hand |
-| `scripts/migrate/retire-shims/legacy-anchors.ts` | Republish live documents still carrying `data-annotation-anchor` (one production pass left; see its README). | an operator, by hand |
