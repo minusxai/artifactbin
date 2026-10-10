@@ -1,3 +1,4 @@
+import {authenticatingTestParent} from '../user-kinds';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
 import {getDb,type Queryable} from '../platform/db';
@@ -45,6 +46,7 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
   const s=await state(tx,true);
   if(s.owner_user_id===identity.userId)return true;
   if((await tx.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[identity.userId])).rows.length)return true;
+  if(await canUseDelegatedDeploymentIdentity(identity.userId,tx))return true;
   if(!email||identity.emailVerified!==true)return false;
   if(!s.owner_user_id&&email===config.ownerEmail&&policy.matches(email)){
    await tx.query('UPDATE deployment_state SET owner_user_id=$2 WHERE id=$1',[ID,identity.userId]);
@@ -64,5 +66,11 @@ export async function canUseDeploymentIdentity(userId:string|null|undefined,quer
  if(deploymentConfig().mode==='public')return true;
  if(!userId)return false;
  const db=query??await getDb();
- return (await db.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[userId])).rows.length>0;
+ return (await db.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[userId])).rows.length>0||await canUseDelegatedDeploymentIdentity(userId,db);
+}
+
+async function canUseDelegatedDeploymentIdentity(userId:string,db:Queryable):Promise<boolean> {
+ const parent=await authenticatingTestParent(userId,db);
+ if(!parent)return false;
+ return (await db.query('SELECT m.user_id FROM deployment_members m JOIN deployment_state s ON s.id=$2 WHERE m.user_id=$1 AND s.setup_complete=true',[parent,ID])).rows.length>0;
 }

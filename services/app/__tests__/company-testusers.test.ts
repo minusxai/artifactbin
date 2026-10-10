@@ -1,0 +1,37 @@
+import {describe,it,expect} from 'vitest';
+import {useAppHarness} from './harness';
+import {createUser,mintToken,resolveToken} from '@/lib/accounts';
+import {createTestUser} from '@/lib/accounts/testusers';
+import {canAuthenticateUser} from '@/lib/accounts/user-kinds';
+import {getDb} from '@/lib/platform/db';
+import {overrideConfig} from '@/lib/platform/config';
+import {admitDeploymentIdentity,canUseDeploymentIdentity,setupDeployment} from '@/lib/deployment';
+import {createGroup,getGroupRole} from '@/lib/groups';
+useAppHarness();
+describe('company delegated test identities',()=>{
+ it('admits live delegated credentials of admitted accounts without child admission markers or inherited group roles',async()=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});
+  const parent=await createUser({email:'owner@example.com'});const parentToken=await mintToken('parent',parent.id);
+  await admitDeploymentIdentity({userId:parent.id,email:parent.email!,emailVerified:true});
+  const child=await createTestUser({userId:parent.id,tokenId:parentToken.id});if(!child.ok)throw Error(child.error);
+  expect(await canAuthenticateUser(child.id)).toBe(true);
+  expect(await canUseDeploymentIdentity(child.id)).toBe(false);
+  const group=await createGroup(parent.id,{handle:'delegation',name:'Delegation'});await setupDeployment(parent.id,group.id);
+  expect(await canUseDeploymentIdentity(child.id)).toBe(true);
+  expect(await admitDeploymentIdentity({userId:child.id})).toBe(true);
+  expect((await resolveToken(child.token))?.userId).toBe(child.id);
+  expect(await getGroupRole(child.id,group.id)).toBeNull();
+  const db=await getDb();expect((await db.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[child.id])).rows).toEqual([]);
+  await db.query('UPDATE groups SET deleted_at=now() WHERE id=$1',[group.id]);
+  expect(await canUseDeploymentIdentity(child.id)).toBe(true);
+  expect((await resolveToken(child.token))?.userId).toBe(child.id);
+  await db.query('DELETE FROM deployment_members WHERE user_id=$1',[parent.id]);
+  expect(await canUseDeploymentIdentity(child.id)).toBe(false);expect(await resolveToken(child.token)).toBeNull();
+  await db.query('INSERT INTO deployment_members(user_id) VALUES ($1)',[parent.id]);
+  await db.query("UPDATE users SET expires_at=now()-interval '1 second' WHERE id=$1",[child.id]);
+  expect(await canUseDeploymentIdentity(child.id)).toBe(false);expect(await admitDeploymentIdentity({userId:child.id})).toBe(false);
+  await db.query("UPDATE users SET expires_at=now()+interval '1 hour' WHERE id=$1",[child.id]);
+  await db.query('DELETE FROM users WHERE id=$1',[parent.id]);
+  expect(await canUseDeploymentIdentity(child.id)).toBe(false);expect(await resolveToken(child.token)).toBeNull();
+ });
+});
