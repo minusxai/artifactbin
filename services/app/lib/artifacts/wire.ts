@@ -145,6 +145,15 @@ export const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<s
  */
 export const committedOpenAnnotations = (row: ArtifactRow): number => row.open_annotations ?? 0;
 
+/** Canonical saved ownership and provenance, shared by reads and write acknowledgments. */
+function artifactOwnershipWire(row: ArtifactRow) {
+  return {
+    owner: row.group_id ? { type: 'group', id: row.group_id } : { type: 'personal' },
+    group_id: row.group_id ?? null,
+    creator_user_id: row.creator_user_id ?? null,
+  };
+}
+
 /** A committed head without its content: the wire shape less `markup`, `state` and the declared `mutations`. */
 async function artifactHeadToWire(row: ArtifactRow, base: string, openAnnotations: number) {
   const { document: _document, markup: _markup, state: _state, mutations: _mutations, ...head } = await artifactToWire(row, base, openAnnotations, false) as Awaited<ReturnType<typeof artifactToWire>> & { document?: unknown; mutations?: unknown };
@@ -172,7 +181,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
   const isDoc = format === 'markup' || format === 'folder';
   return {
     ...rest,
-    owner:row.group_id?{type:'group',id:row.group_id}:{type:'personal'},group_id:row.group_id??null,creator_user_id:row.creator_user_id??null,
+    ...artifactOwnershipWire(row),
     state: content ? artifactState(row) : '',
     format,
     url: `${base}/a/${row.id}`,
@@ -360,7 +369,7 @@ export async function replacedArtifactWire(
 ): Promise<Record<string, unknown>> {
   return {
     ...monitoringGuidance(base,row.id,row.format),
-    owner:row.group_id?{type:'group',id:row.group_id}:{type:'personal'},group_id:row.group_id??null,creator_user_id:row.creator_user_id??null,
+    ...artifactOwnershipWire(row),
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     ...(affected?{affected_dependents:affected.map(dependent=>({id:dependent.id,title:dependent.title}))}:{}),
     // A replace moves the head pointer — hand back the new one so the caller
@@ -394,6 +403,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
   const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown; bytes?: number; pages?: number; filename?: string; contentType?: string };
   return {
     ...monitoringGuidance(base,row.id,row.format),
+    ...artifactOwnershipWire(row),
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.

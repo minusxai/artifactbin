@@ -25,6 +25,16 @@ async function fixture(){
  const move=(id:string,destination:object,bearer=a.token)=>transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',token:bearer,json:{destination}}),{params:Promise.resolve({id})});
  return {creator,editor,viewer,a,b,c,db,make,move};
 }
+it('echoes canonical ownership and immutable creator metadata from personal and group publication',async()=>{
+ const f=await fixture();
+ for(const destination of [{type:'personal'},{type:'group',id:'grp_ownership'}]){
+  const response=await create(request('/api/artifacts',{method:'POST',token:f.b.token,json:{markup:'<p>Ownership echo</p>',destination}}));
+  expect(response.status,await response.clone().text()).toBe(201);
+  const wire=await response.json();
+  expect(wire).toMatchObject({owner:destination,group_id:destination.type==='group'?'grp_ownership':null,creator_user_id:f.editor.id});
+  expect(await getArtifactById(wire.id)).toMatchObject({group_id:wire.group_id,creator_user_id:wire.creator_user_id});
+ }
+});
 it('transfers ownership, revokes creator and token fallback, and reflects live membership roles',async()=>{
  const f=await fixture();const id=await f.make({markup:'<p id="hello">Hello</p>',visibility:'private'});
  const moved=await f.move(id,{type:'group',id:'grp_ownership'});expect(moved.status,await moved.clone().text()).toBe(200);
