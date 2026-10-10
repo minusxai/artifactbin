@@ -1,5 +1,5 @@
 /** Embedded SQLite for held imports. The file never asks a URL for wasm or data. */
-import type { PageEngine } from '@/lib/story-runtime/page-engine';
+import type { PageEngine } from '@/lib/story-runtime/data';
 import type { ImportTables } from '@/lib/dataflow/compiled-flow';
 import { pageEngine } from '@/lib/islands/sqlite-engine';
 

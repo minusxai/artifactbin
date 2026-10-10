@@ -14,7 +14,7 @@ import type { IslandStoryController } from '@/lib/story-runtime/contract';
 import type { FrameEditSession } from '@/lib/story-runtime/edit/session';
 import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
-import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
+import type { RuntimeChannel } from '@/lib/story-runtime/contract';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';

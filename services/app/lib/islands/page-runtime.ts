@@ -20,7 +20,7 @@
  */
 import { batch, createSignal as solidCreateSignal, untrack, type JSX, type SignalOptions } from 'solid-js';
 import { createComponent, render } from 'solid-js/web';
-import type { DataflowStore } from '@/lib/story-runtime/store';
+import type { DataflowStore } from '@/lib/story-runtime/data';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
 import type { Row, Scalar } from '@/lib/dataflow/dataflow';
 import { PAGE_GLOBAL } from '@/lib/author-script/contract';

@@ -9,7 +9,7 @@
  * from any caller — an island, the author's script, the SPA — is reported the same way.
  * Framework-free; the indicator (kit/status.tsx) and boot's `writes` event read it.
  */
-import type { DataflowStore, StoreWriteEvent } from '@/lib/story-runtime/store';
+import type { DataflowStore, StoreWriteEvent } from '@/lib/story-runtime/data';
 import { SAVED_STATUS_TTL_MS, type WriteStatus, type WriteStatusFeed } from './contract';
 
 export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusFeed {
