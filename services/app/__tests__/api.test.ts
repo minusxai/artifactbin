@@ -1,5 +1,5 @@
 import { createUser } from '@/lib/accounts';
-import {artifactQuery} from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifacts/table';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * API contract tests — real route handlers, in-memory PGLite (NODE_ENV=test ⇒

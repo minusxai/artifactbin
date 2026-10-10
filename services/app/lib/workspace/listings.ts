@@ -7,7 +7,8 @@ import type { ShareRole } from '@artifactbin/contracts';
 // The trash gate (lib/artifacts LIVE_ARTIFACT_SQL) is a VALUE here rather
 // than an inherited predicate: these listings build their own statements
 // instead of going through the row-loading seam, so each one names the gate.
-import { type ArtifactSummary, LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
+import { type ArtifactSummary } from '@/lib/artifacts';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import { LIVE_TOKEN_SQL } from '@/lib/accounts/tokens';
 import { getDb } from '@/lib/platform/db';
 

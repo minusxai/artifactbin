@@ -1,11 +1,22 @@
 /**
  * THE ARTIFACTS TABLE, as statements see it: the row type, the scopes every scoped statement runs
- * under, and the trash gate. It imports nothing from this module but the editor policy, so every
- * other file (access, the row lookups, the write path) can stand on it without a cycle.
+ * under, and the trash gate. It imports nothing from this module but the editor policy and the row
+ * loader, so every other file (access, the row lookups, the write path) can stand on it without a cycle.
+ *
+ * Also the module's second entry (DEEP_MODULES['lib/artifacts'] in scripts/ci/module-graph.mjs) for the
+ * callers outside that still query the artifacts table themselves (workspace listings, trash and
+ * analytics, publish preparation and fork, custom domains, document trust, annotations, the compiled-page
+ * backfill): the trash gate, the owner predicate and the row loaders. Narrowing them is its own redesign.
+ *
+ * Known readers BELOW this door, which cannot import it by layering and keep their own SQL:
+ * lib/accounts/{users,guest-owner,testusers} (account merges and cascades), lib/notifications/events
+ * (recipient joins) and lib/datasets/user-fields.
  */
 import { ACCOUNT_REACH_SQL, type TokenActor } from '@/lib/accounts';
 import type { StoredDocument } from '../document';
 import { hasDocumentEditorAccess } from './document-policy';
+
+export { artifactQuery, loadArtifactDocument } from './document';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
 export interface ArtifactRow {

@@ -1,4 +1,4 @@
-import {artifactQuery} from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifacts/table';
 import {beforeEach,expect,it,vi} from 'vitest';
 overrideCatalogExecutor(vi.fn(async()=>({columns:[{name:'id',type:'number'}],rows:[{id:1}]})) as never);
 overridePostgres({discover:vi.fn<PostgresDriver['discover']>(async()=>[{schema:'public',name:'rows',columns:[{name:'id',type:'number'}]}])});

@@ -14,7 +14,8 @@ import { GET as versionRoute } from '@/app/api/artifacts/[id]/versions/[version]
 import { GET as myVersionRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as restoreRoute } from '@/app/api/artifacts/[id]/restore/route';
 import { documentEditBody } from './prepared-document';
-import { artifactQuery, getArtifactById } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifacts/table';
 import { servableDocument, UnservableDocument } from '@/lib/artifacts/servable';
 import { createDocumentGraph } from '@/lib/document/document-graph';
 

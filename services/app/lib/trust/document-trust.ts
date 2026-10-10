@@ -25,7 +25,8 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform/db';
 import { parseCookie } from '@/lib/http/http';
-import { artifactQuery, type ArtifactRow } from '@/lib/artifacts';
+import { type ArtifactRow } from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifacts/table';
 import { parseJsx } from '@/lib/jsx';
 import {
   splitHelmet, CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, cspExtensionsOf, emptyCspExtensions, hasCspExtensions,

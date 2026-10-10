@@ -1,4 +1,5 @@
-import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuery, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, grantsOf, grantsPermitRead, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
+import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, grantsOf, grantsPermitRead, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
+import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import type { TokenActor } from '@/lib/accounts';
 import { mutationTargetRef } from '@/lib/dataflow';
@@ -221,11 +222,11 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   try {
     created = await (await getDb()).transaction(async (tx) => {
     await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[source.id,...copies.map(c=>c.row.id)]]);
-    const currentSource=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[source.id])).rows[0];
+    const currentSource=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL}`,[source.id])).rows[0];
     if(!currentSource||currentSource.edit_id!==source.edit_id)throw new DatasetError('The source changed; retry the fork',409);
     for(const copy of copies){
       if(!grantsOf(copy.row))continue;
-      const current=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[copy.row.id])).rows[0];
+      const current=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL}`,[copy.row.id])).rows[0];
       if(!current||current.edit_id!==copy.row.edit_id||current.policy_revision!==copy.row.policy_revision||!await grantsPermitRead(current,actor,currentSource,tx))throw new DatasetError('A dataset changed or is no longer readable; retry the fork',409);
     }
     const datasets: ArtifactRow[] = [];

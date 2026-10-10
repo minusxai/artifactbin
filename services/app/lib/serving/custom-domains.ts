@@ -1,4 +1,5 @@
-import { artifactQuery, type ArtifactRow, canReadArtifact, LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
+import { type ArtifactRow, canReadArtifact } from '@/lib/artifacts';
+import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 /**
  * CUSTOM DOMAINS — one hostname an ACCOUNT serves its public documents at.
  *

@@ -1,6 +1,6 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
-import {artifactQuery} from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifacts/table';
 import {recordEvent} from '../notifications/events';
 import {commentMentions} from './saved-mentions';
 import {MembershipError} from '@/lib/artifacts';

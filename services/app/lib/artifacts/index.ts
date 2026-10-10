@@ -67,9 +67,6 @@ export { notificationAuthority } from './notification-authority';
 export { evaluateNotificationQuery } from './notification-query';
 export { notificationJobStore } from './notification-runtime';
 
-/** Table access, PROVISIONAL: callers that still query the artifacts table themselves. Narrowing this is its own redesign (workspace listings, trash, analytics, publish preparation); until then the debt stays visible here, in one place. */
-export { LIVE_ARTIFACT_SQL, ownerPredicate } from './table';
-export { artifactQuery, loadArtifactDocument } from './document';
 
 /** Independent ownership destinations and atomic ownership transfer. */
 export {parseArtifactDestination,newArtifactDestination} from './ownership';
