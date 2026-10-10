@@ -4,7 +4,7 @@
  * specifier its SQL pool receives (`createSql(caps, { extensions })`) — and its
  * default export (`SqlExtensions`) is installed wherever the app prepares a
  * <Mutation> in this process: the publish checks (lib/dataflow/compile-dataflow)
- * and the owner's direct write (lib/artifacts/write/dataset-mutate). Reads never see it.
+ * and the owner's direct write (lib/document-data/dataset-mutate). Reads never see it.
  *
  * Kept on `globalThis`, like the services registry: a root registers once per
  * process, and a module reload in a test must not silently drop it.

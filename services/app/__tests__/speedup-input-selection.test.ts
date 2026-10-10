@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
-import {runDocumentDataflow} from '@/lib/artifacts';
+import { runDocumentDataflow } from '@/lib/document-data';
 
 useAppHarness();
 /** The compile-time shape of every import (the owner's reach), separate from the reader's rows. */

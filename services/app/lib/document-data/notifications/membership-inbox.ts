@@ -3,12 +3,13 @@ import {JOIN_RELATIONS,dismissPendingRelations} from '@/lib/accounts';
 import {canAnnotate} from '@artifactbin/contracts';
 import {notificationChanged,notificationsChanged} from '@/lib/notifications/write';
 import {getDb} from '@/lib/platform/db';
-import {MembershipError} from './membership';
-import { effectiveRole } from '../access';
-import { LIVE_ARTIFACT_SQL, type ArtifactRow } from '../table';
-import { preloadAccessFacts } from '../access-facts';
+import { MembershipError } from '@/lib/artifacts';
+import { effectiveRole } from '@/lib/artifacts';
+import { type ArtifactRow } from '@/lib/artifacts';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { preloadAccessFacts } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts';
-import {readThrough} from '@/lib/artifacts/dataset-policy/grants';
+import { readThrough } from '@/lib/artifacts';
 export async function membershipInbox(actor:RoleActor,offset=0,onlyId:string|null=null){
  if(!actor.userId)throw new MembershipError('Sign in to see notifications');
  const db=await getDb();

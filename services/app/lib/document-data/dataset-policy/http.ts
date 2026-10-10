@@ -1,11 +1,11 @@
 import {getDb} from '@/lib/platform/db';
-import { getArtifactFor } from '@/lib/artifacts/rows';
-import { editorScope } from '@/lib/artifacts/table';
+import { getArtifactFor } from '@/lib/artifacts';
+import { editorScope } from '@/lib/artifacts';
 import type { TokenActor } from '@/lib/accounts';
-import { getSharingFor } from '@/lib/artifacts/sharing';
+import { getSharingFor } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { json, readJson } from '@/lib/http/http';
-import { setDatasetPolicy } from './index';
+import { setDatasetPolicy } from '.';
 
 export async function readDatasetPolicy(
   actor: TokenActor,

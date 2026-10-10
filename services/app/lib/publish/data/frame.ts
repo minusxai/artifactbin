@@ -13,7 +13,8 @@ import { readerDataflow } from '@/lib/dataflow';
  * Cached by (id, edit_id): a document with two hundred readers costs one
  * build per version, not one per connection.
  */
-import { type ArtifactRow, datasetsForDocument, declarationsForRow, servableDocument } from '@/lib/artifacts';
+import { type ArtifactRow, declarationsForRow, servableDocument } from '@/lib/artifacts';
+import { datasetsForDocument } from '@/lib/document-data';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { authorHandle } from '@/lib/accounts';

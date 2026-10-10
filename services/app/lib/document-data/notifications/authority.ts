@@ -1,13 +1,13 @@
 /** Transaction-only authorization shared by query execution, result commit and disclosure. */
-import {getGroupRole} from '../groups';
+import {getGroupRole} from '../../groups';
 import {notificationRuleSourceIds,notificationRevision as hash} from '@/lib/notifications/context';
 import {explicitNotificationMemberships} from '@/lib/notifications/membership';
-import {grantsOf,grantsPermitRead,readThrough,type ReadRow} from '@/lib/artifacts/dataset-policy/grants';
-import {liveAccessFacts,preloadAccessFacts,type AccessFacts} from './access-facts';
+import { grantsOf, grantsPermitRead, readThrough, type ReadRow } from '@/lib/artifacts';
+import { liveAccessFacts, preloadAccessFacts, type AccessFacts } from '@/lib/artifacts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
-import type { ArtifactRow } from './table';
+import type { ArtifactRow } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts';
-import {hasDocumentEditorAccess} from './document-policy';
+import { hasDocumentEditorAccess } from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {PUBLIC_BASE_URL} from '@/lib/platform/config';
 import {NotificationExecutionError} from '@/lib/notifications/errors';

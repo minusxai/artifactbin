@@ -1,14 +1,15 @@
 import { grantMutationPolicy } from '@artifactbin/utils';
-import { grantsOf, grantContext, grantsPermitWrite, type GrantDocument } from './grants';
+import { grantsOf, grantContext, grantsPermitWrite, type GrantDocument } from '@/lib/artifacts';
 import {validateDatasetPolicyForRow} from '@/lib/datasets/policy/validation';
 import { policySession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
 import { canEdit, type DatasetAccessPolicy as DatasetPolicy, type DatasetMutationPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { getDb } from '@/lib/platform/db';
-import { canReadArtifact, effectiveRole } from '../access';
-import { editorScope, groupMemberPredicate, writerFor, type ArtifactRow } from '../table';
+import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
+import { editorScope, writerFor, type ArtifactRow } from '@/lib/artifacts';
+import { groupMemberPredicate } from '@/lib/artifacts/table';
 import type { TokenActor, RoleActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactFor } from '../rows';
+import { getArtifactById, getArtifactFor } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets/catalog';
 
 /** One read-access fence for policy actions: sharing remains the only audience.

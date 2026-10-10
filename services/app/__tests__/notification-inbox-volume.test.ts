@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { request, setSession, useAppHarness } from './harness';
 import { GET } from '@/app/api/my/people/route';
-import { membershipInbox, updateMembershipInbox } from '@/lib/artifacts';
+import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import { getDb, measureQueries } from '@/lib/platform';
 import { RECIPIENT, inboxVolumeBase, seedInboxVolume } from './inbox-volume';
 

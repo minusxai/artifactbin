@@ -5,8 +5,8 @@ import {getDb} from '@/lib/platform';
 import {createUser} from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {seedOwnerJoin} from '@/lib/accounts';
-import { notificationExecutionFence, notificationExecutionSource, notificationSourcesReadable } from '@/lib/artifacts/notification-authority';
-import { notificationAuthority } from '@/lib/artifacts';
+import { notificationExecutionFence, notificationExecutionSource, notificationSourcesReadable } from '@/lib/document-data/notifications/authority';
+import { notificationAuthority } from '@/lib/document-data';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 useAppHarness();
 async function setup(){

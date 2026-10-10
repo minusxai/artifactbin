@@ -4,7 +4,7 @@ import { loadImage } from '@/lib/object-store/image-store';
 import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts';
 import { getArtifactById } from '@/lib/artifacts';
 import { unservable } from '@/lib/artifacts';
-import { referencedArtifactForRow } from '@/lib/artifacts';
+import { referencedArtifactForRow } from '@/lib/document-data';
 import { sessionActor } from '../accounts';
 import { escapeAttr } from '@artifactbin/utils/escape';
 import { ID_RE } from '../platform/ids-shape';

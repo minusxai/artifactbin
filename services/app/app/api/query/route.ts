@@ -1,4 +1,5 @@
-import { datasetResolverForActor, refLoaderForActor, runDocumentDataflow } from '@/lib/artifacts';
+import { refLoaderForActor } from '@/lib/artifacts';
+import { datasetResolverForActor, runDocumentDataflow } from '@/lib/document-data';
 import { actorForArtifacts, sessionActor } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';

@@ -14,7 +14,7 @@ import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor } from '@/
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 import { getArtifactById, getVersionFor } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts/actors';
-import { setDatasetPolicy } from '@/lib/artifacts/dataset-policy';
+import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/document/asset-url';
@@ -233,7 +233,7 @@ describe('the snapshot', () => {
 /*
  * A <User> over a result the FILE computes: it can ask no server, so the cards
  * of everyone it may show travel in the snapshot — by the rule a reader's page
- * asks its door by (lib/artifacts nameablePeople), for the downloader.
+ * asks its door by (lib/document-data nameablePeople), for the downloader.
  */
 describe('the people the file may name', () => {
   it('carries the cards of the people its held rows show, and of nobody no query shows', async () => {

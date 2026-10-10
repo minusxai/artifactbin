@@ -1,7 +1,8 @@
 import {expect,it} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
-import {dataflowForRow,getArtifactById,accountProfile} from '@/lib/artifacts';
+import { getArtifactById, accountProfile } from '@/lib/artifacts';
+import { dataflowForRow } from '@/lib/document-data';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {claimToken,createUser} from '@/lib/accounts';
 import {count,has,link} from '@/lib/accounts';

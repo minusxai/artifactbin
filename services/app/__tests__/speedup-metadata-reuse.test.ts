@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { useAppHarness } from './harness';
-import { dataflowForRow, datasetsForDocument, type ArtifactRow } from '@/lib/artifacts';
+import { type ArtifactRow } from '@/lib/artifacts';
+import { dataflowForRow, datasetsForDocument } from '@/lib/document-data';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata } from '@/lib/document/parsed-artifact-metadata';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
 import { compiledSource, type TestSource } from '@/test/helpers/compiled';

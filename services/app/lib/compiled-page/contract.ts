@@ -303,7 +303,7 @@ export interface PlannedMutation {
 /**
  * The access facts `planOf` needs about the datasets a version reads, decided
  * by the caller with the run's OWN admission for the anonymous principal
- * through THIS document (lib/artifacts tableForRef: `grantsPermitRead` when
+ * through THIS document (lib/document-data tableForRef: `grantsPermitRead` when
  * the dataset carries grants — every dataset does, the default grants read to
  * `*` — else `visibility !== 'private'`). Reads carry no row-level rules today:
  * a read grant is the whole dataset, so "admitted or not" is the whole fact.

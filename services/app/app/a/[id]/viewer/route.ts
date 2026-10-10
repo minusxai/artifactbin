@@ -1,4 +1,5 @@
-import { canReadArtifact, compiledForRow, dataflowForRow, getArtifactById, holdableImports, viewerIdentityFor, type ArtifactRow } from '@/lib/artifacts';
+import { canReadArtifact, compiledForRow, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { dataflowForRow, holdableImports, viewerIdentityFor } from '@/lib/document-data';
 import { type RoleActor, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';

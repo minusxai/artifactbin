@@ -5,7 +5,7 @@ import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';
 import {createUser} from '@/lib/accounts';
-import { membershipInbox, updateMembershipInbox } from '@/lib/artifacts';
+import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import {recordNotification} from '@/lib/notifications';
 useAppHarness();
 it('keeps newer activity unread when an older rendered revision is acknowledged',async()=>{

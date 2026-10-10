@@ -1,5 +1,5 @@
 import { sessionActor } from '@/lib/accounts';
-import { readDatasetImage } from '@/lib/artifacts';
+import { readDatasetImage } from '@/lib/document-data';
 import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
 

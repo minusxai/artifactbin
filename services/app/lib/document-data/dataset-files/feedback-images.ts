@@ -1,12 +1,12 @@
 import { getDb } from '@/lib/platform/db';
 import { generateInternalId, ID_RE } from '@/lib/platform';
-import type { ArtifactRow } from './table';
-import { getArtifactById } from './rows';
+import type { ArtifactRow } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts';
-import { artifactQuery } from '@/lib/artifacts/document';
-import { dataflowForRow } from '@/lib/artifacts/dataflow';
+import { artifactQuery } from '@/lib/artifacts/table';
+import { dataflowForRow } from '../dataflow';
 import { catalogOf } from '@/lib/datasets/catalog';
-import { grantsOf, grantContext, grantsPermitRead, readThrough, type GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
+import { grantsOf, grantContext, grantsPermitRead, readThrough, type GrantDocument } from '@/lib/artifacts';
 import { DatasetError } from '@/lib/datasets/errors';
 import { imageInsertAllowed } from '@/lib/datasets/image-upload-policy';
 import { storeImageContent } from '@/lib/datasets/data-tiers';

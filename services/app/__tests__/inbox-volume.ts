@@ -7,7 +7,7 @@
  */
 import { POST as create } from '@/app/api/artifacts/route';
 import { mintAccountToken, request } from './harness';
-import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/artifacts/notification-authority';
+import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/document-data/notifications/authority';
 import type { Queryable } from '@artifactbin/contracts';
 
 export const RECIPIENT = { id: 'vol-recipient', email: 'vol-recipient@example.com' };

@@ -1,16 +1,16 @@
-import { canReadArtifact, ownsArtifact } from './access';
-import { type ArtifactRow, writerFor } from './table';
+import { canReadArtifact, ownsArtifact } from '@/lib/artifacts';
+import { type ArtifactRow, writerFor } from '@/lib/artifacts';
 import type { RoleActor, TokenActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactFor, getLinkReadableArtifact } from './rows';
-import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from './row-compile';
+import { getArtifactById, getArtifactFor, getLinkReadableArtifact } from '@/lib/artifacts';
+import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from '@/lib/artifacts';
 import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
 import { JOIN_RELATIONS } from '../accounts';
-import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts/dataset-policy/grants';
+import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
 import { type DataflowState, imageRefData, rawUrl, isEmptyDataflow, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';
 import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
-import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from './capabilities';
-import { pinMutationContext, type MutationReceipt } from './mutation-receipt';
+import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from '@/lib/artifacts';
+import { pinMutationContext, type MutationReceipt } from '@/lib/artifacts';
 import { notificationContextSnapshot } from '../notifications/context';
 import type { MutationNotificationJobInput, MutationInitiator } from '@artifactbin/contracts';
 import { catalogOf } from '@/lib/datasets/catalog';
@@ -19,12 +19,12 @@ import { displayTitle, declarationsOf } from '../document';
 import { compileWithLoader } from '@/lib/dataflow/server';
 import { schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { canWriteDataset, mutationPolicy, type WriteRefusal } from './dataset-policy';
-import { isMutationRefused, mutateDataset } from './write/dataset-mutate';
+import { isMutationRefused, mutateDataset } from './dataset-mutate';
 import { runMutation } from '@/lib/sql/engine';
 import { sqlExtensions } from '@/lib/sql/extensions';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
 import { storedRowStats } from '@/lib/datasets/dataset-store';
-import { childrenTableFor } from './placement';
+import { childrenTableFor } from '@/lib/artifacts';
 import type { RanDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 
 /**

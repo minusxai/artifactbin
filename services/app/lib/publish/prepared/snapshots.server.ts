@@ -48,7 +48,8 @@
  * forgotten, never re-run.
  */
 import { createHash } from 'node:crypto';
-import { type ArtifactRow, canReadArtifact, compiledForRow, dataflowForRow, getArtifactById, grantsOf, grantsPermitRead } from '@/lib/artifacts';
+import { type ArtifactRow, canReadArtifact, compiledForRow, getArtifactById, grantsOf, grantsPermitRead } from '@/lib/artifacts';
+import { dataflowForRow } from '@/lib/document-data';
 import { type DataPlan, type DatasetAccessFacts, planOf } from '@/lib/compiled-page';
 import { type CompiledDataflow, dataRefs, type Scalar } from '@/lib/dataflow';
 import { getDb } from '@/lib/platform/db';

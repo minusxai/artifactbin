@@ -255,7 +255,7 @@ export interface IslandPageData {
    */
   signedIn: boolean;
   /**
-   * The imports this page may hold in full (lib/artifacts holdableImports, for the door the page queries
+   * The imports this page may hold in full (lib/document-data holdableImports, for the door the page queries
    * through), by name: what its own SQLite engine answers once loaded (lib/dataflow/placement). Empty: the
    * page runs nothing itself.
    */

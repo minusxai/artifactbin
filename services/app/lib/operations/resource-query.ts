@@ -1,7 +1,8 @@
 import {resolveToken} from '../accounts/tokens';
 import { validateQueryValues } from '@/lib/dataflow';
 import {createHash} from 'node:crypto';
-import { artifactState, dataflowForRow, declarationsForRow, readableArtifact } from '@/lib/artifacts';
+import { artifactState, declarationsForRow, readableArtifact } from '@/lib/artifacts';
+import { dataflowForRow } from '@/lib/document-data';
 import type { TokenActor } from '@/lib/accounts';
 import {catalogOf} from '../datasets/catalog';
 import {executeCatalog} from '../datasets/execute';

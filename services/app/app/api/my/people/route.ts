@@ -2,7 +2,8 @@ import {z} from 'zod';
 import {browserActor} from '@/lib/accounts';
 import {actorForArtifacts,sessionActor} from '@/lib/accounts';
 import {json,readJson,unauthorized,withServerTiming} from '@/lib/http';
-import { membershipInbox, updateMembershipInbox, MembershipError } from '@/lib/artifacts';
+import { MembershipError } from '@/lib/artifacts';
+import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 const schema=z.object({autoAccept:z.boolean().optional(),read:z.string().max(512).optional(),readAll:z.boolean().optional(),revision:z.number().int().min(1).optional(),block:z.string().max(128).optional(),unblock:z.string().max(128).optional()}).strict();
 export function GET(request:Request){return withServerTiming(async()=>{const actor=actorForArtifacts(await sessionActor(request));if(!actor)return unauthorized(request);try{return json(await membershipInbox(actor,Math.max(0,Math.min(100000,Number(new URL(request.url).searchParams.get('offset'))||0))));}catch(e){if(e instanceof MembershipError)return json({error:e.message},e.status);throw e;}});}
 export function PATCH(request:Request){return withServerTiming(async()=>{const session=await browserActor(request);if(session instanceof Response)return session;const actor=actorForArtifacts(session);if(!actor)return unauthorized(request);const input=schema.safeParse(await readJson(request));if(!input.success)return json({error:'invalid_preferences'},400);try{return json(await updateMembershipInbox(actor,input.data));}catch(e){if(e instanceof MembershipError)return json({error:e.message},e.status);throw e;}});}

@@ -1,4 +1,5 @@
-import { canReadArtifact, dataflowForRow, getArtifactById, holdImport, nameablePeople, type ArtifactRow } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { dataflowForRow, holdImport, nameablePeople } from '@/lib/document-data';
 import { type RoleActor, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { json, readJson } from '@/lib/http';
@@ -118,7 +119,7 @@ async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleA
 /**
  * `{hold}` — every row of one import the document declares, for a reader's
  * page that runs its queries itself (lib/dataflow/placement). Decided for THIS
- * door's viewer on every request (lib/artifacts holdImport): the island's
+ * door's viewer on every request (lib/document-data holdImport): the island's
  * `hold` is only a hint. Anything else — an undeclared name, a ref, a dataset
  * the viewer may not read, a connected database, past the cap — is one answer,
  * so a refusal says nothing about why.
