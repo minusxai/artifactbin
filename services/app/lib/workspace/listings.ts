@@ -31,7 +31,7 @@ export async function listPublicArtifactsByUser(userId: string): Promise<Artifac
   const db = await getDb();
   const r = await db.query<ArtifactSummary>(
     `SELECT ${SUMMARY_COLS} FROM artifacts
-     WHERE user_id = $1 AND visibility = 'public' AND format IN ('markup', 'folder') AND ${LIVE_ARTIFACT_SQL}
+     WHERE group_id IS NULL AND user_id = $1 AND visibility = 'public' AND format IN ('markup', 'folder') AND ${LIVE_ARTIFACT_SQL}
        AND cardinality(ancestor_ids) = 0
      ORDER BY updated_at DESC LIMIT 200`,
     [userId],
@@ -80,7 +80,7 @@ export async function listDraftsByTokenIds(tokenIds: string[]): Promise<OwnedArt
        (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
         WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
      FROM artifacts
-     WHERE artifacts.${LIVE_ARTIFACT_SQL} AND EXISTS (
+     WHERE artifacts.group_id IS NULL AND artifacts.${LIVE_ARTIFACT_SQL} AND EXISTS (
        SELECT 1 FROM tokens LEFT JOIN users ON users.id = tokens.user_id
        WHERE tokens.id = ANY($1) AND ${LIVE_TOKEN_SQL}
          AND ((artifacts.user_id = tokens.user_id AND users.kind = 'guest')
@@ -110,7 +110,7 @@ export async function listOwnedArtifacts(col: 'user_id' | 'token_id', value: str
     `SELECT ${SUMMARY_COLS},
        (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
         WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
-     FROM artifacts WHERE ${col} = $1 AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC LIMIT 200`,
+     FROM artifacts WHERE group_id IS NULL AND ${col} = $1 AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC LIMIT 200`,
     [value],
   );
   return r.rows;

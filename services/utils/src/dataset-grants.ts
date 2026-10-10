@@ -47,6 +47,7 @@ export function defaultDatasetGrants(): DatasetGrantPolicy {
 }
 
 function samePrincipal(left: DatasetPrincipal, right: DatasetPrincipal): boolean {
+  if (left.groupId || right.groupId) return !!left.groupId && left.groupId === right.groupId;
   if (left.userId || right.userId) return !!left.userId && left.userId === right.userId;
   return !!left.tokenId && left.tokenId === right.tokenId;
 }
@@ -57,7 +58,7 @@ function person(target: string, principal: DatasetPrincipal, owner: DatasetPrinc
 /** Selector matching only. The app must establish artifact access/membership before supplying its context. */
 export function datasetGrantAllows(policy: DatasetGrantPolicy, action: DatasetAction, context: DatasetGrantContext): boolean {
   return policy.allow.some(grant => grant.actions.includes(action) && Object.entries(grant.from).every(([field, target]) => {
-    if (field === 'user') return person(target, context.caller, context.owner);
+    if (field === 'user') return (target === '$owner' && !!context.owner.groupId && !!context.callerEditorGroupIds?.includes(context.owner.groupId)) || person(target, context.caller, context.owner);
     if (!context.artifact) return false;
     if (field === 'artifact') return target === '*' || target === context.artifact.id;
     if (field === 'artifactOwner') return person(target, context.artifact.owner, context.owner);

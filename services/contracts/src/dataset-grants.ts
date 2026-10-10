@@ -23,6 +23,7 @@ export interface DatasetGrantPolicy {
 }
 
 export interface DatasetPrincipal {
+  groupId?: string | null;
   userId: string | null;
   tokenId: string | null;
 }
@@ -30,6 +31,8 @@ export interface DatasetPrincipal {
 /** Constructed by the server; the saved artifact context is never request input. */
 export interface DatasetGrantContext {
   caller: DatasetPrincipal;
+  /** Server-authorized editor memberships only; viewers never satisfy owner writes. */
+  callerEditorGroupIds?: string[];
   owner: DatasetPrincipal;
   artifact?: { id: string; owner: DatasetPrincipal };
 }

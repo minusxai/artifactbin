@@ -1,3 +1,5 @@
+import {newArtifactDestination} from '@/lib/artifacts/ownership';
+import type {ArtifactDestination} from '@artifactbin/contracts';
 import { type ArtifactRow, type Visibility } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { afterCreated, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, type ArtifactInput } from '@/lib/artifacts/store';
@@ -27,6 +29,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
  * re-decide, for instance, whether an anonymous token may go private.
  */
 export interface ForkOverrides {
+  destination?:ArtifactDestination;
   title?: string;
   visibility?: Visibility;
   /** Where the COPY lands, already resolved (lib/folders resolveParent). Absent = the forker's root. */
@@ -82,6 +85,10 @@ export async function forkArtifact(
    * (ownsArtifact reads it first), so the test user owns the copy outright —
    * and erasing it takes the rows, and the parent's count, away again.
    */
+  let destination:ArtifactDestination;
+  try{destination=await newArtifactDestination(owner,overrides.destination,overrides.ancestor_ids?.at(-1));}
+  catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  overrides={...overrides,destination};
   const creator: TokenActor = { tokenId: actor.tokenId, userId: owner.userId };
   /*
    * A FOLDER IS NOT FORKABLE, and the refusal lives HERE so both doors — the
@@ -95,12 +102,13 @@ export async function forkArtifact(
   // A copy is born marked current (lib/dataflow/data-syntax): a retired stored shape is never copied into one.
   const retired = unservable(source);
   if (retired) return retired.response();
-  const copying = await writtenDatasetForkPlan(actor, source, owner);
+  const publicationOwner:TokenActor=destination.type==='group'?{tokenId:creator.tokenId,userId:null,groupId:destination.id}:creator;
+  const copying = await writtenDatasetForkPlan(actor, source, publicationOwner);
   // The page PLUS its dataset copies: one cap, counted against what this call
   // will really create rather than against the page alone.
   if (await artifactQuotaExceeded(actor.tokenId, copying.length + 1)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
   if (copying.length) return deepFork(actor, source, overrides, copying, creator);
-  const input = await forkInput(actor, source, overrides);
+  const input = await forkInput(publicationOwner, source, overrides);
   if (input instanceof Response) return input;
   const row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role, ...(source.format==='dataset'?{datasetPolicy:{policy:source.dataset_policy??null,revision:source.policy_revision??0}}:{}) });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
@@ -169,9 +177,9 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, ow
       plan.push(candidate);continue;
     }
     if(!written.has(use.id))continue;
-    const own = owner.userId ? await getArtifactFor({ userId: owner.userId, tokenId: '' }, use.id) : await getArtifact(owner.tokenId, use.id);
+    const own = owner.groupId || owner.userId ? await getArtifactFor(owner, use.id) : await getArtifact(owner.tokenId, use.id);
     if (own) continue;
-    const row = (owner.userId !== actor.userId ? await getArtifactFor(actor, use.id) : null) ?? await getLinkReadableArtifact(use.id);
+    const row = (owner.groupId || owner.userId !== actor.userId ? await getArtifactFor(actor, use.id) : null) ?? await getLinkReadableArtifact(use.id);
     if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres') continue;
     plan.push(row);
   }
@@ -203,8 +211,9 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
   const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
   const planned = new Map(copies.map((copy) => [copy.id, copy.row]));
-  const loader = refLoaderForActor(actor);
-  const input = await forkInput(actor, source, overrides, {
+  const publicationOwner:TokenActor=overrides.destination?.type==='group'?{tokenId:owner.tokenId,userId:null,groupId:overrides.destination.id}:owner;
+  const loader = refLoaderForActor(publicationOwner);
+  const input = await forkInput(publicationOwner, source, overrides, {
     source: repointRefs(sourceWithoutAnchors(source.source ?? ''), rewrite),
     // A planned copy resolves as the forker's OWN dataset, with the original's
     // columns, access and policy — which is what it will be a moment from now.
@@ -229,6 +238,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
     const datasets: ArtifactRow[] = [];
     for (const copy of copies) {
       datasets.push(await createArtifact(owner.tokenId, owner.userId, {
+        destination:overrides.destination,
         title: copy.row.title,
         description: copy.row.description,
         format: 'dataset',
@@ -288,6 +298,7 @@ async function forkInput(
   // override, the copy lands at the forker's ROOT — the only place they could
   // have filed it without naming a folder of their own.
   const carried = {
+    destination:overrides.destination,
     title: overrides.title ?? source.title,
     description: source.description,
     visibility: overrides.visibility ?? source.visibility,

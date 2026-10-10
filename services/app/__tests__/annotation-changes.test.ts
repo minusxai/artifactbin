@@ -215,3 +215,15 @@ it('bounds total active waits across accounts to 128 per process',async()=>{
  }finally{controllers.forEach(controller=>controller.abort());await Promise.all(polling);spy.mockRestore();}
  expect(live.liveChannelCount()).toBe(0);
 });
+
+it.each(['viewer','editor'] as const)('revokes a group %s ongoing private monitor and checkpoint reads after removal',async role=>{
+ const f=await fixture(),member=await mintAccountToken('group monitor'),db=await getDb();
+ await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES('grp_monitor','monitor','Monitor','',$1)",[f.token.userId]);
+ await db.query('INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2,$3)',['grp_monitor',member.userId,role]);
+ await db.query("UPDATE artifacts SET visibility='private',user_id=NULL,group_id='grp_monitor' WHERE id=$1",[f.doc.id]);
+ const baseline=await f.read('now','wait=0',undefined,f.doc.id,member.token);expect(baseline.status).toBe(200);
+ const cursor=(await baseline.json()).next_cursor;const polling=f.read(cursor,'wait=3',undefined,f.doc.id,member.token);
+ await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));await db.query('DELETE FROM group_members WHERE user_id=$1',[member.userId]);
+ expect((await polling).status).toBe(404);expect(live.liveChannelCount()).toBe(0);
+ expect((await f.read(cursor,'wait=0',undefined,f.doc.id,member.token)).status).toBe(404);
+});

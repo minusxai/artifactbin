@@ -26,6 +26,7 @@ import { canReadArtifact } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
 import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish/publish';
+import {parseArtifactDestination} from '@/lib/artifacts/ownership';
 import { isParentRefusal, resolveParent } from '@/lib/artifacts/placement';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
 import { trackEvent } from '@/lib/platform/analytics';
@@ -208,7 +209,7 @@ const createArtifactOp: Operation = {
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
   description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf | file). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Import name="d" src="ref:<id>" />, <Value> page values, <Query name>{`select … from d.rows`}</Query> in SQLite and <Mutation> writes (connected PostgreSQL is read-only, via <Query source="ref:<id>">), bound in the body by name — <Question data="$q">, <select value="$x" options="$q">, <Button run="$m">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
-  input: { ...CONTENT_FIELDS, forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
+  input: { ...CONTENT_FIELDS, destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
   annotations: {},
   example: {
     input: { title: 'Q3 report', markup: '<div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Q3</h1></div>', theme: 'industry' },
@@ -580,6 +581,7 @@ const forkArtifactOp: Operation = {
     // fork defaults to whatever the source is, which is the one thing about
     // visibility a forker has to know.
     visibility: CONTENT_FIELDS.visibility.describe("read ACL for the COPY: 'public' = anyone with the link, and it lists on your public profile; 'unlisted' = anyone with the link, listed nowhere; 'private' = you plus the emails you share it with (needs a logged-in account). Omit to keep the source's."),
+    destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(),
     parent_id: CONTENT_FIELDS.parent_id.describe("the id of a folder of YOURS to file the COPY under; omit to file it at your root"),
     // THE ONE DOOR INTO THE SANDBOX. A test user cannot reach an account's
     // artifact to fork it — that is the whole point of the kind — so the
@@ -613,7 +615,9 @@ const forkArtifactOp: Operation = {
     // the source's is carried, because it is somebody else's tree.
     const placement = parent === undefined ? undefined : await resolveParent(ctx.actor, parent, null);
     if (placement && isParentRefusal(placement)) return reply(placement, 400);
+    let destination;try{destination=parseArtifactDestination(input.destination);}catch{return reply({error:'invalid_destination'},400);}
     const overrides: ForkOverrides = {
+      ...(destination?{destination}:{}),
       ...(typeof input.title === 'string' ? { title: input.title } : {}),
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
@@ -625,7 +629,7 @@ const forkArtifactOp: Operation = {
     // reaches its own artifact directly, an account reaches whatever it may
     // read. Unreachable and unknown are one answer.
     const viewer = ctx.actor.userId ? { userId: ctx.actor.userId, email: null } : null;
-    if (ctx.actor.tokenId !== source.token_id && !(await canReadArtifact(source, viewer))) {
+    if ((!!source.group_id || ctx.actor.tokenId !== source.token_id) && !(await canReadArtifact(source, viewer))) {
       return reply({ error: 'not_found' }, 404);
     }
 

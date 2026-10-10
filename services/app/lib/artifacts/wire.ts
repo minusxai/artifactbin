@@ -20,7 +20,7 @@ import {catalogOf} from '@/lib/datasets/catalog';
  * shared behaviour is the module, so both paths validate the same fields and
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
-import { DATASET_ACCESS, canReadArtifact, canWriteDataset, type ArtifactRow, type DatasetAccess, type Visibility } from './access';
+import { DATASET_ACCESS, ownsArtifact, canReadArtifact, canWriteDataset, type ArtifactRow, type DatasetAccess, type Visibility } from './access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { SHARE_ROLES, type ShareEntry, type ShareRole } from './share-roles';
 import { getArtifactById, getArtifactFor, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
@@ -172,6 +172,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
   const isDoc = format === 'markup' || format === 'folder';
   return {
     ...rest,
+    owner:row.group_id?{type:'group',id:row.group_id}:{type:'personal'},group_id:row.group_id??null,creator_user_id:row.creator_user_id??null,
     state: content ? artifactState(row) : '',
     format,
     url: `${base}/a/${row.id}`,
@@ -359,6 +360,7 @@ export async function replacedArtifactWire(
 ): Promise<Record<string, unknown>> {
   return {
     ...monitoringGuidance(base,row.id,row.format),
+    owner:row.group_id?{type:'group',id:row.group_id}:{type:'personal'},group_id:row.group_id??null,creator_user_id:row.creator_user_id??null,
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     ...(affected?{affected_dependents:affected.map(dependent=>({id:dependent.id,title:dependent.title}))}:{}),
     // A replace moves the head pointer — hand back the new one so the caller
@@ -526,7 +528,7 @@ async function declaredDatasetMutations(row: ArtifactRow): Promise<Array<{ name:
 /** A document's declared mutation, run by name with its arguments — the bearer twin of the page door. */
 async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Record<string, unknown>, receipt?: MutationReceipt): Promise<Response> {
   const row = await getArtifactById(id);
-  if (!row || row.deleted_at || !(row.token_id === actor.tokenId || (await canReadArtifact(row, actor.userId ? { userId: actor.userId, email: null } : null)))) return json({ error: 'not_found' }, 404);
+  if (!row || row.deleted_at || !(ownsArtifact(row,actor) || (await canReadArtifact(row, actor.userId ? { userId: actor.userId, email: null } : null)))) return json({ error: 'not_found' }, 404);
   const { name, id: _id, ...rest } = body;
   const parsed = parseMutationRequest({ ...rest, mutation: name });
   if (parsed instanceof Response) return json(await parsed.json(), 400);

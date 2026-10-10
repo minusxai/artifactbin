@@ -7,8 +7,9 @@
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
+import {parseArtifactDestination,newArtifactDestination} from '@/lib/artifacts/ownership';
 import { CONTENT_FIELDS } from '@artifactbin/contracts';
-import { canReadArtifact, writerFor, type ArtifactRow, type DatasetAccess, type Visibility } from '@/lib/artifacts/access';
+import { ownsArtifact, canReadArtifact, writerFor, type ArtifactRow, type DatasetAccess, type Visibility } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { applyEditFor, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput } from '@/lib/artifacts/store';
 import { findDependentsFor, refLoaderForActor, rowToResolvedRef } from '@/lib/artifacts/dataflow';
@@ -74,6 +75,7 @@ export async function replaceArtifactWithBody(
   // they could never own. Unreachable is the uniform 404, before any parse.
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
+  if(body.destination!==undefined)return json({error:'ownership_requires_transfer',hint:'Use the transfer endpoint to change owner.'},400);
   if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish content first, then change policy in the dataset YAML without replacing content.'},400);
   // Sharing settings use edit access; filing under an owner's folder still checks placement.
   const owned = body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
@@ -232,6 +234,8 @@ export async function createArtifactFromBody(
   request?: Request,
   options: {dryRun?:boolean} = {},
 ): Promise<Response> {
+  let destination;
+  try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
   if(body.reserved_id!==undefined&&(typeof body.reserved_id!=='string'||!ID_RE.test(body.reserved_id)))return json({error:'invalid_reserved_id'},400);
   if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish the dataset first, pull its YAML, then change its policy.'},400);
   // LINEAGE. A fork is made locally — a draft with the source's identity stripped
@@ -244,7 +248,7 @@ export async function createArtifactFromBody(
     if (typeof body.forked_from !== 'string' || !ID_RE.test(body.forked_from)) return json({ error: 'invalid_metadata', hint: 'forked_from is the id of the artifact this copy came from.' }, 400);
     const source = await getArtifactById(body.forked_from);
     const viewer = actor.userId ? { userId: actor.userId, email: null } : null;
-    if (!source || (actor.tokenId !== source.token_id && !(await canReadArtifact(source, viewer)))) return json({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
+    if (!source || (!ownsArtifact(source,actor) && !(await canReadArtifact(source, viewer)))) return json({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
     forkedFrom = source.id;
   }
   let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup);
@@ -256,12 +260,21 @@ export async function createArtifactFromBody(
   const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
+  const parent = parseParentField(body);
+  if (parent instanceof Response) return parent;
+  // Nothing exists yet to be unreachable, so there is no ordering question
+  // here: the parent is the only row being read, and it must be the caller's
+  // own folder or this is the one refusal.
+  const placement = (await placementFor(actor, parent, null)) ?? { ancestor_ids: [] };
+  if (placement instanceof Response) return placement;
+  try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  const publicationActor:TokenActor=destination.type==='group'?{tokenId:actor.tokenId,userId:null,groupId:destination.id}:actor;
   const sentMarkup=body.markup;
   const prepared = await prepareContentInput(body, {
     normalizeMarkup: source => normalizeNodeIds(source),
     creating: true,
     prepareDataset: (input,objects) => prepareCatalog(input,actor,undefined,objects),
-    loadRef: refLoaderForActor(actor),
+    loadRef: refLoaderForActor(publicationActor),
     overByteQuota: byteQuotaFor(actor.tokenId),
   }, {allowRemoteInputs:!options.dryRun});
   if (prepared instanceof Response) return prepared;
@@ -271,13 +284,7 @@ export async function createArtifactFromBody(
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
   if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
-  const parent = parseParentField(body);
-  if (parent instanceof Response) return parent;
-  // Nothing exists yet to be unreachable, so there is no ordering question
-  // here: the parent is the only row being read, and it must be the caller's
-  // own folder or this is the one refusal.
-  const placement = (await placementFor(actor, parent, null)) ?? { ancestor_ids: [] };
-  if (placement instanceof Response) return placement;
+
 
   if (options.dryRun) return preflightReply(prepared);
 
@@ -292,6 +299,7 @@ export async function createArtifactFromBody(
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
+    destination,
   }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }

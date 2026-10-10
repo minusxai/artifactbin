@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 import type { CommentChangesPage, CommentChangeEvent } from '@artifactbin/contracts';
 import type { TokenActor } from '@/lib/accounts/actors';
-import { annotationScope } from '@/lib/artifacts/access';
+import { commentMonitorScope } from '@/lib/artifacts/access';
 import { getDb } from '@/lib/platform/db';
 import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 
@@ -58,7 +58,7 @@ export async function readCommentChangesFor(actor: TokenActor, id: string, optio
   after: string; limit: number; waitSeconds: number; signal: AbortSignal;
 }): Promise<CommentChangesPage | null> {
   const db = await getDb();
-  const scope = annotationScope(actor);
+  const scope = commentMonitorScope(actor);
   const identity = cursorScope(actor, id);
   let position = options.after === 'now' ? '0' : decode(options.after, identity);
   const authorized = async () => (await db.query(`SELECT id FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id, scope.val])).rows.length > 0;

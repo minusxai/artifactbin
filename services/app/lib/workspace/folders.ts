@@ -3,6 +3,7 @@
  * address. The hierarchy itself (placement, moves, which children a viewer is
  * listed) is lib/artifacts/placement's; this module projects it for app chrome.
  */
+import {getGroupById} from '@/lib/groups';
 import { getDb } from '@/lib/platform/db';
 import { canRead } from '@/lib/artifacts/share-roles';
 import { effectiveRole, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts/access';
@@ -32,6 +33,7 @@ interface FolderCrumb {
 export interface FolderPage {
   id: string;
   title: string | null;
+  group?:{id:string;handle:string;name:string};
   /** Root → parent, and ONLY the ancestors this viewer may read. */
   trail: FolderCrumb[];
   /**
@@ -81,7 +83,8 @@ export async function folderPageFor(
       ...(picked.numbers ? { views: c.views, sparkline: await picked.sparkline(c.id) } : {}),
     });
   }
-  return { ...head, count: { documents, folders }, rows };
+  const group=folder.group_id?await getGroupById(folder.group_id):null;
+  return { ...head,...(group?{group:{id:group.id,handle:group.handle,name:group.name}}:{}), count: { documents, folders }, rows };
 }
 
 /**
@@ -113,7 +116,7 @@ async function folderHeadFor(
   const db = await getDb();
   const actor: RoleActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null, email: viewer?.email ?? null };
   const r = await db.query<Pick<ArtifactRow, 'id' | 'title' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>>(
-    `SELECT id, title, user_id, token_id, visibility, link_role FROM artifacts
+    `SELECT id, title, user_id, group_id, token_id, visibility, link_role FROM artifacts
       WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`,
     [ids],
   );

@@ -8,6 +8,7 @@ export async function GET(request: Request) {
   const actor = await sessionActor(request);
   const user = actor.credential === 'session' && actor.viewer?.userId ? actor.viewer : null;
   const part = new URL(request.url).searchParams.get('part');
+  const groupId=new URL(request.url).searchParams.get('groupId')??undefined;
   if (!user?.userId) {
     if (part === 'insights') return json({ signedIn: false }, 200, { 'Cache-Control': 'no-store' });
     const cookie = actor.heldTokenIds
@@ -23,6 +24,10 @@ export async function GET(request: Request) {
         version: draft.version, updated_at: draft.updated_at, visibility: draft.visibility,
       })),
     }, 200, { 'Cache-Control': 'no-store' });
+  }
+  if(groupId){
+    const core=await accountWorkspaceCoreFor(user.userId,user.email,groupId);
+    return core?json({signedIn:true,accountId:user.userId,...core},200,{'Cache-Control':'no-store'}):json({error:'not_found'},404);
   }
   if (part === 'core' || part === 'insights') {
     return json({ signedIn: true, accountId: user.userId, ...(await (part === 'core'

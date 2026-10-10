@@ -8,15 +8,15 @@ export interface AssetSelection { page: number; query: string; formats: string[]
 const ASSETS_PAGE_SIZE = 50;
 type InventoryRow = Pick<ArtifactSummary, 'id' | 'title' | 'format' | 'version' | 'visibility' | 'ancestor_ids' | 'updated_at'>;
 const COLS = 'id, title, format, version, visibility, ancestor_ids, updated_at';
-const OWNED = `user_id = $1 AND ${LIVE_ARTIFACT_SQL}`;
+const OWNED = `group_id IS NULL AND user_id = $1 AND ${LIVE_ARTIFACT_SQL}`;
 const ASSETS = `${OWNED} AND format NOT IN ('markup', 'folder')`;
 const project = (row: InventoryRow) => ({ ...row, url: `/a/${row.id}` });
 
-export async function workspaceDocumentsFor(userId: string) {
+export async function workspaceDocumentsFor(userId: string, groupId?:string) {
   const db = await getDb();
   const result = await db.query<InventoryRow>(`SELECT ${COLS}
-    FROM artifacts WHERE ${OWNED} AND format IN ('markup', 'folder')
-    ORDER BY updated_at DESC, id DESC LIMIT 1000`, [userId]);
+    FROM artifacts WHERE ${groupId ? 'group_id = $1 AND '+LIVE_ARTIFACT_SQL : OWNED} AND format IN ('markup', 'folder')
+    ORDER BY updated_at DESC, id DESC LIMIT 1000`, [groupId??userId]);
   return result.rows;
 }
 

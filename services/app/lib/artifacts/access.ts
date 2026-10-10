@@ -1,3 +1,4 @@
+import { getGroupRole } from '../groups';
 import { getArtifactById } from './store';
 import type { StoredDocument } from '../document';
 import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
@@ -46,6 +47,8 @@ export interface ArtifactRow {
   token_id: string;
   /** Owner account; NULL until the creating token is claimed. */
   user_id: string | null;
+  group_id?: string | null;
+  creator_user_id?: string | null;
   title: string | null;
   description: string | null;
   format: ArtifactFormat;
@@ -101,7 +104,7 @@ export interface ArtifactRow {
  * bytes leave. Fail closed: an unresolvable session is just a null viewer.
  */
 export async function canReadArtifact(
-  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>,
+  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
   viewer: Viewer,
 ): Promise<boolean> {
   if(row.format==='dataset'||row.format===undefined){
@@ -118,8 +121,9 @@ export async function canReadArtifact(
 }
 
 /** Does this actor OWN the row — pure, the account by user_id, a bare token by token_id. */
-export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: RoleActor): boolean {
-  if (actor.userId && row.user_id) return row.user_id === actor.userId;
+export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: RoleActor): boolean {
+  if (row.group_id) return !!actor.groupId && actor.groupId===row.group_id;
+  if (row.user_id) return !!actor.userId && row.user_id === actor.userId;
   return !!actor.tokenId && row.token_id === actor.tokenId;
 }
 
@@ -127,7 +131,7 @@ export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, act
 const roleActor = (actor: RequestActor): RoleActor => ({ ...actor.viewer, userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId });
 
 /** Does this request's actor OWN the row — pure (ownsArtifact), for the places that need only that. */
-export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: RequestActor): boolean {
+export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: RequestActor): boolean {
   return ownsArtifact(row, roleActor(actor));
 }
 
@@ -138,7 +142,7 @@ export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: R
  * this, so they cannot disagree on who gets the shell; `none` is the miss that
  * every serving path answers as the uniform 404.
  */
-export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>, actor: RequestActor): Promise<ArtifactRole> {
+export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>, actor: RequestActor): Promise<ArtifactRole> {
   return effectiveRole(row, roleActor(actor));
 }
 
@@ -157,17 +161,23 @@ export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | '
  * request would otherwise pay for.
  */
 export async function roleWithoutLink(
-  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'format'>>,
+  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
   actor: RoleActor,
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
+  let groupRole:ArtifactRole='none';
+  if (row.group_id) {
+    const role = await getGroupRole(actor.userId, row.group_id);
+    if(role==='editor')return 'owner';
+    if(role==='viewer')groupRole='viewer';
+  }
   // A NAMED share can never reach a guest or a test user: neither has an email
   // for an invitation to be addressed to, and neither is the kind of identity
   // an account invites. They reach a stranger's document through the LINK or
   // not at all (lib/user-kinds).
-  if (await isLinkOnlyActor(actor.userId)) return 'none';
+  if (await isLinkOnlyActor(actor.userId)) return groupRole;
   if (row.format === 'markup' && hasDocumentEditorAccess(actor)) return 'editor';
-  return namedRoleFor(row, actor);
+  return maxRole(groupRole,await namedRoleFor(row, actor));
 }
 
 /**
@@ -182,7 +192,7 @@ export async function roleWithoutLink(
  *   - the LINK        — what a stranger holding the address gets.
  */
 export async function effectiveRole(
-  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>,
+  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
   actor: RoleActor,
 ): Promise<ArtifactRole> {
   const held = await roleWithoutLink(row, actor);
@@ -322,8 +332,9 @@ async function resolveSharesFor(db: Queryable, artifactId: string, userId: strin
  * trashed rows on purpose (the listing, restore). Every other
  * caller wants `ownerScope`, which is this with the gate composed in.
  */
-export const ownerPredicate = ({ tokenId, userId }: TokenActor): Scope =>
-  userId ? { where: (p) => `user_id = ${p}`, val: userId } : { where: (p) => `token_id = ${p}`, val: tokenId };
+export const groupMemberPredicate = (user:string, role?:'editor', alias='artifacts') => `EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user}${role ? " AND gm.role='editor'" : ''} AND g.deleted_at IS NULL)`;
+export const ownerPredicate = ({ tokenId, userId, groupId }: TokenActor): Scope =>
+  groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'editor')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId };
 
 export const ownerScope = (actor: TokenActor): Scope => live(ownerPredicate(actor));
 
@@ -349,7 +360,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
  */
 const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? live({ where: (p) => `(user_id = ${p} OR (${ACCOUNT_REACH_SQL(p)} AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
+    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');
@@ -365,6 +376,11 @@ export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'ed
  * named editor only one they wrote.
  */
 export const annotationScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'commenter');
+/** Group viewers may observe comment feeds without gaining annotation writes. */
+export const commentMonitorScope = (actor:TokenActor):Scope => {
+ const scope=annotationScope(actor);
+ return actor.userId?{where:p=>`(${scope.where(p)} OR (${LIVE_ARTIFACT_SQL} AND ${groupMemberPredicate(p)}))`,val:scope.val}:scope;
+};
 
 // ── Writable datasets ────────────────────────────────────────────────────────
 
@@ -385,4 +401,4 @@ export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, de
 }
 
 /** The document author's identity resolves its declared data references, never a viewer's write authority. */
-export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'>): TokenActor => ({ tokenId: doc.token_id, userId: doc.user_id });
+export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>): TokenActor => ({ tokenId: doc.token_id, userId: doc.user_id, groupId:doc.group_id ?? null });

@@ -1,6 +1,6 @@
 import { canReadArtifact, canWriteDataset, ownerScope, ownsArtifact, type ArtifactRow, type Scope, type WriteRefusal, writerFor } from './access';
 import type { RoleActor, TokenActor } from '@/lib/accounts/actors';
-import { getArtifact, getArtifactById, getArtifactByUser, getArtifactFor, getLinkReadableArtifact, refLoaderFor, refLoaderForUser } from './store';
+import { getArtifactById, getArtifactFor, getLinkReadableArtifact, refLoaderFor, refLoaderForUser } from './store';
 import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
 import { artifactQuery } from './document';
 import { JOIN_RELATIONS } from '../accounts/relation-state';
@@ -46,6 +46,7 @@ import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
 
 export function refLoaderForActor(actor: TokenActor): ServerRefLoader {
+  if(actor.groupId)return async id=>{const own=await getArtifactFor(actor,id);const row=own??await getLinkReadableArtifact(id);return row?rowToResolvedRef(row,!!own):null;};
   return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId);
 }
 
@@ -326,7 +327,7 @@ export async function dataflowForRow(
       const allowed:string[]=[];
       for(const ref of refs) {
         const id=ref==='current'?row.id:ref.slice(4), scope=await getArtifactById(id);
-        if(scope&&(scope.token_id===viewer?.tokenId||await canReadArtifact(scope,viewer?.userId?{userId:viewer.userId,email:viewer.email??null}:null)))allowed.push(`ref:${id}`);
+        if(scope&&(ownsArtifact(scope,{tokenId:viewer?.tokenId??null,userId:viewer?.userId??null})||await canReadArtifact(scope,viewer?.userId?{userId:viewer.userId,email:viewer.email??null}:null)))allowed.push(`ref:${id}`);
       }
       return {...column,constraints:{...column.constraints,memberOf:allowed}};
     };
@@ -688,7 +689,7 @@ export async function nameablePeople(row: ArtifactRow, viewer: RoleActor | null,
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
 export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id,mode) =>
-  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { userId: actor.userId, tokenId: actor.tokenId },undefined,mode===undefined||mode==='import');
+  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { ...actor },undefined,mode===undefined||mode==='import');
 
 /** The rows of the named imports, resolved; an import that does not resolve is left out, and its readers report the missing table. */
 async function importsFor(flow: CompiledDataflow, names: Iterable<string>, resolve: DatasetResolver): Promise<ImportTables> {
@@ -761,8 +762,7 @@ export async function datasetsForDocument(document: (Pick<ArtifactRow, 'id' | 'v
 export async function referencedArtifactForRow(row: ArtifactRow, id: string): Promise<ArtifactRow | null> {
   const refs = (row.meta as { refs?: Array<{ id: string }> }).refs ?? [];
   if (!refs.some((ref) => ref.id === id)) return null;
-  return (await getArtifact(row.token_id, id))
-    ?? (row.user_id ? await getArtifactByUser(row.user_id, id) : null)
+  return (await getArtifactFor(writerFor(row), id))
     ?? (await getLinkReadableArtifact(id));
 }
 
