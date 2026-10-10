@@ -14,9 +14,7 @@
  *  - a capture never reaches here: a keyed request is compiled.
  */
 import { createEffect, createSignal, onMount, onCleanup, Show, type JSX } from 'solid-js';
-import { canEdit as canEditRole, canGovern, canAnnotate as canAnnotateRole, type ArtifactRole } from '@/lib/artifacts/share-roles';
-import type { Visibility } from '@/lib/artifacts/access';
-import { isStartPlaceholder } from '@artifactbin/contracts';
+import { type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, isStartPlaceholder, type Visibility } from '@artifactbin/contracts';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { displayTitle } from '@/lib/document/display-title';

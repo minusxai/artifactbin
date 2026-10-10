@@ -2,14 +2,11 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
-import { SHARE_ROLES, SHARE_ROLE_LABEL, type ShareEntry, type ShareRole } from '@/lib/artifacts/share-roles';
-import type { DatasetAccess, Visibility } from '@/lib/artifacts/access';
-import type { SharingPatch } from '@/lib/artifacts/sharing';
+import { ARTIFACT_ID_PATTERN, CARD_RENDER_GENERATION, type DatasetAccess, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { artifactEditPath } from '@/lib/http/urls';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { SharingVerdict } from '@/lib/workspace/visibility-icons';
-import { ARTIFACT_ID_PATTERN, CARD_RENDER_GENERATION } from '@artifactbin/contracts';
 import { Tooltip } from '../ui/Tooltip';
 import { SelectMenu } from '../ui/SelectMenu';
 import { sharingIconFor, VISIBILITY_ICON_NODES, type SharingIcon } from '@/lib/workspace/visibility-icons';

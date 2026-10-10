@@ -63,10 +63,8 @@ const ARTIFACTS_ENTRIES = [
   '', 'access', 'after-commit', 'archived-version', 'asset-quota', 'capabilities', 'creation-ledger', 'dataflow', 'dataset-policy/grants',
   'dataset-policy/http', 'document', 'feedback-images', 'file-upload-http', 'identities', 'membership/membership', 'metadata-wire',
   'mutation-operation', 'mutation-receipt', 'notification-authority', 'notification-query', 'notification-runtime', 'placement',
-  'read-access', 'servable', 'share-roles', 'state', 'store', 'wire',
+  'read-access', 'servable', 'state', 'store', 'wire',
 ];
-const ARTIFACTS_BROWSER_IMPORTERS = ['services/app/solid/'];
-const ARTIFACTS_BROWSER_LEAVES = ['sharing'];
 const STORY_RUNTIME_ENTRIES = [
   'authenticated-transport', 'chrome-css', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',
   'page-bindings', 'preview-props', 'reader-mode', 'script-mount', 'slides', 'store', 'story-fragment',
@@ -136,7 +134,7 @@ const ACCOUNTS_BROWSER_LEAVES = ['browser-session', 'chrome-identity', 'profile-
  */
 const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/artifacts': { entries: ARTIFACTS_ENTRIES, browserImporters: ARTIFACTS_BROWSER_IMPORTERS, browserLeaves: ARTIFACTS_BROWSER_LEAVES },
+  'lib/artifacts': { entries: ARTIFACTS_ENTRIES },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/dataflow': { entries: DATAFLOW_ENTRIES, browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES },

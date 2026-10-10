@@ -33,7 +33,7 @@ import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/
 import { SPA_PATHS } from '@/lib/http/app-pages';
 import { ownerUsername, sessionActor } from '@/lib/accounts';
 import { AGENT_COOKIE } from '@/lib/accounts/agent-session';
-import { canEdit } from '@/lib/artifacts';
+import { canEdit } from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/platform';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';

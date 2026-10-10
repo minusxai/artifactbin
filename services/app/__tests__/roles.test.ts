@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
-import { canReadArtifact, createArtifact, effectiveRole, linkRoleOf, updateSharingFor, type ArtifactRow, ROLE_ORDER, atLeast, canAnnotate, canEdit, canGovern, canRead, maxRole, rankOf, shareRolesAtLeast, type ArtifactRole, type ShareRole, type Visibility, artifactQuery, applyEditFor, getSharingFor, ANONYMOUS_CEILING, capRole, parseShareEntries, effectiveRole as roleFor, getArtifactById, SHARE_ROLES, SHARE_ROLE_LABEL, committedHeadsSettled, getVersionFor, roleFor as requestRoleFor, membershipInbox, updateMembershipInbox, changeMembership, membershipState, mentionCandidates, invitePeople } from '@/lib/artifacts';
+import { applyEditFor, artifactQuery, type ArtifactRow, canReadArtifact, changeMembership, committedHeadsSettled, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, linkRoleOf, membershipInbox, membershipState, mentionCandidates, parseShareEntries, roleFor as requestRoleFor, updateMembershipInbox, updateSharingFor } from '@/lib/artifacts';
+import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
 import { claimToken, createUser, setUserEmail, ensureUsername, setRelationState, has, count, linked, link } from '@/lib/accounts';
 import { documentEdit, documentEditBody, documentPublicationBody } from '@/__tests__/prepared-document';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor } from '@/lib/annotations';

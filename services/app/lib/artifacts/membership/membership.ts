@@ -10,7 +10,7 @@ import { getDb } from '@/lib/platform/db';
 import { effectiveRole, type ArtifactRow } from '../access';
 import type { RoleActor } from '@/lib/accounts/actors';
 import { getArtifactById } from '../store';
-import { canAnnotate, canEdit, canRead } from '../share-roles';
+import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 import { can } from '../capabilities';
 
 export class MembershipError extends DatasetError {

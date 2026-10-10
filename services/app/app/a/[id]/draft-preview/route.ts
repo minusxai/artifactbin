@@ -5,7 +5,7 @@ import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { canEdit } from '@/lib/artifacts';
+import { canEdit } from '@artifactbin/contracts';
 import { compileDraft, draftCompileGate } from '@/lib/publish/prepared/draft-compile.server';
 import { refusesCrossSite, requestOrSessionActor } from '@/lib/accounts';
 import { STORY_DESIGN_NAMES, type StoryDesignName } from '@/lib/validation/atlas-schemas';

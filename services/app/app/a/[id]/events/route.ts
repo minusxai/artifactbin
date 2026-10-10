@@ -15,7 +15,7 @@
 import { trackEvent } from '@/lib/platform';
 import { canReadArtifact, datasetsForDocument, getArtifactById, isOwner, roleFor } from '@/lib/artifacts';
 import { isDocumentFormat } from '@/lib/publish/document/input';
-import { canAnnotate } from '@/lib/artifacts';
+import { canAnnotate } from '@artifactbin/contracts';
 import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';

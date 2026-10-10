@@ -3,7 +3,7 @@ import { effectiveRole, type ArtifactRow } from './access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { getArtifactById, getEditableArtifactFor } from './store';
 import {servableDocument} from './servable';
-import {canRead,canEdit,canAnnotate,type ArtifactRole} from './share-roles';
+import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
 import {publicCatalogOf} from '../datasets/catalog';
 
 /** Read access never implies access to the editable governance or connection definition. */

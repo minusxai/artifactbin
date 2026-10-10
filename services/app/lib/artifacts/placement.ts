@@ -14,7 +14,7 @@
  * viewer on the server.
  */
 import { getDb } from '@/lib/platform/db';
-import { canAnnotate, canEdit, canRead } from './share-roles';
+import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 // The hierarchy builds its own statements rather than going through the
 // row-loading seam, so every one of them names the trash gate: a trashed
 // folder is not somewhere to file into, and a trashed child is not listed.

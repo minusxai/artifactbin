@@ -1,4 +1,4 @@
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type Visibility } from './access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type Scope } from './access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
@@ -45,7 +45,7 @@ import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
 import type { ServerRef, ServerRefLoader } from '@/lib/datasets/schema-loader';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import { type ShareEntry, type ShareRole } from './share-roles';
+import { type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read

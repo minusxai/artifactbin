@@ -1,12 +1,12 @@
 import type {DatasetAccessPolicy as DatasetPolicy} from './dataset-grants';
-import type {ShareEntry} from './sharing';
+import type {DatasetAccess,ShareEntry,ShareRole,Visibility} from './sharing';
 
 /** Editable identity and settings shared by JSX fences and typed resource files. */
 export interface ResourceMetadata {
  id?:string;edit_id?:string;head_version?:number;state?:string;version?:number;
  title?:string|null;description?:string|null;theme?:string|null;template?:string|null;
  colorMode?:'light'|'dark'|null;
- visibility?:'private'|'unlisted'|'public';link?:'viewer'|'commenter'|'editor';
+ visibility?:Visibility;link?:ShareRole;
  folder?:string|null;shares?:ShareEntry[];
  /** Lineage recorded by fork; written once at first push and never edited. */
  forked_from?:string|null;
@@ -17,5 +17,5 @@ export type ArtifactResourceFile = ResourceMetadata & (
  | {type:'artifact';source?:string}
  | {type:'folder'}
  | {type:'file';source?:string}
- | {type:'dataset';source?:string;access?:'read'|'readwrite';policy?:DatasetPolicy|null;policy_revision?:number}
+ | {type:'dataset';source?:string;access?:DatasetAccess;policy?:DatasetPolicy|null;policy_revision?:number}
 );

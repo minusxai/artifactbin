@@ -28,7 +28,7 @@
  */
 import type { Capability } from '@artifactbin/contracts';
 import { json } from '../http/http';
-import { canRead, canEdit } from './share-roles';
+import { canRead, canEdit } from '@artifactbin/contracts';
 import { effectiveRole, ownsArtifact, type ArtifactRow } from './access';
 import { getArtifactById } from './store';
 import { userKindOf } from '../accounts/user-kinds';
