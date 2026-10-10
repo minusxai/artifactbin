@@ -287,7 +287,7 @@ describe('module graph', () => {
         'services/app/lib/publish/a.ts': "import { splitHelmet } from '@/lib/document';\nimport { COMPILED_DATAFLOW } from '../document/server';\n",
         'services/app/lib/cli-toolkit/index.ts': "export { splitHelmet } from '../document';\n",
         'services/app/solid/editor/Panel.tsx': "import { splitHelmet } from '@/lib/document/helmet';\n",
-        'services/app/lib/editor-engine/history.ts': "import type { EditRecord } from '../document/splice';\n",
+        'services/app/lib/editor-engine/annotation-map.ts': "import type { AnnotationOperation } from '../document/annotation-edits';\n",
         'services/app/lib/offline/file-backend.ts': "import { declarationsOf } from '../document/helmet';\n",
       })).not.toMatch(refusal);
     });

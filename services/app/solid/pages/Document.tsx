@@ -20,7 +20,7 @@ import type { AnnotationWire } from '@/lib/annotations/store';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
 import { DocumentActions } from '../document/DocumentActions';
 import { CspConsentBar } from '../document/CspConsentBar';
-import type { CspRequest } from '@/lib/document/csp-extensions';
+import type { CspRequest } from '@/lib/document';
 import { AnnotationLayer } from '../document/AnnotationLayer';
 import { SelectionActions } from '../document/SelectionActions';
 import { ForkConfirm } from '../document/ForkArtifact';

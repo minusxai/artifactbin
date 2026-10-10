@@ -9,7 +9,7 @@
  * /api/trust.
  */
 import { createSignal, Show, type JSX } from 'solid-js';
-import type { CspRequest } from '@/lib/document/csp-extensions';
+import type { CspRequest } from '@/lib/document';
 import { DOCUMENT_FRAME_SELECTOR, freshFrameSrc } from './create-framed-story';
 
 /**

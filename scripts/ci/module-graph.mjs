@@ -137,8 +137,10 @@ const DATAFLOW_BROWSER_LEAVES = [
 ];
 /*
  * lib/document: server code enters through its index or `server` (node-only); browser-bundled code
- * imports a listed leaf instead, never the index (browserLeavesOnly), because the island and app
- * bundlers cannot drop the rest of a barrel.
+ * imports values from a listed leaf instead, never the index (browserLeavesOnly), because the island and
+ * app bundlers cannot drop the rest of a barrel. Its types come from the index (erased), except
+ * annotation-edits: re-pointing editor-engine/annotation-map's type import renames esbuild's minified
+ * identifiers in the frame-editor chunks (same raw sizes, different bytes and hashes), so it stays a leaf.
  */
 const DOCUMENT_ENTRIES = ['', 'server'];
 const DOCUMENT_BROWSER_IMPORTERS = [
@@ -154,10 +156,9 @@ const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/lib/offline/snapshot-current.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
-  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'csp-extensions', 'display-title', 'document-authoring-client',
-  'document-graph', 'document-graph-patch', 'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet',
-  'nesting', 'person-mentions', 'pwa-settings', 'query-notebook', 'script-export-location', 'social-preview', 'source-changes', 'splice', 'table-catalog',
-  'title', 'update-parts',
+  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'display-title', 'document-authoring-client', 'document-graph', 'document-graph-patch',
+  'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'person-mentions', 'pwa-settings',
+  'query-notebook', 'script-export-location', 'social-preview', 'source-changes', 'table-catalog', 'title', 'update-parts',
 ];
 /**
  * lib/compiled-page: server code uses its index, or one of the three heavy entries the index must not
