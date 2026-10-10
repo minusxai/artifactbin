@@ -19,7 +19,7 @@ import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/rout
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken } from './harness';
 import { resetRateLimit } from '@/lib/accounts';
-import { MAX_STALE_EDITS } from '@/lib/artifacts';
+import { MAX_STALE_EDITS } from '@/lib/artifacts/store';
 
 const harness = useAppHarness();
 const snapshots=new Map<string,ArtifactRow>();

@@ -1,7 +1,7 @@
 /** The graph writer owns a single artifact lock and one SQL statement for the
  * document, preimage archive, invertible source log, node identities and wakeup. */
 import type {Queryable} from '@artifactbin/contracts';
-import type { ArtifactRow, Scope } from '@/lib/artifacts';
+import type { ArtifactRow, Scope } from '../access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import {hydrateArtifactDocument} from '../document';
 import {graphAdmissionPlan,type GraphAdmission,type GraphAdmissionPlan} from './document-graph-admission';

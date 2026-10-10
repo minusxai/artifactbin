@@ -60,10 +60,9 @@ const ISLANDS_BROWSER_LEAVES = [
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
 const ARTIFACTS_ENTRIES = [
-  '', 'access', 'after-commit', 'archived-version', 'asset-quota', 'capabilities', 'creation-ledger', 'dataflow', 'dataset-policy/grants',
-  'dataset-policy/http', 'document', 'feedback-images', 'file-upload-http', 'identities', 'membership/membership', 'metadata-wire',
-  'mutation-operation', 'mutation-receipt', 'notification-authority', 'notification-query', 'notification-runtime', 'placement',
-  'read-access', 'servable', 'state', 'store', 'wire',
+  '', 'access', 'archived-version', 'asset-quota', 'dataflow', 'dataset-policy/http', 'document', 'feedback-images', 'file-upload-http',
+  'membership/membership', 'mutation-operation', 'mutation-receipt', 'notification-authority', 'notification-query', 'placement',
+  'read-access', 'servable', 'store', 'wire',
 ];
 const STORY_RUNTIME_ENTRIES = [
   'authenticated-transport', 'chrome-css', 'contract', 'dataflow-core', 'edit/annotate', 'edit/selection-actions', 'outline', 'outline-view',

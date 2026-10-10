@@ -1,14 +1,7 @@
 import {hostedAuthorization,hostedRefusal,hostedOperationCompleted} from '@/lib/accounts/request-authority';
-import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/artifacts/mutation-operation';
-import {MembershipError} from '@/lib/artifacts/membership/membership';
-import {refusingUnservable} from '@/lib/artifacts/servable';
-import {grantsOf,grantsPermitWrite} from '@/lib/artifacts/dataset-policy/grants';
+import { adaptMutationOperationReply, canReadArtifact, durableMutation, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, MembershipError, mutationInitiator, normalizeMutationOperation, readableArtifact, refusingUnservable } from '@/lib/artifacts';
 import {tokenActorForRequest} from '@/lib/accounts/viewer';
-import {readableArtifact} from '@/lib/artifacts/read-access';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
-import {durableMutation} from '@/lib/artifacts/mutation-receipt';
-import { getArtifactFor, getArtifactById } from '@/lib/artifacts/store';
-import { canReadArtifact } from '@/lib/artifacts/access';
 import {ownedArtifactState} from '@/lib/workspace/trash';
 import {sessionOwnedBy} from '@/lib/remote/resource';
 /**

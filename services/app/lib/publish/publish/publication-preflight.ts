@@ -1,10 +1,7 @@
 /** Read-only validation against real artifact identities and existing permissions. */
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
-import {updateMetadataFromBody} from '@/lib/artifacts/metadata-wire';
-import {respondToEdit} from '@/lib/artifacts/wire';
+import { applyEditFor, findDependentsFor, getArtifactFor, getOwnedArtifactFor, respondToEdit, updateMetadataFromBody } from '@/lib/artifacts';
 import {createArtifactFromBody,replaceArtifactWithBody} from './requests';
-import { applyEditFor, getArtifactFor, getOwnedArtifactFor } from '@/lib/artifacts/store';
-import { findDependentsFor } from '@/lib/artifacts/dataflow';
 import type { TokenActor } from '@/lib/accounts/actors';
 import {json,baseUrl} from '@/lib/http/http';
 export async function preflightPublication(request:Request,actor:TokenActor,body:Record<string,unknown>):Promise<Response>{

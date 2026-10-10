@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
-import { setArtifactQuotaForTests } from '@/lib/artifacts';
+import { setArtifactQuotaForTests } from '@/lib/artifacts/store';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
