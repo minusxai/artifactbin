@@ -37,7 +37,7 @@ interface FrameBridgeParentOptions {
   /** The framed document's origin: its pages origin, or `'null'` for the sandboxed `/raw` copy (development). */
   frameOrigin: string;
   id: string;
-  /** The version's source nodes (createIslandController `nodes`). */
+  /** The served version's source nodes (createIslandController `nodes`); a saved version sent by `update` replaces them. */
   nodes: JsxNode[];
   /** Read when attaching; later values go out through `setContext`. */
   editId: () => string;
@@ -119,6 +119,11 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   /** The page's bars over the frame's top edge (setTopInset): every new frame controller is told on `ready`. */
   let inset = 0;
   const restoring = new Map<number, { resolve: () => void; reject: (error: unknown) => void }>();
+  /**
+   * The nodes of the newest saved version the page sent (`update` without a source), else the served ones: what a
+   * controller that starts — the first, or one in a document that loaded again — classifies selections against.
+   */
+  let nodes = options.nodes;
 
   const envelope = (payload: FrameBridgeParentPayload) => {
     try { frame.contentWindow?.postMessage({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload }, target); } catch { /* the frame went away */ }
@@ -131,7 +136,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   /** (Re)send this session's attach: the door starts the frame half on the first one and ignores a key it holds. */
   const attach = () => {
     if (attached || closed || !frame.contentWindow) return;
-    envelope({ kind: 'attach', id, nodes: options.nodes, editId: options.editId(), source: options.source() });
+    envelope({ kind: 'attach', id, nodes, editId: options.editId(), source: options.source() });
   };
   const reject = (reason: string) => {
     for (const waiting of restoring.values()) waiting.reject(new Error(`the framed document closed (${reason})`));
@@ -226,7 +231,11 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     get nonce() { return nonce; },
     selectionReady() { /* the frame's controller makes its selection actions itself */ },
     send(command: unknown) { post({ kind: 'send', command }); },
-    update(command: StoryDocumentUpdate) { post({ kind: 'update', command }); },
+    update(command: StoryDocumentUpdate) {
+      // A saved version (no source: neither a draft nor a preview) is what the document shows from now on.
+      if (command.source === undefined && !command.preview) nodes = command.nodes;
+      post({ kind: 'update', command });
+    },
     invalidate(datasets: string[]) { post({ kind: 'send', command: { type: STORY_DATA_MESSAGE, datasets } }); },
     restored() {
       if (closed) return Promise.reject(new Error('the framed document closed'));

@@ -469,6 +469,12 @@ export function createFrameSelectionActions({
     },
     setNodes(next) {
       nodes = next;
+      // A new version drawn in place under an open bubble: what it describes was classified against the last one.
+      // A selection is described again (or the bubble goes, when the version took the words away); a document menu
+      // named a block that may have moved, so it closes.
+      if (!toolbar || toolbar.hidden) return;
+      if (contextOpen) hide();
+      else showForSelection();
     },
     dispose() {
       hide();

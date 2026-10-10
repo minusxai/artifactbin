@@ -441,10 +441,10 @@ async function ownerLeg(browser, { id, token }) {
  * failed check, and the other lane still reports.
  */
 const run = async () => {
-  const [main, quote, md, fold, pick, targets, tableSelection] = await Promise.all([
+  const [main, quote, md, fold, pick, targets, tableSelection, liveSelection] = await Promise.all([
     publish(DOC), publish(QUOTE_DOC), publish(MD_DOC), publish(FOLD_DOC), publish(DOC),
     publish(commentTargetsMarkup, { title: 'Dynamic comment acceptance', visibility: 'unlisted' }),
-    publish(TABLE_SELECTION_DOC),
+    publish(TABLE_SELECTION_DOC), publish(liveSelectionDoc(1)),
   ]);
   const browser = await launchChromium();
   const lane = async (name, legs) => {
@@ -458,7 +458,8 @@ const run = async () => {
       // then the comment that keeps the exact words, then an agent's reply read as markdown
       lane('owner lane', [[ownerLeg, main], [quoteLeg, quote], [markdownLeg, md], [tableSelectionLeg, tableSelection]]),
       // pins that follow declarative items, then a block PICKED and an area drawn
-      lane('pick lane', [[targetsLeg, targets], [pickLeg, pick]]),
+      // then the selection bubble and document menu across live versions
+      lane('pick lane', [[targetsLeg, targets], [pickLeg, pick], [liveSelectionLeg, liveSelection]]),
     ]);
     // a long reply folds; a resolved card reads as resolved
     await lane('fold', [[foldLeg, fold]]);
@@ -568,6 +569,101 @@ async function tableSelectionLeg(browser, { id, token }) {
     await documentLocator(page).locator('#row25-end').waitFor();
     check(await page.locator('[aria-label^="Open annotation conversation by"]').count() === 0,
       'refresh does not restore a resolved countdown marker');
+  } finally { await ctx.close(); }
+}
+
+/**
+ * SELECTION ACTIONS SURVIVE LIVE VERSIONS. The framed document draws a new version itself (its own live stream);
+ * its selection bubble and document menu classify against the version's nodes, which the page's stream brings.
+ * Every version below inserts a block ABOVE the selected paragraph, so every path moves: with the first version's
+ * nodes the bubble never showed and a right-click got the browser's menu. Versions also land while the rail is
+ * open, while the bubble is open, and while the comment composer is open.
+ */
+const liveSelectionDoc = (n) => '<Helmet><title>Live selection</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + Array.from({ length: n - 1 }, (_, i) => `<p id="inserted-${n - i}">Inserted by version ${n - i}.</p>`).join('')
+  + '<h1 id="live-heading">Selection across versions</h1>'
+  + '<p id="live-intro">Words to select before and after every version.</p>'
+  + '<details id="live-fold"><summary>A collapsible section</summary><p id="live-folded">Folded words.</p></details>'
+  + '<table id="live-table"><tbody><tr><td id="live-cell">24</td><td>Deploy npm race</td></tr></tbody></table></div>';
+
+async function liveSelectionLeg(browser, { id, token }) {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  try {
+    await becomeOwner(page, BASE, token);
+    await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    const frame = documentLocator(page);
+    await frame.locator('#live-intro').waitFor();
+    const raw = await documentFrame(page);
+    const commentButton = frame.getByRole('button', { name: 'Comment on selected text', exact: true });
+    const select = () => raw.evaluate(() => {
+      const text = document.querySelector('#live-intro').firstChild;
+      const range = document.createRange();
+      range.setStart(text, 0); range.setEnd(text, 'Words to select'.length);
+      const selection = window.getSelection();
+      selection.removeAllRanges(); selection.addRange(range);
+      document.querySelector('#live-intro').dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    });
+    /** Select the words until the bubble offers Comment (the version's nodes may still be on their way). */
+    const bubble = () => until(async () => { await select(); return commentButton.isVisible(); }, (shown) => shown === true, 10000);
+    const rightClickPrevented = async () => {
+      await raw.evaluate(() => window.addEventListener('contextmenu', (event) => {
+        window.__gateLiveMenuPrevented = event.defaultPrevented;
+      }, { once: true }));
+      // On the selected words themselves: a right-click elsewhere is a menu for another place.
+      await frame.locator('#live-intro').click({ button: 'right', position: { x: 4, y: 6 } });
+      return raw.evaluate(() => window.__gateLiveMenuPrevented === true);
+    };
+    const shown = () => raw.evaluate(() => document.body.getAttribute('data-mx-live-edit'));
+    const write = async (n) => {
+      const before = await shown();
+      const put = await fetch(`${BASE}/api/artifacts/${id}`, {
+        method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markup: liveSelectionDoc(n) }),
+      });
+      if (!put.ok) throw new Error(`version ${n} failed (${put.status}): ${await put.text()}`);
+      await until(shown, (now) => !!now && now !== before, 15000);
+      await frame.locator(`#inserted-${n}`).waitFor();
+    };
+
+    check(await bubble(), 'live selection: the bubble offers Comment before any new version');
+    check(await rightClickPrevented(), 'live selection: right-click on selected text keeps the document menu before any new version');
+
+    await write(2);
+    check(await bubble(), 'live selection: after a live version moved every path, selecting text shows the bubble');
+    check(await rightClickPrevented(), 'live selection: after a live version, right-click on selected text keeps the document menu, not the native one');
+    check(await commentButton.isVisible(), 'live selection: the document menu on selected text offers Comment after a live version');
+
+    await page.locator(COMMENT_GLYPH).click();
+    await page.getByLabel('Close comments', { exact: true }).waitFor();
+    await write(3);
+    check(await bubble() && await rightClickPrevented(), 'live selection: a version that lands with the rail open leaves the bubble and the document menu working');
+    await page.getByLabel('Close comments', { exact: true }).click();
+
+    // A version lands while the bubble is open: its Comment names the paragraph where it is now, with the same words.
+    check(await bubble(), 'live selection: the bubble is open before the next version');
+    await write(4);
+    await until(() => commentButton.isVisible(), (visible) => visible === true, 5000);
+    await commentButton.click();
+    await page.getByLabel('Annotation comment', { exact: true }).fill('Still the same words');
+    await page.getByLabel('Save annotation', { exact: true }).click();
+    await page.getByRole('dialog', { name: 'Annotation composer' }).waitFor({ state: 'hidden' });
+    const saved = await until(async () => {
+      const response = await fetch(`${BASE}/api/artifacts/${id}/annotations`, { headers: { Authorization: `Bearer ${token}` } });
+      return (await response.json()).annotations;
+    }, (rows) => rows?.length === 1, 10000);
+    const annotation = saved?.[0];
+    check(annotation?.quote === 'Words to select' && annotation?.orphaned === false && JSON.stringify(annotation?.anchor ?? null).includes('live-intro'),
+      `live selection: a comment from a bubble opened before the version anchors to the moved paragraph with its words (${JSON.stringify(annotation?.anchor ?? null)})`);
+
+    // A version lands while the composer is open: cancelled, the next selection still gets the bubble and the menu.
+    await bubble();
+    await commentButton.click();
+    await page.getByLabel('Annotation comment', { exact: true }).waitFor();
+    await write(5);
+    await page.getByLabel('Cancel annotation', { exact: true }).click();
+    check(await bubble() && await rightClickPrevented(), 'live selection: a version that lands with the composer open leaves the bubble and the document menu working');
   } finally { await ctx.close(); }
 }
 

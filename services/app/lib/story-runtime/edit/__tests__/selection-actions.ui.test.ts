@@ -728,3 +728,64 @@ it('keeps unkeyed repeat text feedback on the owner without a positional text ra
  expect(onAction).toHaveBeenCalledWith('annotate',expect.objectContaining({nodeId:'orders',tag:'For',quote:'Alice'}));
  expect(onAction.mock.calls[0][1].range).toBeUndefined();
 });
+
+describe('a new version drawn in place under the selection actions', () => {
+  // v1: the paragraph is the body's only node. v2 inserts one above it, so every path shifts by one.
+  const v1 = parseJsxOrThrow('<p id="lede">select these words</p>');
+  const v2 = parseJsxOrThrow('<h2 id="added">Inserted</h2><p id="lede">select these words</p>');
+  /**
+   * What the morph leaves on screen, done as the morph does it — in place: the paragraph (same id) and its words
+   * are kept, a heading is inserted above it, and the paragraph is re-stamped with its v2 path.
+   */
+  const drawV2 = () => {
+    const p = document.querySelector('p')!;
+    const heading = document.createElement('h2');
+    heading.setAttribute('data-mx-ast', '0');
+    heading.setAttribute('data-mx-source-node-id', 'added');
+    heading.textContent = 'Inserted';
+    p.before(heading);
+    p.setAttribute('data-mx-ast', '1');
+  };
+  beforeEach(() => {
+    document.body.innerHTML = '<p data-mx-ast="0" data-mx-source-node-id="lede">select these words</p>';
+    actions.setNodes(v1.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+  });
+
+  it('offers the bubble and the document menu again once the version\'s nodes arrive', async () => {
+    drawV2();
+    // The precondition the page must not leave in place: classified against the FIRST version's nodes, the new
+    // DOM describes nothing — no bubble, and a right-click falls through to the browser's own menu.
+    await selectText();
+    expect(bubbleVisible()).toBe(false);
+
+    actions.setNodes(v2.nodes);
+    await selectText();
+    expect(bubbleVisible()).toBe(true);
+    const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 90 });
+    document.querySelector('p')!.dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(true);
+    document.querySelector<HTMLButtonElement>('[aria-label="Comment on selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('annotate', expect.objectContaining({ path: '1', nodeId: 'lede' }));
+  });
+
+  it('re-describes a bubble that was open when the version arrived, so its action names the node where it is now', async () => {
+    await selectText();
+    expect(bubbleVisible()).toBe(true);
+    drawV2();
+    actions.setNodes(v2.nodes);
+    expect(bubbleVisible()).toBe(true);
+    document.querySelector<HTMLButtonElement>('[aria-label="Edit selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('edit', expect.objectContaining({ path: '1', nodeId: 'lede' }));
+  });
+
+  it('closes an open document menu when the version arrives: the block it named may have moved', async () => {
+    const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 90 });
+    document.querySelector('p')!.dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(true);
+    expect(bubbleVisible()).toBe(true);
+    drawV2();
+    actions.setNodes(v2.nodes);
+    expect(bubbleVisible()).toBe(false);
+  });
+});

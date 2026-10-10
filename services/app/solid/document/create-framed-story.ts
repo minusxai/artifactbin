@@ -16,7 +16,7 @@ import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-
 import type { JsxNode } from '@/lib/jsx/types';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
-import type { IslandStoryController } from '@/lib/story-runtime/contract';
+import { STORY_DOCUMENT_MESSAGE, type IslandStoryController } from '@/lib/story-runtime/contract';
 
 /** The served frame a consent grant reloads (brief C's CspConsentBar) and the bridge attaches to. */
 export const DOCUMENT_FRAME_SELECTOR = 'iframe[data-mx-document-frame]';
@@ -65,6 +65,14 @@ interface FramedStoryOptions {
   /** The head pointer drafts are previewed against, and the source the editor opened on (read live; sent on change). */
   editId: () => string;
   source: () => string | null;
+  /**
+   * The newest saved version the page's own stream delivered (createLiveArtifact's frame), and whether the page is
+   * reading. The framed document draws that version itself, from its own stream; only its NODES — which comments,
+   * the selection bubble and the document menu are classified against — come from here. Without them every path
+   * the new version moved describes the first version's node, and the document's selection actions fall silent.
+   */
+  version?: Accessor<{ editId: string; nodes?: JsxNode[] } | null>;
+  reading?: Accessor<boolean>;
 }
 
 export interface FramedStory {
@@ -90,6 +98,14 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   });
   setCurrent(bridge);
   createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
+  // Each saved version once, while reading: the editor's drafts (and Done's return to reading) draw their own.
+  let forwarded: string | null = null;
+  createEffect(() => {
+    const version = options.version?.();
+    if (!version?.nodes || !(options.reading?.() ?? true) || version.editId === forwarded) return;
+    forwarded = version.editId;
+    bridge.update({ type: STORY_DOCUMENT_MESSAGE, nodes: version.nodes });
+  });
   onCleanup(() => {
     setCurrent(null);
     setNonce(null);
