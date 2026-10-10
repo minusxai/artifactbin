@@ -462,3 +462,12 @@ describe('lifecycle', () => {
     expect((await artifactQuery(db,'SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
   });
 });
+
+
+it('single-artifact create and read teach the same deployment-scoped comment monitor',async()=>{
+ const t=await mintToken('agent');
+ const res=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:DOC}}));expect(res.status).toBe(201);
+ const made=await res.json();
+ expect(made.monitoring).toMatchObject({guide:expect.stringContaining('/llms/monitoring'),http:expect.stringContaining(`/api/artifacts/${made.id}/annotations/changes`),cli:expect.stringContaining(`afbin watch `)});
+ const read=await getArtifactRoute(request(`/api/artifacts/${made.id}`,{token:t.token}),params({id:made.id}));expect(read.status).toBe(200);expect((await read.json()).monitoring).toEqual(made.monitoring);
+});

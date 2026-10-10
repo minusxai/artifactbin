@@ -34,17 +34,13 @@ export function json(body: unknown, status = 200, headers: Record<string, string
   });
 }
 
-/**
- * The uniform bearer/browser refusal. There is no token door to point at: afbin authenticates itself
- * the first time it needs the server, so the agent's move is simply to retry the command. `guide` is
- * the one-pager for an agent that has nothing installed yet.
- */
+/** Shared refusal: keep HTTP clients on their credential flow; installed CLI remains optional. */
 export function unauthorized(request: Request): Response {
   const base = baseUrl(request);
   return json(
     {
       error: 'unauthorized',
-      help: `Retry through afbin: afbin auth --server ${base}. If \`afbin\` is not installed, run \`npx --yes @afbin/cli@latest setup\` once (Windows PowerShell: \`npx.cmd --yes @afbin/cli@latest setup\`); it installs the \`afbin\` command and the agent skills.`,
+      help: `Use saved credentials for ${base}; refresh an expired access token before signing in again. HTTP authentication: ${base}/llms/http-auth (no CLI installation required). Already using afbin? Run afbin auth --server ${base}.`,
       guide: `${base}/llms.txt`,
     },
     401,

@@ -7,7 +7,7 @@ import {installSkills,type SkillHarness,type SkillInstallation} from './skill-in
 /** Foreground progress events; npm does the download, so only the release and install stages are drawn. */
 export type UpdateProgress={stage:'release';current:string;available:string}|{stage:'install';version:string;recovered:boolean};
 interface UpdateOptions {
- home:string;server:string;env?:NodeJS.ProcessEnv;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;npm?:NpmRunner;
+ home:string;cwd?:string;takeover?:boolean;server:string;env?:NodeJS.ProcessEnv;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;npm?:NpmRunner;
  chooseHarnesses?:()=>Promise<SkillHarness[]>;report?:(event:UpdateProgress)=>void;platform?:string;
 }
 type UpdateResult=
@@ -37,6 +37,6 @@ export async function updateCli(options:UpdateOptions):Promise<UpdateResult>{
  const installed=await globalInstall({version:target,home:options.home,env:options.env??process.env,...(options.platform?{platform:options.platform}:{}),...(options.npm?{npm:options.npm}:{})});
  if(installed.status==='failed')throw new CliError('update_failed',`npm could not install @afbin/cli@${target}: ${installed.reason??'unknown failure'}`,'npx --yes @afbin/cli@latest setup',undefined,1);
  const harnesses=options.chooseHarnesses?await options.chooseHarnesses():options.harnesses;
- const skills=await installSkills(harnesses,{home:options.home,...(options.env?{env:options.env}:{}),origin:options.server});
+ const skills=await installSkills(harnesses,{home:options.home,cwd:options.cwd,takeover:options.takeover,...(options.env?{env:options.env}:{}),origin:options.server});
  return {version:target,current:CLI_VERSION,installed,installations:skills.installations,harnesses:skills.harnesses};
 }

@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {HttpClient,httpStatus} from '../src/http';
 import {createServer} from 'node:http';
 import {CliError} from '../src/errors';
-import {loadConnection} from '../src/config';
+import {loadConnection,saveConnection} from '../src/config';
 import {CLI_VERSION} from '../src/version';
 
 test('ordinary writes use one conditional request, and actual 401 refreshes once without a validation GET',async()=>{
@@ -131,4 +131,17 @@ test('object details with a message (a script refusal with line and column) are 
   assert.ok(error instanceof CliError);assert.equal(error.message,'invalid_script: line 10:40: Unexpected token; plain');
   return true;
  });
+});
+
+test('temporary refresh failures keep the grant and never open reauthentication',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'mxmx_test_transient_refresh-'));
+ const connection={server:'https://example.com',token:'mxmx_test_expired',refreshToken:'mxmx_test_durable_grant',clientId:'mxmx_test_client'};
+ try{
+  await saveConnection(connection,home,{});
+  for(const status of[429,500,200,0]){
+   let signIns=0;const client=new HttpClient({connection,home,env:{},authenticate:async()=>{signIns++;return connection;},fetch:async input=>{if(new URL(String(input)).pathname!=='/oauth/token')return Response.json({error:'unauthorized'},{status:401});if(status===0)throw new Error('offline');return Response.json({error:'temporarily_unavailable'},{status});}});
+   await assert.rejects(client.request('/artifacts'),(error:unknown)=>error instanceof CliError&&error.code==='refresh_unavailable');
+   assert.equal(signIns,0);assert.deepEqual(await loadConnection(connection.server,home,{}),connection);
+  }
+ }finally{await rm(home,{recursive:true,force:true});}
 });

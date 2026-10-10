@@ -18,7 +18,7 @@ export const AGENT_HELP_TITLE='Agents: create, edit, or operate artifacts with t
 const origin=(base:string)=>base.replace(/\/$/,'');
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=origin(base);
- return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`};
+ return {url:`${o}/llms.txt`,instruction:`Use an installed afbin CLI, otherwise HTTP: reuse the artifactbin skill or read ${o}/llms.txt; optional skill ZIP: ${o}/skills/artifactbin.zip. CLI setup when requested: npx --yes @afbin/cli@latest setup --server ${JSON.stringify(o)} (Windows: npx.cmd). Authenticate as the recipient with artifact access. Local/offline editing needs no remote API.`};
 }
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="${escapeHtml(help.instruction)}">`;

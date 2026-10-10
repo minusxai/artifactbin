@@ -1,8 +1,8 @@
 ---
-title: HTTP document graph contract
+name: http-document-graph
 description: Exact graph update fields, stable node identity and observed concurrency guards for direct HTTP clients.
 ---
-## Document graph wire contract
+## Read first
 
 Read `GET /api/artifacts/<id>` before editing. Read its `markup` source and keep its `document` (schema 3 graph), `version` and `edit_id`; source alone does not contain the concurrency/identity facts. `document.nodes` is keyed by opaque graph keys; `$root` owns the ordered top-level `children`. Each node has an encoded own `ast`, ordered child graph keys and `parts` interleaved around the children. Its own `units`/`partUnits` count UTF-16 code units; `bytes` counts UTF-8 bytes. `subtreeUnits` includes descendants. `selfVersion`, `childrenVersion` and `subtreeVersion` are revision facets. `selectors` contains facts such as `id:message`; `claimedIds` remembers every body-element ID ever claimed, including retired IDs. Do not reuse retired IDs for different elements.
 

@@ -4,6 +4,7 @@ import teaching from './generated/teaching.json';
 import {STORY_TEMPLATE_NAMES} from '../../app/lib/cli-toolkit';
 import {commands,commandHelp,CliError} from './commands';
 import {manPage} from './man';
+import {diagnosticsHelp} from './diagnostics';
 import {atomicWrite,isMissing} from './files';
 import {teachingFilesFor,withTeachingOrigin} from './teaching-origin';
 import {DEFAULT_SERVER} from './config';
@@ -101,6 +102,8 @@ function helpBody(topic:string|undefined,format:string,origin:string):string{
   if(format==='man')return manPage();
   return format==='markdown'?commandsMarkdown():commandHelp();
  }
+ // Registry recovery remains exact; the portable folder shares concise task rules.
+ if(topic==='errors')return helpTopics.errors+'\n'+diagnosticsHelp();
  // The agent brief by name, for a terminal whose bare `afbin help` shows the human overview instead.
  if(topic==='brief'){
   if(format==='man')throw new CliError('unsupported_format','The manual documents commands, not the brief.','Read it with --format text or markdown.');

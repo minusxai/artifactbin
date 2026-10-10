@@ -9,7 +9,7 @@ import {resourceContent} from './resource-file';
 interface Diagnostic {code:string;message:string;fix?:string;start?:number;end?:number;line?:number;column?:number;severity?:'error'|'notice'}
 /** 1-based file line and column of a character offset, so a diagnostic can be opened without counting characters. */
 const locate=(text:string,offset:number)=>{const before=text.slice(0,offset);const line=(before.match(/\n/g)??[]).length+1;return{line,column:offset-(before.lastIndexOf('\n')+1)+1};};
-export async function validateFiles(workspace:Workspace,paths?:string[],fix=false,options:{skipMissingTracked?:boolean}={}){
+export async function validateFiles(workspace:Workspace,paths?:string[],fix=false,options:{skipMissingTracked?:boolean;/** False collects original-source diagnostics without automatic syntax repair. */repairSyntax?:boolean}={}){
  const files:Array<{path:string;valid:boolean;fixed:boolean;diagnostics:Diagnostic[]}>=[];
  for(const file of await inspectWorkspace(workspace,paths)){
   if(options.skipMissingTracked&&!file.bytes&&file.tracked)continue;
@@ -26,7 +26,7 @@ export async function validateFiles(workspace:Workspace,paths?:string[],fix=fals
     // A brace count the grammar can prove is REPAIRED, not refused: the file is rewritten so it matches
     // what push sends, and the repair is reported as a notice. 15 tasks spent 82 model calls on one
     // `}`; the publish door applies the same repair (lib/jsx/repair).
-    if(checked.errors.some(error=>error.message.startsWith('JSX syntax error'))){
+    if(options.repairSyntax!==false&&checked.errors.some(error=>error.message.startsWith('JSX syntax error'))){
      const repaired=repairJsxSource(body);
      if(repaired){
       const again=validateMarkupStructure(repaired.source);

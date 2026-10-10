@@ -146,8 +146,8 @@ interface AnnotationRowDb {
   view_state: CommentViewState | null;
 }
 
-const scopedRow = async (q: Queryable, scope: Scope, id: string): Promise<ArtifactRow | null> => {
-  const r = await artifactQuery<ArtifactRow>(q,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
+const scopedRow = async (q: Queryable, scope: Scope, id: string, lock = false): Promise<ArtifactRow | null> => {
+  const r = await artifactQuery<ArtifactRow>(q,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}${lock ? ' FOR UPDATE' : ''}`, [id, scope.val]);
   return r.rows[0] ?? null;
 };
 
@@ -476,7 +476,8 @@ export async function actOnAnnotationFor(
    * once the transaction has resolved.
    */
   const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean; wire?:AnnotationWire } | null> => {
-    const row = await scopedRow(tx, scope, artifactId);
+    // Artifact → thread order matches root creation and serializes seq allocation through commit.
+    const row = await scopedRow(tx, scope, artifactId, true);
     if (!row) return null;
     const found = await tx.query<AnnotationRowDb>(
       `SELECT * FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
@@ -551,7 +552,8 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
   const owner = canGovern(await effectiveRole(reached, actor));
 
   const cleanup = await db.transaction(async (tx): Promise<{ anchorKey: string | null } | null> => {
-    const row = await scopedRow(tx, scope, artifactId);
+    // Artifact → thread order matches root creation and serializes seq allocation through commit.
+    const row = await scopedRow(tx, scope, artifactId, true);
     if (!row) return null;
     const target = await tx.query<{ id: string; root_id: string | null }>(
       `SELECT id, root_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND ${LIVE_ANNOTATION_SQL}`,

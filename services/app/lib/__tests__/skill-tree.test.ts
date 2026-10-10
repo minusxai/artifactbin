@@ -215,6 +215,18 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
     for (const t of STORY_THEMES) expect(tree.get(`artifactbin/references/themes-${t.name}.md`)).toBeUndefined();
     for (const t of STORY_TEMPLATES) expect(tree.get(`artifactbin/references/templates-${t.name}.md`)?.name).toBe(`templates-${t.name}`);
   });
+  it('selects installed CLI or HTTP without prompting an unnecessary installation, and preserves the returned fence',()=>{
+    const brief=buildQuickSheet(BASE);
+    expect(brief).toContain('already installed runnable CLI');
+    expect(brief).toContain('otherwise use');
+    expect(brief).toContain('Install CLI only');
+    expect(brief).not.toContain('CLI chosen and');
+    for(const text of [brief,render(tree.get('artifactbin/references/publishing.md')!)]){
+      expect(text).toContain('exactly the identity fields returned');
+      expect(text).toContain('never add `version`');
+      expect(text).toContain('optional historical selection');
+    }
+  });
   it('uses the CLI-owned root within its budget',()=>{
     const sheet=buildQuickSheet(BASE);expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);expect(sheet).toContain('afbin push');
   });

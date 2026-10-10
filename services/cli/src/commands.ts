@@ -6,6 +6,7 @@ export {CliError} from './errors.js';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ comments:{description:'Follow new human comments and replies.'},
  'idempotency-key':{value:'KEY',description:'Reuse this upload identity to recover a confirmed file without creating another.'},
  account:{value:'ACCOUNT',description:'Explicit workspace rebind target: current authenticated account only.'},
  artifact:{value:'ID',description:'Published live artifact ID for a schedule, including program artifacts.'},
@@ -46,7 +47,7 @@ export const flags: Record<string,Flag> = {
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
  for:{value:'TEMPLATE',description:'Print every reference a document of this template needs, in reading order, as one output.'},
  version:{description:'Show the installed CLI version.'},
- help:{short:'h',description:'Show local command help.'}, json:{description:'Write one JSON document to stdout; diagnostics go to stderr.'},
+ help:{short:'h',description:'Show local command help.'}, json:{description:'Write JSON to stdout (watch: NDJSON); diagnostics go to stderr.'},
  server:{value:'URL',description:'Use this server origin for this command.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; never bypass authentication.'},
  'dry-run':{short:'n',description:'Validate the operation without changing local or remote state.'},force:{short:'f',description:'Overwrite local changes on pull, or observe and conditionally replace a stale head on push. On delete, allow referenced assets. On auth, sign in again through the browser even when the saved token is valid.'},
  remote:{description:'Fetch current remote state; comparison still runs locally.'},fix:{description:'Apply mechanical local fixes. Push never fixes source.'},
@@ -55,6 +56,7 @@ export const flags: Record<string,Flag> = {
  limit:{value:'N',description:'Maximum results in this page (1–100).'},cursor:{value:'CURSOR',description:'Continue from a returned next_cursor.'},
  after:{value:'SEQUENCE',description:'Read run events after this sequence (default 0).'},
  input:{value:'PATH',description:'Read command input from a local file; use - for stdin. Schedule commands take inline JSON instead.'},
+ takeover:{description:'Replace an existing external or edited skill with a CLI-managed copy after backing up its current files.'},
  'no-global':{description:'Install agent skills only; do not install the afbin command globally through npm.'},
  agent:{value:'NAME',description:'Identify the agent posting or replying (for example codex, claude-code, pi). Custom names are accepted; optional.'},
  harness:{value:'NAME',repeat:true,description:'Select a skill installation target: claude, codex, pi, opencode; repeat to select several, or use none.'},
@@ -83,6 +85,7 @@ const FORMATS:Record<string,readonly string[]>={
 export const globalFlags=['help','version','json','server','yes'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
+ {name:'watch',usage:'<url|id> --comments --json',description:'Follow new human comments and replies as NDJSON until cancelled; --cursor resumes an explicit checkpoint.',min:1,max:1,flags:['comments','cursor'],examples:['afbin watch abc123 --comments --json']},
  {name:'upload',usage:'<file> --in <document> --name <import>',description:'Upload one attachment to a declared dataset import; returns its file reference without changing rows.',min:1,max:1,flags:['in','name','idempotency-key'],examples:['afbin upload receipt.pdf --in abc123 --name expenses --json']},
  {name:'workspace',usage:'rebind --account current',description:'Explicitly rebind local workspace ownership; preserves content and remote permission checks.',min:1,max:1,flags:['account','dry-run'],examples:['afbin workspace rebind --account current --dry-run','afbin workspace rebind --account current']},
  {name:'add',usage:'<path> [<path> ...]',description:'Assign stable account-scoped identities to local files without publishing.',min:1,max:Infinity,flags:[],examples:['afbin add sales.csv report.jsx --json']},
@@ -106,9 +109,9 @@ export const commands: Command[] = [
  {name:'serve',description:'Run a persistent authenticated server in the foreground.',usage:'[--dir <path>] [--config <path>] [--port <port>] [--db-url <url>]',min:0,max:0,flags:['config','dir','db-url','port'],examples:['afbin serve --dir ~/team-artifacts --port 7445','afbin serve --dir ~/team-artifacts --db-url postgres://localhost/artifactbin']},
  {name:'config',usage:'get <key> | set <key> <value>',description:'Read or change client defaults without starting a server.',min:2,max:3,flags:[],examples:['afbin config set host http://app.lvh.me:7445','afbin config get host']},
  {name:'auth',usage:'[<artifact>]',description:'Sign in through browser approval, or use --email when a browser is unavailable.',min:0,max:1,flags:['email','otp','force'],examples:['afbin auth','afbin auth --force','afbin auth --email you@example.com','afbin auth --email you@example.com --otp 123456']},
- {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in. Set ARTIFACTBIN_SKILLS=off in the environment to install no skill at all and leave every harness folder untouched \u2014 what a checkout\u2019s development loop (npm run afbin) runs under.',min:0,max:0,flags:['harness','service','no-global'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
+ {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in. Set ARTIFACTBIN_SKILLS=off in the environment to install no skill at all and leave every harness folder untouched \u2014 what a checkout\u2019s development loop (npm run afbin) runs under.',min:0,max:0,flags:['harness','service','no-global','takeover'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
 
- {name:'update',usage:'',description:'Install the latest afbin through npm and refresh agent skills.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
+ {name:'update',usage:'',description:'Install the latest afbin through npm and refresh agent skills.',min:0,max:0,flags:['harness','dry-run','takeover'],examples:['afbin update --yes --json']},
  {name:'schedule',usage:'create | list | get|update|pause|resume|delete|run|history <schedule-id>',description:'Schedule a live artifact with cron and timezone; inspect history or run it now. Each attempt executes the current published head.',min:1,max:2,flags:['artifact','cron','timezone','input','max-attempts','retry-backoff','request'],examples:["afbin schedule create --artifact abc123 --cron '0 9 * * *' --timezone Asia/Kolkata --input '{\"region\":\"east\"}' --json",'afbin schedule list --json','afbin schedule pause sch_123 --json','afbin schedule run sch_123 --json','afbin schedule history sch_123 --json']},
  {name:'runs',usage:'start <artifact> | status|events|cancel <run-id>',description:'Execute a published Lambda artifact and inspect its output, receipt and events. Read afbin help lambdas.',min:2,max:2,flags:['input','request','after','limit'],examples:['afbin runs start abc123 --request weekly-1 --input input.json --json','afbin runs status run_123 --json','afbin runs events run_123 --after 0 --json','afbin runs cancel run_123 --json']},
  {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution','as'],examples:['afbin sessions script new --input actions.js --json','afbin sessions script new --as guest --input actions.js --json','afbin sessions script new --as tu_9fA2b --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},

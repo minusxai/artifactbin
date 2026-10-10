@@ -202,17 +202,16 @@ describe('public serving', () => {
 });
 
 describe('CLI and HTTP discovery',()=>{
- it('serves a compact overview under 2 KB followed by full email HTTP authoring instructions',async()=>{
+ it('serves the shared skill root within its budget and links the HTTP task references',async()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
-  expect(text.split('\n')[0]).toMatch(/^artifactbin: .*npm CLI or direct HTTP API\.$/);
-  expect(text).toContain('http://localhost:3000/getting-started.md');expect(text).toContain('http://localhost:3000/a/<id>');
+  expect(text).toMatch(/^## Read first/);
+  expect(text).toContain('http://localhost:3000/getting-started.md');
   expect(text).toContain('afbin help');expect(text).not.toMatch(/@afbin\/cli@latest|ensure-node|releases\/download|npm install/);
-  // MCP and /docs/ on this text are retired-surfaces.test.ts's row for the one-pager.
-  expect(Buffer.byteLength(text.split('## Direct HTTP API')[0]!)).toBeLessThan(2048);
-  expect(text).toContain('/api/authentication/token');
-  expect(text).toContain('/api/browser-sessions');
-  expect(text).toContain('function buildPlainTextUpdate');
-  expect(text).toContain('CLI and HTTP authentication require email');
+  expect(Buffer.byteLength(text)).toBeLessThanOrEqual(8192);
+  for(const topic of ['http-api','http-auth','http-authoring','http-document-graph','live-sessions'])
+    expect(text).toContain(`http://localhost:3000/llms/${topic}`);
+  expect(text).toContain('## Example');expect(text).toContain('## Read next');
+  expect(text).not.toContain('## Direct HTTP API');
  });
 });

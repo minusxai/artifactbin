@@ -145,3 +145,11 @@ it('routes the script\'s solid-js through the shim whose named createSignal is t
   expect(code).toMatch(/typeof options\.name === "string" && b \? b\.createSignal\(value, options\) : plain\(value, options\)/);
   expect(result.ok && result.module.exports).toEqual(['Nav']);
 });
+
+
+it('refuses a missing page binder import while allowing locally bound functions', async () => {
+ const message=await refused("import {signal} from 'page'; const rows=query('$monthly'); export function Chart(){return <p>{rows().length}</p>}");
+ expect(message).toMatch(/import.*query.*from ['"]page['"]/);
+ await built("function query(value){return ()=>value} const rows=query('local'); export function Chart(){return <p>{rows()}</p>}");
+ await built("import {query as rowsOf} from 'page'; const rows=rowsOf('$monthly'); export function Chart(){return <p>{rows().length}</p>}");
+});

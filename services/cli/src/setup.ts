@@ -10,7 +10,7 @@ import {findAfbinOnPath,globalInstall,installKind,retireAfbin,type GlobalInstall
 
 /** Offline setup owns selection before any writes, including an explicitly empty selection. */
 interface SetupOptions {
- home:string;env?:NodeJS.ProcessEnv;interactive:boolean;yes?:boolean;requested?:string[];origin?:string;
+ home:string;env?:NodeJS.ProcessEnv;cwd?:string;takeover?:boolean;interactive:boolean;yes?:boolean;requested?:string[];origin?:string;
  choose?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;
 }
 export async function setupSkills(options:SetupOptions){
@@ -49,7 +49,10 @@ export function setupSummary(installations:readonly SkillInstallation[],s:Style)
  const rows=['',`  ${s.bold('Agent skills')}`];
  if(!installations.length)rows.push(`    ${s.dim('No skills selected. Run afbin setup whenever you’re ready.')}`);
  for(const item of installations){
-  for(const harness of item.harnesses)rows.push(`    ${s.green('✓')} ${harnessLabels[harness].padEnd(12)} ${s.dim(item.path)} ${s.dim(`(${item.status==='unchanged'?'up to date':item.status})`)}`);
+  for(const harness of item.harnesses)rows.push(`    ${item.status==='conflict'||item.status==='modified'?s.yellow('!'):s.green('✓')} ${harnessLabels[harness].padEnd(12)} ${s.dim(item.path)} ${s.dim(`(${item.status==='unchanged'?'up to date':item.status})`)}`);
+  for(const link of item.links??[])rows.push(`      ${s.dim(`Harness link ${link.path} → ${link.target}`)}`);
+  if(item.recovery)rows.push(`      ${s.dim(item.recovery)}`);
+  for(const duplicate of item.duplicates??[])rows.push(`      ${s.dim(`Additional skill preserved at ${duplicate}`)}`);
   if(item.backup)rows.push(`      ${s.dim(`Previous skill backed up at ${item.backup}`)}`);
  }
  const restart=[...new Set(installations.filter(i=>i.restart_required).flatMap(i=>i.harnesses).filter(h=>h==='claude'||h==='codex'))].map(h=>harnessLabels[h]);

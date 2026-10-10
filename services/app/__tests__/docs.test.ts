@@ -3,16 +3,20 @@ import {expect,it} from 'vitest';
 import teaching from '../../cli/src/generated/teaching.json';
 import {STORY_HTML_TAGS,STORY_UI_COMPONENT_NAME_LIST} from '@/lib/jsx/component-names';
 import {commands} from '../../cli/src/commands';
+import {helpDocument} from '../../cli/src/teaching';
 it('the bundled vocabulary comes from the registries',()=>{
  const markup=teaching.files['references/markup.md'];
  expect(markup).toContain(`${STORY_HTML_TAGS.length} are allowed`);
  expect(markup).toContain(`Kit components (${STORY_UI_COMPONENT_NAME_LIST.length})`);
  expect(Object.keys(teaching.files)).not.toContain('references/api.md');
- for(const command of commands)expect(teaching.files['references/commands.md']).toContain(`## ${command.name}\n`);
+ for(const command of commands)expect(helpDocument('commands','markdown')).toContain(`## ${command.name}\n`);
+ expect(teaching.files['references/commands.md']).toContain('## watch\n');
 });
 it('the bundled auth guide teaches local setup without self-minting or legacy configuration',()=>{
  const auth=teaching.files['references/publishing-auth.md'];
- expect(auth).toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');expect(auth).toContain('afbin auth');
+ expect(auth).toContain('~/.artifactbin/hosts/<hostname>/credentials.env');
+ expect(auth).toContain('hosts/<hostname>@<scheme>-<port>/credentials.env');
+ expect(auth).toContain('readable locations may alias an older hashed store');expect(auth).toContain('afbin auth');
  expect(auth).toContain('browser approval');
  // tokens/anonymous, MCP and the old dotfile spelling are retired-surfaces.test.ts's row for
  // the bundle's auth guide.

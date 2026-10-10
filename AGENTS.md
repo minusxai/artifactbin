@@ -1,37 +1,34 @@
 # Working on artifactbin
 
-`CLAUDE.md` imports this file. Setup: [CONTRIBUTING.md](CONTRIBUTING.md).
+`CLAUDE.md` imports this file. [Setup](CONTRIBUTING.md).
 
-## CHECK TIERS — READ THIS BEFORE RUNNING ANY COMMAND
+## Check tiers — read before running commands
 
-**FAST tier (seconds, catches almost every error) — after every change:** `npm run validate`,
+**FAST — after every change:** `npm run validate`,
 `npm test -- --files <paths>`, the running dev app, `npm run afbin`.
 
-**SLOW tier (minutes, 15–50× longer) — EXACTLY ONCE, at the very end, immediately before merge.
-NEVER after an individual edit, "just to check" or mid-task:** gate containers, pushing for PR CI, bare `npm test`.
+**SLOW — EXACTLY ONCE, at the end before merge. NEVER per edit or mid-task:** gate containers, pushing for PR CI, bare `npm test`.
 
-- **Finish the ENTIRE change on FAST checks, then run the SLOW tier ONE time.** Never a gate or a push per edit.
-- **Gates belong to PR CI** (7 gate shards, the build, every test shard). Run a local gate container
-  only if CI's gate shard failed or you changed the reader/hydration.
+- **Finish the entire change on FAST checks, then SLOW once.** No gate or push per edit.
+- **Gates belong to PR CI** (7 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
 - **Pre-merge is one sequence, run once:** FAST tier clean → commit and push ONCE → PR CI green →
   the exact user scenario verified end to end on the built artifact → merge.
-- Pushing, polling CI or gating per edit: **STOP. You are doing it wrong.**
+- Never push, poll CI or gate per edit.
 
 ## CI speed contract
 
-Measure the complete required-check chain from the workflow attempt's `run_started_at` through
-its final rollup, including runner setup, dependency waits and artifact uploads. Aim below **3 minutes**;
-normal maximum is below **4 minutes**. CI fails above **8 minutes** on PRs and main. Individual job times,
-parallel-job sums and full workflow durations are different metrics. Per-job durations above four
-minutes produce diagnostics, not timing failures; the complete chain owns the hard eight-minute limit. Optional cache warming and
-post-check downstream release notifications are outside this required-check chain; report their tails separately.
-Investigate the critical path and repeated work; never raise the budget, skip required coverage, subtract
-queues or rerun unchanged code to hide a slow run. Report cold and warm timings separately.
+Measure the required-check chain from `run_started_at` through final rollup, including runner setup,
+dependency waits and uploads. Aim below **3 minutes**; normal maximum below **4 minutes**. CI fails above **8 minutes** on PRs and main. Job times,
+parallel sums and workflow durations differ. Per-job durations above four
+minutes produce diagnostics, not timing failures; the complete chain owns the hard eight-minute limit. Report optional cache warming and downstream release
+notification tails separately; they are outside the chain.
+Investigate the critical path and repetition; never raise budgets, skip coverage, subtract queues
+or rerun unchanged code to hide slowness. Report cold and warm timings separately.
 
 ## Working rules
 
-- Design modules first (Ousterhout): state affected boundaries and contracts; prefer a cohesive module
-  hiding complexity behind a narrow interface. Routes translate results to HTTP.
+- Design modules first (Ousterhout): state boundaries/contracts; hide complexity in cohesive modules
+  with narrow interfaces. Routes translate results to HTTP.
 - Layers: entry points `server.ts`, `scripts`, `services/cli`, `services/app/{app,server,scripts}`; UI `services/app/{solid,web}`;
   libraries `services/app/lib/*`; packages the other `services/*`, importing only `contracts`, `utils` and themselves.
   `npm run validate` (`scripts/ci/module-graph.mjs`) fails a cycle through an entry point or the UI, a package
@@ -39,31 +36,40 @@ queues or rerun unchanged code to hide a slow run. Report cold and warm timings 
   `services/cli/src` imports app code only through `lib/cli-toolkit`'s per-bundle entries.
 - TDD for features and refactors: contracts, then behavioral tests, observe the failure, implement.
   Refactors: existing tests pass, prove the assertion detects broken behavior, restore it (Blue → Red → Blue).
-  Report what actually ran; never claim red/green or end-to-end evidence you did not observe.
-- Probe risky assumptions; record evidence and unknowns in the plan. Order milestones by
-  plan-changing risk; finish with runnable checks.
+  Report only observed runs and red/green/end-to-end evidence.
+- Probe risky assumptions; record evidence/unknowns. Order milestones by plan-changing risk; finish
+  with runnable checks.
 - Verify user-facing changes on the task's running app (`npm run dev`, port `APP__PORT` in `.env`;
   a worktree has its own). Changed `services/cli` or the skill: `npm run afbin -- <args>` runs the
   branch's CLI against that server, state in `~/.artifactbin-dev/<port>` (home and released `afbin`
   untouched); `npm run eval -- --tasks <name>` shows an agent using them. Both take `APP__PORT=<n>`.
-  Never test or iterate on production — it is confirmed after a deploy, not explored.
-- **50 test files TOTAL across Vitest + CLI.** Above 50, `npm test` runs neither suite and exits 2:
-  **DEFERRED TO CI, NOT PASSED**. No affected tests also means unverified (exit 2); discovery errors
-  fail visibly. Never count/preview tests, raise the cap, use `--all`, bypass the wrapper, or split
-  a deferred suite into local batches.
-- **Deferral mid-task means you ran the wrong command**: drop back to `--files` and keep working. At
-  the end of a complete, FAST-clean change it is the normal handoff: commit, push ONCE, open/update a
-  PR with an empty body and inspect CI (a branch push alone starts none). Report deferral accurately;
-  require selected checks before merging. Full suites, Docker/Chromium integration, the gate set and
-  production builds are CI-only. On a red PR: fetch every failed job's log in ONE command, fix all
+  Never iterate/test on production; confirm after deploy.
+- **Local evals use the real product contract.** Supply target origin and exact candidate CLI/skill
+  assets independently. Local/deployed briefs and scorers are identical: no local-only prompts, auth
+  bypass, production deployment or published/latest fallback. Test installed/fresh-install paths
+  against the candidate; HTTP discovery/guides/auth/API use the target. Isolate harness homes,
+  credentials/data. Record server/source revision, candidate/skill hashes and harness/model/settings;
+  invalidate stale assets on relevant inputs.
+  CLI/shared-package/skill edits reach the next run without release.
+  Exception for this workflow: building/packing the complete candidate CLI and its required runtime
+  assets locally is eval preparation, not a CI check. Use the normal package assembly, once per
+  relevant source snapshot with an input-hash receipt; never a reduced-capability substitute or
+  published-package fallback. This exception does not permit local full suites or merge gates.
+  Harness delivers local OTP; agent follows normal auth.
+  Compare baseline/candidate with identical scenarios/settings; retain failures and missing metrics.
+- **50 test files TOTAL across Vitest + CLI.** Above 50, neither suite runs; exit 2:
+  **DEFERRED TO CI, NOT PASSED**. No affected tests means unverified (exit 2); discovery errors fail visibly. Never count/preview, raise the cap, use `--all`, bypass the wrapper or batch a deferred suite.
+- **Mid-task deferral is the wrong command**: return to `--files`. At FAST-clean completion:
+  commit, push ONCE, open/update an empty-body PR and inspect CI (branch pushes start none). Report
+  deferral accurately; require selected checks before merge. Full suites, Docker/Chromium integration, gates and builds are CI-only. On a red PR: fetch every failed job's log in ONE command, fix all
   failures together (independent ones in parallel agents), never retry unchanged code.
 - **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same
-  arguments). Receipts last an hour and need matching sources, command, environment, runtime, lock and
-  generated inputs; failed/deferred/empty runs never count. Label reuse as prior evidence, not a fresh
-  run or CI. Never copy receipts; omit `--reuse` after manual changes to ignored dependencies or
-  external state. See [docs/agent-workflows.md](docs/agent-workflows.md).
-- **Bound investigation:** scoped `rg -l`/`rg -n`, output limits, targeted sections; skip fixtures,
-  transcripts, generated assets and dependencies unless relevant; batch reads, never repeat a search.
+  arguments). One-hour receipts require matching sources, command, environment, runtime, lock and
+  generated inputs; failed/deferred/empty runs never count. Label prior evidence, never fresh/CI.
+  Never copy receipts; omit reuse after manual ignored-dependency/external-state changes.
+  See [docs/agent-workflows.md](docs/agent-workflows.md).
+- **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output/sections; skip irrelevant fixtures,
+  transcripts/assets/dependencies; batch reads, never repeat searches.
 - Changing pinned docs/copy/errors: find their tests and gates (`buildQuickSheet`, `agentDiscovery`,
   `renderDoc`, exact text) and update them together. Skill guide edits also run
   `services/app/lib/__tests__/skill-tree.test.ts`: each rendered guide must stay within 8,192 bytes.
@@ -72,23 +78,22 @@ queues or rerun unchanged code to hide a slow run. Report cold and warm timings 
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a
   new exception at the boundary and verify the bundle.
-- Read environment variables through the owning service's audited config module (CLI scripts and
-  eval harnesses have their own). `MODULE__NAME` settings; spread typed objects, never re-enumerate keys.
-- Product code is independent of downstream deployments. Shared types/constants: `services/contracts`;
+- Read env vars through owning service audited config (CLI scripts/eval harnesses own theirs). `MODULE__NAME` settings; spread typed objects, never re-enumerate keys.
+- Product code ignores downstream deployments. Shared types/constants: `services/contracts`;
   shared transport and assembly: `services/utils`. The app never imports the proxy. Local and HTTP
   service implementations keep the same contracts.
-- Bearer secrets stay out of URLs, documents, logs and storage; test tokens are not real credentials.
+- Keep bearer secrets out of URLs/docs/logs/storage; test tokens are not credentials.
   Use `mxmx_test_*` accounts for disposable browser flows; read local OTPs with `npm run dev:otp`,
   never a public app endpoint.
-- UI tests use accessible names; interactive controls need accessible labels. App tooltips use
+- UI tests use accessible names; label controls. Tooltips use
   `solid/components/Tooltip.tsx`, not native `title` tooltips.
-- Tests exercise real handlers on isolated state, resetting database and limiter state between cases.
+- Tests use real handlers on isolated state; reset database/limiter between cases.
   Merge gates use deterministic third-party fixtures; live-provider checks are separate.
-- Never hand-edit generated routes, schemas or CSS candidate lists: run their generators, review the diff.
+- Generate routes/schemas/CSS candidate lists; never hand-edit. Review diffs.
 
 ## Commands
 
-From the repo root; keep this list current.
+From repo root. Keep current.
 
 - `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition, default http://localhost:3030; `dev:app` the app alone, without login/OAuth.
@@ -121,7 +126,7 @@ From the repo root; keep this list current.
   (such as `compiled-page/compiler.ts`): run `npm run generate-story-ui-classes`
   and review the generated diff before final CI. FAST regression checks are
   `services/app/lib/story-ui/__tests__/recipe-classes.test.ts` and
-  `services/app/lib/publish/__tests__/reader-sheet.test.ts`; type checking alone does not catch drift.
+  `services/app/lib/publish/__tests__/reader-sheet.test.ts`; types do not catch drift.
 - CLI releases: `npm run release:cli` in the CLI's PR, or the `Release afbin` dispatch (straight to
   main). `checks` refuses a CLI PR without a bump; a version-only diff packs npm and verifies native consumers; a tree PR
   CI passed is not re-tested on merge. [Steps](services/cli/README.md). Teaching is generated before
@@ -135,16 +140,15 @@ From the repo root; keep this list current.
 - Preserve access checks on reads, writes, exports, live streams and dataset mutations; public/unlisted
   link access is neither ownership nor dataset write access.
 - Rendering, editing and author scripts have separate trust boundaries. Read
-  [services/app/lib/story-ui/AGENTS.md](services/app/lib/story-ui/AGENTS.md) before changing markup.
+  [services/app/lib/story-ui/AGENTS.md](services/app/lib/story-ui/AGENTS.md) before markup changes.
 - After a lockfile merge, regenerate if needed and run `npm ci --dry-run` (a populated install hides
-  a broken lockfile). Native packages and browser assets also need build/image verification.
+  a broken lockfile). Native packages/browser assets need build/image verification.
 
 ## Delegated work
 
-The orchestrator seeds contracts, core tests and a bounded brief; the implementer completes it without
-delegating, in its own worktree, data directory and port block (never two in one checkout).
-**Independent deliverables are separate briefs, one implementer each, in parallel worktrees; one brief
-only when deliverables share files. The orchestrator merges.** Browser gates run in containers
+The orchestrator seeds contracts, core tests and a bounded brief; each implementer uses its own
+worktree, data directory and port block, never delegates or shares a checkout.
+**Independent deliverables get separate briefs/implementers in parallel worktrees; shared files get one brief. The orchestrator merges.** Browser gates run in containers
 (`scripts/gate-container.mjs`), up to engine CPUs ÷ container CPUs at once (`GATES__CONTAINER_SLOTS`
 overrides), never on the host. **Gates are SLOW-tier: an implementer runs them ONCE at the end of the
 brief, NEVER per edit. Every brief must say so verbatim.** Keep PRs scoped per repository.

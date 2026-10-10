@@ -26,8 +26,6 @@ assignee:user. Replace ntf123 with that published dataset's ID. */}
 <Mutation name="change_status" expectedAffected={1}>{`
 update tasks.rows set status = $status where id = $task_id
 `}</Mutation>
-{/* Actor shown separately: Task Review pricing is now Done.
-Joined recipients only; rules combine per user/run. */}
 <Notify name="status_notice" on="change_status">{`
 select assignee as "to", 'Task ' || title || ' is now ' || status as message
 from tasks.rows where id = $task_id
@@ -39,12 +37,9 @@ from tasks.rows where id = $task_id
 <h1 className="text-3xl @2xl:text-5xl font-bold">Revenue grew in every region but one</h1>
 <p>Container prefixes like @2xl: start at phone width.</p>
 </header>
-{/* Changing $region reruns its queries. */}
 <Select label="Region" value="$region" options="$regions" placeholder="All regions" />
-{/* Grid columns: w is out of 12; narrow screens stack. */}
 <Grid mode="flow" className="mt-6">
 <GridItem w={4}>
-{/* data="$monthly" binds computed query rows. */}
 <Card><CardHeader><CardTitle>Total revenue</CardTitle></CardHeader>
 <CardContent className="kpi text-4xl font-semibold">
 <Number data="$monthly" col="revenue" agg="sum" prefix="$" format=",.0f" />

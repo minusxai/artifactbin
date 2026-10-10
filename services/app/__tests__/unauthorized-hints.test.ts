@@ -1,22 +1,17 @@
-/**
- * DISCOVER: the moment an agent is refused is the moment it needs the pointer. Every `401 unauthorized` JSON
- * body carries `help` — telling the agent to just retry, since afbin authenticates itself, and how to install
- * it if it is missing — and `guide` (the one-pager), on the request base. No credential door of any kind:
- * there is nothing to hand out and nowhere to get one but the CLI.
- */
+/** Authentication refusals retain the direct HTTP route and never require installing a client. */
 import { describe, expect, it } from 'vitest';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { GET as listMine } from '@/app/api/my/tokens/route';
 
 const BASE = 'http://localhost:3000';
-const HELP = `Retry through afbin: afbin auth --server ${BASE}. If \`afbin\` is not installed, run \`npx --yes @afbin/cli@latest setup\` once (Windows PowerShell: \`npx.cmd --yes @afbin/cli@latest setup\`); it installs the \`afbin\` command and the agent skills.`;
+const HELP = expect.stringContaining(`${BASE}/llms/http-auth`);
 
 describe('401 bodies', () => {
   /*
    * One case over every door: the three that existed asserted the same HELP
    * constant three times, differing only in which route produced the refusal.
    */
-  it('every refusal says retry, how to install afbin, and names the one-pager — and offers no credential of its own', async () => {
+  it('every refusal links HTTP credential recovery without forcing a CLI install or exposing credentials', async () => {
     const anonymous = await listArtifacts(new Request(`${BASE}/api/artifacts`));
     expect(anonymous.status).toBe(401);
     expect(await anonymous.json()).toEqual({ error: 'unauthorized', help: HELP, guide: `${BASE}/llms.txt` });
@@ -31,6 +26,8 @@ describe('401 bodies', () => {
       const body = await res.json();
       expect(body, name).toMatchObject({ error: 'unauthorized', help: HELP, guide: `${BASE}/llms.txt` });
       expect(body, name).not.toHaveProperty('tokens');
+      expect(body.help, name).not.toMatch(/npx|install (?:the )?(?:afbin|CLI)/i);
+      expect(body.help, name).toContain('refresh');
       expect(JSON.stringify(body), name).not.toContain('/tokens/new');
     }
   });

@@ -56,6 +56,7 @@ import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} fro
 import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext,claudeConfigDirectory,claudeConfigEnvironment} from './config';
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
+import {watchCommand} from './watch';
 import {HttpClient,detailLine} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
@@ -64,7 +65,7 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {/** Executable entry; defaults to the running CLI. */entry?:string;/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {signal?:AbortSignal;/** Executable entry; defaults to the running CLI. */entry?:string;/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const update=automaticUpdate({home:context.home??homedir(),env:context.env,entry:context.entry,npm:context.npm,stderr:context.stderr??(value=>process.stderr.write(value))});
  const code=await dispatchCli(argv,context,update.observe);
@@ -133,15 +134,15 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    // The default is stored as the deployment's CANONICAL origin when it publishes one, so an
    // installer served from a second hostname does not pin the folder to a name of the same server.
    if(typeof flags.server==='string')await saveDefaultServer((await serverIdentity(flags.server,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})})).canonical,home,context.env);
-   const result=await setupSkills({home,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
+   const result=await setupSkills({home,cwd:context.cwd??process.cwd(),takeover:!!flags.takeover,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    const installed=await setupGlobal({home,env:context.env??process.env,noGlobal:!!flags['no-global'],...(context.installKind?{kind:context.installKind}:{}),...(context.npm?{npm:context.npm}:{})});
    if(json){emit({...result,...installed});if(installed.global.status==='failed')stderr(`afbin command not installed: ${installed.global.reason}\n${manualInstallHint(installed.global.version)}\n`);}
    else stdout(setupSummary(result.installations,style)+globalSummary(installed,style));
-   return 0;
+   return result.installations.some(item=>item.status==='conflict')?2:0;
   }
   // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
   // harnesses. It never authenticates or touches the network, and is a no-op once the skill is current.
-  if(command!=='setup')await ensureInit({home,env:context.env,origin:declaredServer,stderr,style});
+  if(command!=='setup')await ensureInit({home,cwd:context.cwd??process.cwd(),env:context.env,origin:declaredServer,stderr,style});
   if(flags.help||command==='help'){
    const bundled=command==='help'?flags:{};
    const format=typeof bundled.format==='string'?bundled.format:'text';const topic=command==='help'?positionals[0]:command;
@@ -155,7 +156,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    if(json){emit({help:text});return 0;}
    // The printed brief says its references are files beside SKILL.md; without the absolute path an agent
    // searched the whole filesystem for them (three tasks, 100–120 s each).
-   const installed=!topic&&screen===undefined?(await skillStatus(await realpath(home),context.env)).filter(item=>item.installed).map(item=>item.path):[];
+   const installed=!topic&&screen===undefined?(await skillStatus(await realpath(home),context.env,context.cwd??process.cwd())).filter(item=>item.installed).map(item=>item.path):[];
    emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd,home);
@@ -203,12 +204,12 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    const selected=await selectSkills({...selection,interactive:false});
    const ask=interactive&&!json&&!flags.yes&&!flags.harness&&!skillsDisabled(context.env);
    const live=!json&&(context.progress??(!context.stderr&&!!process.stderr.isTTY));
-   const updated=await (context.update??updateCli)({home,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch,...(context.npm?{npm:context.npm}:{}),
+   const updated=await (context.update??updateCli)({home,cwd:context.cwd??process.cwd(),takeover:!!flags.takeover,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch,...(context.npm?{npm:context.npm}:{}),
     ...(ask?{chooseHarnesses:()=>selectSkills({...selection,interactive:true})}:{}),
     ...(live?{report:progressRenderer(stderr,createStyle(context.stderr?styleOptions:colorSupport(context.env??process.env,true)))}:{})});
    emit(updated);
    if('installations' in updated)for(const hint of restartHints(updated.installations))stderr(hint+'\n');
-   return 0;
+   return 'installations' in updated&&updated.installations.some(item=>item.status==='conflict')?2:0;
   }
   if(workspace.tracking&&typeof flags.server==='string'&&!managedOrigin&&!['auth','update'].includes(command)){
    // Two names of ONE deployment are not two servers. Ask only when the strings differ.
@@ -329,7 +330,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    emit({authenticated:true,server:connection.server});return 0;
   }
   if(!connection){
-   if(flags['dry-run'])throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.');
+   if(flags['dry-run']||command==='watch')throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.');
    connection=await authenticate();
   }
   // A directory is tracked against ONE server and account. Sending another server this directory's account
@@ -338,7 +339,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const sameManagedOrigin=!!managedOrigin&&sameServer(resolved,managedOrigin);
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server)&&!sameManagedOrigin)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const workspaceAccount=sameManagedOrigin&&!sameServer(resolved,workspace.tracking?.server??'')?undefined:workspace.tracking?.account;
-  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'?{onRelease}:{}),account:workspaceAccount,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'&&command!=='watch'?{onRelease}:{}),account:workspaceAccount,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']&&command!=='watch'?{authenticate}: {})});
+  if(command==='watch'){await watchCommand(workspace,parsed,client,{stdout,stderr,signal:context.signal});return 0;}
   if(command==='workspace'){emit(await rebindWorkspace(workspace,client,{dryRun:!!flags['dry-run']}));return 0;}
   if(command==='schedule'){emit(await scheduleCommand(workspace,client,positionals,flags));return 0;}
   if(command==='runs'){
@@ -460,7 +462,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    }
   }
   const failure=error instanceof ApprovalRequired?{code:error.code,message:error.message,verification_url:error.verificationUrl,user_code:error.userCode,expires_at:new Date(error.expiresAt).toISOString()}:error instanceof CliError?{code:error.code,message:error.message,...(error.fix?{fix:error.fix}:{}),...(error.details?{details:error.details}:{})}:{code:'operation_failed',message:error instanceof Error?error.message:String(error)};
-  if(json)stdout(JSON.stringify({error:failure})+'\n');
+  if(json&&parsed?.command!=='watch'&&argv[0]!=='watch')stdout(JSON.stringify({error:failure})+'\n');
   const diagnosed=refusalDetails(failure.message,'details'in failure?failure.details:undefined);
   stderr(`${style.red(style.bold(failure.code))}: ${withoutCode(failure.code,failure.message)}${diagnosed.length?`\n${diagnosed.join('\n')}`:''}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
   return error instanceof CliError?error.exitCode:1;
@@ -479,6 +481,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
 const withoutCode=(code:string,message:string):string=>message.startsWith(`${code}: `)?message.slice(code.length+2):message;
 /** How many failing files a refusal names before it stops; the rest are one counted line. */
 const MAX_REFUSAL_FILES=3;
+/** Enough context to explain related declarations, while keeping refusal output bounded. */
+const MAX_REFUSAL_DIAGNOSTICS_PER_FILE=3;
 /**
  * THE DIAGNOSIS THE REFUSAL ALREADY CARRIES, as human lines.
  *
@@ -506,8 +510,12 @@ function refusalDetails(message:string,details:unknown):string[]{
   const failed=files.filter((file):file is {path:string;diagnostics:Array<{message?:unknown;severity?:unknown;line?:unknown;column?:unknown}>}=>
    !!file&&typeof file==='object'&&(file as {valid?:unknown}).valid===false&&typeof (file as {path?:unknown}).path==='string'&&Array.isArray((file as {diagnostics?:unknown}).diagnostics));
   for(const file of failed.slice(0,MAX_REFUSAL_FILES)){
-   const first=file.diagnostics.find(diagnostic=>!!diagnostic&&typeof diagnostic.message==='string'&&diagnostic.severity!=='notice');
-   if(first){const at=typeof first.line==='number'?`:${first.line}${typeof first.column==='number'?`:${first.column}`:''}`:'';lines.push(`${file.path}${at}: ${first.message as string}`);}
+   const diagnostics=[...new Set(file.diagnostics.filter(diagnostic=>!!diagnostic&&typeof diagnostic.message==='string'&&diagnostic.severity!=='notice').map(diagnostic=>{
+    const at=typeof diagnostic.line==='number'?`:${diagnostic.line}${typeof diagnostic.column==='number'?`:${diagnostic.column}`:''}`:'';
+    return `${file.path}${at}: ${diagnostic.message as string}`;
+   }))];
+   lines.push(...diagnostics.slice(0,MAX_REFUSAL_DIAGNOSTICS_PER_FILE));
+   if(diagnostics.length>MAX_REFUSAL_DIAGNOSTICS_PER_FILE)lines.push(`${file.path}: … and ${diagnostics.length-MAX_REFUSAL_DIAGNOSTICS_PER_FILE} more diagnostics; run afbin validate for the rest.`);
   }
   if(failed.length>MAX_REFUSAL_FILES)lines.push(`… and ${failed.length-MAX_REFUSAL_FILES} more files; run afbin validate for the rest.`);
  }
@@ -551,17 +559,17 @@ async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(co
  * never prompts (selection is non-interactive here) and never authenticates. Idempotent: it installs
  * only when the managed skill manifest is missing or stale, and stays silent otherwise.
  */
-async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;origin?:string;stderr:(value:string)=>void;style:Style}):Promise<void>{
+async function ensureInit(options:{home:string;cwd?:string;env?:NodeJS.ProcessEnv;origin?:string;stderr:(value:string)=>void;style:Style}):Promise<void>{
  const selected=await selectSkills({home:options.home,env:options.env,interactive:false});
  if(!selected.length)return;
- const plans=await planSkills(selected,{home:options.home,env:options.env,origin:options.origin});
+ const plans=await planSkills(selected,{home:options.home,cwd:options.cwd,env:options.env,origin:options.origin});
  // Eager init installs a MISSING or version-stale skill. A skill addressed to another server is
  // `afbin setup`'s decision: without this gate, a command run with --server against a second
  // server rewrites every harness's skill files on every invocation.
- const stale=plans.filter(plan=>plan.status==='install'||(plan.status==='update'&&(!validVersion(plan.installed)||compareVersions(plan.installed,plan.version)<0)));
+ const stale=plans.filter(plan=>plan.link_required||plan.status==='install'||(plan.status==='update'&&(!validVersion(plan.installed)||compareVersions(plan.installed,plan.version)<0)));
  if(!stale.length)return;
- const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,env:options.env,origin:options.origin,preserveSelection:true});
- for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${options.style.green(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
+ const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,cwd:options.cwd,env:options.env,origin:options.origin,preserveSelection:true});
+ for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${(item.status==='conflict'?options.style.yellow:options.style.green)(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}${item.recovery?`\n${item.recovery}`:''}\n`);
  for(const hint of restartHints(installed.installations))options.stderr(options.style.yellow(hint)+'\n');
 }
 /** The approval sentence keeps its words; the code and the URL stand out on a terminal. */

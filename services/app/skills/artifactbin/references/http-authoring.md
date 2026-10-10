@@ -1,8 +1,8 @@
 ---
-title: Direct HTTP JSX authoring
+name: http-authoring
 description: Direct JSX creation, artifact ID reservations and an executable graph-edit example without invoking the CLI.
 ---
-## Direct JSX creation and graph editing
+## Read first
 
 HTTP supports JSX creation and prepared edits without CLI installation; this guide is in `/llms.txt`.
 

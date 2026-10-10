@@ -94,6 +94,34 @@ assertions are Linux containment facts skips those by name when a session report
 Every tier takes `APP__PORT=<n>`, so a worktree's own port block keeps it off another agent's server.
 The gate container needs no port at all: it has its own network namespace.
 
+## Eval target and candidate contract
+
+Treat the server origin and CLI package as independent harness inputs. A local dev server is a normal
+product target; the evaluated agent does not receive a special local-mode task or easier scorer. Use
+this worktree's dev server with its exact public origin (including scheme and port) and a candidate
+package/skill projection from the intended source revision. Installation scenarios must serve that
+candidate through the same installer/npm paths a deployed target uses. Never silently fetch a public
+release or require a production deploy to make the local evaluation runnable.
+
+A complete candidate may need runtime asset compilation before npm packing. The local-eval exception
+in AGENTS.md permits that preparation using normal package assembly; cache it by all relevant inputs
+and run it once per source snapshot. It is not a production deployment or evidence that CI passed.
+Do not replace the real CLI with a limited fixture, skip its normal lifecycle or silently remove local
+capabilities to make the evaluation cheaper. Full suites and merge gates still belong to CI.
+
+For direct HTTP, supply the target artifact URL and serve its root/references/API on that target.
+Separate API-task fixtures with preauthenticated access from login/persistence fixtures that start
+without a token, follow normal auth, save credentials, restart and refresh. The harness can retrieve a
+local OTP from the protected outbox to play the user's approval role; that is not an agent auth bypass.
+
+Each run owns its home, credential store, fixtures and server ports. Record target and product revision,
+CLI package checksum, skill checksum, eval revision (including dirty inputs), model/provider, harness
+version and task settings. Candidate preparation must notice changes to CLI code, generated teaching,
+skill sources, shared packages and the lockfile. Fail visibly on absent/stale candidates or unreachable
+targets; no production/published-CLI fallback. Keep baseline and candidate fixtures/settings matched,
+retain raw success/failure and token/latency/cost evidence, and disclose missing metrics. The eval
+repository's README owns the exact runnable commands and provider preflight, not copied policy prose.
+
 ## Browser gates in containers
 
 `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] [--servers N] <gate ...>` runs the named

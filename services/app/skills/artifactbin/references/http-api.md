@@ -1,20 +1,10 @@
 ---
-title: Direct HTTP API
+name: http-api
 description: Email-authenticated HTTP integration, artifact operations and conditional writes without installing Node or afbin.
 ---
-## Authentication
+## Read first
 
-HTTP authentication requires an email account.
-
-Send JSON to `[[ base ]]` with `Content-Type: application/json`; session requests need `Origin: [[ base ]]`.
-
-1. `POST /api/auth/email-otp/send-verification-otp` with `{"email":"you@example.com","type":"sign-in"}`; ask for the emailed OTP.
-2. `POST /api/auth/sign-in/email-otp` with `{"email":"you@example.com","otp":"<user's code>"}`; retain returned cookies in a private jar.
-3. `POST /api/authentication/token` with those cookies and Origin. Verified email sessions receive `access_token`, `refresh_token`, `client_id`, `expires_in` (seconds), `token_type: "Bearer"` and `scope: "artifacts"`.
-4. Persist origin, both tokens, client ID and access expiry in a persistent secret store across tasks/sandbox restarts. A private persistent filesystem may use an origin-scoped file outside the workspace: directory `0700`, file `0600`. Task files and chat memory are insufficient. Never put credentials in URLs, docs, source control or logs.
-5. Use `Authorization: Bearer <access_token>` only on that origin's `/api` requests. Sign-out closes the temporary email session, not the credentials.
-
-Before access expiry (24 hours), or after a 401, `POST /oauth/token` on the saved origin with JSON `{"grant_type":"refresh_token","client_id":"<saved client_id>","refresh_token":"<saved refresh_token>","resource":"[[ base ]]/api"}`. No login cookies or OTP are needed. Atomically replace both saved tokens and access expiry before retrying the API request once. Serialize refresh across tasks: each refresh token is single-use; replay can revoke the connection. A successful refresh renews its 30-day lifetime. Repeat email login only for missing credentials or `invalid_grant` (expired/revoked); keep credentials on transient errors. Without persistent secret storage, authentication cannot survive sandbox replacement.
+Authenticate with an email account using the [shared credential helper and sign-in contract](http-auth.md). Reuse CLI credentials on the same origin; authenticate as the recipient with access. Send JSON with `Content-Type: application/json`; session requests need `Origin: [[ base ]]`.
 
 ## Operations
 
@@ -84,4 +74,4 @@ const reopened = await commentRequest(threadPath, {reopen:true, expected_revisio
 
 Publishing requires access to the selected server.
 
-[HTTP authoring](http-authoring.md) covers creation and edits; [document graphs](http-document-graph.md) defines wire fields and concurrency. See the [public index](/llms.txt).
+[HTTP authoring](http-authoring.md) covers creation and edits; [document graphs](http-document-graph.md) defines wire fields and concurrency. See the [public index](../SKILL.md).

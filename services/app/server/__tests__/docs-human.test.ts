@@ -79,7 +79,8 @@ describe('docs addresses', () => {
     expect(text).toContain('Claude Code, Codex, Pi, and OpenCode');
     expect(text).toContain('use the artifactbin skill');
     expect(text).toContain('afbin help to discover everything you can do');
-    expect(text).toContain('Approve access in your browser');
+    expect(text).toContain('browser approval automatically when needed');
+    expect(text).toContain('direct HTTP clients use email authentication');
     expect(text).toContain('--server');
     expect(text).toContain('afbin pull');
     expect(text).toContain('afbin push');
@@ -138,6 +139,7 @@ describe('docs addresses', () => {
     expect(html).toMatch(/<link rel="help" href="[^"]+\/llms.txt" title="[^"]+"/);
     expect(html).toMatch(/<meta name="afbin" content="[^"]*afbin[^"]*"/);
     expect(html).toContain('Windows: npx.cmd');
-    expect(html).toContain('HTTP: email auth');
+    expect(html).toContain('Use an installed afbin CLI, otherwise HTTP');
+    expect(html).toContain('/skills/artifactbin.zip');
   });
 });
