@@ -11,7 +11,8 @@ artifact tables) is `lib/artifacts/write` and the publish pipeline stays in `lib
   fails any edge back into the cycle; move the shared code down or invert the dependency instead.
 - `index.ts` (model and edits), `head.ts` and `annotations.ts` are browser-safe; `server.ts` holds the
   compiled-dataflow record (node:crypto, zod). Browser-bundled code imports leaf files directly: the
-  island and app bundlers cannot drop the rest of a barrel.
+  island and app bundlers cannot drop the rest of a barrel. Outside code may import only the paths listed
+  in `DEEP_MODULES['lib/document']` (`scripts/ci/module-graph.mjs`): a new deep import fails validate.
 - Inversions that keep it below the cycle: `AnnotationOperation` is defined here and lib/editor-engine
   imports it; `StoredMermaidImage` is a contract; `runtimeId` is `@artifactbin/utils/runtime-id`;
   `prepareBrowserDocumentUpdate` takes a `{ prepare }` port (`DocumentPreparePort`), not the artifact
