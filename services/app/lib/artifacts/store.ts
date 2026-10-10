@@ -311,11 +311,6 @@ export async function getArtifact(tokenId: string, id: string): Promise<Artifact
   return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND group_id IS NULL AND token_id = $2 AND (user_id IS NULL OR user_id=(SELECT user_id FROM tokens WHERE tokens.id=$2)) AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
 }
 
-export async function getArtifactByUser(userId: string, id: string): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND user_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, userId]);
-}
-
 async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
   const db = await getDb();
   const r = await db.query<ArtifactSummary>(

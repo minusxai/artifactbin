@@ -7,7 +7,7 @@
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import {parseArtifactDestination,newArtifactDestination} from '@/lib/artifacts/ownership';
+import {parseArtifactDestination,newArtifactDestination} from '@/lib/artifacts';
 import { CONTENT_FIELDS } from '@artifactbin/contracts';
 import { ownsArtifact, canReadArtifact, writerFor, type ArtifactRow, type DatasetAccess, type Visibility } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';

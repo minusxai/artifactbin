@@ -33,3 +33,6 @@ export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, 
 export type { ArtifactSummary } from './store';
 export { recordArtifactView } from './view-admission';
 export { artifactSummaryToWire, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, respondToEdit } from './wire';
+
+export { parseArtifactDestination, newArtifactDestination } from './ownership';
+export { transferArtifact } from './transfer';

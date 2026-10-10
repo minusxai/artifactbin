@@ -5,8 +5,8 @@ import type {ArtifactDestination,GroupSummary} from '@artifactbin/contracts';
 import {trustedPortalOf} from '@/lib/islands/trusted-portal';
 import {apiRequest} from '../lib/api';
 import {usePageData} from '../lib/use-page-data';
-import {DialogShell} from './DialogShell';
-import {Button} from './ui';
+import {DialogShell} from '../ui/DialogShell';
+import {Button} from '../ui/ui';
 /** Ownership transfer is separate from folder placement. The server authorizes the complete move. */
 export function TransferOwnershipDialog(props:{id:string;title:string;currentGroupId?:string|null;onClose:()=>void;onTransferred:(destination:ArtifactDestination)=>void}):JSX.Element {
  const groups=usePageData<{groups:GroupSummary[]}>('/api/groups');

@@ -27,3 +27,11 @@ CLI: `afbin push report.jsx --group <handle> --server [[ base ]]` resolves a gro
 HTTP new artifact creation accepts `destination: {"type":"personal"}` or `destination: {"type":"group","id":"<resolved group.id>"}`. Omit it to use the account/deployment default. Viewers cannot publish or edit group artifacts. Inaccessible saved groups are refused; they do not silently fall back to Personal.
 
 Transfers are separate authorized operations; changing a default, folder metadata or creator attribution is not a transfer. Preserve artifact IDs/history and dependency safety. Inspect the group/ownership API’s returned permissions and instructions before a deliberate transfer. Group IDs are distinct from user IDs and never become credential account IDs.
+
+## Company deployment
+
+Run `afbin serve --config server.env` with the normal hosting settings plus `APP__DEPLOYMENT_MODE=company` and `APP__DEPLOYMENT_OWNER_EMAIL=<owner email>`. Admission combines `AUTH__INVITE_ONLY=true|false` with `AUTH__ALLOWED_EMAIL_PATTERNS` (comma-separated email globs, default `*`). An invitation never bypasses the email allowlist. Existing admitted accounts remain admitted when these settings change.
+
+The designated owner signs in with their verified email, creates or selects an editor group, then explicitly confirms it in deployment setup. No other account can join before confirmation. The default group is stored by the server, never supplied as an environment group ID. If it becomes unavailable, new admissions stop until the owner repairs setup. Existing members can still use Personal.
+
+Copy setup instructions from that deployment or group. Company installers explicitly select that server and, after confirmation, its default group. Each recipient signs in as themselves. A default group is a fallback; an account can explicitly choose Personal or another accessible group.

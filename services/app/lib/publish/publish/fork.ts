@@ -1,4 +1,4 @@
-import {newArtifactDestination} from '@/lib/artifacts/ownership';
+import {newArtifactDestination} from '@/lib/artifacts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { type ArtifactRow, type Visibility } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';

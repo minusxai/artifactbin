@@ -1,7 +1,7 @@
 import {groupRoute} from '@/lib/group-routes';
 import {json,readJson} from '@/lib/http';
-import {parseArtifactDestination} from '@/lib/artifacts/ownership';
-import {transferArtifact} from '@/lib/artifacts/transfer';
+import {parseArtifactDestination} from '@/lib/artifacts';
+import {transferArtifact} from '@/lib/artifacts';
 import {DatasetError} from '@/lib/datasets/errors';
 export const POST=groupRoute(async(request,userId,params)=>{
  const body=await readJson(request);if(!body)return json({error:'invalid_body'},400);

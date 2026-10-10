@@ -26,7 +26,7 @@ import { canReadArtifact } from '@/lib/artifacts/access';
 import type { TokenActor } from '@/lib/accounts/actors';
 import { findDependentsFor } from '@/lib/artifacts/dataflow';
 import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish/publish';
-import {parseArtifactDestination} from '@/lib/artifacts/ownership';
+import {parseArtifactDestination} from '@/lib/artifacts';
 import { isParentRefusal, resolveParent } from '@/lib/artifacts/placement';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
 import { trackEvent } from '@/lib/platform/analytics';

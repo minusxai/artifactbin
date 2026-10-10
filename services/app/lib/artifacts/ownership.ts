@@ -16,7 +16,7 @@ export function parseArtifactDestination(value:unknown):ArtifactDestination|unde
  if(d.type==='group'&&typeof d.id==='string'&&d.id&&Object.keys(d).every(k=>k==='type'||k==='id'))return {type:'group',id:d.id};
  throw new DatasetError('Invalid destination',400);
 }
-export const destinationOf=(row:Pick<ArtifactRow,'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>):ArtifactDestination=>row.group_id?{type:'group',id:row.group_id}:{type:'personal'};
+const destinationOf=(row:Pick<ArtifactRow,'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>):ArtifactDestination=>row.group_id?{type:'group',id:row.group_id}:{type:'personal'};
 export async function newArtifactDestination(actor:TokenActor,explicit?:ArtifactDestination,parentId?:string|null):Promise<ArtifactDestination>{
  const db=await getDb();
  const parent=parentId?(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[parentId])).rows[0]:undefined;

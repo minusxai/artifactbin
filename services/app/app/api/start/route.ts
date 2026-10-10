@@ -20,7 +20,7 @@ import {canUseDeploymentIdentity} from '@/lib/deployment';
 import { canAuthenticateUser } from '@/lib/accounts/user-kinds';
 import { sessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish/document/input';
-import {parseArtifactDestination} from '@/lib/artifacts/ownership';
+import {parseArtifactDestination} from '@/lib/artifacts';
 import {DatasetError} from '@/lib/datasets/errors';
 
 export async function POST(request: Request) {
