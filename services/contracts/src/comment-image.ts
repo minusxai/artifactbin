@@ -10,6 +10,9 @@ export interface CommentImageMetadata {
  strokes:BrushStroke[];
 }
 export interface CommentImageWire {
- id:string; width:number;height:number; capturedEditId:string; capturedAt:string;
+ id:string;
+ /** How the picture was made: a captured screenshot (`region`, `canvas`) or an attached image (`upload`). Absent on old reads. */
+ method?:CommentImageMetadata['method'];
+ width:number;height:number; capturedEditId:string; capturedAt:string;
  originalUrl:string;previewUrl:string;thumbnailUrl:string;
 }

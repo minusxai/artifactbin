@@ -442,10 +442,10 @@ async function ownerLeg(browser, { id, token }) {
  * failed check, and the other lane still reports.
  */
 const run = async () => {
-  const [main, quote, md, fold, pick, targets, tableSelection, liveSelection, hoverReply, images] = await Promise.all([
+  const [main, quote, md, fold, pick, targets, tableSelection, liveSelection, hoverReply, images, liveImages] = await Promise.all([
     publish(DOC), publish(QUOTE_DOC), publish(MD_DOC), publish(FOLD_DOC), publish(DOC),
     publish(commentTargetsMarkup, { title: 'Dynamic comment acceptance', visibility: 'unlisted' }),
-    publish(TABLE_SELECTION_DOC), publish(liveSelectionDoc(1)), publish(HOVER_REPLY_DOC), publish(DOC),
+    publish(TABLE_SELECTION_DOC), publish(liveSelectionDoc(1)), publish(HOVER_REPLY_DOC), publish(DOC), publish(liveImageDoc(1)),
   ]);
   const browser = await launchChromium();
   const lane = async (name, legs) => {
@@ -460,6 +460,8 @@ const run = async () => {
       lane('owner lane', [[ownerLeg, main], [quoteLeg, quote], [markdownLeg, md], [tableSelectionLeg, tableSelection]]),
       // a screenshot pasted and dropped into a new comment, another pasted into a reply, both through a reload
       lane('image lane', [[imagePasteLeg, images]]),
+      // an image on a comment and a reply made after live versions the frame drew in place
+      lane('live image lane', [[liveVersionImageLeg, liveImages]]),
       // pins that follow declarative items, then a block PICKED and an area drawn
       // then the selection bubble and document menu across live versions
       lane('pick lane', [[targetsLeg, targets], [pickLeg, pick], [liveSelectionLeg, liveSelection]]),
@@ -675,17 +677,106 @@ async function imagePasteLeg(browser, { id, token }) {
     const threadCard = page.getByLabel('Annotation thread', { exact: true }).first();
     await threadCard.waitFor();
     if (await threadCard.getByRole('button', { name: 'Open annotation thread' }).count()) await threadCard.getByRole('button', { name: 'Open annotation thread' }).click();
-    const thumbnails = threadCard.getByRole('img', { name: 'Screenshot attached to comment' });
+    // Attached (pasted, dropped) pictures are Images; only a captured shot is a Screenshot.
+    const thumbnails = threadCard.getByRole('img', { name: 'Image attached to comment' });
     check(await holds(expect(thumbnails).toHaveCount(3, { timeout: 10000 })), 'after a reload the thread shows the comment\'s image and both replies\'');
     check(await holds(expect.poll(() => thumbnails.evaluateAll((images) => images.map((img) => img.complete && img.naturalWidth > 0)), { timeout: 10000 }).toEqual([true, true, true])),
       'every persisted thumbnail loads');
     await page.getByRole('button', { name: 'Close comments', exact: true }).click();
     await marker.hover();
     await hoverCard.getByRole('button', { name: 'Expand replies', exact: true }).click();
-    const cardThumbnails = hoverCard.getByRole('list', { name: 'Thread replies' }).getByRole('img', { name: 'Screenshot attached to comment' });
+    const cardThumbnails = hoverCard.getByRole('list', { name: 'Thread replies' }).getByRole('img', { name: 'Image attached to comment' });
     check(await holds(expect(cardThumbnails).toHaveCount(2, { timeout: 10000 })), 'after a reload the hover card shows each reply\'s image');
     check(await holds(expect.poll(() => cardThumbnails.evaluateAll((images) => images.every((img) => img.complete && img.naturalWidth > 0)), { timeout: 10000 }).toBe(true)),
       'the hover card thumbnails load');
+  } finally { await ctx.close(); }
+}
+
+const liveImageDoc = (n) => '<Helmet><title>Live image comment</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + `<p id="live-version">Version ${n} of this page.</p>`
+  + '<p id="live-figure">Revenue grew 40% in Q3 and the chart renders blank.</p></div>';
+
+/**
+ * AN IMAGE ON A COMMENT MADE AFTER A LIVE VERSION (production regression): the page loads version 1, an agent writes
+ * version 2, which the frame draws in place; words selected then, with a dropped image, save — the image is staged
+ * against the head shown now, not the one the page loaded with. Another live version later, a pasted image rides a
+ * reply too. No reload anywhere before the saves.
+ */
+async function liveVersionImageLeg(browser, { id, token }) {
+  const holds = (promise) => promise.then(() => true, () => false);
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const png = async (width, height, rgb) => (await sharp({ create: { width, height, channels: 3, background: rgb } }).png().toBuffer()).toString('base64');
+  const [dropped, pasted] = await Promise.all([png(130, 60, { r: 30, g: 90, b: 200 }), png(150, 75, { r: 200, g: 60, b: 160 })]);
+  const send = (locator, types, base64, name) => locator.evaluate((element, { types, base64, name }) => {
+    const transfer = () => { const data = new DataTransfer(); data.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name, { type: 'image/png' })); return data; };
+    for (const type of types) {
+      const event = type === 'paste'
+        ? new ClipboardEvent('paste', { clipboardData: transfer(), bubbles: true, cancelable: true, composed: true })
+        : new DragEvent(type, { dataTransfer: transfer(), bubbles: true, cancelable: true, composed: true });
+      element.dispatchEvent(event);
+    }
+  }, { types, base64, name });
+  const threads = async () => (await (await fetch(`${BASE}/api/artifacts/${id}/annotations`, { headers: { Authorization: `Bearer ${token}` } })).json()).annotations ?? [];
+  try {
+    await becomeOwner(page, BASE, token);
+    await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    const frame = documentLocator(page);
+    await frame.locator('#live-figure').waitFor({ timeout: 15000 });
+    const raw = await documentFrame(page);
+    if (!raw) throw new Error('the document frame is missing');
+    const shown = () => raw.evaluate(() => document.body.getAttribute('data-mx-live-edit'));
+    /** An agent writes version `n`; the frame draws it in place. */
+    const write = async (n) => {
+      const before = await shown();
+      const put = await fetch(`${BASE}/api/artifacts/${id}`, {
+        method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markup: liveImageDoc(n) }),
+      });
+      if (!put.ok) throw new Error(`version ${n} failed (${put.status}): ${await put.text()}`);
+      await until(shown, (now) => !!now && now !== before, 15000);
+      await expect(frame.locator('#live-version')).toHaveText(`Version ${n} of this page.`, { timeout: 15000 });
+    };
+
+    await write(2);
+    const bubble = frame.getByRole('button', { name: 'Comment on selected text', exact: true });
+    await until(async () => {
+      await frame.locator('#live-figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
+      return bubble.isVisible().catch(() => false);
+    }, (v) => v === true, 15000);
+    await bubble.click();
+    const composer = page.getByRole('dialog', { name: 'Annotation composer', exact: true });
+    const field = composer.getByLabel('Annotation comment', { exact: true });
+    await field.waitFor();
+    await send(composer, ['dragenter', 'dragover', 'drop'], dropped, 'dropped.png');
+    const canvas = composer.getByLabel('Screenshot drawing canvas');
+    await expect(canvas).toHaveAttribute('width', '130', { timeout: 15000 });
+    await expect(canvas).toHaveAttribute('aria-busy', 'false');
+    await field.fill('blank after the agent\'s version');
+    await composer.getByRole('button', { name: 'Save annotation', exact: true }).click();
+    const saved = await holds(composer.waitFor({ state: 'hidden', timeout: 15000 }));
+    if (!saved) console.error('live version image comment', { alerts: await page.getByRole('alert').allTextContents() });
+    check(saved, 'after a live version, a comment with a dropped image saves');
+    const root = await until(threads, (rows) => rows.length === 1, 10000);
+    check(root?.[0]?.thread?.[0]?.image?.width === 130, `the comment made after a live version keeps its image (${root?.[0]?.thread?.[0]?.image?.width})`);
+
+    await write(3);
+    await page.locator(COMMENT_GLYPH).click();
+    const reply = page.getByLabel('Reply to annotation', { exact: true }).first();
+    if (!await reply.isVisible().catch(() => false)) await page.getByRole('button', { name: 'Open annotation thread' }).first().click();
+    await reply.waitFor();
+    await reply.fill('still blank on version 3');
+    await send(reply, ['paste'], pasted, 'image.png');
+    const replyCanvas = page.getByLabel('Annotation sidebar').getByLabel('Screenshot drawing canvas');
+    await expect(replyCanvas).toHaveAttribute('width', '150', { timeout: 15000 });
+    await expect(replyCanvas).toHaveAttribute('aria-busy', 'false');
+    await page.getByRole('button', { name: 'Send reply', exact: true }).click();
+    const sent = await holds(expect(replyCanvas).toHaveCount(0, { timeout: 15000 }));
+    if (!sent) console.error('live version image reply', { alerts: await page.getByRole('alert').allTextContents() });
+    check(sent, 'after another live version, a reply with a pasted image sends');
+    const answered = await until(threads, (rows) => rows[0]?.thread?.length === 2, 10000);
+    check(answered?.[0]?.thread?.[1]?.image?.width === 150, `the reply made after a live version keeps its image (${answered?.[0]?.thread?.[1]?.image?.width})`);
   } finally { await ctx.close(); }
 }
 

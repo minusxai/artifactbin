@@ -204,21 +204,23 @@ export function createHttpBackend(id: string): ArtifactBackend {
       });
       if (res.ok) return (await res.json()) as AnnotationWire;
       const refusal: unknown = await res.json().catch(() => null);
-      const code = refusal && typeof refusal === 'object' ? (refusal as { error?: unknown; code?: unknown }) : {};
+      const code = refusal && typeof refusal === 'object' ? (refusal as { error?: unknown; code?: unknown; edit_id?: unknown }) : {};
       throw new BackendRequestError(
         annotationFailure(res.status, refusal),
         res.status,
         code.error === SIGN_IN_REQUIRED || code.code === SIGN_IN_REQUIRED,
+        typeof code.error === 'string' ? code.error : undefined,
+        typeof code.edit_id === 'string' ? code.edit_id : undefined,
       );
     },
     async actOnAnnotation(annotationId, body) {
       const res = await fetch(`${mine}/annotations/${annotationId}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
       if (!res.ok) {
-        const refusal = await res.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+        const refusal = await res.json().catch(() => null) as { error?: unknown; message?: unknown; edit_id?: unknown } | null;
         const code = typeof refusal?.error === 'string' ? refusal.error : undefined;
         // A reply's image refusals say what happened; everything else stays the generic sentence.
         const attachment = (code === 'invalid_attachment' || code === 'stale') && typeof refusal?.message === 'string';
-        throw new BackendRequestError(attachment ? String(refusal!.message) : `Could not update this comment (${res.status})`, res.status, false, code);
+        throw new BackendRequestError(attachment ? String(refusal!.message) : `Could not update this comment (${res.status})`, res.status, false, code, typeof refusal?.edit_id === 'string' ? refusal.edit_id : undefined);
       }
       return (await res.json()) as AnnotationWire;
     },
@@ -229,8 +231,10 @@ export function createHttpBackend(id: string): ArtifactBackend {
     async uploadCommentImage(form) {
       const response = await fetch(`${mine}/comment-images`, { method: 'POST', body: form });
       if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.error === 'stale' ? 'The document changed. Your draft is preserved; retake the screenshot.' : result.error === 'quota_exceeded' ? 'Image storage quota reached.' : 'Could not upload the screenshot. Please retry.');
+        const result = await response.json().catch(() => ({})) as { error?: unknown; edit_id?: unknown };
+        // `stale` is said for a captured screenshot; CommentCapture restages an attached image against `edit_id` instead.
+        throw new BackendRequestError(result.error === 'stale' ? 'The document changed. Your draft is preserved; retake the screenshot.' : result.error === 'quota_exceeded' ? 'Image storage quota reached.' : 'Could not upload the screenshot. Please retry.',
+          response.status, false, typeof result.error === 'string' ? result.error : undefined, typeof result.edit_id === 'string' ? result.edit_id : undefined);
       }
       return (await response.json()) as { id: string };
     },

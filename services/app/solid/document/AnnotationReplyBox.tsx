@@ -55,10 +55,8 @@ export function AnnotationReplyBox(props: AnnotationReplyBoxProps): JSX.Element 
     if (props.busy || sending() || imageBusy() || !hasReplyText(props.value)) return;
     setSending(true); setError('');
     try {
-      let attachment: CommentImageAttachment | undefined;
-      try { attachment = await image?.stage(); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : REPLY_FAILED); return; }
-      if (!await props.onSend(props.value, attachment)) throw new Error(REPLY_FAILED);
+      const write = (attachment?: CommentImageAttachment) => props.onSend(props.value, attachment);
+      if (!await (image ? image.send(write) : write())) throw new Error(REPLY_FAILED);
       props.onChange('');
       image?.capture.reset();
       props.onSent?.();

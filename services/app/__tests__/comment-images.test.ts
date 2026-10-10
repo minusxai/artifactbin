@@ -57,6 +57,8 @@ describe('comment image attachment ownership',()=>{
   const s=await setup();
   const result=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,capturedEditId:'old'});
   expect((result as Response).status).toBe(409);
+  // It names the head now, so an attached image (of no version) can be staged against it.
+  expect(await (result as Response).json()).toEqual({error:'stale',edit_id:s.doc.edit_id});
  });
 });
 
@@ -161,7 +163,7 @@ describe('a reply carries its own image',()=>{
   const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,method:'upload'});if(stage instanceof Response)throw new Error(await stage.text());
   const db=await getDb();await db.query("UPDATE artifacts SET edit_id='moved-head' WHERE id=$1",[s.doc.id]);
   const refused=await reply(s,root,{reply:'Stale image',attachment_id:stage.id,edit_id:s.doc.edit_id});
-  expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'stale',message:expect.stringContaining('send again')});
+  expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'stale',edit_id:'moved-head',message:expect.stringContaining('send again')});
   expect((await db.query<{annotation_id:string|null}>('SELECT annotation_id FROM comment_images WHERE id=$1',[stage.id])).rows[0].annotation_id).toBeNull();
   expect((await db.query('SELECT id FROM annotations WHERE root_id=$1',[root])).rows).toHaveLength(0);
   // Naming the moved head does not launder a stage made against the old one.

@@ -108,7 +108,7 @@ type CreateAnnotationRefusal =
  * stale check), `invalid` when the stage is not this actor's to use (missing, someone else's, used, expired).
  */
 export class AnnotationAttachmentError extends Error {
-  constructor(readonly reason: 'stale' | 'invalid') {
+  constructor(readonly reason: 'stale' | 'invalid', readonly head?: string) {
     super(reason === 'stale' ? 'The document changed while you were replying; send again to attach the image.' : 'The image could not be attached; try again.');
   }
 }
@@ -506,7 +506,7 @@ export async function actOnAnnotationFor(
       // The reply's image is consumed in the reply's own transaction, exactly as a root's is: single use, the uploader's, unexpired.
       // Checked against the CURRENT head, exactly as a root comment's image is.
       if (action.attachmentId) {
-        if (action.attachmentEditId !== row.edit_id) throw new AnnotationAttachmentError('stale');
+        if (action.attachmentEditId !== row.edit_id) throw new AnnotationAttachmentError('stale', row.edit_id);
         if (!await consumeCommentImage(tx, actor, artifactId, action.attachmentId, replyId, row.edit_id)) throw new AnnotationAttachmentError('invalid');
       }
       await tx.query(
