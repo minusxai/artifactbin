@@ -31,10 +31,10 @@ SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing]
 ## Declarations (Helmet only)
 
 - `<Import name="sales" src="ref:<id>" />` — a stored dataset or folder. SQL reads
-  it as `sales.rows` (a multi-table dataset: `sales.<table>`). IDs: `afbin add --json` / `afbin push`.<!--bundle:skip--> Folder imports read children as `kids.rows`; list with `<Files data="$children" variant="icons|tiles" />`. Columns `id title format level visibility updated_at url thumbnail views sparkline`; per VIEWER, strangers see only public children.<!--/bundle:skip-->
+  it as `sales.rows` (a multi-table dataset: `sales.<table>`). IDs: `afbin add --json` / `afbin push`. Folder children use `<Import name="kids" src="ref:<folderId>" />` and SQL over `kids.rows`, which a document can list with `<Files data="$children" variant="icons|tiles" />` after declaring a children query. Columns `id title format level visibility updated_at url thumbnail views sparkline`; per VIEWER, strangers see only public children.
 - `<Value name type default />` — a page value the reader changes. `type`:
   `string | number | boolean | date | user`; no default = `null`, so
-  `$region is null` means "all".<!--bundle:skip--> `?$region=EU` seeds state; picks rewrite the link. `url={false}` excludes it both ways.<!--/bundle:skip-->
+  `$region is null` means "all".<!--bundle:skip--> `?$region=EU` seeds a pre-filtered link; picks rewrite the link. `url={false}` excludes it both ways.<!--/bundle:skip-->
 - `<Value name="tiny" type="table" value={[{…}]} />` — inline rows; SQL reads
   `tiny`, the view binds `$tiny`. Local mutations may change them until reload.
   [Local state](markup-state.md).

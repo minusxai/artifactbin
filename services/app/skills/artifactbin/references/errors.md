@@ -14,3 +14,6 @@ Read the returned error code and recovery instruction. A refusal is not successf
 - 401: use the shared credential helper to serialize refresh and retry once. Missing or revoked credentials require email sign-in.
 - 403: confirm the recipient's own identity and artifact/dataset permission. A public or unlisted link grants reading, not ownership or dataset writes.
 - Capacity/transient failures: retain credentials and pending intent, follow retry guidance; avoid duplicate creation.
+
+- `image_fetch_failed`: check the named URL serves image bytes publicly; correct it before retrying.
+- `dataset_read_only`: for a writable file dataset, publish it with `afbin push <file> --type dataset --access readwrite`. Postgres datasets remain read-only. For shared viewer writes, also follow [dataset policy](publishing-datasets.md).

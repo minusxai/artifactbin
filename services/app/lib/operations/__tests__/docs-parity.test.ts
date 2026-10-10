@@ -2,18 +2,26 @@
 import {expect,it} from 'vitest';
 import {commands,commandHelp} from '../../../../cli/src/commands';
 import teaching from '../../../../cli/src/generated/teaching.json';
+import {helpDocument} from '../../../../cli/src/teaching';
 it('documents every command/flag and direct HTTP while refusing retired CLI and remote-skill transports',()=>{
  const reference=teaching.files['references/commands.md'];
- for(const command of commands)expect(reference,command.name).toContain(commandHelp(command.name));
- for(const [file,text] of Object.entries(teaching.files))expect(text,file).not.toMatch(/afbin api|--method|MCP|\/docs\/|references\/api\.md/);
+ for(const command of commands)expect(helpDocument('commands','markdown'),command.name).toContain(commandHelp(command.name));
+ expect(reference).toContain(commandHelp('watch'));
+ expect(reference).toContain('afbin <command> -h');
+ for(const [file,text] of Object.entries(teaching.files)){
+  expect(text,file).not.toMatch(/afbin api|MCP|\/docs\/|references\/api\.md/);
+  if(!file.startsWith('references/http-')&&file!=='scripts/credentials.mjs')expect(text,file).not.toContain('--method');
+ }
  expect(Object.keys(teaching.files)).not.toContain('references/api.md');
  const http=teaching.files['references/http-api.md'];
- expect(http).toContain('/api/auth/email-otp/send-verification-otp');
- expect(http).toContain('/api/authentication/token');
- expect(http).toContain('Verified email sessions receive');
- expect(http).toContain('refresh_token');expect(http).toContain('client_id');
- expect(http).toContain('persistent secret store');expect(http).toContain('Atomically');
- expect(http).toContain('/oauth/token');expect(http).not.toContain('there is no refresh token');
+ const auth=teaching.files['references/http-auth.md'];
+ expect(http).toContain('(http-auth.md)');
+ expect(auth).toContain('/api/auth/email-otp/send-verification-otp');
+ expect(auth).toContain('/api/authentication/token');
+ expect(auth).toContain('Verified email sessions receive');
+ expect(auth).toContain('refresh_token');expect(auth).toContain('client_id');
+ expect(auth).toContain('persistent secret store');expect(auth).toContain('Atomically');
+ expect(auth).toContain('/oauth/token');expect(auth).not.toContain('there is no refresh token');
  expect(http).toContain('http-authoring.md');
  expect(http).toContain('GET /api/artifacts/<id>/policy` for `revision`');
  expect(http).toContain('`expectedPolicyRevision`');
@@ -36,7 +44,7 @@ it('documents every command/flag and direct HTTP while refusing retired CLI and 
  expect(http).toContain('finally {if(accepted)await call({op:\'close\',session_id});}');
  expect(http).not.toMatch(/output\.(text|log)\s*\(/);
  expect(http).toMatch(/no `output\.text` or `output\.log`/);
- expect(http).toContain('[public index](/llms.txt)');
+ expect(http).toContain('[public index](../SKILL.md)');
  expect(http).toContain('Publishing requires access to the selected server.');
  expect(http).toMatch(/scripts run at most 20 seconds/i);
  expect(http).toMatch(/no local Chrome/i);

@@ -12,6 +12,8 @@ Read the thread with afbin comment <artifact> --json (follow next_cursor if need
 
 Comments are sidecar relations to the node's persistent BODY `id`; reading or writing a comment does not rewrite source or flush the editor. Legacy data-annotation-anchor attributes are preservation-only: preserve an existing value with its element; never author, change or reuse one. New comments do not add it.
 
+Set a thread to open or resolved with `afbin comment <ref> --thread <thread-id> --state open` or `--state resolved`; reopening does not post a new comment.
+
 Listing a document returns its OPEN threads only. Read the ones already settled with `afbin comment <ref> --filter state=resolved`, or both lists at once with `--filter state=all`.
 
 "snippet" is the current node text. "quote" is the selected text; quote_found says whether it is still present. Comment Markdown supports links and emphasis: `![alt](url)` is not an image, but a literal exclamation mark plus a link. A comment cannot embed a picture. A deleted thread is not erased; there is no undo for it here.
