@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import type { ArtifactDestination } from '@artifactbin/contracts';
 import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Check, Copy, Loader2 } from 'lucide-solid';
 import { Tooltip } from './Tooltip';
@@ -7,7 +8,7 @@ import { copyText } from '../lib/copy-text';
 
 interface StartResponse { id: string; url: string; prompt?: string; error?: string }
 const COUNTDOWN_S = 3;
-export function AgentLink(props: { docsLink?: boolean; frame?: boolean; size?: 'panel' | 'inline' }): JSX.Element {
+export function AgentLink(props: { docsLink?: boolean; frame?: boolean; size?: 'panel' | 'inline'; destination?: ArtifactDestination }): JSX.Element {
   const [state, setState] = createSignal<'idle' | 'working' | 'done' | 'error'>('idle');
   const [message, setMessage] = createSignal('');
   const [countdown, setCountdown] = createSignal<number | null>(null);
@@ -17,7 +18,7 @@ export function AgentLink(props: { docsLink?: boolean; frame?: boolean; size?: '
     if (state() === 'working' || state() === 'done') return;
     setState('working');
     try {
-      const response = await fetch('/api/start', { method: 'POST' });
+      const response = await fetch('/api/start', { method: 'POST', ...(props.destination ? {headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:props.destination})} : {}) });
       const body = await response.json().catch(() => ({})) as StartResponse;
       if (!response.ok) { setState('error'); setMessage(body.error === 'rate_limited' ? 'too many new documents from here — try again shortly' : 'could not start a document'); return; }
       setMessage(typeof body.prompt === 'string' && await copyText(body.prompt) ? 'copied! paste it in the agent' : 'created! copy the prompt from the document page');

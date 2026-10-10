@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
-import { DEFAULT_SERVER } from '@artifactbin/contracts';
+import { DEFAULT_SERVER, type ArtifactDestination } from '@artifactbin/contracts';
 import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon, PiIcon } from './brand-icons';
 import { CopyBlock } from './CopyBlock';
 import { AgentLink } from './AgentLink';
@@ -15,7 +15,7 @@ const AGENTS = [
 ] as const;
 function Step(props: { n: number; title: JSX.Element; aside?: JSX.Element; children: JSX.Element }): JSX.Element { return <div><div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><h3 class="font-mono text-[13px] font-semibold text-fg"><span class="text-accent">Step {props.n}</span><span aria-hidden="true" class="mx-2 font-normal text-faint">·</span>{props.title}</h3>{props.aside}</div>{props.children}</div>; }
 
-export default function GetStarted(props: { heading?: boolean; frame?: boolean }): JSX.Element {
+export default function GetStarted(props: { heading?: boolean; frame?: boolean; destination?: ArtifactDestination }): JSX.Element {
   const [origin, setOrigin] = createSignal('');
   const [windows, setWindows] = createSignal(false);
   onMount(() => { setOrigin(window.location.origin); setWindows(/^Win/i.test(window.navigator.platform)); });
@@ -33,6 +33,6 @@ export default function GetStarted(props: { heading?: boolean; frame?: boolean }
       <p class="mt-2 text-xs text-muted">{install().blocks[0]!.text}</p>
       <div class="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5"><span class="mr-0.5 font-sans text-[13px] text-muted">also installs skills for</span><For each={AGENTS}>{agent => <span class="inline-flex items-center gap-1.5 rounded-[4px] border border-edge bg-raised px-2 py-1 font-mono text-[11px] leading-none text-fg"><agent.icon size={agent.size} />{agent.label}</span>}</For></div>
     </Step>
-    <div class="mt-5"><Step n={2} title="Copy the instructions" aside={<p class="ml-auto text-right font-sans text-[13px] leading-relaxed text-muted">Paste into your agent and watch it cook.</p>}><div class="mt-2"><AgentLink frame={false} docsLink={false} /></div></Step></div>
+    <div class="mt-5"><Step n={2} title="Copy the instructions" aside={<p class="ml-auto text-right font-sans text-[13px] leading-relaxed text-muted">Paste into your agent and watch it cook.</p>}><div class="mt-2"><AgentLink destination={props.destination} frame={false} docsLink={false} /></div></Step></div>
   </div></section>;
 }
