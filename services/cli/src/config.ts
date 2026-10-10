@@ -73,7 +73,7 @@ export async function setClientDefault(key: string, value: string, home = homedi
   return config;
 }
 
-export const normalizeServer=credentialOrigin;
+export const normalizeServer:(input:string)=>string=credentialOrigin;
 /** Client defaults never read server settings or implicitly follow a login. */
 export async function exportedServer(home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<string | undefined> {
   const selected = env.ARTIFACTBIN_URL ?? (await readClientDefaults(home, env)).host;
