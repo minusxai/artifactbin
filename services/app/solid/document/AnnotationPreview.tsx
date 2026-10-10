@@ -9,12 +9,13 @@
  * Expanded, the preview ends in the thread's reply box; focusing it or leaving a draft in it PINS the
  * card, which then stays until it is sent from, closed, escaped, or clicked away from while empty.
  */
-import { createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
+import { batch, createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { StoryEditRect } from '@/lib/story-runtime/contract';
 import Check from 'lucide-solid/icons/check';
 import PenLine from 'lucide-solid/icons/pen-line';
+import Reply from 'lucide-solid/icons/reply';
 import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
@@ -227,9 +228,15 @@ export function AnnotationPreview(props: {
     replyBox?.querySelector<HTMLElement>('[role="textbox"]')?.focus();
     article.scrollTop = article.scrollHeight;
   });
+  /**
+   * The footer's Reply opened the box: its field takes the caret as it mounts (it may still be loading). It pins
+   * the card at once — the pressed button unmounts with the focus, and that blur must not fold the card away.
+   */
+  const [replyRequested, setReplyRequested] = createSignal(false);
+  const startReply = () => batch(() => { setReplyRequested(true); setRepliesExpanded(true); props.onPin?.(); });
   // The preview owns the delay; leaving or unmounting always cancels it.
   createEffect(() => {
-    if (!props.hovered) { setRepliesExpanded(false); return; }
+    if (!props.hovered) { setRepliesExpanded(false); setReplyRequested(false); return; }
     const button = continuation();
     if (!button) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -305,8 +312,8 @@ export function AnnotationPreview(props: {
       <span class="pointer-events-none relative z-10 flex h-full animate-[rise_.12s_ease-out] flex-col">
         <span class="flex items-center justify-between gap-2">
           <AuthorIdentity author={first()!.author} />
-          <span class="pointer-events-auto relative z-10 flex items-center gap-2">
-            <CommentTimestamp iso={first()!.created_at} class="font-mono text-[10px] text-faint" />
+          <span class="pointer-events-auto relative z-10 flex shrink-0 items-center gap-2">
+            <CommentTimestamp iso={first()!.created_at} class="whitespace-nowrap font-mono text-[10px] text-faint" />
             <Show when={props.row.status === 'open' && props.onResolve}>
               <Tooltip content="resolve thread">
                 <button type="button" aria-label="Resolve thread" disabled={props.resolving} onClick={(event) => { event.stopPropagation(); props.onResolve?.(); }}
@@ -315,12 +322,8 @@ export function AnnotationPreview(props: {
                 </button>
               </Tooltip>
             </Show>
-            <Show when={props.pinned}>
-              <Tooltip content="close">
-                <button type="button" aria-label="Close comment preview" onClick={(event) => { event.stopPropagation(); props.onClose?.(); }}
-                  class="inline-flex h-6 w-6 items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"><X size={13} strokeWidth={1.8} /></button>
-              </Tooltip>
-            </Show>
+            {/* Room for the close button, which comes LAST in keyboard order (Resolve leads into the reply box). */}
+            <Show when={props.pinned}><span aria-hidden="true" class="w-6 shrink-0" /></Show>
           </span>
         </span>
         {/* Next after Resolve for the keyboard, last on screen: the thread's own reply box, stuck to the card's bottom. */}
@@ -337,17 +340,26 @@ export function AnnotationPreview(props: {
             }}
             class="pointer-events-auto sticky bottom-0 z-20 order-last -mx-3 -mb-2.5 mt-2 border-t border-edge bg-comment-hover px-3 pb-2.5 pt-2 font-sans text-xs">
             <AnnotationReplyBox backend={props.backend!} artifactId={props.artifactId!} busy={props.busy ?? false} rows={2} placeholder="Reply…"
-              value={props.draft ?? ''} onChange={(value) => props.onDraftChange?.(value)} onSend={(body, attachment) => props.onReply!(body, attachment)} onSent={keepReplying} image={replyImage} />
+              value={props.draft ?? ''} onChange={(value) => props.onDraftChange?.(value)} onSend={(body, attachment) => props.onReply!(body, attachment)} onSent={keepReplying} image={replyImage} autoFocus={replyRequested()} />
           </div>
         </Show>
         <span class="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
         <Show when={props.resolveError}><span role="alert" class="mt-1 font-mono text-[10px] text-danger">{props.resolveError}</span></Show>
-        <span class="mt-auto flex items-center justify-between font-mono text-[10px] text-faint">
-          <Show when={messages() > 1 || canReply()} fallback={<ThreadContinuation thread={props.row.thread} />}>
+        {/* The count (and "+N more", which expands the replies) on the left; Reply and the way to the rail on the right. */}
+        <span data-card-footer class={`mt-auto flex min-h-[22px] items-center justify-between gap-2 font-mono text-[10px] text-faint ${repliesExpanded() ? 'pt-2' : ''}`}>
+          <Show when={messages() > 1} fallback={<ThreadContinuation thread={props.row.thread} />}>
             <button ref={setContinuation} type="button" aria-label="Expand replies" aria-expanded={repliesExpanded()} onClick={() => setRepliesExpanded(true)}
-              class="pointer-events-auto cursor-pointer rounded-sm text-left hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"><ThreadContinuation thread={props.row.thread} /></button>
+              class="pointer-events-auto min-w-0 cursor-pointer rounded-sm text-left hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"><ThreadContinuation thread={props.row.thread} /></button>
           </Show>
-          <span class="transition-colors group-hover:text-accent">open →</span>
+          <span class="flex shrink-0 items-center gap-2">
+            <Show when={canReply() && !repliesExpanded()}>
+              <button type="button" aria-label="Reply" onClick={(event) => { event.stopPropagation(); startReply(); }}
+                class="pointer-events-auto inline-flex h-[22px] cursor-pointer items-center gap-1 rounded-[3px] border border-edge-bright bg-surface px-2 font-sans text-[11px] font-semibold text-fg hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent">
+                <Reply size={12} strokeWidth={2} aria-hidden="true" />Reply
+              </button>
+            </Show>
+            <span class="transition-colors group-hover:text-accent">open →</span>
+          </span>
         </span>
         <Show when={repliesExpanded() && messages() > 1}>
           <span role="list" aria-label="Thread replies" class="pointer-events-auto mt-2 flex flex-col gap-3 border-t border-edge pt-2">
@@ -358,6 +370,14 @@ export function AnnotationPreview(props: {
                 <Show when={reply.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
               </span>
             )}</For>
+          </span>
+        </Show>
+        <Show when={props.pinned}>
+          <span class="pointer-events-auto absolute right-0 top-0 z-30">
+            <Tooltip content="close">
+              <button type="button" aria-label="Close comment preview" onClick={(event) => { event.stopPropagation(); props.onClose?.(); }}
+                class="inline-flex h-6 w-6 items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"><X size={13} strokeWidth={1.8} /></button>
+            </Tooltip>
           </span>
         </Show>
       </span>

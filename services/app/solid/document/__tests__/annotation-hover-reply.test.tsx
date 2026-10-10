@@ -6,7 +6,7 @@
  * while empty; a draft is never lost — the marker says one is waiting and reopening restores it.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, within } from '@testing-library/dom';
+import { screen, waitFor, within } from '@testing-library/dom';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import { STORY_ANNOTATION_LAYOUT_MESSAGE } from '@/lib/story-runtime/contract';
 import { fireEvent, render } from '../../__tests__/helpers';
@@ -68,9 +68,73 @@ describe('the expanded hover card ends in a reply box', () => {
     expect(expand.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
-  it('a single-comment thread expands to its reply box too', async () => {
-    await expandedCard({}, [SINGLE]);
+});
+
+/** Hover the first marker of `rows` without expanding it. */
+async function hoveredCard(rows: AnnotationWire[]) {
+  knobs.open = rows;
+  const view = layer({ showViewComments: true });
+  await flush(); await flush();
+  view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: rows.map((row, index) => ({ id: row.id, rect: { x: 10, y: 120 + index * 200, width: 300, height: 40 } })) });
+  const card = view.container.querySelector<HTMLElement>(`[data-annotation-id="${rows[0]!.id}"]`)!;
+  fireEvent.mouseEnter(card);
+  return { view, card };
+}
+
+describe('the card says plainly that it can be answered', () => {
+  it('a one-message thread shows its count as text and a separate Reply button that opens and focuses the box', async () => {
+    const { card } = await hoveredCard([SINGLE]);
+    expect(within(card).queryByRole('button', { name: 'Expand replies' })).toBeNull();
+    expect(within(card).getByText('1 message')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Reply to annotation' })).toBeNull();
+    fireEvent.click(within(card).getByRole('button', { name: 'Reply' }));
+    const field = await replyField();
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    const close = within(card).getByRole('button', { name: 'Close comment preview' });
+    // Pinned, Resolve still leads straight into the box: the close button comes after it for the keyboard.
+    expect(within(card).getByRole('button', { name: 'Resolve thread' }).compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(field.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(card).queryByRole('button', { name: 'Reply' })).toBeNull();
+    fireEvent.mouseLeave(card);
+    expect(card.style.width).toBe('288px');
+  });
+
+  it('pressing Reply pins the card, so the button leaving with the focus cannot fold it away', async () => {
+    const { card } = await hoveredCard([SINGLE]);
+    const reply = within(card).getByRole('button', { name: 'Reply' });
+    reply.focus();
+    fireEvent.click(reply);
+    // The pressed button unmounts while focused: the browser reports focus leaving the card.
+    fireEvent.focusOut(card, { relatedTarget: null });
     expect(await replyField()).toBeTruthy();
+    expect(card.style.width).toBe('288px');
+    expect(within(card).getByRole('button', { name: 'Close comment preview' })).toBeTruthy();
+  });
+
+  it('a longer thread keeps "+N more" expanding the replies, beside its own Reply button', async () => {
+    const { card } = await hoveredCard([ANN]);
+    const more = within(card).getByRole('button', { name: 'Expand replies' });
+    expect(more).toHaveTextContent('+1 more');
+    const reply = within(card).getByRole('button', { name: 'Reply' });
+    expect(reply.textContent).toContain('Reply');
+    fireEvent.click(reply);
+    const field = await replyField();
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    expect(within(card).getByRole('list', { name: 'Thread replies' })).toHaveTextContent('one more thought');
+  });
+
+  it('the expanded footer keeps its own row with room above it', async () => {
+    const { card } = await expandedCard();
+    const footer = card.querySelector<HTMLElement>('[data-card-footer]')!;
+    expect(footer).toHaveClass('pt-2');
+    expect(within(footer).getByRole('button', { name: 'Expand replies' })).toBeTruthy();
+  });
+
+  it('a viewer who cannot reply sees no Reply button, and a one-message count stays plain text', async () => {
+    render(() => <AnnotationPreview row={SINGLE} top={100} hovered onOpen={() => {}} onHover={() => {}} />);
+    expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand replies' })).toBeNull();
+    expect(screen.getByText('1 message')).toBeTruthy();
   });
 });
 
