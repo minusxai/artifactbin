@@ -1,5 +1,6 @@
 import {describe,it,expect} from 'vitest';
-import {useAppHarness} from './harness';
+import {useAppHarness,request} from './harness';
+import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {createUser,mintToken,resolveToken} from '@/lib/accounts';
 import {createTestUser} from '@/lib/accounts/testusers';
 import {canAuthenticateUser} from '@/lib/accounts/user-kinds';
@@ -21,6 +22,12 @@ describe('company delegated test identities',()=>{
   expect(await admitDeploymentIdentity({userId:child.id})).toBe(true);
   expect((await resolveToken(child.token))?.userId).toBe(child.id);
   expect(await getGroupRole(child.id,group.id)).toBeNull();
+  const publish=(destination?:{type:'personal'})=>createArtifact(request('/api/artifacts',{method:'POST',token:child.token,json:{markup:'<p id="body">Delegated test fixture</p>',...(destination?{destination}:{})}}));
+  expect((await publish()).status).toBe(403);
+  const personal=await publish({type:'personal'});expect(personal.status).toBe(201);
+  const created=await personal.json();expect(created.owner).toEqual({type:'personal'});
+  expect(created.creator_user_id).toBe(child.id);
+  expect((await (await getDb()).query('SELECT user_id,group_id FROM artifacts WHERE id=$1',[created.id])).rows[0]).toEqual({user_id:child.id,group_id:null});
   const db=await getDb();expect((await db.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[child.id])).rows).toEqual([]);
   await db.query('UPDATE groups SET deleted_at=now() WHERE id=$1',[group.id]);
   expect(await canUseDeploymentIdentity(child.id)).toBe(true);
