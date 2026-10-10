@@ -135,3 +135,33 @@ it('supports a verified browser account transfer without a bearer or token ID an
  const denied=await transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',actor,origin:'https://other.example',json:{destination:{type:'personal'}}}),{params:Promise.resolve({id})});expect(denied.status).toBe(403);
  expect((await getArtifactById(id))?.group_id).toBe('grp_ownership');
 });
+
+it('uses nonblocking transfer locks and rolls back busy artifact or group ownership changes',async()=>{
+ const f=await fixture(),id=await f.make({markup:'<p>Busy ownership</p>'});
+ const original=f.db.transaction.bind(f.db);const statements:string[][]=[];
+ for(const busy of ['artifacts','groups']){
+  const spy=vi.spyOn(f.db,'transaction').mockImplementation(fn=>original(tx=>{
+   const queries:string[]=[];statements.push(queries);
+   return fn({query:async(sql,values)=>{
+    queries.push(sql);
+    if((busy==='artifacts'&&sql.startsWith('LOCK TABLE artifacts'))||(busy==='groups'&&sql.includes('FROM groups')&&sql.includes('FOR UPDATE')))throw Object.assign(new Error('could not obtain lock'),{code:'55P03'});
+    return tx.query(sql,values);
+   }});
+  }));
+  try{
+   const response=await f.move(id,{type:'group',id:'grp_ownership'});
+   expect(response.status).toBe(409);expect(await response.json()).toMatchObject({error:'transfer_refused',details:['Work is changing; retry ownership transfer']});
+  }finally{spy.mockRestore();}
+  expect(await getArtifactById(id)).toMatchObject({user_id:f.creator.id,group_id:null});
+  expect((await f.db.query('SELECT id FROM ownership_transfers WHERE artifact_id=$1',[id])).rows).toHaveLength(0);
+ }
+ const spy=vi.spyOn(f.db,'transaction').mockImplementation(fn=>original(tx=>{
+  const queries:string[]=[];statements.push(queries);
+  return fn({query:async(sql,values)=>{queries.push(sql);return tx.query(sql,values);}});
+ }));
+ try{expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);}finally{spy.mockRestore();}
+ for(const queries of statements){
+  expect(queries[0]).toBe('LOCK TABLE artifacts IN EXCLUSIVE MODE NOWAIT');
+  for(const sql of queries.filter(sql=>/FOR (UPDATE|SHARE)/.test(sql)))expect(sql).toContain('NOWAIT');
+ }
+});
