@@ -18,7 +18,7 @@ Follow new human comments and replies as NDJSON until cancelled; --cursor resume
   --version
     Show the installed CLI version.
   --json
-    Write one JSON document to stdout; diagnostics go to stderr.
+    Write JSON to stdout (watch: NDJSON); diagnostics go to stderr.
   --server <URL>
     Use this server origin for this command.
   -y, --yes

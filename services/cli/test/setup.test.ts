@@ -124,7 +124,7 @@ test('setup --server records a self-hosted origin as the default, once, and neve
   assert.deepEqual(JSON.parse(await readFile(join(home,'.artifactbin','config.json'),'utf8')),{host:'https://self.example'});
   out.length=0;
   assert.equal(await runCli(['help','--json'],context),0,'no --server: the recorded origin is the one afbin names');
-  assert.match(out.join(''),/CLI examples use `--server https:\/\/self\.example`/);
+  assert.match(out.join(''),/CLI: `--server https:\/\/self\.example`/);
   assert.match(out.join(''),/already installed runnable CLI/);
   assert.match(out.join(''),/references\/http-api\.md/);
   out.length=0;

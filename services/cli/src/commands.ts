@@ -47,7 +47,7 @@ export const flags: Record<string,Flag> = {
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
  for:{value:'TEMPLATE',description:'Print every reference a document of this template needs, in reading order, as one output.'},
  version:{description:'Show the installed CLI version.'},
- help:{short:'h',description:'Show local command help.'}, json:{description:'Write one JSON document to stdout; diagnostics go to stderr.'},
+ help:{short:'h',description:'Show local command help.'}, json:{description:'Write JSON to stdout (watch: NDJSON); diagnostics go to stderr.'},
  server:{value:'URL',description:'Use this server origin for this command.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; never bypass authentication.'},
  'dry-run':{short:'n',description:'Validate the operation without changing local or remote state.'},force:{short:'f',description:'Overwrite local changes on pull, or observe and conditionally replace a stale head on push. On delete, allow referenced assets. On auth, sign in again through the browser even when the saved token is valid.'},
  remote:{description:'Fetch current remote state; comparison still runs locally.'},fix:{description:'Apply mechanical local fixes. Push never fixes source.'},
