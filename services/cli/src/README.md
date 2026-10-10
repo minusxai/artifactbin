@@ -109,6 +109,7 @@ What `dispatch.ts` calls to do a command's work.
 | `teaching-origin.ts` | Fill the server address into the teaching bundle. |
 | `help-screen.ts` | Help screens for a terminal. |
 | `man.ts` | Roff output for the manual page. |
+| `group-destination.ts` | Resolve group handles to immutable destination IDs and save authenticated setup defaults. |
 | `identities.ts` | Register and resolve file identities. |
 | `markdown.ts` | One-time Markdown to JSX conversion on push. |
 | `local-html-import.ts` | Import an exported HTML file as data. |

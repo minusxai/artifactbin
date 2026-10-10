@@ -227,8 +227,8 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
       expect(text).toContain('optional historical selection');
     }
   });
-  it('uses the CLI-owned root within its budget',()=>{
-    const sheet=buildQuickSheet(BASE);expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);expect(sheet).toContain('afbin push');
+  it.each([BASE, 'https://artifactbin.dev', 'https://app.artifactbin.dev', 'https://artifacts.company.example'])('uses the CLI-owned root within its budget at %s',base=>{
+    const sheet=buildQuickSheet(base);expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);expect(sheet).toContain('afbin push');
   });
   it('renders every file for two bases with no leftover template syntax', () => {
     for (const base of [BASE, 'http://localhost:3000']) {
