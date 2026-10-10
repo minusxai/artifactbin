@@ -11,8 +11,7 @@
  * checker must find the documents it strands.
  */
 import { describe, expect, it } from 'vitest';
-import type { DataflowState, Row, Scalar } from '@/lib/dataflow/dataflow';
-import { queriesReadingValues } from '@/lib/dataflow/compiled-flow';
+import { type DataflowState, type Row, type Scalar, queriesReadingValues } from '@/lib/dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 import {
   accessSettled, createCore, pendingOf, step,

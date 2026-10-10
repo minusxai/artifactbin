@@ -1,7 +1,8 @@
 /* @jsxImportSource solid-js */
 import { Show, createEffect, createSignal, onCleanup, splitProps, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
-import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/dataflow/dataflow';
+import { refName, resolveBindings, rowBound } from '@/lib/dataflow/dataflow';
+import type { BindingSource, Row, Scalar } from '@/lib/dataflow';
 import { VIEWER_ID } from '@/lib/dataflow/builtins';
 import { refusalText } from '@artifactbin/contracts/sign-in-required';
 import { MutationHint } from './disclosure';

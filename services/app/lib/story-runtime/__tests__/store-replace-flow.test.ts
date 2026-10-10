@@ -10,8 +10,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { createDataflowStore, type QueryTransport } from '../store';
-import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';
-import type { CompiledDataflow, CompiledQuery, CompiledValue } from '@/lib/dataflow/compiled-dataflow';
+import type { DataflowState, Scalar, CompiledDataflow, CompiledQuery, CompiledValue } from '@/lib/dataflow';
 
 // The store's own unit: compiled records built by shape (the compiler's output is covered in lib/publish).
 const flowOf = (values: CompiledValue[], queries: CompiledQuery[]): CompiledDataflow => ({ imports: [], values, queries, mutations: [] });

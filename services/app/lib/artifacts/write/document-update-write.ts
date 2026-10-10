@@ -12,7 +12,7 @@ import type { TokenActor } from '@/lib/accounts';
 import {hydrateArtifactDocument} from '../document';
 import {GRAPH_POLICY, newEditId} from '../../document';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
-import {DATA_SYNTAX_META} from '@/lib/dataflow/data-syntax';
+import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
 import {TABLES} from '../../platform/schema';
 /**
  * The committed head WITHOUT its document: every artifacts column but `document`, built column by column. Not

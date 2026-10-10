@@ -34,7 +34,8 @@
  */
 import { parseJsx, type JsxElement, type JsxNode, type ValidationError } from '@/lib/jsx';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
-import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseNotifyDecl, parseQueryDecl, parseValueDecl, type Dataflow, type ImportDecl, type MutationDecl, type NotifyDecl, type QueryDecl, type ValueDecl } from '@/lib/dataflow/dataflow';
+import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseNotifyDecl, parseQueryDecl, parseValueDecl } from '@/lib/dataflow/dataflow';
+import type { Dataflow, ImportDecl, MutationDecl, NotifyDecl, QueryDecl, ValueDecl } from '@/lib/dataflow';
 
 export const HELMET_TAG = 'Helmet';
 export const CONTEXT_TAG = 'Context';

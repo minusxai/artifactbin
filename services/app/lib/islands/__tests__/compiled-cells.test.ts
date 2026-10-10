@@ -20,8 +20,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import type { MutationRequest } from '@/lib/dataflow/mutation-request';
+import type { CompiledDataflow, MutationRequest } from '@/lib/dataflow';
 import { EDITABLE_CELLS_BODY, EDITABLE_CELLS_REFUSAL, EDITABLE_CELLS_ROWS, LEGACY_REFUSED_CELLS } from './fixtures/editable-cells';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');

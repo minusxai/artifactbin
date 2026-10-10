@@ -1,5 +1,5 @@
 import {resolveToken} from '../accounts/tokens';
-import {validateQueryValues} from '@/lib/dataflow';
+import { validateQueryValues } from '@/lib/dataflow';
 import {createHash} from 'node:crypto';
 import { artifactState, dataflowForRow, declarationsForRow, readableArtifact } from '@/lib/artifacts';
 import type { TokenActor } from '@/lib/accounts';

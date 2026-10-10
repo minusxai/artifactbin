@@ -32,8 +32,7 @@ import { Select, loadSelectPopup } from '../kit/select';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../kit/dialog';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import type { Scalar } from '@/lib/dataflow/dataflow';
+import type { CompiledDataflow, Scalar } from '@/lib/dataflow';
 
 const flow = (values: Array<{ name: string; default: Scalar }> = []): CompiledDataflow => ({
   imports: [], queries: [], mutations: [],

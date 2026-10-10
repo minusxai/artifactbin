@@ -32,12 +32,11 @@ import type { MutationInput, Row, Scalar } from '@artifactbin/contracts';
 import { DISPLAY_ROWS, isQueryFailure } from '@artifactbin/contracts';
 import type { HeldDatabase, SqliteEngine } from '@artifactbin/sql/core';
 import { evaluateDataflow } from '@/lib/dataflow/evaluate';
-import type { CompiledDataflow, CompiledMutation } from '@/lib/dataflow/compiled-dataflow';
-import { importRef, mutationReads, type ImportTables } from '@/lib/dataflow/compiled-flow';
-import type { TableResult } from '@/lib/dataflow/dataflow';
-import { runLocalStateMutation, type LocalMutationResult } from '@/lib/dataflow/local-state';
+import type { CompiledDataflow, CompiledMutation, ImportTables, TableResult, LocalMutationResult, MutationRequest } from '@/lib/dataflow';
+import { importRef, mutationReads } from '@/lib/dataflow/compiled-flow';
+import { runLocalStateMutation } from '@/lib/dataflow/local-state';
 import { localTableOverrides } from '@/lib/dataflow/local-tables';
-import { bindMutationRequest, type MutationRequest } from '@/lib/dataflow/mutation-request';
+import { bindMutationRequest } from '@/lib/dataflow/mutation-request';
 import type { RunAnswer } from './dataflow-core';
 
 /** The one deadline and write cap every composition applies (services/sql caps). */

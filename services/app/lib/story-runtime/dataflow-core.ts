@@ -21,7 +21,7 @@
  * survives a later run for `trend`: nothing either one reads moved the other.
  */
 import type { PersonCard } from '@artifactbin/contracts';
-import type { DataflowState, Row, Scalar, TableResult } from '@/lib/dataflow/dataflow';
+import type { DataflowState, Row, Scalar, TableResult } from '@/lib/dataflow';
 import { checkedLocalRows } from '@/lib/dataflow/local-tables';
 import { graphDefaults, graphInlineTables, type GraphReads, type RuntimeGraph } from './runtime-graph';
 import type { MutationAnswer } from './store';

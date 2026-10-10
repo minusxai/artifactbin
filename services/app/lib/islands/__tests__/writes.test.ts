@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWriteStatusFeed } from '../writes';
 import { SAVED_STATUS_TTL_MS } from '../contract';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow';
 
 const flow: CompiledDataflow = {
   imports: [{ name: 'd', ref: 'DS1', tables: [{ name: 'rows', columns: [{ name: 'n', type: 'number' }] }] }],

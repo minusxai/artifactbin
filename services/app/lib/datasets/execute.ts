@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {runQueries,isQueryFailure} from '@/lib/sql/engine';
 import type { Scalar, TableResult } from '@/lib/dataflow';
 import {compileDatasetSql} from './sql';
-import {datasetSqlParams} from '@/lib/dataflow/sql-parameters';
+import { datasetSqlParams } from '@/lib/dataflow/server';
 import {queryPostgres} from './postgres';
 import {DatasetError} from './errors';
 import {resolveDatasetConnection} from './secrets';
@@ -12,7 +12,7 @@ import {storedTables} from './catalog';
 import type {DatasetCatalog} from './types';
 import {getDb} from '@/lib/platform/db';
 import {createDatasetResultCache} from './result-cache';
-interface CatalogQueryOptions {timeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow/dataset-shape').DatasetColumn['type']>;datasetId?:string;actor?:RoleActor;signal?:AbortSignal;authorize?:()=>Promise<void>}
+interface CatalogQueryOptions {timeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow').DatasetColumn['type']>;datasetId?:string;actor?:RoleActor;signal?:AbortSignal;authorize?:()=>Promise<void>}
 export type CatalogResult=TableResult&{refreshedAt:string};
 /** Callers authorize dataset access before entering this execution/cache boundary. */
 async function executeCatalogDirect(catalog:DatasetCatalog,sql:string,params:Record<string,Scalar>={},opts:CatalogQueryOptions={}):Promise<CatalogResult> {

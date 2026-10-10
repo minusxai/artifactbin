@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { kitchenSinkMarkup } from '../fixtures/kitchen-sink';
 import { parseJsx, validateJsx } from '@/lib/jsx';
 import { dataflowOf, splitHelmet, validateHelmet } from '@/lib/document/helmet';
-import { collectRefNameUses, validateDataflow } from '@/lib/dataflow/dataflow';
+import { collectRefNameUses, validateDataflow } from '@/lib/dataflow';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';

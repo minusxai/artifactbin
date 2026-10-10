@@ -8,12 +8,9 @@
  * and the record is the compiled dataflow's own (lib/dataflow/compiled-dataflow):
  * SQLite's analysis of every statement, taken at publish.
  */
-import type { ColumnType, DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import type { CompiledDataflow, CompiledReads } from '@/lib/dataflow/compiled-dataflow';
+import type { ColumnType, DatasetColumn, CompiledDataflow, CompiledReads, DataflowPlacement, DataflowState, Row, Scalar } from '@/lib/dataflow';
 import { importRef, selectQueries } from '@/lib/dataflow/compiled-flow';
-import type { DataflowPlacement } from '@/lib/dataflow/placement';
 import { VIEWER } from '@/lib/dataflow/builtins';
-import type { DataflowState, Row, Scalar } from '@/lib/dataflow/dataflow';
 
 /** The source a membership change bumps; every query and every write check reads it. */
 const MEMBERS_SOURCE = '_members';

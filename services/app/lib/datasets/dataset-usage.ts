@@ -1,6 +1,6 @@
 /** Canonical authoring examples shared by create responses and catalog copy UI. */
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import type { DatasetColumn } from '@/lib/dataflow';
 
 const defaultTable = (catalog?: DatasetCatalog) => catalog?.tables.find(t => t.schema === catalog.defaultSchema) ?? catalog?.tables[0];
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;

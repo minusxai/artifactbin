@@ -79,17 +79,46 @@ const STORY_RUNTIME_BROWSER_LEAVES = [
   'anchor', 'anchor-restore', 'authenticated-transport', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update',
   'fetch-transport', 'frame-bridge/parent', 'page-bindings', 'page-engine', 'reader-mode', 'store',
 ];
-const DATAFLOW_ENTRIES = [
-  '', 'builtins', 'compile-dataflow', 'compiled-dataflow', 'compiled-flow', 'data-syntax', 'dataflow', 'dataset-shape', 'evaluate',
-  'image-source', 'local-state', 'local-tables', 'mutation-request', 'number-aggregation', 'number-format', 'placement', 'query-values',
-  'ref-data', 'reference-positions', 'refs', 'server', 'sql-parameters', 'url-values',
-];
+/**
+ * lib/dataflow's browser leaves: the island build splits by FILE reachability (esbuild), so a value
+ * import through the index puts every re-exported file's code in that island's closure (measured on
+ * row 40.1: +3.5 to +9.2 KB raw per kit closure, +6.9 KB on @mx/rt). Value imports from the island
+ * graph name a leaf; their types and everything else use the entries.
+ */
 const DATAFLOW_BROWSER_IMPORTERS = [
+  'services/app/lib/document/asset-url.ts',
+  'services/app/lib/document/helmet.ts',
+  'services/app/lib/islands/frame-bridge.ts',
+  'services/app/lib/islands/kit/basic.tsx',
+  'services/app/lib/islands/kit/cells.tsx',
   'services/app/lib/islands/kit/controls.tsx',
+  'services/app/lib/islands/kit/data.tsx',
+  'services/app/lib/islands/kit/dialog.tsx',
+  'services/app/lib/islands/kit/embed.tsx',
+  'services/app/lib/islands/kit/files.tsx',
+  'services/app/lib/islands/kit/image-map.ts',
+  'services/app/lib/islands/kit/image.tsx',
+  'services/app/lib/islands/kit/people.tsx',
   'services/app/lib/islands/kit/select.tsx',
+  'services/app/lib/islands/kit/static/preview-controls.tsx',
+  'services/app/lib/islands/kit/upload/control.tsx',
+  'services/app/lib/islands/morph/engine.ts',
+  'services/app/lib/islands/url-sync.ts',
+  'services/app/lib/islands/viewer.ts',
+  'services/app/lib/offline/snapshot-current.ts',
+  'services/app/lib/offline/snapshot-transport.ts',
+  'services/app/lib/story-runtime/dataflow-core.ts',
+  'services/app/lib/story-runtime/fetch-transport.ts',
+  'services/app/lib/story-runtime/page-engine.ts',
+  'services/app/lib/story-runtime/runtime-graph.ts',
   'services/app/lib/story-runtime/store.ts',
+  'services/app/lib/story-ui/data-table.ts',
+  'services/app/lib/viz/chart-envelope.ts',
 ];
-const DATAFLOW_BROWSER_LEAVES = ['mutation-request-builder', 'scalar-input'];
+const DATAFLOW_BROWSER_LEAVES = [
+  'builtins', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
+  'mutation-request', 'mutation-request-builder', 'number-aggregation', 'number-format', 'placement', 'ref-data', 'scalar-input', 'url-values',
+];
 /*
  * lib/document: server code enters through its index or `server` (node-only); browser-bundled code
  * imports a listed leaf instead, never the index (browserLeavesOnly), because the island and app
@@ -138,7 +167,7 @@ const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
-  'lib/dataflow': { entries: DATAFLOW_ENTRIES, browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
+  'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },

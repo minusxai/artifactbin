@@ -49,12 +49,10 @@
  */
 import { createHash } from 'node:crypto';
 import { type ArtifactRow, canReadArtifact, compiledForRow, dataflowForRow, getArtifactById, grantsOf, grantsPermitRead } from '@/lib/artifacts';
-import type { CompiledDataflow } from '@/lib/dataflow';
-import { dataRefs } from '@/lib/dataflow/compiled-flow';
 import { type DataPlan, type DatasetAccessFacts, planOf } from '@/lib/compiled-page';
+import { type CompiledDataflow, dataRefs, type Scalar } from '@/lib/dataflow';
 import { getDb } from '@/lib/platform/db';
 import { DatasetError } from '@/lib/datasets/errors';
-import type { Scalar } from '@/lib/dataflow';
 import { marksOf } from './served-results.server';
 import { preparedPageFor } from './prepared-page.server';
 import { drawSnapshotCharts } from './charts.server';

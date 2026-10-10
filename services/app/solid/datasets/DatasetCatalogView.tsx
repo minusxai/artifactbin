@@ -4,8 +4,7 @@ import { ChevronDown } from 'lucide-solid';
 import { Button } from '../ui/ui';
 import { artifactEditPath } from '@/lib/http/urls';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import type { Row } from '@/lib/dataflow/dataflow';
+import type { DatasetColumn, Row } from '@/lib/dataflow';
 import { apiFetch } from '../lib/api';
 import { dateTime } from '../lib/format';
 

@@ -1,6 +1,5 @@
 /** The one conversion from a Question viz prop to a chart envelope. */
-import type { TableResult } from '@/lib/dataflow/dataflow';
-import type { RefDataMap } from '@/lib/dataflow/ref-data';
+import type { TableResult, RefDataMap } from '@/lib/dataflow';
 import { columnVizKind } from '@/lib/dataflow/dataset-shape';
 import { materializeFileRecipe } from '@/lib/viz/recipe-file';
 import type { VizResultColumn } from '@/lib/viz/types';

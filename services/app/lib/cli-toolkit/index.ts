@@ -40,19 +40,9 @@ export type { AnnotationAuthor, AnnotationCommentWire } from '@artifactbin/contr
 export { validateFileComments } from '../offline/comment-validation';
 
 // ---- Dataflow: compile and evaluate a document's queries locally.
-export { compileWithLoader } from '../dataflow/compile-dataflow';
-export { selectQueries } from '../dataflow/compiled-flow';
-export type { ImportTables } from '../dataflow/compiled-flow';
-export { evaluateDataflow } from '../dataflow/evaluate';
-export type { RunDataflowOptions } from '../dataflow/evaluate';
-export { validateQueryValues } from '../dataflow/query-values';
-export { collectRefUses } from '../dataflow/refs';
-export { imageReferenceId } from '../dataflow/image-source';
-export { REFERENCE_POSITIONS } from '../dataflow/reference-positions';
-export type { CompiledDataflow } from '../dataflow/compiled-dataflow';
-export type { Dataflow, DataflowState } from '../dataflow/dataflow';
-export type { DatasetColumn } from '../dataflow/dataset-shape';
-export type { RefDataMap } from '../dataflow/ref-data';
+export { compileWithLoader } from '../dataflow/server';
+export { collectRefUses } from '../dataflow/references';
+export { selectQueries, type ImportTables, evaluateDataflow, type RunDataflowOptions, validateQueryValues, imageReferenceId, REFERENCE_POSITIONS, type CompiledDataflow, type Dataflow, type DataflowState, type DatasetColumn, type RefDataMap } from '../dataflow';
 
 // ---- Data ingest: CSV and GeoJSON files as typed rows.
 export { coerceRows } from '../data-ingest/coerce';

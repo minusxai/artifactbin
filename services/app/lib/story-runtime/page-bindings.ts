@@ -2,7 +2,7 @@
 import { batch, createRoot, createSignal, untrack, type Accessor } from 'solid-js';
 import type { DataflowStore } from './store';
 import type { DatasetUploadResult } from '@artifactbin/contracts';
-import type { Row, Scalar } from '@/lib/dataflow/dataflow';
+import type { Row, Scalar } from '@/lib/dataflow';
 
 /** A Value's setter, Solid's shape: a value, or a function of the current one. Returns what it wrote. */
 export type ValueSetter = (next: Scalar | ((current: Scalar) => Scalar)) => Scalar;

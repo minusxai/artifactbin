@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { DataTable } from '../kit/data';
-import type { TableResult } from '@/lib/dataflow/dataflow';
+import type { TableResult } from '@/lib/dataflow';
 
 // A measured virtualizer can briefly retain indices from the previous query result.
 vi.mock('@tanstack/solid-virtual', () => ({

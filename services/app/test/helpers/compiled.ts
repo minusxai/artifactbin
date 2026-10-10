@@ -8,8 +8,8 @@
 import type { DatasetColumn } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx';
 import { dataflowOf, splitHelmet } from '@/lib/document';
-import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/compile-dataflow';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/server';
+import type { CompiledDataflow } from '@/lib/dataflow';
 
 /** An import's shape: its `rows` columns, or a full source (a folder, a catalog, a connected database). */
 export type TestSource = DatasetColumn[] | ImportSource;

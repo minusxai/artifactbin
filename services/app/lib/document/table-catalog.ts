@@ -7,8 +7,7 @@
  */
 import { parseJsxShared } from '@/lib/jsx/parse-shared';
 import { splitHelmet } from './helmet';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import type { DataflowState } from '@/lib/dataflow/dataflow';
+import type { DatasetColumn, DataflowState } from '@/lib/dataflow';
 
 export interface TableChoice {
   /** The declared name (`data="$name"` binds it). */

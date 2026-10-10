@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { Show, createContext, createEffect, createSignal, splitProps, onCleanup, onMount, useContext, type JSX } from 'solid-js';
-import { refName, resolveBindings, type BindingSource } from '@/lib/dataflow/dataflow';
+import { refName, resolveBindings } from '@/lib/dataflow/dataflow';
+import type { BindingSource } from '@/lib/dataflow';
 import { refusalText } from '@artifactbin/contracts/sign-in-required';
 import { useIsland } from '../context';
 import { kitSignal } from '../comment-state';

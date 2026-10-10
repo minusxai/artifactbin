@@ -33,8 +33,6 @@ export interface MutationRequest {
   localTables?: Record<string, Row[]>;
 }
 
-export { mutationRequestFor } from './mutation-request-builder';
-
 /**
  * The request a control's press makes: each argument from `args` (what the
  * control's `args=` resolved to) or else the page value of the same name; the
@@ -151,3 +149,6 @@ export function bindMutationRequest(flow: CompiledDataflow, m: CompiledMutation,
   const names = mutationParams(m);
   return { ok: true, params: bindParams(names, logical), paramTypes: bindTypes(names, types), bindings:{values:logical,types:{...Object.fromEntries(Object.entries(types).filter((entry):entry is [string,ColumnType]=>entry[1]!==null)), '_me.id':'user',_now:'timestamp',_tz:'string'},...platform} };
 }
+
+/** @public The evals repository's tracker scorer imports the builder from this path (evals/lib/score/kinds/tracker.ts). */
+export { mutationRequestFor } from './mutation-request-builder';

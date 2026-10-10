@@ -18,8 +18,7 @@
 import type { AnnotationWire } from '@/lib/annotations';
 import type { CompiledPage } from '@/lib/compiled-page';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
-import type { DataflowState, Scalar, TableResult } from '@/lib/dataflow/dataflow';
-import type { ImportTables } from '@/lib/dataflow/compiled-flow';
+import type { DataflowState, Scalar, TableResult, ImportTables } from '@/lib/dataflow';
 
 export const ARTIFACT_FILE_FORMAT = 1 as const;
 

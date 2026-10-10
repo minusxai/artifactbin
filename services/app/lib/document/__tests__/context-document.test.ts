@@ -3,7 +3,8 @@ import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { serializeJsx } from '@/lib/jsx';
 import { splitHelmet } from '../helmet';
 import { validateMarkupStructure } from '../local-validation';
-import { collectRefUses, validateRefs } from '@/lib/dataflow/refs';
+import { collectRefUses } from '@/lib/dataflow/references';
+import { validateRefs } from '@/lib/dataflow/server';
 import { contextDocumentId, writeContextRef } from '../context';
 
 const source = '<Helmet><Context src="ref:abc123" /></Helmet><p id="body">Dashboard</p>';

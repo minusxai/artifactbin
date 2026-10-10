@@ -16,9 +16,7 @@
  * as the downloader (every combination of a batch in one engine call).
  */
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { coerceScalarInput, controlOptions, refName, REF_ATTRS, type DataflowState, type Scalar } from '@/lib/dataflow/dataflow';
-import type { CompiledDataflow, CompiledValue } from '@/lib/dataflow/compiled-dataflow';
-import { queriesReadingValues } from '@/lib/dataflow/compiled-flow';
+import { coerceScalarInput, controlOptions, refName, REF_ATTRS, type DataflowState, type Scalar, type CompiledDataflow, type CompiledValue, queriesReadingValues } from '@/lib/dataflow';
 import type { ArtifactFileVariant } from './file-format';
 
 export interface VariantCaps {
@@ -79,7 +77,7 @@ const scalarKey = (v: Scalar): string => JSON.stringify(v);
 const dedupe = (xs: Scalar[]): Scalar[] => [...new Map(xs.map((x) => [scalarKey(x), x])).values()];
 
 /** The finite values one control offers, in the Value's own type; null when it can write anything. */
-function controlValues(domain: ControlDomain, decl: Pick<CompiledValue, "name" | "default"> & { type: import("@/lib/dataflow/dataset-shape").ColumnType }, base: DataflowState): Scalar[] | null {
+function controlValues(domain: ControlDomain, decl: Pick<CompiledValue, "name" | "default"> & { type: import("@/lib/dataflow").ColumnType }, base: DataflowState): Scalar[] | null {
   if (domain.kind === 'open') return null;
   const nullable = decl.default === null;
   if (domain.kind === 'boolean') return nullable ? [true, false, null] : [true, false];

@@ -11,7 +11,7 @@ import {
 } from '../../document';
 import type {ServerRefLoader} from '../../datasets/schema-loader';
 import type {SourceRepair} from '../../jsx/repair';
-import type {ReferenceValidationState,ResolvedRef} from '@/lib/dataflow/refs';
+import type { ReferenceValidationState, ResolvedRef } from '@/lib/dataflow/server';
 
 /** What admission needs from the publish pipeline, supplied by the caller: the
  * reference loader it witnesses, the identity normalization, and the publisher

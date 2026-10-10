@@ -14,7 +14,7 @@ import { MountScope, commentSignal, commentStateKey } from '../comment-state';
 import { exposeCommentValues, mountComponents, scriptCreateSignal } from '../page-runtime';
 import { bindPage } from '@/lib/story-runtime/page-bindings';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow';
 import { clearPendingCommentState } from '@/lib/story-runtime/comment-state';
 import { captureCommentState, restoreCommentState } from '@/lib/story-runtime/comment-state-io';
 

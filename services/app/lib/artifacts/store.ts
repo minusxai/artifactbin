@@ -38,11 +38,11 @@ import { json } from '../http/http';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } from '@/lib/document/server';
 import { emitHeadCommitted } from './after-commit';
-import { DATA_SYNTAX_META } from '@/lib/dataflow/data-syntax';
+import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
 import type { ServerRef, ServerRefLoader } from '@/lib/datasets/schema-loader';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import type { DatasetColumn } from '@/lib/dataflow';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a

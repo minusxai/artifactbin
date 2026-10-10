@@ -5,8 +5,8 @@ import {JSX_STORY_COMPONENT_NAMES} from '@/lib/jsx/components';
 import {STORY_HTML_TAGS} from '@/lib/jsx/component-names';
 import {dataflowOf,splitHelmet,validateHelmet,type HelmetSplit} from './helmet';
 import {analyzeRowScopes} from '@/lib/jsx/row-scope';
-import {collectRefNameUses,validateDataflow} from '@/lib/dataflow/dataflow';
-import {findBrokenEmbeds} from '@/lib/dataflow/refs';
+import { collectRefNameUses, validateDataflow } from '@/lib/dataflow';
+import { findBrokenEmbeds } from '@/lib/dataflow/references';
 import {cspExtensionsOf} from './csp-extensions';
 
 interface MarkupStructureOptions{

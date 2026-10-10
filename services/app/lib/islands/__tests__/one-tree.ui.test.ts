@@ -5,7 +5,7 @@ import path from 'node:path';
 import * as rt from '../rt';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/dataflow';
 import type { Component } from 'solid-js';
 import { pathToFileURL } from 'node:url';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';

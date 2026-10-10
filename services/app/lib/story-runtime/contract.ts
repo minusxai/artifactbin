@@ -13,15 +13,14 @@ import type { JsxNode } from '@/lib/jsx';
 // The pristine channel's shape (lib/story-runtime/pristine), for the frame's edit chunks and their loaders.
 export type { RuntimeChannel } from './pristine';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { RefDataMap } from '@/lib/dataflow/ref-data';
-import type { DataflowState, Scalar } from '@/lib/dataflow/dataflow';
+import type { RefDataMap, DataflowState, Scalar } from '@/lib/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import type { DocumentGraph, PersonCard, StoredMermaidImage } from '@artifactbin/contracts';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
   /** The compiled declarations (lib/dataflow/compiled-dataflow): what every query reads, every mutation's signature. */
-  flow: import('@/lib/dataflow/compiled-dataflow').CompiledDataflow;
+  flow: import('@/lib/dataflow').CompiledDataflow;
   /**
    * The rows, when somebody has already run them. ABSENT is the reader's
    * normal case — paint first: the document arrives with its declarations and

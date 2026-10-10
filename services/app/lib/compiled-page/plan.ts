@@ -21,9 +21,7 @@
  *
  * Pure and deterministic: no I/O, no clock, output order follows the flow.
  */
-import type { CompiledDataflow, CompiledQuery, CompiledReads } from '@/lib/dataflow/compiled-dataflow';
-import { importRef, mutationTargetRef } from '@/lib/dataflow/compiled-flow';
-import { placeDataflow } from '@/lib/dataflow/placement';
+import { type CompiledDataflow, type CompiledQuery, type CompiledReads, importRef, mutationTargetRef, placeDataflow } from '@/lib/dataflow';
 import type { DataPlan, DatasetAccessFacts, PlannedMutation, PlannedQuery, PlannedValue, QueryScope } from './contract';
 
 /** Built-ins whose value is the same for every reader of one version (§4.2: `_members` is covered by the snapshot's marks, `_now` by its age bound). */

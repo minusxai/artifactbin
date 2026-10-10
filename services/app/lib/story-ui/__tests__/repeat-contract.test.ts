@@ -1,6 +1,6 @@
 import { expect,it } from 'vitest';
 import { parseJsx,validateJsx } from '@/lib/jsx';
-import { collectRefNameUses } from '@/lib/dataflow/dataflow';
+import { collectRefNameUses } from '@/lib/dataflow';
 import { keyedRowsError, validRowKey } from '../repeat-identity';
 import { publishJsx } from '@/lib/publish/document/jsx-tier';
 import { renderDoc } from '@/test/helpers/skill-docs';

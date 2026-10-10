@@ -4,7 +4,7 @@
  * SQL identifiers are conservative: extra dependencies only reject concurrency.
  */
 import type {JsxNode} from '../jsx/types';
-import {collectRefNameUses} from '@/lib/dataflow/dataflow';
+import { collectRefNameUses } from '@/lib/dataflow';
 export function graphSelectors(node:JsxNode):string[] {
  const selectors=new Set<string>();
  const own=node.type==='element'?{...node,children:[]}:node;

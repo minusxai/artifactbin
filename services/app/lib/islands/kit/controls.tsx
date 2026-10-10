@@ -4,7 +4,8 @@ import { format as d3format } from 'd3-format';
 import { overlayDestination } from './trusted-overlay';
 import type { DatePickerPopupProps } from './controls/date-picker-popup';
 import { popupDismiss } from './popup-dismiss';
-import { controlOptions as normalize, refName, type Scalar } from '@/lib/dataflow/dataflow';
+import { controlOptions as normalize, refName } from '@/lib/dataflow/dataflow';
+import type { Scalar } from '@/lib/dataflow';
 import { coerceScalarInput } from '@/lib/dataflow/scalar-input';
 import { useIsland } from '../context';
 

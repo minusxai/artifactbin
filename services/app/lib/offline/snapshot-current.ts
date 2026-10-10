@@ -1,5 +1,6 @@
 /** A downloaded answer is valid only for the query text it was taken over. */
-import { EMPTY_DATAFLOW, type Dataflow, type DataflowState, type QueryDecl } from '@/lib/dataflow/dataflow';
+import { EMPTY_DATAFLOW } from '@/lib/dataflow/dataflow';
+import type { Dataflow, DataflowState, QueryDecl } from '@/lib/dataflow';
 import { declarationsOf } from '@/lib/document/helmet';
 import { OFFLINE_QUERY_REASON, type ArtifactFile } from './file-format';
 

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { dryRunMutations, isQueryFailure, runMutation } from '@/lib/sql/engine';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import type { DatasetColumn } from '@/lib/dataflow';
 
 const COLUMNS: DatasetColumn[] = [{ name: 'choice', type: 'string' }, { name: 'votes', type: 'number' }];
 const ROWS = [{ choice: 'ramen', votes: 2 }, { choice: 'tacos', votes: 1 }];

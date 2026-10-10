@@ -7,9 +7,7 @@
  */
 import { importedTables } from '@/lib/datasets/catalog';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import type { ResolvedRef } from '@/lib/dataflow/refs';
-import type { ImportSource, SchemaLoader } from '@/lib/dataflow/compile-dataflow';
-import { datasetSqlParams } from '@/lib/dataflow/sql-parameters';
+import { type ResolvedRef, type ImportSource, type SchemaLoader, datasetSqlParams } from '@/lib/dataflow/server';
 
 export type ServerRef = ResolvedRef & { catalog?: DatasetCatalog };
 /** What the server's ref loaders answer; one is also a dataflow `RefLoader`. */

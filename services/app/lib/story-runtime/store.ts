@@ -1,5 +1,9 @@
 import { runtimeId } from '@artifactbin/utils/runtime-id';
-import type {ImageAssetAnswer} from '@/lib/dataflow/ref-data';
+import type { ImageAssetAnswer, DataflowState, Row, Scalar, TableResult, CompiledDataflow, MutationRequest, LocalMutationResult, ImportTables, DataflowPlacement } from '@/lib/dataflow';
+import { mutationRequestFor } from '@/lib/dataflow/mutation-request-builder';
+import { importRef, selectQueries } from '@/lib/dataflow/compiled-flow';
+import { localZone } from '@/lib/dataflow/builtins';
+import { placeDataflow } from '@/lib/dataflow/placement';
 /**
  * The document's DATA at runtime — one store per document, framework-free.
  *
@@ -28,14 +32,6 @@ import type {ImageAssetAnswer} from '@/lib/dataflow/ref-data';
  * contract `useSyncExternalStore` needs, and what keeps a re-render from
  * cascading through every embed on every keystroke.
  */
-import type { DataflowState, Row, Scalar, TableResult } from '@/lib/dataflow/dataflow';
-import type { CompiledDataflow } from '@/lib/dataflow/compiled-dataflow';
-import type { MutationRequest } from '@/lib/dataflow/mutation-request';
-import { mutationRequestFor } from '@/lib/dataflow/mutation-request-builder';
-import type { LocalMutationResult } from '@/lib/dataflow/local-state';
-import { importRef, selectQueries, type ImportTables } from '@/lib/dataflow/compiled-flow';
-import { localZone } from '@/lib/dataflow/builtins';
-import { placeDataflow, type DataflowPlacement } from '@/lib/dataflow/placement';
 import type { PersonCard } from '@artifactbin/contracts';
 import { MAX_PEOPLE_IDS } from '@artifactbin/contracts/query-request';
 import {

@@ -2,7 +2,7 @@
 import type { JsxAttribute, JsxElement, JsxNode } from '@/lib/jsx';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { immutableSet } from '@/lib/jsx/immutable-set';
-import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/dataflow/dataflow';
+import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/dataflow';
 import { substituteRow } from '@/lib/jsx/row-scope';
 import { needsFrameReferrer } from './document-sources';
 import { AST_PATH_ATTR, SOURCE_NODE_ID_ATTR } from './ast-path';

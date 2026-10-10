@@ -9,9 +9,8 @@
  *
  * Owners: rt.ts / boot.ts (w2-runtime), kit/* (w2-kit-*), viewer + writes (w3-viewer-writes), handover (w3-handover).
  */
-import type { Scalar, TableResult } from '@/lib/dataflow/dataflow';
-import type { MutationRequest } from '@/lib/dataflow/mutation-request';
 import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/data';
+import type { Scalar, TableResult, MutationRequest } from '@/lib/dataflow';
 import type { ServedResults, StoryViewer } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { ColumnType, PersonCard } from '@artifactbin/contracts';
@@ -237,7 +236,7 @@ export interface IslandPageData {
   /** Brotli bytes of the pinned DOM factory resource; absent for older compiles. */
   templateBrBytes?: number | null;
   /** A prepared version that cannot run carries its query errors into the reader. */
-  state?: import('@/lib/dataflow/dataflow').DataflowState;
+  state?: import('@/lib/dataflow').DataflowState;
   results: ServedResults | null;
   queryUrl?: string;
   mutateUrl?: string;

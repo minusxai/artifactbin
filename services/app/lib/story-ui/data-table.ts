@@ -17,8 +17,7 @@
  * from the theme's chart color, `diverging` red↔green around zero).
  */
 import { numberFormatter } from '@/lib/dataflow/number-format';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
-import type { Row } from '@/lib/dataflow/dataflow';
+import type { DatasetColumn, Row } from '@/lib/dataflow';
 
 type SortDir = 'asc' | 'desc';
 export interface SortSpec { col: string; dir: SortDir }

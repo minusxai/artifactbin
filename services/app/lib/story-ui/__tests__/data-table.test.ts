@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows,
 } from '@/lib/story-ui/data-table';
-import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';
+import type { DatasetColumn } from '@/lib/dataflow';
 
 const COLUMNS: DatasetColumn[] = [
   { name: 'region', type: 'string' },

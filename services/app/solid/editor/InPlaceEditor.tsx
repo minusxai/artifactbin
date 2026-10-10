@@ -61,7 +61,7 @@ import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
 import { tableChoices } from '@/lib/document/table-catalog';
 import { queryCells, updateQuerySqlInJsx } from '@/lib/document/query-notebook';
 import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
-import type { DataflowState } from '@/lib/dataflow/dataflow';
+import type { DataflowState } from '@/lib/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { ArtifactVersionSnapshot } from '@/lib/artifact-backend/types';
