@@ -12,7 +12,7 @@ Use one monitor per artifact while working. Existing open comments are in the ar
 afbin watch [[ base ]]/a/ARTIFACT_ID --server [[ base ]] --comments --json
 ```
 
-Keep the process running through your harness's background/monitor mechanism, or poll while the task is active. stdout contains comment events as NDJSON; stderr emits accepted checkpoints. Use `--cursor CHECKPOINT` to resume. Read the full thread for its anchor and attached screenshots before acting. Reply using `afbin comment ID --thread ANNOTATION_ID --body 'Answer'`. Do not resolve a thread unless requested. Stop the watch with Ctrl-C when monitoring is no longer wanted. Do not start duplicate monitors.
+The watch is long-lived: start it through your harness's background/monitor mechanism, then immediately continue the task and handle existing comments. Do not wait for the watch process to exit. Do not pipe it to `head` or another command waiting for a fixed number of new events: a quiet artifact may never produce them. If your harness cannot run background tools, make bounded HTTP changes reads between work steps (`after=CURSOR&wait=0`), not an endless foreground watch. Save the returned cursor after delivering its events; use `after=now` only for the initial baseline. stdout contains comment events as NDJSON; stderr emits accepted checkpoints. Use `--cursor CHECKPOINT` to resume. Read the full thread for its anchor and attached screenshots before acting. Reply using `afbin comment ID --thread ANNOTATION_ID --body 'Answer'`. Do not resolve a thread unless requested. Stop the watch with Ctrl-C when monitoring is no longer wanted. Do not start duplicate monitors.
 
 ## HTTP (no CLI installation)
 

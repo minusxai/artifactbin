@@ -5,5 +5,5 @@ export function monitoringGuidance(base:string,id:string,format:string):Record<s
  return {monitoring:{artifact_url:url,guide:`${origin}/llms/monitoring`,
   cli:`afbin watch ${url} --server ${origin} --comments --json`,
   http:`${origin}/api/artifacts/${id}/annotations/changes?after=now&wait=60`,
-  instruction:'Monitor this artifact for new human comments while working. Reuse one active monitor; follow the guide for HTTP, replies, restart and stopping.'}};
+  instruction:'Handle existing comments and continue the task. Monitor new human comments in one background process; never wait for it to exit. Without background support, use bounded HTTP polls between work steps. Follow the guide for replies, checkpoints and stopping.'}};
 }

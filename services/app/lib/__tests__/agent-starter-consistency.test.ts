@@ -2,6 +2,7 @@
  * while direct HTTP discovery teaches verified email issuance and graph claims.
  * Retired endpoints/brands remain forbidden on every surface. */
 import { describe, expect, it } from 'vitest';
+import { monitoringGuidance } from '@/lib/artifacts/monitoring-guidance';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract } from '@/lib/serving';
@@ -426,4 +427,15 @@ describe('shared instructions after missing credentials and before publishing cl
   expect(brief).toContain('every named series');
   expect(brief).toContain('Label assumptions');
  });
+});
+
+it('keeps live comment tracking from blocking existing work or waiting for process termination', () => {
+ const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}};
+ expect(hint.monitoring.instruction).toContain('background');
+ expect(hint.monitoring.instruction).toContain('existing comments');
+ const guide = publicGuideText('monitoring', DEFAULT_SERVER)!;
+ expect(guide).toContain('Do not wait for the watch process to exit');
+ expect(guide).toContain('head');
+ expect(guide).toContain('wait=0');
+ expect(guide).toContain('Save the returned cursor');
 });
