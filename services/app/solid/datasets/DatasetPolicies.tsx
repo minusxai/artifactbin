@@ -4,7 +4,7 @@ import { Portal } from 'solid-js/web';
 import { parse as parseYaml } from 'yaml';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils/dataset-grants';
 import type { DatasetAccessPolicy, DatasetOperation, DatasetTablePolicy, InsertPermission, UpdatePermission, DeletePermission } from '@artifactbin/contracts';
-import { Button } from './ui';
+import { Button } from '../ui/ui';
 import { PolicyConditions } from './PolicyConditions';
 import { apiFetch } from '../lib/api';
 

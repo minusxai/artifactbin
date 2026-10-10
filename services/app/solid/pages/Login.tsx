@@ -4,7 +4,7 @@ import { loginRedirectTarget, internalRedirectTarget } from '@/lib/http/safe-red
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 
-import { FormPage, FORM_INPUT as INPUT, FORM_PRIMARY_BUTTON as BUTTON } from '../components/FormControls';
+import { FormPage, FORM_INPUT as INPUT, FORM_PRIMARY_BUTTON as BUTTON } from '../ui/FormControls';
 
 /** Email and the sent flag (never the code) survive a reload, e.g. an in-app browser that reloads on app switch. */
 const progressKey = () => `afbin:login:${new URLSearchParams(window.location.search).get('callbackUrl') ?? ''}`;

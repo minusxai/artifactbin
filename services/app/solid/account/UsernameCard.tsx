@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { pageDataChanged, profileChanged } from '@/solid/lib/page-data-events';
-import { Button } from './ui';
+import { Button } from '../ui/ui';
 import { apiFetch } from '../lib/api';
 
 const HANDLE_REFUSALS: Record<string, string> = { username_taken: 'that handle is taken — pick another', invalid_username: '3–32 characters: lowercase letters, numbers, underscore (no hyphens)' };

@@ -9,7 +9,7 @@ import ExternalLink from 'lucide-solid/icons/external-link';
 import Link2Off from 'lucide-solid/icons/link-2-off';
 import Pencil from 'lucide-solid/icons/pencil';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
-import { Tooltip } from '@/solid/components/Tooltip';
+import { Tooltip } from '@/solid/ui/Tooltip';
 
 interface LinkCardRect { x: number; y: number; width: number; height: number }
 

@@ -148,7 +148,7 @@ describe('reader bundle hygiene', () => {
   });
 
   it('keeps the dataset viewer out of the static text-reader graph', () => {
-    const dataset = path.join(ROOT, 'solid/components/DatasetCatalogView.tsx');
+    const dataset = path.join(ROOT, 'solid/datasets/DatasetCatalogView.tsx');
     expect(reach.files.has(dataset) ? chainTo(dataset, reach.parent) : null).toBeNull();
   });
 

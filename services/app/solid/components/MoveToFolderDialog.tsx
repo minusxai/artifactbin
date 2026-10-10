@@ -10,8 +10,8 @@ import Search from 'lucide-solid/icons/search';
 import Check from 'lucide-solid/icons/check';
 import { parentOfRow, type ShelfRow } from '@/lib/workspace/shelf';
 import { displayTitle } from '@/lib/document/display-title';
-import { DialogShell } from './DialogShell';
-import { Button } from './ui';
+import { DialogShell } from '../ui/DialogShell';
+import { Button } from '../ui/ui';
 
 type FolderNode = {id: string | null; name: string; parent: string | null; children: FolderNode[]};
 

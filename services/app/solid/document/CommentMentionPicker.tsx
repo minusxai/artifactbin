@@ -12,7 +12,7 @@ import { personMention } from '@/lib/document/person-mentions';
 import { remoteMention } from '@/lib/annotations/remote-reply';
 import { type RemoteSessionInfo } from '../../../contracts/src/remote';
 import { agentNameColor } from '../lib/agent-identity';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 const agentLabel = (name: string) => (({ claude: 'Claude Code', codex: 'Codex', pi: 'Pi', opencode: 'OpenCode' } as Record<string, string>)[name] ?? name);
 /** Hosted native generations own the comment relay; raw run terminals do not.
  * Shared by quick choices and the full picker, including requests queued before login. */

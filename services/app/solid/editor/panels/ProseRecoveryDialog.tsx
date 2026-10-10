@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import type { JSX } from 'solid-js';
-import { DialogShell } from '@/solid/components/DialogShell';
+import { DialogShell } from '@/solid/ui/DialogShell';
 
 /** Recovery stays modal until the user explicitly restores the authoritative draft. */
 export default function ProseRecoveryDialog(props: {

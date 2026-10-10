@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack, type JSX } from 'solid-js';
 import { ChevronDown } from 'lucide-solid';
-import { Button } from './ui';
+import { Button } from '../ui/ui';
 import { artifactEditPath } from '@/lib/http/urls';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetColumn } from '@/lib/dataflow/dataset-shape';

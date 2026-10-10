@@ -21,10 +21,10 @@ import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { sharingIconFor, VISIBILITY_ICON_NODES } from '@/lib/workspace/visibility-icons';
 import type { Visibility } from '@/lib/artifacts/access';
 import { PageChrome, type Panel } from '../components/PageChrome';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 import { DocumentTitle } from '../components/PageBar';
 import { DocumentCommentAction, DocumentEditAction, DOCUMENT_ACTION_CLASS } from './DocumentBarActions';
-import { Avatar } from '../components/Avatar';
+import { Avatar } from '../ui/Avatar';
 import { sendReaction } from './reactions';
 
 /** The one line an archived render's bar carries. */

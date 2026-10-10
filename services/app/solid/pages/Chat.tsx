@@ -1,5 +1,5 @@
 import { Portal } from 'solid-js/web';
-import { DialogShell } from '../components/DialogShell';
+import { DialogShell } from '../ui/DialogShell';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import './chat.css';
 import { Plus } from 'lucide-solid';
@@ -19,8 +19,8 @@ import { newAgentName, agentNameColor } from '../lib/agent-identity';
 import { REMOTE_NAME } from '../../../contracts/src/remote';
 import { connectedAgentStatus, isConnectedAgent } from '../lib/connected-agents';
 import { isTerminalProtocolReply } from '../lib/terminal-input';
-import { Tooltip } from '../components/Tooltip';
-import { Button } from '../components/ui';
+import { Tooltip } from '../ui/Tooltip';
+import { Button } from '../ui/ui';
 import { usePageData } from '../lib/use-page-data';
 import { copyText } from '../lib/copy-text';
 import { startManagedRun } from '../lib/managed-run-retry';

@@ -4,11 +4,11 @@ import { Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
 import { usePageData } from '../lib/use-page-data';
 import { useSession } from '../lib/session';
-import { AvatarCircle } from '../components/AvatarCircle';
-import { UsernameCard } from '../components/UsernameCard';
-import { NotificationSettings } from '../components/NotificationSettings';
-import { CustomDomainCard } from '../components/CustomDomainCard';
-import { TokensPanel } from '../components/TokensPanel';
+import { AvatarCircle } from '../ui/AvatarCircle';
+import { UsernameCard } from '../account/UsernameCard';
+import { NotificationSettings } from '../account/NotificationSettings';
+import { CustomDomainCard } from '../account/CustomDomainCard';
+import { TokensPanel } from '../account/TokensPanel';
 
 export function AccountPage(): JSX.Element {
   const { session } = useSession();

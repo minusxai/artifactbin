@@ -3,7 +3,7 @@
  * The app's ONE 404. The login href is a signal set on mount and re-read on click.
  */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { LINK } from '../components/ui';
+import { LINK } from '../ui/ui';
 import { loginHref } from '@/lib/http/login-href';
 import { useSession } from '../lib/session';
 import { useChromeVisibility } from '../components/PageChrome';

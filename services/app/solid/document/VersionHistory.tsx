@@ -9,9 +9,9 @@ import { For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import Eye from 'lucide-solid/icons/eye';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import X from 'lucide-solid/icons/x';
-import { timeAgo } from '../components/ui';
-import { Tooltip } from '../components/Tooltip';
-import MobileSheet, { isPhoneViewport } from '../components/MobileSheet';
+import { timeAgo } from '../ui/ui';
+import { Tooltip } from '../ui/Tooltip';
+import MobileSheet, { isPhoneViewport } from '../ui/MobileSheet';
 import type { ArtifactVersionSummary } from '@/lib/artifact-backend/types';
 
 interface VersionHistoryProps {

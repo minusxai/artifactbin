@@ -1,10 +1,10 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
-import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon, PiIcon } from './brand-icons';
-import { CopyBlock } from './CopyBlock';
+import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon, PiIcon } from '../ui/brand-icons';
+import { CopyBlock } from '../ui/CopyBlock';
 import { AgentLink } from './AgentLink';
-import { LINK } from './ui';
+import { LINK } from '../ui/ui';
 import { gettingStarted } from '@/lib/serving/getting-started';
 
 const AGENTS = [

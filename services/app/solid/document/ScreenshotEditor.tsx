@@ -4,7 +4,7 @@ import type { CapturedImage } from '@/lib/capture/contract';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke } from '../../../contracts/src/comment-image';
 import Check from 'lucide-solid/icons/check';
 import Undo2 from 'lucide-solid/icons/undo-2';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 
 const COLORS = [['Red', '#ef4444'], ['Orange', '#f59e0b'], ['Blue', '#3b82f6'], ['Green', '#22c55e'], ['Black', '#171717'], ['White', '#ffffff']] as const;
 export interface ScreenshotDrawing { preview: Blob; strokes: BrushStroke[] }

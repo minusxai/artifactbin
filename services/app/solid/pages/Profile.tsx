@@ -9,7 +9,7 @@ import { refusedForSignIn } from '@artifactbin/contracts';
 import { loginHref } from '@/lib/http/login-href';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { takeBootstrap } from '@/solid/lib/bootstrap';
-import { Avatar } from '../components/Avatar';
+import { Avatar } from '../ui/Avatar';
 import { usePageData } from '../lib/use-page-data';
 import { NotFoundPage } from './NotFound';
 import { apiFetch } from '../lib/api';

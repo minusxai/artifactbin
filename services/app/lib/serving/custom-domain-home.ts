@@ -75,7 +75,7 @@ export function linkedStylesheets(html: string): string[] {
 /** The app listing's empty state. */
 const NOTHING_HERE_HTML = '<p class="reveal font-mono text-sm text-muted"><span class="text-accent">$</span> nothing here yet<span class="caret text-accent">▍</span></p>';
 
-/** solid/components/Avatar, at the one size (48) ListingHero draws it. */
+/** solid/ui/Avatar, at the one size (48) ListingHero draws it. */
 function avatarHtml(userId: string, image: string | null | undefined, initial: string, size: number): string {
   const faceStyle = `background-color:${personFaceBackground(userId)};font-size:${Math.round(size * 0.42)}px`;
   const picture = image ? `<img src="${escapeHtml(image)}" alt="" class="absolute inset-0 size-full object-cover">` : '';

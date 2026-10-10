@@ -8,7 +8,7 @@
  * online, the control renders exactly as it always has.
  */
 import { createUniqueId, Show, type JSX } from 'solid-js';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 
 interface UnavailableProps { disabled?: true; 'aria-describedby'?: string }
 

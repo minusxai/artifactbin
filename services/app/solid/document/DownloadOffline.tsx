@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, Show, type JSX } from 'solid-js';
 import Download from 'lucide-solid/icons/download';
-import { Tooltip } from '../components/Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 
 export function DownloadOffline(props: { id: string; version?: number }): JSX.Element {
   const [busy, setBusy] = createSignal(false);

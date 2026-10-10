@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { Copy } from 'lucide-solid';
-import { Badge, Button, PANEL } from './ui';
-import { Tooltip } from './Tooltip';
+import { Badge, Button, PANEL } from '../ui/ui';
+import { Tooltip } from '../ui/Tooltip';
 import { copyText } from '../lib/copy-text';
 import { CustomDomainPaths } from './CustomDomainPaths';
 

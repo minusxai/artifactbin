@@ -2,7 +2,7 @@
 /**
  * components/views/story/__tests__/format-toolbar-spacing.ui.test.tsx PORTED to the Solid toolbar.
  * Same cases and assertions, minus one Radix implementation detail this port has no equivalent for
- * (`data-slot="tooltip-trigger"` — a Radix-only attribute; solid/components/Tooltip's own open/close
+ * (`data-slot="tooltip-trigger"` — a Radix-only attribute; solid/ui/Tooltip's own open/close
  * behavior is exercised instead, indirectly, by the Escape-closes-the-menu assertion). The React test
  * wraps the toolbar in `ArtifactBackendProvider`; this Solid toolbar takes `backend` as a prop instead
  * (see the DEVIATION note in StoryFormatToolbar.tsx), so the wrapper is replaced with a direct prop.

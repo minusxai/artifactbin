@@ -2,7 +2,7 @@
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import type { WorkspaceSharedItem } from '@/lib/workspace/dashboard';
 import { SHARE_ROLE_LABEL, SHARE_ROLES } from '@/lib/artifacts/share-roles';
-import { FormatBadge, formatLabel, LINK, MicroLabel, PANEL, TABLE_ROW, timeAgo } from './ui';
+import { FormatBadge, formatLabel, LINK, MicroLabel, PANEL, TABLE_ROW, timeAgo } from '../ui/ui';
 
 const FORMAT_ORDER = ['markup', 'dataset', 'viz', 'image', 'pdf'];
 /** `query`: Home's own "search artifacts" box, ANDed with this panel's own — typing there filters

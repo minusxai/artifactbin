@@ -3,7 +3,7 @@ import CalendarClock from 'lucide-solid/icons/calendar-clock';
 import { createContext, createEffect, createSignal, For, on, onCleanup, Show, useContext, type Accessor, type JSX, type Setter } from 'solid-js';
 /** Shared Solid app chrome. One owner closes one panel before another opens. */
 import { Bell, BookOpen, ChevronRight, CircleUser, FileText, LogIn, LogOut, Moon, SlidersVertical, Sun, User, X } from 'lucide-solid';
-import { GitHubIcon } from './brand-icons';
+import { GitHubIcon } from '../ui/brand-icons';
 import { useLocation } from '@solidjs/router';
 import { Portal } from 'solid-js/web';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
@@ -15,13 +15,13 @@ import { REPO_URL } from '@/lib/serving/repo';
 import { forgetPagesSession } from '@/lib/accounts/browser-session';
 import { loginHref } from '@/lib/http/login-href';
 import { useSession } from '../lib/session';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from '../ui/Tooltip';
 import { PeopleInbox } from './PeopleInbox';
 import { useOptionalInbox } from '../lib/notifications';
-import { Avatar } from './Avatar';
+import { Avatar } from '../ui/Avatar';
 import { closeOnEscape } from '../lib/close-on-escape';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
-import { createIsPhoneViewport } from './MobileSheet';
+import { createIsPhoneViewport } from '../ui/MobileSheet';
 
 /** Artifact controls from the editor seam; the named export below owns app pages. */
 export default function ArtifactPageChrome(props: { authed: boolean; anon: boolean; title: string; label: string; children: JSX.Element }): JSX.Element {

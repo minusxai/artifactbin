@@ -2,7 +2,7 @@
 import { createEffect, createSignal, Show } from 'solid-js';
 import { MAX_DATASET_BYTES, type DatasetSource, type IngestResult } from '@/lib/data-ingest/types';
 import { apiRequest } from '../lib/api';
-import { Button, Input } from './ui';
+import { Button, Input } from '../ui/ui';
 
 /** Imports rows into a draft; the editor owns table naming and the eventual save. */
 export function DatasetImport(props: {
