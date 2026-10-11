@@ -33,6 +33,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { compiledPageFailures } from '@/lib/publish/prepared/serve.server';
 import path from 'node:path';
 import { createDocumentGraph } from '@/lib/document/document-graph';
+import { unpackDocumentGraph } from '@/lib/document/document-graph-wire';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { ISLAND_DATA_ID, DOCUMENT_MODULE_PATH } from '@/lib/story-runtime/contract';
 
@@ -117,7 +118,7 @@ describe('the reader payload', () => {
     expect(applyStyleOverrides(nodes, runtime.overrides)).toEqual(realInlineStoryNodes(raw.data.nodes, reader));
   });
 
-  it('hands the editor its source, graph and raw sheets only on the editor door, and only to a writer', async () => {
+  it('hands the editor its source and graph only on the editor door, and only to a writer (its payload: editor-part.test.ts)', async () => {
     const { owner, id } = styled();
     expect((await readPage(id, '?part=editor')).status).toBe(404);
     asSession(owner);
@@ -125,9 +126,10 @@ describe('the reader payload', () => {
     expect(res.status).toBe(200);
     const editor = await res.json();
     expect(editor.source).toContain('Quarterly notes');
-    expect(editor.document).toMatchObject({ kind: 'graph' });
-    expect(editor.compiledCss).toEqual(expect.any(String));
-    expect(editor.authorCss).toContain('.lede');
+    expect(editor.graph.keys.length).toBeGreaterThan(0);
+    expect(unpackDocumentGraph(editor.graph, editor.source)).toEqual((await getArtifactById(id))!.document);
+    // The sheets are the reader's and the frame's: the editor reads neither.
+    for (const key of ['compiledCss', 'authorCss']) expect(editor).not.toHaveProperty(key);
   });
 });
 
