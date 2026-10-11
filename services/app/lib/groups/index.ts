@@ -42,8 +42,20 @@ export async function setGroupMember(actorId:string,groupId:string,userId:string
 export async function removeGroupMember(actorId:string,groupId:string,userId:string):Promise<void>{await (await getDb()).transaction(async tx=>{await requireEditor(tx,actorId,groupId);await protectLastEditor(tx,groupId,userId);await tx.query('DELETE FROM group_members WHERE group_id=$1 AND user_id=$2',[groupId,userId]);});}
 export async function inviteGroupMember(actorId:string,groupId:string,email:string,role:GroupRole):Promise<GroupInvitation>{if(typeof email!=='string'||!/^\S+@\S+\.\S+$/.test(email.trim())||email.length>320||!roleValid(role))throw new GroupError('invalid_invitation');return (await getDb()).transaction(async tx=>{await requireEditor(tx,actorId,groupId);return (await tx.query<GroupInvitation>('INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES($1,$2,$3,$4,$5) ON CONFLICT(group_id,email) DO UPDATE SET role=EXCLUDED.role,invited_by=EXCLUDED.invited_by RETURNING id,email,role,created_at',['gin_'+generateInternalId(),groupId,email.trim().toLowerCase(),role,actorId])).rows[0];});}
 export async function removeGroupInvitation(actorId:string,groupId:string,id:string):Promise<void>{await (await getDb()).transaction(async tx=>{await requireEditor(tx,actorId,groupId);await tx.query('DELETE FROM group_invitations WHERE group_id=$1 AND id=$2',[groupId,id]);});}
-/** Only the admission workflow calls this after inbox verification. It may share its transaction. */
-export async function acceptGroupInvitations(userId:string,verifiedEmail:string,query?:Queryable):Promise<string[]>{const accept=async(tx:Queryable)=>{
+/**
+ * Only the admission workflow calls this after inbox verification. It may share its transaction.
+ *
+ * It also runs on every request a verified-email session makes, and nearly always finds nothing, so a
+ * caller that brings no transaction of its own first asks with one plain, unlocked read whether any live
+ * group holds an invitation for the address, and returns when none does: no transaction, no row locks, no
+ * pool connection held. When one exists the locked transaction below runs unchanged. The read is NOT
+ * remembered: an invitation written on any process is seen by the invitee's very next request, which a
+ * per-process "nothing pending" memo could not promise. A caller that passes its transaction (login
+ * admission) always runs the checked, locked path.
+ */
+export async function acceptGroupInvitations(userId:string,verifiedEmail:string,query?:Queryable):Promise<string[]>{
+ if(!query&&!(await (await getDb()).query('SELECT 1 FROM group_invitations i JOIN groups g ON g.id=i.group_id WHERE i.email=$1 AND g.deleted_at IS NULL LIMIT 1',[verifiedEmail.trim().toLowerCase()])).rows.length)return [];
+ const accept=async(tx:Queryable)=>{
  const email=verifiedEmail.trim().toLowerCase();if(!(await tx.query("SELECT id FROM users WHERE id=$1 AND email=$2 AND kind='account'",[userId,email])).rows.length)throw new GroupError('verified_email_mismatch',403);
  const invitations=(await tx.query<{id:string;group_id:string;role:GroupRole}>('SELECT i.id,i.group_id,i.role FROM group_invitations i JOIN groups g ON g.id=i.group_id WHERE i.email=$1 AND g.deleted_at IS NULL ORDER BY i.group_id FOR UPDATE OF g,i',[email])).rows;
  for(const invitation of invitations){await tx.query("INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(group_id,user_id) DO UPDATE SET role=CASE WHEN group_members.role='editor' THEN 'editor' ELSE EXCLUDED.role END",[invitation.group_id,userId,invitation.role]);await tx.query('DELETE FROM group_invitations WHERE id=$1',[invitation.id]);}return invitations.map(i=>i.group_id);

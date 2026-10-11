@@ -74,5 +74,30 @@ describe('company admission',()=>{
   expect((await getDeploymentState(owner)).is_owner).toBe(true);
   expect((await getDeploymentState(owner==='first'?'second':'first')).is_owner).toBe(false);
  });
+ it('decides from plain reads, with no transaction and no lock, whenever the answer is already determined',async()=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'false',AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com'});
+  expect(await admitDeploymentIdentity(identity('owner','owner@example.com'))).toBe(true);
+  const db=await getDb();
+  await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('team','team','Team','owner')");
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('team','owner','editor')");
+  await setupDeployment('owner','team');
+  expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);
+  const transaction=db.transaction.bind(db),query=db.query.bind(db),sql:string[]=[];let transactions=0;
+  db.transaction=async<T>(fn:(tx:Queryable)=>Promise<T>):Promise<T>=>{transactions++;return transaction(tx=>fn({query:async<R>(text:string,params?:unknown[])=>{sql.push(text);return tx.query<R>(text,params);}}));};
+  db.query=async<R>(text:string,params?:unknown[])=>{sql.push(text);return query<R>(text,params);};
+  try{
+   expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);
+   expect(await admitDeploymentIdentity(identity('owner','owner@example.com'))).toBe(true);
+   expect(await admitDeploymentIdentity({userId:'member'})).toBe(true);
+   expect(await admitDeploymentIdentity({userId:'stranger',email:'stranger@example.com',emailVerified:false})).toBe(false);
+   expect(await admitDeploymentIdentity(identity('outside','outside@elsewhere.com'))).toBe(false);
+  }finally{db.transaction=transaction;db.query=query;}
+  expect(transactions).toBe(0);
+  expect(sql.filter(text=>/FOR UPDATE/i.test(text))).toEqual([]);
+  expect(sql.filter(text=>/^\s*(INSERT|UPDATE|DELETE)/i.test(text))).toEqual([]);
+  // The write path is unchanged: a new, eligible, verified person is still admitted under the lock.
+  expect(await admitDeploymentIdentity(identity('newcomer','newcomer@example.com'))).toBe(true);
+  expect((await db.query("SELECT role FROM group_members WHERE group_id='team' AND user_id='newcomer'")).rows).toEqual([{role:'viewer'}]);
+ });
  it('public mode remains open',async()=>{overrideConfig({}, {APP__DEPLOYMENT_MODE:'public'});expect(await admitDeploymentIdentity(identity('any','any@example.com'))).toBe(true);});
 });
