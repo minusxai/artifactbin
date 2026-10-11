@@ -311,3 +311,12 @@ it('draws a SearchField as a list filter by default: chrome density with the lab
   expect(form.className.split(/\s+/)).toContain('h-control');
   expect(form).toHaveAttribute('placeholder', 'find');
 });
+
+it('packs an icon-only underline strip (its tabs are squares) and spaces a labelled one', () => {
+  const items = [{ value: 'a', label: 'Artifact', icon: () => <span>A</span> }, { value: 'b', label: 'Code', icon: () => <span>B</span> }];
+  render(() => <><Tabs label="Icons" iconOnly items={items} value="a" onChange={() => {}} /><Tabs label="Labels" items={items} value="a" onChange={() => {}} /></>);
+  const icons = screen.getByRole('tablist', { name: 'Icons' }).className.split(/\s+/);
+  expect(icons).toContain('gap-1');
+  expect(icons).not.toContain('gap-4');
+  expect(screen.getByRole('tablist', { name: 'Labels' }).className.split(/\s+/)).toContain('gap-4');
+});
