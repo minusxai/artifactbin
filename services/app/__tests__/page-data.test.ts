@@ -142,8 +142,8 @@ describe('GET /api/page/artifact/:id', () => {
     // The prepared reader runtime: one isolated sheet, no raw copy and no source (__tests__/prepared-page).
     expect(anon.surface).not.toHaveProperty('compiledCss');
     expect(anon.surface).not.toHaveProperty('source');
-    expect(anon.surface.runtime.css).toEqual(expect.any(String));
-    expect(anon.surface.runtime).not.toHaveProperty('compiledCss');
+    // …which is the frame's; the app's door answers the document's title and declared dataflow only.
+    expect(anon.surface.runtime).toEqual({ title: expect.any(String), data: {} });
     asSession(w.owner);
     const own = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();
     expect(own).toMatchObject({ role: 'owner', kind: 'account' });

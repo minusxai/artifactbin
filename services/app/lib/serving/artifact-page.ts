@@ -133,6 +133,15 @@ async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'i
   return { src: pagesFrameUrl(origin, search, ticket), origin };
 }
 
+/**
+ * THE KIND DOOR (`?part=kind`): only what a client navigation to an address it knows nothing about needs first, to
+ * decide between crossing to the server (a document, whose page carries its own bootstrap) and asking for the full
+ * answer (everything else) — solid/pages/ArtifactAddress. Admitted by the caller exactly as the page is, then answered
+ * from the header alone: no document, no runtime, no social reads, and the 410 of a retired stored shape is the full
+ * door's to give once the document is asked for.
+ */
+const kindAnswer = (header: Pick<ArtifactHeader, 'format'>): ArtifactPageAnswer => ({ status: 200, body: { format: header.format } });
+
 /** The page's answer; a stored shape the current code no longer serves is its 410 (lib/artifacts/servable). */
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {
   try { return await answerArtifactPage(request, id, options); }
@@ -154,6 +163,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const actor = await sessionActor(request);
   if (!admitted && !exporting && actor.tokenId !== header.token_id && !(await canReadArtifact(header, actor.viewer))) return notFound();
   if (!ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
+  if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
   const artifact = admitted ?? await getArtifactById(id);
   if (!artifact) return notFound();
   // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
@@ -295,7 +305,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // The app page frames every document it serves — an archived version (`?version=N`, carried in the frame's
   // first URL) and the writer's `/edit` included — except the starter placeholder's READ view, whose agent
   // instructions are app UI (solid/pages/Starter). A capture photographs `/raw` itself (lib/export).
-  const framing = !!options.pages && !!prepared && !(starterDoc && !editAddress);
+  const framedDocument = !!prepared && !(starterDoc && !editAddress);
+  // Only the HTML door draws the frame (and mints its ticket); both doors answer a framed document with its FramedRuntime.
+  const framing = !!options.pages && framedDocument;
 
 
   const meta = (row.meta ?? {}) as {
@@ -324,8 +336,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const readerAdmitted = !!admitted || !exporting || actor.tokenId === artifact.token_id;
   // Beside the served runtime and the social reads, not after them: none depends on another.
   const [firstServed, [author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview], hasInvitedUsers, framedSrc, membership, cspRequest] = await Promise.all([
-    // A framed document runs its own first results on its own origin: the app page's answer carries none.
-    servedFor(!framing),
+    // A framed document runs its own first results on its own origin: the app's answer, through either door, carries none.
+    servedFor(!framedDocument),
     social,
     ownerScope ? hasInvitedUsersFor(ownerScope, id) : Promise.resolve(false),
     // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
@@ -366,8 +378,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     author: authorMark,
     ...(served ? {
       // The framed page's own sheet, script and reader data are the frame's, and the tree is the nodes door's: the
-      // app page keeps what it reads (FramedRuntime). The JSON door keeps the served runtime, less the tree.
-      runtime: framing ? framedRuntime(served.runtime) : served.runtime,
+      // app keeps what it reads (FramedRuntime), whichever door it asked. The starter's read view, which is app UI
+      // rather than a frame, keeps the whole served runtime, less the tree.
+      runtime: (framedDocument ? framedRuntime(served.runtime) : served.runtime) satisfies FramedRuntime,
       // What the reader's chrome derived from the source: the document's own
       // name (lib/document/title) and whether it is still the starter placeholder.
       heading: firstHeadingTitle(row.source), starter,
@@ -446,12 +459,14 @@ async function membershipOf(viewer: Awaited<ReturnType<typeof sessionActor>>, id
  * The JSON door (app/api/page/artifact/[id]).
  *
  * Every role reads a markup document in the frame the HTML door draws (solid/pages/Document adopts it);
- * nothing renders a document from this answer. A client-side link to a document
- * reads it only to learn that the address is a document (solid/pages/ArtifactAddress `replaceDocument`), the
- * writer's editor reads `?part=editor`, the framed document's edit controller reads `?part=nodes`, and a dataset
- * reader re-reads its catalog. So this door keeps the non-compiled payload (`servedFor(true)`: the runtime and its
- * first results, less the node tree), which served-results.test.ts / prepared-page.test.ts depend on, and never
- * names an app entry.
+ * nothing renders a document from this answer. A client navigation to an address of unknown kind asks `?part=kind`
+ * first and crosses to the server for a document without reading this answer (solid/pages/ArtifactAddress
+ * `replaceDocument`), the writer's editor reads `?part=editor`, the framed document's edit controller reads
+ * `?part=nodes`, and a dataset reader re-reads its catalog. So a framed document's answer carries the same
+ * `FramedRuntime` as the HTML door's (the title and declared dataflow, nothing the frame draws from): measured at
+ * 211 KB on a large document, of which the sheet, system sheet and author script were 209 KB that nothing here
+ * reads. The full served runtime is built for /raw, draft preview and prepared pages, none of which come through
+ * this door. It never names an app entry.
  */
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);

@@ -13,6 +13,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import Shelf from '../components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';
+import { artifactLink } from '../lib/artifact-link';
 
 interface FolderProps { folder: FolderData & {group?:Pick<GroupSummary,'id'|'handle'|'name'>}; role: ArtifactRole; workspace?: AccountWorkspace; ownerUsername?: string | null }
 const NAME_TYPE = 'font-sans text-lg leading-normal font-medium tracking-[-0.01em] text-fg';
@@ -58,6 +59,6 @@ export function FolderPage(props: FolderProps): JSX.Element {
 }
 
 function ForTrail(props: { folder: FolderData }): JSX.Element {
-  return <>{props.folder.trail.map(crumb => <span class="flex min-w-0 items-baseline gap-x-3"><ChevronRight size={14} aria-hidden="true" class="shrink-0 self-center text-faint" /><a href={crumb.url} class={`${NAME_TYPE} text-muted no-underline hover:text-accent`}>{crumb.title ?? crumb.id}</a></span>)}</>;
+  return <>{props.folder.trail.map(crumb => <span class="flex min-w-0 items-baseline gap-x-3"><ChevronRight size={14} aria-hidden="true" class="shrink-0 self-center text-faint" /><a {...artifactLink(crumb.url, 'folder')} class={`${NAME_TYPE} text-muted no-underline hover:text-accent`}>{crumb.title ?? crumb.id}</a></span>)}</>;
 }
 

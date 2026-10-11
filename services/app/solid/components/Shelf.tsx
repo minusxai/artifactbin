@@ -27,6 +27,7 @@ import ShareLink from './ShareLink';
 import { TransferOwnershipDialog } from './TransferOwnershipDialog';
 import { MoveToFolderDialog } from './MoveToFolderDialog';
 import { apiFetch } from '../lib/api';
+import { artifactLink } from '../lib/artifact-link';
 
 type Actions = 'none' | 'share' | 'full';
 interface Props {
@@ -56,7 +57,7 @@ function VisibilityGlyph(props: { visibility?: string }): JSX.Element {
 /** One document jacket: preview, caption and independent actions share the same surface. */
 function ArtifactCover(props: { row: ShelfRow; showVisibility: boolean; children: JSX.Element }): JSX.Element {
   return <div class="artifact-cover">
-    <a href={props.row.url} rel="external" aria-label={`Open ${nameOf(props.row)}`} class="artifact-cover-link" />
+    <a {...artifactLink(props.row.url, props.row.format)} aria-label={`Open ${nameOf(props.row)}`} class="artifact-cover-link" />
     <div class="artifact-cover-preview"><img width={CARD_WIDTH} height={CARD_HEIGHT} src={`/a/${props.row.id}/export?format=jpg&mode=card&v=${props.row.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" /></div>
     <span class="artifact-cover-fold" aria-hidden="true" />
     <Show when={props.showVisibility}><div class="artifact-cover-visibility"><Visibility row={props.row} /></div></Show>
@@ -101,7 +102,7 @@ export function RowActions(props: { row: ShelfRow; level: Actions; folders: Shel
     <Show when={renaming()}><span class="relative z-20 inline-block w-36"><Input size="sm" aria-label="Folder name" autofocus value={draft()} onInput={event => setDraft(event.currentTarget.value)} onBlur={() => void saveName()} onKeyDown={event => { if (event.key === 'Enter') void saveName(); if (event.key === 'Escape') setRenaming(false); }} /></span></Show>
     <Show when={props.level === 'full'}>
       <span class="relative z-10 inline-flex shrink-0 items-center gap-1">
-        <Show when={props.row.format !== 'folder' && props.showEdit !== false}><Tooltip content="edit"><a aria-label={`Edit ${nameOf(props.row)}`} href={`/a/${props.row.id}#edit`} class="shelf-secondary-action text-muted hover:text-accent"><Pencil size={13} /></a></Tooltip></Show>
+        <Show when={props.row.format !== 'folder' && props.showEdit !== false}><Tooltip content="edit"><a aria-label={`Edit ${nameOf(props.row)}`} {...artifactLink(`/a/${props.row.id}#edit`, props.row.format)} class="shelf-secondary-action text-muted hover:text-accent"><Pencil size={13} /></a></Tooltip></Show>
         <RowMenu name={nameOf(props.row)} items={[
           { label: `Manage sharing for ${nameOf(props.row)}`, text: 'share', icon: () => <span>↗</span>, onSelect: () => setSharing(true) },
           ...(props.row.format === 'folder' ? [{ label: `Rename ${nameOf(props.row)}`, text: 'rename', icon: () => <Pencil size={12} />, onSelect: () => { setDraft(props.row.title ?? ''); setRenaming(true); } }] : []),
@@ -168,9 +169,9 @@ export default function Shelf(props: Props): JSX.Element {
     <Show when={shelf().folders.length}><section aria-label="Folders" class="relative z-20 mb-6"><div class="mb-2"><MicroLabel>folders</MicroLabel></div><ul class={view() === 'grid' ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'grid grid-cols-1 gap-3 sm:grid-cols-2'}><For each={shelf().folders}>{row => {
       const papers = () => all().filter(item => parentOfRow(item) === row.id && item.format === 'markup').slice(0, 5);
       return <li class={view() === 'grid' ? 'group relative rounded-md p-3 hover:bg-raised/60' : 'group relative min-w-0'}>
-        <Show when={view() === 'grid'} fallback={<Panel padding="none" class="flex items-center gap-2 p-3"><FolderIcon size={15} class="shrink-0 text-accent" /><a href={row.url} rel="external" aria-label={`Open folder ${nameOf(row)}`} class="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg after:absolute after:inset-0">{nameOf(row)}</a><Show when={childCount(row.id)}><span class="font-mono text-micro text-faint">{childCount(row.id)}</span></Show><Show when={props.showVisibility !== false}><Visibility row={row} /></Show><RowActions groupId={props.groupId} row={row} level={props.actions ?? 'none'} folders={folders()} childCount={childCount(row.id)} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></Panel>}>
+        <Show when={view() === 'grid'} fallback={<Panel padding="none" class="flex items-center gap-2 p-3"><FolderIcon size={15} class="shrink-0 text-accent" /><a {...artifactLink(row.url, row.format)} aria-label={`Open folder ${nameOf(row)}`} class="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg after:absolute after:inset-0">{nameOf(row)}</a><Show when={childCount(row.id)}><span class="font-mono text-micro text-faint">{childCount(row.id)}</span></Show><Show when={props.showVisibility !== false}><Visibility row={row} /></Show><RowActions groupId={props.groupId} row={row} level={props.actions ?? 'none'} folders={folders()} childCount={childCount(row.id)} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></Panel>}>
           <div aria-label={`Preview of folder ${nameOf(row)}`} class="folder-cover">
-            <a href={row.url} rel="external" aria-label={`Open folder ${nameOf(row)}`} class="absolute inset-0 z-[2] rounded-md focus-visible:outline-2 focus-visible:outline-accent" />
+            <a {...artifactLink(row.url, row.format)} aria-label={`Open folder ${nameOf(row)}`} class="absolute inset-0 z-[2] rounded-md focus-visible:outline-2 focus-visible:outline-accent" />
             <div class="folder-cover-tab"><span class="truncate font-mono text-micro tabular-nums">{childCount(row.id) ? `${childCount(row.id)} artifact${childCount(row.id) === 1 ? '' : 's'}` : 'empty folder'}</span></div>
             <div class="folder-cover-back" />
             <Show when={!papers().length}><div class="folder-cover-empty" aria-hidden="true"><Inbox size={28} /></div></Show>
@@ -186,7 +187,7 @@ export default function Shelf(props: Props): JSX.Element {
       <ul aria-label={view() === 'grid' ? 'Artifact grid' : 'Artifact list'} class={view() === 'grid' ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'flex flex-col gap-2'}>
         <For each={docs()}>{row => <li class={view() === 'grid' ? 'group relative min-w-0 rounded-md p-3 hover:bg-raised/60' : 'group relative'}>
           <Show when={view() === 'grid'} fallback={<Panel padding="none" class="flex items-center gap-3 px-3 py-2">
-            <a href={row.url} rel="external" aria-label={`Open ${nameOf(row)}`} class="flex min-w-0 flex-1 items-center gap-2 font-mono text-sm font-medium text-fg hover:text-accent"><img src={`/a/${row.id}/export?format=jpg&mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`} alt="" width={24} height={24} loading="lazy" class="size-6 shrink-0 rounded-sm border border-edge bg-raised object-cover object-top" /><span class="truncate">{nameOf(row)}</span></a>
+            <a {...artifactLink(row.url, row.format)} aria-label={`Open ${nameOf(row)}`} class="flex min-w-0 flex-1 items-center gap-2 font-mono text-sm font-medium text-fg hover:text-accent"><img src={`/a/${row.id}/export?format=jpg&mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`} alt="" width={24} height={24} loading="lazy" class="size-6 shrink-0 rounded-sm border border-edge bg-raised object-cover object-top" /><span class="truncate">{nameOf(row)}</span></a>
             <Show when={props.showVisibility !== false}><Visibility row={row} /></Show>
             <span class="font-mono text-micro text-faint">{timeAgo(row.updated_at)}</span>
             <RowActions groupId={props.groupId} row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} />

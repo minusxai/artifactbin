@@ -16,6 +16,13 @@ import { InboxProvider } from '@/solid/lib/notifications';
 
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
+/** The kind door answers the format of the artifact the page door answers `page` for; every other URL is the page door. */
+const answering = (page: { surface?: { format?: string } & Record<string, unknown>; folder?: unknown } & Record<string, unknown>, status = 200) => vi.fn(async (input: unknown) => {
+  const url = String(input);
+  if (status !== 200) return Response.json({ error: 'not_found' }, { status });
+  return url.includes('part=kind') ? Response.json({ format: page.folder ? 'folder' : page.surface?.format }) : Response.json(page);
+});
+
 const at = async (path: string) => {
   window.history.replaceState(null, '', path);
   const view = render(() => <InboxProvider><Router><Route path="/:user/*rest" component={ProfileAliasRoute} /></Router></InboxProvider>);
@@ -27,7 +34,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.mocked(replaceDocument).m
 
 it('renders the folder for an id-shaped rest path', async () => {
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ folder: { id: 'fold01', title: 'Reports', trail: [], count: { documents: 0, folders: 0 }, rows: [] }, role: 'viewer' })));
+  vi.stubGlobal('fetch', answering({ folder: { id: 'fold01', title: 'Reports', trail: [], count: { documents: 0, folders: 0 }, rows: [] }, role: 'viewer' }));
   await at('/@bob/fold01-reports');
   await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports'));
 });
@@ -39,17 +46,19 @@ it('is the uniform 404 when the rest path names no id — nesting is not in the 
 
 it('renders a data tier here: an image alias is the data page, not a crossing', async () => {
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ role: 'viewer', kind: 'none', surface: { id: 'img001', editId: 'e1', format: 'image', title: 'Sunset', version: 1, dataPreview: '', columns: [] } })));
+  vi.stubGlobal('fetch', answering({ role: 'viewer', kind: 'none', surface: { id: 'img001', editId: 'e1', format: 'image', title: 'Sunset', version: 1, dataPreview: '', columns: [] } }));
   await at('/@bob/img001-sunset');
   await waitFor(() => expect(screen.getByRole('img', { name: 'Sunset' })).toHaveAttribute('src', '/a/img001/raw'));
   expect(replaceDocument).not.toHaveBeenCalled();
 });
 
-it('crosses a fetched document answer to the server, whose page for it is the compiled one', async () => {
+it('crosses a document to the server, whose page for it is the compiled one, without fetching its page', async () => {
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ role: 'viewer', surface: { format: 'markup' } })));
+  const fetched = answering({ role: 'viewer', surface: { format: 'markup' } });
+  vi.stubGlobal('fetch', fetched);
   await at('/@bob/doc001-hello');
   await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/@bob/doc001-hello'));
+  expect(fetched.mock.calls.map(([url]) => String(url))).toEqual(['/api/page/artifact/doc001?part=kind']);
   expect(screen.queryByLabelText('Not found')).toBeNull();
 });
 

@@ -74,8 +74,10 @@ describe('each view loads only the parts of the prepared page it uses', () => {
     as(w.owner, OWNER);
     const html = await observe(() => framed(w.id));
     expect(html.value.status).toBe(200);
-    const door = await observe(() => json(w.id).then((r) => r.json() as Promise<{ surface: { runtime: { css: string } } }>));
-    expect(door.value.surface.runtime.css).toEqual(expect.any(String));
+    const door = await observe(() => json(w.id).then((r) => r.json() as Promise<{ surface: { runtime: { title: string; data: Record<string, unknown> } } }>));
+    // The JSON door answers the same framed runtime as the HTML door: the sheet and script are the frame's.
+    expect(door.value.surface.runtime).toEqual((html.value.body as { surface: { runtime: unknown } }).surface.runtime);
+    expect(Object.keys(door.value.surface.runtime).sort()).toEqual(['data', 'title']);
     for (const seen of [html, door]) {
       expect(seen.returned).not.toBe('');
       expect(hasTree(seen.returned)).toBe(false);

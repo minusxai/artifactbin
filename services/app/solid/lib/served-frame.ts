@@ -8,10 +8,26 @@ import { STORY_FRAMED_ATTR } from '@/lib/islands/contract';
 
 let servedFrame: HTMLElement | null = null;
 let servedPath = '';
+/** The served address, until a page claims it ({@link claimServedPath}). */
+let unclaimedPath = '';
 
 export function captureServedFrame(): void {
   servedFrame = document.querySelector<HTMLElement>(`body > [${STORY_FRAMED_ATTR}]`);
   servedPath = window.location.pathname;
+  unclaimedPath = servedPath;
+}
+
+/**
+ * Claim the address this document load was served at, ONCE (as the address bar held it when the app mounted, after
+ * healing): true for `pathname` the first time it is asked, false ever after and for any other address. What the app
+ * page draws there is the server's own answer for the address; any other visit is a client navigation. An address the
+ * server answered without a page for it (an unservable document, a refusal) must never be sent back to the server
+ * (solid/pages/ArtifactAddress).
+ */
+export function claimServedPath(pathname: string): boolean {
+  const served = unclaimedPath !== '' && pathname === unclaimedPath;
+  if (served) unclaimedPath = '';
+  return served;
 }
 
 /** The served frame's host, while no page has taken it. */
@@ -33,5 +49,5 @@ export function dropServedFrame(): void {
 
 /** A client navigation away from the address the frame was served at drops it. */
 export function dropServedFrameOnRoute(pathname: string): void {
-  if (pathname !== servedPath) dropServedFrame();
+  if (pathname !== servedPath) { unclaimedPath = ''; dropServedFrame(); }
 }
