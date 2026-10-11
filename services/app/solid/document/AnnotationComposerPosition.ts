@@ -1,4 +1,4 @@
-import type { StoryEditSelection } from '@/lib/story-runtime/contract';
+import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { APP_BAR_H } from '@/lib/story-ui/edit-bar';
 
 export interface ComposerPoint { left: number; top: number }

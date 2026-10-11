@@ -11,7 +11,7 @@
  * `mx:document` — which this document already knew how to re-render in place.
  *
  * Everything it says goes out over the pristine channel with the session nonce
- * (lib/story-runtime/pristine): the author's script shares this realm, so
+ * (lib/edit-protocol RuntimeChannel): the author's script shares this realm, so
  * "the frame said so" is not evidence of anything.
  */
 import type { JsxNode } from '@/lib/jsx';
@@ -23,28 +23,7 @@ import { toggleInline, pasteFragment } from '@/lib/editor-engine/model';
 import { clipboardAst } from '@/lib/editor-engine/clipboard';
 import { SELECTION_PRESENTATION } from '@/lib/editor-engine/selection-presentation';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import type { RuntimeChannel } from '../pristine';
-import {
-  STORY_EDIT_KEY_MESSAGE,
-  STORY_EDIT_READY_MESSAGE,
-  STORY_INLINE_MESSAGE,
-  STORY_MARKDOWN_BLOCK_MESSAGE, STORY_MARKDOWN_TABLE_MESSAGE,
-  STORY_PASTE_MESSAGE,
-  STORY_FLOW_EDIT_MESSAGE,
-  STORY_TEXT_EDIT_MESSAGE,
-  STORY_TYPING_MESSAGE,
-  STORY_APPLY_FORMAT_MESSAGE,
-  STORY_APPLY_LINK_MESSAGE,
-  STORY_FOCUS_TEXT_MESSAGE,
-  STORY_SELECT_MESSAGE,
-  STORY_SPOTLIGHT_MESSAGE,
-  STORY_COMMIT_MESSAGE,
-  STORY_COMMITTED_MESSAGE,
-  STORY_LAYOUT_EDIT_MESSAGE,
-  STORY_SLIDE_TITLE_MESSAGE,
-  STORY_OPEN_SCRIPT_MESSAGE,
-  type StoryEditParentMessage,
-} from '../contract';
+import type { RuntimeChannel, StoryEditFrameMessage, StoryEditFramePost, StoryEditParentMessage } from '@/lib/edit-protocol';
 import { ancestorCrumbs } from './describe-selection';
 import { collectTextRegions, createRegionGeometry, navigateAcrossRegions } from './arrow-navigation';
 import {
@@ -227,7 +206,7 @@ export function createFrameEditSession({
       }
   };
 
-  const post = (message: Record<string, unknown>) => channel.post({ ...message, nonce: channel.nonce });
+  const post = (message: StoryEditFramePost) => channel.post({ ...message, nonce: channel.nonce } as StoryEditFrameMessage);
   const at = (path: string) => root.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
 
   const selection = createHoverSelect({
@@ -248,10 +227,10 @@ export function createFrameEditSession({
   const reportTyping = (isTyping: boolean) => {
     if (isTyping === typingReported) return;
     typingReported = isTyping;
-    post({ type: STORY_TYPING_MESSAGE, active: isTyping });
+    post({ type: 'mx:typing', active: isTyping });
   };
   const markdown = createMarkdownRegions(root, {
-    change(path, expected, replacement) { post({ type: STORY_FLOW_EDIT_MESSAGE, path, expected, replacement }); },
+    change(path, expected, replacement) { post({ type: 'mx:flow-edit', path, expected, replacement }); },
     busy: reportTyping,
     selection(el) { selection.reportSelection(selection.describeWithQuote(el)); },
     error(message) { post({ type: 'mx:edit-error', message }); },
@@ -265,7 +244,7 @@ export function createFrameEditSession({
     host.snapshot = innerHtml;
     host.userEdited = false;
     reportTyping(false);
-    post({ type: STORY_TEXT_EDIT_MESSAGE, path: host.path, innerHtml });
+    post({ type: 'mx:text-edit', path: host.path, innerHtml });
     return true;
   };
 
@@ -313,7 +292,7 @@ export function createFrameEditSession({
       const selectedPath = selection.selectedPath();
       const el = selectedPath && at(selectedPath);
       if (!el) {
-        post({ type: STORY_EDIT_KEY_MESSAGE, key: 'Escape' });
+        post({ type: 'mx:edit-key', key: 'Escape' });
         return;
       }
       event.preventDefault();
@@ -334,7 +313,7 @@ export function createFrameEditSession({
     if (el && (el as HTMLElement).isContentEditable) return;
     if (!selection.selectedPath()) return;
     event.preventDefault();
-    post({ type: STORY_EDIT_KEY_MESSAGE, key: event.key });
+    post({ type: 'mx:edit-key', key: event.key });
   };
   doc.addEventListener('keydown', onKeyDown, true);
 
@@ -369,7 +348,7 @@ export function createFrameEditSession({
   style.textContent = EDIT_MODE_CSS;
   doc.head.appendChild(style);
 
-  post({ type: STORY_EDIT_READY_MESSAGE });
+  post({ type: 'mx:edit-ready' });
 
   // ── parent → frame ────────────────────────────────────────────────────────
   const format = createFormatLink({ win, root, views, channel, post, republishRect: selection.republishRect });
@@ -430,11 +409,11 @@ export function createFrameEditSession({
       compiledMount = mountCompiled(root, nodes, {
         onFlow(path, expected, replacement, group, change) {
           historyBookmark = historyLanded = undefined;
-          post({ type: STORY_FLOW_EDIT_MESSAGE, path, expected, replacement, group, selection: change });
+          post({ type: 'mx:flow-edit', path, expected, replacement, group, selection: change });
         },
-        onLayout(rects) { post({ type: STORY_LAYOUT_EDIT_MESSAGE, rects }); },
-        onSlideTitle(path, title) { post({ type: STORY_SLIDE_TITLE_MESSAGE, path, title }); },
-        onOpenScript(component) { post({ type: STORY_OPEN_SCRIPT_MESSAGE, component }); },
+        onLayout(rects) { post({ type: 'mx:layout-edit', rects }); },
+        onSlideTitle(path, title) { post({ type: 'mx:slide-title', path, title }); },
+        onOpenScript(component) { post({ type: 'mx:open-script', component }); },
         onError(message) { post({ type: 'mx:edit-error', message }); },
         onBusy: reportTyping,
         onView(view) {
@@ -453,7 +432,7 @@ export function createFrameEditSession({
       }));
     },
     renameSlide(path: string, title: string) {
-      post({ type: STORY_SLIDE_TITLE_MESSAGE, path, title });
+      post({ type: 'mx:slide-title', path, title });
     },
     setNodes(next: JsxNode[]) {
       if (next === nodes) return;
@@ -473,20 +452,20 @@ export function createFrameEditSession({
       const md = !selection.blockMode() ? markdown.at(selection.selectedPath()) : undefined;
       const view = views.last && views.all.has(views.last) ? views.last : null;
       switch (message.type) {
-        case STORY_MARKDOWN_TABLE_MESSAGE:
+        case 'mx:markdown-table':
           md?.table(message.action);
           break;
-        case STORY_MARKDOWN_BLOCK_MESSAGE:
+        case 'mx:markdown-block':
           md?.block(message.block);
           break;
-        case STORY_INLINE_MESSAGE:
+        case 'mx:inline':
           if (md) { md.inline(message.tag); break; }
           if (view) {
             view.dispatch(toggleInline(view.state, message.tag).setMeta('mx-command', true));
             view.focus();
           }
           break;
-        case STORY_PASTE_MESSAGE:
+        case 'mx:paste':
           if (md) { md.paste(message.value, message.kind); break; }
           if (view) {
             try {
@@ -507,18 +486,18 @@ export function createFrameEditSession({
             }
           } else post({ type: 'mx:edit-error', message: 'Select a regular text paragraph before inserting Markdown.' });
           break;
-        case STORY_APPLY_FORMAT_MESSAGE:
+        case 'mx:apply-format':
           format.applyFormat(message.path, message.className, message.style);
           break;
-        case STORY_APPLY_LINK_MESSAGE:
+        case 'mx:apply-link':
           if (md) { md.link(message.href); break; }
           format.applyLink(message.path, message.href);
           break;
-        case STORY_FOCUS_TEXT_MESSAGE:
+        case 'mx:focus-text':
           if (md) { md.focus(); break; }
           view?.focus();
           break;
-        case STORY_COMMIT_MESSAGE:
+        case 'mx:commit':
           if (message.restore) {
             pendingBookmark = historyBookmark = message.restore;
             win.requestAnimationFrame(restorePending);
@@ -528,16 +507,16 @@ export function createFrameEditSession({
           markdown.flush();
           for (const entry of views.all) flushFlowView(entry);
           commitHost(active);
-          post({ type: STORY_COMMITTED_MESSAGE });
+          post({ type: 'mx:committed' });
           break;
-        case STORY_SELECT_MESSAGE:
+        case 'mx:select':
           if (message.focusText) {
             pendingBookmark = historyBookmark = undefined;
             historyLanded = undefined;
           }
           selection.select(message);
           break;
-        case STORY_SPOTLIGHT_MESSAGE:
+        case 'mx:spotlight':
           selection.setSpotlight(message.paths);
           break;
         default:

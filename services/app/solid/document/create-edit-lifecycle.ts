@@ -17,7 +17,6 @@
  */
 import { createSignal, type Accessor } from 'solid-js';
 import type { DocumentGraph } from '@artifactbin/contracts';
-import { STORY_EDIT_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import type { IslandStoryController } from '@/lib/story-runtime/contract';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
 
@@ -99,7 +98,7 @@ export function createEditLifecycle(options: EditLifecycleOptions): EditLifecycl
     setPhase('restoring');
     const controller = options.controller();
     if (!controller) { setPhase('reading'); return 'restored'; }
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    controller.send({ type: 'mx:edit-mode', on: false });
     try {
       await controller.restored();
     } catch (error) {

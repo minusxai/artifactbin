@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
-import { STORY_ANNOTATION_LAYOUT_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
+import type { StoryEditSelection } from '@/lib/edit-protocol';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { COMMENT_IMAGE_LIMITS } from '../../../../contracts/src/comment-image';
 import { fireEvent } from '../../__tests__/helpers';
@@ -259,7 +259,7 @@ describe('attaching an image to a reply from the hover card', () => {
   const hoverCard = async () => {
     const view = layer({ showViewComments: true, editId: 'edit-current' });
     await flush(); await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
     const card = view.container.querySelector<HTMLElement>(`[data-annotation-id="${ANN.id}"]`)!;
     fireEvent.mouseEnter(card);
     fireEvent.click(within(card).getByRole('button', { name: 'Expand replies' }));

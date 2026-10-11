@@ -9,7 +9,7 @@ import { replaceComment, selectCommentText } from './comment-input';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/dom';
 import type { AnnotationWire } from '@/lib/annotations/store';
-import { STORY_ANNOTATION_LAYOUT_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
+import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentMarkdown } from '../CommentMarkdown';
 import { PersonMentionProvider } from '../PersonMention';
@@ -98,7 +98,7 @@ describe('the compact surfaces show the plain text', () => {
     knobs.open = [MARKDOWN_ROOT];
     const view = layer({ showViewComments: true });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
     const card = screen.getByLabelText('Open annotation comments');
     fireEvent.mouseEnter(card.querySelector('[data-annotation-id]')!);
     expect(card.querySelector('pre')).toBeNull();

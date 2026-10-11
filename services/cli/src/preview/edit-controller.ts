@@ -1,8 +1,9 @@
 /**
- * THE PREVIEW'S STORY CONTROLLER — framework-free, adapted from components/IslandStory.tsx's
+ * THE PREVIEW'S STORY CONTROLLER — framework-free, adapted from lib/islands/island-controller's
  * `createIslandController` for a local file instead of a hosted artifact: the same compiled DOM,
- * the same edit session (lib/story-runtime/edit/session createFrameEditSession), DOM-mounter
- * (lib/story-runtime/edit/dom-mounter), selection-actions and annotate sessions (lib/story-runtime/edit/*) —
+ * the same edit session (`createFrameEditSession`), DOM-mounter, selection-actions and annotate
+ * sessions, each loaded through lib/cli-toolkit/browser's `load*` doors; the messages are
+ * lib/edit-protocol's wire strings, checked by its unions —
  * only a structural edit's recompile goes through this process's own `/draft` door (compiled.ts)
  * instead of `/a/:id/draft-preview`.
  *
@@ -11,7 +12,7 @@
  * in-place editing, the selection bubble, AnnotationLayer's anchor picking — sits inert). Built here
  * first because local preview needed it; the hosted Solid page can mount the same shape.
  */
-import {type JsxNode,serializeJsx,type StoryController,STORY_ANNOTATIONS_MESSAGE,STORY_EDIT_MODE_MESSAGE,STORY_SELECTION_ACTIONS_MESSAGE,STORY_SELECTION_ACTION_MESSAGE,STORY_SELECT_MESSAGE,isEditParentMessage,type StoryDocumentUpdate,isStoryDocumentUpdate,type RuntimeChannel,type FrameEditSession,type FrameSelectionActions,type FrameAnnotateSession,loadFrameEditSession,loadCompiledEditRegions,loadFrameAnnotateSession,loadFrameSelectionActions,loadStoryUpdateParts,loadDraftMorph} from '../../../app/lib/cli-toolkit/browser';
+import {type JsxNode,serializeJsx,type StoryController,isEditParentMessage,type StoryDocumentUpdate,isStoryDocumentUpdate,type RuntimeChannel,type FrameEditSession,type FrameSelectionActions,type FrameAnnotateSession,loadFrameEditSession,loadCompiledEditRegions,loadFrameAnnotateSession,loadFrameSelectionActions,loadStoryUpdateParts,loadDraftMorph} from '../../../app/lib/cli-toolkit/browser';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 
 interface PreviewEditControllerInput {
@@ -69,7 +70,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
  // The selection bubble ("comment"/"edit"), over the SAME picked text AnnotationLayer anchors a new thread to.
  const ensureSelection=():void=>{
   if(disposed||selection||!selectionFactory||!portal||!selectionCommand||(!selectionCommand.edit&&!selectionCommand.annotate))return;
-  selection=selectionFactory({win,root,portal,onAction:(action,selected)=>emit({type:STORY_SELECTION_ACTION_MESSAGE,nonce,action,selection:selected})});
+  selection=selectionFactory({win,root,portal,onAction:(action,selected)=>emit({type:'mx:selection-action',nonce,action,selection:selected})});
   selection.setNodes(nodes);
   selection.update(selectionCommand);
  };
@@ -141,7 +142,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
    if(disposed||!command||typeof command!=='object')return;
    if(isStoryDocumentUpdate(command)){controller.update(command);return;}
    if(!isEditParentMessage(command))return;
-   if(command.type===STORY_EDIT_MODE_MESSAGE){
+   if(command.type==='mx:edit-mode'){
     editRequested=command.on;
     if(!command.on){draftSequence++;pendingDraft=null;if(quietDraftTimer!==null)win.clearTimeout(quietDraftTimer);quietDraftTimer=null;edit?.dispose();edit=null;return;}
     if(edit||editLoading)return;
@@ -154,11 +155,12 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
     }).catch(error=>{if(!disposed)onStatus?.(error instanceof Error?error.message:String(error));}).finally(()=>{editLoading=false;});
     return;
    }
+   // Twin of lib/islands/island-controller's parent-command routing (its own loaders and error sink); change both together.
    if(edit){
     edit.onParentMessage(command);
-    if(command.type!==STORY_ANNOTATIONS_MESSAGE&&command.type!==STORY_SELECTION_ACTIONS_MESSAGE&&command.type!==STORY_SELECT_MESSAGE)return;
+    if(command.type!=='mx:annotations'&&command.type!=='mx:selection-actions'&&command.type!=='mx:select')return;
    }
-   if(command.type===STORY_ANNOTATIONS_MESSAGE){
+   if(command.type==='mx:annotations'){
     annotationCommand=command;
     if(annotate){annotate.update(command);return;}
     if(command.mode==='off'||annotationLoading)return;
@@ -171,7 +173,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
     }).catch(error=>{if(!disposed)onStatus?.(error instanceof Error?error.message:String(error));}).finally(()=>{annotationLoading=false;});
     return;
    }
-   if(command.type===STORY_SELECTION_ACTIONS_MESSAGE){
+   if(command.type==='mx:selection-actions'){
     selectionCommand=command;
     if(selection){selection.update(command);return;}
     if(selectionFactory){ensureSelection();return;}
@@ -183,7 +185,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
     }).catch(error=>{if(!disposed)onStatus?.(error instanceof Error?error.message:String(error));}).finally(()=>{selectionLoading=false;});
     return;
    }
-   if(command.type===STORY_SELECT_MESSAGE)annotate?.select(command.path);
+   if(command.type==='mx:select')annotate?.select(command.path);
   },
   update(command:StoryDocumentUpdate){
    if(disposed)return;

@@ -11,8 +11,7 @@ import type { JsxElement } from '@/lib/jsx';
 import { setLink } from '@/lib/editor-engine/links';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import type { RuntimeChannel } from '../pristine';
-import { STORY_TEXT_EDIT_MESSAGE } from '../contract';
+import type { RuntimeChannel, StoryEditFramePost } from '@/lib/edit-protocol';
 import type { EditViews } from './hover-select';
 
 interface FormatLinkOptions {
@@ -20,7 +19,7 @@ interface FormatLinkOptions {
   root: HTMLElement;
   views: EditViews;
   channel: Pick<RuntimeChannel, 'innerHtmlOf'>;
-  post: (message: Record<string, unknown>) => void;
+  post: (message: StoryEditFramePost) => void;
   /** Re-send the selection: a format changes what the toolbar shows for it. */
   republishRect: () => void;
 }
@@ -128,7 +127,7 @@ export function createFormatLink({ win, root, views, channel, post, republishRec
       if (!anchor) return;
       anchor.replaceWith(...Array.from(anchor.childNodes));
     }
-    post({ type: STORY_TEXT_EDIT_MESSAGE, path, innerHtml: channel.innerHtmlOf(host) });
+    post({ type: 'mx:text-edit', path, innerHtml: channel.innerHtmlOf(host) });
   };
 
   return { applyFormat, applyLink };

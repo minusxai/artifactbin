@@ -43,11 +43,7 @@ import { COMMENT_TARGET_ATTR, COMMENT_OWNER_ATTR, parseCommentTarget } from '@/l
  */
 import type { JsxNode } from '@/lib/jsx';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import type { RuntimeChannel } from '../pristine';
-import {
-  STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_SELECTION_MESSAGE,
-  type StoryAnnotationsMessage,
-} from '../contract';
+import type { RuntimeChannel, StoryAnnotationsMessage, StoryEditFrameMessage, StoryEditFramePost, StoryEditSelection } from '@/lib/edit-protocol';
 import { describeSelection, describeCommentSelection } from './describe-selection';
 type AnnotationRangeOnWire = NonNullable<StoryAnnotationsMessage['pins'][number]['range']>;
 import { resolveParts } from './selection-range';
@@ -215,7 +211,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   const registeredHighlights = new Set<string>();
   let rafPending = false;
 
-  const post = (message: Record<string, unknown>) => channel.post({ ...message, nonce: channel.nonce });
+  const post = (message: StoryEditFramePost) => channel.post({ ...message, nonce: channel.nonce } as StoryEditFrameMessage);
 
   /**
    * Deck thumbnails re-render the slide's real nodes (and therefore duplicate
@@ -425,13 +421,13 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
         const children = [...el.querySelectorAll<HTMLElement>(`[${COMMENT_TARGET_ATTR}]`)].map((child) => child.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
         if (children.length) {const x=Math.min(...children.map((r)=>r.x));const y=Math.min(...children.map((r)=>r.y));rect={x,y,width:Math.max(...children.map((r)=>r.right))-x,height:Math.max(...children.map((r)=>r.bottom))-y};}
       }
-      const status = isTargetRange(pin.range) ? (el.getAttribute(COMMENT_TARGET_ATTR) ? 'exact' : 'missing') : undefined;
+      const status = isTargetRange(pin.range) ? (el.getAttribute(COMMENT_TARGET_ATTR) ? 'exact' as const : 'missing' as const) : undefined;
       return [{ id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, ...(status ? {status}:{}) }];
     });
     const key = JSON.stringify([positions, viewStateError]);
     if (unchangedQuiet && key === postedLayout) return;
     postedLayout = key;
-    post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions, viewStateError });
+    post({ type: 'mx:annotation-layout', positions, viewStateError });
   };
 
   /** Whether the layer may have stamped, highlighted or banded anything since its last sweep. */
@@ -476,11 +472,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   /** Keep the page-level draft popover attached while the document moves. */
   const reportSelectedGeometry = (unchangedQuiet = false) => {
     if (!state || state.mode === 'off' || !selectedPath || pick) { postedSelection = null; return; }
-    const report = (selection: unknown) => {
+    const report = (selection: StoryEditSelection) => {
       const key = JSON.stringify(selection);
       if (unchangedQuiet && key === postedSelection) return;
       postedSelection = key;
-      post({ type: STORY_SELECTION_MESSAGE, selection });
+      post({ type: 'mx:selection', selection });
     };
     if (isTargetRange(state.selected?.range)) {
       const selected = state.selected!;
@@ -522,7 +518,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     captureHandoff = Boolean(selection && extra.captureRect && pick === 'area');
     selectedPath = selection?.path ?? null;
     applyState();
-    post({ type: STORY_SELECTION_MESSAGE, selection });
+    post({ type: 'mx:selection', selection });
   };
 
   // Saved comments never consume content clicks: the first click of a native
@@ -546,7 +542,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     const id = pinAt(target)?.id ?? null;
     if (id === reportedHoverId) return;
     reportedHoverId = id;
-    post({ type: STORY_ANNOTATION_HOVER_MESSAGE, id });
+    post({ type: 'mx:annotation-hover', id });
   };
 
   // ── the pick ──────────────────────────────────────────────────────────────
@@ -632,7 +628,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     event.preventDefault();
     event.stopPropagation();
     if (drawing) { drawing = null; removeBand(); }
-    post({ type: STORY_SELECTION_MESSAGE, selection: null });
+    post({ type: 'mx:selection', selection: null });
   };
 
   // ── the drawn area ────────────────────────────────────────────────────────
@@ -783,7 +779,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       else if (message.selectedPath !== undefined) selectedPath = message.selectedPath;
       if (message.mode === 'off') ensureCss(false);
       applyState();
-      if (message.mode === 'off') post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [] });
+      if (message.mode === 'off') post({ type: 'mx:annotation-layout', positions: [] });
       else reportLayout();
       reportSelectedGeometry();
       // The Docs move: opening a thread brings its node to the reader. Once

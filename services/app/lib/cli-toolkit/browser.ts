@@ -19,13 +19,12 @@ export { BackendRequestError } from '../artifact-backend/errors';
 export type { ArtifactBackend, BackendFeature, EditAnswer } from '../artifact-backend/types';
 
 // ---- Story runtime: the controller protocol between the preview chrome and the compiled document.
-export {
-  STORY_ANNOTATIONS_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_ROOT_ID,
-  STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECT_MESSAGE, isEditParentMessage,
-} from '../story-runtime/contract';
+export { STORY_DOCUMENT_MESSAGE, STORY_ROOT_ID } from '../story-runtime/contract';
 export type { StoryController, StoryDocumentUpdate } from '../story-runtime/contract';
 export { isStoryDocumentUpdate } from '../story-runtime/document-update';
-export type { RuntimeChannel } from '../story-runtime/contract';
+// The edit protocol: the preview writes its wire strings, which the protocol's unions check.
+export { isEditParentMessage } from '../edit-protocol';
+export type { RuntimeChannel } from '../edit-protocol';
 export type { FrameEditSession } from '../story-runtime/edit/session';
 export type { FrameSelectionActions } from '../story-runtime/edit/selection-actions';
 export type { FrameAnnotateSession } from '../story-runtime/edit/annotate';

@@ -8,7 +8,7 @@ import { replaceComment } from './comment-input';
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
-import { STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
+import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { fireEvent } from '../../__tests__/helpers';
 import { fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
@@ -30,7 +30,7 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const creates = () => fetchCalls.filter((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-const selects = (send: ReturnType<typeof vi.fn>) => send.mock.calls.map((c) => c[0]).filter((m) => m?.type === STORY_SELECT_MESSAGE);
+const selects = (send: ReturnType<typeof vi.fn>) => send.mock.calls.map((c) => c[0]).filter((m) => m?.type === 'mx:select');
 const TEXT = (over: Partial<StoryEditSelection> = {}): StoryEditSelection => ({ kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [], ...over } as StoryEditSelection);
 
 describe('the annotation composer', () => {
@@ -74,7 +74,7 @@ describe('the annotation composer', () => {
       expect(Number.parseFloat(dialog.style.left)).toBeLessThanOrEqual(420 - Number.parseFloat(dialog.style.width) - 12);
       expect(Number.parseFloat(dialog.style.top)).toBeGreaterThanOrEqual(112);
       const moved = { left: dialog.style.left, top: dialog.style.top };
-      view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ rect: { x: 40, y: 80, width: 200, height: 40 } }) });
+      view.runtime.emit({ type: 'mx:selection', selection: TEXT({ rect: { x: 40, y: 80, width: 200, height: 40 } }) });
       expect({ left: dialog.style.left, top: dialog.style.top }).toEqual(moved);
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
       fireEvent(window, new Event('resize'));
@@ -255,7 +255,7 @@ describe('the annotation composer', () => {
     const viewState = { v: 2 as const, state: { $: { screen: 'checkout' }, 'aBcD:open': false } };
     const view = layer({ railOpen: true, initialSelection: TEXT({ viewState }) });
     await flush();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ nodeId: 'node-1', rect: { x: 9, y: 10, width: 200, height: 40 } }) });
+    view.runtime.emit({ type: 'mx:selection', selection: TEXT({ nodeId: 'node-1', rect: { x: 9, y: 10, width: 200, height: 40 } }) });
     replaceComment(await screen.findByLabelText('Annotation comment'), 'Review this view');
     fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
     expect(JSON.parse(String(creates()[0]?.init?.body)).view_state).toEqual(viewState);
@@ -275,7 +275,7 @@ describe('the annotation composer', () => {
     const quoted = TEXT({ nodeId: 'node-1', quote: 'grew 40% in Q3,', range: { v: 1, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] } });
     const view = layer({ railOpen: true, initialSelection: quoted });
     await flush();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ nodeId: 'node-1', rect: { x: 5, y: 40, width: 200, height: 40 } }) });
+    view.runtime.emit({ type: 'mx:selection', selection: TEXT({ nodeId: 'node-1', rect: { x: 5, y: 40, width: 200, height: 40 } }) });
     replaceComment(await screen.findByLabelText('Annotation comment'), 'still about those words');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
@@ -285,7 +285,7 @@ describe('the annotation composer', () => {
   it('does not inherit a removed target identity into an id-less successor at the same path', async () => {
     const view = layer({ railOpen: true, initialSelection: TEXT({ nodeId: 'old-node', quote: 'old words', range: { v: 1, parts: [{ rel: '', start: 0, end: 9, text: 'old words' }] } }) });
     await flush();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ rect: { x: 5, y: 40, width: 200, height: 40 } }) });
+    view.runtime.emit({ type: 'mx:selection', selection: TEXT({ rect: { x: 5, y: 40, width: 200, height: 40 } }) });
     const composer = await screen.findByLabelText('Annotation comment');
     replaceComment(composer, 'draft survives replacement');
     fireEvent.click(screen.getByLabelText('Save annotation'));
@@ -298,7 +298,7 @@ describe('the annotation composer', () => {
   it('drops the old quote and range when the same path reports a different durable node', async () => {
     const view = layer({ railOpen: true, initialSelection: TEXT({ nodeId: 'old-node', quote: 'old words', range: { v: 1, parts: [{ rel: '', start: 0, end: 9, text: 'old words' }] } }) });
     await flush();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ nodeId: 'new-node', rect: { x: 5, y: 40, width: 200, height: 40 } }) });
+    view.runtime.emit({ type: 'mx:selection', selection: TEXT({ nodeId: 'new-node', rect: { x: 5, y: 40, width: 200, height: 40 } }) });
     replaceComment(await screen.findByLabelText('Annotation comment'), 'draft follows explicit target');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
@@ -308,7 +308,7 @@ describe('the annotation composer', () => {
   it('drops them when the composer is widened to a DIFFERENT node — they no longer describe it', async () => {
     const view = layer({ railOpen: true, initialSelection: TEXT({ quote: 'grew 40% in Q3,', range: { v: 1, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] } }) });
     await flush();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { kind: 'element', path: '0', nodeId: 'node-0', tag: 'section', rect: { x: 0, y: 0, width: 400, height: 90 }, className: '', style: '', ancestors: [] } });
+    view.runtime.emit({ type: 'mx:selection', selection: { kind: 'element', path: '0', nodeId: 'node-0', tag: 'section', rect: { x: 0, y: 0, width: 400, height: 90 }, className: '', style: '', ancestors: [] } });
     replaceComment(await screen.findByLabelText('Annotation comment'), 'about the whole section');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();

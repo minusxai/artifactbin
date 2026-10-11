@@ -27,12 +27,9 @@ import { islandDocumentOf } from '@/lib/islands/handover';
 import { ISLANDS_READY_EVENT, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
 import { createTrustedOverlayHost } from '@/lib/islands/trusted-overlay-host';
 import { applyReaderChoice } from './reader-actions';
-import {
-  ISLAND_DATA_ID, READER_READY_ATTR,
-  STORY_ADOPT_HOOK, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_HISTORY_MESSAGE, STORY_READER_MODE_MESSAGE,
-  type FrameBridgeParentPayload, type IslandStoryController,
-} from '@/lib/story-runtime/contract';
+import { ISLAND_DATA_ID, READER_READY_ATTR, STORY_ADOPT_HOOK, STORY_READER_MODE_MESSAGE, type FrameBridgeParentPayload, type IslandStoryController } from '@/lib/story-runtime/contract';
 import type { FrameBridgeSession, FrameBridgeStartOptions } from './frame-door';
+import type { StoryEditFramePost } from '@/lib/edit-protocol';
 
 type FetchResult = Extract<FrameBridgeParentPayload, { kind: 'fetch-result' }>;
 
@@ -130,7 +127,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const release = () => { if (hooks[STORY_ADOPT_HOOK] === holding) delete hooks[STORY_ADOPT_HOOK]; };
   cleanups.push(release);
 
-  const emit = (event: Record<string, unknown>) => { if (controller) post({ kind: 'event', event: { ...event, nonce: controller.nonce } }); };
+  const emit = (event: StoryEditFramePost) => { if (controller) post({ kind: 'event', event: { ...event, nonce: controller.nonce } }); };
 
   const receive = (payload: FrameBridgeParentPayload) => {
     if (disposed) return;
@@ -142,7 +139,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     switch (payload.kind) {
       case 'send': {
         const command = payload.command as { type?: unknown; on?: unknown; mode?: unknown } | null;
-        if (command?.type === STORY_EDIT_MODE_MESSAGE && typeof command.on === 'boolean') { editing = command.on; if (editing) hold(); }
+        if (command?.type === 'mx:edit-mode' && typeof command.on === 'boolean') { editing = command.on; if (editing) hold(); }
         // The page's reader choice: the whole document follows it (the app page applies it to its own shell).
         if (command?.type === STORY_READER_MODE_MESSAGE && (command.mode === 'light' || command.mode === 'dark')) applyReaderChoice(win, doc, command.mode);
         controller.send(payload.command);
@@ -169,21 +166,21 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       if (target?.closest?.('input,textarea')) return;
       event.preventDefault();
       event.stopPropagation();
-      emit({ type: STORY_HISTORY_MESSAGE, direction: event.shiftKey || event.key.toLowerCase() === 'y' ? 'redo' : 'undo' });
+      emit({ type: 'mx:history', direction: event.shiftKey || event.key.toLowerCase() === 'y' ? 'redo' : 'undo' });
       return;
     }
-    if (isCommentKey(event)) { event.preventDefault(); emit({ type: STORY_COMMENT_KEY_MESSAGE }); return; }
+    if (isCommentKey(event)) { event.preventDefault(); emit({ type: 'mx:comment-key' }); return; }
     if (isLinkKey(event)) {
       const target = (event.composedPath()[0] ?? event.target) as Element | null;
       if (!target?.closest?.('.ProseMirror,[data-mx-lexical]')) return;
       event.preventDefault();
-      emit({ type: STORY_LINK_KEY_MESSAGE });
+      emit({ type: 'mx:link-key' });
       return;
     }
     // After the editor has handled the key: the paragraph it broke is what goes out.
-    if (event.key === 'Enter') win.setTimeout(() => emit({ type: STORY_EDIT_FLUSH_MESSAGE, reason: 'enter' }), 0);
+    if (event.key === 'Enter') win.setTimeout(() => emit({ type: 'mx:edit-flush', reason: 'enter' }), 0);
   };
-  const onFocusOut = (event: FocusEvent) => { if (editing && event.isTrusted) queueMicrotask(() => emit({ type: STORY_EDIT_FLUSH_MESSAGE, reason: 'focusout' })); };
+  const onFocusOut = (event: FocusEvent) => { if (editing && event.isTrusted) queueMicrotask(() => emit({ type: 'mx:edit-flush', reason: 'focusout' })); };
 
   // ── scroll: what the page placed over this document moves with it ──
   let scrollQueued = false;

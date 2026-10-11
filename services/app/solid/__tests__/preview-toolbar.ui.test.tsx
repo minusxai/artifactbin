@@ -8,7 +8,7 @@ import {EditorView} from '@codemirror/view';
 import {render} from 'solid-js/web';
 import type {InPlaceEditOptions} from '@/solid/editor/create-in-place-edit';
 import type {PreviewDocument} from '../../../cli/src/preview/types';
-import {STORY_ROOT_ID} from '@/lib/story-runtime/contract';
+import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 const edit=vi.hoisted(()=>({options:null as InPlaceEditOptions|null,commit:vi.fn(),realController:false,ready:null as (()=>boolean)|null}));
 vi.mock('@/solid/editor/create-in-place-edit',()=>({createInPlaceEdit:(options:InPlaceEditOptions)=>{edit.options=options;return {commitPending:edit.commit,ready:()=>edit.ready?.()??true};}}));
 vi.mock('@/solid/document/AnnotationLayer',()=>({AnnotationLayer:()=>null}));

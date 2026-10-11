@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Route, Router } from '@solidjs/router';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_FLOW_EDIT_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_TEXT_EDIT_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_DOCUMENT_MESSAGE } from '@/lib/story-runtime/contract';
 import { fakeBackend } from '@/test/helpers/artifact-backend';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { screen, within } from '@testing-library/dom';
@@ -42,7 +42,7 @@ function fakeRuntime() {
   const runtime = {
     send: (msg: unknown) => {
       sent.push(msg as Record<string, unknown>);
-      if ((msg as { type?: string }).type === STORY_COMMIT_MESSAGE) queueMicrotask(() => onEvent?.({ type: STORY_COMMITTED_MESSAGE, nonce: NONCE }));
+      if ((msg as { type?: string }).type === 'mx:commit') queueMicrotask(() => onEvent?.({ type: 'mx:committed', nonce: NONCE }));
     },
     subscribe: (fn: (data: unknown) => void) => { onEvent = fn; return () => { onEvent = null; }; },
     getViewportRect: () => new DOMRect(),
@@ -67,7 +67,7 @@ function mountEditor(source = SOURCE, backend = fakeBackend()) {
   const view = render(() => <Router><Route path="/" component={() => (
     <InPlaceEditor art={art} backend={backend} runtimeRef={runtime.runtimeRef} sessionNonce={NONCE} />
   )} /></Router>);
-  runtime.emit({ type: STORY_EDIT_READY_MESSAGE });
+  runtime.emit({ type: 'mx:edit-ready' });
   return { ...runtime, view };
 }
 
@@ -186,7 +186,7 @@ it('saves a design-system pick and redraws with its identity and default mode, t
 
 it('Ctrl-Z after typing restores the source, draws it, and queues it once', async () => {
   const { emit, sent, view } = mountEditor();
-  emit({ type: STORY_TEXT_EDIT_MESSAGE, path: '0', innerHtml: 'Hello world' });
+  emit({ type: 'mx:text-edit', path: '0', innerHtml: 'Hello world' });
   const typed = '<p>Hello world</p>';
   expect(queued).toEqual([{ source: typed }]);
   expect(view.getByRole('button', { name: 'Undo' })).not.toBeDisabled();
@@ -197,7 +197,7 @@ it('Ctrl-Z after typing restores the source, draws it, and queues it once', asyn
   await vi.waitFor(() => expect(queued).toHaveLength(1));
   expect(queued[0]!.source).toBe(SOURCE);
   // What was still being typed is committed before the history moves; then the restored source is drawn.
-  expect(sent.map((m) => m.type)).toEqual([STORY_COMMIT_MESSAGE, STORY_DOCUMENT_MESSAGE]);
+  expect(sent.map((m) => m.type)).toEqual(['mx:commit', STORY_DOCUMENT_MESSAGE]);
   expect(drafts(sent)).toEqual([SOURCE]);
   expect(view.getByRole('button', { name: 'Undo' })).toBeDisabled();
   expect(view.getByRole('button', { name: 'Redo' })).not.toBeDisabled();
@@ -212,12 +212,12 @@ it('Ctrl-Z after typing restores the source, draws it, and queues it once', asyn
 
 it('Ctrl-Z inside a text field is left to the field', async () => {
   const { emit, sent, view } = mountEditor();
-  emit({ type: STORY_TEXT_EDIT_MESSAGE, path: '0', innerHtml: 'Hello world' });
+  emit({ type: 'mx:text-edit', path: '0', innerHtml: 'Hello world' });
   queued.length = 0;
   sent.length = 0;
   fireEvent.keyDown(view.getByRole('textbox', { name: 'Title' }), { key: 'z', ctrlKey: true });
   // A document undo asks the document to commit its typing first, synchronously; the field's own undo does not.
-  expect(sent.filter((m) => m.type === STORY_COMMIT_MESSAGE)).toEqual([]);
+  expect(sent.filter((m) => m.type === 'mx:commit')).toEqual([]);
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(queued).toEqual([]);
   expect(view.getByRole('button', { name: 'Undo' })).not.toBeDisabled();
@@ -231,7 +231,7 @@ it('retries query preview when an intervening edit discards the pending result',
   preview.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   const { emit } = mountEditor('<Helmet><Query name="costs">{`select 1 as spend`}</Query></Helmet><p>Hello there</p>', backend);
   await vi.waitFor(() => expect(preview).toHaveBeenCalledTimes(1));
-  emit({ type: STORY_TEXT_EDIT_MESSAGE, path: '0', innerHtml: 'Updated while loading' });
+  emit({ type: 'mx:text-edit', path: '0', innerHtml: 'Updated while loading' });
   finish(null);
   await vi.waitFor(() => expect(preview).toHaveBeenCalledTimes(2));
   expect(preview.mock.calls[1]![0]).toContain('Updated while loading');
@@ -241,7 +241,7 @@ it('source typing saves and redraws the same draft before returning to App', asy
   const { sent, view } = mountEditor();
   fireEvent.click(view.getByRole('tab', { name: 'Edit the source' }));
   // Code is another editing surface: pausing the document makes it ignore its drafts and lets Done skip restoring the head.
-  expect(sent.filter(m => m.type === STORY_EDIT_MODE_MESSAGE && m.on === false)).toEqual([]);
+  expect(sent.filter(m => m.type === 'mx:edit-mode' && m.on === false)).toEqual([]);
   const field = await view.findByRole('textbox', { name: 'Markup source' });
   const next = '<p>Code draft accepted</p>';
   fireEvent.input(field, { target: { value: next } });
@@ -258,7 +258,7 @@ it('keeps recovery modal until explicit restore and copies the rejected draft wi
   vi.stubGlobal('navigator', { clipboard: { writeText: async (text: string) => { copied = text; } } });
   const { view, emit, sent } = mountEditor('<p id="a">Current document</p>');
   const fragment = '<p id="a">Recover this text</p>';
-  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected: '<p id="a">Stale document</p>', replacement: fragment });
+  emit({ type: 'mx:flow-edit', path: '0', expected: '<p id="a">Stale document</p>', replacement: fragment });
   const recovery = view.getByRole('alertdialog', { name: 'Recover uncommitted text' });
   expect(recovery).toHaveAttribute('aria-modal', 'true');
   fireEvent.keyDown(window, { key: 'Escape' });

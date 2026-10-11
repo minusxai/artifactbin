@@ -8,8 +8,7 @@
  */
 import { vi } from 'vitest';
 import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
-import { STORY_ANNOTATION_LAYOUT_MESSAGE, type StoryAnnotationsMessage } from '@/lib/story-runtime/contract';
-import type { RuntimeChannel } from '@/lib/story-runtime/contract';
+import type { StoryAnnotationsMessage, RuntimeChannel } from '@/lib/edit-protocol';
 
 export const NONCE = 'l'.repeat(32);
 export const PIN = { id: 'ann_1', path: '0', key: 'anchor_1' };
@@ -28,7 +27,7 @@ export const env = {
 
 export const channel = (): RuntimeChannel => ({
   nonce: NONCE,
-  post: (message) => { env.posted.push(message as Record<string, unknown>); },
+  post: (message) => { env.posted.push({ ...message }); },
   innerHtmlOf: (el) => el.innerHTML,
 });
 
@@ -36,7 +35,7 @@ export const state = (mode: StoryAnnotationsMessage['mode']): StoryAnnotationsMe
   type: 'mx:annotations', mode, pins: [PIN], openId: null, hoverId: null,
 });
 
-export const layouts = () => env.posted.filter((message) => message.type === STORY_ANNOTATION_LAYOUT_MESSAGE);
+export const layouts = () => env.posted.filter((message) => message.type === 'mx:annotation-layout');
 
 /** Pin an element's box, so a geometry assertion has numbers to check. */
 export const rectOf = (el: Element, r: { x: number; y: number; width: number; height: number }) =>

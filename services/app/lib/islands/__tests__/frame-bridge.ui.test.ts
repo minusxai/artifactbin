@@ -44,7 +44,7 @@ import { createFramedStory } from '@/solid/document/create-framed-story';
 import { createRoot, createSignal } from 'solid-js';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import type { JsxNode } from '@/lib/jsx/types';
-import { STORY_ADOPT_HOOK, STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_LINK_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_ADOPT_HOOK, STORY_DOCUMENT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
 
 const APP = 'https://app.test';
 const PAGES = 'https://6869.pages.test';
@@ -127,7 +127,7 @@ describe('the frame bridge', () => {
     const events: unknown[] = [];
     bridge.subscribe((event) => events.push(event));
     // Sent before the frame is even open: kept, then delivered in order.
-    bridge.send({ type: STORY_SELECT_MESSAGE, path: null });
+    bridge.send({ type: 'mx:select', path: null });
     const loads = openDoor(frameWin);
     await settle(() => onReady.mock.calls.length > 0);
     expect(loads).toHaveBeenCalledTimes(1);
@@ -139,7 +139,7 @@ describe('the frame bridge', () => {
     expect(controller.input.initialSource()).toBe('<p>The lede.</p>');
     expect(controller.input.fragmentSurface).toBe('raw');
     await settle(() => controller.sent.length > 0);
-    expect(controller.sent[0]).toEqual({ type: STORY_SELECT_MESSAGE, path: null });
+    expect(controller.sent[0]).toEqual({ type: 'mx:select', path: null });
 
     bridge.setContext('e2', '<p>newer</p>');
     bridge.update({ type: 'mx:document', nodes: [], source: '<p>newer</p>', editId: 'e2', theme: null, colorMode: 'light' });
@@ -170,7 +170,7 @@ describe('the frame bridge', () => {
     frameWin.addEventListener('message', (event) => seen.push(event.data), true);
     frameWin.addEventListener('message', (event) => seen.push(event.data));
     await settle(() => onReady.mock.calls.length > 0);
-    bridge.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    bridge.send({ type: 'mx:edit-mode', on: true });
     frameWin.postMessage({ type: 'mx:query-result', id: 1 }, '*');
     await settle(() => seen.length > 0);
     await tick();
@@ -239,7 +239,7 @@ describe('the frame bridge', () => {
     key({ key: 'z', metaKey: true });
     await tick(); await tick();
     expect(events, 'reading: the key is the document\'s own').toEqual([]);
-    bridge.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    bridge.send({ type: 'mx:edit-mode', on: true });
     await settle(() => made.controllers[0]!.sent.length > 0);
     const undo = key({ key: 'z', metaKey: true });
     expect(undo.defaultPrevented).toBe(true);
@@ -256,8 +256,8 @@ describe('the frame bridge', () => {
     await settle(() => events.length >= 6);
     await tick(); await tick();
     expect(events.map(({ type, direction, reason }) => [type, direction ?? reason ?? null])).toEqual([
-      [STORY_HISTORY_MESSAGE, 'undo'], [STORY_HISTORY_MESSAGE, 'redo'], [STORY_COMMENT_KEY_MESSAGE, null], [STORY_LINK_KEY_MESSAGE, null],
-      [STORY_EDIT_FLUSH_MESSAGE, 'focusout'], [STORY_EDIT_FLUSH_MESSAGE, 'enter'],
+      ['mx:history', 'undo'], ['mx:history', 'redo'], ['mx:comment-key', null], ['mx:link-key', null],
+      ['mx:edit-flush', 'focusout'], ['mx:edit-flush', 'enter'],
     ]);
     expect(events.every((event) => event.nonce === 'n'.repeat(32))).toBe(true);
   });
@@ -269,10 +269,10 @@ describe('the frame bridge', () => {
     await settle(() => onReady.mock.calls.length > 0);
     const hooks = frameWin as unknown as Record<string, unknown>;
     expect(hooks[STORY_ADOPT_HOOK]).toBeUndefined();
-    bridge.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    bridge.send({ type: 'mx:edit-mode', on: true });
     await settle(() => typeof hooks[STORY_ADOPT_HOOK] === 'function');
     expect(typeof hooks[STORY_ADOPT_HOOK]).toBe('function');
-    bridge.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    bridge.send({ type: 'mx:edit-mode', on: false });
     await tick(); await tick();
     expect(typeof hooks[STORY_ADOPT_HOOK]).toBe('function');
     await bridge.restored();
@@ -411,12 +411,12 @@ describe('the frame bridge', () => {
     const { bridge, onReady } = parentFor(frame);
     const events: unknown[] = [];
     bridge.subscribe((event) => events.push(event));
-    bridge.send({ type: STORY_SELECT_MESSAGE, path: null });
+    bridge.send({ type: 'mx:select', path: null });
     await settle(() => onReady.mock.calls.length > 0);
     expect(onReady).toHaveBeenLastCalledWith('n'.repeat(32));
     const first = made.controllers[0]!;
     await settle(() => first.sent.length > 0);
-    expect(first.sent).toEqual([{ type: STORY_SELECT_MESSAGE, path: null }]);
+    expect(first.sent).toEqual([{ type: 'mx:select', path: null }]);
     const keyOf = (index: number) => (toFrame.filter((post) => (post.data as { payload?: { kind?: string } }).payload?.kind === 'attach')[index]?.data as { key?: string } | undefined)?.key;
     const firstKey = keyOf(0);
 
@@ -432,10 +432,10 @@ describe('the frame bridge', () => {
     const keys = new Set(toFrame.flatMap((post) => ((post.data as { payload?: { kind?: string }; key?: string }).payload?.kind === 'attach' ? [(post.data as { key: string }).key] : [])));
     expect(keys.size).toBe(2);
     expect(keys.has(firstKey!)).toBe(true);
-    bridge.send({ type: STORY_SELECT_MESSAGE, path: '0' });
+    bridge.send({ type: 'mx:select', path: '0' });
     const second = made.controllers[1]!;
     await settle(() => second.sent.length > 0);
-    expect(second.sent).toEqual([{ type: STORY_SELECT_MESSAGE, path: '0' }]);
+    expect(second.sent).toEqual([{ type: 'mx:select', path: '0' }]);
     // A load event alone (the same document) changes nothing.
     frame.dispatchEvent(new Event('load'));
     await tick();

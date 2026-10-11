@@ -9,7 +9,7 @@ import type { EditorView } from 'prosemirror-view';
 import { isEditableTextHost } from '@/lib/story-ui/host-classify';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { STORY_GRID_EDIT_CSS } from '@/lib/story-ui/grid-css';
-import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
+import type { StoryLayoutRect } from '@/lib/edit-protocol';
 import { FlowEditor } from './FlowEditor';
 import { flushFlowView, repathFlowView } from '@/lib/editor-engine/flow-view';
 import { GridEdit, type GridTile } from './GridEdit';

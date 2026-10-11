@@ -16,7 +16,7 @@ import { isTargetRange } from '@/lib/document/annotation-range';
  */
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { JsxNode } from '@/lib/jsx';
-import type { StoryEditSelection, StorySelectionActionsMessage } from '../contract';
+import type { StoryEditSelection, StorySelectionActionsMessage } from '@/lib/edit-protocol';
 import { describeSelection, describeCommentSelection } from './describe-selection';
 import { anchorFor, describeRange } from './selection-range';
 

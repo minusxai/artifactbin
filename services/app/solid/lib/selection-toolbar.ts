@@ -25,7 +25,7 @@
  * their own inspector panels — those open BESIDE this toolbar, they do not
  * replace it.
  */
-import type { StoryEditSelection } from '@/lib/story-runtime/contract';
+import type { StoryEditSelection } from '@/lib/edit-protocol';
 
 /** The controls every selection gets, whatever it is. Rendered unguarded. */
 export const ALWAYS_OFFERED = ['name', 'comment', 'delete'] as const;

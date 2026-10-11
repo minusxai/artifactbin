@@ -2,7 +2,6 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { $getSelection, $isRangeSelection } from 'lexical';
 import { mountMarkdownEditor } from '@/lib/markdown/editor';
-import { STORY_SELECTION_MESSAGE } from '@/lib/story-runtime/contract';
 import { createHoverSelect } from '../hover-select';
 
 afterEach(() => { document.body.replaceChildren(); });
@@ -109,7 +108,7 @@ it('does not attach a selected quote or source path from stale rendered identity
   range.selectNodeContents(heading);
   getSelection()!.removeAllRanges(); getSelection()!.addRange(range);
   document.dispatchEvent(new Event('selectionchange'));
-  const selections = post.mock.calls.map(([message]) => message).filter((message) => message.type === STORY_SELECTION_MESSAGE && message.selection);
+  const selections = post.mock.calls.map(([message]) => message).filter((message) => message.type === 'mx:selection' && message.selection);
   expect(selections).toEqual([]);
   getSelection()!.removeAllRanges();
   hover.dispose();

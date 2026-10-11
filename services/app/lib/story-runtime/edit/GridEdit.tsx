@@ -10,7 +10,7 @@
  */
 import { createMemo, createSignal, For, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import { diffLayouts, type GridItemRect } from '@/lib/story-ui/grid-layout';
-import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
+import type { StoryLayoutRect } from '@/lib/edit-protocol';
 import { compact, moveElement, type LayoutItem } from './rgl-kernel';
 
 export interface GridTile { key: string; path: string; rect: GridItemRect; children: () => JSX.Element }

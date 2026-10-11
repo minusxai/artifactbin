@@ -8,7 +8,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import type { AnnotationWire } from '@/lib/annotations/store';
-import { STORY_ANNOTATION_LAYOUT_MESSAGE } from '@/lib/story-runtime/contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationPreview } from '../AnnotationPreview';
 import { preloadCommentField } from '../LazyCommentField';
@@ -31,7 +30,7 @@ async function expandedCard(over: Parameters<typeof layer>[0] = {}, rows: Annota
   knobs.open = rows;
   const view = layer({ showViewComments: true, ...over });
   await flush(); await flush();
-  view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: rows.map((row, index) => ({ id: row.id, rect: { x: 10, y: 120 + index * 200, width: 300, height: 40 } })) });
+  view.runtime.emit({ type: 'mx:annotation-layout', positions: rows.map((row, index) => ({ id: row.id, rect: { x: 10, y: 120 + index * 200, width: 300, height: 40 } })) });
   const card = view.container.querySelector<HTMLElement>(`[data-annotation-id="${rows[0]!.id}"]`)!;
   fireEvent.mouseEnter(card);
   fireEvent.click(within(card).getByRole('button', { name: 'Expand replies' }));
@@ -44,7 +43,7 @@ describe('the expanded hover card ends in a reply box', () => {
     knobs.open = [ANN];
     const view = layer({ showViewComments: true });
     await flush(); await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
     const card = markerCard(/Open annotation conversation by/);
     fireEvent.mouseEnter(card);
     expect(screen.queryByRole('textbox', { name: 'Reply to annotation' })).toBeNull();
@@ -75,7 +74,7 @@ async function hoveredCard(rows: AnnotationWire[]) {
   knobs.open = rows;
   const view = layer({ showViewComments: true });
   await flush(); await flush();
-  view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: rows.map((row, index) => ({ id: row.id, rect: { x: 10, y: 120 + index * 200, width: 300, height: 40 } })) });
+  view.runtime.emit({ type: 'mx:annotation-layout', positions: rows.map((row, index) => ({ id: row.id, rect: { x: 10, y: 120 + index * 200, width: 300, height: 40 } })) });
   const card = view.container.querySelector<HTMLElement>(`[data-annotation-id="${rows[0]!.id}"]`)!;
   fireEvent.mouseEnter(card);
   return { view, card };
@@ -173,7 +172,7 @@ describe('focus or content pins the card', () => {
     knobs.open = [ANN];
     const view = layer({ showViewComments: true }, makeRuntime(), { trusted: true });
     await flush(); await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
     const root = trustedRoot();
     const card = root.querySelector<HTMLElement>('[data-annotation-id]')!;
     fireEvent.mouseEnter(card);
@@ -215,7 +214,7 @@ describe('focus or content pins the card', () => {
     const onRailOpenChange = vi.fn();
     const view = layer({ showViewComments: true, onRailOpenChange });
     await flush(); await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
     const marker = screen.getByLabelText(/Open annotation conversation by/);
     const card = markerCard(/Open annotation conversation by/);
     fireEvent.pointerDown(marker, { pointerType: 'touch' });
@@ -313,7 +312,7 @@ describe('who gets a box', () => {
     knobs.open = [ANN];
     const view = layer({ showViewComments: true });
     await flush(); await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
     knobs.resolved = [{ ...ANN, status: 'resolved', revision: 2, resolved_at: '2026-09-23T00:00:00Z' }];
     view.set({ showViewComments: true, liveAnnotations: [] });
     await flush(); await flush();

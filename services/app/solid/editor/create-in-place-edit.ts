@@ -9,7 +9,7 @@
  * Trust: the author's `<script>` runs in the same realm as the runtime, so
  * `event.source === frame.contentWindow` proves only which FRAME spoke, never
  * which CODE. The session nonce does, and the runtime mints it before the
- * author's script exists (lib/story-runtime/pristine). Everything without it
+ * author's script exists (lib/edit-protocol RuntimeChannel). Everything without it
  * is dropped — including a forgery posted through the unforgeable `top`.
  *
  * `options` is read LIVE (a Solid props object, not a spread copy), so every
@@ -24,16 +24,7 @@ import {
   documentReady,
   type DocumentRuntimeRef,
 } from '@/lib/story-runtime/document-endpoint';
-import {
-  isEditFrameMessage,
-  STORY_APPLY_FORMAT_MESSAGE,
-  STORY_APPLY_LINK_MESSAGE,
-  STORY_EDIT_MODE_MESSAGE,
-  STORY_SELECT_MESSAGE,
-  STORY_SPOTLIGHT_MESSAGE,
-  STORY_COMMIT_MESSAGE,
-  type StoryEditSelection,
-} from '@/lib/story-runtime/contract';
+import { isEditFrameMessage, type MarkdownBlockKind, type MarkdownTableAction, type StoryEditParentMessage, type StoryEditSelection } from '@/lib/edit-protocol';
 import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-engine/bookmark';
 import { editBlock } from '@/lib/editor-engine/block-edit';
 import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
@@ -113,8 +104,8 @@ export interface InPlaceEditController {
   /** Ask the frame to link the live text selection; it answers with a text edit. */
   applyLink: (path: string, href: string | null) => void;
   applyInline: (tag: 'strong' | 'em' | 'u') => void;
-  applyMarkdownBlock: (block: import('@/lib/story-runtime/contract').MarkdownBlockKind) => void;
-  applyMarkdownTable: (action: import('@/lib/story-runtime/contract').MarkdownTableAction) => void;
+  applyMarkdownBlock: (block: MarkdownBlockKind) => void;
+  applyMarkdownTable: (action: MarkdownTableAction) => void;
   /** Return the caret to the document's text (page chrome that took focus closed without a change). */
   focusText: () => void;
   pasteMarkdown: (value: string) => void;
@@ -142,8 +133,8 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
   let committed: ((acknowledged?: boolean) => void) | null = null;
   let commitRequest: Promise<boolean> | null = null;
 
-  const postToFrame = (message: Record<string, unknown>) => {
-    if (rejected && message.type !== STORY_EDIT_MODE_MESSAGE) return;
+  const postToFrame = (message: StoryEditParentMessage) => {
+    if (rejected && message.type !== 'mx:edit-mode') return;
     sendDocument({ runtimeRef: options.runtimeRef }, message);
   };
 
@@ -201,7 +192,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
                 rejected = true;
                 setReady(false);
                 setSelection(null);
-                postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+                postToFrame({ type: 'mx:edit-mode', on: false });
                 options.onRejectedEdit?.(replacement);
               }
               break;
@@ -276,7 +267,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
   createEffect(on(() => options.editing, (editing) => {
     if (editing === asked) return;
     asked = editing;
-    postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: editing });
+    postToFrame({ type: 'mx:edit-mode', on: editing });
     if (!editing) {
       setReady(false);
       setSelection(null);
@@ -290,7 +281,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
     // need the parent to compose their class/style change. Never do both.
     const current = selection();
     const engineOwns = current?.path === path && current.editor === 'prose';
-    postToFrame({ type: STORY_APPLY_FORMAT_MESSAGE, path, ...edit });
+    postToFrame({ type: 'mx:apply-format', path, ...edit });
     if (engineOwns) return;
     const next = composeSource(options.sourceRef.current, {
       text: new Map(),
@@ -302,7 +293,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
 
   const applyLink = (path: string, href: string | null) => {
     // Only the document holds a live Selection; it answers with a text edit.
-    postToFrame({ type: STORY_APPLY_LINK_MESSAGE, path, href });
+    postToFrame({ type: 'mx:apply-link', path, href });
   };
 
   const select = (path: string | null, opts?: { reveal?: boolean; nodeId?: string; focusText?: boolean }) => {
@@ -316,7 +307,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
      */
     if (path === null) setSelection(null);
     postToFrame({
-      type: STORY_SELECT_MESSAGE,
+      type: 'mx:select',
       path,
       ...(opts?.reveal ? { reveal: true } : {}),
       ...(opts?.nodeId ? { nodeId: opts.nodeId } : {}),
@@ -342,7 +333,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
           resolve(acknowledged);
         }
         committed = finish;
-        postToFrame({ type: STORY_COMMIT_MESSAGE });
+        postToFrame({ type: 'mx:commit' });
       });
     }
     const acknowledged = await commitRequest;
@@ -357,19 +348,19 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
     discardRejectedEdit: () => {
       if (!rejected) return;
       rejected = false;
-      if (options.editing) postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+      if (options.editing) postToFrame({ type: 'mx:edit-mode', on: true });
     },
     isUserEditing: () => typing || rejected,
     applyFormat,
     applyLink,
     applyInline: (tag: 'strong' | 'em' | 'u') => postToFrame({ type: 'mx:inline', tag }),
-    applyMarkdownTable: (action: import('@/lib/story-runtime/contract').MarkdownTableAction) => postToFrame({ type: 'mx:markdown-table', action }),
-    applyMarkdownBlock: (block: import('@/lib/story-runtime/contract').MarkdownBlockKind) => postToFrame({ type: 'mx:markdown-block', block }),
+    applyMarkdownTable: (action: MarkdownTableAction) => postToFrame({ type: 'mx:markdown-table', action }),
+    applyMarkdownBlock: (block: MarkdownBlockKind) => postToFrame({ type: 'mx:markdown-block', block }),
     focusText: () => postToFrame({ type: 'mx:focus-text' }),
     pasteMarkdown: (value: string) => postToFrame({ type: 'mx:paste', kind: 'markdown', value }),
     select,
-    spotlight: (paths: string[]) => postToFrame({ type: STORY_SPOTLIGHT_MESSAGE, paths }),
+    spotlight: (paths: string[]) => postToFrame({ type: 'mx:spotlight', paths }),
     commitPending,
-    restoreSelection: (restore: EditorBookmark) => postToFrame({ type: STORY_COMMIT_MESSAGE, restore }),
+    restoreSelection: (restore: EditorBookmark) => postToFrame({ type: 'mx:commit', restore }),
   };
 }

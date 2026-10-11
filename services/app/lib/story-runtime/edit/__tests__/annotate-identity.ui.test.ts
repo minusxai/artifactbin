@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { STORY_SELECTION_MESSAGE } from '@/lib/story-runtime/contract';
 import { NONCE, disposeAnnotateSession, env, installAnnotateSession, state } from '@/test/helpers/annotate-session';
 
 beforeEach(installAnnotateSession);
@@ -14,5 +13,5 @@ it('does not issue a comment selection packet for a witness that conflicts with 
   const heading = document.querySelector('h3')!;
   heading.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
   heading.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-  expect(env.posted.filter((message) => message.type === STORY_SELECTION_MESSAGE && message.nonce === NONCE)).toEqual([]);
+  expect(env.posted.filter((message) => message.type === 'mx:selection' && message.nonce === NONCE)).toEqual([]);
 });

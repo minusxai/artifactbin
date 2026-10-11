@@ -12,7 +12,7 @@ import { screen, fireEvent } from '@testing-library/dom';
 import { expect, it, vi } from 'vitest';
 import { render } from '@/solid/__tests__/helpers';
 import StoryFormatToolbar from '../StoryFormatToolbar';
-import type { StoryEditSelection } from '@/lib/story-runtime/contract';
+import type { StoryEditSelection } from '@/lib/edit-protocol';
 
 function renderToolbar(className = '', rect = { x: 40, y: 300, width: 600, height: 80 }) {
   const selection: StoryEditSelection = { kind: 'element', path: '0.1', tag: 'div', rect, className, style: '', ancestors: [] };

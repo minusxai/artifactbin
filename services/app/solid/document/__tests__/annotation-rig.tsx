@@ -13,7 +13,8 @@ import { createSignal } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { STORY_ANNOTATIONS_MESSAGE, type StoryController, type StoryEditSelection } from '@/lib/story-runtime/contract';
+import { type StoryController } from '@/lib/story-runtime/contract';
+import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { render } from '../../__tests__/helpers';
 import { TrustedUi } from '../../components/TrustedUi';
 import { AnnotationLayer, type AnnotationLayerProps } from '../AnnotationLayer';
@@ -142,7 +143,7 @@ export function makeRuntime(viewport = { left: 0, top: 100, width: 800, height: 
     subscribe: (listener: (data: unknown) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   } as unknown as StoryController;
   const emit = (data: Record<string, unknown>) => { for (const listener of [...listeners]) listener({ nonce: NONCE, ...data }); };
-  const posts = () => send.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
+  const posts = () => send.mock.calls.map((call) => call[0]).filter((message) => message?.type === 'mx:annotations');
   return { ref: { current: controller as StoryController | null }, controller, send, emit, posts, rect, listeners };
 }
 

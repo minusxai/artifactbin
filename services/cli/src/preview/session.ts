@@ -89,7 +89,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(!options.dataset)throw new Refusal(422,`Remote dataset ${id} requires its host connection`);
   return options.dataset(id);
  };
- /** The compiled reader's own query door: an anonymous GET (`?q=`, `lib/story-runtime/fetch-transport`'s default) or this editor's POST. */
+ /** The compiled reader's own query door: an anonymous GET (`?q=`, `lib/page-store/fetch-transport`'s default) or this editor's POST. */
  const runQuery=async(file:string,input:{values?:unknown;only?:unknown;page?:unknown;tz?:unknown})=>{
   // A document that does not compile fails the capture as a query error would: the export names it.
   const current=await read(file).catch((error:unknown)=>{if(options.capture&&error instanceof Refusal)failure=error.message;throw error;}),datasets:Record<string,LocalDataset>={};
