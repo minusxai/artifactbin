@@ -85,3 +85,21 @@ it('confirms rejection, retains the offer on failure, then removes it on success
   fireEvent.click(screen.getByLabelText('Confirm reject'));
   await waitFor(() => expect(screen.queryByText('Alpha draft')).toBeNull());
 });
+
+it('marks the active role and format filters as pressed and counts what remains', () => {
+  render(() => <SharedWithYou items={[shared('one'), shared('two', 'editor')]} />);
+  const editor = screen.getByRole('button', { name: 'Filter editor' });
+  expect(editor).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(editor);
+  expect(editor).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByLabelText('Shared with you')).toHaveTextContent('1/2');
+  fireEvent.click(editor);
+  expect(editor).toHaveAttribute('aria-pressed', 'false');
+});
+
+it('says when nothing shared matches the search, quoting it', () => {
+  render(() => <SharedWithYou items={[shared('one')]} />);
+  fireEvent.input(screen.getByLabelText('Search shared artifacts'), { target: { value: 'zzz' } });
+  expect(screen.getByRole('status')).toHaveTextContent('nothing matches “zzz”');
+  expect(screen.queryByLabelText('Open shared artifact one')).toBeNull();
+});

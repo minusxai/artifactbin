@@ -95,3 +95,44 @@ it('filters the move picker to the account’s folders by name', () => {
   fireEvent.input(screen.getByLabelText('Filter folders'), { target: { value: '' } });
   expect(screen.getByLabelText('Move to Reports')).toBeInTheDocument();
 });
+
+it('keeps the view toggles and visibility filters pressed state accurate', () => {
+  render(() => <Shelf rows={[doc('one', { visibility: 'public' }), doc('two', { visibility: 'private' })]} actions="none" />);
+  const grid = screen.getByRole('button', { name: 'Grid view' }), list = screen.getByRole('button', { name: 'List view' });
+  expect(grid).toHaveAttribute('aria-pressed', 'true');
+  expect(list).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(list);
+  expect(list).toHaveAttribute('aria-pressed', 'true');
+  expect(grid).toHaveAttribute('aria-pressed', 'false');
+  const pub = screen.getByRole('button', { name: 'Filter public' });
+  fireEvent.click(pub);
+  expect(pub).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByLabelText('Open Doc one')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Open Doc two')).toBeNull();
+  fireEvent.click(pub);
+  expect(screen.getByLabelText('Open Doc two')).toBeInTheDocument();
+});
+
+it('pages a long list view with Previous and Next and says where it is', () => {
+  const rows = Array.from({ length: 12 }, (_, index) => doc(`d${String(index).padStart(2, '0')}`));
+  render(() => <Shelf rows={rows} actions="none" />);
+  fireEvent.click(screen.getByRole('button', { name: 'List view' }));
+  expect(screen.getByLabelText('Page range')).toHaveTextContent('1-10 of 12');
+  expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  expect(screen.getByLabelText('Page range')).toHaveTextContent('11-12 of 12');
+  expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Previous page' }));
+  expect(screen.getByLabelText('Page range')).toHaveTextContent('1-10 of 12');
+});
+
+it('renames a folder from its menu through a named text box and saves on Enter', async () => {
+  render(() => <Shelf rows={[folder]} scopeParentId={null} actions="full" />);
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for Reports' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Rename Reports' }));
+  const input = screen.getByRole('textbox', { name: 'Folder name' });
+  expect(input).toHaveValue('Reports');
+  fireEvent.input(input, { target: { value: 'Quarterly' } });
+  fireEvent.keyDown(input, { key: 'Enter' });
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([, init]) => String(init?.body ?? '').includes('"title":"Quarterly"'))).toBe(true));
+});
