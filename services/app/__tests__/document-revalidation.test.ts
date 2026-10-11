@@ -208,14 +208,14 @@ describe('the document on its own origin', () => {
     const src = await frameSrc(id, w.actor);
     const hop = await app.request(src, { headers: { cookie } });
     expect(hop.status).toBe(302);
-    expect(hop.headers.get('location')).toBe(`${self}/`);
+    expect(hop.headers.get('location')).toBe('/');
     expect(hop.headers.get('cache-control')).toBe('no-store');
     expect(hop.headers.get('referrer-policy')).toBe('no-referrer');
     expect(await hop.text()).toBe('');
     const fresh = hop.headers.get('set-cookie')!.split(';')[0]!;
     expect(fresh).not.toBe(cookie);
     // …where the new session revalidates: a 304 with no bytes, for the same viewer.
-    const again = await app.request(hop.headers.get('location')!, { headers: { cookie: fresh, 'if-none-match': tag } });
+    const again = await app.request(`${self}${hop.headers.get('location')!}`, { headers: { cookie: fresh, 'if-none-match': tag } });
     expect(again.status).toBe(304);
     expect(await again.text()).toBe('');
     // The ticket was spent on the hop: replayed, it mints nothing and is not a second hop.
@@ -227,7 +227,14 @@ describe('the document on its own origin', () => {
     withSelection.search = `?$region=west&_pt=${withSelection.searchParams.get('_pt')}`;
     const selected = await app.request(withSelection.href, { headers: { cookie: fresh } });
     expect(selected.status).toBe(302);
-    expect(selected.headers.get('location')).toBe(`${self}/?$region=west`);
+    expect(selected.headers.get('location')).toBe('/?$region=west');
+    // Behind the TLS-terminating proxy the request arrives as http://: the hop must never send an https frame to http.
+    const proxied = new URL(await frameSrc(id, w.actor));
+    proxied.protocol = 'http:';
+    const latest = selected.headers.get('set-cookie')!.split(';')[0]!;
+    const behindProxy = await app.request(proxied.href, { headers: { cookie: latest, 'x-forwarded-proto': 'https' } });
+    expect(behindProxy.status).toBe(302);
+    expect(behindProxy.headers.get('location')).toBe('/');
 
     // A different reader on a browser holding the first one's cookie: a first view for them — the page directly, never the old
     // reader's validator, and the old session is gone.
