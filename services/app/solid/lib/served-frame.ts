@@ -49,5 +49,5 @@ export function dropServedFrame(): void {
 
 /** A client navigation away from the address the frame was served at drops it. */
 export function dropServedFrameOnRoute(pathname: string): void {
-  if (pathname !== servedPath) dropServedFrame();
+  if (pathname !== servedPath) { unclaimedPath = ''; dropServedFrame(); }
 }
