@@ -78,6 +78,18 @@ it('returns to code entry with the same email after a reload, and keeps the code
 });
 
 const guestNote=/Guest sessions ended on 8 October 2026/;
+it('explains company admission without blaming a valid login code',async()=>{
+ const done=vi.fn();vi.stubGlobal('fetch',vi.fn<typeof globalThis.fetch>()
+  .mockResolvedValueOnce(Response.json({success:true}))
+  .mockResolvedValueOnce(Response.json({error:'deployment_admission_required'},{status:403})));
+ render(()=> <LoginPage onAuthenticated={done}/>);
+ fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_admission@example.com'}});
+ fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
+ fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'123456'}});
+ fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
+ const alert=await screen.findByRole('alert');expect(alert.textContent).toMatch(/invitation|invite/i);
+ expect(alert.textContent).not.toMatch(/expired|isn.t right|new code/i);expect(done).not.toHaveBeenCalled();
+});
 it('shows email login without the retired guest-session notice, including signed-out redirects',()=>{
  render(()=> <LoginPage onAuthenticated={vi.fn()}/>);
  expect(screen.getByRole('textbox',{name:'Email'})).toBeTruthy();expect(screen.queryByText(guestNote)).toBeNull();cleanup();
