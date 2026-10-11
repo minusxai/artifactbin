@@ -32,7 +32,7 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
     if (!mockSelectionBridge) return actual.createFramedStory(...args);
     return {
       frame: args[0].framed.frame, nonce: () => 'guest-selection-nonce', setTopInset: () => {},
-      controller: () => ({ send: selectionSend, subscribe: (receive: (data: unknown) => void) => {
+      controller: () => ({ send: selectionSend, getViewportRect: () => undefined, subscribe: (receive: (data: unknown) => void) => {
         selectionReceive = receive; return () => {};
       } }),
     } as unknown as FramedStory;
@@ -71,7 +71,7 @@ beforeEach(() => {
   }));
 });
 
-afterEach(() => { cleanup(); document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); localStorage.clear(); document.cookie = 'mx_theme=; path=/; max-age=0'; document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function mount(path = '/a/doc') {
   window.history.replaceState(null, '', path);
@@ -542,4 +542,69 @@ it('keeps the intent request running when the pointer moves on, and the later cl
   fireEvent.click(edit);
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(editorDoorFetches()).toBe(1);
+});
+
+/**
+ * THE READER'S PICK ON THE DOCUMENT PAGE. A stored pick (lib/story-runtime/reader-mode chooseTheme) is the document's
+ * mode from the first paint: the ground around the frame and what the frame is told, on this document and every other.
+ * Without one the author's mode stands. While editing, the preview shows the document's own Mode setting.
+ */
+const groundOf = (mode: 'light' | 'dark') => { const probe = document.createElement('div'); probe.style.background = mode === 'dark' ? '#0b0b0c' : '#ffffff'; return probe.style.background; };
+const toldModes = () => selectionSend.mock.calls.map(([command]) => command as { type?: string; mode?: string }).filter((command) => command?.type === 'mx:reader-mode').map((command) => command.mode);
+
+it('opens a light document dark for a reader who picked dark: the ground, the toggle and the frame', async () => {
+  localStorage.setItem('mx_theme', 'dark'); document.documentElement.dataset.theme = 'dark';
+  mockRole = 'viewer'; mockSelectionBridge = true;
+  try {
+    mount();
+    expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('dark'));
+    await waitFor(() => expect(toldModes()).toContain('dark'));
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+    expect(within(await controls()).getByRole('button', { name: 'Dark mode' })).toHaveAttribute('aria-pressed', 'true');
+  } finally { delete document.documentElement.dataset.theme; }
+});
+
+it('keeps the author\'s mode for a reader who never picked, even on a dark device', async () => {
+  document.documentElement.dataset.theme = 'dark';
+  mockRole = 'viewer'; mockSelectionBridge = true;
+  try {
+    mount();
+    expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('light'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(toldModes()).toEqual([]);
+  } finally { delete document.documentElement.dataset.theme; }
+});
+
+it('a pick made on one document applies to the next document opened', async () => {
+  mockRole = 'viewer'; mockSelectionBridge = true;
+  const first = mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  fireEvent.click(within(await controls()).getByRole('button', { name: 'Dark mode' }));
+  first.unmount(); cleanup(); document.body.replaceChildren(); selectionSend.mockClear();
+  delete document.documentElement.dataset.theme;
+  mount('/a/another');
+  expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('dark'));
+  await waitFor(() => expect(toldModes()).toEqual(['dark']));
+});
+
+it('while editing, the preview shows the document\'s own Mode setting, and the pick returns with reading', async () => {
+  localStorage.setItem('mx_theme', 'dark'); document.documentElement.dataset.theme = 'dark';
+  mockRole = 'owner'; mockSelectionBridge = true;
+  const existing = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>' });
+    return existing(input, init);
+  });
+  try {
+    mount('/a/doc#edit');
+    await vi.dynamicImportSettled();
+    await waitFor(() => expect(toldModes().at(-1)).toBe('light'));
+    expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('light'));
+    // Leaving edit mode (the address drops `#edit`): reading shows the pick again.
+    window.history.replaceState(null, '', '/a/doc');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    // (Done flushes the editor first, bounded: create-edit-lifecycle FLUSH_BOUND_MS.)
+    await waitFor(() => expect(toldModes().at(-1)).toBe('dark'), { timeout: 5000 });
+    expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('dark'));
+  } finally { delete document.documentElement.dataset.theme; }
 });

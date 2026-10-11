@@ -13,7 +13,7 @@ const run = (stored: string | null, systemDark: boolean) => {
   return document.documentElement.dataset.theme ?? 'light';
 };
 
-afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); delete document.documentElement.dataset.theme; });
+afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); document.cookie = 'mx_theme=; path=/; max-age=0'; delete document.documentElement.dataset.theme; });
 
 it('follows the device setting when the reader has not chosen', () => {
   expect(run(null, true)).toBe('dark');
@@ -23,4 +23,12 @@ it('follows the device setting when the reader has not chosen', () => {
 it('keeps an explicit choice over the device setting', () => {
   expect(run('light', true)).toBe('light');
   expect(run('dark', false)).toBe('dark');
+});
+
+it('hands a pick stored before the cookie existed to the app\'s server, and never writes one for the device setting', () => {
+  document.cookie = 'mx_theme=; path=/; max-age=0';
+  run(null, true);
+  expect(document.cookie).not.toMatch(/mx_theme=/);
+  run('dark', false);
+  expect(document.cookie).toMatch(/(?:^|; )mx_theme=dark(?:;|$)/);
 });

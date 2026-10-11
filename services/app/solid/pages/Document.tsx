@@ -4,7 +4,7 @@ import { CopyAgentButton } from '../components/CopyAgentButton';
 import { createEffect, createMemo, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
-import { chooseTheme } from '@/lib/story-runtime/reader-mode';
+import { chooseTheme, storedTheme } from '@/lib/story-runtime/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
@@ -119,8 +119,22 @@ export function DocumentPage(): JSX.Element {
   const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
   const [panel, setPanel] = createSignal<Panel>(null);
   const [fork, setFork] = createSignal(false);
-  /** The DOCUMENT's colour mode (its ground around the frame, and what a reloaded frame is told): the author's, until the reader picks. */
-  const [documentMode, setDocumentMode] = createSignal<'light' | 'dark'>(page?.surface?.colorMode === 'dark' ? 'dark' : 'light');
+  /**
+   * The reader's ONE light/dark pick (lib/story-runtime/reader-mode chooseTheme), made here or anywhere else in the app:
+   * every document they read shows it. Null for a reader who never picked: documents show their author's mode. The
+   * server drew the frame in it already (its ground, and its first URL: lib/serving/artifact-page readerPickOf).
+   */
+  const [pick, setPick] = createSignal(storedTheme());
+  /** The mode the open editor shows the document in (its own Mode setting), while editing. */
+  const [editorMode, setEditorMode] = createSignal<'light' | 'dark' | null>(null);
+  const authorMode: 'light' | 'dark' = page?.surface?.colorMode === 'dark' ? 'dark' : 'light';
+  /** The DOCUMENT's colour mode (its ground around the frame): the reader's pick, the author's without one, and while editing the editor's. */
+  const documentMode = (): 'light' | 'dark' => (editing() && editorMode()) || pick() || authorMode;
+  /**
+   * What the frame is TOLD, once a reader has picked: the pick while reading, the document's own setting while editing.
+   * Without a pick nothing is sent, and the document keeps its author's mode, new versions included.
+   */
+  const toldMode = (): 'light' | 'dark' | null => (pick() === null ? null : editing() ? editorMode() : pick());
   /** The APP's appearance, which the bar's controls panel shows: never the document's mode (see bug: a light document read the app's toggle as light). */
   const appAppearance = createAppAppearance();
   /** The editor's bar is on screen (it replaces the entry skeleton). */
@@ -149,8 +163,6 @@ export function DocumentPage(): JSX.Element {
    * CspConsentBar renders here, `<Portal mount={frameSlot()}>`), so the frame shrinks to make room.
    */
   const [frameSlot, setFrameSlot] = createSignal<HTMLElement | null>(null);
-  /** The reader chose a colour on this page: a frame that loads again gets it again. */
-  let modeChosen = false;
   const framedOrigin = page?.surface?.framedOrigin ?? null;
   const postToFrame = (message: Record<string, unknown>) => {
     const target = documentFrame()?.contentWindow;
@@ -165,9 +177,7 @@ export function DocumentPage(): JSX.Element {
   const chooseMode = (next: 'light' | 'dark') => {
     // One reader choice, two surfaces: the app shell (its stored preference) and the document in its frame.
     chooseTheme(next);
-    runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode: next });
-    modeChosen = true;
-    setDocumentMode(next);
+    setPick(next);
   };
 
   // ── the editor's door, and the edit mode's one owner (enter → ready → done → restored) ──
@@ -348,11 +358,12 @@ export function DocumentPage(): JSX.Element {
     runtimeRef.current = framedStory.controller();
     createEffect(on(framedStory.controller, (next) => { runtimeRef.current = next; }, { defer: true }));
     // The frame's controller signs its events once it runs: the nonce arrives then (and again after the frame loads
-    // anew, which also takes the reader's colour choice again).
-    createEffect(on(() => story?.nonce() ?? null, (next) => {
-      setNonce(next);
-      if (next && modeChosen) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode: untrack(documentMode) });
+    // anew). It is told the mode then, and whenever that changes (a pick, entering or leaving edit mode).
+    createEffect(on(() => story?.nonce() ?? null, setNonce));
+    createEffect(on([nonce, toldMode], ([signed, mode]) => {
+      if (signed && mode) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
     }));
+    createEffect(on(editing, (now) => { if (!now) setEditorMode(null); }, { defer: true }));
     setReady(true);
     window.addEventListener('hashchange', lifecycle.sync);
     const address = new URL(window.location.href);
@@ -477,7 +488,7 @@ export function DocumentPage(): JSX.Element {
           onCommentsHost={setCommentsHost} titleHost={phone() ? null : titleHost()}
           sharingContent={sharingContent} onPwaEnabledChange={setPwaEnabled}
           onEditorMount={() => setEditorMounted(true)} onEditorReady={lifecycle.ready}
-          onTitleChange={setEditorTitle} onCodeViewChange={setEditorCodeOpen} />
+          onTitleChange={setEditorTitle} onCodeViewChange={setEditorCodeOpen} onDocumentModeChange={setEditorMode} />
       </Suspense>
     </Show>
     <Show when={sharingOpen() && id}>

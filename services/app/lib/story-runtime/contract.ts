@@ -380,6 +380,24 @@ export const STORY_MODE_HOOK = '__mxSetColorMode';
 /** A trusted parent asks its opaque document frame to change the reader's
  * local appearance. It changes no stored document field and grants nothing. */
 export const STORY_READER_MODE_MESSAGE = 'mx:reader-mode';
+
+/** Where the app origin keeps the reader's explicit light/dark pick: storage (the shell's pre-paint stamp) and a cookie (its server). */
+export const THEME_KEY = 'mx_theme';
+/** The query parameter a framed document's first URL carries the reader's stored pick in (lib/serving/artifact-page writes it). */
+export const READER_MODE_PARAM = 'mx-mode';
+
+/** `search` carrying exactly `mode` as the reader's pick, or none of it (null). Every other param is kept, in order. */
+export function withReaderMode(search: string, mode: 'light' | 'dark' | null): string {
+  const kept = search.replace(/^\?/, '').split('&').filter((part) => part && part.split('=')[0] !== READER_MODE_PARAM);
+  if (mode) kept.push(`${READER_MODE_PARAM}=${mode}`);
+  return kept.length ? `?${kept.join('&')}` : '';
+}
+
+/** The pick a URL's search carries, if any. */
+export function readerModeOf(search: string): 'light' | 'dark' | null {
+  const value = new URLSearchParams(search).get(READER_MODE_PARAM);
+  return value === 'light' || value === 'dark' ? value : null;
+}
 /** A framed document's scroll port lives across an opaque-origin boundary
  * from the page chrome. This unprivileged sample lets the parent apply its
  * mobile bar visibility policy; the parent still checks the source window. */

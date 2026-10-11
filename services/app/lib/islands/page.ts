@@ -5,9 +5,10 @@
  * Loaded by every compiled standalone reader copy (never a capture), with islands or without.
  *
  *  1. `mx-framed` on `<html>` when the app page frames the document (the former MODE_PRELUDE).
- *  2. The reader's per-visit colour override from the `mx:doc:` window.name envelope
- *     (lib/story-runtime/reader-mode), on `<html>` and the story root — the document runs on its own
- *     origin and shares no storage with the app, so this is the only thing that survives a same-tab reload.
+ *  2. The reader's colour override (lib/story-runtime/reader-mode `readerMode`), on `<html>` and the story
+ *     root: a pick made during this visit (the `mx:doc:` window.name envelope), else the app's stored pick
+ *     its first URL carries — which the server already drew it in; the document runs on its own origin and
+ *     shares no storage with the app.
  *  3. Top-level, on a page with NO island module (prose, a deck without islands): the document's
  *     own live stream (./live). A page with islands has `boot` hold it, seeded from its snapshot.
  *  4. Top-level: puts the reader back where a live reload left them, held against a settling layout

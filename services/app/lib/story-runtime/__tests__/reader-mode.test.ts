@@ -10,12 +10,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  applyColorMode, chooseTheme, persistReaderMode, readerMode, takeReloadAnchor, writeReloadAnchor,
+  applyColorMode, chooseTheme, persistReaderMode, readerMode, storedTheme, takeReloadAnchor, writeReloadAnchor,
 } from '../reader-mode';
+import { READER_MODE_PARAM, withReaderMode } from '../contract';
 
 const win = () => window as Window & { name: string };
 
-beforeEach(() => { window.name = ''; });
+beforeEach(() => { window.name = ''; window.history.replaceState(null, '', '/'); });
 
 describe('the mx:doc window.name envelope', () => {
   it('round-trips a mode override', () => {
@@ -101,5 +102,59 @@ describe('chooseTheme: the app shell\'s stored preference', () => {
       expect(() => chooseTheme('dark')).not.toThrow();
       expect(document.documentElement.dataset.theme).toBe('dark');
     } finally { set.mockRestore(); }
+  });
+});
+
+/**
+ * THE READER'S STORED PICK, ACROSS ORIGINS. The app origin keeps one pick (`mx_theme`: storage for the shell's pre-paint
+ * stamp, a cookie for its server); the document on its own origin is told it in its first URL (READER_MODE_PARAM), the
+ * channel that survives the frame's reloads, and keeps the address current when the reader picks again in the visit.
+ */
+describe('the reader\'s pick across the app and its documents', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.cookie = 'mx_theme=; path=/; max-age=0';
+    delete document.documentElement.dataset.theme;
+  });
+
+  it('chooseTheme stores the pick where the shell\'s stamp and the app\'s server both read it', () => {
+    chooseTheme('dark');
+    expect(localStorage.getItem('mx_theme')).toBe('dark');
+    expect(document.cookie).toMatch(/(?:^|; )mx_theme=dark(?:;|$)/);
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    chooseTheme('light');
+    expect(document.cookie).toMatch(/(?:^|; )mx_theme=light(?:;|$)/);
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+  });
+
+  it('storedTheme is the explicit pick only: none for a reader who never picked, or for junk', () => {
+    expect(storedTheme()).toBeNull();
+    localStorage.setItem('mx_theme', 'sepia');
+    expect(storedTheme()).toBeNull();
+    chooseTheme('dark');
+    expect(storedTheme()).toBe('dark');
+  });
+
+  it('a document told the pick in its first URL reads it as the reader\'s mode; a later pick in the visit wins', () => {
+    window.history.replaceState(null, '', `/?$region=EU&${READER_MODE_PARAM}=dark`);
+    expect(readerMode(win())).toBe('dark');
+    persistReaderMode(win(), 'light');
+    expect(readerMode(win())).toBe('light');
+    // The address says so too, every other param kept: a reload of the frame is drawn in the new pick.
+    const address = new URLSearchParams(window.location.search);
+    expect(address.get(READER_MODE_PARAM)).toBe('light');
+    expect(address.get('$region')).toBe('EU');
+  });
+
+  it('ignores a URL mode that is not light or dark', () => {
+    window.history.replaceState(null, '', `/?${READER_MODE_PARAM}=sepia`);
+    expect(readerMode(win())).toBeNull();
+  });
+
+  it('withReaderMode puts exactly one pick in a search, or takes it out', () => {
+    expect(withReaderMode('', 'dark')).toBe(`?${READER_MODE_PARAM}=dark`);
+    expect(withReaderMode(`?$a=1&${READER_MODE_PARAM}=light`, 'dark')).toBe(`?$a=1&${READER_MODE_PARAM}=dark`);
+    expect(withReaderMode(`?$a=1&${READER_MODE_PARAM}=light`, null)).toBe('?$a=1');
+    expect(withReaderMode(`?${READER_MODE_PARAM}=dark`, null)).toBe('');
   });
 });
