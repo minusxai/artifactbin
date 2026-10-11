@@ -80,7 +80,7 @@ export function ScreenshotEditor(props: ScreenshotEditorProps): JSX.Element {
   return <Panel label="Screenshot editor" padding="none" class="mb-4 overflow-hidden">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-3 border-b border-edge px-3 py-3">
       <SwatchPicker label="Brush color" size="sm" custom options={SWATCHES} value={color()} onChange={setColor} />
-      <Slider label="Brush thickness" size="sm" min={1} max={16} value={width()} onChange={setWidth} valueText={(value) => `${value} px`} class="w-48" />
+      <Slider label="Brush thickness" size="sm" min={1} max={16} value={width()} onChange={setWidth} valueText={(value) => `${value} px`} class="min-w-60 flex-1" />
       <Tooltip content="Undo last stroke (⌘/Ctrl Z)"><Button variant="ghost" size="sm" disabled={!count() || props.busy} onClick={undo} aria-label="Undo stroke" class="ml-auto"><Undo2 size={16} />Undo</Button></Tooltip>
     </div>
     <div class="flex min-h-24 items-center justify-center overflow-auto bg-surface p-3" style={{ 'background-image': 'radial-gradient(var(--color-edge) 1px, transparent 1px)', 'background-size': '16px 16px' }}>
