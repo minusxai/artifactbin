@@ -13,7 +13,7 @@ it('opens the owner sharing dialog and changes link visibility through the scope
   vi.stubGlobal('fetch', fetcher);
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
-  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Share “Report”' })).toHaveTextContent('anyone with the link'));
+  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Sharing' })).toHaveTextContent('anyone with the link'));
   fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/my/artifacts/abc123/sharing', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ visibility: 'public' }) })));
 });
@@ -37,7 +37,7 @@ it('keeps the owner verdict current and closes with Escape', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
   await waitFor(() => expect(view.getByRole('button', { name: 'Share' })).toHaveTextContent('public'));
   fireEvent.keyDown(window, { key: 'Escape' });
-  expect(screen.queryByRole('dialog', { name: 'Share “Report”' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Sharing' })).toBeNull();
 });
 
 it('invites an email, changes its role, and removes it under public visibility', async () => {
@@ -137,7 +137,7 @@ it('offers social preview to an editor without sharing controls and keeps the ed
   const edit = vi.fn(); const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner={false} onSocialPreview={edit} version={3} />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
-  expect(screen.getByRole('dialog', { name: 'Share “Report”' })).toBeTruthy();
+  expect(screen.getByRole('dialog', { name: 'Sharing' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Make public' })).toBeNull();
   expect(fetcher).not.toHaveBeenCalled();
   const image = screen.getByAltText('Current social preview');
@@ -146,7 +146,7 @@ it('offers social preview to an editor without sharing controls and keeps the ed
   expect(screen.getByText('Preview unavailable')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Edit social preview' }));
   expect(edit).toHaveBeenCalledOnce();
-  expect(screen.queryByRole('dialog', { name: 'Share “Report”' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Sharing' })).toBeNull();
 });
 
 it('refreshes the social thumbnail and loading state when the saved document version changes', () => {
@@ -199,4 +199,25 @@ it('does not disclose dependency guidance or request ACLs to ordinary readers', 
   expect(screen.queryByRole('complementary', { name: 'Dataset access when sharing' })).toBeNull();
   expect(screen.queryByRole('link', { name: /ds1234/ })).toBeNull();
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+it('chooses a dataset\'s writes from a pressed-state group, and re-pressing the current choice sends nothing', async () => {
+  const state = { visibility: 'public', linkRole: 'viewer', shares: [], access: 'read', datasetKind: 'stored', policyVersion: 1, writtenBy: [] as Array<{ id: string; title: string | null; mutations: string[] }> };
+  const puts: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
+    if (init?.method === 'PUT') { const patch = JSON.parse(String(init.body)); puts.push(patch); Object.assign(state, patch); }
+    return Response.json(state);
+  }));
+  const view = render(() => <DocumentSharing id="abc123" title="Data" owner format="dataset" />);
+  fireEvent.click(view.getByRole('button', { name: 'Share' }));
+  const group = await waitFor(() => screen.getByRole('group', { name: 'Dataset writes' }));
+  expect(screen.getByRole('group', { name: 'Link visibility' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Make read-only' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'Make read & write' }));
+  await waitFor(() => expect(puts).toEqual([{ access: 'readwrite' }]));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Make read & write' })).toHaveAttribute('aria-pressed', 'true'));
+  // The group survived the refetch (same buttons, not rebuilt): focus is not lost to a remount.
+  expect(group.isConnected).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Make read & write' }));
+  expect(puts).toHaveLength(1);
 });

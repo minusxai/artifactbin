@@ -229,3 +229,25 @@ it.each(['network','http'])('quick choices report %s failures and retry without 
  await screen.findByRole('button',{name:'Tag retry-agent'});
  expect(screen.getByLabelText('Draft')).toHaveTextContent('Keep this draft');
 });
+
+it('moves one active option through the people and then the agents, wrapping, and Enter picks it', async () => {
+  const backend = {
+    unavailable: () => null,
+    remoteSessions: vi.fn(async () => ({ sessions: [{ id: 'a1', name: 'reviewer', harness: 'codex', machine: 'box', online: true }] })),
+    members: vi.fn(async () => ({ people: [{ user_id: 'usr_asha', username: 'asha', name: 'Asha' }], mentions: {} })),
+  } as unknown as ArtifactBackend;
+  const select = vi.fn();
+  let keys: { keyDown: (key: string) => boolean } | null = null;
+  render(() => <CommentMentionPicker backend={backend} artifactId="doc1" query="" onSelect={select} onReady={(handle) => { keys = handle; }} />);
+  const options = await waitFor(() => { const found = screen.getAllByRole('option'); expect(found).toHaveLength(2); return found; });
+  const selected = () => options.map(option => option.getAttribute('aria-selected'));
+  expect(selected()).toEqual(['true', 'false']);
+  expect(keys!.keyDown('ArrowDown')).toBe(true);
+  expect(selected()).toEqual(['false', 'true']);
+  expect(keys!.keyDown('ArrowDown')).toBe(true);
+  expect(selected()).toEqual(['true', 'false']);
+  expect(keys!.keyDown('ArrowUp')).toBe(true);
+  expect(keys!.keyDown('Enter')).toBe(true);
+  expect(select).toHaveBeenCalledWith('[@reviewer](/chat?session=a1) ');
+  expect(keys!.keyDown('x')).toBe(false);
+});

@@ -38,6 +38,24 @@ async function expandedCard(over: Parameters<typeof layer>[0] = {}, rows: Annota
   return { view, card };
 }
 
+describe('the marker layer', () => {
+  it('carries the marks without covering the page: no full-viewport box, and the whole-card hit target is a ui link Button', async () => {
+    knobs.open = [ANN];
+    const view = layer({ showViewComments: true });
+    await flush(); await flush();
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    const carrier = screen.getByLabelText('Open annotation comments');
+    expect(carrier).toHaveClass('pointer-events-none');
+    expect(carrier).not.toHaveClass('inset-0');
+    // Each mark is fixed at its own anchor, so the carrier needs no box of its own.
+    expect(carrier.querySelector<HTMLElement>('[data-annotation-id]')!.style.position).toBe('fixed');
+    const hit = within(carrier).getByRole('button', { name: /^Open annotation conversation by/ });
+    expect(hit).toHaveClass('absolute', 'inset-0', 'h-auto');
+    expect(hit).toBeEnabled();
+    expect(view.container).toBeTruthy();
+  });
+});
+
 describe('the expanded hover card ends in a reply box', () => {
   it('only the expanded card has it, pinned to the card bottom as a one-line field that grows on focus', async () => {
     knobs.open = [ANN];

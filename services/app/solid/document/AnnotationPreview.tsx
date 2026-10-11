@@ -279,14 +279,14 @@ export function AnnotationPreview(props: {
       'overflow-y': expanded() ? 'auto' : undefined,
       'border-radius': radius(),
     }}>
-    {/* The card's stretched hit target: an invisible full-card button, not a visible control, so ui/Button (which draws one) does not fit. */}
-    <button type="button" aria-label={`Open annotation conversation by ${label()}, ${messages()} message${messages() === 1 ? '' : 's'}`} 
+    {/* The card's stretched hit target: a content-less link-variant Button (h-auto, no border or fill) laid over the whole card. */}
+    <Button type="button" variant="link" aria-label={`Open annotation conversation by ${label()}, ${messages()} message${messages() === 1 ? '' : 's'}`} 
       onPointerDown={(event) => { touched = event.pointerType === 'touch'; }}
       onClick={() => {
         if (touched && !props.pinned && props.onPin) { setRepliesExpanded(true); props.onHover(props.row.id); props.onPin(); return; }
         props.onOpen();
       }}
-      class="absolute inset-0 z-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent" style={{ 'border-radius': radius() }} />
+      class="absolute inset-0 z-0 w-full" style={{ 'border-radius': radius() }} />
     <Show when={unread()}><span aria-label="Unread reply" class="pointer-events-none absolute right-0 top-0 z-10 h-2 w-2 rounded-full bg-accent" /></Show>
     <Show when={!props.hovered && canReply() && hasDraft()}>
       <span role="img" aria-label="Unsent reply draft" class="pointer-events-none absolute bottom-0 left-0 z-10 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-bg"><PenLine size={8} strokeWidth={2.5} /></span>

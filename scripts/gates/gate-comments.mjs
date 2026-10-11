@@ -187,7 +187,8 @@ async function ownerLeg(browser, { id, token }) {
     // The count rides the app bar's Comment button (solid/document/DocumentChrome), kept live by the page.
     check((await page.locator(COMMENT_GLYPH).textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
     const viewComments = page.locator('[aria-label="Open annotation comments"]');
-    await viewComments.waitFor({ timeout: 8000 });
+    // The layer is a box-less carrier (its marks are each fixed at their anchors), so it is attached, never "visible".
+    await viewComments.waitFor({ state: 'attached', timeout: 8000 });
     const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
     await viewComment.waitFor({ timeout: 8000 });
     const compactBox = await viewComment.boundingBox();

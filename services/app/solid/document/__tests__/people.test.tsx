@@ -24,7 +24,9 @@ it('offers explicit access sharing and unrestricted invitation lookup', async ()
   vi.stubGlobal('fetch', fetcher);
   const view = render(() => <DocumentPeople id="abc123" />);
   fireEvent.click(view.getByRole('button', { name: 'People' }));
-  fireEvent.focus(await waitFor(() => screen.getByRole('combobox', { name: 'Find people by username' })));
+  const finder = await waitFor(() => screen.getByRole('combobox', { name: 'Find people by username' }));
+  finder.focus();
+  fireEvent.click(finder);
   fireEvent.click(await waitFor(() => screen.getByRole('option', { name: /@alex/ })));
   expect(screen.getByRole('button', { name: 'Remove @alex' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('checkbox', { name: 'Include viewing access' }));
@@ -51,4 +53,25 @@ it('opens a pending invitation and permits an accepted member to explicitly join
   fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Join artifact' })));
   await waitFor(() => expect(screen.getByText('You’re a member')).toBeTruthy());
   expect(screen.queryByRole('button', { name: 'Join artifact' })).toBeNull();
+});
+
+it('suggests people in the shared combobox: Escape closes the list, the keyboard picks, and nothing is sent until Invite', async () => {
+  const state = { members: [], pending: [], self: null, canManage: false, canInvite: true };
+  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => Response.json(url.includes('?') ? { people: [{ user_id: 'u1', username: 'alex', name: 'Alex' }, { user_id: 'u2', username: 'bo', name: 'Bo' }] } : state));
+  vi.stubGlobal('fetch', fetcher);
+  render(() => <DocumentPeople id="abc123" initialOpen />);
+  const finder = await waitFor(() => screen.getByRole('combobox', { name: 'Find people by username' }));
+  // Nothing is looked up until the field is reached.
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes('purpose=invite'))).toBe(false);
+  finder.focus(); fireEvent.click(finder);
+  const list = await waitFor(() => screen.getByRole('listbox', { name: 'People suggestions' }));
+  expect(await screen.findAllByRole('option')).toHaveLength(2);
+  fireEvent.keyDown(finder, { key: 'Escape' });
+  expect(screen.queryByRole('listbox', { name: 'People suggestions' })).toBeNull();
+  expect(list.isConnected).toBe(false);
+  fireEvent.keyDown(finder, { key: 'ArrowDown' });
+  fireEvent.keyDown(finder, { key: 'ArrowDown' });
+  fireEvent.keyDown(finder, { key: 'Enter' });
+  expect(screen.getByRole('button', { name: 'Remove @bo' })).toBeInTheDocument();
+  expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
 });

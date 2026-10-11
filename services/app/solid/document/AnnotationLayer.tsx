@@ -41,8 +41,8 @@ import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { FeatureGate } from '../components/FeatureGate';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
+import { FloatingPanel } from '../ui/FloatingPanel';
 import { Tooltip } from '../ui/Tooltip';
-import { createForegroundComposer } from '../components/TrustedUi';
 import { beginComposerPointerDrag, clampComposerPosition, positionedComposer, type ComposerPoint } from './AnnotationComposerPosition';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';
 import { RailChrome } from './AnnotationRail';
@@ -193,7 +193,6 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [missingTargets, setMissingTargets] = createSignal<Set<string>>(new Set());
   const [anchorRects, setAnchorRects] = createSignal<Record<string, StoryEditRect>>({});
   let threadsRoot: HTMLDivElement | undefined;
-  let chromeAnchor: HTMLStyleElement | undefined;
   const [selection, setSelection] = createSignal<StoryEditSelection | null>(null);
   const [manualComposerPoint, setManualComposerPoint] = createSignal<ComposerPoint | null>(null);
   const [composerMoveAnnouncement, setComposerMoveAnnouncement] = createSignal('');
@@ -219,7 +218,6 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     window.addEventListener('resize', resize);
     onCleanup(() => window.removeEventListener('resize', resize));
   });
-  createForegroundComposer(() => selection() !== null, () => chromeAnchor);
 
   /** The rail is about to open FOR A THREAD (a pin, a marker): that opening must not start a pick. */
   let openedForThread = false;
@@ -736,7 +734,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       ? { left: measured.left, top: measured.top, width: Math.max(0, measured.width - railWidth()) }
       : { left: 0, top: topOffset(), width: width - railWidth() };
   });
-  let composerElement: HTMLElement | undefined;
+  let composerElement: HTMLDivElement | undefined;
   let composerTarget: string | null = null;
   createEffect(on(selection, (current) => {
     const next = current ? JSON.stringify([current.nodeId ?? null, current.path, current.kind, current.quote ?? null, current.range ?? null]) : null;
@@ -849,15 +847,15 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   return <CommentImagesProvider backend={backend} editId={() => props.editId}><PersonMentionProvider artifactId={props.id} backend={backend} revision={props.membershipRevision}>
     <CommentsOffline.Provider value={backend.mode === 'offline'}>
-      <style ref={chromeAnchor}>{CAPTURE_CHROME_CSS}</style>
+      <style>{CAPTURE_CHROME_CSS}</style>
       <Show when={capture.busy() && !selection()}>
         <div data-capture-chrome role="status" class="fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-panel bg-panel p-3 shadow">Preparing screenshot… <Button type="button" variant="secondary" size="sm" onClick={() => capture.reset()}>Cancel capture</Button></div>
       </Show>
 
       {/* The ambient surface: tiny open-thread identities over the document's right edge, at their anchors. */}
-      {/* The layer below is NOT an overlay or dialog: a pointer-events-none stacking layer that only carries the marks. */}
+      {/* The layer below is NOT an overlay or dialog: a box-less stacking layer that only carries the marks, each of which is fixed at its own anchor. */}
       <Show when={floating()}>
-        <div data-capture-chrome aria-label="Open annotation comments" class="pointer-events-none fixed inset-0 z-20">
+        <div data-capture-chrome aria-label="Open annotation comments" class="pointer-events-none fixed left-0 top-0 z-20 size-0">
           <For each={placedIds()}>{(id) => (
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={recentResolved()[id]?.remaining}
@@ -885,13 +883,16 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       </Show>
 
       {/* Drafts belong to the thing being discussed; the saved conversation moves to the rail. The composer is a NON-modal floating
-          card the reader drags beside the words (no backdrop, no focus trap, the page stays live): ui/Dialog is modal and
-          ui/Popover is anchored to a trigger, so neither fits and its dialog role stays allowlisted. */}
+          card the reader drags beside the words (no backdrop, no focus trap, the page stays live): ui/FloatingPanel. Escape is the
+          window handler above, so the panel is given no `onClose`. */}
       <Show when={selection() && composerPosition() && !pick()}>
-        <section ref={(element) => { composerElement = element; composerDrop.ref(element); }} data-capture-chrome role="dialog" aria-label="Annotation composer" class={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
-          style={{ left: `${composerPosition()!.left}px`, top: `${composerPosition()!.top}px`, width: `${composerPosition()!.width}px`, 'max-height': `calc(100vh - ${composerPosition()!.top + VIEW_COMMENT_INSET}px)` }}>
+        <FloatingPanel label="Annotation composer" data-capture-chrome ref={composerDrop.ref} class="text-sm"
+          position={{ left: composerPosition()!.left, top: composerPosition()!.top }} width={composerPosition()!.width}>
+          {/* The panel is portalled out of this layer's shadow root, so it carries its own copy of the capture rule. */}
+          <style>{CAPTURE_CHROME_CSS}</style>
           {/* A file dragged anywhere over the composer is its image (CommentImageAttach). */}
           <ImageDropTarget over={composerDrop.over()} />
+          <div ref={composerElement} class="overflow-y-auto" style={{ 'max-height': `calc(100vh - ${composerPosition()!.top + VIEW_COMMENT_INSET}px)` }}>
           <div class="flex items-center gap-2 border-b border-edge px-3 py-2.5">
             <span class="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-accent"><MessageSquare size={12} strokeWidth={1.8} /></span>
             <span class="text-xs font-semibold text-fg">Add comment</span>
@@ -940,7 +941,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               <Button type="button" size="sm" aria-label="Save annotation" disabled={busy() || capture.busy() || (capture.required() && !capture.draft()) || !hasReplyText(draft())} onClick={submitDraft}>comment</Button>
             </div>
           </div>
-        </section>
+          </div>
+        </FloatingPanel>
       </Show>
 
       {/* The rail — a panel, open in either mode; a bottom sheet on a phone. */}

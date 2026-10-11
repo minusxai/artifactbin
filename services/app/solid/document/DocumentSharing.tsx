@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { ARTIFACT_ID_PATTERN, CARD_RENDER_GENERATION, type DatasetAccess, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { artifactEditPath } from '@/lib/http/urls';
@@ -8,6 +8,7 @@ import type { SharingVerdict } from '@/lib/workspace/visibility-icons';
 import { Tooltip } from '../ui/Tooltip';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
+import { ToggleGroup } from '../ui/ToggleGroup';
 import { Input } from '../ui/Field';
 import { StatusMessage } from '../ui/StatusMessage';
 import { sharingIconFor, VISIBILITY_ICON_NODES, type SharingIcon } from '@/lib/workspace/visibility-icons';
@@ -40,10 +41,14 @@ interface SharingState {
   access?: DatasetAccess; datasetKind?: DatasetCatalog['kind']; policyVersion?: number;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
 }
-const WRITE_CHOICES = [
-  ['read', 'read-only', 'documents may only read this data'],
-  ['readwrite', 'read & write', 'you and dataset editors may add, change and remove rows'],
-] as const;
+// Module-level, so the groups' option objects keep their identity across the refetches a change causes (ToggleGroup keys by it, and a rebuilt row would drop focus).
+const VISIBILITY_OPTIONS = (['public', 'unlisted', 'private'] as const).map(value => ({
+  value, label: value as string, ariaLabel: `Make ${value}`, tooltip: VISIBILITY_TIPS[value], icon: () => <VisibilityIcon icon={value} size={11} class="shrink-0" />,
+}));
+const WRITE_OPTIONS = [
+  { value: 'read', label: 'read-only', ariaLabel: 'Make read-only', tooltip: 'documents may only read this data' },
+  { value: 'readwrite', label: 'read & write', ariaLabel: 'Make read & write', tooltip: 'you and dataset editors may add, change and remove rows' },
+];
 
 /** The document sharing door owns dialog state and sends one field per PATCH-shaped PUT. */
 export function DocumentSharing(props: {
@@ -64,6 +69,8 @@ export function DocumentSharing(props: {
   const canManage = () => props.owner || Boolean(props.editable);
   const [open, setOpen] = createSignal(props.variant === 'dialog');
   const [state, setState] = createSignal<SharingState | null>(null);
+  const canPrivate = createMemo(() => state()?.canPrivate !== false);
+  const visibilityOptions = createMemo(() => VISIBILITY_OPTIONS.filter(option => option.value !== 'private' || canPrivate()));
   const [email, setEmail] = createSignal('');
   const [error, setError] = createSignal('');
   const [copied, setCopied] = createSignal(false);
@@ -149,14 +156,7 @@ export function DocumentSharing(props: {
     <Show when={canManage() && !state() && !error()}><StatusMessage kind="loading">loading…</StatusMessage></Show>
     <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
     <Show when={canManage() && state()}>{current => <>
-      <div class="flex gap-1"><For each={(['public', 'unlisted', 'private'] as const).filter(value => value !== 'private' || current().canPrivate !== false)}>{visibility =>
-        <Tooltip content={VISIBILITY_TIPS[visibility]}>
-          <Button variant={current().visibility === visibility ? 'primary' : 'secondary'} size="sm" aria-label={`Make ${visibility}`} aria-pressed={current().visibility === visibility} onClick={() => void put({ visibility })}
-            class="flex-1">
-            <VisibilityIcon icon={visibility} size={11} class="shrink-0" /> {visibility}
-          </Button>
-        </Tooltip>
-      }</For></div>
+      <ToggleGroup label="Link visibility" fill value={current().visibility} options={visibilityOptions()} onChange={value => void put({ visibility: value as Visibility })} />
       <Show when={current().visibility !== 'private'}>
         <label class="mt-2 flex items-center justify-between gap-2 text-muted"><span>anyone with the link</span>
           <span class="w-32 shrink-0"><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></Suspense></span>
@@ -166,12 +166,7 @@ export function DocumentSharing(props: {
       <Show when={showWrites()}>
         <div class="mt-5 border-t border-edge pt-4">
           <p class="mb-1 flex items-center justify-between text-faint"><span class="uppercase tracking-wider">writes</span><PenLine size={11} /></p>
-          <div class="flex gap-1"><For each={WRITE_CHOICES}>{([value, name, tip]) =>
-            <Tooltip content={tip}>
-              <Button variant={(current().access ?? 'read') === value ? 'primary' : 'secondary'} size="sm" aria-label={value === 'read' ? 'Make read-only' : 'Make read & write'} aria-pressed={(current().access ?? 'read') === value} onClick={() => setAccess(value)}
-                class="flex-1">{name}</Button>
-            </Tooltip>
-          }</For></div>
+          <ToggleGroup label="Dataset writes" fill value={current().access ?? 'read'} options={WRITE_OPTIONS} onChange={value => setAccess(value as DatasetAccess)} />
           <p class="mt-2 leading-relaxed text-muted">{writable()
             ? 'Sharing controls who can view and manage this dataset. Data rules below control which actions everyone with view access may run. Without a data policy, only dataset editors may write rows.'
             : 'Documents can only read this dataset. A <Mutation> naming it is refused when you publish.'}</p>
@@ -221,7 +216,7 @@ export function DocumentSharing(props: {
       </Show>
     </Show>
     <Show when={open()}>
-      <Dialog title={heading()} size="lg" lockScroll initialFocus="[data-close-sharing]" onClose={close}
+      <Dialog title={heading()} label="Sharing" size="lg" lockScroll initialFocus="[data-close-sharing]" onClose={close}
         description="Manage access, invite people, or copy the link."
         footer={<Button variant="secondary" aria-label="Close sharing" data-close-sharing onClick={close}>Close</Button>}>
         <div class="font-mono text-xs">{body()}</div>
