@@ -151,6 +151,8 @@ export interface InPlaceEditorProps {
   onTitleChange?: (title: string) => void;
   /** Lets page-level overlays follow the editor's source tab, including a restored tab. */
   onCodeViewChange?: (open: boolean) => void;
+  /** The mode the editor shows the document in (its own Mode setting, else its design's default): the page tells the frame. */
+  onDocumentModeChange?: (mode: 'light' | 'dark') => void;
 }
 
 export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
@@ -218,6 +220,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const documentMode = () => colorMode() ?? storyThemeDefaultMode(theme()) ?? 'light';
   /** The APP's appearance, which the editor's own chrome (bar, panels, their portals) follows — never the document's mode. */
   const appAppearance = createAppAppearance();
+  createEffect(() => props.onDocumentModeChange?.(documentMode()));
 
   /** Show a version of the document in the adopted runtime WITHOUT replacing it, in the theme and mode shown now. */
   const showInDocument = createEditDraftSender(runtimeRef, {

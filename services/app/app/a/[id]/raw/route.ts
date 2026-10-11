@@ -44,7 +44,7 @@ import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
 import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
 import type { StorySurface } from '@/lib/story-runtime/story-fragment';
-import { STORY_NODES_ID } from '@/lib/story-runtime/contract';
+import { readerModeOf, STORY_NODES_ID } from '@/lib/story-runtime/contract';
 import { scriptJson } from '@artifactbin/utils/escape';
 import { compiledPageFor, documentEtag, domainFooter, linkedDocumentSheets } from '@/lib/publish/prepared';
 import { stylesheetStore } from '@/lib/compiled-page';
@@ -294,8 +294,13 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       // Stored rows may carry an unknown theme name (unthemed) and a sheet
       // compiled under an older registry (recompiled) — both resolve at the
       // door so the served document always speaks the live vocabulary.
-      // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's.
-      const design = resolveStoredStoryDesign(meta.theme, (byExportKey && !domain ? captureColor(request.url) : null) ?? meta.colorMode);
+      // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's — or, on
+      // the document's own origin, the pick the app page told its first URL (lib/serving/artifact-page readerPickOf):
+      // the page is served in it from its first byte, and its validator names it (`search` and `design` below).
+      const captured = byExportKey && !domain ? captureColor(request.url) : null;
+      const picked = pages && !key && !domain ? readerModeOf(new URL(request.url).search) : null;
+      const shownMode = captured ?? picked;
+      const design = resolveStoredStoryDesign(meta.theme, shownMode ?? meta.colorMode);
       const compiledCss = await currentStoryCss(meta, row.source);
       // ?chrome=0 — the capture path (lib/export screenshots this frame, so the
       // document's own rail/present bar and attribution footer would land in
@@ -378,7 +383,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
           at,
           search: new URL(request.url).search,
           drawings,
-          colorMode: byExportKey && !domain ? captureColor(request.url) : null,
+          colorMode: shownMode,
           // On its own origin the copy carries its reader's pages session, an account's or a guest owner's.
           signedIn: pages ? actor.credential !== 'none' : actor.credential === 'session' && !!viewer?.userId,
           // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as /raw always has.

@@ -87,6 +87,18 @@ describe('startPage', () => {
     expect(document.documentElement.hasAttribute('data-mx-reader-mode')).toBe(false);
   });
 
+  it('takes the reader\'s stored pick from its first URL (the app page tells it there), for the islands as for the page', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    page();
+    window.history.replaceState(null, '', '/?mx-mode=dark');
+    try {
+      stops.push(startPage());
+      expect(document.documentElement.getAttribute('data-mx-reader-mode')).toBe('dark');
+      expect(document.documentElement.classList.contains('dark')).toBe(true);
+      expect(document.getElementById('mx-story-root')!.className).toBe('dark');
+    } finally { window.history.replaceState(null, '', '/'); }
+  });
+
   it('holds the live stream of a page with no island module, and leaves it to boot on one that has', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     page();

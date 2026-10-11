@@ -15,7 +15,7 @@
  *              door (formerly gate-live-data).
  *   agent      an agent rewrites a shared link: a hydrating document is morphed in place (chart element kept,
  *              never navigated, place kept); a prose one too; the reader's dark mode outlives both kinds of
- *              write (formerly gate-live-reader).
+ *              write, and a reload and the next document open in it from the first paint (formerly gate-live-reader).
  *   watched    a reader watches an agent write, then presses edit: the editor opens on the LIVE document, not
  *              the page it was rendered with (formerly gate-inplace-edit, section 3's second half).
  *   reader     the authored theme, a bound select re-running its query live, the owner's Edit control, and one
@@ -380,8 +380,46 @@ async function agentMode() {
     await docText(page, /MODE WRITE LANDED/, 25000);
     await sleep(1200);
     check(await storyHas(page, 'dark'), "an agent write updates the document but does not stomp the reader's mode");
+    // The pick is the reader's, not the visit's: a reload, and another document, open dark from the first paint —
+    // the classes the parser inserted, before any script or bridge message could change them.
+    await ctx.addInitScript(firstPaintModes);
+    await page.reload({ waitUntil: 'load' });
+    await docText(page, /MODE WRITE LANDED/, 20000);
+    let first = await paintedModes(page);
+    check(first.ground === 'dark' && first.html === 'dark' && first.story === 'dark',
+      `a reload opens the light document dark from its first paint (${JSON.stringify(first)})`);
+    const other = await publishLive(withChart('other mode probe'));
+    await page.goto(`${BASE}/a/${other.id}`, { waitUntil: 'load' });
+    await docText(page, /other mode probe/, 20000);
+    first = await paintedModes(page);
+    check(first.ground === 'dark' && first.html === 'dark' && first.story === 'dark',
+      `and so does the next document the reader opens (${JSON.stringify(first)})`);
     await ctx.close();
   });
+}
+/**
+ * Runs in every frame before any of its markup: records the light/dark class the parser gave the app page's frame
+ * ground, and the document's `<html>` and story root, before any script could change them.
+ */
+function firstPaintModes() {
+  const seen = {};
+  window.__mxFirstModes = seen;
+  const modeOf = (el) => (el.classList.contains('dark') ? 'dark' : el.classList.contains('light') ? 'light' : 'none');
+  const look = () => {
+    const html = document.documentElement;
+    if (html && seen.html === undefined && window !== window.top) seen.html = modeOf(html);
+    const ground = document.querySelector('[data-mx-framed]');
+    if (ground && seen.ground === undefined && window === window.top) seen.ground = modeOf(ground);
+    const story = document.querySelector('[data-mx-inline-story]');
+    if (story && seen.story === undefined && window !== window.top) seen.story = modeOf(story);
+  };
+  new MutationObserver(look).observe(document, { childList: true, subtree: true });
+}
+/** The first-paint modes {@link firstPaintModes} recorded on the app page and in its document frame. */
+async function paintedModes(page) {
+  const top = await page.evaluate(() => window.__mxFirstModes ?? {});
+  const framed = await docEval(page, () => window.__mxFirstModes ?? {}).catch(() => ({}));
+  return { ground: top.ground ?? null, html: framed.html ?? null, story: framed.story ?? null };
 }
 
 /** 4. …and survives the reload a no-runtime document delivers edits by. */

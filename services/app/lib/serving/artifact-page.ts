@@ -33,7 +33,7 @@ import { getArtifactById, getArtifactHeaderById, hasInvitedUsersFor } from '@/li
 import { folderPageFor } from '@/lib/workspace/folders';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { verifyExportKey } from '@/lib/platform/export-read-key';
-import { baseUrl, json } from '@/lib/http/http';
+import { baseUrl, json, parseCookie } from '@/lib/http/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform/ids';
 import {
@@ -52,7 +52,7 @@ import { etagOf, matchingTag, notModified, revalidationHeaders } from '@/lib/htt
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { firstHeadingTitle, packDocumentGraph } from '@/lib/document';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
-import type { StoryIslandData } from '@/lib/story-runtime/contract';
+import { type StoryIslandData, THEME_KEY, withReaderMode } from '@/lib/story-runtime/contract';
 import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http/pages-origin';
 import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';
@@ -111,6 +111,17 @@ const accessMoved = (decided: ArtifactHeader, loaded: ArtifactRow): boolean =>
  * may not read the document or it is not a document. `search` carries the reader's `$` values across.
  * The app page draws its frame with it; brief B's framed story asks for a fresh one (app/api/page/frame).
  */
+/**
+ * The reader's explicit light/dark pick, as the app origin keeps it for its server (the `mx_theme` cookie
+ * lib/story-runtime/reader-mode chooseTheme writes), or null: a reader who never picked reads every document in its
+ * author's mode. The app page carrying it is never cached (`no-store`); the document it frames is told it in its
+ * first URL, so the document's own validator names it (app/a/[id]/raw).
+ */
+function readerPickOf(request: Request): 'light' | 'dark' | null {
+  const value = parseCookie(request.headers.get('cookie'), THEME_KEY);
+  return value === 'light' || value === 'dark' ? value : null;
+}
+
 export async function framedDocumentSrc(request: Request, id: string, site: PagesSite, search = ''): Promise<{ src: string; origin: string } | null> {
   if (!ID_RE.test(id)) return null;
   // The frame's address needs the row's identity and format, never its document.
@@ -118,11 +129,12 @@ export async function framedDocumentSrc(request: Request, id: string, site: Page
   if (!artifact || artifact.format !== 'markup') return null;
   const actor = await sessionActor(request);
   if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return null;
-  return admittedFrameSrc(request, artifact, actor, site, search);
+  return admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request));
 }
 
 /** The frame's first URL for a reader this request already admitted to `artifact` (one admission per view). */
-async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'id'>, actor: Awaited<ReturnType<typeof sessionActor>>, site: PagesSite, search: string): Promise<{ src: string; origin: string }> {
+/** `mode` is the reader's pick the document is served in (its first URL says so), or null for its author's own. */
+async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'id'>, actor: Awaited<ReturnType<typeof sessionActor>>, site: PagesSite, search: string, mode: 'light' | 'dark' | null): Promise<{ src: string; origin: string }> {
   const origin = pagesOriginFor(artifact.id, site);
   // The reader's "Allow once" grants live in an app-origin cookie the document's origin never sees: they ride the
   // ticket, and the document's origin reads them back as `pagesRequestOf(request).carried` (app/a/[id]/raw, /fetch).
@@ -130,7 +142,7 @@ async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'i
   // A browser session's scripted browser reads its frame as the session's actor (lib/accounts/pages-sessions).
   // The ticket is for THIS document at this exact origin, and is spent there (server/pages-host): the frame's first URL is the document's own.
   const ticket = await issuePagesTicket(actor, carried, Date.now(), { browserSession: isBrowserSessionRequest(request), artifactId: artifact.id, origin });
-  return { src: pagesFrameUrl(origin, search, ticket), origin };
+  return { src: pagesFrameUrl(origin, withReaderMode(search, mode), ticket), origin };
 }
 
 /**
@@ -317,6 +329,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   };
   // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's.
   const capturedColor = exporting ? captureColor(request.url) : null;
+  // The reader's own pick draws the frame (its ground, and the mode its first URL asks for) — never at the writer's
+  // `/edit`, whose preview is the document's own Mode setting, and never for a capture.
+  const readerPick = framing && !exporting && !editAddress ? readerPickOf(request) : null;
   const design = resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
   // A document's sheet is its prepared page's; the data tiers keep their stored one.
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
@@ -342,7 +357,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     ownerScope ? hasInvitedUsersFor(ownerScope, id) : Promise.resolve(false),
     // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
     framing && artifact.format === 'markup' && (readerAdmitted || await canReadArtifact(artifact, actor.viewer))
-      ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search) : Promise.resolve(null),
+      ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search, readerPick) : Promise.resolve(null),
     membershipAvailable ? membershipOf(actor, artifact.id, readerAdmitted) : Promise.resolve(undefined),
     // What the document asks of the network beyond the default policy, and where this reader stands on it:
     // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
@@ -358,7 +373,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const frame: DocumentFrame | null = framedSrc && prepared ? {
     src: framedSrc.src,
     title: row.title || prepared.page.title || 'Document',
-    colorMode: design.colorMode ?? prepared.page.data.colorMode,
+    colorMode: readerPick ?? design.colorMode ?? prepared.page.data.colorMode,
     head: {
       title: prepared.page.title,
       description: row.description,
