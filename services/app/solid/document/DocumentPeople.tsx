@@ -3,7 +3,10 @@ import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, type 
 import Users from 'lucide-solid/icons/users';
 import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
 import { Button } from '../ui/Button';
+import { Checkbox } from '../ui/Checkbox';
 import { Input } from '../ui/Field';
+import { Panel } from '../ui/Panel';
+import { StatusMessage } from '../ui/StatusMessage';
 import { apiFetch } from '../lib/api';
 import { primeShared, sharedRequest } from '@/lib/http/shared-request';
 type Person = { user_id: string; username: string; name: string | null };
@@ -48,15 +51,15 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
   };
   const self = () => state()?.self;
   return <section aria-label="artifact people" class="space-y-3">
-    <button type="button" aria-label="People" aria-expanded={open()} onClick={() => setOpen(value => !value)} class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-raised">
+    <Button variant="ghost" size="sm" aria-label="People" aria-expanded={open()} onClick={() => setOpen(value => !value)} class="w-full justify-start">
       <Users size={16} /><span>People</span>
       <Show when={self()?.status === 'accepted' && self()?.explicit_join}><span class="text-xs text-accent">Joined</span></Show>
       <Show when={state()}><span class="ml-auto text-xs text-muted">{state()!.members.length}</span></Show>
-    </button>
-    <Show when={open()}><div class="space-y-4 rounded-xl border border-edge bg-surface p-4">
+    </Button>
+    <Show when={open()}><Panel padding="sm" class="space-y-4">
       <div><h3 class="font-medium">People in this artifact</h3><p class="text-xs leading-5 text-muted">Comment access does not depend on joining.</p></div>
-      <Show when={error()}><p role="alert" class="text-xs text-danger">{error()}</p></Show>
-      <Show when={!state() && !error()}><p role="status">Loading people…</p></Show>
+      <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
+      <Show when={!state() && !error()}><StatusMessage kind="loading">Loading people…</StatusMessage></Show>
       <Show when={state()}>{current => <>
         <Show when={self()?.status === 'accepted'} fallback={
           <Show when={self()?.status === 'pending'} fallback={<Show when={!props.hideJoin}><Button disabled={busy()} onClick={() => void act({ action: 'join' })}>{current().canManage ? 'Join artifact' : 'Request to join'}</Button></Show>}>
@@ -89,13 +92,13 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
         <Show when={current().canInvite}><div class="space-y-2 border-t border-edge pt-4">
           <PeopleInvitePicker endpoint={endpoint()} selected={selected()} onSelect={person => setSelected(previous => [...previous, person])} />
           <p class="text-xs leading-5 text-muted">Find anyone by username. Invitations wait for acceptance unless they follow you.</p>
-          <div class="flex flex-wrap gap-1"><For each={selected()}>{person => <button type="button" class="rounded-full bg-accent-soft px-2 py-1 text-xs text-accent" aria-label={`Remove @${person.username}`} onClick={() => setSelected(previous => previous.filter(item => item.user_id !== person.user_id))}>@{person.username} ×</button>}</For></div>
-          <Show when={current().canManage}><label class="flex items-center gap-2 text-xs"><input type="checkbox" checked={includeAccess()} onChange={event => setIncludeAccess(event.currentTarget.checked)} />Include viewing access</label></Show>
+          <div class="flex flex-wrap gap-1"><For each={selected()}>{person => <Button variant="secondary" size="sm" aria-label={`Remove @${person.username}`} onClick={() => setSelected(previous => previous.filter(item => item.user_id !== person.user_id))}>@{person.username} ×</Button>}</For></div>
+          <Show when={current().canManage}><Checkbox size="sm" label="Include viewing access" checked={includeAccess()} onChange={setIncludeAccess} /></Show>
           <Button disabled={busy() || selected().length === 0} onClick={() => void act({ action: 'invite', usernames: selected().map(person => `@${person.username}`), includeAccess: includeAccess() })}>Invite{selected().length ? ` ${selected().length} people` : ''}</Button>
           <p class="text-xs leading-5 text-muted">Followers join immediately unless they’ve turned off automatic acceptance. Others see a pending invitation.</p>
         </div></Show>
       </>}</Show>
-    </div></Show>
+    </Panel></Show>
   </section>;
 }
 
@@ -140,6 +143,7 @@ function PeopleInvitePicker(props: { endpoint: string; selected: Person[]; onSel
           } else if (event.key === 'Enter' && open() && list[active()]) { event.preventDefault(); select(list[active()]!); }
         }} />
     </label>
+    {/* GAP (solid/ui): an async type-ahead listbox anchored to a text input is neither Select (button trigger, fixed options) nor Menu; this stays hand-rolled until a Combobox exists. */}
     <Show when={open()}><div class="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-md border border-edge bg-surface shadow-lg">
       <ul id={id} role="listbox" aria-label="People suggestions" class="max-h-48 overflow-y-auto p-1">
         <For each={options()}>{(person, index) => <li role="presentation">

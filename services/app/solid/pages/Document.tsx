@@ -26,7 +26,6 @@ import { AnnotationLayer } from '../document/AnnotationLayer';
 import { SelectionActions } from '../document/SelectionActions';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { DocumentSharing } from '../document/DocumentSharing';
-import { DocumentPeople } from '../document/DocumentPeople';
 import { createFramedStory, fetchFrameNodes, framedDocumentFor, type FramedStory } from '../document/create-framed-story';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
@@ -34,6 +33,7 @@ import { moveInto } from '@/lib/islands/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
 import { EditEntryChrome } from '../editor/EditEntryChrome';
+import { Button } from '../ui/Button';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import type { EditorArtifact } from '../editor/InPlaceEditor';
@@ -41,9 +41,11 @@ import { TrustedUi } from '../components/TrustedUi';
 import type { Panel } from '../components/PageChrome';
 import { DocumentChrome } from '../document/DocumentChrome';
 
-/** The document's own ground around its frame (a starter shows the app's dotted page instead). */
+/** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
+/** Lazy on purpose (a documented lazy-import exception): the People panel only draws once its row is opened, and the reader's document page must stay within the page-speed prose budget. */
+const DocumentPeople = lazy(() => import('../document/DocumentPeople').then((m) => ({ default: m.DocumentPeople })));
 const ArtifactEditor = lazy(() => import('../editor/ArtifactEditor'));
 const SocialPreviewEditor = lazy(() => import('../document/SocialPreviewEditor').then((m) => ({ default: m.SocialPreviewEditor })));
 
@@ -376,7 +378,7 @@ export function DocumentPage(): JSX.Element {
   const sharingContent = () => <div class="mx-auto max-w-3xl space-y-6">
     <DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable variant="embedded" version={currentVersion()} onSocialPreview={() => setSocialPreviewOpen(true)} />
     <Show when={page?.surface?.membershipAvailable}><hr class="border-edge" />
-    <DocumentPeople id={id!} initialOpen revision={membershipRevision()} onChange={() => setMembershipRevision((n) => n + 1)} /></Show>
+    <Suspense fallback={null}><DocumentPeople id={id!} initialOpen revision={membershipRevision()} onChange={() => setMembershipRevision((n) => n + 1)} /></Suspense></Show>
   </div>;
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<NotFoundPage />}>
     <DocumentChrome id={id!} title={shownTitle} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
@@ -409,7 +411,7 @@ export function DocumentPage(): JSX.Element {
       <Portal mount={slot()}><TrustedUi>
         <div class="flex items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3 text-sm">
           <p role="status">{commentNotice()}</p>
-          <button type="button" aria-label="Dismiss comment access notice" class="shrink-0 cursor-pointer text-muted hover:text-fg" onClick={() => setCommentNotice(null)}>Dismiss</button>
+          <Button variant="ghost" size="sm" aria-label="Dismiss comment access notice" class="shrink-0" onClick={() => setCommentNotice(null)}>Dismiss</Button>
         </div>
       </TrustedUi></Portal>
     )}</Show>

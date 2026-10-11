@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import RefreshCw from 'lucide-solid/icons/refresh-cw';
+import { Button } from '../ui/Button';
 
 interface RefreshReply {
   refreshed?: string[]; unchanged?: string[];
@@ -35,7 +36,7 @@ export function RefreshDocumentAssets(props: { id: string }): JSX.Element {
     })();
   };
   return <>
-    <button type="button" aria-label="Refresh external images" disabled={busy()} onClick={refresh} class="flex w-full items-center gap-2 rounded px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised disabled:opacity-60"><RefreshCw size={14} />{busy() ? 'refreshing…' : 'refresh external images'}</button>
+    <Button variant="ghost" size="sm" aria-label="Refresh external images" disabled={busy()} onClick={refresh} class="w-full justify-start"><RefreshCw size={14} />{busy() ? 'refreshing…' : 'refresh external images'}</Button>
     <Show when={result()}>{lines => <div role="status" aria-label="Refresh result" class="mt-1 rounded border border-edge bg-raised px-2 py-2 text-xs text-muted"><For each={lines()}>{line => <p class="break-all">{line}</p>}</For></div>}</Show>
   </>;
 }

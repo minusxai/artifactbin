@@ -2,7 +2,7 @@
 import { getDb } from '@/lib/platform/db';
 import { type ArtifactSummary } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
-import { viewTotalsFor } from './view-totals';
+import { viewTotalsFor } from '@/lib/platform';
 
 export interface WorkspaceStats { artifacts: number; assets: number; views: number }
 export interface AssetSelection { page: number; query: string; formats: string[]; visibilities: string[] }
