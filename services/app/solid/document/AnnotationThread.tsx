@@ -8,7 +8,7 @@
  * comment, the chevron folds the conversation — all per viewer (lib/comment-folds). A resolved card
  * is muted until hovered or focused, and says what it was about when the document no longer can.
  */
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, For, lazy, onCleanup, Show, Suspense, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
@@ -19,6 +19,7 @@ import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
+import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
@@ -28,15 +29,22 @@ import { CommentFoldingBody } from './CommentFoldingBody';
 import { CommentScreenshot } from './CommentScreenshot';
 import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
-const threadClass = 'rounded-[6px] border border-edge bg-comment text-sm';
-const buttonClass = 'cursor-pointer rounded-[4px] border border-edge bg-raised px-2 py-1 text-muted hover:text-accent';
+/**
+ * The delete menu is a lazy chunk (an intentional exception to top-level imports): it matters only once a thread is on
+ * screen, so the reader page, which statically imports this layer, does not carry ui/Menu. Its trigger renders at once
+ * as the plain fallback below, and the real Menu replaces it as the chunk lands (it starts loading with the first thread).
+ */
+const Menu = lazy(() => import('../ui/Menu').then((module) => ({ default: module.Menu })));
+export const preloadThreadMenu = (): Promise<unknown> => Menu.preload();
+
+const threadClass = 'rounded-panel border border-edge bg-comment text-sm';
 
 /** ONE fold affordance for a thread, wherever the card is putting it. */
 function ThreadFoldControl(props: { folded: boolean; onToggle: () => void }): JSX.Element {
-  return <button type="button" aria-label={props.folded ? 'Expand thread' : 'Collapse thread'} aria-expanded={!props.folded} onClick={() => props.onToggle()}
-    class="-ml-1 inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-faint hover:bg-raised hover:text-fg">
+  return <Button type="button" variant="ghost" size="sm" icon aria-label={props.folded ? 'Expand thread' : 'Collapse thread'} aria-expanded={!props.folded} onClick={() => props.onToggle()}
+    class="-ml-1">
     <Show when={props.folded} fallback={<ChevronDown size={13} strokeWidth={1.8} />}><ChevronRight size={13} strokeWidth={1.8} /></Show>
-  </button>;
+  </Button>;
 }
 
 interface AnnotationThreadProps {
@@ -69,7 +77,6 @@ interface AnnotationThreadProps {
 
 export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   let threadElement: HTMLDivElement | undefined;
-  const menuRoots = new Map<string, HTMLDivElement>();
   const inbox = useOptionalInbox();
   const { session } = useSession();
   const newestFolded = () => props.isCommentFolded(props.a.thread.at(-1)?.id ?? '');
@@ -91,7 +98,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   // The reply draft — words and image — belongs to the thread, so folding the thread away keeps it.
   const [reply, setReply] = createSignal('');
   const replyImage = createCommentImageDraft();
-  const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
   const replyCount = () => Math.max(0, props.a.thread.length - 1);
@@ -101,16 +107,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       || (userId !== undefined && userId !== null && comment.author.user_id === userId)
       || props.backend.canDeleteLocalAnnotation?.(comment.id) === true;
   };
-
-  createEffect(() => {
-    const open = menuOpen();
-    if (!open) return;
-    const dismiss = (event: PointerEvent) => { const menuRoot = menuRoots.get(open); if (!menuRoot || !event.composedPath().includes(menuRoot)) setMenuOpen(null); };
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(null); };
-    document.addEventListener('pointerdown', dismiss);
-    document.addEventListener('keydown', escape);
-    onCleanup(() => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); });
-  });
 
   const agents = () => (props.a.remote_work ?? []).filter((work, index, all) => !all.slice(index + 1).some((next) => next.sessionId === work.sessionId));
 
@@ -133,44 +129,44 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       <div class="px-3 py-2">
         <div class="flex min-w-0 items-center gap-1.5">
           <ThreadFoldControl folded onToggle={props.onToggleFold} />
-          <span class="truncate font-mono text-[10px] text-faint">{props.a.snippet || 'this document'}</span>
+          <span class="truncate font-mono text-micro text-faint">{props.a.snippet || 'this document'}</span>
         </div>
         <Show when={first()}>{(comment) => <>
           <p class="mt-1 truncate font-sans leading-snug text-fg/90">{firstLine(comment().body)}</p>
-          <p class="mt-1 font-mono text-[10px] text-faint">{replyCount() === 1 ? '1 reply' : `${replyCount()} replies`}</p>
+          <p class="mt-1 font-mono text-micro text-faint">{replyCount() === 1 ? '1 reply' : `${replyCount()} replies`}</p>
         </>}</Show>
       </div>
     </Show>
     <Show when={!props.folded}>
       <For each={agents()}>{(work) => (
-        <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-[11px] text-muted">
+        <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-2xs text-muted">
           <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
           <Show when={remoteWorkActive(work)}><span class="comment-agent-spinner" aria-hidden="true" /></Show>
           <Tooltip content={remoteWorkLabel(work)}><span class="comment-agent-status-label" tabIndex={0}>{work.phase === 'delivered' && remoteWorkActive(work) ? 'Awaiting acknowledgment' : remoteWorkLabel(work)}</span></Tooltip>
         </p>
       )}</For>
       <Show when={props.a.view_state}>
-        <div class="flex items-center justify-between gap-2 border-b border-edge px-3 py-1.5 text-[11px] text-muted">
+        <div class="flex items-center justify-between gap-2 border-b border-edge px-3 py-1.5 text-2xs text-muted">
           <span role="status">{props.open && props.viewStateError ? props.viewStateError : 'Saved view attached'}</span>
-          <button type="button" class="shrink-0 cursor-pointer text-accent hover:underline" onClick={props.onOpen}>Restore saved view</button>
+          <Button type="button" variant="link" class="shrink-0" onClick={props.onOpen}>Restore saved view</Button>
         </div>
       </Show>
       <Show when={props.targetMissing && !props.a.orphaned}>
-        <p class="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-[10px] text-faint">Exact target is unavailable. This comment remains attached to its containing block.</p>
+        <p class="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-micro text-faint">Exact target is unavailable. This comment remains attached to its containing block.</p>
       </Show>
       {/* What this was about, when the document cannot say it: the node is gone, or its quoted words were edited away. */}
       <Show when={props.a.orphaned}>
         <div class="border-b border-edge bg-surface/60 px-3 py-1.5">
           <Show when={props.open && (props.a.quote ?? props.a.snippet)}>
-            <p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-[12px] leading-snug text-fg/80">{props.a.quote ?? props.a.snippet}</p>
+            <p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-xs leading-snug text-fg/80">{props.a.quote ?? props.a.snippet}</p>
           </Show>
-          <p class="font-mono text-[10px] text-faint">This passage was removed from the document.</p>
+          <p class="font-mono text-micro text-faint">This passage was removed from the document.</p>
         </div>
       </Show>
       <Show when={props.open && !props.a.orphaned && props.a.quote_found === false && props.a.quote}>
         <div class="border-b border-edge bg-surface/60 px-3 py-1.5">
-          <p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-[12px] leading-snug text-fg/80">{props.a.quote}</p>
-          <p class="font-mono text-[10px] text-faint">These words have since been edited.</p>
+          <p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-xs leading-snug text-fg/80">{props.a.quote}</p>
+          <p class="font-mono text-micro text-faint">These words have since been edited.</p>
         </div>
       </Show>
       <ul class="flex flex-col gap-3 px-3 py-3">
@@ -183,7 +179,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
           // `scroll-mb-14` is what the open-scroll aims at: on a phone the page's action bar floats over the sheet's bottom.
           return <li data-comment-id={c().id} class="scroll-mb-14 sm:scroll-mb-0">
             <div class="mb-1.5 flex min-w-0 items-center gap-2">
-              {/* The author line is the comment's own toggle where there is a body to fold (an open thread). */}
+              {/* The author line is the comment's own toggle where there is a body to fold (an open thread). A span, not a ui/Button: it holds links, which a button cannot nest. */}
               <span role={props.open ? 'button' : undefined} tabIndex={props.open ? 0 : undefined}
                 aria-label={props.open ? (commentFolded() ? 'Expand comment' : 'Collapse comment') : undefined}
                 aria-expanded={props.open ? !commentFolded() : undefined}
@@ -197,9 +193,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                   event.preventDefault();
                   props.onToggleComment(c().id);
                 }}
-                class={`flex min-w-0 flex-1 items-center gap-2 rounded-[3px] ${props.open ? 'cursor-pointer' : ''}`}>
+                class={`flex min-w-0 flex-1 items-center gap-2 rounded-chip ${props.open ? 'cursor-pointer' : ''}`}>
                 <AuthorIdentity author={c().author} />
-                <CommentTimestamp iso={c().created_at} class="ml-auto shrink-0 font-mono text-[10px] text-faint" />
+                <CommentTimestamp iso={c().created_at} class="ml-auto shrink-0 font-mono text-micro text-faint" />
               </span>
               <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
               <Show when={index() === 0 && props.resolved}>
@@ -209,34 +205,29 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
               </Show>
               <Show when={index() === 0 && !props.resolved}>
                 <Tooltip content="resolve thread">
-                  <button type="button" aria-label="Resolve annotation" disabled={props.busy} onClick={() => props.onResolve()}
-                    class="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-accent-soft hover:text-accent disabled:cursor-default disabled:opacity-40">
+                  <Button type="button" variant="ghost" size="sm" icon aria-label="Resolve annotation" disabled={props.busy} onClick={() => props.onResolve()} class="-mx-1">
                     <Check size={13} strokeWidth={2} />
-                  </button>
+                  </Button>
                 </Tooltip>
               </Show>
               <Show when={index() === 0 && props.resolved && props.open}>
-                <button type="button" aria-label="Hide resolved conversation" aria-expanded="true" onClick={() => props.onOpen()}
-                  class="cursor-pointer rounded-[3px] px-1 font-mono text-[11px] text-faint hover:bg-raised hover:text-accent">↑</button>
+                <Button type="button" variant="ghost" size="sm" icon aria-label="Hide resolved conversation" aria-expanded="true" onClick={() => props.onOpen()}>↑</Button>
               </Show>
               <Show when={canDelete(c()) && (index() > 0 || !props.resolved || props.open)}>
-                <div ref={(el) => { menuRoots.set(c().id, el); }} class="relative">
-                  <Tooltip content={index() === 0 ? 'thread actions' : 'comment actions'}>
-                    <button type="button" aria-label={index() === 0 ? 'Annotation actions' : `Comment actions ${index()}`} aria-expanded={menuOpen() === c().id} onClick={() => setMenuOpen((current) => current === c().id ? null : c().id)}
-                      class="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-[3px] text-faint hover:bg-raised hover:text-fg">
-                      <EllipsisVertical size={13} strokeWidth={1.8} />
-                    </button>
-                  </Tooltip>
-                  <Show when={menuOpen() === c().id}>
-                    <div role="menu" aria-label={index() === 0 ? 'Annotation action menu' : 'Comment action menu'} class="absolute right-0 top-6 z-20 min-w-24 rounded-[5px] border border-edge-bright bg-surface p-1 shadow-lg">
-                      <button type="button" role="menuitem" aria-label={index() === 0 ? 'Delete thread' : 'Delete comment'} disabled={props.busy} onClick={() => { setMenuOpen(null); props.onDelete(c().id); }}
-                        class="flex w-full cursor-pointer items-center gap-2 rounded-[3px] px-2 py-1.5 text-left font-mono text-[11px] text-danger hover:bg-raised disabled:cursor-default disabled:opacity-40">
-                        <Trash2 size={12} strokeWidth={1.75} />
-                        {index() === 0 ? 'delete thread' : 'delete comment'}
-                      </button>
-                    </div>
-                  </Show>
-                </div>
+                {(() => {
+                  const trigger = (attrs?: object) => (
+                    <Tooltip content={index() === 0 ? 'thread actions' : 'comment actions'}>
+                      <Button aria-haspopup="menu" aria-expanded={false} {...attrs} type="button" variant="ghost" size="sm" icon aria-label={index() === 0 ? 'Annotation actions' : `Comment actions ${index()}`} class="-mr-1">
+                        <EllipsisVertical size={13} strokeWidth={1.8} />
+                      </Button>
+                    </Tooltip>
+                  );
+                  return <Suspense fallback={trigger()}>
+                    <Menu label={index() === 0 ? 'Annotation action menu' : 'Comment action menu'}
+                      items={[{ label: index() === 0 ? 'Delete thread' : 'Delete comment', text: index() === 0 ? 'delete thread' : 'delete comment', icon: () => <Trash2 size={12} strokeWidth={1.75} />, danger: true, disabled: props.busy, onSelect: () => props.onDelete(c().id) }]}
+                      trigger={(attrs) => trigger(attrs)} />
+                  </Suspense>;
+                })()}
               </Show>
             </div>
             <Show when={commentFolded()} fallback={
@@ -252,24 +243,26 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
         }}</For>
       </ul>
       <Show when={!props.open}>
-        <button type="button" aria-label={props.resolved ? 'Show resolved conversation' : 'Open annotation thread'} aria-expanded={props.resolved ? false : undefined}
-          onClick={() => props.onOpen()}
-          class="flex w-full cursor-pointer items-center justify-between gap-2 border-t border-edge px-3 py-1.5 font-mono text-[10px] text-faint transition-colors hover:bg-raised hover:text-accent">
-          <ThreadContinuation thread={props.a.thread} />
-          <span class="shrink-0">open →</span>
-        </button>
+        <div class="border-t border-edge p-1">
+          <Button type="button" variant="ghost" size="sm" aria-label={props.resolved ? 'Show resolved conversation' : 'Open annotation thread'} aria-expanded={props.resolved ? false : undefined}
+            onClick={() => props.onOpen()} class="w-full">
+            <span class="flex w-full min-w-0 items-center justify-between gap-2">
+              <ThreadContinuation thread={props.a.thread} />
+              <span class="shrink-0">open →</span>
+            </span>
+          </Button>
+        </div>
       </Show>
       <Show when={props.open && !props.resolved}>
         <div class="border-t border-edge bg-raised p-3">
           <AnnotationReplyBox backend={props.backend} artifactId={props.artifactId} busy={props.busy}
             value={reply()} onChange={setReply} onSend={props.onReply} image={replyImage}
-            actions={<button type="button" aria-label="Cancel reply" onClick={() => { setReply(''); replyImage?.capture.reset(); props.onOpen(); }}
-              class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>} />
+            actions={<Button type="button" variant="ghost" size="sm" aria-label="Cancel reply" onClick={() => { setReply(''); replyImage?.capture.reset(); props.onOpen(); }}>cancel</Button>} />
         </div>
       </Show>
       <Show when={props.open && props.resolved}>
         <div class="flex justify-end border-t border-edge px-3 py-2">
-          <button type="button" aria-label="Reopen annotation" disabled={props.busy} onClick={() => props.onReopen()} class={buttonClass}>↺ reopen</button>
+          <Button type="button" variant="secondary" size="sm" aria-label="Reopen annotation" disabled={props.busy} onClick={() => props.onReopen()}>↺ reopen</Button>
         </div>
       </Show>
     </Show>

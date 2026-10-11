@@ -354,7 +354,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const reply = history.querySelector<HTMLElement>('[data-comment-id="ann_3"]')!;
     delayResolvedRefresh = true;
     fireEvent.click(within(reply).getByLabelText('Comment actions 2'));
-    fireEvent.click(within(reply).getByLabelText('Delete comment'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete comment' }));
     fireEvent.click(screen.getByLabelText('Confirm delete comment'));
     await flush();
 
@@ -376,7 +376,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     fireEvent.click(within(remainingHistory).getByLabelText('Show resolved conversation'));
     const thread = screen.getByLabelText('Resolved annotation thread');
     fireEvent.click(within(thread).getByLabelText('Annotation actions'));
-    fireEvent.click(within(thread).getByLabelText('Delete thread'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete thread' }));
     fireEvent.click(screen.getByLabelText('Confirm delete thread'));
     await flush();
     expect(backend.deleteAnnotation).toHaveBeenCalledWith(ANN.id);

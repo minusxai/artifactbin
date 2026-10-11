@@ -53,6 +53,17 @@ describe('picking a block from the rail', () => {
     expect(beginCapture).not.toHaveBeenCalled();
   });
 
+  it('shows the tool in use as the primary button and the idle one as secondary', async () => {
+    layer({ railOpen: true, editId: 'edit-current' }); await flush();
+    const select = screen.getByRole('button', { name: 'Select' });
+    const shot = screen.getByRole('button', { name: 'Screenshot' });
+    expect(select).toHaveAttribute('aria-pressed', 'true');
+    expect(select).toHaveClass('bg-action');
+    expect(shot).toHaveAttribute('aria-pressed', 'false');
+    expect(shot).toHaveClass('bg-surface');
+    expect(shot).not.toHaveClass('bg-action');
+  });
+
   it('keeps Screenshot usable where the browser cannot capture this tab: the area tool still starts', async () => {
     vi.spyOn(captureScreen, 'captureAvailable').mockReturnValue(false);
     layer({ railOpen: true, editId: 'edit-current' }); await flush();

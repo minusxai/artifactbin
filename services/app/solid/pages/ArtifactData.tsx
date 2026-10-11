@@ -33,6 +33,8 @@ import { ForkArtifact } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { copyText } from '../lib/copy-text';
 import { formatCount } from '../lib/format';
+import { Button } from '../ui/Button';
+import { Panel } from '../ui/Panel';
 
 export interface DataAnswer {
   role: ArtifactRole;
@@ -51,8 +53,7 @@ export interface DataAnswer {
   };
 }
 
-const CONTROL_ROW = 'flex w-full cursor-pointer items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted transition-colors hover:bg-raised hover:text-fg';
-const SECTION_HEADING = 'mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint';
+const SECTION_HEADING = 'mb-1 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-faint';
 
 const safeRows = (content: string): Array<Record<string, unknown>> => {
   try { const parsed = JSON.parse(content); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
@@ -118,10 +119,10 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
       <section aria-label="Owner actions">
         <h2 class={SECTION_HEADING}>owner</h2>
         <Show when={format === 'dataset'}>
-          <button type="button" aria-label="Copy dataset reference" class={`${CONTROL_ROW} text-accent`}
+          <Button variant="ghost" size="sm" type="button" aria-label="Copy dataset reference" class="w-full justify-start"
             onClick={() => { void copyText(catalog() ? datasetQuerySnippet(id, catalog()) : `ref:${id}`); setCopiedRef(true); }}>
             {copiedRef() ? 'copied dataset reference' : catalog() ? `copy query · source="${id}"` : `copy ref:${id}`}
-          </button>
+          </Button>
         </Show>
       </section>
     </Show>
@@ -131,19 +132,19 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
   const preview = <>
       <Show when={format === 'image'}>
         {/* A capture has no session: its image is read with the capture's own key, as its page was. */}
-        <Show when={rawKey()} keyed>{(_version) => <img src={rawUrl()} alt={title()} class="mt-4 max-w-full rounded-[6px] border border-edge" />}</Show>
+        <Show when={rawKey()} keyed>{(_version) => <img src={rawUrl()} alt={title()} class="mt-4 max-w-full rounded-control border border-edge" />}</Show>
       </Show>
       <Show when={format === 'pdf' || format === 'file'}>
         {/* The two facts a person picks a file by and the link that opens it — the same card <File> draws
             in a document — over the viewer its extension picks, reading the bytes from /raw. */}
-        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[6px] border border-edge bg-surface p-4">
+        <Panel padding="sm" class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1">
           <p class="font-sans text-xs text-muted" aria-label={format === 'pdf' ? 'PDF summary' : 'File summary'}>
             {format === 'pdf' ? 'PDF' : 'File'}{surface.bytes ? ` · ${formatFileSize(surface.bytes)}` : ''}{surface.pages ? ` · ${surface.pages} page${surface.pages === 1 ? '' : 's'}` : ''}
           </p>
           <a aria-label={format === 'pdf' ? 'Open the PDF' : 'Download file'} href={rawUrl()} target="_blank" rel="noopener noreferrer" class={`${FORM_SECONDARY_BUTTON} ml-auto max-w-full break-words`}>
             {format === 'pdf' ? 'Open' : 'Download'} {title()}
           </a>
-        </div>
+        </Panel>
         {/* A file with no viewer (a zip, a spreadsheet) is the card above and nothing else. */}
         <Show when={fileKindOf(fileName()) !== 'other' && rawKey()} keyed>{(_version) => <div class="mt-4">
           <FileViewer tall name={fileName()} size={surface.bytes ?? 0} url={rawUrl()} pdfUrl={format === 'pdf' ? rawUrl() : null} />
@@ -155,11 +156,11 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
           {formatCount(rows().length)} rows · {surface.columns.length} columns
           <Show when={rows().length > 50}><span class="text-faint"> · showing the first 50</span></Show>
         </p>
-        <div class="mt-2 max-h-[70vh] overflow-auto rounded-[6px] border border-edge">
+        <div class="mt-2 max-h-[70vh] overflow-auto rounded-control border border-edge">
           <table class="w-full border-collapse font-mono text-xs">
             <thead class="sticky top-0 z-10 bg-raised">
               <tr class="border-b border-edge text-left text-faint">
-                <For each={columns()}>{(column) => <th class="whitespace-nowrap px-3 py-2 font-normal">{column.name}<Show when={column.type}><span class="ml-1.5 text-[10px] text-faint">{column.type}</span></Show></th>}</For>
+                <For each={columns()}>{(column) => <th class="whitespace-nowrap px-3 py-2 font-normal">{column.name}<Show when={column.type}><span class="ml-1.5 text-micro text-faint">{column.type}</span></Show></th>}</For>
               </tr>
             </thead>
             <tbody>
@@ -173,7 +174,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
         </div>
       </Show>
       <Show when={format === 'viz'}>
-        <pre class="mt-4 overflow-x-auto rounded-[6px] border border-edge bg-surface p-4 font-mono text-xs text-muted">{content()}</pre>
+        <pre class="mt-4 overflow-x-auto rounded-control border border-edge bg-surface p-4 font-mono text-xs text-muted">{content()}</pre>
       </Show>
   </>;
   return <>
@@ -185,10 +186,10 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
           <div hidden={section() !== 'data' && section() !== 'asset'}>{preview}</div>
           <Show when={format === 'dataset' && section() === 'actions'}><DatasetActionsView id={id} canInspect={canEdit()} kind={catalog()?.kind} /></Show>
           <Show when={section() === 'sharing'}>
-            <div class="mx-auto max-w-2xl space-y-4 rounded-lg border border-edge bg-surface p-5 sm:p-6">
+            <Panel class="mx-auto max-w-2xl space-y-4">
               <DocumentSharing id={id} title={title()} owner={owner()} editable={canEdit()} variant="embedded" format={format} datasetKind={catalog()?.kind} onDataActions={() => setSection('actions')} />
               <Show when={canEdit()}><p class="text-xs text-muted">Sharing changes save immediately.</p></Show>
-            </div>
+            </Panel>
           </Show>
         </AssetWorkspace>
       </WorkspaceShell>

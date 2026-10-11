@@ -21,7 +21,7 @@
  */
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { useLocation } from '@solidjs/router';
-import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import Camera from 'lucide-solid/icons/camera';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import MessageSquare from 'lucide-solid/icons/message-square';
@@ -37,6 +37,7 @@ import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { documentRect, sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { isEditFrameMessage, type StoryAnnotationsMessage, type StoryEditParentMessage, type StoryEditRect, type StoryEditSelection } from '@/lib/edit-protocol';
+import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { FeatureGate } from '../components/FeatureGate';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
@@ -51,6 +52,10 @@ import { CommentImagesProvider, createCommentImageDraft, createImageDropTarget, 
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { PersonMentionProvider } from './PersonMention';
+
+// The upload fallback is a lazy chunk (an intentional exception to top-level imports): it keeps ui/Field off the reader page.
+const ScreenshotUpload = lazy(() => import('./AnnotationScreenshotUpload').then((module) => ({ default: module.ScreenshotUpload })));
+export const preloadScreenshotUpload = (): Promise<unknown> => ScreenshotUpload.preload();
 
 // The brush is its own chunk (CommentImageAttach), preloaded when Screenshot is pressed. Native
 // permission stays in the eager capture module so it keeps the user gesture.
@@ -102,7 +107,7 @@ export interface AnnotationLayerProps {
   linkTarget?: string | null;
 }
 
-const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
+const cardClass = 'rounded-panel border border-edge bg-raised text-sm';
 const CAPTURE_CHROME_CSS = ':host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}';
 const DELETE_THREAD_CONFIRMATION = { title: 'Delete this thread?', description: 'This thread and its replies will be permanently deleted. This cannot be undone.', action: 'Delete thread', confirmLabel: 'Confirm delete thread' };
 const DELETE_REPLY_CONFIRMATION = { title: 'Delete this comment?', description: 'This comment will be removed. The rest of the thread will stay.', action: 'Delete comment', confirmLabel: 'Confirm delete comment' };
@@ -802,24 +807,25 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   const railHeader = () => <div class="space-y-2 border-b border-edge px-1 pb-3 font-sans">
     <div class="flex items-center justify-between">
-      <h2 class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
-      <button type="button" aria-label="Close comments" onClick={() => props.onRailOpenChange(false)} class="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"><X size={14} strokeWidth={1.8} /></button>
+      <h2 class="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
+      <Button type="button" variant="ghost" size="sm" icon aria-label="Close comments" onClick={() => props.onRailOpenChange(false)}><X size={14} strokeWidth={1.8} /></Button>
     </div>
     <div role="group" aria-label="Comment tools" class="grid grid-cols-2 gap-2">
-      <button type="button" aria-label="Select" aria-pressed={pick() === 'block'} onClick={toggleSelect}
-        class={`flex min-h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border px-3 py-2 ${pick() === 'block' ? 'border-accent bg-accent-soft text-accent' : 'border-edge bg-panel text-fg hover:bg-surface'}`}>
-        <span class="flex items-center gap-2 text-sm font-semibold"><SquareDashedMousePointer size={18} />Select</span>
-        <span class="text-[11px]">Block or text</span>
-      </button>
+      {/* A tool in use is the primary variant; min-h-16 grows the control past its fixed height without fighting it. */}
+      <Button type="button" variant={pick() === 'block' ? 'primary' : 'secondary'} size="sm" aria-label="Select" aria-pressed={pick() === 'block'} onClick={toggleSelect}
+        class="min-h-16 flex-col py-2">
+        <span class="flex items-center gap-2 font-sans text-sm font-semibold"><SquareDashedMousePointer size={18} />Select</span>
+        <span class="font-sans text-2xs font-normal">Block or text</span>
+      </Button>
       <FeatureGate reason={screenshotUnavailable()} class="flex">
-        {(gate) => <button type="button" aria-label="Screenshot" aria-pressed={capture.required()} onClick={() => void beginScreenshot()} {...gate}
-          class={`flex min-h-16 w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border px-3 py-2 disabled:cursor-default disabled:opacity-50 ${capture.required() ? 'border-accent bg-accent-soft text-accent' : 'border-edge bg-panel text-fg hover:bg-surface'}`}>
-          <span class="flex items-center gap-2 text-sm font-semibold"><Camera size={18} />Screenshot</span>
-          <span class="text-[11px]">Capture an area</span>
-        </button>}
+        {(gate) => <Button type="button" variant={capture.required() ? 'primary' : 'secondary'} size="sm" aria-label="Screenshot" aria-pressed={capture.required()} onClick={() => void beginScreenshot()} {...gate}
+          class="min-h-16 w-full flex-col py-2">
+          <span class="flex items-center gap-2 font-sans text-sm font-semibold"><Camera size={18} />Screenshot</span>
+          <span class="font-sans text-2xs font-normal">Capture an area</span>
+        </Button>}
       </FeatureGate>
     </div>
-    <p class="text-[11px] leading-relaxed text-muted">{capture.required() ? 'Share this tab, then drag an area.' : 'Select a block or highlight text to comment.'}</p>
+    <p class="text-2xs leading-relaxed text-muted">{capture.required() ? 'Share this tab, then drag an area.' : 'Select a block or highlight text to comment.'}</p>
   </div>;
 
   const threadHandlers = (id: string, resolved: boolean) => ({
@@ -845,10 +851,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     <CommentsOffline.Provider value={backend.mode === 'offline'}>
       <style ref={chromeAnchor}>{CAPTURE_CHROME_CSS}</style>
       <Show when={capture.busy() && !selection()}>
-        <div data-capture-chrome role="status" class="fixed bottom-4 left-4 z-50 rounded bg-panel p-3 shadow">Preparing screenshot… <button type="button" onClick={() => capture.reset()}>Cancel capture</button></div>
+        <div data-capture-chrome role="status" class="fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-panel bg-panel p-3 shadow">Preparing screenshot… <Button type="button" variant="secondary" size="sm" onClick={() => capture.reset()}>Cancel capture</Button></div>
       </Show>
 
       {/* The ambient surface: tiny open-thread identities over the document's right edge, at their anchors. */}
+      {/* The layer below is NOT an overlay or dialog: a pointer-events-none stacking layer that only carries the marks. */}
       <Show when={floating()}>
         <div data-capture-chrome aria-label="Open annotation comments" class="pointer-events-none fixed inset-0 z-20">
           <For each={placedIds()}>{(id) => (
@@ -867,18 +874,19 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       {/* The pick's only indicator once the rail is away, and the phone's only way out of it. */}
       <Show when={pick()}>
         <div role="status" data-capture-chrome aria-label={pick() === 'area' ? 'Screenshot tool active' : 'Select tool active'}
-          class={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
+          class={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-2xs text-muted shadow-xl`}
           style={{ left: `${frameRect().left + frameRect().width / 2}px`, top: `${Math.max(topOffset(), frameRect().top, phoneRail() ? APP_BAR_H : 0) + VIEW_COMMENT_INSET}px`, transform: 'translateX(-50%)' }}>
           <SquareDashedMousePointer size={12} strokeWidth={1.8} class="shrink-0 text-accent" />
           <span class="whitespace-nowrap">{pick() === 'area' ? (capture.busy() ? 'Choose this tab in the sharing dialog' : 'drag an area to screenshot') : 'click a block or highlight text to comment'}</span>
-          <button type="button" aria-label="Cancel picking" onClick={endPick}
-            class="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg">
+          <Button type="button" variant="ghost" size="sm" icon aria-label="Cancel picking" onClick={endPick}>
             <X size={12} strokeWidth={1.8} />
-          </button>
+          </Button>
         </div>
       </Show>
 
-      {/* Drafts belong to the thing being discussed; the saved conversation moves to the rail. */}
+      {/* Drafts belong to the thing being discussed; the saved conversation moves to the rail. The composer is a NON-modal floating
+          card the reader drags beside the words (no backdrop, no focus trap, the page stays live): ui/Dialog is modal and
+          ui/Popover is anchored to a trigger, so neither fits and its dialog role stays allowlisted. */}
       <Show when={selection() && composerPosition() && !pick()}>
         <section ref={(element) => { composerElement = element; composerDrop.ref(element); }} data-capture-chrome role="dialog" aria-label="Annotation composer" class={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
           style={{ left: `${composerPosition()!.left}px`, top: `${composerPosition()!.top}px`, width: `${composerPosition()!.width}px`, 'max-height': `calc(100vh - ${composerPosition()!.top + VIEW_COMMENT_INSET}px)` }}>
@@ -887,22 +895,21 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           <div class="flex items-center gap-2 border-b border-edge px-3 py-2.5">
             <span class="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-accent"><MessageSquare size={12} strokeWidth={1.8} /></span>
             <span class="text-xs font-semibold text-fg">Add comment</span>
-            <button type="button" aria-label="Move comment box" aria-describedby="annotation-composer-move-hint" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" onPointerDown={startComposerDrag} onKeyDown={moveComposerByKey}
-              class="inline-flex h-7 w-7 cursor-move touch-none select-none items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg focus-visible:outline-2 focus-visible:outline-accent">⠿</button>
+            <Button type="button" variant="ghost" size="sm" icon aria-label="Move comment box" aria-describedby="annotation-composer-move-hint" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" onPointerDown={startComposerDrag} onKeyDown={moveComposerByKey}
+              class="touch-none select-none" style={{ cursor: 'move' }}>⠿</Button>
             <span id="annotation-composer-move-hint" class="sr-only" aria-live="polite">Use the arrow keys to move the comment box. Hold Shift to move farther.</span>
             <span class="sr-only" aria-live="polite">{composerMoveAnnouncement()}</span>
-            <button type="button" aria-label="Close annotation composer" onClick={cancelCompose}
-              class="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"><X size={14} strokeWidth={1.8} /></button>
+            <Button type="button" variant="ghost" size="sm" icon aria-label="Close annotation composer" onClick={cancelCompose}
+              class="ml-auto"><X size={14} strokeWidth={1.8} /></Button>
           </div>
           <div class="p-3">
             <Show when={capture.busy()}><div role="status" class="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} class="animate-spin" />Preparing screenshot…</div></Show>
             <Show when={capture.required() && !capture.draft() && !capture.busy()}>
               <div class="mb-3 space-y-3 rounded-lg border border-edge bg-surface p-3 text-xs">
                 <p role="alert" class="leading-relaxed text-muted">{capture.error() || 'A screenshot is required for this selection.'}</p>
-                <button type="button" class="rounded-lg border border-edge bg-panel px-3 py-2 font-medium hover:border-accent" onClick={() => void beginScreenshot()}>Retry screenshot</button>
-                <label class="block space-y-2 font-medium">Upload screenshot<input class="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-panel file:px-3 file:py-2 file:text-fg" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload screenshot"
-                  onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void capture.upload(file); event.currentTarget.value = ''; }} /></label>
-                <button type="button" class="text-muted underline underline-offset-4 hover:text-fg" onClick={() => capture.skip()}>Continue without screenshot</button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => void beginScreenshot()}>Retry screenshot</Button>
+                <Suspense fallback={null}><ScreenshotUpload onFile={(file) => void capture.upload(file)} /></Suspense>
+                <Button type="button" variant="link" onClick={() => capture.skip()}>Continue without screenshot</Button>
               </div>
             </Show>
             <CommentMarkdownField backend={backend} artifactId={props.id}
@@ -910,15 +917,15 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               value={draft()} onChange={setDraft} onSubmit={submitDraft}
 
               rows={2} autoFocus={!capture.busy()}>
-              <div class="flex min-w-0 items-center gap-1 overflow-hidden font-mono text-[11px] text-muted">
+              <div class="flex min-w-0 items-center gap-1 overflow-hidden font-mono text-2xs text-muted">
                 <For each={crumbs()}>{(crumb, index) => (
                   <span class="flex min-w-0 items-center gap-1">
                     <Show when={index() > 0}><span>›</span></Show>
                     <Show when={crumb.path !== selection()?.path} fallback={<span class="truncate text-accent">{crumb.tag}</span>}>
                       <Tooltip content={crumb.hint || crumb.tag}>
-                        <button type="button" aria-label={`Select ${crumb.tag}`} disabled={!!capture.draft() || capture.busy()}
+                        <Button type="button" variant="link" aria-label={`Select ${crumb.tag}`} disabled={!!capture.draft() || capture.busy()}
                           onClick={() => postToFrame({ type: 'mx:select', path: crumb.path })}
-                          class="cursor-pointer truncate underline decoration-dotted hover:text-accent">{crumb.tag}</button>
+                          class="min-w-0 truncate">{crumb.tag}</Button>
                       </Tooltip>
                     </Show>
                   </span>
@@ -926,13 +933,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               </div>
             </CommentMarkdownField>
             <Show when={selection()?.viewStateError}><p role="status" class="mb-2 text-xs text-muted">{selection()?.viewStateError}</p></Show>
-            <Show when={failure()}><p role="alert" class="mb-2 font-mono text-[11px] text-danger">{failure()}</p></Show>
+            <Show when={failure()}><p role="alert" class="mb-2 font-mono text-2xs text-danger">{failure()}</p></Show>
             <div class="flex items-center justify-end gap-2">
               <CommentSubmitHint action="comment" />
-              <button type="button" aria-label="Cancel annotation" onClick={cancelCompose}
-                class="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg">cancel</button>
-              <button type="button" aria-label="Save annotation" disabled={busy() || capture.busy() || (capture.required() && !capture.draft()) || !hasReplyText(draft())} onClick={submitDraft}
-                class="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40">comment</button>
+              <Button type="button" variant="ghost" size="sm" aria-label="Cancel annotation" onClick={cancelCompose}>cancel</Button>
+              <Button type="button" size="sm" aria-label="Save annotation" disabled={busy() || capture.busy() || (capture.required() && !capture.draft()) || !hasReplyText(draft())} onClick={submitDraft}>comment</Button>
             </div>
           </div>
         </section>
@@ -955,7 +960,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             )}</For>
             <div role="separator" aria-labelledby="resolved-annotations-heading" class="mt-1 flex items-center gap-2 px-1">
               <span aria-hidden="true" class="h-px flex-1 bg-edge" />
-              <h2 id="resolved-annotations-heading" class="shrink-0 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">resolved</h2>
+              <h2 id="resolved-annotations-heading" class="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">resolved</h2>
               <span aria-hidden="true" class="h-px flex-1 bg-edge" />
             </div>
             <For each={resolvedIds()}>{(id) => (
