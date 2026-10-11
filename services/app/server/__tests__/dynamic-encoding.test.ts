@@ -125,6 +125,18 @@ describe('compressDynamic', () => {
   });
 });
 
+describe('compressDynamic and validators', () => {
+  const html = '<!doctype html>' + '<p>words</p>'.repeat(500);
+  const accepting = new Request('http://x/', { headers: { 'accept-encoding': 'br' } });
+  it('gives the encoded body its own strong validator, and leaves a weak one and an unencoded one alone', async () => {
+    const page = (etag: string) => new Response(html, { headers: { 'content-type': 'text/html', etag } });
+    expect((await compressDynamic(accepting, page('"abc"'))).headers.get('etag')).toBe('"abc-br"');
+    expect((await compressDynamic(accepting, page('W/"abc"'))).headers.get('etag')).toBe('W/"abc"');
+    const identity = new Request('http://x/', { headers: { 'accept-encoding': 'gzip' } });
+    expect((await compressDynamic(identity, page('"abc"'))).headers.get('etag')).toBe('"abc"');
+  });
+});
+
 describe('negotiateEncoding', () => {
   it('honours q-values and wildcards and treats silence as identity', () => {
     expect(negotiateEncoding('gzip, deflate, br, zstd', ['br', 'gzip'])).toBe('br');

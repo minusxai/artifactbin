@@ -25,7 +25,7 @@ it.each([false, true])('marks all notifications read from the inbox (compact: %s
   render(() => <App />);
   const bell = await screen.findByRole('button', { name: 'Notifications, unread updates' });
   if (compact) fireEvent.click(bell);
-  const view = compact ? within(screen.getByRole('region', { name: 'Notifications' })) : screen;
+  const view = compact ? within(await screen.findByRole('region', { name: 'Notifications' })) : screen;
   const button = await view.findByRole('button', { name: 'Mark all as read' });
   fireEvent.click(button);
   await waitFor(() => expect(button).toBeDisabled());
@@ -67,7 +67,7 @@ it('opens the bell and shows an invitation with a working approval action', asyn
   render(() => <App />);
   const bell = await screen.findByRole('button', { name: 'Notifications, unread updates' });
   fireEvent.click(bell);
-  const panel = within(screen.getByRole('region', { name: 'Notifications' }));
+  const panel = within(await screen.findByRole('region', { name: 'Notifications' }));
   expect(panel.getByRole('region', { name: 'Notification list' })).toHaveTextContent('alice');
   fireEvent.click(panel.getByRole('button', { name: 'Approve request' }));
   await waitFor(() => expect(calls).toContainEqual({ url: '/api/my/artifacts/doc1/members', method: 'POST' }));

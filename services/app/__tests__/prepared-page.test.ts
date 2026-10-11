@@ -33,6 +33,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { compiledPageFailures } from '@/lib/publish/prepared/serve.server';
 import path from 'node:path';
 import { createDocumentGraph } from '@/lib/document/document-graph';
+import { unpackDocumentGraph } from '@/lib/document/document-graph-wire';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { ISLAND_DATA_ID, DOCUMENT_MODULE_PATH } from '@/lib/story-runtime/contract';
 
@@ -117,7 +118,7 @@ describe('the reader payload', () => {
     expect(applyStyleOverrides(nodes, runtime.overrides)).toEqual(realInlineStoryNodes(raw.data.nodes, reader));
   });
 
-  it('hands the editor its source, graph and raw sheets only on the editor door, and only to a writer', async () => {
+  it('hands the editor its source and graph only on the editor door, and only to a writer (its payload: editor-part.test.ts)', async () => {
     const { owner, id } = styled();
     expect((await readPage(id, '?part=editor')).status).toBe(404);
     asSession(owner);
@@ -125,9 +126,10 @@ describe('the reader payload', () => {
     expect(res.status).toBe(200);
     const editor = await res.json();
     expect(editor.source).toContain('Quarterly notes');
-    expect(editor.document).toMatchObject({ kind: 'graph' });
-    expect(editor.compiledCss).toEqual(expect.any(String));
-    expect(editor.authorCss).toContain('.lede');
+    expect(editor.graph.keys.length).toBeGreaterThan(0);
+    expect(unpackDocumentGraph(editor.graph, editor.source)).toEqual((await getArtifactById(id))!.document);
+    // The sheets are the reader's and the frame's: the editor reads neither.
+    for (const key of ['compiledCss', 'authorCss']) expect(editor).not.toHaveProperty(key);
   });
 });
 
@@ -141,10 +143,11 @@ describe('the prepared page store', () => {
     // have stored them. No publisher normalizes this simulated historical write.
     const graph = createDocumentGraph(legacy, original.version);
     await db.query('UPDATE artifacts SET document = $2::jsonb WHERE id = $1', [id, JSON.stringify(graph)]);
-    const cached = (await db.query<{ page: { data: { nodes: unknown }; compiled: CompiledPage } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.page;
+    // The earlier deployment stored the tree and the compiled page inside `page`, with no split columns.
+    const cached = (await db.query<{ page: { data: { nodes: unknown }; compiled: CompiledPage } }>(`SELECT jsonb_set(page, '{data,nodes}', nodes) || jsonb_build_object('compiled', compiled) AS page FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.page;
     cached.data.nodes = parseJsxOrThrow(legacy).nodes;
     cached.compiled.html = legacy;
-    await db.query('UPDATE prepared_pages SET page = $2::jsonb WHERE artifact_id = $1', [id, JSON.stringify(cached)]);
+    await db.query('UPDATE prepared_pages SET page = $2::jsonb, nodes = NULL, compiled = NULL WHERE artifact_id = $1', [id, JSON.stringify(cached)]);
     resetSpies();
     const html = await (await rawRoute(request(`/a/${id}/raw`), params(id))).text();
     // The tree the browser's parser builds from the served bytes: the repaired nesting, not the legacy one.
@@ -164,7 +167,7 @@ describe('the prepared page store', () => {
   });
   it('stores compiled output without a legacy React render', async () => {
     const { id } = await world();
-    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>(`SELECT page || jsonb_build_object('compiled', compiled) AS page FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
     expect(stored.page.ssr).toBeUndefined();
     expect(stored.page.compiled?.html).toContain('Quarterly notes');
   });
@@ -224,7 +227,7 @@ describe('the prepared page store', () => {
     expect(storyRootText(html)).toContain('Six is 6');
     // The overlay carries the rows, so its digest is not the stored anonymous render's: one fresh render, nothing else.
     expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
-    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>(`SELECT page || jsonb_build_object('compiled', compiled) AS page FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
     expect(stored.page.ssr).toBeUndefined();
     expect(stored.page.compiled?.html).not.toContain('Six is 6');
   });
@@ -340,7 +343,7 @@ describe('the compile beside the prepared page', () => {
     return id;
   }
   async function stored(id: string): Promise<{ key: string; compiled: StoredCompile | undefined }> {
-    const row = (await (await harness.db()).query<{ page_key: string; page: { compiled?: StoredCompile } }>('SELECT page_key, page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    const row = (await (await harness.db()).query<{ page_key: string; page: { compiled?: StoredCompile } }>(`SELECT page_key, page || jsonb_build_object('compiled', compiled) AS page FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
     return { key: row.page_key, compiled: row.page.compiled };
   }
 
@@ -406,14 +409,14 @@ describe('the compiled-page failure contract', () => {
     return id;
   }
   const raw = (id: string, search = '?reader=compiled') => rawRoute(request(`/a/${id}/raw${search}`), params(id));
-  const storedBuild = async (id: string) => (await (await harness.db()).query<{ build: string | null }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
+  const storedBuild = async (id: string) => (await (await harness.db()).query<{ build: string | null }>(`SELECT compiled->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
   const storyText = (html: string) => servedHtml(html).byId('mx-story-root')?.text().replace(/\s+/g, ' ').trim() ?? '';
 
   describe('a compile from another build', () => {
     it('the stored compile keeps serving without an inline compile', async () => {
       const who = await owner();
       const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
-      await (await harness.db()).query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"0000000000000000"') WHERE artifact_id = $1`, [id]);
+      await (await harness.db()).query(`UPDATE prepared_pages SET compiled = jsonb_set(compiled, '{build}', '"0000000000000000"') WHERE artifact_id = $1`, [id]);
       const warn = vi.spyOn(console, 'warn');
       const res = await raw(id);
       expect(res.status).toBe(200);
@@ -440,7 +443,7 @@ describe('the compiled-page failure contract', () => {
     it('compiled inline and served, and the compile is stored for the next read', async () => {
       const who = await owner();
       const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
-      await (await harness.db()).query(`UPDATE prepared_pages SET page = page - 'compiled' WHERE artifact_id = $1`, [id]);
+      await (await harness.db()).query(`UPDATE prepared_pages SET compiled = NULL WHERE artifact_id = $1`, [id]);
       expect(await storedBuild(id)).toBeNull();
       const res = await raw(id);
       expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
@@ -453,7 +456,7 @@ describe('the compiled-page failure contract', () => {
     const recordFailure = async (id: string) => {
       const db = await harness.db();
       const build = await storedBuild(id);
-      await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
+      await db.query(`UPDATE prepared_pages SET compiled = $2::jsonb WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
     };
 
     it('/raw and the document the app page frames answer 500, and every occurrence is reported', async () => {

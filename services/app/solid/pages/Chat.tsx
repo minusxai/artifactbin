@@ -20,6 +20,7 @@ import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Field, Input, Textarea } from '../ui/Field';
 import { Panel } from '../ui/Panel';
+import { SelectableItem, SelectableList } from '../ui/SelectableList';
 import { StatusMessage } from '../ui/StatusMessage';
 import { LINK } from '../ui/ui';
 import { usePageData } from '../lib/use-page-data';
@@ -267,7 +268,8 @@ function AgentNameField(props: { value: string; onInput: (value: string) => void
 
 /** A pressed-state choice of one value: buttons in a named group, not tabs (they pick a program, not a view). */
 function HarnessChoices(props: { label: string; choices: ReadonlyArray<readonly [string, string]>; value: string; onChange: (value: string) => void; disabled?: boolean }): JSX.Element {
-  return <div class="flex flex-wrap gap-1.5" role="group" aria-label={props.label}><For each={props.choices}>{([value, label]) => <Button type="button" size="sm" variant={props.value === value ? 'primary' : 'secondary'} disabled={props.disabled} aria-pressed={props.value === value} onClick={() => props.onChange(value)}>{label}</Button>}</For></div>;
+  // Not a ToggleGroup: these sit inside the hosted-box <form>, and a ToggleGroup option does not set type="button", so pressing one would submit it.
+  return <div class="flex flex-wrap gap-1.5" role="group" aria-label={props.label}><For each={props.choices}>{([value, label]) => <Button type="button" size="sm" pressed={props.value === value} disabled={props.disabled} onClick={() => props.onChange(value)}>{label}</Button>}</For></div>;
 }
 
 function ConnectInstructions(): JSX.Element {
@@ -356,7 +358,10 @@ export function ChatPage(): JSX.Element {
     <div class="agents-layout"><aside class="agent-sidebar" aria-label="Agents">
       <div class="agent-list-heading"><h2>Agents</h2><span>{sessions().filter(isConnectedAgent).length} active</span></div>
       <For each={groups}>{group => <section class="agent-session-group" data-agent-location={group.kind} aria-label={group.label}><h3>{group.kind === 'local' ? <Monitor size={12} aria-hidden="true" /> : <Cloud size={12} aria-hidden="true" />}{group.label}</h3><div class="agent-group-action">{setupButton(group.kind, 'sm')}</div><Show when={!group.sessions.length}><p class="agent-group-empty">{group.empty}</p></Show>
-      <For each={group.sessions}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`agent-session ${session.id === id() ? 'is-selected' : ''}`} onClick={() => setParams({ session: session.id })}><span class="agent-session-name"><Show when={agentNameColor(session.name)}>{color => <span class="agent-color-swatch" aria-hidden="true" style={{'background-color':color()}} />}</Show><span class="truncate">{session.name}</span><Show when={session.included}><span class="agent-included-tag">Included for free</span></Show><span class={`agent-dot ${isConnectedAgent(session) ? 'is-online' : ''}`} aria-hidden="true" /></span><span class="text-xs text-muted">{session.harness} · {connectedAgentStatus(session)}</span></button>}</For>
+      <SelectableList label={`${group.label} sessions`}><For each={group.sessions}>{(session) => <SelectableItem label={`Open ${session.name}`} selected={session.id === id()} onSelect={() => setParams({ session: session.id })}
+        title={<><Show when={agentNameColor(session.name)}>{color => <span class="agent-color-swatch mr-2" aria-hidden="true" style={{'background-color':color()}} />}</Show>{session.name}</>}
+        trailing={<><Show when={session.included}><span class="agent-included-tag mr-2">Included for free</span></Show><span class={`agent-dot ${isConnectedAgent(session) ? 'is-online' : ''}`} aria-hidden="true" /></>}
+        meta={`${session.harness} · ${connectedAgentStatus(session)}`} />}</For></SelectableList>
       </section>}</For>
       <Show when={previousCount() > 0}><Button type="button" variant="ghost" size="sm" class="mt-2 w-full" aria-expanded={historyExpanded()} onClick={() => setHistoryExpanded((value) => !value)}>{historyExpanded() ? 'Hide' : 'Show'} previous sessions ({previousCount()})</Button></Show>
 

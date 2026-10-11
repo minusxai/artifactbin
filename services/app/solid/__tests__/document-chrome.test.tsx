@@ -21,6 +21,7 @@ let mockArchived: { version: number; head: number } | null = null;
 let served: HTMLElement | null = null;
 let mockCsp: Record<string, unknown> | undefined;
 let mockTemplate: string | null = null;
+let mockSourceLength: number | undefined;
 let mockLive = () => null as ArtifactLiveEvent | null;
 let mockSelectionBridge = false;
 const selectionSend = vi.fn();
@@ -38,7 +39,7 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
   } };
 });
 vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => mockLive() }));
-vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'markup', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
 import { loginHref } from '@/lib/http/login-href';
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
@@ -57,6 +58,7 @@ beforeEach(() => {
   mockArchived = null;
   mockCsp = undefined;
   mockTemplate = null;
+  mockSourceLength = undefined;
   mockLive = () => null;
   mockSelectionBridge = false;
   selectionSend.mockClear();
@@ -94,7 +96,9 @@ const panelRoot = (): HTMLElement => {
   const hosts = [...document.querySelectorAll('[data-trusted-ui]')].map((host) => host.shadowRoot as unknown as HTMLElement);
   return hosts.find((root) => root.querySelector('[aria-label="Close panel"]')) ?? document.body;
 };
-const controls = () => within(panelRoot()).getByRole('region', { name: 'Artifact controls' });
+// The bar's panels load on first open (components/PageChromePanels), so they are awaited.
+const controls = () => waitFor(() => within(panelRoot()).getByRole('region', { name: 'Artifact controls' }));
+const menuPanel = () => waitFor(() => within(panelRoot()).getByRole('navigation', { name: 'Menu' }));
 
 it('places the doc agent handoff in trusted document navigation, outside the page bar', async () => {
   mockRole = 'owner'; mockTemplate = 'doc';
@@ -108,7 +112,7 @@ it('hides the agent handoff in Code and restores it in Artifact', async () => {
   mockRole = 'owner'; mockTemplate = 'doc';
   const existing = vi.mocked(fetch).getMockImplementation()!;
   vi.mocked(fetch).mockImplementation(async (input, init) => {
-    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>', compiledCss: null, authorCss: null });
+    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>' });
     return existing(input, init);
   });
   mount('/a/doc#edit');
@@ -139,29 +143,29 @@ it('adopts the served frame into the page instead of rendering the document', ()
   expect(viewport.style.top).toBe('44px');
 });
 
-it('opens the artifact controls and the menu from the app bar', () => {
+it('opens the artifact controls and the menu from the app bar', async () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = controls();
+  const panel = await controls();
   fireEvent.click(within(panel).getByRole('button', { name: 'Dark mode' }));
   expect(within(panel).getByRole('button', { name: 'Dark mode' })).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-  const menu = within(panelRoot()).getByRole('navigation', { name: 'Menu' });
-  expect(menu).toHaveClass('right-3', 'top-14');
+  const menu = await menuPanel();
+  expect(menu).toHaveClass('right-3'); expect(menu.style.top).toBe('44px');
   expect(menu).not.toHaveClass('left-0', 'inset-y-0');
   expect(within(panelRoot()).getByRole('link', { name: 'Artifacts' })).toBeInTheDocument();
 });
 
-it('places the artifact menu in a bottom sheet on phones and a dropdown after resizing', () => {
+it('places the artifact menu in a bottom sheet on phones and a dropdown after resizing', async () => {
   vi.stubGlobal('innerWidth', 390);
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-  const menu = within(panelRoot()).getByRole('navigation', { name: 'Menu' });
+  const menu = await menuPanel();
   expect(menu).toHaveClass('inset-x-0', 'bottom-0');
   expect(menu).not.toHaveClass('left-0', 'inset-y-0');
   vi.stubGlobal('innerWidth', 1280);
   fireEvent(window, new Event('resize'));
-  expect(menu).toHaveClass('right-3', 'top-14');
+  expect(menu).toHaveClass('right-3'); expect(menu.style.top).toBe('44px');
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(menu).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus();
@@ -173,10 +177,10 @@ it('names the author and the document in the bar', () => {
   expect(screen.getByText('A copy', { selector: '[data-mx-document-title]' })).toHaveAttribute('data-mx-document-title');
 });
 
-it('says where a fork came from in the controls panel, linked to the source', () => {
+it('says where a fork came from in the controls panel, linked to the source', async () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = within(controls());
+  const panel = within(await controls());
   expect(panel.getByRole('link', { name: 'Open the artifact this was forked from' })).toHaveAttribute('href', '/a/source');
   expect(panel.getByText(/forked from/)).toHaveAttribute('data-mx-forked-from');
 });
@@ -200,26 +204,26 @@ it('the head names no version', () => {
   expect(screen.queryByText(/read-only/)).toBeNull();
 });
 
-it('a commenter sees comments in the controls panel but no duplicate fork, edit or delete', () => {
+it('a commenter sees comments in the controls panel but no duplicate fork, edit or delete', async () => {
   mount();
   // Fork is a direct rail action; the panel does not duplicate it.
   expect(screen.getByRole('button', { name: 'Fork artifact' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = within(controls());
+  const panel = within(await controls());
   expect(panel.getByRole('button', { name: 'Toggle comments' })).toBeInTheDocument();
   expect(panel.queryByRole('button', { name: 'Fork artifact' })).toBeNull();
   expect(panel.queryByRole('button', { name: 'Edit artifact' })).toBeNull();
   expect(panel.queryByRole('button', { name: /^Delete/ })).toBeNull();
 });
 
-it('an owner sees edit and delete in the controls panel, and Edit and Share on the rail', () => {
+it('an owner sees edit and delete in the controls panel, and Edit and Share on the rail', async () => {
   mockRole = 'owner';
   mount();
   expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = within(controls());
+  const panel = within(await controls());
   expect(panel.getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
   expect(panel.getByRole('button', { name: 'Delete A copy' })).toBeInTheDocument();
 });
@@ -246,7 +250,7 @@ it('the controls panel opened beside the open rail paints above it', async () =>
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
     const rail = await waitFor(() => find('[aria-label="Annotation sidebar"]') ?? Promise.reject(new Error('no rail')));
     fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-    const edit = find('[aria-label="Edit artifact"]');
+    const edit = await waitFor(() => find('[aria-label="Edit artifact"]') ?? Promise.reject(new Error('no controls panel')));
     expect(edit, 'the controls panel offers Edit artifact').not.toBeNull();
     const paintOrder = (el: Element) => {
       const root = el.getRootNode();
@@ -267,7 +271,7 @@ it('the controls panel opened beside the open rail paints above it', async () =>
  * navigation layer. The bar's panels (and every popover and dialog, lib/islands/trusted-portal) must still open in the
  * navigation layer, the top-layer overlay ordered above the rail, never in the bar's ordinary root.
  */
-it('opens the bar\'s panels in the navigation layer while the consent bar holds a trusted root earlier in the page', () => {
+it('opens the bar\'s panels in the navigation layer while the consent bar holds a trusted root earlier in the page', async () => {
   const hosts = { connect: ['https://api.open-meteo.com'], script: [], style: [], img: [], frame: [], media: [] };
   mockCsp = { status: 'blocked', denied: false, extensions: hosts, asking: hosts };
   mount();
@@ -277,9 +281,9 @@ it('opens the bar\'s panels in the navigation layer while the consent bar holds 
   expect(bar, 'the consent bar is drawn in a trusted root').toBeGreaterThanOrEqual(0);
   expect(bar, 'and that root comes before the navigation layer').toBeLessThan(navigation);
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  expect((controls().getRootNode() as ShadowRoot).host).toBe(roots[navigation]);
+  expect(((await controls()).getRootNode() as ShadowRoot).host).toBe(roots[navigation]);
   fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-  expect((within(panelRoot()).getByRole('navigation', { name: 'Menu' }).getRootNode() as ShadowRoot).host).toBe(roots[navigation]);
+  expect(((await menuPanel()).getRootNode() as ShadowRoot).host).toBe(roots[navigation]);
 });
 
 // A named EDITOR (the collab-roles gate's step 7, moved here): edit in the controls panel and the whole sharing dialog —
@@ -288,7 +292,7 @@ it('an editor sees edit in the controls panel and a sharing dialog with access c
   mockRole = 'editor';
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = within(controls());
+  const panel = within(await controls());
   expect(panel.getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
   expect(panel.queryByLabelText('Owner actions')).toBeNull();
   fireEvent.click(within(panel.getAllByLabelText('Document actions')[0]!).getByRole('button', { name: 'Share' }));
@@ -308,7 +312,7 @@ it('shares the current editor title without requiring a page reload', async () =
   mockRole = 'owner'; mockTitle = 'Untitled';
   const existing = vi.mocked(fetch).getMockImplementation()!;
   vi.mocked(fetch).mockImplementation(async (input, init) => {
-    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>', compiledCss: null, authorCss: null });
+    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>' });
     return existing(input, init);
   });
   mount('/a/doc#edit');
@@ -338,7 +342,7 @@ it.each(['', '   '])('uses the heading fallback for a blank explicit title (%j) 
   mockLive = frame;
   const existing = vi.mocked(fetch).getMockImplementation()!;
   vi.mocked(fetch).mockImplementation(async (input, init) => {
-    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<h2 id="heading">Heading fallback</h2><p id="body">Hello</p>', compiledCss: null, authorCss: null });
+    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<h2 id="heading">Heading fallback</h2><p id="body">Hello</p>' });
     return existing(input, init);
   });
   mount('/a/doc#edit');
@@ -452,4 +456,68 @@ it('a page served without a frame is the 404 page, never a reload', () => {
   render(() => <Router><Route path="/a/:id" component={DocumentPage} /></Router>);
   expect(screen.queryByLabelText('Artifact viewport')?.querySelector('iframe') ?? null).toBeNull();
   expect(replace).not.toHaveBeenCalled();
+});
+
+/** What the editor's door costs is the document's size: a writer who only reads a large one never pays it. */
+const editorDoorFetches = () => vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('?part=editor')).length;
+const answerEditorDoor = () => {
+  const existing = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => (String(input).includes('?part=editor')
+    ? Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>' }) : existing(input, init)));
+};
+const idleNow = () => vi.stubGlobal('requestIdleCallback', (task: () => void) => { queueMicrotask(task); return 1; });
+
+it('does not fetch the editor part on idle for a writer reading a large document, only when edit mode opens', async () => {
+  mockRole = 'owner'; mockSourceLength = 450_000;
+  answerEditorDoor(); idleNow();
+  mount();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(editorDoorFetches()).toBe(0);
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  fireEvent.click(within(await controls()).getByRole('button', { name: 'Edit artifact' }));
+  await waitFor(() => expect(editorDoorFetches()).toBe(1));
+});
+
+it('prefetches the editor part on idle for a writer reading a small document, so edit mode opens at once', async () => {
+  mockRole = 'owner'; mockSourceLength = 2_000;
+  answerEditorDoor(); idleNow();
+  mount();
+  await waitFor(() => expect(editorDoorFetches()).toBe(1));
+});
+
+it('prefetches nothing for a page that does not say how large the document is', async () => {
+  mockRole = 'owner';
+  answerEditorDoor(); idleNow();
+  mount();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(editorDoorFetches()).toBe(0);
+});
+
+it.each([['hover', (el: Element) => fireEvent.pointerEnter(el)], ['focus', (el: Element) => fireEvent.focus(el)], ['press', (el: Element) => fireEvent.pointerDown(el)]])(
+  'starts the editor part when the Edit control is approached (%s), and the click that follows shares that one request', async (_name, approach) => {
+    mockRole = 'owner'; mockSourceLength = 450_000;
+    answerEditorDoor(); idleNow();
+    mount();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(editorDoorFetches()).toBe(0);
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    approach(edit);
+    await waitFor(() => expect(editorDoorFetches()).toBe(1));
+    fireEvent.click(edit);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(editorDoorFetches()).toBe(1);
+  });
+
+it('keeps the intent request running when the pointer moves on, and the later click still issues no second one', async () => {
+  mockRole = 'owner'; mockSourceLength = 450_000;
+  answerEditorDoor(); idleNow();
+  mount();
+  const edit = screen.getByRole('button', { name: 'Edit' });
+  fireEvent.pointerEnter(edit); fireEvent.pointerLeave(edit);
+  await waitFor(() => expect(editorDoorFetches()).toBe(1));
+  const signal = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes('?part=editor'))![1]!.signal!;
+  expect(signal.aborted).toBe(false);
+  fireEvent.click(edit);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(editorDoorFetches()).toBe(1);
 });

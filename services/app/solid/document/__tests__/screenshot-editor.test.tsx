@@ -10,8 +10,8 @@ it('embeds brush controls without a separate dialog or completion step', () => {
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   const retake = vi.fn();
   const view = render(() => <ScreenshotEditor image={image} initialStrokes={[]} exportRef={{ current: null }} busy={false} onRetake={retake} />);
-  expect(view.getByLabelText('Brush color')).toBeTruthy();
-  expect(view.getByRole('button', { name: 'Blue brush' })).toBeTruthy();
+  expect(view.getByRole('radiogroup', { name: 'Brush color' })).toBeTruthy();
+  expect(view.getByRole('radio', { name: 'Blue' })).toBeTruthy();
   expect(view.queryByRole('dialog')).toBeNull();
   expect(view.queryByRole('button', { name: 'Use screenshot' })).toBeNull();
   fireEvent.change(view.getByLabelText('Brush thickness'), { target: { value: '8' } });
@@ -43,4 +43,38 @@ it('exports a drawing on demand and invalidates the cached image after undo', as
   expect(second.preview).not.toBe(first.preview);
   view.unmount(); expect(exportRef.current).toBeNull();
   vi.unstubAllGlobals(); vi.restoreAllMocks();
+});
+
+it('draws with the chosen swatch, a typed custom colour and the slider width, and stores those exact values', async () => {
+  let loaded: () => void = () => {};
+  vi.stubGlobal('Image', class { set onload(value: () => void) { loaded = value; } set src(_value: string) {} });
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  const context = { clearRect: vi.fn(), drawImage: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn() };
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['drawing'], { type: 'image/png' })));
+  vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 50, right: 100, bottom: 50, x: 0, y: 0, toJSON: () => ({}) });
+  class TestPointerEvent extends MouseEvent { readonly pointerId: number; constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; } }
+  vi.stubGlobal('PointerEvent', TestPointerEvent);
+  Object.defineProperty(HTMLCanvasElement.prototype, 'setPointerCapture', { configurable: true, value: vi.fn() });
+  const exportRef: { current: (() => Promise<ScreenshotDrawing>) | null } = { current: null };
+  const view = render(() => <ScreenshotEditor image={image} initialStrokes={[]} exportRef={exportRef} busy={false} />);
+  loaded();
+  const canvas = view.getByLabelText('Screenshot drawing canvas');
+  const draw = (x: number) => { fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: x, clientY: 10 }); fireEvent.pointerMove(canvas, { pointerId: 1, clientX: x + 20, clientY: 20 }); fireEvent.pointerUp(canvas, { pointerId: 1 }); };
+  // The palette is a radio group: exactly one swatch is checked, and the first is the default.
+  expect(view.getByRole('radio', { name: 'Red' })).toBeChecked();
+  fireEvent.click(view.getByRole('radio', { name: 'Blue' }));
+  expect(view.getByRole('radio', { name: 'Blue' })).toBeChecked();
+  expect(view.getByRole('radio', { name: 'Red' })).not.toBeChecked();
+  fireEvent.input(view.getByRole('slider', { name: 'Brush thickness' }), { target: { value: '8' } });
+  expect(view.getByText('8 px')).toBeTruthy();
+  draw(10);
+  // A custom colour is typed as hex; a shorthand expands to #rrggbb.
+  fireEvent.input(view.getByLabelText('Custom brush color'), { target: { value: '#0f0' } });
+  draw(40);
+  const { strokes } = await exportRef.current!();
+  expect(strokes.map(stroke => stroke.color)).toEqual(['#3b82f6', '#00ff00']);
+  expect(strokes.map(stroke => stroke.width)).toEqual([8, 8]);
+  view.unmount(); vi.restoreAllMocks(); vi.unstubAllGlobals();
 });

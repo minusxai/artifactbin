@@ -16,8 +16,10 @@ import { RowMenu } from '../ui/Menu';
 import { Button } from '../ui/Button';
 import { SearchField } from '../ui/Field';
 import { Panel } from '../ui/Panel';
+import { StatusMessage } from '../ui/StatusMessage';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../ui/Table';
 import { Tooltip } from '../ui/Tooltip';
-import { Badge, FormatBadge, formatLabel, MicroLabel, TABLE_ROW, timeAgo } from '../ui/ui';
+import { Badge, FormatBadge, formatLabel, timeAgo } from '../ui/ui';
 import { usePageData } from '../lib/use-page-data';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
@@ -34,9 +36,8 @@ function TypeFilter(props: { format: string; active: boolean; onToggle: (format:
     <Button
       type="button"
       size="sm"
-      variant={props.active ? 'primary' : 'secondary'}
+      pressed={props.active}
       aria-label={`Filter ${props.format}`}
-      aria-pressed={props.active}
       onClick={() => props.onToggle(props.format)}
     >
       {formatLabel(props.format)}
@@ -113,26 +114,26 @@ export function TrashPage(): JSX.Element {
             </Show>
           </div>
 
-          <table class="w-full border-collapse text-left text-sm">
-            <thead class="hidden sm:table-header-group">
-              <tr>
-                <Index each={HEADINGS}>{(heading) => <th class="px-4 py-2.5"><MicroLabel>{heading()}</MicroLabel></th>}</Index>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHead class="hidden sm:table-header-group">
+              <Index each={HEADINGS}>{(heading) => <TableHeaderCell>{heading()}</TableHeaderCell>}</Index>
+            </TableHead>
+            <TableBody>
               <Show when={page.data() && visible().length === 0}>
-                <tr class={TABLE_ROW}>
-                  <td colspan={5} class="px-5 py-12 text-center text-sm text-muted">
-                    {q() ? <>nothing matches &ldquo;{query().trim()}&rdquo;</> : formatPicks().length ? 'nothing matches the active filters' : 'nothing deleted'}
-                  </td>
-                </tr>
+                <TableRow interactive={false}>
+                  <TableCell colSpan={5} align="center">
+                    <StatusMessage kind="empty" class="justify-center py-10">
+                      {q() ? <>nothing matches &ldquo;{query().trim()}&rdquo;</> : formatPicks().length ? 'nothing matches the active filters' : 'nothing deleted'}
+                    </StatusMessage>
+                  </TableCell>
+                </TableRow>
               </Show>
               <For each={rows()}>
                 {(file, index) => {
                   const name = () => file.title || 'Untitled';
                   return (
-                    <tr class={`${TABLE_ROW} reveal`} style={{ 'animation-delay': `${index() * 40}ms` }}>
-                      <td class="w-full max-w-0 px-3 py-3 sm:px-4 sm:py-2.5">
+                    <TableRow class="reveal" style={{ 'animation-delay': `${index() * 40}ms` }}>
+                      <TableCell class="w-full max-w-0">
                         <span class="block truncate font-semibold text-fg">{name()}</span>
                         <span class="mt-1 flex items-center gap-1.5 font-mono text-micro leading-none text-faint sm:hidden">
                           <span>{formatLabel(file.format)}</span>
@@ -141,15 +142,15 @@ export function TrashPage(): JSX.Element {
                           <span aria-hidden="true">·</span>
                           <time datetime={file.deleted_at}>{timeAgo(file.deleted_at)}</time>
                         </span>
-                      </td>
-                      <td class="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell"><FormatBadge format={file.format} /></td>
-                      <td class="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell"><Badge tone="dim">v{file.version}</Badge></td>
+                      </TableCell>
+                      <TableCell class="hidden whitespace-nowrap sm:table-cell"><FormatBadge format={file.format} /></TableCell>
+                      <TableCell class="hidden whitespace-nowrap sm:table-cell"><Badge tone="dim">v{file.version}</Badge></TableCell>
                       <Tooltip content={dateTime(file.deleted_at)}>
-                        <td class="hidden px-4 py-2.5 text-xs whitespace-nowrap text-muted sm:table-cell">
+                        <TableCell class="hidden whitespace-nowrap text-xs text-muted sm:table-cell">
                           {timeAgo(file.deleted_at)}
-                        </td>
+                        </TableCell>
                       </Tooltip>
-                      <td class="px-2 py-3 text-right whitespace-nowrap sm:px-4 sm:py-2.5">
+                      <TableCell align="right" class="whitespace-nowrap">
                         <RowMenu
                           name={name()}
                           items={[{
@@ -160,13 +161,13 @@ export function TrashPage(): JSX.Element {
                             onSelect: () => void restore(file.id),
                           }]}
                         />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 }}
               </For>
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
 
           <Show when={visible().length > ROWS_PER_PAGE}>
             <div class="flex items-center justify-between border-t border-edge px-4 py-2">

@@ -72,7 +72,7 @@ async function targetsOf(db: BackfillDb, all: boolean, limit: number): Promise<B
 async function storedState(db: BackfillDb): Promise<Map<string, StoredState>> {
   const rows = (await db.query<StoredState & { artifact_id: string; slot: string }>(
     `SELECT artifact_id, slot, page_key, compiler_version, island_build, css_version, ssr_bundle, page_format, handover_contract,
-     page ? 'compiled' AS compiled, page->'compiled'->>'reason' AS reason FROM prepared_pages`,
+     (compiled IS NOT NULL OR page ? 'compiled') AS compiled, COALESCE(compiled->>'reason', page->'compiled'->>'reason') AS reason FROM prepared_pages`,
   )).rows;
   return new Map(rows.map((row) => [keyOf(row.artifact_id, row.slot), row]));
 }

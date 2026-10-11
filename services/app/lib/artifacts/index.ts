@@ -44,7 +44,7 @@ export { findDependentsFor } from './dependents';
 
 /** Sharing, membership, placement and dataset grants. */
 export { getSharingFor, updateSharingFor } from './sharing';
-export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates, savedMentionStates, selfMembership } from './membership/membership';
+export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates, mentionedPeople, savedMentionStates, selfMembership } from './membership/membership';
 export { accountProfile, updateAccountProfile } from './membership/account-profile';
 export { ancestorsForMove, isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';
 export type { Viewer } from './placement';

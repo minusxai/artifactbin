@@ -48,8 +48,12 @@ refuses to boot without it), and that is the only place a document is ever
 rendered. The app page at `/a/<id>` is the app's own shell — its bar and rail
 (`solid/document/DocumentChrome`), the consent slot above the frame, the
 comments rail and the editor's chrome — around ONE frame the server draws into
-the page (`lib/serving/document-frame`), whose first URL hands the reader across
-with a one-time ticket (`lib/accounts/pages-sessions`). The app page carries none
+the page (`lib/serving/document-frame`), whose first URL is the document's own address carrying a one-time
+ticket for exactly that document (`lib/accounts/pages-sessions`): the document's origin spends it before producing
+a byte, in the response that serves the document, and sets its own host-only cookie (`__Host-afbin_pages` over
+https; no `Domain`, so no sibling document receives or can plant it). A guest's frame carries the explicit guest
+marker and renders as nobody whatever cookie the browser holds, clearing it in that same response; sign-out ends
+every pages session of the reader on the server. The app page carries none
 of the document: no story, no island data, no document code, under the strict
 app policy that frames only the pages origins. The document's origin is not the
 app's, so nothing in the document can read the app's cookies, storage or

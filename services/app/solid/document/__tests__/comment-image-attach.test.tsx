@@ -97,7 +97,7 @@ describe('attaching an image to a new comment', () => {
   it('offers Attach image at all times and replaces the draft image with the newest one, within the pixel limit', async () => {
     bitmaps = [{ width: 300, height: 200 }, { width: 4096, height: 3000 }];
     open(); await flush();
-    const input = screen.getByLabelText('Attach image') as HTMLInputElement;
+    const input = screen.getByLabelText('Attach image file') as HTMLInputElement;
     expect(input).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp');
     fireEvent.change(input, { target: { files: [png()] } });
     await waitFor(() => expect(editorCanvas()).toHaveAttribute('width', '300'));
@@ -131,7 +131,7 @@ describe('attaching an image to a new comment', () => {
   it('attaches nothing where the backend cannot store comment images', async () => {
     const gated: ArtifactBackend = { ...httpBackend('doc1'), unavailable: (feature) => (feature === 'commentImages' ? 'Screenshots need a connection.' : null) };
     open({ backend: gated }); await flush();
-    expect(screen.getByLabelText('Attach image')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
     fireEvent.dragEnter(composer(), { dataTransfer: transfer([]) });
     expect(screen.queryByText('Drop image to attach')).toBeNull();
     fireEvent.drop(composer(), { dataTransfer: transfer([png()]) });
@@ -185,7 +185,7 @@ describe('attaching an image to a reply', () => {
     fireEvent.drop(reply, { dataTransfer: transfer([png()]) });
     await waitFor(() => expect(screen.getByLabelText('Screenshot editor')).toBeTruthy());
     bitmaps = [{ width: 640, height: 480 }];
-    fireEvent.change(screen.getByLabelText('Attach image'), { target: { files: [png('second.png')] } });
+    fireEvent.change(screen.getByLabelText('Attach image file'), { target: { files: [png('second.png')] } });
     await waitFor(() => expect(editorCanvas()).toHaveAttribute('width', '640'));
   });
 
@@ -200,7 +200,7 @@ describe('attaching an image to a reply', () => {
   it('offers no attachment where the backend cannot store comment images', async () => {
     const gated: ArtifactBackend = { ...httpBackend('doc1'), unavailable: (feature) => (feature === 'commentImages' ? 'Screenshots need a connection.' : null) };
     const reply = await openThread({ backend: gated });
-    expect(screen.getByLabelText('Attach image')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
     fireEvent.paste(reply, { clipboardData: clipboard([png()]) });
     await flush();
     expect(decode).not.toHaveBeenCalled();
@@ -268,7 +268,7 @@ describe('attaching an image to a reply from the hover card', () => {
 
   it('the hover card reply box is the same box: paste an image and send it with the reply', async () => {
     const { card, field } = await hoverCard();
-    expect(within(card).getByLabelText('Attach image')).toBeEnabled();
+    expect(within(card).getByRole('button', { name: 'Attach image' })).toBeEnabled();
     replaceComment(field, 'from the card');
     fireEvent.paste(field, { clipboardData: clipboard([png()]) });
     await waitFor(() => expect(within(card).getByLabelText('Screenshot drawing canvas')).toHaveAttribute('aria-busy', 'false'));

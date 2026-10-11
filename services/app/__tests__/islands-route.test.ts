@@ -5,11 +5,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import zlib from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
 import { useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '@/server/app';
-import { createModuleStore, createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
+import { createModuleStore, createSpeculationRulesStore, createStylesheetStore } from '@/lib/compiled-page/modules.server';
 import { speculationRulesOf } from '@/lib/compiled-page/speculation';
 import { DOCUMENT_MODULE_PATH } from '@/lib/story-runtime/contract';
 
@@ -30,6 +31,34 @@ describe('GET /islands/d/:sha.js', () => {
     expect((await app.request(`${DOCUMENT_MODULE_PATH}/0123456789abcdef.js`)).status).toBe(404);
     expect((await app.request(`${DOCUMENT_MODULE_PATH}/not-a-sha.js`)).status).toBe(404);
     expect((await app.request(`${DOCUMENT_MODULE_PATH}/..%2F..%2Fetc%2Fpasswd`)).status).toBe(404);
+  });
+});
+
+describe('GET /islands/c/:sha.css', () => {
+  it('serves a stored shared stylesheet immutable and open to the documents on their own origins, brotli when the client takes it', async () => {
+    const css = `.shared{color:red}${'\n.pad{margin:0}'.repeat(200)}`;
+    const url = await createStylesheetStore().put(css);
+    const plain = await app.request(url);
+    expect(plain.status).toBe(200);
+    expect(plain.headers.get('content-type')).toMatch(/^text\/css/);
+    expect(plain.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(plain.headers.get('access-control-allow-origin')).toBe('*');
+    expect(plain.headers.get('content-encoding')).toBeNull();
+    expect(await plain.text()).toBe(css);
+    const br = await app.request(url, { headers: { 'accept-encoding': 'br, gzip' } });
+    expect(br.headers.get('content-encoding')).toBe('br');
+    expect(br.headers.get('vary')).toMatch(/Accept-Encoding/i);
+    expect(zlib.brotliDecompressSync(Buffer.from(await br.arrayBuffer())).toString()).toBe(css);
+  });
+
+  it('answers 404, uncached, for an unknown or malformed sha and for a sha another prefix wrote', async () => {
+    const miss = await app.request('/islands/c/0123456789abcdef.css');
+    expect(miss.status).toBe(404);
+    expect(miss.headers.get('cache-control') ?? '').not.toContain('immutable');
+    expect((await app.request('/islands/c/not-a-sha.css')).status).toBe(404);
+    expect((await app.request('/islands/c/..%2F..%2Fetc%2Fpasswd')).status).toBe(404);
+    const module = await createModuleStore().put(new TextEncoder().encode('export {};'), []);
+    expect((await app.request(`/islands/c/${module.sha}.css`)).status).toBe(404);
   });
 });
 

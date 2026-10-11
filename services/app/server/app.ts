@@ -23,7 +23,7 @@ import {
   agentDiscovery, agentDiscoveryHead, archiveSharedBuild, bindModule, createModuleStore,
   createSpeculationRulesStore, createTemplateResourceStore, loadCompilerBuild, READER_MODE_HEADER,
   retainedBuild, retainedIslandFile, SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH,
-  TEMPLATE_RESOURCE_PATH, withAgentDiscoveryTail,
+  STYLESHEET_PATH, stylesheetStore, TEMPLATE_RESOURCE_PATH, withAgentDiscoveryTail,
 } from '@/lib/compiled-page';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -58,7 +58,7 @@ import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
-import { PAGES_SESSION_META, PAGES_SESSION_PATH, pagesApexOrigin, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
+import { pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
 import { linkedStylesheets } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
@@ -92,18 +92,14 @@ function withGenericSocial(html: string, origin: string): string {
 }
 
 /**
- * The frame's two new connections, started from the head: its first URL is on the pages apex, which 302s to the
- * document's own origin (`next`). Both origins come from the frame the server drew (lib/serving/artifact-page), never
- * from the request. They follow the agent pointer, which stays the head's first element.
+ * The frame's one new connection, started from the head: its first URL is on the document's own origin, which spends
+ * the ticket and serves the document in one response. The origin comes from the frame the server drew
+ * (lib/serving/artifact-page), never from the request. It follows the agent pointer, which stays the head's first element.
  */
 function withPreconnects(html: string, frame: DocumentFrame): string {
-  let origins: string[];
-  try {
-    const src = new URL(frame.src);
-    const next = src.searchParams.get('next');
-    origins = [...new Set([src.origin, ...(next ? [new URL(next).origin] : [])])];
-  } catch { return html; }
-  const tags = origins.map((origin) => `<link rel="preconnect" href="${escapeHtml(origin)}">`).join('');
+  let origin: string;
+  try { origin = new URL(frame.src).origin; } catch { return html; }
+  const tags = `<link rel="preconnect" href="${escapeHtml(origin)}">`;
   const after = /<meta name="afbin"[^>]*>/i.exec(html) ?? /<head(?:\s[^>]*)?>/i.exec(html);
   return after ? `${html.slice(0, after.index + after[0].length)}${tags}${html.slice(after.index + after[0].length)}` : html;
 }
@@ -189,10 +185,10 @@ export const APP_INLINE_SCRIPT_HASHES = [
 
 /**
  * THE APP PAGES' POLICY — one, strict, for every app page: no document ever runs inside one. `frames` are the
- * pages origins (APP__PAGES_HOST) the app page frames documents on — the apex, where the frame's first URL
- * exchanges its ticket, and every document label under it. Nothing else.
+ * pages origins (APP__PAGES_HOST) the app page frames documents on — every document label under the pages host,
+ * and nothing else (the apex is not a document and is never framed).
  */
-function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; connect?: readonly string[] } = {}): string {
+function appCsp({ frames = [] }: { frames?: readonly string[] } = {}): string {
   return [
     // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
     // reader's document runs its queries on (lib/islands/page-sqlite) —
@@ -209,8 +205,7 @@ function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; con
     // GLTFLoader also fetches embedded textures through local blob URLs.
     // Frame and worker policies stay same-origin; blobs are data here.
     "media-src 'self' blob:",
-    // `connect`: the pages apex, which sign-out asks to end the pages session (lib/accounts/browser-session).
-    ['connect-src', "'self'", 'blob:', ...connect].join(' '),
+    "connect-src 'self' blob:",
     "manifest-src 'self'", ['frame-src', "'self'", ...frames].join(' '), "frame-ancestors 'self'",
     // `worker-src` has no default of its own: it falls back through `child-src`
     // to `default-src 'none'`, so a worker would be refused by a directive nobody
@@ -226,11 +221,11 @@ function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; con
 /** The strict app policy, before the pages origins it frames are named (pagesFrameSources). */
 export const APP_CSP = appCsp();
 /** The policy every app page carries on a deployment whose documents are served under `site` (production adds no more). */
-export const appPagePolicy = (site: PagesSite): string => appCsp({ frames: pagesFrameSources(site), connect: [pagesApexOrigin(site)] });
-/** The pages origins an app page may frame (lib/http/pages-origin): the apex and every document label. */
+export const appPagePolicy = (site: PagesSite): string => appCsp({ frames: pagesFrameSources(site) });
+/** The pages origins an app page may frame (lib/http/pages-origin): every document label under the pages host. */
 export function pagesFrameSources(site: PagesSite): string[] {
   const port = site.port ? `:${site.port}` : '';
-  return [`${site.scheme}//${site.host}${port}`, `${site.scheme}//*.${site.host}${port}`];
+  return [`${site.scheme}//*.${site.host}${port}`];
 }
 /** Only the development socket joins connect-src; production uses the policy unchanged. */
 function developmentAppCsp(csp: string, pageUrl: string, port: number): string {
@@ -363,13 +358,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    */
   const pagesSite = opts.pagesSite ?? deployedPagesSite();
   app.use('*', pagesHost(pagesSite));
-  const pagesApex = pagesApexOrigin(pagesSite);
   /** The policy every app page carries: strict, framing only the pages origins. */
   const appPageCsp = appPagePolicy(pagesSite);
   const pageCsp = (url: string): string => (opts.devHmrPort !== undefined ? developmentAppCsp(appPageCsp, url, opts.devHmrPort) : appPageCsp);
-  /** Where sign-out ends the pages session (lib/accounts/browser-session): named in every app page's head. */
-  const withPagesSession = (html: string): string =>
-    html.replace('</head>', () => `<meta name="${PAGES_SESSION_META}" content="${escapeHtml(pagesApex + PAGES_SESSION_PATH)}"></head>`);
   const webDir = opts.webDir ?? path.resolve('dist/web');
   let indexCache: string | null = null;
   /** The app shell: the one Solid entry (web/solid-app.html) for every address the app answers. */
@@ -448,7 +439,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
     const inlined = data;
     const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
-    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(withPagesSession(inlined ? withBootstrap(ordered, inlined) : ordered), agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
+    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       'content-security-policy': pageCsp(c.req.url),
       ...readerHeaders(found?.reader),
@@ -554,6 +545,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   });
   const islandModules = createModuleStore();
   const islandTemplates = createTemplateResourceStore();
+  const islandStylesheets = stylesheetStore();
   const speculationRules = createSpeculationRulesStore();
   /*
    * Brotli like every other text response (the precompressed /islands chunks, the pages): these bytes
@@ -613,6 +605,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
     const bytes = sha ? await islandTemplates.get(sha) : null;
     return bytes ? islandFile(c, `t/${sha}`, bytes, 'application/json; charset=utf-8') : c.notFound();
+  });
+  // The shared document stylesheets: one URL per text for every document (lib/page-styles/linked-sheets.server).
+  app.on(['GET', 'HEAD'], `${STYLESHEET_PATH}/:file`, async (c) => {
+    const sha = /^([0-9a-f]{16})\.css$/.exec(c.req.param('file'))?.[1];
+    const bytes = sha ? await islandStylesheets.get(sha) : null;
+    return bytes ? islandFile(c, `c/${sha}`, bytes, 'text/css; charset=utf-8') : c.notFound();
   });
   app.on(['GET', 'HEAD'], `${SPECULATION_RULES_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];

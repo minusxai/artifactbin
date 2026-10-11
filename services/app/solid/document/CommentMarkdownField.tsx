@@ -139,7 +139,7 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
     <Show when={mention()&&props.backend}><CommentMentionPicker backend={props.backend!} artifactId={props.artifactId} query={mention()!.query} onSelect={insertMention} onReady={handle=>{keyboard=handle;}}/></Show>
     <Show when={props.quickAgents && canMention()}>
       <div class="comment-agents" role="group" aria-label="Tag agent">
-        <div class="comment-agent-choices">
+        <div class="flex min-w-0 flex-wrap items-center gap-1.5">
         <Show when={untaggedAgents().length}><span>Tag agent</span></Show>
         <For each={untaggedAgents().slice(0,2)}>{agent=><Button type="button" variant="ghost" size="sm" aria-label={`Tag ${agent.name}`} onMouseDown={event=>event.preventDefault()} onClick={()=>insertMention(remoteMention(agent))}><span aria-hidden="true" class="text-micro" style={{color:agentNameColor(agent.name)}}>●</span> {agent.name}</Button>}</For>
         <Show when={untaggedAgents().length>2}><Button type="button" variant="link" aria-expanded={!!mention()} onMouseDown={event=>event.preventDefault()} onClick={showAgents}>+{untaggedAgents().length-2} {untaggedAgents().length===3?'other':'others'}</Button></Show>

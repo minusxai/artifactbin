@@ -56,6 +56,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     : storyHtml;
   const story = storyElement(withOutline, input.colorMode, input.theme);
 
+  const linkedOrigin = input.sheets?.some((sheet) => sheet.href) && input.appOrigin ? input.appOrigin.replace(/\/+$/, '') : null;
   const islandPreloads = module ? unique([module.url, ...module.imports]) : [];
   const behaviorSrcs = unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));
   const rules = speculationRulesOf(compiled.links);
@@ -70,11 +71,13 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (input.navigationTarget === null ? '' : '<base target="_top">')
     + `<title>${escapeHtml(input.title)}</title>`
     + headMetadata(input.head)
-    + fontPreloadTags(unique(input.fontPreloads), false)
+    // A face a linked sheet declares is fetched from that sheet's origin (a relative url resolves against the
+    // sheet, not the page), so the preload names the same URL or the face downloads twice.
+    + fontPreloadTags(unique(input.fontPreloads).map((url) => (linkedOrigin && url.startsWith('/') && !url.startsWith('//') ? `${linkedOrigin}${url}` : url)), false)
     + islandPreloads.map(modulePreload).join('')
     + (input.sheets
       // The standalone document's sheets, exactly (lib/page-styles/document-styles).
-      ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
+      ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => (sheet.href ? linkTag(sheet.attr, sheet.href) : styleTag(sheet.attr, sheet.css))).join('')
       : '<style>:root{--mx-vh:100vh}body{margin:0}</style>')
     + (input.css && !input.sheets ? styleTag('data-mx-story-css', input.css) : '')
     + (input.footer?.css ? styleTag('data-mx-footer-css', input.footer.css) : '');
@@ -140,6 +143,13 @@ function headMetadata(head: AssembleHead | null): string {
         + '<meta name="twitter:card" content="summary_large_image">'
       : '');
 }
+
+/**
+ * A shared sheet by address: render-blocking in the head, in its place among the inline ones. `crossorigin`, because the
+ * sheet is the app's and the document is another origin: without it the document's own scripts could not read the
+ * rules (`cssRules` of a cross-origin sheet throws), which they can of an inline one; the app answers it for any origin.
+ */
+const linkTag = (attr: string, href: string): string => `<link rel="stylesheet" href="${escapeHtml(href)}" crossorigin ${attr}>`;
 
 /** `</style` inside CSS would close the element early; CSS has no use for the sequence (lib/publish/document's rule). */
 const styleTag = (attr: string, css: string): string => `<style ${attr}>${css.replace(/<\/style/gi, '')}</style>`;

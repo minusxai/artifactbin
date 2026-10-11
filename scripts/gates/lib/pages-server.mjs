@@ -29,11 +29,11 @@ const freePort = () => new Promise((resolve, reject) => {
   probe.listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => resolve(port)); });
 });
 
-/** Does the server on this port serve pages at lvh.me? Its apex answers `invalid_next` to a bare exchange. */
+/** Does the server on this port serve pages at lvh.me? Its apex is not a document and answers every path 404 `not_found`. */
 async function servesPages(port) {
   try {
-    const res = await fetch(`http://${PAGES_HOST}:${port}/pages-session?next=x`, { signal: AbortSignal.timeout(3000) });
-    return res.status === 400 && (await res.json().catch(() => ({}))).error === 'invalid_next';
+    const res = await fetch(`http://${PAGES_HOST}:${port}/`, { signal: AbortSignal.timeout(3000) });
+    return res.status === 404 && (await res.json().catch(() => ({}))).error === 'not_found';
   } catch { return false; }
 }
 

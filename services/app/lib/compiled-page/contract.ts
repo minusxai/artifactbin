@@ -430,8 +430,10 @@ export interface AssembleInput {
    * A document served BY ITSELF (`/raw`, a domain post, a capture) carries the standalone
    * document's stylesheets, byte for byte (lib/page-styles/document-styles), in place of `css`: the story is
    * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.
+   * A sheet with an `href` is linked instead of inlined (its `css` is the text that address serves): the
+   * stylesheets every document of a build shares, on the app's origin (lib/page-styles/linked-sheets.server).
    */
-  sheets?: ReadonlyArray<{ attr: string; css: string }> | null;
+  sheets?: ReadonlyArray<{ attr: string; css: string; href?: string }> | null;
 }
 
 /** The head metadata of an assembled page (see AssembleInput.head). */

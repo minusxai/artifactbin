@@ -85,3 +85,29 @@ it('keeps one ToggleGroup option pressed, as buttons, with icons, tooltips and a
   fireEvent.click(screen.getByRole('button', { name: 'Make read & write' }));
   expect(screen.getByRole('button', { name: 'Make read & write' }).className).toContain('bg-caution-soft');
 });
+
+it('ToggleGroup options are type="button": one inside a form never submits it', () => {
+  const onSubmit = vi.fn((event: Event) => event.preventDefault());
+  render(() => <form onSubmit={onSubmit}><ToggleGroup label="Mode" value="a" onChange={() => {}} options={[{ value: 'a', label: 'a' }, { value: 'b', label: 'b' }]} /></form>);
+  for (const button of screen.getAllByRole('button')) expect(button).toHaveAttribute('type', 'button');
+  fireEvent.click(screen.getByRole('button', { name: 'b' }));
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+it('ToggleGroup keeps its buttons when a caller rebuilds the options array on every read', () => {
+  const [value, setValue] = createSignal('a');
+  const [tick, setTick] = createSignal(0);
+  // The options are a fresh array of fresh objects whenever `tick` or `value` changes, as a caller's inline `options={[...]}` over a signal is.
+  render(() => <ToggleGroup label="Mode" value={value()} onChange={setValue} options={(tick(), [{ value: 'a', label: 'a' }, { value: 'b', label: 'b' }])} />);
+  const before = screen.getAllByRole('button');
+  const [a] = before;
+  a!.focus();
+  setTick(1);
+  fireEvent.click(screen.getByRole('button', { name: 'b' }));
+  setTick(2);
+  const after = screen.getAllByRole('button');
+  expect(after.length).toBe(before.length);
+  after.forEach((button, index) => expect(button).toBe(before[index]));
+  expect(screen.getByRole('button', { name: 'b' })).toHaveAttribute('aria-pressed', 'true');
+  expect(a).toHaveAttribute('aria-pressed', 'false');
+});

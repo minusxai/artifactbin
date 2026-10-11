@@ -19,7 +19,7 @@
  */
 import { agentDiscovery, READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
-import { canReadArtifact, getArtifactById, refusingUnservable } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, refusingUnservable, roleFor } from '@/lib/artifacts';
 import { dataflowForRow } from '@/lib/document-data';
 import { trackEvent, verifyExportKey } from '@/lib/platform';
 import { requestOrSessionActor } from '@/lib/accounts';
@@ -46,7 +46,9 @@ import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
 import type { StorySurface } from '@/lib/story-runtime/story-fragment';
 import { STORY_NODES_ID } from '@/lib/story-runtime/contract';
 import { scriptJson } from '@artifactbin/utils/escape';
-import { compiledPageFor, domainFooter } from '@/lib/publish/prepared';
+import { compiledPageFor, documentEtag, domainFooter, linkedDocumentSheets } from '@/lib/publish/prepared';
+import { stylesheetStore } from '@/lib/compiled-page';
+import { matchingTag, notModified, REVALIDATE } from '@/lib/http/revalidation';
 import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';
 import { cspExtensionsFor } from '@/lib/trust/document-trust';
 
@@ -312,7 +314,8 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       const appStory = fragment?.surface === 'app';
       {
         const capture = byExportKey && !chrome;
-        let prepared = await preparedPageFor(artifact, at);
+        // The shell and the compiled page: the tree is read only for a fragment (below) or a recompile (which reads it itself).
+        let prepared = await preparedPageFor(artifact, at, { compiled: true });
         if (byExportKey && request.headers.get('x-mx-compiled-backfill') === 'recompile') {
           // A page prepared under an older stylesheet is prepared again whole (its compile with it); otherwise only recompiled.
           if (prepared.stale) prepared = await reprepareStoredPage(artifact, at);
@@ -321,22 +324,66 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
             if (compiled) prepared.page.compiled = compiled;
           }
         }
+        /**
+         * A document on its own origin LINKS the sheets every document of a build shares, from the app's origin where
+         * one URL serves them all (lib/page-styles/linked-sheets.server); a sandboxed copy, a domain post and the
+         * exporter's capture carry the standalone sheets inline, as they always did.
+         */
+        const documentSheets = (standalone: ReturnType<typeof documentStyleSheets>) =>
+          pages && !capture ? linkedDocumentSheets(standalone, { origin: pages.site.app, store: stylesheetStore() }) : standalone;
         const flow = prepared.page.declared?.flow ?? null;
         // The exporter photographs this page: its run is settled, and carries whoever asked (see the
         // capture's run below) — never the guest snapshot's rows, never cached.
         const ran = capture && flow && !prepared.page.declared?.state
           ? await dataflowForRow(row, { values: readUrlValues(new URL(request.url).search, flow), viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } })
           : null;
+        // What this reader trusts the document to reach beyond the default policy (its Helmet `csp-*` metas): the
+        // hosts they published, or every declared one once they allowed the rest; nothing for a capture. On its own
+        // origin the reader's "Allow once" grants arrive with the pages session (`pages.carried`).
+        const extensions = capture ? undefined : await cspExtensionsFor({
+          artifact: row, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId },
+          // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
+          ...(pages ? { carried: pages.carried ?? null } : { request }),
+        });
+        const canonical = chrome ? (domain?.homepage ? `https://${domain.hostname}/` : domain?.path ? `https://${domain.hostname}${domain.path}` : await canonicalDocumentUrl(artifact)) : null;
+        const drawings = domain || engineRequested(request.url) ? null : appStory ? 'inline' as const : 'document' as const;
+        const holder = pages ? { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } : null;
+        /*
+         * REVALIDATION. A document on its own origin is cached by its reader's browser alone (`private, no-cache`) under
+         * a strong ETag over everything that determines its bytes, and `If-None-Match` is answered 304 before anything is
+         * rendered. Not the sandboxed copy or a domain post (their own surfaces), not a signed capture (a one-use key and
+         * its own run), not an archived version (never cached), and not the live morph's fragment, which is asked for
+         * exactly when the version changed.
+         */
+        // The document's policy: a header of this answer, so it is one of the things its validator names (a 304 keeps the
+        // policy of the 200 it revalidates).
+        const policy = pages
+          ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN, ...(extensions ? { extensions } : {}) })
+          : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions);
+        const revalidated = !!pages && !key && !fragment && !at;
+        const etag = revalidated ? await documentEtag({
+          row: prepared.row, artifact, at, page: prepared.page, stale: !!prepared.stale, search: new URL(request.url).search, drawings, holder,
+          facts: {
+            // Who asks, in what role, and what they trust: another reader never matches this reader's tag.
+            reader: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null, credential: actor.credential },
+            role: await roleFor(artifact, actor), trust: extensions ?? null,
+            // The surface and the addresses written into it.
+            surface: pages ? { self: pages.self, app: pages.site.app } : null,
+            chrome, canonical, design, policy,
+          },
+        }) : null;
+        const held = etag ? matchingTag(request.headers.get('if-none-match'), etag) : null;
+        if (etag && held) return notModified(held);
         const answer = await compiledPageFor(prepared.row, prepared.page, {
           at,
           search: new URL(request.url).search,
-          drawings: domain || engineRequested(request.url) ? null : appStory ? 'inline' : 'document',
+          drawings,
           colorMode: byExportKey && !domain ? captureColor(request.url) : null,
           // On its own origin the copy carries its reader's pages session, an account's or a guest owner's.
           signedIn: pages ? actor.credential !== 'none' : actor.credential === 'session' && !!viewer?.userId,
           // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as /raw always has.
           // On its own origin its doors answer for its pages session's reader, so the page holds what they may.
-          holder: pages ? { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } : null,
+          holder,
           // A capture's rows are settled, but its managed iframe still needs the scoped asset door.
           doors: capture ? { queryUrl: '', assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : pages ? {
             // Its own origin's doors, absolute, called directly with the pages cookie (server/pages-host).
@@ -365,7 +412,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
           head: chrome
             ? {
               description: row.description,
-              canonical: domain?.homepage ? `https://${domain.hostname}/` : domain?.path ? `https://${domain.hostname}${domain.path}` : await canonicalDocumentUrl(artifact),
+              canonical,
               social: { title: displayTitle(row), description: row.description, image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}` },
               help: reader ? agentDiscovery(base) : null,
             }
@@ -375,36 +422,27 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
           footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
           // The standalone document's stylesheets, byte for byte (lib/page-styles/document-styles); the app
           // page's story carries its one isolated sheet instead (the assembler's `css`).
-          sheets: appStory ? null : documentStyleSheets({
+          sheets: appStory ? null : await documentSheets(documentStyleSheets({
             compiledCss, chrome, bare: !!domain, theme: design.theme,
             docFonts: prepared.page.base.fonts, systemCss: prepared.page.base.systemCss ?? '', authorCss: prepared.page.authorCss,
-          }),
+          })),
         });
         if (answer.mode === 'compiled') {
-          // What this reader trusts the document to reach beyond the default policy (its Helmet `csp-*` metas): the
-          // hosts they published, or every declared one once they allowed the rest; nothing for a capture. On its own
-          // origin the reader's "Allow once" grants arrive with the pages session (`pages.carried`).
-          const extensions = capture ? undefined : await cspExtensionsFor({
-            artifact: row, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId },
-            // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
-            ...(pages ? { carried: pages.carried ?? null } : { request }),
-          });
           // A fragment carries its version's own source nodes: the morph hands them to the document's selections and
           // comments in the task it draws the version, so neither is ever classified against another version.
-          const html = fragment ? withVersionNodes(answer.html, prepared.page.data.nodes) : answer.html;
+          const html = fragment ? withVersionNodes(answer.html, (await preparedPageFor(artifact, at, { nodes: true })).page.data.nodes) : answer.html;
           return new Response(html, {
             status: 200,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
               // On its own origin the document needs no sandbox: the origin is its alone (lib/page-styles/document-csp).
-              'Content-Security-Policy': pages
-                ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN, ...(extensions ? { extensions } : {}) })
-                : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions),
+              'Content-Security-Policy': policy,
               ...answer.headers,
               [READER_MODE_HEADER]: 'compiled',
               // The /raw copy asks from an opaque origin; an anonymous answer is what anyone with the link reads.
               ...(fragment && !actor.viewer && !actor.tokenId ? { 'Access-Control-Allow-Origin': '*' } : {}),
               ...COMMON,
+              ...(etag ? { ETag: etag, 'Cache-Control': REVALIDATE } : {}),
             },
           });
         }

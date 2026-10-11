@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Field, Textarea } from '../ui/Field';
 import { Panel } from '../ui/Panel';
 import { Select } from '../ui/Select';
+import { ToggleGroup } from '../ui/ToggleGroup';
 import { LINK } from '../ui/ui';
 import { artifactEditPath } from '@/lib/http/urls';
 import type { DatasetCatalog } from '@/lib/datasets/types';
@@ -105,8 +106,8 @@ export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: Catalo
   const choose = (schema: string, name: string) => { setResult(null); setError(''); setExecutedSql(null); setSelection({ schema, name, offset: 0 }); };
   return <section aria-label="Dataset catalog" class="mx-auto min-w-0 w-full max-w-6xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap items-center gap-2">
-      <Button aria-label="Table view" aria-pressed={mode() === 'table'} variant={mode() === 'table' ? 'primary' : 'secondary'} onClick={() => { setMode('table'); choose(selection().schema, selection().name); }}>Table view</Button>
-      <Button aria-label="SQL view" aria-pressed={mode() === 'sql'} variant={mode() === 'sql' ? 'primary' : 'secondary'} onClick={() => { setMode('sql'); if (!sqlDraft()) setSqlDraft(tableSql()); }}>Run SQL</Button>
+      <ToggleGroup label="Dataset view" size="md" value={mode()} onChange={next => { if (next === 'table') { setMode('table'); choose(selection().schema, selection().name); } else { setMode('sql'); if (!sqlDraft()) setSqlDraft(tableSql()); } }}
+        options={[{ value: 'table', label: 'Table view' }, { value: 'sql', label: 'Run SQL', ariaLabel: 'SQL view' }]} />
       <Show when={props.editHref}><a aria-label="Edit dataset" href={props.editHref} class={`ml-auto text-sm ${LINK}`}>Edit dataset</a></Show>
     </div>
     <Show when={props.schemaTables}><DatasetSchemaBrowser tables={props.schemaTables!} /></Show>

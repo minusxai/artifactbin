@@ -602,13 +602,22 @@ const DATASET_RESULT_CACHE: Table = {
 
 /**
  * THE PREPARED PAGE — each document version compiled ONCE for the reader
- * (lib/publish/prepared/prepared-page.server): its isolated stylesheet, its node tree and
- * the style values the CSS policy rewrote, its glyphs, fonts and lazy-code
- * manifest, its declared dataflow, and the anonymous server render. Derived and
+ * (lib/publish/prepared/prepared-page.server): its isolated stylesheet and the
+ * style values the CSS policy rewrote, its glyphs, fonts and lazy-code
+ * manifest, its declared dataflow, its node tree and the compiled page. Derived and
  * disposable: one slot per head or archived version, overwritten whenever the
  * key (a digest of what preparation reads + the CSS compile version + the
  * server build) or the dependency fingerprint (imported datasets, held web
  * assets, imported fonts) no longer matches. Holds no per-viewer data.
+ *
+ * STORED IN THREE PARTS, because readers use them in different amounts: `page`
+ * is the shell (everything the app page reads; its size does not grow with the document),
+ * `nodes` the node tree and `compiled` the compiled page (or its recorded
+ * failure), which do. A view selects only the columns it uses. A row from before
+ * the split holds all of it in `page` (`nodes` NULL, or `page.data.nodes` present):
+ * the next read rewrites it into parts, in place.
+ * `mentions`: the people the version's source names (`/people/<id>`), so the
+ * membership list never scans the document (NULL: not recorded yet, filled by the first list).
  */
 const PREPARED_PAGES: Table = {
   name: 'prepared_pages',
@@ -619,6 +628,10 @@ const PREPARED_PAGES: Table = {
     { name: 'page_key', type: 'TEXT', notNull: true },
     { name: 'deps', type: 'TEXT', notNull: true, default: "''" },
     { name: 'page', type: 'JSONB', notNull: true },
+    // lz4: both are rewritten whole with every preparation and grow with the document (pglz is ~3x slower).
+    { name: 'nodes', type: 'JSONB', compression: 'lz4' },
+    { name: 'compiled', type: 'JSONB', compression: 'lz4' },
+    { name: 'mentions', type: 'TEXT[]' },
     { name: 'compiler_version', type: 'TEXT' },
     { name: 'island_build', type: 'TEXT' },
     { name: 'css_version', type: 'TEXT' },
@@ -926,13 +939,14 @@ const DATASET_IMAGES: Table = {name:'dataset_images',columns:[
  {name:'idx_dataset_images_dataset',columns:['dataset_id','created_at']},
 ]};
 /**
- * THE PAGES SESSIONS (lib/accounts/pages-sessions, server/pages-host): what the `afbin_pages` cookie on
- * the documents' own origins (APP__PAGES_HOST) refers to. The app page mints a one-time ticket for its
- * reader (a `codes` row, 60 s), the pages apex exchanges it for a row here and sets the cookie, and the
- * documents' doors read the reader back from it. Only the cookie's sha256 is stored. The row is an
+ * THE PAGES SESSIONS (lib/accounts/pages-sessions, server/pages-host): what the pages cookie on
+ * a document's own origin (APP__PAGES_HOST) refers to. The app page mints a one-time ticket for its
+ * reader and one document (a `codes` row, 60 s), the document's origin exchanges it for a row here bound to
+ * that document (`artifact_id`) and sets its host-only cookie, and the document's doors read the reader back
+ * from it. Only the cookie's sha256 is stored. The row is an
  * actor snapshot of who the app page served — never the authentication session, which the app does not
- * see — so a token behind it is re-resolved on every read, and logout deletes the row
- * (`DELETE <pages apex>/pages-session`); `expires_at` bounds the rest. Erased with a test user
+ * see — so a token behind it is re-resolved on every read, and logout deletes every row of the reader
+ * (`DELETE /api/session/token`, by `user_id` and `token_id`); `expires_at` bounds the rest. Erased with a test user
  * (`user_id`, lib/operations/testusers).
  */
 const PAGES_SESSIONS: Table = {
@@ -948,13 +962,18 @@ const PAGES_SESSIONS: Table = {
     // App-origin decisions the app page carried across with the ticket (a reader's one-time consent
     // grant, which lives in an app-origin cookie the document's origin never sees). Data, never a credential.
     { name: 'carried', type: 'JSONB', notNull: true, default: "'{}'" },
+    // The one document this session was minted for (its cookie is host-only on that document's origin). NULL only on a
+    // row from before the binding, which no cookie names any more: it matches no document.
+    { name: 'artifact_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'expires_at', type: 'TIMESTAMPTZ', notNull: true },
   ],
   primaryKey: ['id_hash'],
   indexes: [
     { name: 'idx_pages_sessions_expires', columns: ['expires_at'] },
+    // Logout ends every session of a reader, by account and by token.
     { name: 'idx_pages_sessions_user', columns: ['user_id'] },
+    { name: 'idx_pages_sessions_token', columns: ['token_id'] },
   ],
 };
 

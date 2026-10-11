@@ -11,6 +11,13 @@
  *   - glyphs, fonts, the resolved colour mode, the lazy-code manifest, the
  *     declared dataflow and the pinned compiled page.
  *
+ * STORED IN THREE PARTS (app.prepared_pages): the shell (`page`: everything above except the
+ * tree and the compiled page — its size does not grow with the document), the node tree
+ * (`nodes`) and the compiled page (`compiled`). A reader asks for the parts it uses
+ * (`preparedPageFor(row, at, { nodes, compiled })`) and the database sends only those: the app
+ * page reads the shell, `?part=nodes` the tree, a document's own origin the compiled page.
+ * A page stored whole by an earlier deployment is rewritten into parts on its next read.
+ *
  * Nothing per viewer is stored. A request overlays what only it decides — who
  * reads, their `$` values, what they may hold, the other artifacts the document
  * embeds — through the same writer the whole preparation uses
@@ -31,7 +38,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getDb } from '@/lib/platform/db';
-import { archivedReadOnly, type ArchivedRender, type ArtifactRow, declarationsForRow, savedMentionStates, servedRow } from '@/lib/artifacts';
+import { archivedReadOnly, type ArchivedRender, type ArtifactRow, declarationsForRow, mentionedPeople, savedMentionStates, servedRow } from '@/lib/artifacts';
 import { holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/document-data';
 import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import type { Viewer, RoleActor } from '@/lib/accounts';
@@ -44,14 +51,15 @@ import { storedCompiledDataflow } from '@/lib/document/server';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';
 import { assetsPath, inlineStoryCss, inlineStoryNodes, mutatePath, queryPath, type StoryBaseCssRecipe, type StyleOverride, styleOverrides } from '@/lib/page-styles';
 import { readerStorySheet } from './reader-sheet.server';
-import { mermaidImagesFor } from '@/lib/mermaid-images/store';
+import { mermaidImagesForCodes, prerenderableCodes } from '@/lib/mermaid-images/store';
 import {
-  archiveSharedBuild, type CompilerBuild, createSpeculationRulesStore, inlineStoryElement, loadCompilerBuild,
+  archiveSharedBuild, type CompilerBuild, createSpeculationRulesStore, loadCompilerBuild,
   MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, type StoredCompile,
 } from '@/lib/compiled-page';
 import { readUrlValues } from '@/lib/dataflow';
 import { servedResultsFor } from './served-results.server';
 import type { ServedStoryRuntime } from './prepared-runtime';
+import type { JsxNode } from '@/lib/jsx';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { prepareWorkers } from './prepare-workers.server';
@@ -84,8 +92,22 @@ export interface PreparedPage {
   compiled?: StoredCompile;
   /** The stylesheet version (css-version.server) `css` was prepared under: the row's `css_version`, set when read. */
   cssVersion?: string | null;
+  /** The diagram codes a harvest may store a drawing for (lib/mermaid-images): what a reader looks drawings up by without loading the tree. */
+  mermaidCodes: string[];
 }
 interface PreparedDeps { datasets: string[]; assets: string[] }
+
+/** Which of the heavy parts a reader uses. The shell (everything else) is always read. */
+export interface PreparedParts { nodes?: boolean; compiled?: boolean }
+const WHOLE = { nodes: true, compiled: true } as const;
+/** The version less its tree and its compiled page: what the app page reads. */
+export type PreparedShell = Omit<PreparedPage, 'data' | 'compiled'> & { data: Omit<PreparedPage['data'], 'nodes'> };
+/** The shell and the parts asked for: `{ nodes: true }` adds `data.nodes`, `{ compiled: true }` adds `compiled`. */
+export type PreparedView<P extends PreparedParts = typeof WHOLE> = PreparedShell
+  & (P extends { nodes: true } ? { data: PreparedPage['data'] } : unknown)
+  & (P extends { compiled: true } ? Pick<PreparedPage, 'compiled'> : unknown);
+/** A served runtime without the tree (`?part=nodes` is its door). */
+export type TreelessServedRuntime = Omit<ServedStoryRuntime, 'data'> & { data: Omit<StoryIslandData, 'nodes'>; css: string };
 
 /** What a request (never the document) decides about its render. */
 interface ReaderContext {
@@ -143,13 +165,13 @@ async function fingerprint(deps: PreparedDeps): Promise<string> {
 }
 
 /** The per-reader half of the island, through the one writer (readerIslandData). */
-async function readerInputFor(row: ArtifactRow, page: Pick<PreparedPage, 'declared' | 'data'>, reader: ReaderContext): Promise<ReaderIslandInput & { colorMode?: 'light' | 'dark' }> {
+async function readerInputFor(row: ArtifactRow, page: Pick<PreparedPage, 'declared' | 'mermaidCodes'>, reader: ReaderContext): Promise<ReaderIslandInput & { colorMode?: 'light' | 'dark' }> {
   const { at, viewer, search } = reader;
   const declared = page.declared;
   const [refData, mentionStatuses, identity, hold, mermaidImages] = await Promise.all([
     refDataForRow(row), savedMentionStates(row), viewerIdentityFor(row, viewer?.userId ?? null),
     declared ? holdableImports(row, declared.flow, viewer) : Promise.resolve([]),
-    reader.drawings === 'engine' ? Promise.resolve({}) : mermaidImagesFor({ artifactId: row.id, version: at?.version ?? row.version, surface: 'inline', head: !at, visibility: row.visibility }, page.data.nodes),
+    reader.drawings === 'engine' ? Promise.resolve({}) : mermaidImagesForCodes({ artifactId: row.id, version: at?.version ?? row.version, surface: 'inline', head: !at, visibility: row.visibility }, page.mermaidCodes),
   ]);
   return {
     mermaidImages,
@@ -234,7 +256,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: Retu
     css, overrides, base: parts.baseRecipe, authorCss: runtime.authorCss, authorScript: runtime.authorScript,
     theme: runtime.theme, title: runtime.title, fontPreloads: runtime.fontPreloads ?? [],
     lazyCode: lazyCodeOf(nodes), declared: declared ?? null,
-    deps: { datasets, assets: assetUrls },
+    deps: { datasets, assets: assetUrls }, mermaidCodes: prerenderableCodes(nodes),
   };
   // Only the version's compiled output is stored; request data is rendered by its pinned SSR module.
   const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '' });
@@ -242,40 +264,48 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: Retu
   return page;
 }
 
-function servedOf(page: PreparedPage, input: ReaderOverlay): ServedStoryRuntime & { css: string } {
+function servedOf(page: PreparedShell, input: ReaderOverlay): TreelessServedRuntime {
   return {
-    data: { ...page.data, ...readerIslandData(input), ...(input.colorMode ? { colorMode: input.colorMode } : {}) } as StoryIslandData,
+    data: { ...page.data, ...readerIslandData(input), ...(input.colorMode ? { colorMode: input.colorMode } : {}) } as TreelessServedRuntime['data'],
     css: page.css, overrides: page.overrides, base: page.base,
     authorScript: page.authorScript, theme: page.theme, title: page.title, fontPreloads: page.fontPreloads,
   };
 }
-const renderStory = (page: PreparedPage, input: ReaderOverlay): string => {
-  const compiled = page.compiled;
-  if (!compiled || !('html' in compiled)) throw new Error('prepared page has no compiled story');
-  return inlineStoryElement(`<style>${page.css}</style>${compiled.html}`, input.colorMode ?? page.data.colorMode, page.theme);
-};
 
-interface StoredRow { page_key: string; deps: string; page: PreparedPage; page_format: number | null; handover_contract: number | null; css_version: string | null }
+/** The version split along the stored parts. The shell carries nothing the columns beside it already say. */
+function splitPage(page: PreparedPage): { shell: Omit<PreparedShell, 'pageFormat' | 'handoverContract' | 'cssVersion'>; nodes: JsxNode[]; compiled: StoredCompile | null } {
+  const { data: { nodes, ...data }, compiled, ssr: _legacyRender, pageFormat: _format, handoverContract: _contract, cssVersion: _css, ...rest } = page;
+  return { shell: { ...rest, data }, nodes, compiled: compiled ?? null };
+}
+/** The parts of `page` that were asked for, and no more (the shell is always there): a view never carries what its reader did not ask for. */
+function narrow<P extends PreparedParts>(page: PreparedPage, want: P): PreparedView<P> {
+  const { data: { nodes, ...data }, compiled, ...rest } = page;
+  return { ...rest, data: want.nodes ? { ...data, nodes } : data, ...(want.compiled ? { compiled } : {}) } as PreparedView<P>;
+}
 
 /** Write a fresh preparation back. `onlyKey`: only over the entry it replaces (a background re-preparation), never a newer one. */
 async function store(row: ArtifactRow, slot: string, page: PreparedPage, onlyKey?: string): Promise<void> {
   try {
     const db = await getDb();
-    const params = [row.id, slot, keyOf(row), await fingerprint(page.deps), JSON.stringify(page), compilerFingerprint(), page.compiled?.build ?? 'none', page.cssVersion ?? null, null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT];
+    const { shell, nodes, compiled } = splitPage(page);
+    const params = [
+      row.id, slot, keyOf(row), await fingerprint(page.deps), JSON.stringify(shell), JSON.stringify(nodes), compiled ? JSON.stringify(compiled) : null,
+      mentionedPeople(row.source ?? ''), compilerFingerprint(), page.compiled?.build ?? 'none', page.cssVersion ?? null, null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT,
+    ];
     if (onlyKey) {
       await db.query(
-        `UPDATE prepared_pages SET deps = $4, page = $5::jsonb, compiler_version = $6, island_build = $7, css_version = $8, ssr_bundle = $9,
-         page_format = $10, handover_contract = $11, updated_at = now() WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
+        `UPDATE prepared_pages SET deps = $4, page = $5::jsonb, nodes = $6::jsonb, compiled = $7::jsonb, mentions = $8::text[], compiler_version = $9, island_build = $10,
+         css_version = $11, ssr_bundle = $12, page_format = $13, handover_contract = $14, updated_at = now() WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
         params,
       );
       return;
     }
     await db.query(
-      `INSERT INTO prepared_pages (artifact_id, slot, page_key, deps, page, compiler_version, island_build, css_version, ssr_bundle, page_format, handover_contract, updated_at)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, now())
-       ON CONFLICT (artifact_id, slot) DO UPDATE SET page_key = EXCLUDED.page_key, deps = EXCLUDED.deps, page = EXCLUDED.page,
-       compiler_version = EXCLUDED.compiler_version, island_build = EXCLUDED.island_build, css_version = EXCLUDED.css_version,
-       ssr_bundle = EXCLUDED.ssr_bundle, page_format = EXCLUDED.page_format, handover_contract = EXCLUDED.handover_contract, updated_at = now()`,
+      `INSERT INTO prepared_pages (artifact_id, slot, page_key, deps, page, nodes, compiled, mentions, compiler_version, island_build, css_version, ssr_bundle, page_format, handover_contract, updated_at)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::text[], $9, $10, $11, $12, $13, $14, now())
+       ON CONFLICT (artifact_id, slot) DO UPDATE SET page_key = EXCLUDED.page_key, deps = EXCLUDED.deps, page = EXCLUDED.page, nodes = EXCLUDED.nodes,
+       compiled = EXCLUDED.compiled, mentions = EXCLUDED.mentions, compiler_version = EXCLUDED.compiler_version, island_build = EXCLUDED.island_build,
+       css_version = EXCLUDED.css_version, ssr_bundle = EXCLUDED.ssr_bundle, page_format = EXCLUDED.page_format, handover_contract = EXCLUDED.handover_contract, updated_at = now()`,
       params,
     );
   } catch (error) {
@@ -324,33 +354,79 @@ function queueRestyle(stored: ArtifactRow, at: ArchivedRender | null): void {
 }
 
 /**
+ * An entry stored whole by an earlier deployment (the tree and the compiled page inside `page`, or `page`
+ * rewritten whole over a split row by a server that predates the split). Older list commands stored li > li:
+ * a new runtime cannot correct pinned compiled HTML, and recompiling cached nodes would retain that malformed
+ * input, so an affected tree is re-prepared from the unchanged stored document, waiting so the first reader
+ * receives the repair (this key only). Any other is split in place, with no preparation, and read as stored.
+ * Null: the entry is gone, was replaced meanwhile, or holds no compiled page; the caller prepares it.
+ */
+async function settleWhole(row: ArtifactRow, at: ArchivedRender | null, slot: string, key: string): Promise<PreparedPage | null> {
+  const db = await getDb();
+  const stored = (await db.query<{ page: PreparedPage; page_format: number | null; handover_contract: number | null; css_version: string | null }>(
+    'SELECT page, page_format, handover_contract, css_version FROM prepared_pages WHERE artifact_id = $1 AND slot = $2 AND page_key = $3', [row.id, slot, key],
+  )).rows[0];
+  if (!stored?.page.compiled) return null;
+  const page: PreparedPage = { ...stored.page, pageFormat: stored.page_format ?? 0, handoverContract: stored.handover_contract ?? 0, cssVersion: stored.css_version };
+  if (fixHtmlNesting(page.data.nodes) !== page.data.nodes) {
+    const repaired = await prepareNow(row, at);
+    await store(row, slot, repaired, key);
+    return repaired;
+  }
+  page.mermaidCodes ??= prerenderableCodes(page.data.nodes);
+  const { shell, nodes, compiled } = splitPage(page);
+  try {
+    await db.query(
+      `UPDATE prepared_pages SET page = $4::jsonb, nodes = $5::jsonb, compiled = $6::jsonb WHERE artifact_id = $1 AND slot = $2 AND page_key = $3
+       AND (nodes IS NULL OR (page #> '{data,nodes}') IS NOT NULL)`,
+      [row.id, slot, key, JSON.stringify(shell), JSON.stringify(nodes), JSON.stringify(compiled)],
+    );
+  } catch (error) {
+    console.warn('[prepared-page] split write-back failed', row.id, slot, error);
+  }
+  return page;
+}
+
+/** One statement: the shell, and of the tree and the compiled page ($3, $4) only those asked for. A whole-stored entry (`legacy`) is read whole by settleWhole. */
+const READ_PARTS = `
+  SELECT p.page_key, p.page_format, p.handover_contract, p.css_version, l.legacy, (p.compiled IS NOT NULL OR p.page ? 'compiled') AS has_compiled,
+    CASE WHEN l.legacy THEN NULL ELSE p.page END AS page,
+    CASE WHEN $3 AND NOT l.legacy THEN p.nodes END AS nodes,
+    CASE WHEN $4 AND NOT l.legacy THEN p.compiled END AS compiled
+  FROM prepared_pages p, LATERAL (SELECT p.nodes IS NULL OR (p.page #> '{data,nodes}') IS NOT NULL AS legacy) l
+  WHERE p.artifact_id = $1 AND p.slot = $2`;
+interface StoredRow {
+  page_key: string; page_format: number | null; handover_contract: number | null; css_version: string | null;
+  legacy: boolean; has_compiled: boolean; page: PreparedShell | null; nodes: JsxNode[] | null; compiled: StoredCompile | null;
+}
+
+/**
  * The stored entry for this version when it is current, else a fresh one, written back. A current entry
  * prepared under an older stylesheet (`stale`) is served as stored while it is re-prepared in the background.
+ * `parts`: the tree and the compiled page are read only when asked for (both, when `parts` is omitted).
  */
-export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | null): Promise<{ row: ArtifactRow; page: PreparedPage; stale?: true }> {
+export async function preparedPageFor<const P extends PreparedParts = typeof WHOLE>(stored: ArtifactRow, at: ArchivedRender | null, parts?: P): Promise<{ row: ArtifactRow; page: PreparedView<P>; stale?: true }> {
+  const want = parts ?? WHOLE;
   const row = await servedRow(stored, at);
   const key = keyOf(row);
   const slot = slotOf(at);
   const db = await getDb();
-  const found = (await db.query<StoredRow>('SELECT page_key, deps, page, page_format, handover_contract, css_version FROM prepared_pages WHERE artifact_id = $1 AND slot = $2', [row.id, slot])).rows[0];
-  if (found && found.page_key === key && found.page.compiled) {
-    // Older list commands stored li > li. A new runtime cannot correct pinned
-    // compiled HTML, and recompiling cached nodes would retain that malformed
-    // input. Re-prepare only affected trees from the unchanged stored document,
-    // waiting so the first reader receives the repair; write only this cache key.
-    if (fixHtmlNesting(found.page.data.nodes) !== found.page.data.nodes) {
-      const page = await prepareNow(row, at);
-      await store(row, slot, page, key);
-      return { row, page };
+  const found = (await db.query<StoredRow>(READ_PARTS, [row.id, slot, !!want.nodes, !!want.compiled])).rows[0];
+  if (found && found.page_key === key && found.has_compiled) {
+    const whole = found.legacy ? await settleWhole(row, at, slot, key) : null;
+    if (whole || !found.legacy) {
+      const page: PreparedView<P> = whole ? narrow(whole, want) : {
+        ...found.page!, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version,
+        data: { ...found.page!.data, ...(want.nodes ? { nodes: found.nodes! } : {}) }, ...(want.compiled ? { compiled: found.compiled! } : {}),
+      } as PreparedView<P>;
+      if (page.cssVersion === preparedCssVersion()) return { row, page };
+      queueRestyle(stored, at);
+      return { row, page, stale: true };
     }
-    const page = { ...found.page, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version };
-    if (found.css_version === preparedCssVersion()) return { row, page };
-    queueRestyle(stored, at);
-    return { row, page, stale: true };
   }
   const page = await prepareNow(row, at);
   await store(row, slot, page);
-  return { row, page };
+  return { row, page: narrow(page, want) };
 }
 
 /**
@@ -359,22 +435,28 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
  * was served from (the same key), so a newer entry written meanwhile is never overwritten with an
  * older version's compile. Null when this deployment does not compile.
  */
-export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null, page: PreparedPage): Promise<StoredCompile | null> {
+export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null, page: PreparedShell & Pick<PreparedPage, 'compiled'>): Promise<StoredCompile | null> {
   const compiler = compilerBuild();
   if (!compiler) return null;
-  const compiled = await compiledFor(row, page, await refDataForRow(row), compiler);
+  const db = await getDb();
+  // The compile needs the tree, which a reader of the shell did not load: read it now, from this entry only.
+  const nodes = (await db.query<{ nodes: JsxNode[] | null }>(
+    "SELECT COALESCE(page #> '{data,nodes}', nodes) AS nodes FROM prepared_pages WHERE artifact_id = $1 AND slot = $2 AND page_key = $3", [row.id, slotOf(at), keyOf(row)],
+  )).rows[0]?.nodes;
+  if (!nodes) return null;
+  const compiled = await compiledFor(row, { ...page, data: { ...page.data, nodes } }, await refDataForRow(row), compiler);
   page.pageFormat = PAGE_FORMAT;
   page.handoverContract = MIN_HANDOVER_CONTRACT;
   page.compiled = compiled;
   try {
-    const db = await getDb();
     // Only over the entry this page was read from, stylesheet included: a background re-preparation that landed
     // meanwhile (a newer sheet) is never overwritten with this page's older one. The stylesheet version stays the page's own.
+    // The same statement finishes the split of an entry still stored whole, so its old compile cannot outlive this one.
     await db.query(
-      `UPDATE prepared_pages SET page = $4::jsonb, compiler_version = $5, island_build = $6,
-       ssr_bundle = $8, page_format = $9, handover_contract = $10, updated_at = now()
+      `UPDATE prepared_pages SET compiled = $4::jsonb, nodes = COALESCE(page #> '{data,nodes}', nodes), page = (page - 'compiled') #- '{data,nodes}',
+       compiler_version = $5, island_build = $6, ssr_bundle = $8, page_format = $9, handover_contract = $10, updated_at = now()
        WHERE artifact_id = $1 AND slot = $2 AND page_key = $3 AND css_version IS NOT DISTINCT FROM $7`,
-      [row.id, slotOf(at), keyOf(row), JSON.stringify(page), compilerFingerprint(), compiled.build, page.cssVersion ?? null, null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
+      [row.id, slotOf(at), keyOf(row), JSON.stringify(compiled), compilerFingerprint(), compiled.build, page.cssVersion ?? null, null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
     );
   } catch (error) {
     console.warn('[prepared-page] compile write-back failed', row.id, error);
@@ -383,11 +465,10 @@ export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null,
 }
 
 /**
- * THE READER'S RUNTIME for one request. `storyHtml` supplies static compiled
- * markup to remaining editor/API consumers; reader data is rendered by the
- * compiled serve path.
+ * THE READER'S RUNTIME for one request: the version's shell overlaid with what only this request decides.
+ * The compiled serve path renders the page itself; the app page reads this for its dataflow and sheet.
  */
-export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: ReaderContext): Promise<{ runtime: ServedStoryRuntime & { css: string }; storyHtml: () => string }> {
+export async function servedPage(row: ArtifactRow, page: PreparedShell, reader: ReaderContext): Promise<{ runtime: TreelessServedRuntime }> {
   // Only the head's answers are the query route's: an archived render, and a
   // version that cannot run (its declarations already carry every answer), serve none.
   const servable = reader.results && !reader.at && page.declared && !page.declared.state ? page.declared.flow : null;
@@ -397,11 +478,7 @@ export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: R
   ]);
   // Results belong to this request's runtime; compiledPageFor renders them into the page.
   const input: ReaderOverlay = results && overlay.dataflow ? { ...overlay, dataflow: { ...overlay.dataflow, results } } : overlay;
-  const runtime = servedOf(page, input);
-  return {
-    runtime,
-    storyHtml: () => renderStory(page, input),
-  };
+  return { runtime: servedOf(page, input) };
 }
 
 /*

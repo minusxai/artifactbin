@@ -26,12 +26,11 @@ export { ISLANDS_MANIFEST_PATH } from './build.server';
 // ---- Assembly: the reader page around a compiled version.
 export { assembleReaderPage } from './assembler';
 export { withStoredCarriers } from './carriers';
-export { inlineStoryElement } from './story-element';
 export { planOf } from './plan';
 export { agentDiscovery, agentDiscoveryHead, withAgentDiscoveryTail } from './agent-discovery';
 
 // ---- Build storage: the shared build, the per-document modules and their binding to the build.
 export { loadCompilerBuild } from './build.server';
-export { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore } from './modules.server';
+export { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, STYLESHEET_PATH, stylesheetStore } from './modules.server';
 export { archiveSharedBuild, retainedBuild, retainedIslandFile } from './shared-builds.server';
 export { bindModule, bindModuleCode, unresolvedSpecifiers } from './runtime-binding';

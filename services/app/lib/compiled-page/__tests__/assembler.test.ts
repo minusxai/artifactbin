@@ -109,6 +109,33 @@ describe('assembleReaderPage', () => {
     expect([...doc.querySelectorAll('style')].filter((s) => s.textContent?.includes('.mx-doc{color:red}'))).toHaveLength(1);
   });
 
+  it('links a shared sheet in its place among the inline ones and fetches the fonts it declares from the same origin', () => {
+    const sheets = [
+      { attr: 'data-mx-tw-s0', css: '.a{b:c}', href: 'https://app.example.test/islands/c/0123456789abcdef.css' },
+      { attr: 'data-mx-tw-i0', css: '.mine{d:e}' },
+      { attr: 'data-mx-base', css: '.base{f:g}', href: 'https://app.example.test/islands/c/fedcba9876543210.css' },
+      { attr: 'data-mx-author', css: '.author{h:i}' },
+    ];
+    const page = assembleReaderPage(input({ sheets, appOrigin: 'https://app.example.test', fontPreloads: ['/fonts/inter.woff2'] }));
+    const head = dom(page).head;
+    const order = [...head.querySelectorAll('link[rel="stylesheet"], style[data-mx-tw-i0], style[data-mx-author]')].map((el) => el.getAttribute('href') ?? [...el.attributes].map((a) => a.name).find((n) => n.startsWith('data-mx-')));
+    expect(order).toEqual(['https://app.example.test/islands/c/0123456789abcdef.css', 'data-mx-tw-i0', 'https://app.example.test/islands/c/fedcba9876543210.css', 'data-mx-author']);
+    const link = head.querySelector('link[rel="stylesheet"]')!;
+    expect(link.getAttributeNames().filter((name) => name.startsWith('data-mx-'))).toEqual(['data-mx-tw-s0']);
+    // Readable by the document's own scripts, as an inline sheet is: a cross-origin sheet's rules are not without it.
+    expect(link.hasAttribute('crossorigin')).toBe(true);
+    // The sheet is not also inlined, and its text is not in the page.
+    expect(page.html).not.toContain('.a{b:c}');
+    expect(page.html).toContain('.mine{d:e}');
+    // The face a linked sheet declares loads from the sheet's origin, so the preload names that URL.
+    expect(head.querySelector('link[rel="preload"][as="font"]')?.getAttribute('href')).toBe('https://app.example.test/fonts/inter.woff2');
+  });
+
+  it('keeps the fonts preloaded from the document\'s own origin when no sheet is linked', () => {
+    const page = assembleReaderPage(input({ sheets: [{ attr: 'data-mx-tw', css: '.a{b:c}' }], appOrigin: 'https://app.example.test' }));
+    expect(dom(page).head.querySelector('link[rel="preload"][as="font"]')?.getAttribute('href')).toBe('/fonts/inter.woff2');
+  });
+
   it('emits no inline script: the data rides as JSON and every script has a same-origin src', () => {
     const doc = dom(assembleReaderPage(input({ compiled: compiled({ templateBrBytes: 1300 }) })));
     for (const script of doc.querySelectorAll('script')) {
