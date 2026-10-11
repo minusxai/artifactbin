@@ -31,8 +31,9 @@ npm run afbin -- auth
 Approve the connection in your signed-in browser. The development wrapper selects
 this checkout's public URL and keeps credentials in `~/.artifactbin-dev/<port>`;
 it does not change your released CLI configuration or installed agent skills.
-Its first invocation builds the CLI and host runtime, so it takes longer than
-subsequent calls.
+Its first invocation builds the development CLI. The packaged host runtime is
+available in released installations and CI-built checkout artifacts; it is not
+built by this source development command.
 
 Save this as `hello.jsx` in the checkout:
 
@@ -51,8 +52,7 @@ visibility: private
 
 ```sh
 npm run afbin -- add hello.jsx --json
-npm run afbin -- preview hello.jsx
-# Stop preview with Ctrl+C, then publish:
+npm run afbin -- validate hello.jsx
 npm run afbin -- push hello.jsx --json
 npm run afbin -- help markup
 ```
@@ -60,8 +60,27 @@ npm run afbin -- help markup
 Open the published document in the signed-in browser. Edit it there, or edit the
 local file and push again. Push may rewrite the file with identity metadata and
 persistent node IDs; read that file before editing it again. Browser edits to a
-published head require `pull` before your next local edit. Preview instead saves
-browser changes directly to the selected local files.
+published head require `pull` before your next local edit. Use the published artifact
+ID returned by `push --json`, rather than the local filename, as the reference.
+Preserve any unpushed local edits in a separate copy first. Replace `<published-id>`
+below with that ID before running the command:
+
+
+```sh
+npm run afbin -- pull <published-id> --output hello.jsx
+```
+
+If pull refuses because the local file has changed, keep your saved edits and
+pull to a different output file to compare and reconcile them before pushing.
+Do not add `--force` without first preserving the local changes.
+
+For a local file preview that saves browser changes directly to your files, use
+the released CLI (`afbin preview hello.jsx`) or a CI-built checkout containing
+the matching packaged runtime. A plain source checkout can publish to its
+running development server and edit there using the steps above. Its wrapper
+refuses `preview`, `serve`, and local runtime exports when that runtime is
+missing or stale; the refusal explains the required artifact. Published exports
+by URL or ID use the development server instead.
 
 For a second checkout, use `npm run setup -- --yes --port 7445` and its own data
 directory. Setup can be rerun to repair configuration while retaining existing
@@ -88,7 +107,7 @@ and TLS for the document pages host. Keep settings private (mode 0600).
 | CSV/JSON datasets, SQL queries, charts, Values and mutations | Register data with `afbin add rows.csv --json`; use its `ref:ID` in `<Import>`, query `name.rows`, and push the document. Push publishes unpublished registered dependencies. Mutations need the dataset's write policy. | `afbin help markup-data`, `afbin help apps`, `afbin help databases` |
 | Connected PostgreSQL datasets | A reachable PostgreSQL database and credentials in its dataset definition. Private network destinations require the self-host operator's `DATASET__ALLOW_PRIVATE_NETWORKS` setting. | `afbin help databases` |
 | Images, PDFs, other files and URL imports | Registered files or permitted remote URLs. Remote imports need network access and respect size limits and blocked private destinations. | `afbin help publishing-datasets` |
-| PNG/JPG exports | Chromium, prepared/downloaded when needed; published exports run on the server. Local exports also prepare the CLI's preview runtime. | `afbin export <ref> --output report.png` |
+| PNG/JPG exports | Chromium, prepared/downloaded when needed; published exports run on the server. Local exports need the matching packaged CLI runtime (released CLI or CI-built checkout). | `afbin export <ref> --output report.png` |
 | Offline HTML | A published head; use `afbin export <id> --format html --output report.html`. The result is one file that can open, edit and comment offline, within its size limit. | [CLI export reference](../services/cli/README.md) |
 | Native author scripts and exported Solid components | One Helmet script; use `page` bindings and `solid-js`. Bare external npm imports use the ESM CDN and need network access. Extra hosts need declared CSP consent. | `afbin help markup-scripts`, [document format](document-format.md) |
 | Lambdas and cron schedules | Source dev enables the local runner automatically. Packaged hosts need `RUNNER__SERVICE_URL` and matching `CONTRACT__ACTOR_SECRET`, plus a separate controller. Publish a Helmet script with a default-exported function; use `afbin runs start`, `status`, `events` and `cancel`. Schedules use authenticated HTTP APIs. | `afbin help lambdas`, [runner setup and schedules](../services/runner/README.md) |

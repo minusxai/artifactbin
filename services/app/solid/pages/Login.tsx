@@ -3,21 +3,22 @@ import { createEffect, createSignal, Show, untrack, type JSX } from 'solid-js';
 import { loginRedirectTarget, internalRedirectTarget } from '@/lib/http/safe-redirect';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
+import { CODE_DELIVERY_HEADER, codeDeliveryOf, type CodeDelivery } from '@artifactbin/contracts';
 
 import { FormPage, FORM_INPUT as INPUT, FORM_PRIMARY_BUTTON as BUTTON } from '../ui/FormControls';
 
 /** Email and the sent flag (never the code) survive a reload, e.g. an in-app browser that reloads on app switch. */
 const progressKey = () => `afbin:login:${new URLSearchParams(window.location.search).get('callbackUrl') ?? ''}`;
-function readProgress(): { email: string; sent: boolean } {
+function readProgress(): { email: string; sent: boolean; delivery?: CodeDelivery } {
   try {
-    const saved = JSON.parse(sessionStorage.getItem(progressKey()) ?? 'null') as { email?: unknown; sent?: unknown } | null;
-    if (saved && typeof saved.email === 'string' && saved.email) return { email: saved.email, sent: saved.sent === true };
+    const saved = JSON.parse(sessionStorage.getItem(progressKey()) ?? 'null') as { email?: unknown; sent?: unknown; delivery?: unknown } | null;
+    if (saved && typeof saved.email === 'string' && saved.email) return { email: saved.email, sent: saved.sent === true, delivery: codeDeliveryOf(saved.delivery) };
   } catch { /* storage unavailable or malformed: start fresh */ }
   return { email: '', sent: false };
 }
-function writeProgress(email: string, sent: boolean) {
+function writeProgress(email: string, sent: boolean, delivery?: CodeDelivery) {
   try {
-    if (sent) sessionStorage.setItem(progressKey(), JSON.stringify({ email, sent }));
+    if (sent) sessionStorage.setItem(progressKey(), JSON.stringify({ email, sent, delivery }));
     else sessionStorage.removeItem(progressKey());
   } catch { /* storage unavailable */ }
 }
@@ -28,6 +29,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
   const [email, setEmail] = createSignal(saved.email);
   const [code, setCode] = createSignal('');
   const [sent, setSent] = createSignal(saved.sent);
+  const [delivery, setDelivery] = createSignal(saved.delivery);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   createEffect(() => {
@@ -40,7 +42,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
     setBusy(true); setError(null);
     try {
       const response = await apiFetch('/api/auth/email-otp/send-verification-otp', 'POST', { email: email(), type: 'sign-in' });
-      if (response.ok) { setSent(true); setCode(''); writeProgress(email(), true); }
+      if (response.ok) { const mode = codeDeliveryOf(response.headers.get(CODE_DELIVERY_HEADER)); setDelivery(mode); setSent(true); setCode(''); writeProgress(email(), true, mode); }
       else { const body = await response.json().catch(() => ({})); setError(body.error === 'rate_limited' ? 'Too many codes requested. Try again in a bit.' : 'That email address doesn’t look right.'); }
     } catch { setError('Couldn’t reach the server. Try again.'); }
     finally { setBusy(false); }
@@ -50,7 +52,10 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
     try {
       const response = await apiFetch('/api/auth/sign-in/email-otp', 'POST', { email: email(), otp: code() });
       if (!response.ok) {
-        setError(response.status >= 500
+        const body = await response.json().catch(() => null) as { error?: unknown } | null;
+        setError(response.status === 403 && body?.error === 'deployment_admission_required'
+          ? 'This company requires an invitation. Ask its operator to invite this email, confirm company setup, and check the allowed email policy.'
+          : response.status >= 500
           ? 'The server is temporarily unavailable. Your code is still here; try again.'
           : 'That code isn’t right, or it expired. Request a new one.');
         return;
@@ -69,7 +74,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
     <FormPage narrow>
       <h1 class="text-3xl font-semibold tracking-tight text-fg">Log in to artifactbin</h1>
       <Show when={!sent()} fallback={<>
-        <p class="mt-3 text-sm leading-relaxed text-muted">We emailed a code to <span class="text-fg">{email()}</span>. It expires in 10 minutes.</p>
+        <p class="mt-3 text-sm leading-relaxed text-muted">{delivery() === 'email' ? 'We emailed a code to ' : 'A login code was generated for '}<span class="text-fg">{email()}</span>. It expires in 10 minutes.<Show when={delivery() === 'operator_outbox'}> Ask the server operator for the code from the protected local outbox or server output.</Show></p>
         <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void verify(); }}>
           <label for="login-code" class="text-sm font-medium text-fg">Verification code</label>
           <input id="login-code" type="text" autofocus inputMode="numeric" autocomplete="one-time-code" maxLength={6} aria-label="Login code" placeholder="6-digit code" value={code()} onInput={event => setCode(event.currentTarget.value)} class={INPUT} />
@@ -77,7 +82,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
         </form>
         <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted"><button type="button" aria-label="Change email" class="min-h-11 cursor-pointer rounded-md px-1 underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress('', false); }}>Change email</button><button type="button" aria-label="Resend code" class="min-h-11 cursor-pointer rounded-md px-1 underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50" disabled={busy()} onClick={() => void requestCode()}>Resend code</button></div>
       </>}>
-        <p class="mt-3 text-sm leading-relaxed text-muted">We’ll email you a 6-digit code. No password to remember.</p>
+        <p class="mt-3 text-sm leading-relaxed text-muted">Request a 6-digit login code. No password to remember.</p>
         <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void requestCode(); }}>
           <label for="login-email" class="text-sm font-medium text-fg">Email address</label>
           <input id="login-email" type="email" autofocus autocomplete="email" aria-label="Email" placeholder="you@example.com" value={email()} onInput={event => setEmail(event.currentTarget.value)} class={INPUT} />

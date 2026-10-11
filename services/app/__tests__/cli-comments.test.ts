@@ -7,14 +7,41 @@ import { useAppHarness, request } from './harness';
 import { cliWorkspace } from './cli-harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, claimToken } from '@/lib/accounts';
-import { createArtifact, getArtifactFor } from '@/lib/artifacts';
+import { createArtifact, getArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import * as annotations from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as createComment, GET as listComments } from '@/app/api/artifacts/[id]/annotations/route';
 import { DELETE as removeComment, POST as updateComment } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as readArtifact } from '@/app/api/artifacts/[id]/route';
+import {readRecord} from '../../cli/test/tracking';
 
 useAppHarness();
+
+it('private comment creation and reply refusals release the CLI journal without revealing existence',async()=>{
+ const cli=await cliWorkspace('comment-refusal',{env:{}});
+ try{
+  const owner=await mintToken('mxmx_test_comment_refusal_owner');
+  const made=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:owner.token,json:{markup:'<p id="finding">Private finding</p>',visibility:'private'}}));
+  expect(made.status).toBe(201);const artifact=await made.json();
+  const recipient=await createUser({email:'mxmx_test_comment_refusal_viewer@example.com'});
+  await cli.connect('mxmx_test_comment_refusal_viewer',recipient.id);
+  await updateSharingFor({tokenId:owner.id,userId:owner.userId},artifact.id,{shares:[{email:recipient.email!,role:'viewer'}]});
+  for(const id of [artifact.id,'zzzzzz'])for(const reply of [false,true]){
+   const ctx={params:Promise.resolve({id})};
+   let rejected:Response|undefined;
+   const fetcher:typeof fetch=async(input,init)=>{
+    const req=new Request(input,init);
+    if(req.method==='GET')return Response.json({capabilities:{comment_receipts:true}});
+    const response=reply?await updateComment(req,{params:Promise.resolve({id,annId:'ann_missing'})}):await createComment(req,ctx);
+    rejected=response.clone();return response;
+   };
+   const result=await cli.run(['comment',id,...(reply?['--thread','ann_missing']:['--node','finding']),'--body','Refused'],fetcher);
+   expect(result.result.error.code).toBe('not_found');
+   expect(rejected?.status).toBe(404);expect(await rejected?.json()).toEqual({error:'not_found',admission_refused:true});
+   expect(await readRecord(cli.home,cli.root,'pending-operation','current')).toBeNull();
+  }
+ }finally{await cli.cleanup();}
+});
 
 it('creates agent comments by unambiguous quote without editing the document, and refuses ambiguous quotes',async()=>{
  const token=await mintToken('comments');const actor={tokenId:token.id,userId:token.userId};

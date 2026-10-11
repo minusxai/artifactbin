@@ -1,5 +1,5 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
-import {REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
+import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
 import {assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse} from '@artifactbin/utils';
 import {baseUrlOf,mountOAuthRoutes} from './routes/oauth';
@@ -7,6 +7,7 @@ import {say} from './events';
 import {createDevicePairing} from './identity/device-pairing';
 import {createOAuthStore} from './identity/oauth';
 import {readEnv} from './env';
+import {usesDevOutbox} from './mail';
 import {createAgentBrowserSessions} from './auth/agent-browser-session';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
 export interface SessionInfo {userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
@@ -133,6 +134,9 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
         await next();
         if (email && c.res.status >= 200 && c.res.status < 300) {
           void say(o.events, null, 'login_sent', { kind: 'user', id: email }, { email });
+          // Match the runtime mailer's origin policy; do not disclose the protected outbox.
+          const origin = baseUrlOf(c.req.raw, o.trustedHops ?? 0, readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
+          c.res.headers.set(CODE_DELIVERY_HEADER, usesDevOutbox(origin) ? 'operator_outbox' : 'email');
         }
       });
       if (o.sessions.handler) a.all('/api/auth/*', async c => {

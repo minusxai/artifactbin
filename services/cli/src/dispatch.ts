@@ -91,7 +91,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    if(flags.server)throw new CliError('invalid_arguments','Use --config for server settings; --server selects a client destination.');
    const port=flags.port===undefined?undefined:Number(flags.port);
    if(port!==undefined&&(!Number.isInteger(port)||port<1||port>65535))throw new CliError('invalid_arguments','--port must be between 1 and 65535.');
-   return await(context.team??serveTeam)({home,cwd:context.cwd??process.cwd(),...(typeof flags.config==='string'?{config:flags.config}:{}),...(typeof flags.dir==='string'?{directory:flags.dir}:{}),...(typeof flags['db-url']==='string'?{dbUrl:flags['db-url']}:{}),...(port===undefined?{}:{port})});
+   return await(context.team??serveTeam)({home,cwd:context.cwd??process.cwd(),...(typeof flags.config==='string'?{config:flags.config}:{}),...(typeof flags['owner-email']==='string'?{ownerEmail:flags['owner-email']}:{}),...(typeof flags.dir==='string'?{directory:flags.dir}:{}),...(typeof flags['db-url']==='string'?{dbUrl:flags['db-url']}:{}),...(port===undefined?{}:{port})});
   }
   const defaults=await readClientDefaults(home,context.env);
   json=json||defaults.output==='json';

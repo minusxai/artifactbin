@@ -30,8 +30,12 @@ For a deliberate transfer, use the browser’s Transfer ownership action, or aut
 
 ## Company deployment
 
-Run `afbin serve --config server.env` with the normal hosting settings plus `APP__DEPLOYMENT_MODE=company` and `APP__DEPLOYMENT_OWNER_EMAIL=<owner email>`. Admission combines `AUTH__INVITE_ONLY=true|false` with `AUTH__ALLOWED_EMAIL_PATTERNS` (comma-separated email globs, default `*`). An invitation never bypasses the email allowlist. Existing admitted accounts remain admitted when these settings change.
+For a new loopback company, run `afbin serve --dir ./team --owner-email owner@example.com`. This persists private company settings; restart with the same directory. Existing settings are never rewritten by the owner flag. Loopback codes go to the protected operator outbox named at startup, not email. For a shared network host, configure HTTPS, pages DNS/TLS and a complete email or Google/OIDC provider as described in the hosting guide.
+
+Run `afbin serve --config server.env` with the normal hosting settings plus `APP__DEPLOYMENT_MODE=company` and `APP__DEPLOYMENT_OWNER_EMAIL=<owner email>`. Admission combines `AUTH__INVITE_ONLY=true|false` (default `true`) with `AUTH__ALLOWED_EMAIL_PATTERNS` (comma-separated email globs, default `*`). An invitation never bypasses the email allowlist. Existing admitted accounts remain admitted when these settings change.
 
 The designated owner signs in with their verified email, creates or selects an editor group, then explicitly confirms it in deployment setup. No other account can join before confirmation. The default group is stored by the server, never supplied as an environment group ID. If it becomes unavailable, new admissions stop until the owner repairs setup. Existing members can still use Personal.
+
+Invite colleagues to the confirmed company group before they sign in when invite-only is enabled. Document shares do not grant company admission. Group roles are editor (create/edit/manage artifacts) or viewer (read); individual document shares additionally allow commenter (read/comment), while viewer cannot comment and editor can edit/comment.
 
 Copy setup instructions from that deployment or group. Company installers explicitly select that server and, after confirmation, its default group. Each recipient signs in as themselves. A default group is a fallback; an account can explicitly choose Personal or another accessible group.

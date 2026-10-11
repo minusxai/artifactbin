@@ -74,7 +74,7 @@ export const POST = withTokenAuth(async (request, {tokenId, userId, params, clie
   return json(made, 201);
   };
   if(!key)return work();
-  const access=await readableArtifact(actor,params.id);if(!access||!canAnnotate(access.role))return json({error:'not_found'},404);
+  const access=await readableArtifact(actor,params.id);if(!access||!canAnnotate(access.role))return json({error:'not_found',admission_refused:true},404);
   const result=await durableMutation(actor,request.url,key,{operation:'create_comment',id:params.id,body},async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};});
   const terminal=!['operation_pending','outcome_unknown','idempotency_mismatch','invalid_idempotency_key'].includes(String(result.body.error));
   return json(result.body,result.status,terminal?{'X-Artifactbin-Mutation-Receipt':key}:{});

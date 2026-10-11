@@ -155,3 +155,17 @@ describe('the configuration that decides it', () => {
     expect(codes.filter((c) => c === 429), 'nobody may be refused for someone else\'s attempt').toEqual([]);
   }, 60_000);
 });
+
+for(const [origin,delivery] of [['http://app.lvh.me:8401','operator_outbox'],['https://app.example.com','email']] as const)it('reports successful code delivery from configured runtime: '+delivery,async()=>{
+ const app=await proxy({APP__PUBLIC_BASE_URL:origin});const response=await send(app);
+ expect(response.status).toBe(200);expect(response.headers.get('x-artifactbin-code-delivery')).toBe(delivery);
+ expect(await response.json()).toEqual({success:true});expect(response.headers.get('set-cookie')).toBeNull();
+});
+
+for(const status of [201,400])it('delivery hint preserves handler status, body and cookies: '+status,async()=>{
+ const options=await testAuthOptions({env:{APP__PUBLIC_BASE_URL:'http://app.lvh.me:8401'},sessions:{resolve:async()=>null,handler:async()=>new Response('original handler body',{status,headers:{'content-type':'text/plain','set-cookie':'fixture=unchanged; Path=/','x-handler':'kept'}})}});
+ const response=await send(assemble(authParts(options)));
+ expect(response.status).toBe(status);expect(await response.text()).toBe('original handler body');
+ expect(response.headers.get('x-handler')).toBe('kept');expect(response.headers.getSetCookie()).toEqual(['fixture=unchanged; Path=/']);
+ expect(response.headers.get('x-artifactbin-code-delivery')).toBe(status<300?'operator_outbox':null);
+});
