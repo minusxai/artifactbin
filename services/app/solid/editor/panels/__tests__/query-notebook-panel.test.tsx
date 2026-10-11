@@ -69,6 +69,25 @@ describe('reading the cells', () => {
   });
 });
 
+describe('the query index', () => {
+  it('lists each query with its row count and marks the one jumped to', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    panel([cell({ result: { rows: ROWS, columns: COLUMNS } }), cell({ name: 'costs', sql: 'select 1' })]);
+    const index = within(screen.getByRole('navigation', { name: 'Data index' }));
+    expect(index.getByRole('button', { name: /sales\s*12/ })).not.toHaveAttribute('aria-current');
+    fireEvent.click(index.getByRole('button', { name: /costs/ }));
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(index.getByRole('button', { name: /costs/ })).toHaveAttribute('aria-current', 'true');
+    expect(index.getByRole('button', { name: /sales/ })).not.toHaveAttribute('aria-current');
+  });
+
+  it('announces an engine error as an alert inside the cell', () => {
+    panel([cell({ error: 'relation "nothing" does not exist' })]);
+    expect(within(screen.getByLabelText('Query $sales error')).getByRole('alert').textContent).toContain('does not exist');
+  });
+});
+
 describe('what a cell powers', () => {
   const BOUND = [
     { tag: 'Question', label: 'Revenue by region', path: '0.1' },
