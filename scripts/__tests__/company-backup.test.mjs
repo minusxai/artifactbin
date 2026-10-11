@@ -29,11 +29,13 @@ function configuration(directory,withPackage){
 }
 it('backup includes the exact local package needed to rebuild on another host',()=>fixture((root,env)=>{
  const first=join(root,'first'),snapshot=join(root,'snapshot');configuration(first,true);
- copyFileSync(new URL('backup.sh',bundle),join(first,'backup.sh'));
+ for(const name of ['backup.sh','restore.sh'])copyFileSync(new URL(name,bundle),join(first,name));
  execFileSync('sh',['backup.sh',snapshot],{cwd:first,env});
  const unpack=join(root,'unpack');mkdirSync(unpack);
  execFileSync('tar',['-xzf',join(snapshot,'configuration.tar.gz'),'-C',unpack]);
  expect(readFileSync(join(unpack,'packages/afbin.tgz'),'utf8')).toBe('exact package');
+ expect(readFileSync(join(unpack,'backup.sh'),'utf8')).toBe(readFileSync(new URL('backup.sh',bundle),'utf8'));
+ expect(readFileSync(join(unpack,'restore.sh'),'utf8')).toBe(readFileSync(new URL('restore.sh',bundle),'utf8'));
 }));
 it('older registry-backed snapshots restore with only the restore script in a fresh directory',()=>fixture((root,env)=>{
  const first=join(root,'first'),snapshot=join(root,'snapshot'),restored=join(root,'restored');configuration(first,false);
