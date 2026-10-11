@@ -493,10 +493,11 @@ if (!lsDataset.id || !lsDoc.id) throw new Error(`fixture publish failed: ${JSON.
       await editor.getByLabel('Add insert check condition', { exact: true }).click();
       await editor.getByLabel('insert check.1.1 value', { exact: true }).fill('"blocked"');
       await editor.getByLabel('Add insert check condition', { exact: true }).click();
-      await editor.getByLabel('insert check.2.1 operator', { exact: true }).selectOption('_neq');
+      await editor.getByLabel('insert check.2.1 operator', { exact: true }).click();
+      await editor.getByRole('option', { name: 'does not equal', exact: true }).click();
       await editor.getByLabel('insert check.2.1 value', { exact: true }).fill('"blocked"');
       await editor.getByLabel('Remove insert check.1.1 condition', { exact: true }).click();
-      assert.equal(await editor.getByLabel('insert check.1.1 operator', { exact: true }).inputValue(), '_neq');
+      assert.match(await editor.getByLabel('insert check.1.1 operator', { exact: true }).innerText(), /does not equal/);
       await editor.getByRole('button', { name: 'Save access policies', exact: true }).click();
       await editor.getByText('Access policies saved.', { exact: true }).waitFor();
     });
@@ -560,7 +561,7 @@ if (!lsDataset.id || !lsDoc.id) throw new Error(`fixture publish failed: ${JSON.
     check(changed.status === 200, 'a stored row mutation succeeds');
     if (!changed.ok) throw new Error(`Mutate rows: ${changed.status} ${await changed.text()}`);
     await p.getByLabel('Table preview', { exact: true }).getByText('125', { exact: true }).waitFor();
-    check((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'rows', 'live rows refresh without navigating or losing table selection');
+    check((await p.getByLabel('Dataset table', { exact: true }).innerText()).trim() === 'rows', 'live rows refresh without navigating or losing table selection');
 
     // The whole seam: uploaded values reach a real Vega scale (a text `revenue` column draws and is wrong).
     {
