@@ -10,6 +10,7 @@ import { DatasetPolicies } from "../datasets/DatasetPolicies";
 import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js";
 import { Navigate, useParams } from "@solidjs/router";
 import { ChevronDown, ChevronRight, Plus, Play, Code2 } from "lucide-solid";
+import { Disclosure } from "../ui/Disclosure";
 import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
 import { Field, Input, Textarea } from "../ui/Field";
@@ -787,12 +788,10 @@ export function DatasetEditorPage({
                 <DatasetPolicies artifactId={id} expanded saveTarget={policySaveTarget()} />
               </div>}
             <div hidden={section() !== "source"} class="mx-auto mt-6 max-w-4xl space-y-6">
-              <Panel padding="none" class="overflow-hidden"><details class="group">
-                <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-3 sm:px-5 [&::-webkit-details-marker]:hidden">
-                  <ChevronRight size={14} class="text-muted transition-transform group-open:rotate-90" />
+              <Panel padding="none" class="overflow-hidden"><Disclosure inset summary={<>
                   <span class="text-sm font-semibold text-fg">Advanced</span>
-                  <span class="text-xs text-muted">default schema · result cache · source markup</span>
-                </summary>
+                  <span class="text-xs font-normal text-muted">default schema · result cache · source markup</span>
+                </>}>
                 <div class="space-y-5 border-t border-edge p-4 sm:p-5">
                   <fieldset disabled={Boolean(busy()) || sourceText() !== null} class="grid gap-4 sm:grid-cols-2">
                   <Field label="Default schema" hint="Assumed when a table is named without a schema, in notebook SQL and in agent edits. Fixed once the dataset is created.">
@@ -842,7 +841,7 @@ export function DatasetEditorPage({
                   </div>}
               </section>
                 </div>
-              </details></Panel>
+              </Disclosure></Panel>
               {!id && <div class="flex items-center gap-4">
                 <Button aria-label="Save dataset" disabled={!title().trim() || Boolean(busy()) || sourceText() !== null} onClick={saveDataset}>
                   {busy() === "save" ? "Saving…" : "Create dataset"}

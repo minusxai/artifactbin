@@ -3,17 +3,22 @@ import { createSignal, onCleanup, Show } from 'solid-js';
 import Download from 'lucide-solid/icons/download';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { consumeInstall, currentInstall, subscribeInstall } from '@/lib/serving/pwa-install';
+import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
-/** Native discovery needs a full document navigation, not a client route transition. */
-export function InstallArtifactLink(props: { id: string; class?: string; beforeNavigate?: () => Promise<boolean> }) {
+/**
+ * Native discovery needs a full document navigation, not a client route transition. `look="row"` is a row of the
+ * controls panel (a ghost `sm` Button, lower-case); the default is a text link with its icon (the PWA settings).
+ */
+export function InstallArtifactLink(props: { id: string; look?: 'row' | 'link'; beforeNavigate?: () => Promise<boolean> }) {
   const installed = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone;
-  return <Show when={!installed}><a href={`${artifactAppPath(props.id)}?install=1`} target="_self" aria-label="Install app" onClick={event => {
+  const row = () => props.look === 'row';
+  return <Show when={!installed}><Button href={`${artifactAppPath(props.id)}?install=1`} target="_self" aria-label="Install app" onClick={(event: MouseEvent) => {
     if (!props.beforeNavigate) return;
     event.preventDefault();
-    const href = event.currentTarget.href;
+    const href = (event.currentTarget as HTMLAnchorElement).href;
     void props.beforeNavigate().then(ok => { if (ok) window.location.assign(href); });
-  }} class={props.class}><Download size={14} />Install app</a></Show>;
+  }} variant={row() ? 'ghost' : 'link'} size="sm" class={row() ? 'w-full justify-start' : ''}><Download size={14} />{row() ? 'install app' : 'Install app'}</Button></Show>;
 }
 
 export function InstallArtifact(props: { id: string; title: string }) {

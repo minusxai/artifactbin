@@ -89,7 +89,7 @@ export function MoveToFolderDialog(props: {
   };
   return <Dialog title={`Move ${props.title}`} description="Choose a destination folder." size="md" busy={busy()} onClose={props.onClose} lockScroll
     footer={<><Button variant="secondary" aria-label="Close folder picker" disabled={busy()} onClick={props.onClose}>Cancel</Button><Button disabled={busy() || blocked(selected()) || selected() === props.currentParentId} onClick={() => void move()}>{busy() ? 'Moving…' : 'Move here'}</Button></>}>
-    <SearchField label="Filter folders" placeholder="Find a folder…" disabled={busy()} value={query()} onValue={setQuery} />
+    <SearchField label="Filter folders" placeholder="find a folder…" disabled={busy()} value={query()} onValue={setQuery} />
     <div class="mt-3 max-h-72 min-h-48 overflow-y-auto">
       <div role="tree" aria-label="Destination folders" aria-busy={busy()}><For each={visible()}>{node => <div role="treeitem" aria-label={node.id === null ? 'Move to root' : `Move to ${node.name}`}
         aria-level={ancestors(node.id).length + 1} aria-selected={selected() === node.id} aria-expanded={node.children.length ? isExpanded(node.id) : undefined} aria-disabled={blocked(node.id) || busy()}

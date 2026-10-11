@@ -270,3 +270,44 @@ it('draws a tri-state Checkbox: indeterminate is mixed until it is set', () => {
   expect(box.indeterminate).toBe(false);
   expect(box).toBeChecked();
 });
+
+it('marks the current page link with aria-current (not aria-pressed) and the pressed look', () => {
+  render(() => <>
+    <Button variant="ghost" size="sm" href="/account" current>Account</Button>
+    <Button variant="ghost" size="sm" href="/assets" current={false}>Assets</Button>
+  </>);
+  const here = screen.getByRole('link', { name: 'Account' });
+  expect(here).toHaveAttribute('aria-current', 'page');
+  expect(here).not.toHaveAttribute('aria-pressed');
+  expect(here.className).toContain('bg-accent-soft');
+  const there = screen.getByRole('link', { name: 'Assets' });
+  expect(there).not.toHaveAttribute('aria-current');
+  expect(there).not.toHaveAttribute('aria-pressed');
+  expect(there.className).not.toContain('bg-accent-soft');
+});
+
+it('draws a tile Button around auto-height content: no control height or padding, content stretched', () => {
+  render(() => <Button shape="tile" pressed aria-label="Design system Nocturne"><span>specimen</span></Button>);
+  const tile = screen.getByRole('button', { name: 'Design system Nocturne' });
+  expect(tile).toHaveAttribute('aria-pressed', 'true');
+  for (const token of ['h-auto', 'p-0', 'flex-col', 'items-stretch', 'rounded-chip', 'bg-accent-soft']) expect(tile.className).toContain(token);
+  for (const token of ['h-control', 'whitespace-nowrap', 'items-center']) expect(tile.className.split(/\s+/)).not.toContain(token);
+});
+
+it('draws a code-surface Textarea without the field border, radius or minimum height', () => {
+  render(() => <><Textarea surface="code" aria-label="Markup source" /><Textarea aria-label="Notes" /></>);
+  const code = screen.getByRole('textbox', { name: 'Markup source' }).className.split(/\s+/);
+  for (const token of ['border-0', 'rounded-none', 'bg-transparent', 'resize-none']) expect(code).toContain(token);
+  for (const token of ['border-edge-bright', 'bg-surface', 'min-h-16', 'min-h-24']) expect(code).not.toContain(token);
+  expect(screen.getByRole('textbox', { name: 'Notes' }).className).toContain('border-edge-bright');
+});
+
+it('draws a SearchField as a list filter by default: chrome density with the label, lower-cased, as its placeholder', () => {
+  render(() => <><SearchField label="Search people" value="" onValue={() => {}} /><Field label="Find"><SearchField size="md" value="" onValue={() => {}} /></Field></>);
+  const filter = screen.getByRole('searchbox', { name: 'Search people' });
+  expect(filter).toHaveAttribute('placeholder', 'search people');
+  for (const token of ['h-control-sm', 'font-mono', 'text-xs']) expect(filter.className.split(/\s+/)).toContain(token);
+  const form = screen.getByRole('searchbox', { name: 'Find' });
+  expect(form.className.split(/\s+/)).toContain('h-control');
+  expect(form).toHaveAttribute('placeholder', 'find');
+});

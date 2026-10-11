@@ -43,6 +43,7 @@ const OFFENDERS = {
   'native-select': '<select aria-label="Role"><option>a</option></select>',
   'popup-role': '<div role="menu">x</div>',
   overlay: '<div class="fixed inset-0 bg-surface" />',
+  'native-disclosure': '<details open><summary>DNS records</summary><p>x</p></details>',
   'native-title': '<span title="hint">x</span>',
   'styled-button': '<button type="button"\n  class="rounded px-2">Go</button>',
   'styled-field': '<input type="email" class="border" />',
@@ -74,6 +75,34 @@ describe('UI-primitive guard', () => {
     const outside = run(repository({ 'services/app/solid/pages/Page.tsx': text }));
     expect(outside.status).toBe(1);
     expect(outside.output).toContain(rule);
+  });
+
+  it.each([
+    ['a control-styled link row', '<a href="/schedules" class="flex min-h-control-sm w-full items-center rounded-control px-2.5 hover:bg-raised">Schedule</a>'],
+    ['a rounded link with a hover fill', '<a href={href()} download="" class="flex w-full items-center gap-2 rounded px-2 py-2 text-muted hover:bg-raised">x</a>'],
+    ['a link drawn as a secondary button', '<a href="/x" onClick={() => go()} class="block rounded-lg border border-edge px-3 py-2 hover:border-accent">x</a>'],
+    ['a control-look class constant', "const ROW = 'flex min-h-control-sm w-full items-center gap-2 rounded-control px-2.5 text-left';"],
+    ['an exported control-look constant without a hover', "export const MENU_ROW = 'flex w-full items-center rounded-control px-3 py-3 font-mono text-sm';"],
+    ['a template control-look constant', 'const RAIL_LINK = `flex h-control-sm items-center rounded-control px-2.5 hover:bg-raised`;'],
+  ])('refuses %s outside solid/ui (link-control) and allows it inside', (_, text) => {
+    const outside = run(repository({ 'services/app/solid/pages/Page.tsx': text }));
+    expect(outside.status).toBe(1);
+    expect(outside.output).toContain('link-control');
+    // Inside ui the look is the library's own (an exported constant there is control-constant's concern, not this rule's).
+    expect(run(repository({ 'services/app/solid/ui/Thing.tsx': text })).output).not.toContain('link-control');
+  });
+
+  it('leaves text links, surfaces and inline code styles alone (link-control)', () => {
+    const clean = [
+      "import { LINK } from '../ui/ui';",
+      '<a href="/notifications" class={LINK}>All</a><a href="/x" class="text-accent no-underline hover:underline underline-offset-4">x</a>',
+      '<a href="/@ada" class="rounded-chip underline-offset-4 hover:text-accent hover:underline">ada</a>',
+      '<a href={url} class="flex items-center justify-between gap-4 border-b border-edge px-3 py-4 hover:bg-raised">row</a>',
+      '<div class="rounded-control bg-raised p-3 font-mono text-xs">code</div>',
+      "const CODE_CLASS = 'break-all rounded-chip bg-raised px-1 py-0.5 font-mono text-fg';",
+      "const SECTION = 'font-sans text-lg font-semibold';",
+    ].join('\n');
+    expect(run(repository({ 'services/app/solid/pages/Page.tsx': clean })).status).toBe(0);
   });
 
   it('does not run a tag scan past a comparison, nor count an iframe title (its accessible name)', () => {

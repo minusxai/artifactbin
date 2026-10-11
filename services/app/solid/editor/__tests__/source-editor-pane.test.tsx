@@ -22,7 +22,8 @@ it('previews the current draft without emitting edits or replacing the editable 
     return <SourceEditorPane value={value()} revision={0} onChange={(text) => { setValue(text); save(text); }} />;
   }
   render(() => <Harness />);
-  await waitFor(() => expect(screen.getByLabelText('Markup source')).not.toHaveClass('min-h-0'));
+  // The rich editor (mocked) has replaced the plain stand-in, whose status line says it is still loading.
+  await waitFor(() => expect(screen.queryByText('Loading rich editor… You can keep editing.')).toBeNull());
   const editor = screen.getByLabelText('Markup source');
   const draft = '<section><p>Unsaved draft</p><p>Another line</p></section>';
   fireEvent.input(editor, { target: { value: draft } });

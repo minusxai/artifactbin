@@ -60,10 +60,9 @@ export function LinkCard(props: {
     <Panel padding="none" class="flex flex-wrap items-center gap-1 p-1 font-sans text-xs text-fg shadow-lg">
       <Show when={props.editing} fallback={
         <>
-          <a href={props.href ?? '#'} target="_blank" rel="noopener noreferrer" onMouseDown={keepFocus}
-            class="inline-flex min-w-0 max-w-56 items-center gap-1.5 truncate rounded-chip px-1.5 py-1 text-accent hover:bg-raised">
-            <ExternalLink size={12} class="shrink-0" /><span class="truncate">{props.href}</span>
-          </a>
+          <Button variant="link" href={props.href ?? '#'} target="_blank" rel="noopener noreferrer" onMouseDown={keepFocus} class="mx-1.5 min-w-0 max-w-56 shrink gap-1.5 text-xs">
+            <ExternalLink size={12} class="shrink-0" /><span class="min-w-0 truncate">{props.href}</span>
+          </Button>
           <Tooltip content="Edit link (⌘K)">
             <Button variant="ghost" size="sm" icon aria-label="Edit link" onMouseDown={keepFocus} onClick={() => props.onEdit()}><Pencil size={13} /></Button>
           </Tooltip>

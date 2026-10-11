@@ -43,13 +43,13 @@ export function CustomDomainPaths(props: {
   };
   const eligible = () => props.documents.some(document => document.id === artifactId());
   return <section aria-labelledby="domain-paths-heading" class="mt-5 border-t border-edge pt-4">
-    <div class="flex flex-wrap items-center justify-between gap-2"><h3 id="domain-paths-heading" class="text-sm font-medium">Custom paths</h3><Button type="button" variant="secondary" size="sm" aria-label="Add custom path" disabled={props.busy || editing() || props.paths.length >= 50} onClick={() => open()}>Add path</Button></div>
+    <div class="flex flex-wrap items-center justify-between gap-2"><h3 id="domain-paths-heading" class="text-sm font-medium">Custom paths</h3><Button type="button" variant="secondary" aria-label="Add custom path" disabled={props.busy || editing() || props.paths.length >= 50} onClick={() => open()}>Add path</Button></div>
     <p class="mt-1 text-xs leading-relaxed text-muted">Give a public document a URL like /about or /guides/start. Existing document links keep working.</p>
     <Show when={props.paths.length > 0} fallback={<Show when={!editing()}><p class="mt-3 text-xs text-faint">No custom paths yet.</p></Show>}>
       <ul aria-label="Custom path mappings" class="mt-3 max-h-64 overflow-y-auto">
         <For each={props.paths}>{mapping => <ListRow>
           <div class="min-w-0 flex-1"><a href={`https://${props.hostname}${mapping.path}`} target="_blank" rel="noopener noreferrer" class="break-all font-mono text-sm text-accent hover:underline">{mapping.path}</a><p class="mt-1 truncate text-xs text-muted">{props.documents.find(document => document.id === mapping.artifactId)?.title || 'Document unavailable — this URL returns not found'}</p></div>
-          <div class="flex shrink-0 gap-2"><Button type="button" variant="secondary" size="sm" aria-label={`Edit path ${mapping.path}`} disabled={props.busy} onClick={() => open(mapping)}>Edit</Button><Button type="button" variant="danger" size="sm" aria-label={`Remove path ${mapping.path}`} disabled={props.busy} onClick={() => void save(mapping)}>Remove</Button></div>
+          <div class="flex shrink-0 gap-2"><Button type="button" variant="secondary" aria-label={`Edit path ${mapping.path}`} disabled={props.busy} onClick={() => open(mapping)}>Edit</Button><Button type="button" variant="danger" aria-label={`Remove path ${mapping.path}`} disabled={props.busy} onClick={() => void save(mapping)}>Remove</Button></div>
         </ListRow>}</For>
       </ul>
     </Show>

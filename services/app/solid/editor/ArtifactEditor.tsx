@@ -59,7 +59,7 @@ export default function ArtifactEditor(props: ArtifactEditorProps): JSX.Element 
         </Panel>
         <div class="mt-4 flex items-center justify-between font-mono text-xs">
           <Button variant="secondary" size="sm" aria-label="View this document without editing" onClick={() => props.onExit()}>view this document</Button>
-          <a href="/" aria-label="Go home" class="inline-flex h-control-sm items-center gap-1.5 rounded-control border border-edge-bright px-2.5 text-muted no-underline hover:border-accent hover:text-fg"><House size={12} /> go home</a>
+          <Button variant="secondary" size="sm" href="/" aria-label="Go home"><House size={12} />go home</Button>
         </div>
       </main>
     }>

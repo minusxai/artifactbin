@@ -57,7 +57,7 @@ export function AssetsPage(): JSX.Element {
         <div aria-busy={page.pending()}>
         <Show when={page.error()}><Button variant="secondary" size="sm" class="m-3" aria-label="Retry assets" onClick={() => void page.refresh(true)}>Could not refresh assets. Retry</Button></Show>
         <div class="flex flex-wrap items-center gap-2 border-b border-edge bg-raised/30 px-4 py-3">
-          <SearchField size="sm" label="Search assets" placeholder="search assets" value={selected().query} onValue={(query) => setSelection((current) => ({ ...current, query, page: 0 }))} class="min-w-32 flex-1" />
+          <SearchField label="Search assets" value={selected().query} onValue={(query) => setSelection((current) => ({ ...current, query, page: 0 }))} class="min-w-32 flex-1" />
           <Show when={(data()?.formats.length ?? 0) >= 2}><For each={data()?.formats ?? []}>{(format) => <Button size="sm" variant="ghost" aria-label={`Filter ${format}`} pressed={selected().formats.includes(format)} onClick={() => toggle('formats', format)}>{format}</Button>}</For></Show>
           <Show when={(data()?.visibilities.length ?? 0) >= 2}><For each={data()?.visibilities ?? []}>{(visibility) => <Button size="sm" variant="ghost" aria-label={`Filter ${visibility}`} pressed={selected().visibilities.includes(visibility)} onClick={() => toggle('visibilities', visibility)}>{visibility}</Button>}</For></Show>
         </div>

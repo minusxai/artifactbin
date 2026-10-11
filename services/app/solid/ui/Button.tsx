@@ -9,6 +9,12 @@
  * link takes them. A disabled link drops its href and says `aria-disabled`, since an anchor cannot be disabled.
  * With `pressed` it is a toggle (a filter chip, a view switch): `aria-pressed`, unpressed drawn as `secondary`
  * (or `ghost`), pressed tinted with the accent (or the caution colour for `variant="caution"`).
+ * A link takes `current` instead when it names the page being shown (a navigation row): `aria-current="page"`,
+ * drawn like a pressed toggle — `aria-pressed` would make a link announce itself as a toggle button.
+ *
+ * `shape="tile"` is a Button around auto-height content (a thumbnail, a specimen card): no control height or
+ * padding, its content stretched to the full width, the radius of a chip; the variant's colours still apply
+ * (a pressed tile is the accent's). Text controls never take it.
  */
 import { splitProps, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
@@ -28,21 +34,25 @@ const PRESSED = {
 } as const;
 
 type ButtonVariant = keyof typeof VARIANT;
-type Look = { variant?: ButtonVariant; size?: ButtonSize; class?: string; pressed?: boolean | 'mixed' };
+type Look = { variant?: ButtonVariant; size?: ButtonSize; class?: string; pressed?: boolean | 'mixed'; shape?: 'tile' };
 type Square = { icon?: false } | { icon: true; 'aria-label': string };
 type NativeButton = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, 'class'> & { href?: undefined };
 type LinkProps = NativeLink & Look & Square;
 type ButtonProps = NativeButton & Look & Square;
-type NativeLink = Omit<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, 'class' | 'href'> & { href: string; disabled?: boolean };
+type NativeLink = Omit<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, 'class' | 'href'> & { href: string; disabled?: boolean; current?: boolean };
 
 /** The class string of a Button of this look. */
-function buttonClass(look: { variant?: ButtonVariant; size?: ButtonSize; icon?: boolean; pressed?: boolean | 'mixed'; class?: string }): string {
+/** A tile's geometry: auto height, no padding, its content stretched across (flex column, items stretched). */
+const TILE = 'h-auto min-w-0 flex-col items-stretch overflow-hidden rounded-chip p-0 text-left';
+const ROW = 'items-center justify-center gap-2 whitespace-nowrap';
+
+function buttonClass(look: { variant?: ButtonVariant; size?: ButtonSize; icon?: boolean; pressed?: boolean | 'mixed'; shape?: 'tile'; class?: string }): string {
   const variant = look.variant ?? (look.pressed === undefined ? 'primary' : 'secondary');
-  const geometry = variant === 'link' ? 'h-auto px-0 font-sans text-sm' : (look.icon ? ICON_SIZE : CONTROL_SIZE)[look.size ?? 'md'];
+  const geometry = look.shape === 'tile' ? TILE : `${ROW} ${variant === 'link' ? 'h-auto px-0 font-sans text-sm' : (look.icon ? ICON_SIZE : CONTROL_SIZE)[look.size ?? 'md']}`;
   const tone = look.pressed === undefined ? VARIANT[variant]
     : look.pressed ? PRESSED[variant === 'caution' ? 'caution' : 'accent']
       : VARIANT[variant === 'ghost' ? 'ghost' : 'secondary'];
-  return `inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap no-underline transition-colors ${geometry} ${tone} ${FOCUS_RING} ${DISABLED} aria-disabled:cursor-not-allowed aria-disabled:opacity-50 ${look.class ?? ''}`;
+  return `inline-flex shrink-0 cursor-pointer no-underline transition-colors ${geometry} ${tone} ${FOCUS_RING} ${DISABLED} aria-disabled:cursor-not-allowed aria-disabled:opacity-50 ${look.class ?? ''}`;
 }
 
 // Two signatures, not one union: a union of the two would defeat TypeScript's check of a spread `icon`
@@ -50,12 +60,15 @@ function buttonClass(look: { variant?: ButtonVariant; size?: ButtonSize; icon?: 
 export function Button(props: LinkProps): JSX.Element;
 export function Button(props: ButtonProps): JSX.Element;
 export function Button(props: LinkProps | ButtonProps): JSX.Element {
-  const [own, native] = splitProps(props as ButtonProps & { href?: string; disabled?: boolean }, ['variant', 'size', 'icon', 'class', 'pressed', 'href', 'disabled']);
+  const [own, native] = splitProps(props as ButtonProps & { href?: string; disabled?: boolean; current?: boolean }, ['variant', 'size', 'icon', 'class', 'pressed', 'shape', 'href', 'disabled', 'current']);
   const link = () => own.href !== undefined;
+  // A current link is drawn as a pressed one, but says aria-current, not aria-pressed.
+  const look = () => (link() && own.current !== undefined ? { ...own, pressed: own.current } : own);
   return <Dynamic component={link() ? 'a' : 'button'} {...native}
     href={link() && !own.disabled ? own.href : undefined}
     disabled={link() ? undefined : own.disabled}
     aria-disabled={link() && own.disabled ? 'true' : undefined}
-    aria-pressed={own.pressed}
-    class={buttonClass(own)} />;
+    aria-pressed={link() && own.current !== undefined ? undefined : own.pressed}
+    aria-current={link() && own.current ? 'page' : undefined}
+    class={buttonClass(look())} />;
 }

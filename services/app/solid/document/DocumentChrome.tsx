@@ -66,8 +66,6 @@ interface DocumentChromeProps {
   controls: (close: () => void) => JSX.Element;
 }
 
-/** The Install link is a link (it navigates to the app), drawn like the rail's ghost `sm` buttons. */
-const RAIL_LINK = 'flex h-control-sm min-w-control-sm items-center justify-center gap-1 rounded-control px-2.5 font-mono text-xs text-muted no-underline transition-colors hover:bg-raised hover:text-fg';
 
 function SharingGlyph(props: { visibility: Visibility; invited: boolean }): JSX.Element {
   const nodes = () => VISIBILITY_ICON_NODES[sharingIconFor({ visibility: props.visibility, hasInvitedUsers: props.invited })];
@@ -136,7 +134,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
         <span class="hidden sm:contents"><Tooltip content="Fork artifact"><Button variant="ghost" size="sm" icon aria-label="Fork artifact" onClick={() => props.onFork()}><GitFork size={18} stroke-width={1.5} /></Button></Tooltip></span>
       </Show>
       <Show when={props.install}>
-        <Tooltip content="Install app"><a class={`${RAIL_LINK} hidden sm:flex`} href={`${artifactAppPath(props.id)}?install=1`} aria-label="Install app"><Download size={18} stroke-width={1.5} /></a></Tooltip>
+        <span class="hidden sm:contents"><Tooltip content="Install app"><Button variant="ghost" size="sm" icon href={`${artifactAppPath(props.id)}?install=1`} aria-label="Install app"><Download size={18} stroke-width={1.5} /></Button></Tooltip></span>
       </Show>
     </Show>
     <Show when={props.canEdit && !props.archived}>

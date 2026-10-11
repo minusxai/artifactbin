@@ -2,6 +2,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DatasetAccessPolicy, DatasetGrantSelector, DatasetOperation } from '@artifactbin/contracts';
 import { rowTitle } from '@/lib/document/display-title';
+import { Disclosure } from '../ui/Disclosure';
 import { SectionHeading } from '../ui/PageHeader';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
@@ -55,10 +56,9 @@ function SavedActions(props: {id: string}): JSX.Element {
           <Show when={policy().tables?.length === 0}><p class="text-muted">No table writes are allowed.</p></Show>
           <For each={policy().tables}>{table => <Panel padding="sm" class="space-y-3">
             <h4 class="font-mono font-semibold">{table.table.schema}.{table.table.name}</h4>
-            <For each={operations}>{operation => <For each={table[`${operation}_permissions`]} fallback={<p class="text-muted">{operation}: not allowed</p>}>{entry => <details>
-              <summary class="cursor-pointer font-medium">{operation} · {entry.role}</summary>
+            <For each={operations}>{operation => <For each={table[`${operation}_permissions`]} fallback={<p class="text-muted">{operation}: not allowed</p>}>{entry => <Disclosure summary={`${operation} · ${entry.role}`}>
               <pre class="mt-2 overflow-x-auto rounded-control bg-raised p-3 font-mono text-xs">{JSON.stringify(entry.permission, null, 2)}</pre>
-            </details>}</For>}</For>
+            </Disclosure>}</For>}</For>
           </Panel>}</For>
         </section>
         <section><h3 class="font-semibold">Blocked functions</h3><p class="mt-1 text-muted">{policy().execution?.functions?.deny?.join(', ') || 'None'}</p></section>

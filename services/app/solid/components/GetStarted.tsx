@@ -4,6 +4,7 @@ import {buildSetupInstructions} from '@/lib/platform/setup-instructions';
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { DEFAULT_SERVER, type ArtifactDestination } from '@artifactbin/contracts';
+import { Disclosure } from '../ui/Disclosure';
 import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon, PiIcon } from '../ui/brand-icons';
 import { CopyBlock } from '../ui/CopyBlock';
 import { AgentLink } from './AgentLink';
@@ -32,7 +33,7 @@ export default function GetStarted(props: { heading?: boolean; frame?: boolean; 
   const content = <>
     <Show when={props.heading !== false}><div class="mb-4 flex items-baseline justify-between gap-3"><h2 class="font-mono text-2xs tracking-[0.14em] text-muted uppercase">get started</h2><a href="/getting-started" class={`font-mono text-2xs ${LINK}`}>full guide →</a></div></Show>
     <Step n={1} title={install().title}>
-      <Show when={windows()} fallback={<>{unix}<details class="mt-3"><summary class="cursor-pointer text-xs text-muted hover:text-fg">See Windows instructions</summary>{windowsInstructions}</details></>}>
+      <Show when={windows()} fallback={<>{unix}<Disclosure size="sm" class="mt-3" summary="See Windows instructions">{windowsInstructions}</Disclosure></>}>
         {windowsInstructions}<p class="mt-3 text-xs text-muted">macOS / Linux</p>{unix}
       </Show>
       <p class="mt-2 text-xs text-muted">{install().blocks[0]!.text}</p>

@@ -8,6 +8,7 @@ import type { SharingVerdict } from '@/lib/workspace/visibility-icons';
 import { Tooltip } from '../ui/Tooltip';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
+import { SectionHeading } from '../ui/PageHeader';
 import { ToggleGroup } from '../ui/ToggleGroup';
 import { Input } from '../ui/Field';
 import { StatusMessage } from '../ui/StatusMessage';
@@ -27,6 +28,8 @@ import { apiFetch } from '../lib/api';
 const Select = lazy(() => import('../ui/Select').then((m) => ({ default: m.Select })));
 
 const ROLE_OPTIONS = SHARE_ROLES.map((role) => ({ value: role, label: SHARE_ROLE_LABEL[role] }));
+/** What the sharing surface is for: the Share dialog's description and the editor's Sharing tab say the same. */
+const SHARING_DESCRIPTION = 'Manage access, invite people, or copy the link.';
 const VISIBILITY_TIPS = { public: 'anyone with the link · listed on your profile', unlisted: 'anyone with the link · not listed anywhere', private: 'only you and invited emails' } as const;
 
 /** The sharing verdict's icon, from the same nodes the served rail draws (lib/visibility-icons). */
@@ -197,12 +200,17 @@ export function DocumentSharing(props: {
           <Button type="submit" variant="secondary" size="sm" aria-label="Add email">Add</Button>
         </form>
       </div>
-      <Show when={props.format === 'dataset' && !postgres()}><a aria-label="Manage access policies" onClick={event => { close(); if (props.onDataActions) { event.preventDefault(); props.onDataActions(); } }} href={artifactEditPath(props.id)} class="mt-4 block rounded-lg border border-edge px-3 py-2 text-sm text-muted hover:border-accent hover:text-fg">Manage data actions ↗</a></Show>
+      <Show when={props.format === 'dataset' && !postgres()}><Button variant="secondary" size="sm" aria-label="Manage access policies" onClick={(event: MouseEvent) => { close(); if (props.onDataActions) { event.preventDefault(); props.onDataActions(); } }} href={artifactEditPath(props.id)} class="mt-4 w-full justify-start">manage data actions ↗</Button></Show>
     </>}</Show>
   </>;
   const heading = () => `Share “${props.title || (props.format === 'folder' ? 'Untitled folder' : 'Untitled')}”`;
   const verdict = () => sharingIconFor({ visibility: state()?.visibility ?? 'private', hasInvitedUsers: (state()?.shares.length ?? 0) > 0 });
-  if (props.variant === 'embedded') return <section aria-label="Sharing" class="font-mono text-xs"><h2 class="mb-4 text-base font-semibold text-fg">{heading()}</h2>{body()}</section>;
+  // The embedded surface (the editor's Sharing tab, a dataset's) heads its controls the way the Share dialog does:
+  // a sans heading and description over the same chrome-density body.
+  if (props.variant === 'embedded') return <section aria-label="Sharing">
+    <header class="mb-4"><SectionHeading>{heading()}</SectionHeading><p class="mt-2 font-sans text-sm leading-relaxed text-muted">{SHARING_DESCRIPTION}</p></header>
+    <div class="font-mono text-xs">{body()}</div>
+  </section>;
   return <>
     <Show when={props.variant !== 'dialog'}>
       <Show when={canManage() || props.onSocialPreview} fallback={
@@ -217,7 +225,7 @@ export function DocumentSharing(props: {
     </Show>
     <Show when={open()}>
       <Dialog title={heading()} label="Sharing" size="lg" lockScroll initialFocus="[data-close-sharing]" onClose={close}
-        description="Manage access, invite people, or copy the link."
+        description={SHARING_DESCRIPTION}
         footer={<Button variant="secondary" aria-label="Close sharing" data-close-sharing onClick={close}>Close</Button>}>
         <div class="font-mono text-xs">{body()}</div>
       </Dialog>
