@@ -60,11 +60,19 @@ npm run afbin -- help markup
 Open the published document in the signed-in browser. Edit it there, or edit the
 local file and push again. Push may rewrite the file with identity metadata and
 persistent node IDs; read that file before editing it again. Browser edits to a
-published head require `pull` before your next local edit:
+published head require `pull` before your next local edit. Use the published artifact
+ID returned by `push --json`, rather than the local filename, as the reference.
+Preserve any unpushed local edits in a separate copy first. Replace `<published-id>`
+below with that ID before running the command:
+
 
 ```sh
-npm run afbin -- pull hello.jsx
+npm run afbin -- pull <published-id> --output hello.jsx
 ```
+
+If pull refuses because the local file has changed, keep your saved edits and
+pull to a different output file to compare and reconcile them before pushing.
+Do not add `--force` without first preserving the local changes.
 
 For a local file preview that saves browser changes directly to your files, use
 the released CLI (`afbin preview hello.jsx`) or a CI-built checkout containing

@@ -190,11 +190,15 @@ describe('README.md', () => {
     expect(readme()).toContain('npm is the sole CLI distribution');
     expect(readme()).toContain(`curl -fsSL ${defaultServer()}/chat/install.sh | sh`);
     expect(readme()).toContain(`Invoke-RestMethod ${defaultServer()}/chat/install.ps1 | Invoke-Expression`);
-    for (const command of ['preview report.jsx', 'push report.jsx', 'serve --dir ./artifactbin-data --port 7445', 'add report.jsx sales.csv --json']) {
+    for (const command of ['preview report.jsx', 'push report.jsx', 'serve --dir ./artifactbin-data --owner-email owner@example.com --port 7445', 'add report.jsx sales.csv --json']) {
       expect(readme()).toContain(`afbin ${command}`);
     }
     // npm appears only as the two setup lines (Unix and Windows); every other command is `afbin <command>`.
     expect([...readme().matchAll(/npx(?:\.cmd)? --yes @afbin\/cli@\S+ ([a-z-]+)/g)].map((m) => m[1])).toEqual(['setup', 'setup']);
+    expect(readme()).toContain('sign in as that verified owner');
+    expect(readme()).toContain('confirm deployment setup');
+    expect(readme()).toContain('company admission is invite-only by default');
+    expect(readme()).toContain('A document share alone does not admit a colleague');
     expect(readme()).toContain('stable workspace-local IDs without uploading or signing in');
     expect(readme()).toContain('separate copy with remote IDs, preserving the originals and their local references');
     expect(readme()).toContain('Local preview continues independently after publication');
@@ -207,6 +211,14 @@ describe('README.md', () => {
 });
 
 describe('docs/', () => {
+  it('source onboarding pulls by the published ID and preserves local edits', () => {
+    const onboarding = read('docs', 'oss-onboarding.md');
+    expect(onboarding).toContain('npm run afbin -- pull <published-id> --output hello.jsx');
+    expect(onboarding).toContain('ID returned by `push --json`');
+    expect(onboarding).toContain('Preserve any unpushed local edits');
+    expect(onboarding).not.toContain('npm run afbin -- pull hello.jsx');
+    expect(onboarding).not.toContain('pull <published-id> --output hello.jsx --force');
+  });
   it('holds the essays the README used to carry', () => {
     for (const f of ['editing.md', 'document-format.md', 'serving-and-security.md', 'ownership.md', 'operations.md']) {
       expect(fs.existsSync(path.join(ROOT, 'docs', f)), f).toBe(true);
