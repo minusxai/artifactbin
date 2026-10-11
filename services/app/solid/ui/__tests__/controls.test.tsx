@@ -146,3 +146,127 @@ it('draws page and section headings at one level each, and panels with their hea
   expect(people.className).toContain('rounded-panel');
   expect(people).toHaveTextContent('body');
 });
+
+it('renders a Button with href as a link of the same look, passing anchor props through', () => {
+  render(() => <>
+    <Button href="/a/doc" variant="secondary" size="sm" target="_blank" rel="noopener" download="doc.html">Open doc</Button>
+    <Button href="/a/off" disabled>Unavailable</Button>
+    <Button variant="secondary">Plain</Button>
+  </>);
+  const link = screen.getByRole('link', { name: 'Open doc' });
+  expect(link.tagName).toBe('A');
+  expect(link).toHaveAttribute('href', '/a/doc');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link).toHaveAttribute('rel', 'noopener');
+  expect(link).toHaveAttribute('download', 'doc.html');
+  const plain = screen.getByRole('button', { name: 'Plain' });
+  for (const token of ['h-control-sm', 'border-edge-bright', 'bg-surface']) expect(link.className).toContain(token);
+  expect(plain.className).toContain('border-edge-bright');
+  // An anchor cannot be disabled natively: it drops its href and says so.
+  const off = screen.getByText('Unavailable');
+  expect(off.tagName).toBe('A');
+  expect(off).not.toHaveAttribute('href');
+  expect(off).toHaveAttribute('aria-disabled', 'true');
+});
+
+it('marks a toggle Button pressed with aria-pressed and a distinct look', () => {
+  const [on, setOn] = createSignal(false);
+  render(() => <Button pressed={on()} onClick={() => setOn(!on())}>Images</Button>);
+  const chip = screen.getByRole('button', { name: 'Images' });
+  expect(chip).toHaveAttribute('aria-pressed', 'false');
+  expect(chip.className).toContain('border-edge-bright');
+  expect(chip.className).not.toContain('bg-accent-soft');
+  fireEvent.click(chip);
+  expect(chip).toHaveAttribute('aria-pressed', 'true');
+  expect(chip.className).toContain('bg-accent-soft');
+  expect(chip.className).toContain('text-accent');
+});
+
+it('offers an extra-compact xs icon size, a 36px bar size and a caution variant', () => {
+  render(() => <>
+    <Button size="xs" variant="ghost" icon aria-label="Close comments">×</Button>
+    <Button size="bar" variant="ghost" icon aria-label="Notifications">!</Button>
+    <Button variant="caution" pressed aria-label="Read and write">rw</Button>
+  </>);
+  const xs = screen.getByRole('button', { name: 'Close comments' });
+  expect(xs.className).toContain('size-control-xs');
+  expect(xs.className).toContain('pointer-coarse:min-h-9');
+  expect(screen.getByRole('button', { name: 'Notifications' }).className).toContain('size-9');
+  const caution = screen.getByRole('button', { name: 'Read and write' });
+  expect(caution.className).toContain('bg-caution-soft');
+  expect(caution.className).toContain('text-caution');
+});
+
+it('names a Checkbox by ariaLabel when it has no visible label', () => {
+  const onChange = vi.fn();
+  render(() => <Checkbox ariaLabel="Select row Report" checked={false} onChange={onChange} />);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select row Report' }));
+  expect(onChange).toHaveBeenCalledWith(true);
+});
+
+it('forwards rest attributes to a Panel and a StatusMessage root', () => {
+  const onClick = vi.fn();
+  render(() => <>
+    <Panel label="Tokens" id="tokens" aria-busy="true" data-kind="list" onClick={onClick}><p>rows</p></Panel>
+    <StatusMessage kind="caution" aria-label="Write access notice">Anyone with the link can write.</StatusMessage>
+  </>);
+  const panel = screen.getByRole('region', { name: 'Tokens' });
+  expect(panel).toHaveAttribute('id', 'tokens');
+  expect(panel).toHaveAttribute('aria-busy', 'true');
+  expect(panel).toHaveAttribute('data-kind', 'list');
+  fireEvent.click(panel);
+  expect(onClick).toHaveBeenCalled();
+  const notice = screen.getByRole('status', { name: 'Write access notice' });
+  expect(notice.className).toContain('text-caution');
+  render(() => <Badge tone="caution">read & write</Badge>);
+  expect(screen.getByText('read & write').className).toContain('text-caution');
+});
+
+it('gives Tabs icons, distinct names, badges, tooltips, controls and a disabled reason', () => {
+  const [value, setValue] = createSignal('selection');
+  render(() => <Tabs label="Edit panel tabs" variant="pill" size="sm" value={value()} onChange={setValue} items={[
+    { value: 'selection', label: 'Selection', icon: () => <svg data-icon="sliders" />, badge: true, controls: 'panel-body', tooltip: 'Selected block' },
+    { value: 'history', label: 'History', ariaLabel: 'Version history', disabled: true, disabledReason: 'History is not available offline' },
+    { value: 'comments', label: 'Comments', badge: <span>3</span> },
+  ]} />);
+  const selection = screen.getByRole('tab', { name: 'Selection' });
+  expect(selection.querySelector('[data-icon="sliders"]')).not.toBeNull();
+  expect(selection).toHaveAttribute('aria-controls', 'panel-body');
+  expect(selection.querySelector('[data-tab-dot]')).not.toBeNull();
+  expect(selection.className).toContain('bg-accent-soft');
+  const history = screen.getByRole('tab', { name: 'Version history' });
+  expect(history).toBeDisabled();
+  expect(history).toHaveAccessibleDescription('History is not available offline');
+  expect(screen.getByRole('tab', { name: 'Comments' })).toHaveTextContent('3');
+});
+
+it('shows only the icon when Tabs are iconOnly, keeping the label as the name', () => {
+  render(() => <Tabs label="Strip" iconOnly value="a" onChange={vi.fn()} items={[{ value: 'a', label: 'Selection', icon: () => <svg data-icon="a" /> }]} />);
+  const tab = screen.getByRole('tab', { name: 'Selection' });
+  expect(tab).not.toHaveTextContent('Selection');
+});
+
+it('moves vertical Tabs with ArrowUp and ArrowDown and says it is vertical', () => {
+  const [value, setValue] = createSignal('a');
+  render(() => <Tabs label="Rail" orientation="vertical" value={value()} onChange={setValue} items={[{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }, { value: 'c', label: 'C' }]} />);
+  const list = screen.getByRole('tablist', { name: 'Rail' });
+  expect(list).toHaveAttribute('aria-orientation', 'vertical');
+  fireEvent.keyDown(screen.getByRole('tab', { name: 'A' }), { key: 'ArrowDown' });
+  expect(value()).toBe('b');
+  fireEvent.keyDown(screen.getByRole('tab', { name: 'B' }), { key: 'ArrowUp' });
+  expect(value()).toBe('a');
+  fireEvent.keyDown(screen.getByRole('tab', { name: 'A' }), { key: 'ArrowRight' });
+  expect(value()).toBe('a');
+});
+
+it('draws a tri-state Checkbox: indeterminate is mixed until it is set', () => {
+  const [state, setState] = createSignal<boolean | 'mixed'>('mixed');
+  render(() => <Checkbox ariaLabel="Expose cell 2" checked={state() === true} indeterminate={state() === 'mixed'} onChange={setState} />);
+  const box = screen.getByRole('checkbox', { name: 'Expose cell 2' }) as HTMLInputElement;
+  expect(box.indeterminate).toBe(true);
+  expect(box).toHaveAttribute('aria-checked', 'mixed');
+  fireEvent.click(box);
+  expect(state()).toBe(true);
+  expect(box.indeterminate).toBe(false);
+  expect(box).toBeChecked();
+});

@@ -31,6 +31,8 @@ export function Select(props: {
   onChange: (value: string) => void;
   /** The accessible name; omit it inside a Field, whose label names the trigger. */
   ariaLabel?: string;
+  /** The trigger's id, so a separate `<label for>` names it (inside a Field the Field's id is used). */
+  id?: string;
   size?: ControlSize;
   disabled?: boolean;
   /** Trigger text when `value` matches no option — the caller says what absence means here. */
@@ -79,9 +81,9 @@ export function Select(props: {
           <button
             ref={attrs.ref}
             type="button"
-            id={field?.id}
+            id={props.id ?? field?.id}
             aria-label={props.ariaLabel}
-            aria-labelledby={props.ariaLabel ? undefined : field?.labelId}
+            aria-labelledby={props.ariaLabel || props.id ? undefined : field?.labelId}
             aria-describedby={field?.describedBy}
             aria-haspopup="listbox"
             aria-expanded={attrs['aria-expanded']}

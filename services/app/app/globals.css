@@ -53,6 +53,9 @@
   --color-accent-soft: #e2f5e9;
   --color-danger: #c93c37;
   --color-danger-soft: #fbe9e8;
+  /* Caution: a state that is allowed but deserves a second look (a dataset anyone can write). */
+  --color-caution: #a85d00;
+  --color-caution-soft: #fdf1df;
 
   /*
    * The faces themselves, named exactly as the @fontsource packages web/shell.css
@@ -95,9 +98,11 @@
   --text-micro--line-height: 14px;
   --text-2xs: 11px;
   --text-2xs--line-height: 16px;
-  /* Two control densities: md (form, h-control) and sm (chrome: toolbars, panels, menus, h-control-sm). */
+  /* Control densities: md (form, h-control), sm (chrome: toolbars, panels, menus, h-control-sm) and xs (dense
+   * icon toolbars and comment rails, size-control-xs; touch pointers grow it to a 36px target). */
   --spacing-control: 2.5rem;
   --spacing-control-sm: 2rem;
+  --spacing-control-xs: 1.5rem;
 }
 
 /* Kit overlays enter TrustedUi's shadow root, where document styles are absent.
@@ -135,6 +140,8 @@
   --color-accent-soft: #e2f5e9;
   --color-danger: #c93c37;
   --color-danger-soft: #fbe9e8;
+  --color-caution: #a85d00;
+  --color-caution-soft: #fdf1df;
   color-scheme: light;
 }
 
@@ -159,6 +166,8 @@
   --color-accent-soft: #12281a;
   --color-danger: #f85149;
   --color-danger-soft: #2d1512;
+  --color-caution: #f0a23b;
+  --color-caution-soft: #2b1f0e;
 }
 
 /* Dot color for the engineering-paper grid — light needs a darker ink than its

@@ -101,3 +101,67 @@ it('draws nothing when a RowMenu has no items', () => {
   render(() => <RowMenu name="Doc" items={[]} />);
   expect(screen.queryByRole('button', { name: 'More actions for Doc' })).toBeNull();
 });
+
+it('draws link items, labelled sections, separators and checked items', () => {
+  const choose = vi.fn();
+  render(() => <Menu label="Create menu" items={[
+    { label: 'Folder', text: 'Folder', onSelect: choose },
+    { label: 'Program', text: 'Program', href: '/programs/new' },
+    { separator: true },
+    { section: 'assets', items: [{ label: 'File', text: 'File', href: '/files/new' }, { label: 'Dataset', text: 'Dataset', href: '/datasets/new' }] },
+    { label: 'Show archived', text: 'archived', checked: true, onSelect: choose },
+  ]} trigger={(attrs) => <button {...attrs}>Create</button>} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  const program = screen.getByRole('menuitem', { name: 'Program' });
+  expect(program.tagName).toBe('A');
+  expect(program).toHaveAttribute('href', '/programs/new');
+  expect(screen.getByRole('separator')).toBeInTheDocument();
+  const assets = screen.getByRole('group', { name: 'assets' });
+  expect(assets).toContainElement(screen.getByRole('menuitem', { name: 'Dataset' }));
+  const archived = screen.getByRole('menuitemcheckbox', { name: 'Show archived' });
+  expect(archived).toHaveAttribute('aria-checked', 'true');
+  // Arrow keys walk links, grouped items and checkbox items alike.
+  const item = (name: string) => screen.getByRole('menuitem', { name });
+  fireEvent.keyDown(item('Folder'), { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(item('Program'));
+  fireEvent.keyDown(item('Program'), { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(item('File'));
+  fireEvent.keyDown(item('File'), { key: 'End' });
+  expect(document.activeElement).toBe(archived);
+});
+
+it('opens a submenu flyout with ArrowRight and closes it with ArrowLeft', () => {
+  const pick = vi.fn();
+  render(() => <Menu label="Create menu" items={[
+    { label: 'Artifact', text: 'Artifact', items: [{ label: 'Doc', text: 'Doc', onSelect: () => pick('doc') }, { label: 'Deck', text: 'Deck', onSelect: () => pick('deck') }] },
+    { label: 'Folder', text: 'Folder', onSelect: () => pick('folder') },
+  ]} trigger={(attrs) => <button {...attrs}>Create</button>} />);
+  const trigger = screen.getByRole('button', { name: 'Create' });
+  fireEvent.click(trigger);
+  const artifact = screen.getByRole('menuitem', { name: 'Artifact' });
+  expect(artifact).toHaveAttribute('aria-haspopup', 'menu');
+  expect(artifact).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.keyDown(artifact, { key: 'ArrowRight' });
+  expect(artifact).toHaveAttribute('aria-expanded', 'true');
+  const sub = screen.getByRole('menu', { name: 'Artifact' });
+  expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Doc' }));
+  // Arrows stay inside the submenu.
+  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Doc' }), { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Deck' }));
+  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Deck' }), { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Doc' }));
+  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Doc' }), { key: 'ArrowLeft' });
+  expect(sub).not.toBeInTheDocument();
+  expect(document.activeElement).toBe(artifact);
+  fireEvent.click(artifact);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Deck' }));
+  expect(pick).toHaveBeenCalledWith('deck');
+  expect(screen.queryByRole('menu')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
+it('matches the trigger width when asked', () => {
+  render(() => <Menu label="Wide" width="trigger" items={[{ label: 'One', text: 'one', onSelect: vi.fn() }]} trigger={(attrs) => <button {...attrs}>Wide</button>} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Wide' }));
+  expect(screen.getByRole('menu', { name: 'Wide' }).getAttribute('style')).toContain('--radix-popper-anchor-width');
+});

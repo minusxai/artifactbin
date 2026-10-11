@@ -1,18 +1,23 @@
 /* @jsxImportSource solid-js */
 /**
  * THE TWO TOGGLES. Checkbox is a native checkbox inside its label (so the label text, with an optional
- * description, names it and toggles it). Switch is a `role="switch"` button for a setting that takes
+ * description, names it and toggles it); with no visible label it is named by `ariaLabel`. `indeterminate` is
+ * the third, mixed state (a parent row over partly checked children): the native property and
+ * `aria-checked="mixed"`, until the caller resolves it. Switch is a `role="switch"` button for a setting that takes
  * effect at once; it is named by `label`.
  */
-import { Show, type JSX } from 'solid-js';
+import { createEffect, Show, type JSX } from 'solid-js';
 import type { ControlSize } from './control-styles';
 
-export function Checkbox(props: { label: JSX.Element; description?: JSX.Element; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; size?: ControlSize; class?: string }): JSX.Element {
+export function Checkbox(props: { label?: JSX.Element; ariaLabel?: string; description?: JSX.Element; checked: boolean; indeterminate?: boolean; onChange: (checked: boolean) => void; disabled?: boolean; size?: ControlSize; class?: string }): JSX.Element {
   const sm = () => props.size === 'sm';
+  let box!: HTMLInputElement;
+  createEffect(() => { box.indeterminate = !!props.indeterminate; });
   return <label class={`flex items-start gap-3 ${sm() ? 'font-mono text-xs' : 'font-sans text-sm'} ${props.disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${props.class ?? ''}`}>
-    <input type="checkbox" checked={props.checked} disabled={props.disabled} onChange={(event) => props.onChange(event.currentTarget.checked)}
+    <input ref={box} type="checkbox" aria-label={props.ariaLabel} aria-checked={props.indeterminate ? 'mixed' : undefined} checked={props.checked} disabled={props.disabled}
+      onChange={(event) => { event.currentTarget.indeterminate = false; props.onChange(event.currentTarget.checked); }}
       class={`${sm() ? 'mt-px size-3.5' : 'mt-0.5 size-4'} shrink-0 cursor-[inherit] accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`} />
-    <span class="min-w-0 text-fg">{props.label}<Show when={props.description}><span class="mt-1 block text-xs leading-5 text-muted">{props.description}</span></Show></span>
+    <Show when={props.label !== undefined || props.description}><span class="min-w-0 text-fg">{props.label}<Show when={props.description}><span class="mt-1 block text-xs leading-5 text-muted">{props.description}</span></Show></span></Show>
   </label>;
 }
 

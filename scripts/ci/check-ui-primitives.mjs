@@ -26,14 +26,18 @@ const SCOPE = /^services\/app\/solid\/.+\.(tsx|css)$/;
 const EXEMPT = /^services\/app\/solid\/(ui|test)\/|\/__tests__\//;
 const PALETTE = 'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';
 
+/** The rest of an opening tag: anything but `<` and `>`, except the `=>` of an arrow-function attribute. */
+const IN_TAG = '(?:[^<>=]|=(?!>)|=>)*?';
+
 /** Each rule names the primitive that replaces what it matches. */
 const RULES = [
   { id: 'native-select', use: 'ui/Select', pattern: /<select\b/g },
-  { id: 'popup-role', use: 'ui/Menu, ui/Select, ui/Dialog, ui/Tabs or ui/Switch', pattern: /\brole=["'{]+(?:menu|listbox|dialog|alertdialog|tablist|switch)\b/g },
+  // On an HTML element only: `<Dialog role="alertdialog">` is the primitive being used, not hand-rolled.
+  { id: 'popup-role', use: 'ui/Menu, ui/Select, ui/Dialog, ui/Tabs or ui/Switch', pattern: new RegExp(`<[a-z][a-z0-9]*\\b${IN_TAG}\\srole=["'{]+(?:menu|listbox|dialog|alertdialog|tablist|switch)\\b`, 'g') },
   { id: 'overlay', use: 'ui/Dialog', pattern: /\bfixed inset-0\b/g },
-  { id: 'native-title', use: 'ui/Tooltip', pattern: /<[a-z][a-z0-9]*\b[^<>]*?\stitle=/g },
-  { id: 'styled-button', use: 'ui/Button', pattern: /<button\b[^<>]*?\sclass(?:List)?=/g },
-  { id: 'styled-field', use: 'ui/Input, ui/Textarea, ui/SearchField or ui/Checkbox', pattern: /<(?:input|textarea)\b[^<>]*?\sclass(?:List)?=/g },
+  { id: 'native-title', use: 'ui/Tooltip', pattern: new RegExp(`<[a-z][a-z0-9]*\\b${IN_TAG}\\stitle=`, 'g') },
+  { id: 'styled-button', use: 'ui/Button', pattern: new RegExp(`<button\\b${IN_TAG}\\sclass(?:List)?=`, 'g') },
+  { id: 'styled-field', use: 'ui/Input, ui/Textarea, ui/SearchField or ui/Checkbox', pattern: new RegExp(`<(?:input|textarea)\\b${IN_TAG}\\sclass(?:List)?=`, 'g') },
   { id: 'arbitrary-radius', use: 'rounded-chip|control|panel|dialog', pattern: /\brounded(?:-[a-z]{1,2})?-\[/g },
   { id: 'arbitrary-text', use: 'text-micro, text-2xs or the Tailwind scale', pattern: /\btext-\[\d/g },
   { id: 'raw-color', use: 'a theme color token', pattern: /#[0-9a-fA-F]{3,8}\b/g },

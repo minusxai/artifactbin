@@ -14,9 +14,9 @@ const FORMAT_COLORS: Record<string, string> = {
 const FORMAT_FALLBACK_COLOR = '#95a5a6';
 
 export const PAGE_COLUMN = 'mx-auto max-w-4xl px-4 sm:px-6';
-/** @deprecated Use ui/Panel. */
+/** @deprecated → ui/Panel. */
 export const PANEL = 'rounded-panel border border-edge bg-surface';
-/** @deprecated Use ui/Panel's ListRow (lists) — a table row keeps this until tables get a primitive. */
+/** @deprecated → ui/Table's TableRow (tables) or ui/Panel's ListRow (lists). */
 export const TABLE_ROW = 'border-t border-edge hover:bg-raised transition-colors';
 export const LINK = 'text-accent no-underline hover:underline underline-offset-4';
 
@@ -25,6 +25,7 @@ const TONES = {
   accent: 'border-accent/40 text-accent bg-accent-soft',
   dim: 'border-edge text-faint',
   danger: 'border-danger/40 text-danger bg-danger-soft',
+  caution: 'border-caution/40 text-caution bg-caution-soft',
 } as const;
 
 export function Badge(props: { children: JSX.Element; tone?: keyof typeof TONES }): JSX.Element {

@@ -80,3 +80,34 @@ it('keeps ConfirmDialog\'s contract on the shared dialog', () => {
   fireEvent.mouseDown(dialog.parentElement!);
   expect(onCancel).toHaveBeenCalledTimes(1);
 });
+
+it('takes an accessible name apart from its visible title, an xl size, top alignment and a header close button', () => {
+  const onClose = vi.fn();
+  render(() => <Dialog title="Quarterly review" label="Sharing" size="xl" align="top" closeLabel="Close sharing" onClose={onClose}><button>inside</button></Dialog>);
+  const dialog = screen.getByRole('dialog', { name: 'Sharing' });
+  expect(dialog.className).toContain('max-w-4xl');
+  expect(dialog.parentElement!.className).toContain('items-start');
+  expect(screen.getByRole('heading', { level: 2, name: 'Quarterly review' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Close sharing' }));
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+it('scrolls its body between a fixed header and footer, edge to edge when flush', () => {
+  render(() => <Dialog title="Social preview" body="flush" onClose={vi.fn()} footer={<Button>Save</Button>}><div>stage</div></Dialog>);
+  const body = screen.getByText('stage').parentElement!;
+  expect(body).toHaveAttribute('data-dialog-body');
+  expect(body.className).toContain('overflow-y-auto');
+  expect(body.className).not.toContain('px-6');
+  expect(screen.getByRole('button', { name: 'Save' }).parentElement!.className).toContain('shrink-0');
+});
+
+it('draws an alertdialog that neither Escape nor the backdrop dismisses', () => {
+  const onClose = vi.fn();
+  render(() => <Dialog role="alertdialog" dismissible={false} title="Your text needs recovery" onClose={onClose}><textarea aria-label="Uncommitted text" /></Dialog>);
+  const dialog = screen.getByRole('alertdialog', { name: 'Your text needs recovery' });
+  expect(dialog).toHaveAttribute('aria-modal', 'true');
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  fireEvent.mouseDown(dialog.parentElement!);
+  expect(onClose).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
+});
