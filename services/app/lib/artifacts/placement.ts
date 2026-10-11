@@ -14,6 +14,7 @@
  * viewer on the server.
  */
 import { getDb } from '@/lib/platform/db';
+import { viewTotalsFor } from '@/lib/platform/view-totals';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 // The hierarchy builds its own statements rather than going through the
 // row-loading seam, so every one of them names the trash gate: a trashed
@@ -91,7 +92,7 @@ export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): 
  *    what a public link alone grants — reads the whole shelf, and everyone
  *    else gets the `public` children plus any child they are personally named
  *    on (`roleWithoutLink`: ownership or a share, never the link).
- *  - THE NUMBERS — `views` and `sparkline` only when the viewer may EDIT the
+ *  - THE NUMBERS — `views` (and, for the table, `sparkline`) only when the viewer may EDIT the
  *    folder (its owner, or someone named editor on it). Everyone else gets
  *    none, decided on the server rather than hidden in the markup.
  *  - THE CAP — 500 rows, oldest dropped. The count both callers report is
@@ -102,7 +103,7 @@ export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): 
 export async function selectChildren(
   folder: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>,
   viewer: Viewer,
-): Promise<{ children: ChildRow[]; numbers: boolean; sparkline: (id: string) => Promise<string> }> {
+): Promise<{ children: ChildRow[]; numbers: boolean; views: ReadonlyMap<string, number>; sparkline: (id: string) => Promise<string> }> {
   const db = await getDb();
   const actor: RoleActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null, email: viewer?.email ?? null };
   const folderRole = await effectiveRole(folder as ArtifactRow, actor);
@@ -115,9 +116,7 @@ export async function selectChildren(
   const insider = canAnnotate(folderRole);
   const r = await db.query<ChildRow>(
     `SELECT id, title, format, cardinality(ancestor_ids)::int AS level, visibility, updated_at,
-            user_id, group_id, token_id, link_role, version,
-            (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
-             WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
+            user_id, group_id, token_id, link_role, version
        FROM artifacts
       WHERE ancestor_ids[cardinality(ancestor_ids)] = $1 AND ${LIVE_ARTIFACT_SQL}
       ORDER BY updated_at DESC
@@ -140,8 +139,13 @@ export async function selectChildren(
     if (!insider && c.visibility !== 'public' && !canRead(await roleWithoutLink(c, actor))) continue;
     children.push(c);
   }
-  const series = numbers && children.length ? await viewSeries(children.map((c) => c.id)) : new Map<string, number[]>();
+  // The numbers cost nothing for a viewer who is told none, and one aggregate over the shelf for one who is
+  // (lib/platform/view-totals: the folded all-time counts), never a subquery per child.
+  const views = numbers && children.length ? await viewTotalsFor(children.map((c) => c.id)) : new Map<string, number>();
   /*
+   * THE SPARKLINE is the children table's alone (the Files kit draws it; the folder page's shelf shows none),
+   * so the series is read on the FIRST ask, once for the whole shelf, and a caller that never asks never pays.
+   *
    * ONE Vega render per distinct SERIES, not per row. A sparkline costs ~2.3ms
    * to draw, so a folder of 100 documents spent 230ms of a response drawing
    * charts — and a folder whose documents are new draws the SAME flat line for
@@ -149,15 +153,17 @@ export async function selectChildren(
    * collapse and different ones still each get their own picture. Measured at
    * 100 children: 230ms → 6ms.
    */
+  let series: Promise<Map<string, number[]>> | undefined;
   const drawn = new Map<string, Promise<string>>();
-  const sparkline = (id: string): Promise<string> => {
-    const s = series.get(id) ?? new Array<number>(SPARKLINE_DAYS).fill(0);
+  const sparkline = async (id: string): Promise<string> => {
+    series ??= viewSeries(children.map((c) => c.id));
+    const s = (await series).get(id) ?? new Array<number>(SPARKLINE_DAYS).fill(0);
     const key = s.join(',');
     let svg = drawn.get(key);
     if (!svg) drawn.set(key, (svg = renderSparklineSvg(s)));
     return svg;
   };
-  return { children, numbers, sparkline };
+  return { children, numbers, views, sparkline };
 }
 
 /** The parent of a row (last of ancestor_ids) or null at root. */
@@ -263,7 +269,6 @@ interface ChildRow {
   token_id: string;
   link_role: ArtifactRow['link_role'];
   version: number;
-  views: number;
 }
 
 /**
@@ -300,7 +305,7 @@ export async function childrenTableFor(
       updated_at: c.updated_at,
       url: `/a/${c.id}`,
       thumbnail: linkable && c.format !== 'folder' ? `/a/${c.id}/export?mode=card&v=${c.version}` : null,
-      views: picked.numbers ? c.views : null,
+      views: picked.numbers ? picked.views.get(c.id) ?? 0 : null,
       sparkline: picked.numbers ? await picked.sparkline(c.id) : null,
     });
   }
