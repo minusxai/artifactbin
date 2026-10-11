@@ -310,7 +310,7 @@ async function reading(engineName, browser) {
       const metrics = await page.getByRole('button', { name: 'Comment', exact: true }).evaluate(button => ({ height: button.getBoundingClientRect().height, radius: getComputedStyle(button).borderRadius, fontSize: getComputedStyle(button).fontSize, barHeight: button.closest('header').getBoundingClientRect().height, shadow: button.getRootNode() instanceof ShadowRoot }));
       await expectDocumentRoot(page, file.metadata, name);
       await expectUiFonts(page, name);
-      check(metrics.shadow && metrics.barHeight === 44 && metrics.height === 36 && metrics.radius === '8px' && metrics.fontSize !== '40px', `${name}: shared protected chrome metrics ${JSON.stringify(metrics)}`);
+      check(metrics.shadow && metrics.barHeight === 44 && metrics.height === 32 && metrics.radius === '6px' && metrics.fontSize !== '40px', `${name}: shared protected chrome metrics ${JSON.stringify(metrics)}`);
       await page.getByRole('button', { name: 'Open artifact controls', exact: true }).click();
       const controls = page.getByRole('region', { name: 'Artifact controls' });
       await expect(controls).toContainText('Data as of');

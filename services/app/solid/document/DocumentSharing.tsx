@@ -162,7 +162,7 @@ export function DocumentSharing(props: {
           <p class="mb-1 flex items-center justify-between text-faint"><span class="uppercase tracking-wider">writes</span><PenLine size={11} /></p>
           <div class="flex gap-1"><For each={WRITE_CHOICES}>{([value, name, tip]) =>
             <Tooltip content={tip}>
-              <Button variant={(current().access ?? 'read') !== value ? 'secondary' : value === 'readwrite' ? 'danger' : 'primary'} size="sm" aria-label={value === 'read' ? 'Make read-only' : 'Make read & write'} aria-pressed={(current().access ?? 'read') === value} onClick={() => setAccess(value)}
+              <Button variant={(current().access ?? 'read') === value ? 'primary' : 'secondary'} size="sm" aria-label={value === 'read' ? 'Make read-only' : 'Make read & write'} aria-pressed={(current().access ?? 'read') === value} onClick={() => setAccess(value)}
                 class="flex-1">{name}</Button>
             </Tooltip>
           }</For></div>

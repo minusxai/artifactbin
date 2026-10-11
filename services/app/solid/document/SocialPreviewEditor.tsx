@@ -207,7 +207,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
         <RotateCcw size={13} /> reset
       </Button>
       <div class="flex gap-2">
-        <Button variant="secondary" data-cancel-preview onClick={props.onClose}>cancel</Button>
+        <Button variant="secondary" aria-label="Cancel social preview" data-cancel-preview onClick={props.onClose}>cancel</Button>
         <Button disabled={saving() || uploading() || !imageReady()} onClick={() => void save()}>{saving() ? 'saving…' : 'save preview'}</Button>
       </div>
     </div>}>
