@@ -7,7 +7,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { type JsxNode } from '@/lib/jsx';
-import { STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_MESSAGE } from '@/lib/story-runtime/contract';
 import { NONCE, disposeAnnotateSession, env, installAnnotateSession, layouts, rectOf, state } from '@/test/helpers/annotate-session';
 
 beforeEach(installAnnotateSession);
@@ -31,7 +30,7 @@ const PICK_NODES: JsxNode[] = [{
 describe('picking a block to comment on', () => {
   const anchor = () => document.querySelector('main p')!;
   const picking = (on: boolean) => env.session.update({ ...state('on'), pins: [], pick: on ? 'block' : null });
-  const selections = () => env.posted.filter((message) => message.type === STORY_SELECTION_MESSAGE);
+  const selections = () => env.posted.filter((message) => message.type === 'mx:selection');
 
   it('outlines the selectable node under the pointer only while picking, and paints it', () => {
     env.session.setNodes(PICK_NODES);
@@ -92,7 +91,7 @@ describe('picking a block to comment on', () => {
     }
     expect(selections().at(-1)).toMatchObject({ nonce: NONCE, selection: { path: '0', tag: 'p' } });
     expect(anchor()).toHaveAttribute('data-mx-annotate-selected');
-    expect(env.posted.some((message) => message.type === STORY_ANNOTATION_PIN_MESSAGE)).toBe(false);
+    expect(env.posted.some((message) => message.type === 'mx:annotation-pin')).toBe(false);
   });
 
   it('in view mode the press is left alone, and a drag that selected words is NOT a pick', () => {
@@ -120,7 +119,7 @@ describe('picking a block to comment on', () => {
     env.session.update({ ...state('on'), pick: 'block' }); // PIN sits on this very node
     expect(anchor()).toHaveAttribute('data-mx-annotated');
     anchor().dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    expect(env.posted.some((message) => message.type === STORY_ANNOTATION_PIN_MESSAGE)).toBe(false);
+    expect(env.posted.some((message) => message.type === 'mx:annotation-pin')).toBe(false);
     expect(selections().at(-1)).toMatchObject({ selection: { path: '0' } });
   });
 
@@ -177,7 +176,7 @@ describe('drawing an area to comment on', () => {
     return { sec: document.getElementById('sec')!, pa: document.getElementById('pa')!, pb: document.getElementById('pb')! };
   };
   const drawing = () => env.session.update({ ...state('on'), pins: [], pick: 'area' });
-  const selections = () => env.posted.filter((message) => message.type === STORY_SELECTION_MESSAGE);
+  const selections = () => env.posted.filter((message) => message.type === 'mx:selection');
   const band = () => document.querySelector('[data-mx-annotate-band]');
 
   it('Select previews blocks, taps a block, and drags an area with the same tool', () => {
@@ -213,7 +212,7 @@ describe('drawing an area to comment on', () => {
     const posted = env.posted.push.bind(env.posted);
     let bandAtCapture: Element | null | undefined;
     vi.spyOn(env.posted, 'push').mockImplementation((...messages) => {
-      if (messages.some(message => message.type === STORY_SELECTION_MESSAGE)) bandAtCapture = band();
+      if (messages.some(message => message.type === 'mx:selection')) bandAtCapture = band();
       return posted(...messages);
     });
     mouse('pointerup', pb, 300, 190);
@@ -245,7 +244,7 @@ describe('drawing an area to comment on', () => {
     const picked = selections().at(-1)!.selection as { path: string; range?: unknown };
     expect(picked).toMatchObject({ path: '0.0' });
     expect(picked.range).toBeUndefined();
-    expect(env.posted.some((message) => message.type === STORY_ANNOTATION_PIN_MESSAGE)).toBe(false);
+    expect(env.posted.some((message) => message.type === 'mx:annotation-pin')).toBe(false);
   });
 
   it('a band over nothing picks nothing and stays in area mode', () => {

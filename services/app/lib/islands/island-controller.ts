@@ -11,10 +11,10 @@ import type { IslandDocument } from '@/lib/islands/contract';
 import { serializeJsx } from '@/lib/jsx/serialize';
 import type { JsxNode } from '@/lib/jsx/types';
 import type { IslandStoryController } from '@/lib/story-runtime/contract';
+import { type RuntimeChannel, isEditParentMessage } from '@/lib/edit-protocol';
 import type { FrameEditSession } from '@/lib/story-runtime/edit/session';
 import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
-import type { RuntimeChannel } from '@/lib/story-runtime/contract';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
@@ -23,11 +23,7 @@ import { nextTask, PARSE_SLICE_MS, parseHtmlInSlices } from './sliced-parse';
 import { storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
-import {
-  STORY_ANNOTATIONS_MESSAGE, type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE,
-  STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECT_MESSAGE, isEditParentMessage,
-  STORY_EDIT_MODE_MESSAGE, STORY_VERSION_DRAWN_EVENT,
-} from '@/lib/story-runtime/contract';
+import { type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
 
 type Movable = HTMLElement & { moveBefore?: (node: Node, child: Node | null) => void };
 
@@ -533,7 +529,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const ensureSelection = () => {
     if (disposed || selection || !selectionFactory || !portal.current || !selectionCommand || (!selectionCommand.edit && !selectionCommand.annotate)) return;
     selection = selectionFactory({ win, root, portal: portal.current,
-      onAction: (action, selected) => emit({ type: STORY_SELECTION_ACTION_MESSAGE, nonce, action, selection: selected }) });
+      onAction: (action, selected) => emit({ type: 'mx:selection-action', nonce, action, selection: selected }) });
     selection.setNodes(nodes);
     selection.update(selectionCommand);
   };
@@ -557,7 +553,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         return;
       }
       if (!isEditParentMessage(command)) return;
-      if (command.type === STORY_EDIT_MODE_MESSAGE) {
+      if (command.type === 'mx:edit-mode') {
         const wasEditing = editRequested;
         editRequested = command.on;
         if (!command.on) {
@@ -601,12 +597,13 @@ export function createIslandController({ win, root, islands, nodes: served, port
         }).catch((error) => { if (!disposed) console.error('Failed to mount compiled editor', error); }).finally(() => { editLoading = false; });
         return;
       }
+      // Twin of services/cli/src/preview/edit-controller.ts's parent-command routing (its own loaders and error sink); change both together.
       if (edit) {
         edit.onParentMessage(command);
-        if (command.type !== STORY_ANNOTATIONS_MESSAGE && command.type !== STORY_SELECTION_ACTIONS_MESSAGE
-          && command.type !== STORY_SELECT_MESSAGE) return;
+        if (command.type !== 'mx:annotations' && command.type !== 'mx:selection-actions'
+          && command.type !== 'mx:select') return;
       }
-      if (command.type === STORY_ANNOTATIONS_MESSAGE) {
+      if (command.type === 'mx:annotations') {
         annotationCommand = command;
         if (annotate) { annotate.update(command); return; }
         if (command.mode === 'off' || annotationLoading) return;
@@ -619,7 +616,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         }).catch((error) => { if (!disposed) console.error('Failed to load artifact annotations', error); }).finally(() => { annotationLoading = false; });
         return;
       }
-      if (command.type === STORY_SELECTION_ACTIONS_MESSAGE) {
+      if (command.type === 'mx:selection-actions') {
         selectionCommand = command;
         if (selection) { selection.update(command); return; }
         if (selectionFactory) { ensureSelection(); return; }
@@ -631,7 +628,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         }).catch((error) => { if (!disposed) console.error('Failed to load artifact selection actions', error); }).finally(() => { selectionLoading = false; });
         return;
       }
-      if (command.type === STORY_SELECT_MESSAGE) annotate?.select(command.path);
+      if (command.type === 'mx:select') annotate?.select(command.path);
       // The compiled root remains mounted while the editor attaches controls.
     },
     update(command: StoryDocumentUpdate) {

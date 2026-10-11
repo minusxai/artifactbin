@@ -60,7 +60,7 @@ vi.mock('@/lib/story-runtime/edit/selection-actions', () => ({
 import { createIslandController, holdChartDrawings } from '@/lib/islands/island-controller';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
 import { storyUpdateParts } from '@/lib/document/update-parts';
-import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import { createEditDraftSender, DRAFT_IDLE_MS } from '@/solid/editor/edit-draft';
 import { TYPING_QUIET_MS } from '@/lib/islands/island-controller';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
@@ -86,7 +86,7 @@ describe('island controller editor drafts', () => {
       win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > 0);
 
     controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
@@ -126,7 +126,7 @@ describe('island controller editor drafts', () => {
       win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > 0);
     const unmounts = editSession.unmounts;
     hold.on = true;
@@ -170,12 +170,12 @@ describe('island controller editor drafts', () => {
     });
     // The reader chose dark: the saved version's compiled colour must not replace it.
     controller.send({ type: STORY_READER_MODE_MESSAGE, mode: 'dark' });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > 0);
     expect(islands.setMode).toHaveBeenLastCalledWith('edit');
     let restored = false;
     // Done: the page asks the islands back, and a version frame may land meanwhile (newest wins).
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    controller.send({ type: 'mx:edit-mode', on: false });
     void controller.restored().then(() => { restored = true; });
     controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [] });
     await settle(() => fetch.mock.calls.length >= 2);
@@ -219,7 +219,7 @@ describe('island controller editor drafts', () => {
       win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > 0);
     controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
     await settle(() => engine.state.releases.length === 1);
@@ -227,7 +227,7 @@ describe('island controller editor drafts', () => {
     await settle(() => engine.state.active === 0 && root.textContent === 'v1');
     const draws = engine.state.applied.length;
 
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    controller.send({ type: 'mx:edit-mode', on: false });
     await controller.restored();
     expect(engine.state.applied.length, 'the saved version is already on screen').toBe(draws);
     expect(root.textContent).toBe('v1');
@@ -247,10 +247,10 @@ describe('island controller editor drafts', () => {
       win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > 0);
     engine.blocker = 'the island build changed under the page';
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    controller.send({ type: 'mx:edit-mode', on: false });
     await expect(controller.restored()).rejects.toThrow('the island build changed under the page');
     expect(islands.setMode).not.toHaveBeenCalledWith('read');
     expect(root.textContent).toBe('v0');
@@ -273,7 +273,7 @@ describe('island controller editor drafts', () => {
       win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > 0);
     // The editor's own state, as InPlaceEditor holds it: the picked theme lands in a signal, its save is debounced.
     let theme: StoryThemeName | null = null;
@@ -318,14 +318,14 @@ describe('island controller editor drafts', () => {
       win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > 0);
     const headFetches = () => fetch.mock.calls.filter(([url]) => String(url).startsWith('/a/doc/story')).length;
 
     // What InPlaceEditor sends for "preview version 1": the snapshot, then editing ends (twice: the effect's cleanup and its rerun).
     controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>old v1</p>', editId: 'e1', theme: null, colorMode: 'light', preview: true });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    controller.send({ type: 'mx:edit-mode', on: false });
+    controller.send({ type: 'mx:edit-mode', on: false });
     await settle(() => engine.state.releases.length === 1);
     engine.state.releases.shift()!();
     await settle(() => engine.state.active === 0 && root.textContent === 'old v1');
@@ -336,7 +336,7 @@ describe('island controller editor drafts', () => {
     expect(islands.setMode).not.toHaveBeenCalledWith('read');
 
     // Done while previewing: the page reads the saved version again, in place.
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    controller.send({ type: 'mx:edit-mode', on: false });
     const restored = controller.restored();
     await settle(() => engine.state.releases.length === 1);
     engine.state.releases.shift()!();
@@ -410,7 +410,7 @@ describe('island controller editor drafts', () => {
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
     const mounts = editSession.mounts;
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > mounts);
     return { root, controller, fetch: spy };
   };
@@ -574,7 +574,7 @@ describe('island controller app requests (a framed document relays them through 
       initialSource: () => '<p>v0</p>', portal: { current: null }, appFetch, fragmentSurface: 'raw',
     });
     try {
-      controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+      controller.send({ type: 'mx:edit-mode', on: true });
       await settle(() => editSession.mounts > 0 && appFetch.mock.calls.length > 0);
       expect(appFetch.mock.calls[0]![0]).toBe('/a/doc/draft-preview');
       expect(appFetch.mock.calls[0]![1].method ?? 'GET').toBe('GET');
@@ -586,7 +586,7 @@ describe('island controller app requests (a framed document relays them through 
       await settle(() => engine.state.releases.length === 1);
       engine.state.releases.shift()!();
       await settle(() => engine.state.active === 0 && root.textContent === 'v1');
-      controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+      controller.send({ type: 'mx:edit-mode', on: false });
       await controller.restored();
       const fragment = appFetch.mock.calls.find(([path]) => path.startsWith('/a/doc/story?'));
       expect(fragment, 'the post-Done story fetch goes through appFetch').toBeTruthy();
@@ -625,7 +625,7 @@ describe('island controller: the editor opens on the document on screen', () => 
     root.innerHTML = '<p>Second paragraph. Written while watching.</p>';
     document.body.setAttribute(LIVE_EDIT_ATTR, 'e2');
     const mounts = editSession.mounts;
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > mounts);
     expect(JSON.stringify(editSession.nodes)).toContain('Written while watching.');
     expect(editSession.nodes).toEqual(storyUpdateParts(live, (url) => /^https?:/.test(url))!.nodes);
@@ -635,7 +635,7 @@ describe('island controller: the editor opens on the document on screen', () => 
   it('keeps the served nodes when the version on screen is the one they describe', async () => {
     const { controller, served } = reading('<p>Second paragraph.</p>');
     const mounts = editSession.mounts;
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > mounts);
     expect(editSession.nodes).toBe(served);
     controller.dispose();

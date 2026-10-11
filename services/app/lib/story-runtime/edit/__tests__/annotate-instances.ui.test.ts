@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { STORY_SELECTION_MESSAGE, type StoryAnnotationsMessage } from '@/lib/story-runtime/contract';
+import type { StoryAnnotationsMessage } from '@/lib/edit-protocol';
 import { disposeAnnotateSession, env, installAnnotateSession, layouts, rectOf, state } from '@/test/helpers/annotate-session';
 import { registerCommentState } from '@/lib/story-runtime/comment-state';
 import { pendingCommentState } from '@/lib/story-runtime/comment-state-io';
@@ -37,7 +37,7 @@ it('retains ordinary area refinement in geometry reports for the same owner', ()
   const parsed=parseJsxOrThrow('<section id="section" />');env.session.setNodes(parsed.nodes);
   const range={v:1 as const,kind:'area' as const,box:{x:0.1,y:0.2,w:0.5,h:0.4}};
   env.session.update({...state('on'),pins:[],selectedPath:'0',selected:{kind:'element',path:'0',nodeId:'section',tag:'section',rect:{x:0,y:0,width:200,height:100},className:'',style:'',ancestors:[],range}});
-  expect(env.posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({selection:{nodeId:'section',range,rect:{x:20,y:40}}});
+  expect(env.posted.filter((message)=>message.type==='mx:selection').at(-1)).toMatchObject({selection:{nodeId:'section',range,rect:{x:20,y:40}}});
 });
 
 
@@ -50,7 +50,7 @@ it('captures comment state on selection and restores it before highlighting, onc
   const unregister = registerCommentState(document, 'screen', { get: () => screen, set: restore });
   try {
     env.session.update({ ...state('on'), pins: [] }); env.session.select('0');
-    const selection = env.posted.filter(message => message.type === STORY_SELECTION_MESSAGE).at(-1)?.selection as { viewState?: unknown };
+    const selection = env.posted.filter(message => message.type === 'mx:selection').at(-1)?.selection as { viewState?: unknown };
     expect(selection.viewState).toEqual({ v: 2, state: { screen: 'payment' } });
     screen = 'plans';
     const opened = { ...state('on'), openId: 'saved', pins: [{ id: 'saved', path: '0', key: 'payment', nodeId: 'payment', viewState: selection.viewState }] } as StoryAnnotationsMessage;

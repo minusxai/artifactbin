@@ -10,7 +10,7 @@ import { screen, waitFor, within } from '@testing-library/dom';
 import { Suspense } from 'solid-js';
 import * as captureScreen from '@/lib/capture/screen';
 import { CaptureError, type CaptureSession } from '@/lib/capture/contract';
-import { STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
+import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationLayer } from '../AnnotationLayer';
 import { preloadCommentField } from '../LazyCommentField';
@@ -37,7 +37,7 @@ describe('picking a block from the rail', () => {
     expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Screenshot' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Screenshot' })).toHaveAttribute('aria-pressed', 'false');
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
+    view.runtime.emit({ type: 'mx:selection', selection: PICKED });
     replaceComment(screen.getByLabelText('Annotation comment'), 'Node comment');
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
     expect(screen.queryByLabelText('Upload screenshot')).toBeNull();
@@ -48,7 +48,7 @@ describe('picking a block from the rail', () => {
     expect(JSON.parse(String(creates()[0]!.init!.body))).not.toHaveProperty('attachment_id');
     expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, path: '2.2', nodeId: 'node-2-2' } });
+    view.runtime.emit({ type: 'mx:selection', selection: { ...PICKED, path: '2.2', nodeId: 'node-2-2' } });
     expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('');
     expect(beginCapture).not.toHaveBeenCalled();
   });
@@ -70,7 +70,7 @@ describe('picking a block from the rail', () => {
     expect(beginCapture).toHaveBeenCalledOnce(); await flush();
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: 'area' });
     expect(screen.getByRole('status', { name: 'Screenshot tool active' })).toHaveTextContent('drag an area');
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, range: { v: 1, kind: 'area', box: { x: 0, y: 0, w: 1, h: 1 } } } });
+    view.runtime.emit({ type: 'mx:selection', selection: { ...PICKED, range: { v: 1, kind: 'area', box: { x: 0, y: 0, w: 1, h: 1 } } } });
     expect(capture).toHaveBeenCalledOnce();
     // The area is the document's (its viewport at 0,100 here, as a framed document's sits below the bar): the page captures it where it is.
     expect(capture.mock.calls[0]![0]).toMatchObject({ x: 5, y: 106, width: 200, height: 40 });
@@ -93,7 +93,7 @@ describe('picking a block from the rail', () => {
     </Suspense>);
     await flush();
     fireEvent.click(screen.getByRole('button', { name: 'Screenshot' })); await flush();
-    runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, range: { v: 1, kind: 'area', box: { x: 0, y: 0, w: 1, h: 1 } } } });
+    runtime.emit({ type: 'mx:selection', selection: { ...PICKED, range: { v: 1, kind: 'area', box: { x: 0, y: 0, w: 1, h: 1 } } } });
     await flush();
     expect(screen.queryByText('page on hold')).toBeNull();
     expect(screen.getByLabelText('Annotation sidebar')).toBeTruthy();
@@ -128,7 +128,7 @@ describe('picking a block from the rail', () => {
     let grant!: (session: CaptureSession) => void;
     vi.spyOn(captureScreen, 'beginCapture').mockImplementation(() => new Promise((resolve) => { grant = resolve; }));
     const view = layer({ railOpen: true, editId: 'edit-current' }); await flush();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
+    view.runtime.emit({ type: 'mx:selection', selection: PICKED });
     replaceComment(screen.getByLabelText('Annotation comment'), 'Keep my draft');
     fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
     fireEvent.click(screen.getByLabelText('Select'));
@@ -136,7 +136,7 @@ describe('picking a block from the rail', () => {
     grant(session); await flush();
     expect(session.dispose).toHaveBeenCalledOnce();
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: 'block' });
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
+    view.runtime.emit({ type: 'mx:selection', selection: PICKED });
     expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('Keep my draft');
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
   });
@@ -144,14 +144,14 @@ describe('picking a block from the rail', () => {
   it.each(['Cancel annotation', 'Close annotation composer', 'Escape'])('keeps Select ready after dismissing a node comment with %s', async (dismiss) => {
     const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
     const view = layer({ railOpen: true, editId: 'edit-current' }); await flush();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
+    view.runtime.emit({ type: 'mx:selection', selection: PICKED });
     replaceComment(screen.getByLabelText('Annotation comment'), 'Discard this draft');
     if (dismiss === 'Escape') fireEvent.keyDown(window, { key: 'Escape' });
     else fireEvent.click(screen.getByRole('button', { name: dismiss }));
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
     expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: 'block', selectedPath: null });
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, path: '2.2', nodeId: 'next-node' } });
+    view.runtime.emit({ type: 'mx:selection', selection: { ...PICKED, path: '2.2', nodeId: 'next-node' } });
     expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('');
     expect(view.runtime.posts().at(-1)).toMatchObject({ selectedPath: '2.2' });
     expect(beginCapture).not.toHaveBeenCalled();
@@ -168,7 +168,7 @@ describe('picking a block from the rail', () => {
   it('the context/selection action activates Select with the rail closed', async () => {
     const view = layer({ railOpen: false });
     await flush();
-    view.runtime.emit({ type: STORY_SELECTION_ACTION_MESSAGE, action: 'select', selection: PICKED });
+    view.runtime.emit({ type: 'mx:selection-action', action: 'select', selection: PICKED });
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: 'block' });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
   });
@@ -204,7 +204,7 @@ describe('picking a block from the rail', () => {
     const view = layer({ railOpen: true });
     await flush();
     expect(pill()).not.toBeNull();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
+    view.runtime.emit({ type: 'mx:selection', selection: PICKED });
     expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
     expect(screen.getByLabelText('Select section')).toBeTruthy();
     expect(pill()).toBeNull();
@@ -222,7 +222,7 @@ describe('picking a block from the rail', () => {
     const view = layer({ railOpen: true });
     await flush();
     expect(pill()).not.toBeNull();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: null });
+    view.runtime.emit({ type: 'mx:selection', selection: null });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
     expect(pill()).toBeNull();
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: null });
@@ -241,7 +241,7 @@ describe('picking a block from the rail', () => {
     const view = layer({ railOpen: true });
     await flush();
     fireEvent.click(screen.getByLabelText('Cancel picking'));
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED });
+    view.runtime.emit({ type: 'mx:selection', selection: PICKED });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
   });
 
@@ -288,7 +288,7 @@ describe('opening the rail opens a pick', () => {
     const onRailOpenChange = vi.fn();
     const view = layer({ railOpen: false, onRailOpenChange });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id, rect: { x: 0, y: 0, width: 10, height: 10 } });
+    view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id, rect: { x: 0, y: 0, width: 10, height: 10 } });
     expect(onRailOpenChange).toHaveBeenCalledWith(true);
     view.set({ railOpen: true, onRailOpenChange });
     await flush();
@@ -342,11 +342,11 @@ describe('drawing an area from the rail', () => {
   it('an area pick opens the composer on its anchor and saves the area as the range, with no quote', async () => {
     const view = layer({ railOpen: true });
     await flush();
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: PICKED_AREA });
+    view.runtime.emit({ type: 'mx:selection', selection: PICKED_AREA });
     expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
     expect(view.runtime.posts().at(-1)).toMatchObject({ pick: null, selectedPath: '2' });
     // The document re-reports the SAME node's geometry on scroll, without the range; the area survives it.
-    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED_AREA, range: undefined, rect: { x: 5, y: 60, width: 400, height: 200 } } });
+    view.runtime.emit({ type: 'mx:selection', selection: { ...PICKED_AREA, range: undefined, rect: { x: 5, y: 60, width: 400, height: 200 } } });
     replaceComment(screen.getByLabelText('Annotation comment'), 'this whole region');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
@@ -379,6 +379,6 @@ it('does not replay unchanged area state in response to a geometry-only echo', a
   const view = layer({ railOpen: true, initialSelection: selected }); await flush();
   view.runtime.send.mockClear();
   const { range: _range, ...geometry } = selected;
-  view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: geometry }); await flush();
+  view.runtime.emit({ type: 'mx:selection', selection: geometry }); await flush();
   expect(view.runtime.posts()).toHaveLength(0);
 });

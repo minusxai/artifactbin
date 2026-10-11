@@ -10,8 +10,8 @@
 import type { JsxNode } from '@/lib/jsx';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import { STORY_IMAGE_DROP_MESSAGE, STORY_IMAGE_REPLACE_MESSAGE } from '../contract';
 import { imageFileFromTransfer } from './image-drop';
+import type { StoryEditFramePost } from '@/lib/edit-protocol';
 
 /** Marks the image a dragged file would REPLACE if dropped now. */
 export const EDIT_DROP_REPLACE_ATTR = 'data-mx-drop-replace';
@@ -32,7 +32,7 @@ interface ImageTransferOptions {
   selectableAt: (target: EventTarget | null) => Element | null;
   /** Select the image a double-click is about to replace. */
   selectImage: (img: Element) => void;
-  post: (message: Record<string, unknown>) => void;
+  post: (message: StoryEditFramePost) => void;
 }
 
 /** Listens on the document until disposed. */
@@ -124,7 +124,7 @@ export function createImageTransfer({ win, root, nodes, selectedPath, selectable
     if (!img) return;
     event.preventDefault();
     selectImage(img);
-    post({ type: STORY_IMAGE_REPLACE_MESSAGE, path: img.getAttribute(AST_PATH_ATTR)! });
+    post({ type: 'mx:image-replace', path: img.getAttribute(AST_PATH_ATTR)! });
   };
 
   /**
@@ -151,7 +151,7 @@ export function createImageTransfer({ win, root, nodes, selectedPath, selectable
         : isImagePath(selected) ? selected : null;
     // Not onto an image: a drop lands in the gap it was dropped in; a paste is placed by the page.
     const at = !target && event.type === 'drop' ? { at: dropGapAt(event.target, (event as DragEvent).clientY) } : {};
-    post({ type: STORY_IMAGE_DROP_MESSAGE, file, ...(target ? { target } : {}), ...at });
+    post({ type: 'mx:image-drop', file, ...(target ? { target } : {}), ...at });
   };
 
   /**

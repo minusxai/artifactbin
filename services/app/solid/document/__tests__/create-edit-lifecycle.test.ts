@@ -1,6 +1,5 @@
 import { createRoot, createSignal } from 'solid-js';
 import { afterEach, expect, it, vi } from 'vitest';
-import { STORY_EDIT_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import { createEditLifecycle, createEditorPartLoader } from '../create-edit-lifecycle';
 
 /** A window with an in-memory history: `back()` pops asynchronously and fires the page's hashchange, as a browser does. */
@@ -34,7 +33,7 @@ function fakeController(restored: () => Promise<void> = () => Promise.resolve())
   return { sent, controller: { send: (command: unknown) => { sent.push(command as Record<string, unknown>); }, restored: vi.fn(restored) } };
 }
 
-const offs = (sent: Array<Record<string, unknown>>) => sent.filter((m) => m.type === STORY_EDIT_MODE_MESSAGE && m.on === false).length;
+const offs = (sent: Array<Record<string, unknown>>) => sent.filter((m) => m.type === 'mx:edit-mode' && m.on === false).length;
 
 const disposers: Array<() => void> = [];
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); vi.useRealTimers(); });

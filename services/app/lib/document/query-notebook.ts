@@ -22,7 +22,7 @@ export interface BoundEmbed {
   tag: string;
   /** Its `title`, when it has one — what a reader knows it as. */
   label: string | null;
-  /** The BODY path the document renders it at (STORY_SPOTLIGHT_MESSAGE / STORY_SELECT_MESSAGE speak these). */
+  /** The BODY path the document renders it at (`mx:spotlight` / `mx:select` speak these). */
   path: string;
 }
 

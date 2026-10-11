@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { AnnotationLayer } from '../AnnotationLayer';
-import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE } from '@/lib/story-runtime/contract';
 import { personHue } from '@/lib/islands/person-face';
 import { Avatar } from '../../ui/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
@@ -68,7 +67,7 @@ describe('AnnotationLayer', () => {
   it('shows distinct local times for a comment and reply on the same day', async () => {
     const view = layer({ railOpen: true });
     await screen.findByText('is this right?');
-    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
+    view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id });
     await screen.findByText('one more thought');
     const times = [...view.container.querySelectorAll('time')];
     const first = times.find((time) => time.dateTime === ANN.thread[0]!.created_at);
@@ -86,7 +85,7 @@ describe('AnnotationLayer', () => {
     await waitFor(() => expect(trustedRoot().querySelector('[data-thread-id="ann_1"]')).not.toBeNull());
     const thread = trustedRoot().querySelector('[data-thread-id="ann_1"]')!;
     const scroll = vi.fn(); thread.scrollIntoView = scroll;
-    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
+    view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id });
     await waitFor(() => expect(scroll).toHaveBeenCalled());
   });
 
@@ -97,7 +96,7 @@ describe('AnnotationLayer', () => {
     const view = layer({ sessionNonce: null, showViewComments: true, liveAnnotations: [ANN] }, runtime);
     runtime.ref.current = controller;
     view.set({ sessionNonce: NONCE, showViewComments: true, liveAnnotations: [ANN] });
-    runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 20, y: 150, width: 100, height: 30 } }] });
+    runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 20, y: 150, width: 100, height: 30 } }] });
     expect(screen.getByLabelText(/^Open annotation conversation by vivek/)).toBeInTheDocument();
   });
 
@@ -125,7 +124,7 @@ describe('AnnotationLayer', () => {
     const onRailOpenChange = vi.fn();
     const view = layer({ onRailOpenChange });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    view.runtime.emit({ type: 'mx:annotation-pin', id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
     expect(onRailOpenChange).toHaveBeenCalledWith(true);
     expect(window.location.hash).toBe('');
     view.set({ onRailOpenChange, railOpen: true });
@@ -140,7 +139,7 @@ describe('AnnotationLayer', () => {
     const view = layer({ showViewComments: true, onRailOpenChange });
     await flush();
     expect(screen.queryByLabelText(/Open annotation conversation/)).toBeNull();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
     const preview = await screen.findByLabelText('Open annotation conversation by vivek, 2 messages');
     const card = preview.closest<HTMLElement>('[data-annotation-id]')!;
     expect(card).toBeTruthy();
@@ -172,7 +171,7 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('vivek avatar').textContent).toBe('V');
     expect(screen.getByRole('link', { name: 'View @vivek profile' }).getAttribute('href')).toBe('/@vivek');
     expect(screen.getByText('is this right?')).toBeTruthy();
-    view.runtime.emit({ type: STORY_ANNOTATION_HOVER_MESSAGE, id: null });
+    view.runtime.emit({ type: 'mx:annotation-hover', id: null });
     expect(card.style.width).toBe('288px'); // a queued document leave cannot cancel a UI hover
     expect(screen.queryByText('one more thought')).toBeNull();
     expect(card.textContent).toContain('+1 more');
@@ -182,7 +181,7 @@ describe('AnnotationLayer', () => {
     expect(card.style.width).toBe('44px');
     expect(view.runtime.posts().at(-1)).toMatchObject({ hoverId: null });
 
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 50, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 50, width: 300, height: 40 } }] });
     expect(card.style.top).toBe('150px');
     expect(card.isConnected).toBe(true); // a new layout moves the mark, never remounts it
 
@@ -198,7 +197,7 @@ describe('AnnotationLayer', () => {
     const onRailOpenChange = vi.fn();
     const view = layer({ showViewComments: true, onRailOpenChange }, makeRuntime(), { trusted: true });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
     const card = trustedRoot().querySelector('[data-annotation-id]')!;
     fireEvent.mouseEnter(card);
     const more = trustedRoot().querySelector<HTMLButtonElement>('[aria-label="Expand replies"]');
@@ -225,7 +224,7 @@ describe('AnnotationLayer', () => {
   it('the sidebar resolves and replies; resolving drops the pin', async () => {
     const view = layer({ railOpen: true });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    view.runtime.emit({ type: 'mx:annotation-pin', id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
     await screen.findByLabelText('Annotation thread');
     replaceComment(screen.getByLabelText('Reply to annotation'), 'never mind');
     fireEvent.click(screen.getByLabelText('Send reply'));
@@ -319,7 +318,7 @@ describe('AnnotationLayer', () => {
     const view = layer({ railOpen: true });
     await flush();
     await screen.findByLabelText('Annotation thread');
-    view.runtime.emit({ type: STORY_ANNOTATION_HOVER_MESSAGE, id: ANN.id });
+    view.runtime.emit({ type: 'mx:annotation-hover', id: ANN.id });
     expect(screen.getByLabelText('Annotation thread').getAttribute('data-hovered')).toBe('true');
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.getByLabelText('Codex agent')).toBeTruthy();
@@ -331,7 +330,7 @@ describe('AnnotationLayer', () => {
     await flush();
     view.set({ showViewComments: true, liveAnnotations: [MCP_AGENT] });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: MCP_AGENT.id, rect: { x: 10, y: 100, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: MCP_AGENT.id, rect: { x: 10, y: 100, width: 300, height: 40 } }] });
     const marker = await screen.findByLabelText('Open annotation conversation by Claude Code, 1 message');
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     expect(screen.getByText('Claude Code')).toBeTruthy();
@@ -345,7 +344,7 @@ describe('AnnotationLayer', () => {
     await flush();
     view.set({ showViewComments: true, liveAnnotations: [GENERIC_AGENT] });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: GENERIC_AGENT.id, rect: { x: 10, y: 100, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: GENERIC_AGENT.id, rect: { x: 10, y: 100, width: 300, height: 40 } }] });
     const marker = await screen.findByLabelText('Open annotation conversation by Agent, 1 message');
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     expect(screen.getByLabelText('Agent agent')).toBeTruthy();
@@ -355,7 +354,7 @@ describe('AnnotationLayer', () => {
   it('delete asks first, then erases the thread and its pin', async () => {
     const view = layer({ railOpen: true });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    view.runtime.emit({ type: 'mx:annotation-pin', id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
     const thread = await screen.findByLabelText('Annotation thread');
     fireEvent.click(within(thread).getByLabelText('Annotation actions'));
     fireEvent.click(within(thread).getByLabelText('Delete thread'));
@@ -371,7 +370,7 @@ describe('AnnotationLayer', () => {
   it('deletes only the chosen reply and keeps the rest of the thread visible', async () => {
     const view = layer({ railOpen: true });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    view.runtime.emit({ type: 'mx:annotation-pin', id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
     const thread = await screen.findByLabelText('Annotation thread');
     const reply = thread.querySelector<HTMLElement>('[data-comment-id="ann_2"]')!;
     fireEvent.click(within(reply).getByLabelText('Comment actions 1'));
@@ -393,7 +392,7 @@ describe('AnnotationLayer', () => {
       : priorFetch(url, init)));
     const view = layer({ railOpen: true });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    view.runtime.emit({ type: 'mx:annotation-pin', id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
     const thread = await screen.findByLabelText('Annotation thread');
     const reply = thread.querySelector<HTMLElement>('[data-comment-id="ann_2"]')!;
     fireEvent.click(within(reply).getByLabelText('Comment actions 1'));
@@ -409,7 +408,7 @@ describe('AnnotationLayer', () => {
     knobs.open = [FACES];
     const view = layer({ showViewComments: true });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: FACES.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: FACES.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
     const preview = await screen.findByLabelText('Open annotation conversation by ada, 4 messages');
     const card = preview.closest<HTMLElement>('[data-annotation-id]')!;
     const compact = card.querySelector<HTMLImageElement>(`img[src="${ADA_IMAGE}"]`);
@@ -443,7 +442,7 @@ describe('AnnotationLayer', () => {
       const onRailOpenChange = vi.fn();
       const view = layer({ showViewComments: true, onRailOpenChange });
       await flush();
-      view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+      view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
       const marker = await screen.findByLabelText('Open annotation conversation by vivek, 2 messages');
       expect(marker.closest<HTMLElement>('[data-annotation-id]')!.style.width).toBe('44px');
       fireEvent.click(marker);
@@ -461,7 +460,7 @@ describe('AnnotationLayer', () => {
   it('keeps annotations ambient with no visibility-off state', async () => {
     const view = layer({ showViewComments: true });
     await flush();
-    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
     expect(await screen.findByLabelText(/Open annotation conversation/)).toBeTruthy();
     view.set({ showViewComments: true });
     await flush();
@@ -502,7 +501,7 @@ it('starts replies empty even in a tagged thread and retains a failed reply', as
   knobs.open = [tagged];
   const view = layer({ railOpen: true, liveAnnotations: [tagged] });
   await screen.findByText('help', { exact: false });
-  view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
+  view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id });
   const field = await screen.findByLabelText('Reply to annotation');
   expect(field.textContent).toBe('');
   expect(screen.getByLabelText('Send reply')).toBeDisabled();

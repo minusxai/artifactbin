@@ -13,16 +13,6 @@ import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { mountCompiledEditRegions } from '@/lib/story-runtime/edit/dom-mounter';
 import { morphDraftDom } from '@/lib/islands/morph/engine';
 import { createFrameEditSession, type FrameEditSession } from '../session';
-import {
-  STORY_APPLY_FORMAT_MESSAGE,
-  STORY_APPLY_LINK_MESSAGE,
-  STORY_COMMIT_MESSAGE,
-  STORY_COMMITTED_MESSAGE,
-  STORY_HISTORY_MESSAGE,
-  STORY_IMAGE_DROP_MESSAGE,
-  STORY_SELECTION_MESSAGE,
-  STORY_TEXT_EDIT_MESSAGE,
-} from '../../contract';
 
 const SOURCE = '<div><p>Body text</p><img src="/a.png" alt="a" /><button>Label</button></div>';
 const DOM = '<div data-mx-ast="0"><p data-mx-ast="0.0">Body text</p><img data-mx-ast="0.1" src="/a.png" alt="a"><button data-mx-ast="0.2">Label</button></div>';
@@ -115,7 +105,7 @@ describe('edit session', () => {
   it('a click on a block posts mx:selection with its path and kind, block-selected', async () => {
     const { of, at } = await open(SOURCE, DOM);
     at('0.1').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    expect(of(STORY_SELECTION_MESSAGE).at(-1)?.selection).toMatchObject({ path: '0.1', kind: 'element', mode: 'block' });
+    expect(of('mx:selection').at(-1)?.selection).toMatchObject({ path: '0.1', kind: 'element', mode: 'block' });
   });
 
   it('a format on a non-prose host lands on the element and republishes the selection', async () => {
@@ -123,11 +113,11 @@ describe('edit session', () => {
     const host = at('0.2');
     expect(host.closest('.ProseMirror')).toBeNull();
     host.focus();
-    const before = of(STORY_SELECTION_MESSAGE).length;
-    session!.onParentMessage({ type: STORY_APPLY_FORMAT_MESSAGE, path: '0.2', className: 'text-lg' });
+    const before = of('mx:selection').length;
+    session!.onParentMessage({ type: 'mx:apply-format', path: '0.2', className: 'text-lg' });
     expect(host.getAttribute('class')).toBe('text-lg');
-    expect(of(STORY_SELECTION_MESSAGE).length).toBe(before + 1);
-    expect(of(STORY_SELECTION_MESSAGE).at(-1)?.selection).toMatchObject({ path: '0.2' });
+    expect(of('mx:selection').length).toBe(before + 1);
+    expect(of('mx:selection').at(-1)?.selection).toMatchObject({ path: '0.2' });
   });
 
   it('a link on a non-prose host posts mx:text-edit with the wrapped selection', async () => {
@@ -138,15 +128,15 @@ describe('edit session', () => {
     range.selectNodeContents(host.firstChild!);
     window.getSelection()!.removeAllRanges();
     window.getSelection()!.addRange(range);
-    session!.onParentMessage({ type: STORY_APPLY_LINK_MESSAGE, path: '0.2', href: 'https://example.com' });
-    expect(of(STORY_TEXT_EDIT_MESSAGE).at(-1)).toMatchObject({
+    session!.onParentMessage({ type: 'mx:apply-link', path: '0.2', href: 'https://example.com' });
+    expect(of('mx:text-edit').at(-1)).toMatchObject({
       path: '0.2',
       innerHtml: '<a href="https://example.com" target="_blank" rel="noopener noreferrer">Label</a>',
     });
     // An active-content scheme is refused at the sink: nothing more is posted.
-    const count = of(STORY_TEXT_EDIT_MESSAGE).length;
-    session!.onParentMessage({ type: STORY_APPLY_LINK_MESSAGE, path: '0.2', href: 'javascript:alert(1)' });
-    expect(of(STORY_TEXT_EDIT_MESSAGE).length).toBe(count);
+    const count = of('mx:text-edit').length;
+    session!.onParentMessage({ type: 'mx:apply-link', path: '0.2', href: 'javascript:alert(1)' });
+    expect(of('mx:text-edit').length).toBe(count);
   });
 
   it('an image file dropped on a block posts mx:image-drop with the side the pointer is on', async () => {
@@ -157,19 +147,19 @@ describe('edit session', () => {
     });
     const file = new File(['x'], 'pic.png', { type: 'image/png' });
     expect(drop(host, file, 105).defaultPrevented).toBe(true);
-    expect(of(STORY_IMAGE_DROP_MESSAGE).at(-1)).toMatchObject({ file, at: { path: '0.2', side: 'before' } });
+    expect(of('mx:image-drop').at(-1)).toMatchObject({ file, at: { path: '0.2', side: 'before' } });
     drop(host, file, 135);
-    expect(of(STORY_IMAGE_DROP_MESSAGE).at(-1)).toMatchObject({ file, at: { path: '0.2', side: 'after' } });
+    expect(of('mx:image-drop').at(-1)).toMatchObject({ file, at: { path: '0.2', side: 'after' } });
     // Onto an image: that image is the target, replaced in place.
     drop(at('0.1'), file, 105);
-    expect(of(STORY_IMAGE_DROP_MESSAGE).at(-1)).toMatchObject({ file, target: '0.1' });
+    expect(of('mx:image-drop').at(-1)).toMatchObject({ file, target: '0.1' });
   });
 
   it('a drop that carries no image is left to the browser', async () => {
     const { of, at } = await open(SOURCE, DOM);
     const event = drop(at('0.2'), new File(['x'], 'notes.txt', { type: 'text/plain' }), 105);
     expect(event.defaultPrevented).toBe(false);
-    expect(of(STORY_IMAGE_DROP_MESSAGE)).toHaveLength(0);
+    expect(of('mx:image-drop')).toHaveLength(0);
   });
 
   it('a commit hands over half-typed text, then posts mx:committed', async () => {
@@ -179,11 +169,11 @@ describe('edit session', () => {
     host.innerHTML = 'Label edited';
     host.dispatchEvent(new Event('input', { bubbles: true }));
     const from = posted.length;
-    session!.onParentMessage({ type: STORY_COMMIT_MESSAGE });
-    const after = posted.slice(from).filter((m) => m.type === STORY_TEXT_EDIT_MESSAGE || m.type === STORY_COMMITTED_MESSAGE);
+    session!.onParentMessage({ type: 'mx:commit' });
+    const after = posted.slice(from).filter((m) => m.type === 'mx:text-edit' || m.type === 'mx:committed');
     expect(after).toEqual([
-      expect.objectContaining({ type: STORY_TEXT_EDIT_MESSAGE, path: '0.2', innerHtml: 'Label edited' }),
-      expect.objectContaining({ type: STORY_COMMITTED_MESSAGE }),
+      expect.objectContaining({ type: 'mx:text-edit', path: '0.2', innerHtml: 'Label edited' }),
+      expect.objectContaining({ type: 'mx:committed' }),
     ]);
   });
 
@@ -197,7 +187,7 @@ describe('edit session', () => {
       input.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(false);
     }
-    expect(of(STORY_HISTORY_MESSAGE)).toHaveLength(0);
+    expect(of('mx:history')).toHaveLength(0);
   });
 
   it('dispose removes the injected edit stylesheet and stops listening', async () => {
@@ -218,7 +208,7 @@ describe('edit session', () => {
     editor.focus();
     await frame();
     // The undo of a `### ` shortcut: the history target is the end of the literal prefix, in block x.
-    session!.onParentMessage({ type: STORY_COMMIT_MESSAGE, restore: { anchor: { id: 'x', offset: 4 }, head: { id: 'x', offset: 4 } } });
+    session!.onParentMessage({ type: 'mx:commit', restore: { anchor: { id: 'x', offset: 4 }, head: { id: 'x', offset: 4 } } });
     await frame();
     // The undo's draft lands: block x is a paragraph again.
     session!.unmountCompiledDom();
@@ -266,7 +256,7 @@ describe('edit session', () => {
     const editor = root.querySelector<HTMLElement>('.ProseMirror')!;
     editor.focus();
     await frame();
-    session!.onParentMessage({ type: STORY_COMMIT_MESSAGE, restore: { anchor: { id: 'x', offset: 11 }, head: { id: 'x', offset: 11 } } });
+    session!.onParentMessage({ type: 'mx:commit', restore: { anchor: { id: 'x', offset: 11 }, head: { id: 'x', offset: 11 } } });
     await frame();
     // The person selects "alpha" before the undo's draft is drawn 
     const text = root.querySelector('p#x')!.firstChild!;

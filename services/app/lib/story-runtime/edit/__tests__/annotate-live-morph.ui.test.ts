@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import { morphStory } from '@/lib/islands/morph/engine';
-import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
+import type { RuntimeChannel } from '@/lib/edit-protocol';
 
 const FIRST = 'Revenue grew 40% in Q3, ahead of plan.';
 const QUOTE = 'ahead of plan.';

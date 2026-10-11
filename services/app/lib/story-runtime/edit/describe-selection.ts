@@ -18,7 +18,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { crumbHint, isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR, SOURCE_NODE_ID_ATTR } from '@/lib/story-ui/ast-path';
 import { isComponentPart } from './edit-chrome';
-import type { StoryEditCrumb, StoryEditSelection } from '../contract';
+import type { StoryEditCrumb, StoryEditSelection } from '@/lib/edit-protocol';
 
 /** What kind of thing the source says this path is. Null when the path is not in the source at all. */
 export function selectionKindAt(nodes: JsxNode[], path: string): StoryEditSelection['kind'] | null {

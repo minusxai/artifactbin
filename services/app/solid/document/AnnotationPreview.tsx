@@ -12,7 +12,7 @@
 import { batch, createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { AnnotationCommentWire } from '@artifactbin/contracts';
-import type { StoryEditRect } from '@/lib/story-runtime/contract';
+import type { StoryEditRect } from '@/lib/edit-protocol';
 import Check from 'lucide-solid/icons/check';
 import PenLine from 'lucide-solid/icons/pen-line';
 import Reply from 'lucide-solid/icons/reply';

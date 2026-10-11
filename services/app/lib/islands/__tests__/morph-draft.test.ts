@@ -22,7 +22,7 @@ vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () 
 vi.mock('@/lib/story-runtime/edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
 import { createIslandController } from '@/lib/islands/island-controller';
-import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_DOCUMENT_MESSAGE } from '@/lib/story-runtime/contract';
 import { disposeChangedDraftIslands, draftTreeKept, hydrateDraftIslands, morphDraftDom, sameDataflow } from '../morph/engine';
 import { ISLAND_DOCUMENT_KEY } from '../contract';
 import { boot, type MorphableIslandDocument } from '../boot';
@@ -50,7 +50,7 @@ async function editing(source: string, served: string, compiled: (source: string
     initialSource: () => source, portal: { current: null },
   });
   const mounts = editSession.mounts;
-  controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+  controller.send({ type: 'mx:edit-mode', on: true });
   await settle(() => editSession.mounts > mounts);
   let edits = 0;
   const draw = async (draft: string, drawn: () => boolean) => {
@@ -81,7 +81,7 @@ describe('a draft drawn in place', () => {
     const controller = createIslandController({ win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1', initialSource: () => source, portal: { current: null } });
     try {
       const mounts = editSession.mounts;
-      controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+      controller.send({ type: 'mx:edit-mode', on: true });
       await settle(() => editSession.mounts > mounts);
       controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source, editId: 'e1', theme: 'volta', colorMode: 'dark', redraw: true });
       await settle(() => root.classList.contains('dark'));
@@ -188,7 +188,7 @@ describe('entering edit mode', () => {
       initialSource: () => '<p>Before</p><Question title="Q" />', portal: { current: null },
     });
     const mounts = editSession.mounts;
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > mounts);
     expect(islands.mode()).toBe('edit');
     expect(root.querySelector('[aria-label="Question embed"]'), 'entering edit mode keeps the chart element').toBe(chart);

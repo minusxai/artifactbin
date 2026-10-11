@@ -21,13 +21,7 @@ import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { nodeName } from '@/lib/story-ui/node-names';
-import {
-  STORY_BLOCK_EDIT_MESSAGE,
-  STORY_SELECTION_MESSAGE,
-  type StoryEditParentMessage,
-  type StoryEditRect,
-  type StoryEditSelection,
-} from '../contract';
+import type { StoryEditFramePost, StoryEditParentMessage, StoryEditRect, StoryEditSelection } from '@/lib/edit-protocol';
 import { describedKind, describeSelection } from './describe-selection';
 import { captureSelection } from './selection-range';
 import { markdownEditorFor } from '@/lib/markdown/editor';
@@ -68,7 +62,7 @@ export const EDIT_SELECTED_ATTR = 'data-mx-selected';
 export const EDIT_EMBED_SELECTED_ATTR = 'data-mx-embed-selected';
 /** Marks the selectable node under the pointer while edit mode is live. Value: its edit-chrome kind (drives the cursor only). */
 export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
-/** Marks nodes the page pointed at (STORY_SPOTLIGHT_MESSAGE) — outlined, never selected. */
+/** Marks nodes the page pointed at (`mx:spotlight`) — outlined, never selected. */
 export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
 /** The story root while editing: focusable, so a block selection keeps the keyboard in the document. */
 export const EDIT_ROOT_ATTR = 'data-mx-edit-root';
@@ -116,7 +110,7 @@ interface HoverSelectOptions {
   activePath: () => string | null;
   /** Hand over half-typed text before a structural command runs. */
   commitActive: () => void;
-  post: (message: Record<string, unknown>) => void;
+  post: (message: StoryEditFramePost) => void;
   /** An explicit text-focus request has landed; stale redraw caret recovery must yield. */
   onTextFocus?: () => void;
 }
@@ -140,12 +134,12 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
   const cancelPendingSelect = () => { pendingSelect?.disconnect(); pendingSelect = null; };
   const at = (path: string) => root.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
 
-  const blockSelection = createBlockSelection(doc, root, (command) => post({ type: STORY_BLOCK_EDIT_MESSAGE, command }));
+  const blockSelection = createBlockSelection(doc, root, (command) => post({ type: 'mx:block-edit', command }));
   const chrome = createNodeChrome(
     doc,
     (command) => {
       commitActive();
-      post({ type: STORY_BLOCK_EDIT_MESSAGE, command });
+      post({ type: 'mx:block-edit', command });
     },
     (el) => selectBlock(el),
   );
@@ -271,7 +265,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     blockMode = !!selection && block;
     if (selection) selection.mode = blockMode ? 'block' : 'typing';
     stampSelection();
-    post({ type: STORY_SELECTION_MESSAGE, selection });
+    post({ type: 'mx:selection', selection });
   };
 
   const republishRect = () => {
@@ -280,7 +274,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     const el = at(active ?? selectedPath!);
     const selection = el ? describeWithQuote(el) : null;
     if (selection) selection.mode = blockMode && !active ? 'block' : 'typing';
-    post({ type: STORY_SELECTION_MESSAGE, selection });
+    post({ type: 'mx:selection', selection });
   };
 
   const selectableAt = (target: EventTarget | null): Element | null => {

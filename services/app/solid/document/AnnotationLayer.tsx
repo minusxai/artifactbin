@@ -36,11 +36,7 @@ import { loginHref } from '@/lib/http/login-href';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { documentRect, sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import {
-  isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
-  STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE,
-  type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection,
-} from '@/lib/story-runtime/contract';
+import { isEditFrameMessage, type StoryAnnotationsMessage, type StoryEditParentMessage, type StoryEditRect, type StoryEditSelection } from '@/lib/edit-protocol';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { FeatureGate } from '../components/FeatureGate';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
@@ -135,7 +131,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     retake: () => (capture.draft()?.image.method === 'upload' ? undefined : () => void beginScreenshot()) })!;
   const composerDrop = createImageDropTarget(() => composerImage);
   let mutation = { signature: '', key: '' };
-  const postToFrame = (message: unknown) => { if (props.runtimeRef) sendDocument({ runtimeRef: props.runtimeRef }, message); };
+  const postToFrame = (message: StoryEditParentMessage) => { if (props.runtimeRef) sendDocument({ runtimeRef: props.runtimeRef }, message); };
 
   const [annotations, writeAnnotations] = createSignal<AnnotationWire[]>([]);
   let annotationEpoch = 0, readSequence = 0, appliedRead = 0;
@@ -413,13 +409,13 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       });
     const selected = selection();
     postToFrame({
-      type: STORY_ANNOTATIONS_MESSAGE, viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: previewId(),
+      type: 'mx:annotations', viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: previewId(),
       selectedPath: selected?.path ?? null, selected, canComment: true, pick: pick(),
     } satisfies StoryAnnotationsMessage);
   });
   // Closing the rail drops what only the rail was showing; the pins stay.
   createEffect(on(railOpen, (open) => { if (!open) setOpenId(null); }));
-  onCleanup(() => postToFrame({ type: STORY_ANNOTATIONS_MESSAGE, mode: 'off', pins: [], openId: null, hoverId: null } satisfies StoryAnnotationsMessage));
+  onCleanup(() => postToFrame({ type: 'mx:annotations', mode: 'off', pins: [], openId: null, hoverId: null } satisfies StoryAnnotationsMessage));
 
   // What the document says: pin clicks always; selections only while a pick or a composer is open.
   createEffect(() => {
@@ -429,12 +425,12 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     const unsubscribe = subscribeDocument({ runtimeRef: runtime }, (event) => {
       const data = event.data;
       if (!isEditFrameMessage(data, nonce)) return;
-      if (data.type === STORY_SELECTION_ACTION_MESSAGE && data.action === 'select') {
+      if (data.type === 'mx:selection-action' && data.action === 'select') {
         if (props.pickOnOpen === false) return;
         startPick();
         return;
       }
-      if (data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) {
+      if (data.type === 'mx:annotation-layout') {
         setViewStateError(data.viewStateError ?? null);
         const next: Record<string, StoryEditRect> = {};
         for (const position of data.positions) next[position.id] = position.rect;
@@ -444,10 +440,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         });
         return;
       }
-      if (data.type === STORY_ANNOTATION_PIN_MESSAGE) { openThread(data.id); return; }
-      if (data.type === STORY_ANNOTATION_HOVER_MESSAGE) { setHoverId(uiHoverId ?? data.id); return; }
+      if (data.type === 'mx:annotation-pin') { openThread(data.id); return; }
+      if (data.type === 'mx:annotation-hover') { setHoverId(uiHoverId ?? data.id); return; }
       const picking = untrack(pick);
-      if (data.type === STORY_SELECTION_MESSAGE && picking) {
+      if (data.type === 'mx:selection' && picking) {
         // THE PICK'S ANSWER, and the pick is over either way. Null: escape in the document.
         const picked = data.selection;
         resumeSelectAfterCompose = Boolean(picked) && picking === 'block';
@@ -466,7 +462,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         });
         return;
       }
-      if (data.type === STORY_SELECTION_MESSAGE && untrack(selection) !== null) {
+      if (data.type === 'mx:selection' && untrack(selection) !== null) {
         const reported = data.selection;
         if (capture.draft() || capture.busy()) return;
         /*
@@ -618,7 +614,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         setJustOpenedId(wire.id);
         if (resume) setPick('block');
       });
-      if (!resume) postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
+      if (!resume) postToFrame({ type: 'mx:select', path: null });
     } catch (error) { setFailure(error instanceof Error ? error.message : 'Could not save the comment. Your draft is still here.'); }
     finally { setBusy(false); }
   };
@@ -630,7 +626,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       resumeSelectAfterCompose = false;
       // The next annotation state clears the old target without a null-selection echo cancelling the new pick.
       startPick();
-    } else postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
+    } else postToFrame({ type: 'mx:select', path: null });
   };
 
   const submitDraft = () => {
@@ -919,7 +915,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
                     <Show when={crumb.path !== selection()?.path} fallback={<span class="truncate text-accent">{crumb.tag}</span>}>
                       <Tooltip content={crumb.hint || crumb.tag}>
                         <button type="button" aria-label={`Select ${crumb.tag}`} disabled={!!capture.draft() || capture.busy()}
-                          onClick={() => postToFrame({ type: STORY_SELECT_MESSAGE, path: crumb.path })}
+                          onClick={() => postToFrame({ type: 'mx:select', path: crumb.path })}
                           class="cursor-pointer truncate underline decoration-dotted hover:text-accent">{crumb.tag}</button>
                       </Tooltip>
                     </Show>

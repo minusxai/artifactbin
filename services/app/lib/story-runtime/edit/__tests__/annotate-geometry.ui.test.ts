@@ -7,7 +7,6 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
-import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_SELECTION_MESSAGE } from '@/lib/story-runtime/contract';
 import { NONCE, PIN, channel, disposeAnnotateSession, env, installAnnotateSession, layouts, state } from '@/test/helpers/annotate-session';
 
 beforeEach(installAnnotateSession);
@@ -166,10 +165,10 @@ describe('view-mode annotation geometry', () => {
     env.session.update(state('on'));
     const anchor = document.querySelector('main p')!;
     anchor.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
-    expect(env.posted.at(-1)).toMatchObject({ type: STORY_ANNOTATION_HOVER_MESSAGE, nonce: NONCE, id: PIN.id });
+    expect(env.posted.at(-1)).toMatchObject({ type: 'mx:annotation-hover', nonce: NONCE, id: PIN.id });
 
     anchor.dispatchEvent(new MouseEvent('pointerout', { bubbles: true }));
-    expect(env.posted.at(-1)).toMatchObject({ type: STORY_ANNOTATION_HOVER_MESSAGE, nonce: NONCE, id: null });
+    expect(env.posted.at(-1)).toMatchObject({ type: 'mx:annotation-hover', nonce: NONCE, id: null });
   });
 
   it('refreshes the selected node geometry while an on-page composer is open', () => {
@@ -177,13 +176,13 @@ describe('view-mode annotation geometry', () => {
       type: 'element', tag: 'p', isComponent: false, attributes: [], children: [], selfClosing: false, start: 0, end: 0,
     }]);
     env.session.update({ ...state('on'), selectedPath: '0' });
-    expect(env.posted.filter((message) => message.type === STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({
+    expect(env.posted.filter((message) => message.type === 'mx:selection').at(-1)).toMatchObject({
       selection: { path: '0', rect: { y: 220 } },
     });
 
     env.y = 72;
     window.dispatchEvent(new Event('scroll'));
-    expect(env.posted.filter((message) => message.type === STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({
+    expect(env.posted.filter((message) => message.type === 'mx:selection').at(-1)).toMatchObject({
       selection: { path: '0', rect: { y: 72 } },
     });
   });
