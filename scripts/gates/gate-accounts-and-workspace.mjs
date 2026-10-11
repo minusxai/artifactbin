@@ -784,6 +784,48 @@ async function hostedRestartLeg(owner) {
   }
 }
 
+// A separate account prevents preference changes from racing the folder/fork fixtures.
+async function groupUiLeg() {
+  const { must, run } = lane(check, 'group-ui');
+  const ctx = await context();
+  try {
+    await run(async () => {
+      const page = await ctx.newPage();
+      await loginViaEmail(page, BASE, sink, `mxmx_test_group_ui_${stamp}@example.com`);
+      await page.goto(`${BASE}/groups`);
+      await page.getByLabel('Group name', { exact: true }).fill('Design team');
+      await page.getByLabel('Group handle', { exact: true }).fill(`design-${stamp}`);
+      await page.getByRole('button', { name: 'Create group', exact: true }).click();
+      await page.getByRole('heading', { name: 'Design team', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Set as default', exact: true }).click();
+      await page.getByRole('button', { name: 'Remove default', exact: true }).waitFor();
+      must(new URL(page.url()).pathname === `/@design-${stamp}`, 'saving a default confirms inline without redirect');
+      await page.goto(`${BASE}/`);
+      await page.getByRole('heading', { name: 'Design team', exact: true }).waitFor();
+      await page.reload();
+      await page.getByRole('button', { name: 'Remove default', exact: true }).click();
+      await page.getByRole('heading', { name: /create your first artifact/i }).waitFor();
+      await page.reload();
+      await page.getByRole('heading', { name: /create your first artifact/i }).waitFor();
+      check(true, 'removing a default selects Personal across reload');
+      await page.setViewportSize({ width: 390, height: 844 });
+      const navigation = page.getByRole('button', { name: 'Toggle navigation' });
+      must(await navigation.getAttribute('aria-expanded') === 'false', 'phone navigation starts collapsed');
+      await navigation.click();
+      await page.getByRole('link', { name: 'Account settings', exact: true }).waitFor();
+      await navigation.click();
+      must(await navigation.getAttribute('aria-expanded') === 'false', 'phone navigation closes after a second tap');
+      await page.getByRole('button', { name: 'Open page controls', exact: true }).click();
+      await page.getByRole('button', { name: 'Dark mode', exact: true }).click();
+      // A real click catches a scrim covering the apparent close button; DOM dispatch cannot.
+      await page.getByRole('button', { name: 'Close page controls', exact: true }).click();
+      await page.getByRole('button', { name: 'Open page controls', exact: true }).waitFor();
+      check(true, 'the page bar close action stays clickable above the scrim');
+      must(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'phone workspace has no horizontal overflow');
+    });
+  } finally { await ctx.close(); }
+}
+
 // ── cli: portable CLI/HTTP acceptance against this host — scripts/gates/lib/cli-conformance.mjs, shared with the
 // standalone scripts/gate-cli-conformance.mjs a downstream deployment runs against its own host.
 const cliLeg = () => cliConformance({ base: BASE, check, stamp, sink, context });
@@ -794,8 +836,9 @@ await Promise.all([
   doorLeg(),
   workspaceOwner().then((owner) => owner && Promise.all([forkLeg(owner), foldersLeg(owner), hostedRestartLeg(owner)])),
   cliLeg(),
+  groupUiLeg(),
 ]);
-check.note(`five legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+check.note(`account and workspace legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 await browser.close();
 sink.close();
 check.done();

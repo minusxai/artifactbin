@@ -38,7 +38,7 @@ export function ProfilePage(): JSX.Element {
   });
   return <Show when={page.data()} fallback={<Show when={page.error()} fallback={<main aria-label="Loading page" role="status" class="mx-auto max-w-4xl px-4 py-10">Loading profile…</main>}><NotFoundPage /></Show>}>
     {answer => <Show when={answer().kind !== 'group'} fallback={<GroupPage identity={answer().handle!}/>}><Show when={answer().kind === 'public-profile' && answer().handle} fallback={answer().kind === 'redirect' && answer().to ? <Navigate href={answer().to!} /> : <NotFoundPage />}>
-      <main class="workspace-page">
+      <main class="mx-auto max-w-6xl px-5 py-8 font-sans sm:px-8 sm:py-10">
         <Show when={page.error()}><button type="button" class={`${FORM_SECONDARY_BUTTON} mb-4`} aria-label="Retry profile" onClick={() => void page.refresh(true)}>Could not refresh profile. Retry</button></Show>
         <header class="mb-8 border-b border-edge pb-7">
           <p class="text-sm text-muted">Public profile</p>

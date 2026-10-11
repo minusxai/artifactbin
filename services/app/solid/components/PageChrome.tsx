@@ -117,7 +117,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
       * not be pressed. A page without trusted UI keeps them on its body.
       */}
     <Show when={panel()}><Portal mount={trustedPortalOf(document) ?? document.body}>
-      <button type="button" aria-label="Close panel" class="fixed inset-0 z-40 cursor-default border-0 bg-black/25 p-0" onClick={close} />
+      <button type="button" aria-label="Close panel" class="fixed inset-x-0 bottom-0 top-11 z-40 cursor-default border-0 bg-black/25 p-0" onClick={close} />
       <Show when={panel() === 'menu'}>
         <PageMenuPanel close={close} phone={phone()} />
       </Show>

@@ -51,7 +51,7 @@ export function FileConnectReceiver(props:{adapter:ConnectAdapter;authentication
  };
  const title=()=>props.adapter.hosted?'Connect to artifactbin':'Preview server';
  return <><PageBar home={null} mobileTitle={title()} navigation={<><span class="shrink-0 text-muted">artifactbin</span><DocumentTitle title={title()}/><span class="text-xs text-muted">{props.adapter.hosted?'Hosted':'Local'}</span></>} actions={<></>}/><FormPage>
-  <h1 class="text-base font-semibold">{props.adapter.hosted?'Connect an offline file':'Import an HTML file'}</h1>
+  <h1 class="text-2xl font-semibold tracking-tight">{props.adapter.hosted?'Connect an offline file':'Import an HTML file'}</h1>
   <p class="text-muted">Choose an artifactbin .jsx.html file, or use Connect to server in your offline file.</p>
   <p class="text-muted">{props.adapter.hosted?'Review the destination and confirm before anything is published. Your original HTML file stays unchanged.':'Importing creates or reconciles a copy in this server’s workspace. Your original HTML file stays unchanged. Nothing is published.'}</p>
   <Show when={offer()}>{incoming=><p class="break-words">Received file: <b>{incoming().filename}</b></p>}</Show>
