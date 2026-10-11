@@ -8,7 +8,7 @@ import type { UserKind } from '@artifactbin/contracts';
 import { getDb,type Queryable } from '../platform/db';
 import { emit } from '../platform/events';
 import { generateInternalId } from '../platform/ids';
-import { sha256 } from './tokens';
+import { forgetRequestCredentials, sha256 } from './tokens';
 import {reserveHandle,RESERVED_HANDLES} from '../platform/handles';
 
 /**
@@ -244,6 +244,7 @@ async function claimWhere(
       if (token.user_id && token.user_id !== userId) return null;
       if (!token.user_id) {
         await tx.query('UPDATE tokens SET user_id = $1 WHERE id = $2', [userId, token.id]);
+        forgetRequestCredentials();
       }
 
       // Uniform null: unknown, revoked, or someone else's — the caller cannot
@@ -346,6 +347,7 @@ export async function revokeUserToken(userId: string, tokenId: string): Promise<
     'UPDATE tokens SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING name',
     [tokenId, userId],
   );
+  forgetRequestCredentials();
   const row = r.rows[0];
   if (!row) return false;
   // The owner is the one acting; the same statement hands back the name.

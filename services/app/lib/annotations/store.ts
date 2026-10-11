@@ -362,10 +362,14 @@ const LIVE_ANNOTATION_SQL = 'deleted_at IS NULL';
 /** Assemble wire threads for a set of roots — anchors resolved against the CURRENT source. */
 async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[]): Promise<AnnotationWire[]> {
   if (roots.length === 0) return [];
+  const rootIds = roots.map((root) => root.id);
+  // Three statements however many threads: the selected roots' replies, their remote work, the artifact's images.
   const replies = await db.query<AnnotationRowDb>(
-    `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id IS NOT NULL AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
-    [head.id],
+    `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id = ANY($2::text[]) AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
+    [head.id, rootIds],
   );
+  const work = await remoteAgents.workFor(db, head.id, rootIds);
+  const images = await commentImagesFor(db, head.id);
   const byRoot = new Map<string, AnnotationRowDb[]>();
   for (const r of replies.rows) {
     const list = byRoot.get(r.root_id!) ?? [];
@@ -373,11 +377,10 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
     byRoot.set(r.root_id!, list);
   }
 
-  const images = await commentImagesFor(db,head.id);
   const source = head.source ?? '';
   const anchors = anchorIndex(source);
 
-  return Promise.all(roots.map(async (root) => {
+  return roots.map((root) => {
     const found = root.anchor_key ? anchors.get(root.anchor_key) : undefined;
     const bodyPath = found ? sourcePathToBodyPath(source, found.path) : null;
     const anchored = !!found && bodyPath !== null;
@@ -400,12 +403,12 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
       quote: root.quote,
       range,
       quote_found: quoteFound(anchored ? found : undefined, root.quote, range),
-      remote_work:await remoteAgents.work(db,head.id,root.id),
+      remote_work: work.get(root.id) ?? [],
       thread: [commentWire(root, images), ...(byRoot.get(root.id) ?? []).map((reply) => commentWire(reply, images))],
       created_at: root.created_at,
       resolved_at: root.resolved_at,
     };
-  }));
+  });
 }
 
 /**

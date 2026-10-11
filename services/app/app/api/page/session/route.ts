@@ -13,23 +13,24 @@
  * still has `welcome_pending`. Everybody else — a guest, a test user, an
  * anonymous browser, nobody at all — is true, because the shell's gate reads
  * this bit to redirect and a `false` nobody can resolve would be a loop.
- * Together with the row read these are two lookups on a payload that is
- * already `no-store`; the welcome rule stays in lib/profiles.
+ * The request is authenticated ONCE (`browserSessionKind` takes the actor
+ * already resolved) and the welcome bit rides the same users row as the
+ * handle and picture, so the payload costs one lookup; the rule it reads is
+ * lib/profiles' `welcomePending`, asked of that row.
  */
 import { avatarUrl } from '@/lib/accounts';
 import { json } from '@/lib/http';
-import { welcomePending } from '@/lib/accounts';
-import { getUserById } from '@/lib/accounts';
+import { getUserById, welcomePending } from '@/lib/accounts';
 import { browserSessionKind, sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
-  const kind = await browserSessionKind(request);
+  const kind = await browserSessionKind(request, actor);
   const userId = actor.credential === 'session' ? actor.viewer?.userId : undefined;
   const row = userId ? await getUserById(userId) : null;
   const user = userId
     ? { id: userId, email: actor.viewer?.email ?? null, username: row?.username ?? null, image: row ? avatarUrl(row) : null }
     : null;
-  const onboarded = userId ? !(await welcomePending(userId)) : true;
+  const onboarded = userId ? !(await welcomePending(row)) : true;
   return json({ user, kind, onboarded }, 200, { 'Cache-Control': 'no-store' });
 }
