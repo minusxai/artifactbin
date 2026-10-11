@@ -10,6 +10,7 @@ const args = raw.filter(arg => arg !== '--reuse');
 const node = process.execPath;
 const commands = label === 'validate' && !args.length ? [
   [node, 'scripts/ci/check-residual-names.mjs'],
+  [node, 'scripts/ci/check-ui-primitives.mjs'],
   [node, 'scripts/ci/module-graph.mjs'],
   // Unused files, exports, types and dependencies (knip.config.js names the entry points); a stale entry fails too.
   [node, 'node_modules/knip/bin/knip.js', '--no-progress', '--treat-config-hints-as-errors'],
