@@ -76,8 +76,8 @@ describe('UI-primitive guard', () => {
     expect(outside.output).toContain(rule);
   });
 
-  it('does not run a tag scan past a comparison into the next tag', () => {
-    const clean = '<span onClick={() => go(a > b)}>x</span><Button class="w-full">Go</Button><Dialog role="alertdialog" title="t" />';
+  it('does not run a tag scan past a comparison, nor count an iframe title (its accessible name)', () => {
+    const clean = '<span onClick={() => go(a > b)}>x</span><Button class="w-full">Go</Button><Dialog role="alertdialog" title="t" /><iframe src={u} title="Context document" />';
     expect(run(repository({ 'services/app/solid/pages/Page.tsx': clean })).status).toBe(0);
   });
 
