@@ -37,7 +37,7 @@ function PlainSourceFallback(props: SourceEditorProps & { unavailable?: string |
         <pre data-source-line-numbers class="m-0 py-2 pr-3" style={{ font: 'inherit' }}>{props.value.split('\n').map((_, index) => index + 1).join('\n')}</pre>
       </div>
       <Textarea ref={input} surface="code" aria-label={props.ariaLabel ?? 'Markup source'} aria-description={props.unavailable ?? undefined} readOnly={props.readOnly}
-        class="flex-1 [tab-size:2]" wrap="off"
+        class="flex-1 [tab-size:2]" style={CODE} wrap="off"
         spellcheck={false} autocapitalize="off" value={props.value}
         on:input={(event) => {
           props.remember({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd });
