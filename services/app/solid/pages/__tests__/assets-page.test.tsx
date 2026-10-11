@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { AssetsPage } from '@/solid/pages/Assets';
@@ -67,4 +67,33 @@ it('reports a missing assets endpoint and offers retry', async () => {
   open();
   expect(await screen.findByLabelText('Assets unavailable')).toBeInTheDocument();
   expect(screen.getByLabelText('Retry assets')).toBeInTheDocument();
+});
+
+it('toggles a format filter as a pressed button and asks the server for it', async () => {
+  const fetchMock = vi.fn(async (_url: string) => Response.json(payload));
+  vi.stubGlobal('fetch', fetchMock);
+  open();
+  const filter = await screen.findByRole('button', { name: 'Filter image' });
+  expect(filter).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(filter);
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('formats=image'))).toBe(true));
+  expect(screen.getByRole('button', { name: 'Filter image' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'Filter image' }));
+  expect(screen.getByRole('button', { name: 'Filter image' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+it('names the search box and announces a failed first load as an alert with a working retry', async () => {
+  const fetchMock = vi.fn(async (_url: string) => Response.json({}, { status: 404 }));
+  vi.stubGlobal('fetch', fetchMock);
+  open();
+  const region = await screen.findByLabelText('Assets unavailable');
+  expect(within(region).getByRole('alert')).toHaveTextContent('could not load assets');
+  const calls = fetchMock.mock.calls.length;
+  fireEvent.click(within(region).getByRole('button', { name: 'Retry assets' }));
+  await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(calls));
+});
+
+it('labels the search box as a search field', async () => {
+  open();
+  expect(await screen.findByRole('searchbox', { name: 'Search assets' })).toHaveValue('');
 });

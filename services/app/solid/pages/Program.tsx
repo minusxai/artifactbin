@@ -1,5 +1,5 @@
 import WorkspaceHeading from '../components/WorkspaceHeading';
-import { FORM_INPUT, FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON } from '../ui/FormControls';
+import { FORM_SECONDARY_BUTTON } from '../ui/FormControls';
 /* @jsxImportSource solid-js */
 import { creationDestination } from '../lib/creation-destination';
 import {createSignal,createEffect,onCleanup,Show,type JSX} from 'solid-js';
@@ -10,8 +10,11 @@ import {apiRequest} from '../lib/api';
 import {runFailureMessage} from '../lib/run-failure-message';
 import {useSession} from '../lib/session';
 import {DocumentSharing} from '../document/DocumentSharing';
-const FIELD=`${FORM_INPUT} mt-1`;
-const BUTTON=FORM_SECONDARY_BUTTON;
+import {Button} from '../ui/Button';
+import {Field,Input,Textarea} from '../ui/Field';
+import {SectionHeading} from '../ui/PageHeader';
+import {Panel} from '../ui/Panel';
+import {StatusMessage} from '../ui/StatusMessage';
 const EXAMPLE:ProgramDefinition={version:1,command:['node','-e','console.log("Hello from the program")'],compute:{vcpu:1,memoryMiB:2048,ttlSeconds:600}};
 interface ProgramWire{id:string;title:string|null;version:number;state:string;program:ProgramDefinition}
 export function ProgramPage(props:{artifactId?:string;owner?:boolean}={}):JSX.Element{
@@ -54,12 +57,12 @@ export function ProgramPage(props:{artifactId?:string;owner?:boolean}={}):JSX.El
   if(poll)clearInterval(poll);poll=setInterval(()=>void refresh(),2000);await refresh();
  }catch(error){setError(error instanceof Error?error.message:'Could not run program.');}finally{setBusy(false);}};
  return <main class="workspace-page space-y-6"><WorkspaceHeading title={props.artifactId?'Saved program':'New program'} description="A saved command runs in a temporary compute box. Its home directory persists between runs. Keep credentials out of the definition." />
- <Show when={error()}><p role="alert" class="rounded-lg border border-danger/30 bg-danger-soft p-3 text-sm text-danger">{error()}</p></Show><Show when={notice()}><p role="status" class="rounded-lg border border-accent/30 bg-accent-soft p-3 text-sm text-accent">{notice()}</p></Show><Show when={loading()}><p role="status">Loading program…</p></Show>
- <Show when={props.artifactId||session()?.user} fallback={<p><a href="/login" class="underline">Sign in</a> to create a program.</p>}><Show when={!props.artifactId||source()}><form onSubmit={event=>void save(event)} class="space-y-4 rounded-xl border border-edge bg-surface p-5 sm:p-6">
- <label for="program-title" class="block text-sm">Program title<input id="program-title" required value={title()} readOnly={!canManage()} onInput={event=>{setTitle(event.currentTarget.value);setDirty(true);}} class={FIELD}/></label>
- <label for="program-source" class="block text-sm">Program JSON<textarea id="program-source" spellcheck={false} rows={16} value={source()} readOnly={!canManage()} onInput={event=>{setSource(event.currentTarget.value);setDirty(true);}} class={`${FIELD} font-mono leading-relaxed`}/></label>
+ <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show><Show when={notice()}><StatusMessage kind="notice">{notice()}</StatusMessage></Show><Show when={loading()}><StatusMessage kind="loading">Loading program…</StatusMessage></Show>
+ <Show when={props.artifactId||session()?.user} fallback={<p><a href="/login" class="underline">Sign in</a> to create a program.</p>}><Show when={!props.artifactId||source()}><form onSubmit={event=>void save(event)}><Panel class="space-y-4">
+ <Field label="Program title"><Input required value={title()} readOnly={!canManage()} onInput={event=>{setTitle(event.currentTarget.value);setDirty(true);}}/></Field>
+ <Field label="Program JSON"><Textarea size="sm" spellcheck={false} rows={16} value={source()} readOnly={!canManage()} onInput={event=>{setSource(event.currentTarget.value);setDirty(true);}}/></Field>
  <p class="text-xs text-muted">Version 1 requires a command array. Compute and environment configuration are optional. Defaults: 1 vCPU, 2 GiB RAM. Runtime authentication is supplied separately.</p>
- <Show when={canManage()} fallback={<p>Only the owner can run or schedule this program.</p>}><div class="flex flex-wrap gap-2"><button type="submit" class={FORM_PRIMARY_BUTTON} disabled={busy()||loading()}>Save program</button><Show when={id()}><button type="button" class={BUTTON} disabled={busy()||dirty()||['queued','running'].includes(run()?.status??'')} onClick={()=>void invoke()}>Run program</button><a aria-label="Schedule program" class={BUTTON} href={`/schedules?artifact=${encodeURIComponent(id()!)}`}>Schedule</a></Show></div><Show when={dirty()&&id()}><p class="mt-2 text-xs text-muted">Save your changes before running.</p></Show></Show>
- </form></Show></Show><Show when={canManage()&&id()}><DocumentSharing id={id()!} title={title()} owner version={version()} format="program" /></Show><Show when={id()}><a href={`/a/${id()}`} class="text-sm underline">Open saved program</a></Show>
- <Show when={run()}>{state=><section aria-label="Program run" class="min-w-0 rounded-xl border border-edge bg-surface p-5"><h2 class="break-all font-semibold">Run {state().runId}</h2><p role="status" class="mt-2">{state().status}</p><Show when={state().receipt?.reason}><p role="alert" class="rounded-lg border border-danger/30 bg-danger-soft p-3 text-sm text-danger">{runFailureMessage(state().receipt!.reason!)}</p></Show><Show when={state().output!==null}><details><summary>Output</summary><pre class="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(state().output,null,2)}</pre></details></Show></section>}</Show></main>;
+ <Show when={canManage()} fallback={<p>Only the owner can run or schedule this program.</p>}><div class="flex flex-wrap gap-2"><Button type="submit" disabled={busy()||loading()}>Save program</Button><Show when={id()}><Button variant="secondary" type="button" disabled={busy()||dirty()||['queued','running'].includes(run()?.status??'')} onClick={()=>void invoke()}>Run program</Button><a aria-label="Schedule program" class={FORM_SECONDARY_BUTTON} href={`/schedules?artifact=${encodeURIComponent(id()!)}`}>Schedule</a></Show></div><Show when={dirty()&&id()}><p class="mt-2 text-xs text-muted">Save your changes before running.</p></Show></Show>
+ </Panel></form></Show></Show><Show when={canManage()&&id()}><DocumentSharing id={id()!} title={title()} owner version={version()} format="program" /></Show><Show when={id()}><a href={`/a/${id()}`} class="text-sm underline">Open saved program</a></Show>
+ <Show when={run()}>{state=><Panel label="Program run"><SectionHeading class="break-all">Run {state().runId}</SectionHeading><StatusMessage kind="notice" class="mt-2">{state().status}</StatusMessage><Show when={state().receipt?.reason}><StatusMessage kind="error">{runFailureMessage(state().receipt!.reason!)}</StatusMessage></Show><Show when={state().output!==null}><details><summary>Output</summary><pre class="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(state().output,null,2)}</pre></details></Show></Panel>}</Show></main>;
 }
