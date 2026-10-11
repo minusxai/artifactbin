@@ -9,9 +9,6 @@
  * `{ mentionsUnavailable: string | null; members?: (query: string, opts: { signal }) => Promise<{ people: [...] } | null> }`.
  * Whoever wires this toolbar into a live page passes the app's ArtifactBackend (it satisfies this
  * shape already — `unavailable('mentions')` and `members(...)`).
- *
- * The text-color control is a native color input behind an icon label: no solid/ui primitive draws a color well,
- * and its black default is data.
  */
 import { createEffect, createSignal, createUniqueId, For, on, Show, type JSX } from 'solid-js';
 import AArrowDown from 'lucide-solid/icons/a-arrow-down';
@@ -55,6 +52,7 @@ import type { MarkdownBlockKind, MarkdownTableAction, StoryEditSelection } from 
 import type { ComposableFormatEdit } from '@/lib/document/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
 import { Button } from '@/solid/ui/Button';
+import { ColorField } from '@/solid/ui/ColorField';
 import { Input } from '@/solid/ui/Field';
 import { Select } from '@/solid/ui/Select';
 import { Tooltip } from '@/solid/ui/Tooltip';
@@ -113,11 +111,11 @@ function Chip(props: { label: string; on?: boolean | 'mixed'; onClick: () => voi
   return (
     <Tooltip content={props.label}>
       <Button
-        variant={props.on ? 'secondary' : 'ghost'}
+        variant="ghost"
         size="sm"
         icon
         aria-label={props.label}
-        aria-pressed={props.on}
+        pressed={props.on}
         onMouseDown={(e) => e.preventDefault()}
         onClick={props.onClick}
       >
@@ -300,13 +298,9 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
 
                 <Show when={plan().color}>
                   <span class="mx-0.5 h-4 w-px bg-edge" />
-                  <Tooltip content="text color">
-                    <label aria-label="Text color" class="inline-flex size-control-sm shrink-0 cursor-pointer items-center justify-center rounded-control text-fg hover:bg-raised">
-                      <Baseline size={14} />
-                      <input type="color" aria-label="Pick text color" value={currentStoryColor(cls(), 'text') ?? '#000000'}
-                        onInput={(e) => apply(applyStoryColor(cls(), 'text', e.currentTarget.value))} class="absolute h-0 w-0 opacity-0" />
-                    </label>
-                  </Tooltip>
+                  <Baseline size={14} aria-hidden="true" class="shrink-0 text-muted" />
+                  <ColorField ariaLabel="Text color" size="sm" class="w-28 shrink-0" value={currentStoryColor(cls(), 'text') ?? ''}
+                    onChange={(hex) => apply(applyStoryColor(cls(), 'text', hex))} />
                 </Show>
               </Show>
 

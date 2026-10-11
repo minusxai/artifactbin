@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { readPwaSettings } from '@/lib/document/pwa-settings';
@@ -34,4 +34,33 @@ it('reports a refused upload as an alert and keeps the source untouched', async 
   fireEvent.change(input);
   expect(await screen.findByRole('alert')).toHaveTextContent('That image is too large.');
   expect(change).not.toHaveBeenCalled();
+});
+
+afterEach(() => vi.useRealTimers());
+
+it('draws the theme and background colors as color fields that write once the color settles', () => {
+  vi.useFakeTimers();
+  const change = vi.fn();
+  render(() => <PwaSettingsPanel id="Abc123" title="Doc" source={SOURCE} onChange={change} onUpload={vi.fn()} />);
+  const theme = screen.getByRole('textbox', { name: 'Theme color' });
+  expect(theme).toHaveValue('#ffffff');
+  expect(screen.getByRole('textbox', { name: 'Background color' })).toHaveValue('#ffffff');
+  expect(screen.getByText('App title bar and browser toolbar, where supported.')).toBeInTheDocument();
+  // A drag over the picker fires many input events: one write, for the last color.
+  for (const hex of ['#111111', '#222222', '#336699']) fireEvent.input(screen.getByLabelText('Theme color picker'), { target: { value: hex } });
+  expect(theme).toHaveValue('#336699');
+  expect(change).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(400);
+  expect(change).toHaveBeenCalledTimes(1);
+  expect(readPwaSettings(change.mock.lastCall![0])).toEqual({ themeColor: '#336699' });
+});
+
+it('keeps a pending color when the panel closes before it settles', () => {
+  vi.useFakeTimers();
+  const change = vi.fn();
+  const view = render(() => <PwaSettingsPanel id="Abc123" title="Doc" source={SOURCE} onChange={change} onUpload={vi.fn()} />);
+  fireEvent.input(screen.getByRole('textbox', { name: 'Background color' }), { target: { value: '#102030' } });
+  expect(change).not.toHaveBeenCalled();
+  view.unmount();
+  expect(readPwaSettings(change.mock.lastCall![0])).toEqual({ backgroundColor: '#102030' });
 });

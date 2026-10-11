@@ -1,18 +1,39 @@
 /* @jsxImportSource solid-js */
-import { createMemo, createSignal, Show } from 'solid-js';
+import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import type { ImageChoice } from '@/lib/artifact-backend/types';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/document/pwa-settings';
 import { InstallArtifactLink } from '../document/InstallArtifact';
 import { Button } from '../ui/Button';
+import { ColorField } from '../ui/ColorField';
 import { Switch } from '../ui/Checkbox';
 import { Field, Input } from '../ui/Field';
 import { SectionHeading } from '../ui/PageHeader';
 import { StatusMessage } from '../ui/StatusMessage';
 
 interface PwaSettingsPanelProps { id: string; title: string; source: string; onChange: (source: string) => void; onUpload: (file: File) => Promise<ImageChoice>; beforeInstall?: () => Promise<boolean> }
-// No ui primitive draws a color well; the two `type="color"` inputs below stay native (their white defaults are data, the colour a settings value falls back to).
-const COLOR_WELL = 'mt-1 h-10 w-full cursor-pointer rounded-control border border-edge bg-ground p-1';
+/** What an unset colour shows: white, the manifest's own default (a stored-settings default, not a UI colour). */
+const UNSET_COLOR = '#ffffff';
+/** A colour is written once it settles: dragging the picker would otherwise queue a structural source edit per frame. */
+const SETTLE_MS = 300;
+
+/** A colour well's value and its settled commit; a pending colour is committed if the panel goes away first. */
+function createSettledColor(read: () => string | undefined, commit: (hex: string) => void) {
+  const [draft, setDraft] = createSignal<string | null>(null);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    clearTimeout(timer);
+    const pending = draft();
+    if (pending === null) return;
+    setDraft(null);
+    commit(pending);
+  };
+  onCleanup(flush);
+  return {
+    value: () => draft() ?? read() ?? UNSET_COLOR,
+    set: (hex: string) => { setDraft(hex); clearTimeout(timer); timer = setTimeout(flush, SETTLE_MS); },
+  };
+}
 
 /** Uses the editor's source queue: settings participate in autosave, conflicts and undo. */
 export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
@@ -34,6 +55,8 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
     } catch { setError('Could not upload the icon. Try again.'); }
     finally { setUploading(false); }
   };
+  const themeColor = createSettledColor(() => settings().themeColor, themeColor => update({ themeColor }));
+  const backgroundColor = createSettledColor(() => settings().backgroundColor, backgroundColor => update({ backgroundColor }));
   let iconFile: HTMLInputElement | undefined;
   const preview = () => uploaded() && uploaded()!.id === settings().icon ? uploaded()!.url : settings().icon ? `/a/${settings().icon}/raw` : `${artifactAppPath(props.id)}icon-192.png`;
   return <section aria-label="PWA settings" class="mx-auto max-w-3xl space-y-8">
@@ -51,8 +74,8 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
       <Show when={uploading()}><StatusMessage kind="loading">Uploading icon…</StatusMessage></Show>
     </div>
     <div class="grid gap-5 sm:grid-cols-2">
-      <label class="text-sm text-muted">Theme color<input type="color" aria-label="Theme color" class={COLOR_WELL} value={settings().themeColor ?? '#ffffff'} onChange={e => update({ themeColor: e.currentTarget.value })} /><span class="mt-1 block text-xs">App title bar and browser toolbar, where supported.</span></label>
-      <label class="text-sm text-muted">Background color<input type="color" aria-label="Background color" class={COLOR_WELL} value={settings().backgroundColor ?? '#ffffff'} onChange={e => update({ backgroundColor: e.currentTarget.value })} /><span class="mt-1 block text-xs">Loading screen and padding around your app icon.</span></label>
+      <Field label="Theme color" hint="App title bar and browser toolbar, where supported."><ColorField value={themeColor.value()} onChange={themeColor.set} /></Field>
+      <Field label="Background color" hint="Loading screen and padding around your app icon."><ColorField value={backgroundColor.value()} onChange={backgroundColor.set} /></Field>
     </div>
     <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
     <div class="space-y-3 border-t border-edge pt-5"><InstallArtifactLink id={props.id} beforeNavigate={props.beforeInstall} class="inline-flex items-center gap-2 text-sm font-semibold text-accent" />

@@ -48,7 +48,7 @@ const RULES = [
   // On an HTML element only: `<Dialog role="alertdialog">` is the primitive being used, not hand-rolled.
   { id: 'popup-role', use: 'ui/Menu, ui/Select, ui/Dialog, ui/Tabs or ui/Switch', pattern: new RegExp(`<[a-z][a-z0-9]*\\b${IN_TAG}\\srole=["'{]+(?:menu|listbox|dialog|alertdialog|tablist|switch)\\b`, 'g') },
   { id: 'overlay', use: 'ui/Dialog', pattern: /\bfixed inset-0\b/g },
-  { id: 'native-title', use: 'ui/Tooltip', pattern: new RegExp(`<[a-z][a-z0-9]*\\b${IN_TAG}\\stitle=`, 'g') },
+  { id: 'native-title', use: 'ui/Tooltip', pattern: new RegExp(`<(?!iframe\\b)[a-z][a-z0-9]*\\b${IN_TAG}\\stitle=`, 'g') },
   { id: 'styled-button', use: 'ui/Button', pattern: new RegExp(`<button\\b${IN_TAG}\\sclass(?:List)?=`, 'g') },
   { id: 'styled-field', use: 'ui/Input, ui/Textarea, ui/SearchField or ui/Checkbox', pattern: new RegExp(`<(?:input|textarea)\\b${IN_TAG}\\sclass(?:List)?=`, 'g') },
   { id: 'arbitrary-radius', use: 'rounded-chip|control|panel|dialog', pattern: /\brounded(?:-[a-z]{1,2})?-\[/g },

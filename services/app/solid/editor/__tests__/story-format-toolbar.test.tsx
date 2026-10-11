@@ -184,3 +184,37 @@ it('offers Markdown tables, checklists and dividers and routes table commands', 
   fireEvent.click(screen.getByRole('button', { name: 'Delete column' }));
   expect(onMarkdownTable).toHaveBeenCalledWith('delete-column');
 });
+
+const text = (className: string): StoryEditSelection => ({ kind: 'text', path: '0.1', tag: 'p', rect: { x: 0, y: 0, width: 1, height: 1 }, className, style: '', ancestors: [] });
+
+it('draws the text color as the shared color field: typed hex or picked color applies one color class', () => {
+  const onApply = vi.fn();
+  render(() => <StoryFormatToolbar selection={text('mt-4 text-[#112233]')} onApply={onApply} onApplyLink={vi.fn()} onSelect={vi.fn()} onDelete={vi.fn()} backend={{ mentionsUnavailable: null }} />);
+  const hex = screen.getByRole('textbox', { name: 'Text color' });
+  expect(hex).toHaveValue('#112233');
+  expect(hex.className).toContain('h-control-sm');
+  fireEvent.input(hex, { target: { value: '#abc' } });
+  expect(lastClass(onApply)).toBe('mt-4 text-[#aabbcc]!');
+  fireEvent.input(screen.getByLabelText('Text color picker'), { target: { value: '#ff0000' } });
+  expect(lastClass(onApply)).toBe('mt-4 text-[#ff0000]!');
+  fireEvent.input(hex, { target: { value: 'nope' } });
+  expect(hex).toHaveAttribute('aria-invalid', 'true');
+});
+
+it('shows no color until one is set: an unset text color is an empty field, not a stored black', () => {
+  render(() => <StoryFormatToolbar selection={text('mt-4')} onApply={vi.fn()} onApplyLink={vi.fn()} onSelect={vi.fn()} onDelete={vi.fn()} backend={{ mentionsUnavailable: null }} />);
+  expect(screen.getByRole('textbox', { name: 'Text color' })).toHaveValue('');
+});
+
+it('reports bold, italic and underline as pressed toggles that follow the selection', () => {
+  const [className, setClassName] = createSignal('font-bold');
+  render(() => <StoryFormatToolbar selection={text(className())} onApply={vi.fn()} onApplyLink={vi.fn()} onSelect={vi.fn()} onDelete={vi.fn()} backend={{ mentionsUnavailable: null }} />);
+  const bold = screen.getByRole('button', { name: 'Toggle bold' });
+  expect(bold).toHaveAttribute('aria-pressed', 'true');
+  expect(bold.className).toContain('bg-accent-soft');
+  expect(screen.getByRole('button', { name: 'Toggle italic' })).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.getByRole('button', { name: 'Toggle italic' }).className).not.toContain('bg-accent-soft');
+  setClassName('italic');
+  expect(bold).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.getByRole('button', { name: 'Toggle italic' })).toHaveAttribute('aria-pressed', 'true');
+});

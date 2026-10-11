@@ -105,3 +105,36 @@ it('shows a dot on the Selection tab when a new selection exists behind another 
   render(() => <Dotted />);
   expect(screen.getByRole('tab', { name: 'Selection' }).querySelector('[aria-hidden="true"]')).toBeTruthy();
 });
+
+it('draws the expanded strip as pill tabs wired to the panel body, with roving focus and arrow keys', () => {
+  render(() => <Harness />);
+  const selection = screen.getByRole('tab', { name: 'Selection' });
+  expect(selection).toHaveAttribute('tabindex', '0');
+  expect(screen.getByRole('tab', { name: 'History' })).toHaveAttribute('tabindex', '-1');
+  expect(screen.getByRole('tablist', { name: 'Edit panel tabs' })).not.toHaveAttribute('aria-orientation');
+  expect(selection).toHaveAttribute('aria-controls', screen.getByRole('tabpanel').id);
+  expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', selection.id);
+  expect(selection.textContent).toContain('Selection');
+  fireEvent.keyDown(selection, { key: 'ArrowRight' });
+  expect(screen.getByRole('tab', { name: 'History' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', screen.getByRole('tab', { name: 'History' }).id);
+});
+
+it('collapses to a vertical icon-only strip that keeps the names, the dot and the disabled reason', () => {
+  function Collapsed() {
+    const [tab, setTab] = createSignal<EditPanelTab>('history');
+    return (
+      <EditPanel top={0} tab={tab()} onTab={setTab} collapsed onCollapsedChange={vi.fn()} selectionDot commentsAvailable historyUnavailable={null}>
+        <p>body</p>
+      </EditPanel>
+    );
+  }
+  render(() => <Collapsed />);
+  expect(screen.getByRole('tablist', { name: 'Edit panel tabs' })).toHaveAttribute('aria-orientation', 'vertical');
+  const selection = screen.getByRole('tab', { name: 'Selection' });
+  expect(selection.textContent?.trim()).toBe('');
+  expect(selection.querySelector('[data-tab-dot]')).not.toBeNull();
+  expect(screen.getByRole('tab', { name: 'History' }).querySelector('[data-tab-dot]')).toBeNull();
+  fireEvent.keyDown(screen.getByRole('tab', { name: 'History' }), { key: 'ArrowDown' });
+  expect(screen.getByRole('tab', { name: 'Comments' })).toHaveAttribute('aria-selected', 'true');
+});

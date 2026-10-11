@@ -1,16 +1,1 @@
-[
-  {"path":"services/app/solid/editor/ContextPanel.tsx","rule":"native-title","count":1},
-  {"path":"services/app/solid/editor/EditPanel.tsx","rule":"popup-role","count":2},
-  {"path":"services/app/solid/editor/EditPanel.tsx","rule":"styled-button","count":2},
-  {"path":"services/app/solid/editor/EditorChrome.tsx","rule":"popup-role","count":1},
-  {"path":"services/app/solid/editor/EditorChrome.tsx","rule":"styled-button","count":1},
-  {"path":"services/app/solid/editor/PwaSettingsPanel.tsx","rule":"styled-field","count":2},
-  {"path":"services/app/solid/editor/PwaSettingsPanel.tsx","rule":"raw-color","count":2},
-  {"path":"services/app/solid/editor/SourceEditorPane.tsx","rule":"styled-field","count":1},
-  {"path":"services/app/solid/editor/StoryFormatToolbar.tsx","rule":"styled-field","count":1},
-  {"path":"services/app/solid/editor/StoryFormatToolbar.tsx","rule":"raw-color","count":1},
-  {"path":"services/app/solid/editor/ThemePicker.tsx","rule":"styled-button","count":1},
-  {"path":"services/app/solid/editor/panels/ProseRecoveryDialog.tsx","rule":"popup-role","count":1},
-  {"path":"services/app/solid/editor/panels/ProseRecoveryDialog.tsx","rule":"overlay","count":1},
-  {"path":"services/app/solid/editor/panels/ProseRecoveryDialog.tsx","rule":"palette-color","count":1}
-]
+[]

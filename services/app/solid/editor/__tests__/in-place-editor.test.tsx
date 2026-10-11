@@ -256,19 +256,22 @@ it('source typing saves and redraws the same draft before returning to App', asy
 it('keeps recovery modal until explicit restore and copies the rejected draft without saving it', async () => {
   let copied = '';
   vi.stubGlobal('navigator', { clipboard: { writeText: async (text: string) => { copied = text; } } });
-  const { view, emit, sent } = mountEditor('<p id="a">Current document</p>');
+  const { emit, sent } = mountEditor('<p id="a">Current document</p>');
   const fragment = '<p id="a">Recover this text</p>';
   emit({ type: 'mx:flow-edit', path: '0', expected: '<p id="a">Stale document</p>', replacement: fragment });
-  const recovery = view.getByRole('alertdialog', { name: 'Recover uncommitted text' });
+  const recovery = screen.getByRole('alertdialog', { name: 'Recover uncommitted text' });
   expect(recovery).toHaveAttribute('aria-modal', 'true');
+  expect(within(recovery).getByRole('heading', { name: 'Your text needs recovery' })).toBeInTheDocument();
+  expect(within(recovery).getByRole('textbox', { name: 'Uncommitted text' })).toHaveValue(fragment);
   fireEvent.keyDown(window, { key: 'Escape' });
+  fireEvent.mouseDown(recovery.parentElement!);
   expect(recovery.isConnected).toBe(true);
   fireEvent.click(within(recovery).getByRole('button', { name: 'Copy uncommitted text' }));
   await vi.waitFor(() => expect(copied).toBe(fragment));
   expect(recovery.isConnected).toBe(true);
   expect(queued).toHaveLength(0);
   fireEvent.click(within(recovery).getByRole('button', { name: 'Discard this text and restore document' }));
-  expect(view.queryByRole('alertdialog', { name: 'Recover uncommitted text' })).toBeNull();
+  expect(screen.queryByRole('alertdialog', { name: 'Recover uncommitted text' })).toBeNull();
   expect(drafts(sent).at(-1)).toBe('<p id="a">Current document</p>');
 });
 
