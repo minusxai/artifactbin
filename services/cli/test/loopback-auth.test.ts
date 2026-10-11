@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {runInNewContext} from 'node:vm';
 import {runCli} from '../src/dispatch';
 import {loadConnection,saveConnection} from '../src/config';
 import {browserAuthenticate} from '../src/browser-auth';
@@ -59,7 +60,14 @@ test('a signed-in local browser completes afbin auth with no click: loopback lis
   assert.match(seen.redirect,/^http:\/\/(127\.0\.0\.1|\[::1\]):\d+\/callback$/);
   assert.equal(seen.exchanged?.redirect_uri,seen.redirect);
   assert.ok(!seen.paths.includes('/oauth/device'),'no device pairing was started');
-  const page=await browser.pages[0]!;assert.equal(page.status,200);assert.match(page.text,/Signed in — you can close this tab/);
+  const page=await browser.pages[0]!;assert.equal(page.status,200);assert.match(page.text,/If this tab stays open, you can close it/);
+  const script=page.text.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(script,'successful sign-in attempts to close the tab');
+  const timers:{callback:()=>void;delay:number}[]=[];let closes=0;
+  runInNewContext(script,{window:{close:()=>{closes++;}},setTimeout:(callback:()=>void,delay:number)=>timers.push({callback,delay})});
+  assert.equal(closes,0,'show the confirmation before closing');
+  assert.equal(timers.length,1);assert.equal(timers[0]!.delay,1000);
+  timers[0]!.callback();assert.equal(closes,1);
   const saved=await loadConnection(origin,home,{});
   assert.deepEqual({...saved,expiresAt:undefined},{server:origin,token:'loopback_access',refreshToken:'loopback_refresh',clientId:'afbin_client',expiresAt:undefined});
   assert.ok(saved!.expiresAt!>Date.now());
@@ -74,6 +82,7 @@ test('a callback with the wrong state is refused and ignored; the command keeps 
   assert.equal(connection.token,'loopback_access');
   const pages=await Promise.all(browser.pages);
   assert.deepEqual(pages.map(page=>page.status).sort(),[200,400,400]);
+  for(const page of pages.filter(page=>page.status===400))assert.doesNotMatch(page.text,/<script/);
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
@@ -122,5 +131,6 @@ test('a refused code exchange saves nothing and tells the browser to retry',asyn
   await assert.rejects(browserAuthenticate(origin,{home,env:{},interactive:false,fetch,notify:()=>{},open:browser.open}),(error:unknown)=>error instanceof CliError&&error.code==='auth_failed');
   assert.equal(await loadConnection(origin,home,{}),null);
   const page=await browser.pages[0]!;assert.equal(page.status,400);assert.match(page.text,/run afbin auth again/);
+  assert.doesNotMatch(page.text,/<script/,'failed sign-in stays visible');
  }finally{await rm(home,{recursive:true,force:true});}
 });

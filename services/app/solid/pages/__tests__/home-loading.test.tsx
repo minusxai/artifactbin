@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomePage } from '@/solid/pages/Home';
 import { SessionProvider, useSession } from '@/solid/lib/session';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
+import { withPersonalBootstrap } from './home-bootstrap-fetch';
 
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com' }, onboarded: true };
 const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'markup', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
@@ -19,13 +20,14 @@ function open() {
   const remount = () => { setVisible(false); setVisible(true); };
   return { ...view, remount };
 }
-const homeFetch = (handler: (...args: any[]) => any) => vi.fn((url: string, init?: RequestInit) => url === '/api/deployment' ? Promise.resolve(Response.json({mode:'public',setup_complete:true,is_owner:false,default_group:null})) : url === '/api/me/preferences' ? Promise.resolve(Response.json({default_destination:{type:'personal'}})) : handler(url,init));
+const homeFetch = (handler: (...args: any[]) => any) => vi.fn(withPersonalBootstrap(handler));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it('starts core before session and offers retry if identity fails', async () => {
-  const pending = deferred(); const calls: string[] = []; let signal: AbortSignal | null = null;
-  vi.stubGlobal('fetch', homeFetch((url: string, init?: RequestInit) => { calls.push(url); if (url.includes('/session')) return pending.promise; if (url.includes('part=core')) signal = init?.signal ?? null; return Promise.resolve(response(core)); }));
-  open(); expect(calls).toContain('/api/page/home?part=core'); expect(screen.queryByLabelText('Open Private document')).toBeNull();
+it('starts the bootstrap before session and offers retry if identity fails', async () => {
+  const pending = deferred(); let signal: AbortSignal | null = null;
+  const fetcher = homeFetch((url: string, init?: RequestInit) => { if (url.includes('/session')) return pending.promise; if (url.includes('part=core')) signal = init?.signal ?? null; return Promise.resolve(response(core)); });
+  vi.stubGlobal('fetch', fetcher);
+  open(); expect(fetcher.mock.calls.map(([url]) => url)).toContain('/api/page/home?part=bootstrap'); expect(screen.queryByLabelText('Open Private document')).toBeNull();
   pending.resolve(response({}, 500)); await screen.findByLabelText('Retry workspace');
   await waitFor(() => expect(signal?.aborted).toBe(true));
   vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {} }))));
