@@ -13,7 +13,7 @@ afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 function open(){render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);}
 const publicDeployment={mode:'public',setup_complete:true,is_owner:false,default_group:null};
 const emptyShelf={artifacts:[],shared:[]};
-const insights={signedIn:true,accountId:'u1',stats:{assets:0},views:{},viewsOverTime:[],likes:0,likesOverTime:[],followers:0,forks:0,sparklines:{}};
+const insights={signedIn:true,accountId:'u1',stats:{assets:0},views:{},viewsOverTime:[],likes:0,likesOverTime:[],followers:0,forks:0};
 /** Home's one request answers for the saved group (or its absence); everything else a group homepage must not ask for is a failure. */
 function bootstrapOf(destination:unknown,preferences:unknown={default_destination:{type:'group',id:'g1'}},accountId='u1'){return Response.json({signedIn:true,accountId,deployment:publicDeployment,preferences,destination});}
 const groupDestination={kind:'group',groupId:'g1',detail:{group,members:[],linked_groups:[]},core:emptyShelf};

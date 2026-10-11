@@ -38,3 +38,14 @@ it('keeps stats in the rail without expansion and preserves chart focus', () => 
   fireEvent.click(screen.getByRole('button', { name: 'Focus views' }));
   expect(screen.getByRole('button', { name: 'Focus views' })).toHaveAttribute('aria-pressed', 'false');
 });
+
+it('explains an empty engagement chart and puts the exact count in a tooltip on each metric', async () => {
+  render(() => <Dashboard rows={[]} stats={{ artifacts: 1500, assets: 0, views: 0 }} />);
+  expect(screen.getByRole('status')).toHaveTextContent('No engagement in the last 30 days.');
+  expect(screen.queryByRole('button', { name: 'Focus views' })).toBeNull();
+  const value = within(screen.getByLabelText('Dashboard metrics')).getByText('1.5k');
+  expect(value).not.toHaveAttribute('title');
+  fireEvent.focus(value);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('1,500 artifacts');
+  expect(screen.getByRole('heading', { name: 'Engagement over time' })).toBeInTheDocument();
+});

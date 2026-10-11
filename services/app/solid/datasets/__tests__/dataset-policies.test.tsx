@@ -17,12 +17,13 @@ it('edits insert check conditions as a structured predicate and saves the result
   fireEvent.click(screen.getByLabelText('Add insert check condition'));
   fireEvent.input(screen.getByLabelText('insert check.1.1 value'), { target: { value: '"blocked"' } });
   fireEvent.click(screen.getByLabelText('Add insert check condition'));
-  fireEvent.change(screen.getByLabelText('insert check.2.1 operator'), { target: { value: '_neq' } });
+  fireEvent.click(screen.getByLabelText('insert check.2.1 operator'));
+  fireEvent.click(screen.getByRole('option', { name: 'does not equal' }));
   expect(document.querySelector('pre')?.textContent).toContain('"_neq"');
-  expect(screen.getByLabelText('insert check.2.1 operator')).toHaveValue('_neq');
+  expect(screen.getByLabelText('insert check.2.1 operator')).toHaveTextContent('does not equal');
   fireEvent.input(screen.getByLabelText('insert check.2.1 value'), { target: { value: '"blocked"' } });
   fireEvent.click(screen.getByLabelText('Remove insert check.1.1 condition'));
-  expect(screen.getByLabelText('insert check.1.1 operator')).toHaveValue('_neq');
+  expect(screen.getByLabelText('insert check.1.1 operator')).toHaveTextContent('does not equal');
   fireEvent.click(screen.getByRole('button', { name: 'Save access policies' }));
   await waitFor(() => expect(requests).toHaveLength(1));
   expect(requests[0]).toMatchObject({ policy: { tables: [{ insert_permissions: [{ permission: { check: { _and: [{ branch: { _neq: 'blocked' } }] } } }] }] } });

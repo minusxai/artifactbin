@@ -1429,6 +1429,19 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_artifact_created ON app.analytic
 
 CREATE INDEX IF NOT EXISTS idx_analytics_events_event ON app.analytics_events (event);
 
+CREATE TABLE IF NOT EXISTS app.artifact_view_totals (
+  artifact_id TEXT NOT NULL,
+  closed_through DATE NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (artifact_id)
+);
+
+ALTER TABLE app.artifact_view_totals ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_view_totals ADD COLUMN IF NOT EXISTS closed_through DATE NOT NULL;
+
+ALTER TABLE app.artifact_view_totals ADD COLUMN IF NOT EXISTS views INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS app.relations (
   subject_kind TEXT NOT NULL,
   subject_id TEXT NOT NULL,

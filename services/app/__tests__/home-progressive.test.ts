@@ -19,7 +19,8 @@ it('workspace view totals exclude non-markup artifacts', async () => {
   await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id, at, source, verb, object_kind, object_id, subject_kind, subject_id, payload) VALUES ('view_doc', now(), 'app', 'viewed', 'artifact', 'doc123', 'visitor', 'a', '{}'), ('view_data', now(), 'app', 'viewed', 'artifact', 'data12', 'visitor', 'b', '{}')`);
   const insights = await accountWorkspaceInsightsFor(user.id);
   expect(insights.viewsOverTime.reduce((a, b) => a + b, 0)).toBe(1);
-  expect(insights.sparklines).not.toHaveProperty('data12');
+  expect(insights).not.toHaveProperty('sparklines');
+  expect(insights.views).not.toHaveProperty('data12');
 });
 
 it('core is independently authorized and finishes without executing the blocked insights work', async () => {

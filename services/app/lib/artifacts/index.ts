@@ -35,7 +35,7 @@ export { setDocumentEditorPolicy } from './document-policy';
 export type { DocumentEditorPolicy } from './document-policy';
 
 /** Wire (routes, publish, operations): body parsers and the response shapes. */
-export { artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, respondToEdit, sourceRepairsEcho } from './wire';
+export { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, respondToEdit, sourceRepairsEcho } from './wire';
 
 /** A row compiled (publish, offline, runner, operations, routes), and what depends on a row. */
 export { compiledForRow, declarationsForRow, refLoaderForActor, rowToResolvedRef } from './row-compile';

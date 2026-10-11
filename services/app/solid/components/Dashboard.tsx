@@ -10,6 +10,10 @@ import LayoutDashboard from 'lucide-solid/icons/layout-dashboard';
 import Users from 'lucide-solid/icons/users';
 import type { WorkspaceStats } from '@/lib/workspace/inventory';
 import { formatCount } from '../lib/format';
+import { Button } from '../ui/Button';
+import { SectionHeading } from '../ui/PageHeader';
+import { StatusMessage } from '../ui/StatusMessage';
+import { Tooltip } from '../ui/Tooltip';
 
 interface DashboardRow { format: string; views?: number | null }
 interface Props {
@@ -56,23 +60,23 @@ export default function Dashboard(props: Props): JSX.Element {
     }).join(' ');
   };
   return <section aria-label="Dashboard" class="min-w-0 reveal">
-    <div class="mb-4 flex items-center justify-between gap-3 border-b border-edge pb-3"><h1 class="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg"><LayoutDashboard size={12} class="text-accent" />Dashboard</h1></div>
+    <div class="mb-4 flex items-center justify-between gap-3 border-b border-edge pb-3"><SectionHeading class="flex items-center gap-1.5"><LayoutDashboard size={14} class="text-accent" />Dashboard</SectionHeading></div>
     <dl aria-label="Dashboard metrics" class="grid grid-cols-2 border-b border-edge">
       <For each={metrics()}>{({ label, value, Icon }, index) => <div class={`group py-2.5 ${index() % 2 ? 'border-l border-edge pl-3' : 'pr-3'} ${index() > 1 ? 'border-t border-edge' : ''}`}>
-        <dt class="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.11em] text-faint"><Icon size={10} class="transition-colors group-hover:text-accent" /><span>{label}</span></dt>
-        <dd title={`${formatCount(value)} ${label}`} class="mt-1.5 font-mono text-lg leading-none font-medium tabular-nums text-fg">{compactMetric(value)}</dd>
+        <dt class="flex items-center gap-1.5 font-mono text-micro uppercase tracking-[0.11em] text-faint"><Icon size={10} class="transition-colors group-hover:text-accent" /><span>{label}</span></dt>
+        <Tooltip content={`${formatCount(value)} ${label}`}><dd class="mt-1.5 font-mono text-lg leading-none font-medium tabular-nums text-fg">{compactMetric(value)}</dd></Tooltip>
       </div>}</For>
     </dl>
-    <div class="mt-5"><div class="mb-2.5"><h2 class="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg"><Activity size={12} class="text-accent" />Engagement over time</h2>
-      <p class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[9px] tabular-nums text-faint"><span>{periodViews()} views</span><span>{periodLikes()} likes</span><span>last 30 days</span></p></div>
-      <Show when={periodViews() + periodLikes() > 0} fallback={<div class="flex h-36 items-end border-b border-edge pb-3"><p class="font-mono text-[11px] text-faint">No engagement in the last 30 days.</p></div>}>
+    <div class="mt-5"><div class="mb-2.5"><SectionHeading class="flex items-center gap-1.5"><Activity size={14} class="text-accent" />Engagement over time</SectionHeading>
+      <p class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-micro tabular-nums text-faint"><span>{periodViews()} views</span><span>{periodLikes()} likes</span><span>last 30 days</span></p></div>
+      <Show when={periodViews() + periodLikes() > 0} fallback={<div class="flex h-36 items-end border-b border-edge pb-3"><StatusMessage kind="empty" class="text-2xs">No engagement in the last 30 days.</StatusMessage></div>}>
         <div role="group" aria-label={`Interactive engagement chart: ${periodViews()} views and ${periodLikes()} likes in the last 30 days`}>
-          <div class="flex gap-3 font-mono text-[9px]"><button type="button" aria-label="Focus views" aria-pressed={focus() === 'views'} onClick={() => setFocus(focus() === 'views' ? null : 'views')} class="text-accent">views</button><button type="button" aria-label="Focus likes" aria-pressed={focus() === 'likes'} onClick={() => setFocus(focus() === 'likes' ? null : 'likes')} class="text-muted">likes</button></div>
+          <div class="flex gap-1"><Button size="sm" variant={focus() === 'views' ? 'secondary' : 'ghost'} aria-label="Focus views" aria-pressed={focus() === 'views'} onClick={() => setFocus(focus() === 'views' ? null : 'views')}>views</Button><Button size="sm" variant={focus() === 'likes' ? 'secondary' : 'ghost'} aria-label="Focus likes" aria-pressed={focus() === 'likes'} onClick={() => setFocus(focus() === 'likes' ? null : 'likes')}>likes</Button></div>
           <svg aria-label="Engagement Vega chart" role="img" viewBox="0 0 240 140" preserveAspectRatio="none" class="h-[14.25rem] w-full border-b border-edge" onDblClick={() => setFocus(null)}>
             <polyline points={points(views())} fill="none" stroke="var(--color-accent)" stroke-width="2" opacity={focus() === 'likes' ? 0.18 : 1} onClick={() => setFocus(focus() === 'views' ? null : 'views')} class="cursor-pointer" />
             <polyline points={points(likes())} fill="none" stroke="var(--color-muted)" stroke-width="2" opacity={focus() === 'views' ? 0.18 : 1} onClick={() => setFocus(focus() === 'likes' ? null : 'likes')} class="cursor-pointer" />
           </svg>
-          <p class="mt-1 font-mono text-[8px] leading-relaxed text-faint">click a line or legend to focus · double-click to reset</p>
+          <p class="mt-1 font-mono text-micro leading-relaxed text-faint">click a line or legend to focus · double-click to reset</p>
         </div>
       </Show>
     </div>

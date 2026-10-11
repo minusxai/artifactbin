@@ -7,13 +7,16 @@ import StepHeader from "../datasets/StepHeader";
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DatasetImport } from '../datasets/DatasetImport';
 import { DatasetPolicies } from "../datasets/DatasetPolicies";
-import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js";
 import { Navigate, useParams } from "@solidjs/router";
 import { ChevronDown, ChevronRight, Plus, Play, Code2 } from "lucide-solid";
-import { PANEL } from "../ui/ui";
 import { Button } from "../ui/Button";
+import { Checkbox } from "../ui/Checkbox";
+import { Field, Input, Textarea } from "../ui/Field";
+import { Panel } from "../ui/Panel";
+import { Select } from "../ui/Select";
+import { StatusMessage } from "../ui/StatusMessage";
 import { Tabs } from "../ui/Tabs";
-import { Input } from "../ui/Field";
 import { CatalogRows, DatasetExplorer, type CatalogPreview, type CatalogQuery } from "../datasets/DatasetCatalogView";
 import { DatasetWhitelist, type SourceDraft } from "../datasets/DatasetWhitelist";
 import { parseDatasetDefinition, serializeDatasetDefinition } from "@/lib/datasets/definition";
@@ -47,7 +50,6 @@ const initialConnection = (): DatasetConnection => ({
   passwordSecretId: "",
   ssl: true
 });
-const control = "w-full rounded-md border border-edge bg-surface px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-2 focus:outline-accent/30";
 const sourceKey = (table: {
   schema: string;
   name: string;
@@ -56,18 +58,6 @@ const namesToColumns = (names: string[] = []): DatasetColumn[] => names.map(name
   name,
   type: "string"
 }));
-function Field({
-  name,
-  children
-}: {
-  name: string;
-  children: JSX.Element;
-}) {
-  return <label class="grid min-w-0 gap-1.5 text-xs text-muted">
-      {name}
-      {children}
-    </label>;
-}
 /** Visual authoring and source share one definition boundary. Passwords never enter the definition. */
 export function DatasetEditorPage({
   artifactId,
@@ -552,18 +542,18 @@ export function DatasetEditorPage({
           <span hidden={section() !== 'actions'} ref={setPolicySaveTarget} />
           <span hidden={section() === 'actions' || section() === 'sharing'}><Button aria-label="Save dataset" disabled={!title().trim() || Boolean(busy()) || sourceText() !== null} onClick={saveDataset}>{busy() === 'save' ? 'Saving…' : 'Save'}</Button></span>
         </div> : undefined}>
-        {error() && <p role="alert" aria-label="Dataset error" class="rounded border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
+        {error() && <p role="alert" aria-label="Dataset error" class="rounded-panel border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
             {error()}
           </p>}
-        {loading() ? <p class="text-sm text-muted">Loading dataset…</p> : loadFailed() ? <p class="text-sm text-muted">
+        {loading() ? <StatusMessage kind="loading">Loading dataset…</StatusMessage> : loadFailed() ? <p class="text-sm text-muted">
             The dataset could not be opened for editing.
           </p> : <>
             <div hidden={section() !== "source"} class="mx-auto max-w-4xl space-y-6">
               <fieldset disabled={Boolean(busy()) || sourceText() !== null} class="min-w-0 space-y-6">
-                <Field name="Dataset title (required)">
+                <Field label="Dataset title (required)">
                   <Input required aria-label="Dataset title" value={title()} onInput={e => setTitle(e.target.value)} placeholder="Weekly sales" />
                 </Field>
-                <section aria-label="Raw data" class={`${PANEL} overflow-hidden rounded-xl`}>
+                <Panel label="Raw data" padding="none" class="overflow-hidden">
                   <StepHeader n={1} title="Raw data">
                     Import CSV or Google Sheets, paste JSON rows, or connect to PostgreSQL.
                   </StepHeader>
@@ -580,24 +570,24 @@ export function DatasetEditorPage({
                           Use a database account with read access. The password is stored securely and cannot be retrieved.
                         </p>
                     <div class="grid gap-4 sm:grid-cols-[1fr_7rem]">
-                      <Field name="Host">
+                      <Field label="Host">
                         <Input aria-label="Host" autocomplete="off" placeholder="db.example.com" value={connection().host} onInput={e => updateConnection({
                         host: e.target.value
                       })} />
                       </Field>
-                      <Field name="Port">
+                      <Field label="Port">
                         <Input aria-label="Port" type="number" min={1} max={65535} value={connection().port} onInput={e => updateConnection({
                         port: Number(e.target.value)
                       })} />
                       </Field>
                     </div>
                     <div class="grid gap-4 sm:grid-cols-2">
-                      <Field name="Database">
+                      <Field label="Database">
                         <Input aria-label="Database" autocomplete="off" value={connection().database} onInput={e => updateConnection({
                         database: e.target.value
                       })} />
                       </Field>
-                      <Field name="Username">
+                      <Field label="Username">
                         <Input aria-label="Username" autocomplete="off" value={connection().username} onInput={e => updateConnection({
                         username: e.target.value
                       })} />
@@ -617,19 +607,14 @@ export function DatasetEditorPage({
                     }}>
                           Replace
                         </Button>
-                      </div> : <Field name="Password">
+                      </div> : <Field label="Password">
                         <Input aria-label="Password" type="password" autocomplete="new-password" value={password()} onInput={e => {
                       setConnectionFeedback(null);
                       setPassword(e.target.value);
                     }} />
                       </Field>}
                     <div class="flex flex-wrap items-center justify-between gap-3">
-                      <label class="flex items-center gap-2 text-xs text-muted">
-                        <input aria-label="Use SSL" type="checkbox" class="accent-accent" checked={connection().ssl} onChange={e => updateConnection({
-                        ssl: e.target.checked
-                      })} />
-                        Use SSL / TLS
-                      </label>
+                      <Checkbox label={<>Use SSL<span aria-hidden="true"> / TLS</span></>} checked={connection().ssl} onChange={ssl => updateConnection({ ssl })} />
                       <Button aria-label="Test and discover" variant="secondary" onClick={discover}>
                         {busy() === "discover" ? "Connecting…" : "Test and discover"}
                       </Button>
@@ -656,21 +641,21 @@ export function DatasetEditorPage({
                         {!!stored().length && <p class="text-xs font-medium text-fg">Tables in this dataset · {stored().length}</p>}
                     {stored().map((table, index) => <div class="space-y-3 border-t border-edge pt-4">
                         <div class="grid gap-3 sm:grid-cols-2">
-                          <Field name="Schema">
+                          <Field label="Schema">
                             <Input aria-label={`Stored schema ${index + 1}`} disabled={table.retained} value={table.schema} onInput={e => setStored(items => items.map(s => s.key === table.key ? {
                           ...s,
                           schema: e.target.value
                         } : s))} />
                           </Field>
-                          <Field name="Table name">
+                          <Field label="Table name">
                             <Input aria-label={`Stored table name ${index + 1}`} disabled={table.retained} value={table.name} onInput={e => setStored(items => items.map(s => s.key === table.key ? {
                           ...s,
                           name: e.target.value
                         } : s))} />
                           </Field>
                         </div>
-                        <Field name={table.retained ? "Replace rows (optional)" : "Rows"}>
-                          <textarea aria-label={`Stored rows ${index + 1}`} class={`${control} min-h-32`} spellcheck={false} value={table.rows} placeholder='[{"id": 1}]' onInput={e => setStored(items => items.map(s => s.key === table.key ? {
+                        <Field label={table.retained ? "Replace rows (optional)" : "Rows"}>
+                          <Textarea size="sm" rows={8} aria-label={`Stored rows ${index + 1}`} spellcheck={false} value={table.rows} placeholder='[{"id": 1}]' onInput={e => setStored(items => items.map(s => s.key === table.key ? {
                         ...s,
                         rows: e.target.value
                       } : s))} />
@@ -681,13 +666,13 @@ export function DatasetEditorPage({
                       </div>)}
                       </section>}
                   </div>
-                </section>
-                <section aria-label="Data models notebook" class={`${PANEL} rounded-xl overflow-hidden`}>
+                </Panel>
+                <Panel label="Data models notebook" padding="none" class="overflow-hidden">
                   <StepHeader n={2} title="Data models">
                     {kind() === "postgres" ? "Read raw tables using schema.table, for example public.orders. Later cells can reference an earlier cell by its name. Expose only the outputs readers need." : "Save SQL queries over your JSON tables as named model tables."}
                   </StepHeader>
                   <div class="space-y-4 p-3 sm:p-4">
-                    {!models().length && <div class="rounded border border-dashed border-edge p-5 text-center">
+                    {!models().length && <div class="rounded-panel border border-dashed border-edge p-5 text-center">
                         <Code2 size={20} class="mx-auto mb-2 text-faint" />
                         <p class="text-sm text-muted">
                           Start with a query, build on it in the next cell.
@@ -696,18 +681,18 @@ export function DatasetEditorPage({
                           Optional — you can expose raw tables directly.
                         </p>
                       </div>}
-                    {models().map((model, index) => <article aria-label={`Notebook cell ${index + 1}`} class="min-w-0 overflow-hidden rounded border border-edge bg-bg/30">
+                    {models().map((model, index) => <article aria-label={`Notebook cell ${index + 1}`} class="min-w-0 overflow-hidden rounded-panel border border-edge bg-bg/30">
                         <header class="flex flex-wrap items-center gap-2 border-b border-edge bg-raised/30 p-2.5">
-                          <button type="button" aria-label={`Collapse cell ${index + 1}`} aria-expanded={!model.collapsed} class="inline-flex min-h-8 min-w-8 items-center justify-center rounded border border-edge text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent" onClick={() => setModels(items => items.map(m => m.cell.id === model.cell.id ? {
+                          <Button variant="secondary" size="sm" icon aria-label={`Collapse cell ${index + 1}`} aria-expanded={!model.collapsed} onClick={() => setModels(items => items.map(m => m.cell.id === model.cell.id ? {
                       ...m,
                       collapsed: !m.collapsed
                     } : m))}>
                             {model.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                          </button>
+                          </Button>
                           <span class="font-mono text-xs text-faint">
                             {String(index + 1).padStart(2, "0")}
                           </span>
-                          <Input aria-label={`Cell name ${index + 1}`} class="min-w-24 max-w-64 flex-1 bg-transparent text-xs" placeholder="model_name" value={model.cell.name} onInput={e => updateModel(index, {
+                          <Input size="sm" aria-label={`Cell name ${index + 1}`} class="min-w-24 max-w-64 flex-1" placeholder="model_name" value={model.cell.name} onInput={e => updateModel(index, {
                       name: e.target.value
                     })} />
                           {!model.legacy && <label class="ml-auto flex items-center gap-2 text-xs text-muted">
@@ -719,26 +704,26 @@ export function DatasetEditorPage({
                       } : m))} />
                               Expose
                             </label>}
-                          <Button aria-label={`Run cell ${index + 1}`} aria-keyshortcuts="Meta+Enter Control+Enter" variant="secondary" disabled={!model.cell.name.trim() || !model.cell.sql.trim()} onClick={() => runCell(index)} class="inline-flex items-center gap-1.5">
+                          <Button aria-label={`Run cell ${index + 1}`} aria-keyshortcuts="Meta+Enter Control+Enter" variant="secondary" size="sm" disabled={!model.cell.name.trim() || !model.cell.sql.trim()} onClick={() => runCell(index)}>
                             <Play size={12} />
                             Run
                           </Button>
                         </header>
                         {!model.collapsed && <div class="space-y-3 p-3">
-                            {model.legacy && <Field name="Model schema">
-                                <Input aria-label={`Model schema ${index + 1}`} value={model.schema} onInput={e => setModels(items => items.map(m => m.cell.id === model.cell.id ? {
+                            {model.legacy && <Field label="Model schema">
+                                <Input size="sm" aria-label={`Model schema ${index + 1}`} value={model.schema} onInput={e => setModels(items => items.map(m => m.cell.id === model.cell.id ? {
                         ...m,
                         schema: e.target.value
                       } : m))} />
                               </Field>}
-                            <textarea aria-label={`Cell SQL ${index + 1}`} spellcheck={false} onKeyDown={event => {
+                            <Textarea size="sm" rows={6} aria-label={`Cell SQL ${index + 1}`} spellcheck={false} onKeyDown={event => {
                       if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.repeat || event.isComposing || event.keyCode === 229 || event.currentTarget.matches(":disabled") || busy() || sourceText() !== null) return;
                       event.preventDefault();
                       runCell(index);
-                    }} class={`${control} min-h-36 resize-y border-transparent bg-transparent leading-6`} placeholder={index ? `SELECT * FROM ${models()[index - 1].cell.name || "previous_cell"}` : "SELECT * FROM public.orders"} value={model.cell.sql} onInput={e => updateModel(index, {
+                    }} class="resize-y leading-6" placeholder={index ? `SELECT * FROM ${models()[index - 1].cell.name || "previous_cell"}` : "SELECT * FROM public.orders"} value={model.cell.sql} onInput={e => updateModel(index, {
                       sql: e.target.value
                     })} />
-                            <p class="text-[11px] text-faint">
+                            <p class="text-2xs text-faint">
                               Run this cell with{" "}
                               <kbd class="font-mono">⌘ Enter</kbd> or{" "}
                               <kbd class="font-mono">Ctrl Enter</kbd>.
@@ -747,34 +732,34 @@ export function DatasetEditorPage({
                                 {model.stale ? "Run this cell to inspect its current output columns." : `${model.columns.length} saved output columns · run to preview rows`}
                               </p>}
                             <div class="flex flex-wrap justify-between gap-2">
-                              <Button aria-label={`Insert cell after ${index + 1}`} variant="secondary" class="inline-flex items-center gap-1" onClick={() => addModel(index)}>
+                              <Button aria-label={`Insert cell after ${index + 1}`} variant="secondary" size="sm" onClick={() => addModel(index)}>
                                 <Plus size={12} />
                                 Insert cell below
                               </Button>
-                              <Button aria-label={`Remove cell ${index + 1}`} variant="secondary" onClick={() => setModels(items => invalidate(items.filter(m => m.cell.id !== model.cell.id), index))}>
+                              <Button aria-label={`Remove cell ${index + 1}`} variant="secondary" size="sm" onClick={() => setModels(items => invalidate(items.filter(m => m.cell.id !== model.cell.id), index))}>
                                 Remove
                               </Button>
                             </div>
                           </div>}
                       </article>)}
-                    <Button aria-label="Add notebook cell" variant="secondary" class="inline-flex items-center gap-1.5" onClick={() => addModel()}>
+                    <Button aria-label="Add notebook cell" variant="secondary" onClick={() => addModel()}>
                       <Plus size={14} />
                       Add SQL cell
                     </Button>
                   </div>
-                </section>
+                </Panel>
                 {kind() === "postgres" ? <DatasetWhitelist sources={exposures()} onChange={changeExposures} /> : (
             /* JSON tables have no picker: a pasted table is exposed
              * whole, and a model once its cell has run. The step still
              * exists so the reader sees what a reader of the dataset
              * will get, in the same place the PostgreSQL picker sits. */
-            <section aria-label="Exposed tables" class={`${PANEL} overflow-hidden rounded-xl`}>
+            <Panel label="Exposed tables" padding="none" class="overflow-hidden">
                     <StepHeader n={3} title="Whitelist">
                       JSON tables are exposed whole, and a model is exposed once its cell has run. Column-level whitelisting is for PostgreSQL sources.
                     </StepHeader>
                     <div class="p-4 sm:p-5">
                       {exposedTables().length ? <ul class="grid gap-2 sm:grid-cols-2">
-                          {exposedTables().map(table => <li class="flex items-center justify-between gap-3 rounded border border-edge bg-raised/40 px-3 py-2 text-xs">
+                          {exposedTables().map(table => <li class="flex items-center justify-between gap-3 rounded-control border border-edge bg-raised/40 px-3 py-2 text-xs">
                               <span class="truncate font-mono text-fg">
                                 {table.schema}.{table.name}
                               </span>
@@ -786,28 +771,28 @@ export function DatasetEditorPage({
                           Name a table in step 1, or run a model in step 2, and it appears here.
                         </p>}
                     </div>
-                  </section>)}
+                  </Panel>)}
               </fieldset>
             </div>
-            <div hidden={section() !== "data"} class={`${PANEL} overflow-hidden rounded-xl`}>
+            <div hidden={section() !== "data"}><Panel padding="none" class="overflow-hidden">
               <header class="border-b border-edge px-4 py-3">
                 <h2 class="text-sm font-semibold text-fg">
                   Explore exposed data
                 </h2>
               </header>
               <DatasetExplorer catalog={explorerCatalog()} query={previewDraft} paginate={false} />
-            </div>
+            </Panel></div>
             <Show when={id && section() === 'sharing'}>
-              <div class="mx-auto max-w-2xl space-y-4 rounded-lg border border-edge bg-surface p-5 sm:p-6">
+              <Panel class="mx-auto max-w-2xl space-y-4">
                 <DocumentSharing id={id!} title={title()} owner={false} editable variant="embedded" format="dataset" datasetKind={kind()} onDataActions={() => setSection('actions')} />
                 <p class="text-xs text-muted">Sharing changes save immediately.</p>
-              </div>
+              </Panel>
             </Show>
             {id && kind() === "stored" && <div hidden={section() !== "actions"}>
                 <DatasetPolicies artifactId={id} expanded saveTarget={policySaveTarget()} />
               </div>}
             <div hidden={section() !== "source"} class="mx-auto mt-6 max-w-4xl space-y-6">
-              <details class={`group ${PANEL} overflow-hidden rounded-xl`}>
+              <Panel padding="none" class="overflow-hidden"><details class="group">
                 <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-3 sm:px-5 [&::-webkit-details-marker]:hidden">
                   <ChevronRight size={14} class="text-muted transition-transform group-open:rotate-90" />
                   <span class="text-sm font-semibold text-fg">Advanced</span>
@@ -815,15 +800,11 @@ export function DatasetEditorPage({
                 </summary>
                 <div class="space-y-5 border-t border-edge p-4 sm:p-5">
                   <fieldset disabled={Boolean(busy()) || sourceText() !== null} class="grid gap-4 sm:grid-cols-2">
-                  <Field name="Default schema">
-                    <span class="text-[11px] leading-4 text-faint">Assumed when a table is named without a schema, in notebook SQL and in agent edits. Fixed once the dataset is created.</span>
-                    <select aria-label="Default schema" disabled={Boolean(id)} class={control} value={defaultSchema()} onInput={e => setDefaultSchema(e.target.value)}>
-                      <option value="" selected={defaultSchema() === ""}>Automatic ({selectedSchemas()[0] ?? "public"})</option>
-                      {[...new Set([...selectedSchemas(), ...(defaultSchema() ? [defaultSchema()] : [])])].map(schema => <option selected={defaultSchema() === schema}>{schema}</option>)}
-                    </select>
+                  <Field label="Default schema" hint="Assumed when a table is named without a schema, in notebook SQL and in agent edits. Fixed once the dataset is created.">
+                    <Select ariaLabel="Default schema" disabled={Boolean(id)} value={defaultSchema()} onChange={setDefaultSchema}
+                      options={[{ value: "", label: `Automatic (${selectedSchemas()[0] ?? "public"})` }, ...[...new Set([...selectedSchemas(), ...(defaultSchema() ? [defaultSchema()] : [])])].map(schema => ({ value: schema, label: schema }))]} />
                   </Field>
-                  <Field name="Result cache (seconds)">
-                    <span class="text-[11px] leading-4 text-faint">PostgreSQL results are served from cache this long before being queried again; 0 queries the database on every read. Ignored for JSON tables.</span>
+                  <Field label="Result cache (seconds)" hint="PostgreSQL results are served from cache this long before being queried again; 0 queries the database on every read. Ignored for JSON tables.">
                     <Input aria-label="Refresh interval" type="number" min={0} step={1} value={refreshSeconds()} onInput={e => setRefreshSeconds(Number(e.target.value))} />
                   </Field>
                   </fieldset>
@@ -838,8 +819,8 @@ export function DatasetEditorPage({
                 }}>
                     Edit source markup
                   </Button> : <div class="space-y-3">
-                    <Field name="Dataset source markup">
-                      <textarea aria-label="Dataset source" spellcheck={false} class={`${control} min-h-64 resize-y text-xs leading-5`} value={sourceText() ?? ""} onInput={e => setSourceText(e.target.value)} />
+                    <Field label="Dataset source markup">
+                      <Textarea size="sm" rows={12} aria-label="Dataset source" spellcheck={false} class="resize-y" value={sourceText() ?? ""} onInput={e => setSourceText(e.target.value)} />
                     </Field>
                     <p class="text-xs text-muted">
                       Apply markup to update the visual editor. Passwords are
@@ -866,14 +847,14 @@ export function DatasetEditorPage({
                   </div>}
               </section>
                 </div>
-              </details>
+              </details></Panel>
               {!id && <div class="flex items-center gap-4">
                 <Button aria-label="Save dataset" disabled={!title().trim() || Boolean(busy()) || sourceText() !== null} onClick={saveDataset}>
                   {busy() === "save" ? "Saving…" : "Create dataset"}
                 </Button>
-                {busy() && <span role="status" class="text-sm text-muted">
+                {busy() && <StatusMessage kind="loading">
                     Working…
-                  </span>}
+                  </StatusMessage>}
               </div>}
             </div>
           </>}
