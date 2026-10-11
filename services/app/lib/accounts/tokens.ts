@@ -13,6 +13,7 @@ import { emit } from '../platform/events';
 import { generateTokenId } from '../platform/ids';
 import type { Harness } from '@/lib/platform';
 import { canAuthenticateUser } from './user-kinds';
+import { currentRequest } from '../platform/request-context';
 
 const TOKEN_PREFIX = 'mx_';
 
@@ -24,6 +25,37 @@ const TOKEN_PREFIX = 'mx_';
  * ambiguous`, which is a 500 on the dashboard of anyone holding a token.
  */
 export const LIVE_TOKEN_SQL = 'tokens.deleted_at IS NULL AND (tokens.expires_at IS NULL OR tokens.expires_at > now())';
+
+/**
+ * WHAT ONE REQUEST HAS ALREADY LEARNED ABOUT ITS CREDENTIAL. The bearer door asks "is this token live?"
+ * and "is its hosted authority scoped?" from several places on the way to a handler (the route wrapper,
+ * the actor resolvers, `runOperation`), each a round trip to the same row. Within a request they cannot
+ * disagree, so the first answer is kept for that request and no longer.
+ *
+ * Held per `Request` object (the server runs every handler inside `runWithRequest`), so it dies with the
+ * request: NOTHING here outlives one request or is visible to another, which is what keeps revocation
+ * immediate in every process — the next request always asks the database. Outside a request (a script, a
+ * direct call) there is no memo. Every write to a token row in this module (and the two in lib/users)
+ * forgets the request's answers, so a request that revokes a token never reads its own stale "live".
+ */
+const requestAnswers = new WeakMap<Request, Map<string, Promise<unknown>>>();
+function answeredOnce<T>(key: string, ask: () => Promise<T>): Promise<T> {
+  const request = currentRequest();
+  if (!request) return ask();
+  let answers = requestAnswers.get(request);
+  if (!answers) requestAnswers.set(request, answers = new Map());
+  const kept = answers.get(key);
+  if (kept) return kept as Promise<T>;
+  const asked = ask();
+  answers.set(key, asked);
+  asked.catch(() => { if (answers.get(key) === asked) answers.delete(key); });
+  return asked;
+}
+/** Drop what the current request learned about credentials: call after any write to a token row. */
+export function forgetRequestCredentials(): void {
+  const request = currentRequest();
+  if (request) requestAnswers.delete(request);
+}
 
 // Cheap reject before any DB hit: exact shape of prefix + base64url(32 bytes).
 const TOKEN_RE = /^mx_[A-Za-z0-9_-]{40,50}$/;
@@ -110,6 +142,7 @@ export async function mintToken(
     options.scope ?? null,
     options.requestAuthority === true,
   ]);
+  forgetRequestCredentials();
   /*
    * THE ONE CHOKEPOINT. Every mint in the product — anonymous, operator,
    * browser, the agent-link start door — comes through this insert, so the log
@@ -154,10 +187,14 @@ interface ResolvedToken {
 /** Resolve a presented plaintext token, or null (unknown OR revoked — same answer). */
 export async function resolveToken(presented: string): Promise<ResolvedToken | null> {
   if (!TOKEN_RE.test(presented)) return null;
+  const hash = sha256(presented);
+  return answeredOnce(`token:${hash}`, () => lookUpToken(hash));
+}
+async function lookUpToken(hash: string): Promise<ResolvedToken | null> {
   const db = await getDb();
   const r = await db.query<{ id: string; user_id: string | null; client_harness: Harness | null }>(
     `SELECT id, user_id, client_harness FROM tokens WHERE token_hash = $1 AND ${LIVE_TOKEN_SQL}`,
-    [sha256(presented)],
+    [hash],
   );
   const row = r.rows[0];
   return row && await canUseDeploymentIdentity(row.user_id,db) && await canAuthenticateUser(row.user_id, db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
@@ -169,6 +206,7 @@ export async function rememberTokenClient(id: string, harness: Harness): Promise
   // not fail over it.
   const db = await getDb();
   await db.query('UPDATE tokens SET client_harness = $2 WHERE id = $1', [id, harness]);
+  forgetRequestCredentials();
 }
 
 /**
@@ -202,6 +240,7 @@ export async function resolveTokenById(id: string): Promise<ResolvedToken | null
 export async function revokeToken(id: string): Promise<boolean> {
   const db = await getDb();
   const r = await db.query<{ name: string | null }>('UPDATE tokens SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING name', [id]);
+  forgetRequestCredentials();
   const row = r.rows[0];
   if (!row) return false;
   await emit(null, 'revoked', { kind: 'token', id }, { name: row.name });
@@ -240,6 +279,7 @@ export async function revokeHeldToken(id: string, userId: string | null): Promis
     'UPDATE tokens SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL AND (user_id IS NULL OR user_id = $2) RETURNING name',
     [id, userId],
   );
+  forgetRequestCredentials();
   const row = r.rows[0];
   if (!row) return false;
   // The browser holding the cookie may have no account behind it; the token
@@ -269,7 +309,10 @@ export async function listTokensByUser(userId: string): Promise<TokenRow[]> {
 }
 
 /** Trusted hosted authorization metadata, never token plaintext or caller-supplied names. */
-export async function hostedCredentialDescriptor(owner:string,id:string):Promise<{name:string|null;expiresAt:string|null;scoped:boolean}|null>{
+export function hostedCredentialDescriptor(owner:string,id:string):Promise<{name:string|null;expiresAt:string|null;scoped:boolean}|null>{
+ return answeredOnce(`descriptor:${owner}:${id}`,()=>readCredentialDescriptor(owner,id));
+}
+async function readCredentialDescriptor(owner:string,id:string):Promise<{name:string|null;expiresAt:string|null;scoped:boolean}|null>{
  const db=await getDb();const row=(await db.query<{name:string|null;expires_at:string|null;request_authority:boolean}>(`SELECT name,expires_at,request_authority FROM tokens WHERE id=$1 AND user_id=$2 AND ${LIVE_TOKEN_SQL}`,[id,owner])).rows[0];
  return row?{name:row.name,expiresAt:row.expires_at,scoped:row.request_authority}:null;
 }
@@ -279,4 +322,5 @@ export async function hostedCredentialDescriptor(owner:string,id:string):Promise
 export async function markRequestAuthority(prefix:string,q:Queryable):Promise<void>{
  if(!prefix||prefix.length>256)throw Error('request_authority_prefix_invalid');
  await q.query('UPDATE tokens SET request_authority=true WHERE left(name,length($1))=$1 AND request_authority=false',[prefix]);
+ forgetRequestCredentials();
 }

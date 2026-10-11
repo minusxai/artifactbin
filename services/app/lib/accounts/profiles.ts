@@ -34,7 +34,12 @@ export class DuplicateProfileEmail extends Error {}
  */
 
 /** Is this person still owed the welcome page? Only an ACCOUNT ever is. */
-export async function welcomePending(userId: string): Promise<boolean> {
+export async function welcomePending(userId: string): Promise<boolean>;
+/** The same rule over a `users` row the caller already read (or its absence): no second lookup. */
+export async function welcomePending(row: { kind: string; welcome_pending: boolean } | null): Promise<boolean>;
+export async function welcomePending(who: string | { kind: string; welcome_pending: boolean } | null): Promise<boolean> {
+  if (typeof who !== 'string') return who?.kind === 'account' && who.welcome_pending;
+  const userId = who;
   const db = await getDb();
   const row = (await db.query<{ pending: boolean }>(
     "SELECT (kind = 'account' AND welcome_pending) AS pending FROM users WHERE id = $1", [userId],
