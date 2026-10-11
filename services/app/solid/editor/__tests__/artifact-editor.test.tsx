@@ -5,6 +5,9 @@ import { fakeBackend } from '@/test/helpers/artifact-backend';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import ArtifactEditor from '../ArtifactEditor';
 
+// The in-place editor is its own tests' subject; here only whether it is mounted, and on what.
+vi.mock('../InPlaceEditor', () => ({ default: (props: { art: { markup?: string | null } }) => <p>editing {props.art.markup}</p> }));
+
 /** The gate into editing: no write authority means the locked card, never the editor. */
 it('shows the locked card when this browser may not write, and lets the visitor leave', async () => {
   const onExit = vi.fn();
@@ -21,4 +24,19 @@ it('says it is loading until the document arrives', () => {
   const backend = fakeBackend({}, { load: vi.fn(() => new Promise<never>(() => {})) });
   render(() => <ArtifactEditor id="doc12345" backend={backend} onExit={() => {}} runtimeRef={{ current: null }} sessionNonce="n" />);
   expect(screen.getByRole('status')).toHaveTextContent('loading…');
+});
+
+/**
+ * A seeded editor was admitted by the editor door, which answers a writer alone: reading the whole document again
+ * just to ask the same question downloaded it twice (the document's graph and source, 20 times its size).
+ */
+it('opens on its seed without reading the document again', async () => {
+  const load = vi.fn(async () => null);
+  const backend = fakeBackend({}, { load });
+  const seed = { id: 'doc12345', version: 3, edit_id: 'e3', title: null, theme: null, template: null, colorMode: null, markup: '<p id="a">Hi</p>' };
+  render(() => <ArtifactEditor id="doc12345" backend={backend} seed={seed} onExit={() => {}} runtimeRef={{ current: null }} sessionNonce="n" />);
+  expect(await screen.findByText(/^editing /)).toBeInTheDocument();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(load).not.toHaveBeenCalled();
+  expect(screen.queryByRole('heading', { name: 'this document is locked' })).toBeNull();
 });

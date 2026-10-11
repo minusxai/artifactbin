@@ -1,9 +1,10 @@
 /* @jsxImportSource solid-js */
 /**
  * The gate into editing, mounted by the document page when edit
- * mode is on. It decides whether this browser may write at all (one `backend.load()`, authorized by
- * whichever browser credential the cookie carries), else the locked card; otherwise it is the
- * in-place editor over the page's adopted document, seeded with what the page already holds.
+ * mode is on. Seeded by the page it is the in-place editor over the document the page already holds: the editor's
+ * door (lib/serving/artifact-page `?part=editor`) answers a writer alone, so a seed IS the admission, and reading
+ * the whole document again to ask it would download it twice. Unseeded it decides whether this browser may write
+ * at all (one `backend.load()`, authorized by whichever browser credential the cookie carries), else the locked card.
  */
 import { createSignal, onMount, Show, type JSX } from 'solid-js';
 import House from 'lucide-solid/icons/house';
@@ -28,10 +29,11 @@ export default function ArtifactEditor(props: ArtifactEditorProps): JSX.Element 
   // The locked card is this session's whole editor: the page's entry chrome and loading bar end with it.
   const lock = () => { setLocked(true); props.onEditorMount?.(); props.onEditorReady?.(); };
   onMount(() => {
+    if (art()) return;
     void props.backend.load().then((head) => {
       if (!head) { lock(); return; }
       setLocked(false);
-      if (!art()) setArt({ ...head, template: head.template ?? null, colorMode: head.colorMode ?? null, markup: head.markup ?? '', refs: head.refs ?? [], compiledCss: null, dataflow: null });
+      setArt({ ...head, template: head.template ?? null, colorMode: head.colorMode ?? null, markup: head.markup ?? '', refs: head.refs ?? [], compiledCss: null, dataflow: null });
     }).catch(lock);
   });
   return (

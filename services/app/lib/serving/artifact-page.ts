@@ -15,8 +15,8 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  *
  * A DOCUMENT is served from its prepared page (lib/publish/prepared/prepared-page.server):
  * the reader payload carries no source, no document graph and no raw
- * stylesheet. An owner or editor fetches those on the EDITOR door
- * (`?part=editor`) — prefetched on idle, so entering edit mode stays instant.
+ * stylesheet. An owner or editor fetches the source and the graph on the EDITOR door (`?part=editor`): on idle when
+ * the document is small (`surface.sourceLength`), otherwise when edit mode opens.
  *
  * NOR DOES IT CARRY THE DOCUMENT'S NODE TREE: the app page only relays it to the framed document's edit
  * controller (solid/document/create-framed-story), which classifies comments and selections against it. On a large
@@ -31,7 +31,6 @@ import { countOpenAnnotations } from '@/lib/annotations/store';
 import { canReadArtifact, roleFor } from '@/lib/artifacts';
 import { getArtifactById, getArtifactHeaderById, hasInvitedUsersFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/workspace/folders';
-import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { verifyExportKey } from '@/lib/platform/export-read-key';
 import { baseUrl, json } from '@/lib/http/http';
@@ -49,7 +48,7 @@ import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/publish/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { firstHeadingTitle } from '@/lib/document';
+import { firstHeadingTitle, packDocumentGraph } from '@/lib/document';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
 import type { ServedStoryRuntime } from '@/lib/publish/prepared/prepared-runtime';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
@@ -219,19 +218,21 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const isDoc = artifact.format === 'markup';
 
   /*
-   * THE EDITOR'S DOOR: what only writing needs — the source, the document
-   * graph and the raw sheets the in-place editor re-isolates as it types.
-   * The reader payload below carries none of it; a writer's page prefetches
-   * this on idle.
+   * THE EDITOR'S DOOR: what only writing needs — the source, and the document graph the editor addresses its edits
+   * against. Nothing else: the reader payload carries neither, and the editor reads no stylesheet from here (its
+   * compiled sheet is the frame's, its author sheet the source's). The graph travels in its wire form
+   * (lib/document/document-graph-wire): the node keys, not the 20 fields per node the source already says. A graph
+   * that form cannot reproduce exactly, and an explicit `?graph=full`, get the stored graph whole.
    */
   if (search.get('part') === 'editor') {
     if (!isDoc || at || exporting || !canEdit(role)) return notFound();
-    const { row, page } = await preparedPageFor(artifact, null);
+    const row = await servedRow(artifact, null);
+    const source = row.source ?? '';
+    const stored = artifact.document?.kind === 'graph' ? artifact.document : null;
+    const packed = stored && search.get('graph') !== 'full' ? packDocumentGraph(stored, source) : null;
     return { status: 200, body: {
-      editId: artifact.edit_id, version: artifact.version, source: row.source ?? '',
-      ...(artifact.document?.kind === 'graph' ? { document: artifact.document } : {}),
-      compiledCss: await currentStoryCss((row.meta ?? {}) as { compiledCss?: string | null; cssCompileVersion?: string | null }, row.source),
-      authorCss: page.authorCss,
+      editId: artifact.edit_id, version: artifact.version, source,
+      ...(packed ? { graph: packed } : stored ? { document: stored } : {}),
     } };
   }
 
@@ -393,6 +394,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // for the owner alone left an editor's and a commenter's count at 0
     // forever, on a control they were being shown.
     openAnnotations,
+    // What the editor's door will cost, so the page prefetches it on idle only when it is cheap (solid/pages/Document).
+    ...(isDoc && !at && canEdit(role) ? { sourceLength: (row.source ?? '').length } : {}),
   };
   const body = {
     canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
