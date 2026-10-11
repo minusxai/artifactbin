@@ -124,9 +124,9 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const actions = <>
     <Show when={reading()}>
       <Tooltip content={like().liked ? 'Unlike' : 'Like'}>
-        <Button variant="ghost" size="sm" {...(like().count > 0 ? {} : { icon: true as const })} class={like().count > 0 ? '' : 'min-w-9'} aria-label={like().liked ? 'Unlike' : 'Like'} aria-pressed={like().liked} onClick={() => void toggleLike()}>
+        <Button variant="ghost" size="sm" icon class="relative min-w-9" aria-label={like().liked ? 'Unlike' : 'Like'} aria-pressed={like().liked} onClick={() => void toggleLike()}>
           <Heart size={18} stroke-width={1.5} fill={like().liked ? 'currentColor' : 'none'} />
-          <Show when={like().count > 0}><span>{like().count}</span></Show>
+          <Show when={like().count > 0}><span class="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1 font-mono text-micro leading-4 text-action-ink">{like().count}</span></Show>
         </Button>
       </Tooltip>
       <DocumentCommentAction count={props.comments()} onClick={props.onComment} />
