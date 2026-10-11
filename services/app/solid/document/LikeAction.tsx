@@ -2,6 +2,7 @@
 import { createSignal, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
 import { loginHref } from '@/lib/http/login-href';
+import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { sendReaction } from './reactions';
 
@@ -23,5 +24,5 @@ export function LikeAction(props: LikeActionProps): JSX.Element {
     setBusy(false);
     if (answer) { setState(answer); props.onChange?.(answer); }
   };
-  return <Tooltip content={state().liked ? 'unlike' : 'like'}><button type="button" aria-label={state().liked ? 'Unlike artifact' : 'Like artifact'} aria-pressed={state().liked} disabled={busy()} onClick={() => void toggle()} class="inline-flex items-center gap-1 rounded px-2 py-1 text-sm text-muted hover:text-accent"><Heart size={14} fill={state().liked ? 'currentColor' : 'none'} />{state().count}</button></Tooltip>;
+  return <Tooltip content={state().liked ? 'unlike' : 'like'}><Button variant="ghost" size="sm" pressed={state().liked} aria-label={state().liked ? 'Unlike artifact' : 'Like artifact'} disabled={busy()} onClick={() => void toggle()} class="w-full justify-start"><Heart size={14} fill={state().liked ? 'currentColor' : 'none'} />{state().count}</Button></Tooltip>;
 }
