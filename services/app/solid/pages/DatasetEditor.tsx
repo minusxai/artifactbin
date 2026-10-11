@@ -10,7 +10,10 @@ import { DatasetPolicies } from "../datasets/DatasetPolicies";
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import { Navigate, useParams } from "@solidjs/router";
 import { ChevronDown, ChevronRight, Plus, Play, Code2 } from "lucide-solid";
-import { Button, Input, PANEL } from "../ui/ui";
+import { PANEL } from "../ui/ui";
+import { Button } from "../ui/Button";
+import { Tabs } from "../ui/Tabs";
+import { Input } from "../ui/Field";
 import { CatalogRows, DatasetExplorer, type CatalogPreview, type CatalogQuery } from "../datasets/DatasetCatalogView";
 import { DatasetWhitelist, type SourceDraft } from "../datasets/DatasetWhitelist";
 import { parseDatasetDefinition, serializeDatasetDefinition } from "@/lib/datasets/definition";
@@ -564,17 +567,12 @@ export function DatasetEditorPage({
                   <StepHeader n={1} title="Raw data">
                     Import CSV or Google Sheets, paste JSON rows, or connect to PostgreSQL.
                   </StepHeader>
-                  <div role="tablist" aria-label="Raw data source" class="flex gap-4 overflow-x-auto border-b border-edge px-4 sm:gap-5 sm:px-5">
-                    {([["csv", "CSV"], ["sheet", "Google Sheets"], ["json", "JSON"], ["postgres", "PostgreSQL"]] as const).map(([key, label]) => {
-                      const selected = () => kind() === "postgres" ? key === "postgres" : key === storedInput();
-                      return <button type="button" role="tab" aria-label={label} aria-selected={selected()} disabled={Boolean(id) && (key === "postgres") !== (kind() === "postgres")} onClick={() => {
-                        setKind(key === "postgres" ? "postgres" : "stored");
-                        if (key !== "postgres") setStoredInput(key);
-                      }} class={`-mb-px shrink-0 border-b-2 px-1 py-3 text-xs font-medium disabled:cursor-default ${selected() ? "border-accent text-fg" : "border-transparent text-muted enabled:hover:text-fg disabled:opacity-50"}`}>
-                        {label}
-                      </button>;
-                    })}
-                  </div>
+                  <Tabs label="Raw data source" class="overflow-x-auto px-4 sm:gap-5 sm:px-5" value={kind() === "postgres" ? "postgres" : storedInput()}
+                    items={([["csv", "CSV"], ["sheet", "Google Sheets"], ["json", "JSON"], ["postgres", "PostgreSQL"]] as const).map(([value, label]) => ({ value, label, disabled: Boolean(id) && (value === "postgres") !== (kind() === "postgres") }))}
+                    onChange={key => {
+                      setKind(key === "postgres" ? "postgres" : "stored");
+                      if (key !== "postgres") setStoredInput(key as "csv" | "sheet" | "json");
+                    }} />
                   {/* Keep source controls at a stable height; added tables scroll below them. */}
                   <div class="h-[22rem] overflow-y-auto p-4 sm:p-5">
                     {kind() === "postgres" ? <section aria-label="Dataset connection" class="space-y-4">
@@ -609,7 +607,7 @@ export function DatasetEditorPage({
                         <span aria-label="Password status" class="text-xs text-muted">
                           Password · Configured
                         </span>
-                        <Button aria-label="Replace password" variant="ghost" onClick={() => {
+                        <Button aria-label="Replace password" variant="secondary" onClick={() => {
                       setConnectionFeedback(null);
                       setConnection(value => ({
                         ...value,
@@ -632,7 +630,7 @@ export function DatasetEditorPage({
                       })} />
                         Use SSL / TLS
                       </label>
-                      <Button aria-label="Test and discover" variant="ghost" onClick={discover}>
+                      <Button aria-label="Test and discover" variant="secondary" onClick={discover}>
                         {busy() === "discover" ? "Connecting…" : "Test and discover"}
                       </Button>
                     </div>
@@ -651,7 +649,7 @@ export function DatasetEditorPage({
                         }} />}
                         {storedInput() === "json" && <div class="space-y-3">
                           <p class="text-xs text-muted">Add a table and paste a JSON array of objects, for example [{"{"}&quot;id&quot;: 1{"}"}].</p>
-                          <Button aria-label="Add JSON table" variant="ghost" onClick={() => setStored(items => [...items, {
+                          <Button aria-label="Add JSON table" variant="secondary" onClick={() => setStored(items => [...items, {
                             key: runtimeId(), schema: defaultSchema() || "public", name: "", rows: "", retained: false
                           }])}>Add JSON table</Button>
                         </div>}
@@ -677,7 +675,7 @@ export function DatasetEditorPage({
                         rows: e.target.value
                       } : s))} />
                         </Field>
-                        <Button aria-label={`Remove stored table ${index + 1}`} variant="ghost" onClick={() => setStored(items => items.filter(s => s.key !== table.key))}>
+                        <Button aria-label={`Remove stored table ${index + 1}`} variant="secondary" onClick={() => setStored(items => items.filter(s => s.key !== table.key))}>
                           Remove table
                         </Button>
                       </div>)}
@@ -721,7 +719,7 @@ export function DatasetEditorPage({
                       } : m))} />
                               Expose
                             </label>}
-                          <Button aria-label={`Run cell ${index + 1}`} aria-keyshortcuts="Meta+Enter Control+Enter" variant="ghost" disabled={!model.cell.name.trim() || !model.cell.sql.trim()} onClick={() => runCell(index)} class="inline-flex items-center gap-1.5">
+                          <Button aria-label={`Run cell ${index + 1}`} aria-keyshortcuts="Meta+Enter Control+Enter" variant="secondary" disabled={!model.cell.name.trim() || !model.cell.sql.trim()} onClick={() => runCell(index)} class="inline-flex items-center gap-1.5">
                             <Play size={12} />
                             Run
                           </Button>
@@ -749,17 +747,17 @@ export function DatasetEditorPage({
                                 {model.stale ? "Run this cell to inspect its current output columns." : `${model.columns.length} saved output columns · run to preview rows`}
                               </p>}
                             <div class="flex flex-wrap justify-between gap-2">
-                              <Button aria-label={`Insert cell after ${index + 1}`} variant="ghost" class="inline-flex items-center gap-1" onClick={() => addModel(index)}>
+                              <Button aria-label={`Insert cell after ${index + 1}`} variant="secondary" class="inline-flex items-center gap-1" onClick={() => addModel(index)}>
                                 <Plus size={12} />
                                 Insert cell below
                               </Button>
-                              <Button aria-label={`Remove cell ${index + 1}`} variant="ghost" onClick={() => setModels(items => invalidate(items.filter(m => m.cell.id !== model.cell.id), index))}>
+                              <Button aria-label={`Remove cell ${index + 1}`} variant="secondary" onClick={() => setModels(items => invalidate(items.filter(m => m.cell.id !== model.cell.id), index))}>
                                 Remove
                               </Button>
                             </div>
                           </div>}
                       </article>)}
-                    <Button aria-label="Add notebook cell" variant="ghost" class="inline-flex items-center gap-1.5" onClick={() => addModel()}>
+                    <Button aria-label="Add notebook cell" variant="secondary" class="inline-flex items-center gap-1.5" onClick={() => addModel()}>
                       <Plus size={14} />
                       Add SQL cell
                     </Button>
@@ -830,7 +828,7 @@ export function DatasetEditorPage({
                   </Field>
                   </fieldset>
               <section class="space-y-3" aria-label="Dataset definition">
-                {sourceText() === null ? <Button aria-label="Edit dataset source" variant="ghost" disabled={Boolean(busy())} onClick={() => {
+                {sourceText() === null ? <Button aria-label="Edit dataset source" variant="secondary" disabled={Boolean(busy())} onClick={() => {
                   try {
                     setSourceText(serializeDatasetDefinition(buildCatalog(connection(), false)));
                     setError("");
@@ -861,7 +859,7 @@ export function DatasetEditorPage({
                     }}>
                         Apply source
                       </Button>
-                      <Button aria-label="Cancel dataset source" variant="ghost" onClick={() => setSourceText(null)}>
+                      <Button aria-label="Cancel dataset source" variant="secondary" onClick={() => setSourceText(null)}>
                         Cancel
                       </Button>
                     </div>

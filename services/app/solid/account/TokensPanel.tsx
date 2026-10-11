@@ -2,7 +2,8 @@
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { Ban } from 'lucide-solid';
 import { usePageData } from '../lib/use-page-data';
-import { Button, PANEL, TABLE_ROW } from '../ui/ui';
+import { PANEL, TABLE_ROW } from '../ui/ui';
+import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface UserTokenView { id: string; name: string | null; status: 'active' | 'expired' | 'revoked'; created_at: string; deleted_at: string | null; expires_at: string | null; last_used_at: string | null }
@@ -35,12 +36,12 @@ export function TokensPanel(): JSX.Element {
     <Show when={selected()}>{token => <ConfirmDialog title={`Revoke “${token().name ?? token().id}”?`} description="Agents using this token will stop working immediately. This cannot be undone." action="Revoke token" confirmLabel="Confirm revoke" danger busy={busy()} error={error()} onCancel={() => setSelected(null)} onConfirm={() => void revoke()} />}</Show>
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3">
       <div class="flex gap-2" role="group" aria-label="Connection status">
-        <Button type="button" variant={view() === 'active' ? 'solid' : 'ghost'} aria-pressed={view() === 'active'} onClick={() => switchView('active')}>Active ({active().length})</Button>
-        <Button type="button" variant={view() === 'history' ? 'solid' : 'ghost'} aria-pressed={view() === 'history'} onClick={() => switchView('history')}>History ({history().length})</Button>
+        <Button type="button" variant={view() === 'active' ? 'primary' : 'secondary'} aria-pressed={view() === 'active'} onClick={() => switchView('active')}>Active ({active().length})</Button>
+        <Button type="button" variant={view() === 'history' ? 'primary' : 'secondary'} aria-pressed={view() === 'history'} onClick={() => switchView('history')}>History ({history().length})</Button>
       </div>
       <span class="text-xs text-muted">{view() === 'active' ? 'Can access your account' : 'Expired and revoked connections'}</span>
     </div>
-    <Show when={page.error()}><p role="alert" class="p-4 text-sm text-danger">Could not load connections. <Button variant="ghost" onClick={() => void page.refresh(true)}>Retry connections</Button></p></Show>
+    <Show when={page.error()}><p role="alert" class="p-4 text-sm text-danger">Could not load connections. <Button variant="secondary" onClick={() => void page.refresh(true)}>Retry connections</Button></p></Show>
     <Show when={!page.data() && !page.error()}><p role="status" class="p-4 text-sm text-muted">Loading connections…</p></Show>
     <Show when={page.data()}>
       <Show when={visible().length} fallback={<p class="p-5 text-sm text-muted">{view() === 'active' ? 'No active connections. Run afbin auth to connect an agent.' : 'No connection history yet.'}</p>}>
@@ -54,7 +55,7 @@ export function TokensPanel(): JSX.Element {
           <td class="px-4 py-2.5 text-right align-middle"><Show when={token.status !== 'revoked'} fallback={<span class="text-xs text-muted">Revoked</span>}><Button variant="danger" type="button" aria-label={`Revoke token ${token.name ?? token.id}`} onClick={() => setSelected(token)} class="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap"><Ban size={12} />Revoke</Button></Show></td>
         </tr>}</For></tbody></table></div>
       </Show>
-      <Show when={filtered().length > 5}><div class="flex items-center justify-between gap-2 border-t border-edge px-4 py-3"><span role="status" class="text-xs text-muted">{currentPage() * 5 + 1}–{Math.min(currentPage() * 5 + 5, filtered().length)} of {filtered().length}</span><div class="flex gap-2"><Button variant="ghost" aria-label="Previous connections page" disabled={currentPage() === 0} onClick={() => setPageIndex(currentPage() - 1)}>Previous</Button><Button variant="ghost" aria-label="Next connections page" disabled={currentPage() === lastPage()} onClick={() => setPageIndex(currentPage() + 1)}>Next</Button></div></div></Show>
+      <Show when={filtered().length > 5}><div class="flex items-center justify-between gap-2 border-t border-edge px-4 py-3"><span role="status" class="text-xs text-muted">{currentPage() * 5 + 1}–{Math.min(currentPage() * 5 + 5, filtered().length)} of {filtered().length}</span><div class="flex gap-2"><Button variant="secondary" aria-label="Previous connections page" disabled={currentPage() === 0} onClick={() => setPageIndex(currentPage() - 1)}>Previous</Button><Button variant="secondary" aria-label="Next connections page" disabled={currentPage() === lastPage()} onClick={() => setPageIndex(currentPage() + 1)}>Next</Button></div></div></Show>
     </Show>
   </section>;
 }

@@ -673,7 +673,7 @@ async function foldersLeg(owner) {
     await step('the Solid route restores the folder and updates its table', async () => {
       await Promise.all([
         o.waitForResponse((r) => r.url().endsWith(`/api/my/artifacts/${folder.id}/restore`) && r.status() === 200, { timeout: 15000 }),
-        o.getByRole('button', { name: 'Restore Field Notes 2026' }).click(),
+        o.getByRole('menuitem', { name: 'Restore Field Notes 2026' }).click(),
       ]);
       await trashTable.getByText('Field Notes 2026').first().waitFor({ state: 'detached', timeout: 15000 });
     });

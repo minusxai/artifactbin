@@ -11,7 +11,7 @@ import Check from 'lucide-solid/icons/check';
 import { parentOfRow, type ShelfRow } from '@/lib/workspace/shelf';
 import { rowTitle } from '@/lib/document/display-title';
 import { DialogShell } from '../ui/DialogShell';
-import { Button } from '../ui/ui';
+import { Button } from '../ui/Button';
 
 type FolderNode = {id: string | null; name: string; parent: string | null; children: FolderNode[]};
 
@@ -112,7 +112,7 @@ export function MoveToFolderDialog(props: {
         <footer class="border-t border-edge bg-raised/30 px-5 py-4">
           <p aria-label="Selected destination" class="mb-3 break-words text-xs text-muted">{['Workspace', ...ancestors(selected()).map(node => node.name)].join(' / ')}</p>
           <Show when={error()}><p role="alert" class="mb-3 text-xs text-danger">{error()}</p></Show>
-          <div class="flex justify-end gap-2"><Button variant="ghost" aria-label="Close folder picker" disabled={busy()} onClick={close}>Cancel</Button><Button disabled={busy() || blocked(selected()) || selected() === props.currentParentId} onClick={() => void move()}>{busy() ? 'Moving…' : 'Move here'}</Button></div>
+          <div class="flex justify-end gap-2"><Button variant="secondary" aria-label="Close folder picker" disabled={busy()} onClick={close}>Cancel</Button><Button disabled={busy() || blocked(selected()) || selected() === props.currentParentId} onClick={() => void move()}>{busy() ? 'Moving…' : 'Move here'}</Button></div>
         </footer>
       </div>
     </div>

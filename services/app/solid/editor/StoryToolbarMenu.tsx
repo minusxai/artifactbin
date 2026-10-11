@@ -24,7 +24,7 @@ export function StoryToolbarMenu(props: {
       open={props.open}
       onOpenChange={props.onOpenChange}
       label={`${name()} options`}
-      class="z-[200] max-w-[calc(100vw-16px)] rounded-lg p-2 text-fg"
+      class="max-w-[calc(100vw-16px)] p-2 text-fg"
       sideOffset={6}
       trigger={(attrs) => (
         <button

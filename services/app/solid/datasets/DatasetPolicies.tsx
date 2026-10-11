@@ -4,7 +4,7 @@ import { Portal } from 'solid-js/web';
 import { parse as parseYaml } from 'yaml';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils/dataset-grants';
 import type { DatasetAccessPolicy, DatasetOperation, DatasetTablePolicy, InsertPermission, UpdatePermission, DeletePermission } from '@artifactbin/contracts';
-import { Button } from '../ui/ui';
+import { Button } from '../ui/Button';
 import { PolicyConditions } from './PolicyConditions';
 import { apiFetch } from '../lib/api';
 
@@ -20,7 +20,7 @@ const control = 'w-full rounded border border-edge bg-surface px-3 py-2 text-sm 
 export function DatasetPolicies(props: { artifactId: string; expanded?: boolean; saveTarget?: HTMLElement }): JSX.Element {
   const [open, setOpen] = createSignal(Boolean(props.expanded));
   return <div>
-    <Show when={!props.expanded}><Button variant="ghost" aria-expanded={open()} onClick={() => setOpen(value => !value)}>Manage access policies</Button></Show>
+    <Show when={!props.expanded}><Button variant="secondary" aria-expanded={open()} onClick={() => setOpen(value => !value)}>Manage access policies</Button></Show>
     <Show when={open()}><PolicyEditor artifactId={props.artifactId} saveTarget={props.saveTarget} /></Show>
   </div>;
 }
@@ -70,7 +70,7 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
   const saveButton = (compact = false) => <Button aria-label="Save access policies" disabled={!state() || state()?.canManage === false || saving() || source() !== null} onClick={() => void save()}>{saving() ? 'Saving…' : compact ? 'Save' : 'Save access policies'}</Button>;
   return <section aria-label="Access policies" class="space-y-5 py-4 text-sm text-fg">
     <header class="flex flex-wrap justify-between gap-3"><div><h2 class="text-xl font-semibold">Control how data can change</h2><p class="mt-1 text-muted">Choose allowed actions, then narrow them with column and row rules.</p></div>
-      <Show when={state() && state()?.canManage !== false && source() === null}><Button variant="ghost" onClick={() => setSource(pretty(draft()))}>Edit JSON / YAML</Button></Show></header>
+      <Show when={state() && state()?.canManage !== false && source() === null}><Button variant="secondary" onClick={() => setSource(pretty(draft()))}>Edit JSON / YAML</Button></Show></header>
     <Show when={error()}><p role="alert" class="rounded border border-danger/30 bg-danger-soft p-3 text-danger">{error()}</p></Show>
     <Show when={!state() && !error()}><p role="status">Loading data actions…</p></Show>
     <Show when={state()?.canManage === false}><p>Dataset edit access is required to change these rules.</p></Show>
@@ -93,7 +93,7 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
         <section><h3 class="font-semibold">Connected apps</h3><Show when={state()?.writtenBy?.length} fallback={<p>No apps use these actions yet.</p>}><For each={state()?.writtenBy}>{item => <p><a href={`/a/${item.id}`}>{item.title ?? item.id}</a> · {item.mutations.join(', ')}</p>}</For></Show></section>
       </>}>
         <label class="grid gap-1">Policy JSON or YAML<textarea aria-label="Policy JSON or YAML" spellcheck={false} class={`${control} min-h-96 font-mono`} value={source() ?? ''} onInput={event => setSource(event.currentTarget.value)} /></label>
-        <div class="flex gap-2"><Button onClick={() => { try { change(parseDatasetAccessPolicy(parseYaml(source()!))); setSource(null); setTableIndex(0); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid policy'); } }}>Apply policy source</Button><Button variant="ghost" onClick={() => setSource(null)}>Cancel source changes</Button></div>
+        <div class="flex gap-2"><Button onClick={() => { try { change(parseDatasetAccessPolicy(parseYaml(source()!))); setSource(null); setTableIndex(0); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid policy'); } }}>Apply policy source</Button><Button variant="secondary" onClick={() => setSource(null)}>Cancel source changes</Button></div>
       </Show>
       <details><summary>Review permission changes</summary><pre>{pretty(draft())}</pre></details>
       <footer class="flex items-center justify-between gap-3 rounded border border-edge bg-surface p-3"><p role="status">{notice() || (pretty(draft()) !== pretty(state()?.policy) ? 'You have unsaved rule changes.' : 'Rules are up to date.')}</p><Show when={props.saveTarget} fallback={saveButton()}>{target => <Portal mount={target()}>{saveButton(true)}</Portal>}</Show></footer>

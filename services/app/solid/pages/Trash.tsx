@@ -1,4 +1,3 @@
-import { FORM_SECONDARY_BUTTON } from '../ui/FormControls';
 import WorkspaceHeading from '../components/WorkspaceHeading';
 /* @jsxImportSource solid-js */
 /**
@@ -14,9 +13,11 @@ import ChevronRight from 'lucide-solid/icons/chevron-right';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import Search from 'lucide-solid/icons/search';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
-import RowMenu from '../ui/RowMenu';
+import { RowMenu } from '../ui/Menu';
+import { Button } from '../ui/Button';
+import { Panel } from '../ui/Panel';
 import { Tooltip } from '../ui/Tooltip';
-import { Badge, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo } from '../ui/ui';
+import { Badge, FormatBadge, formatLabel, MicroLabel, TABLE_ROW, timeAgo } from '../ui/ui';
 import { usePageData } from '../lib/use-page-data';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
@@ -27,8 +28,6 @@ interface TrashFile { id: string; title: string | null; format: string; version:
 const ROWS_PER_PAGE = 10;
 const FORMAT_ORDER = ['folder', 'markup', 'dataset', 'viz', 'image', 'pdf'];
 const HEADINGS = ['title', 'type', 'ver', 'deleted', ''];
-const ICON_ACTION =
-  'inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border border-edge bg-surface p-0 text-muted transition-colors focus-visible:outline-2 focus-visible:outline-accent';
 
 function TypeFilter(props: { format: string; active: boolean; onToggle: (format: string) => void }): JSX.Element {
   return (
@@ -92,9 +91,9 @@ export function TrashPage(): JSX.Element {
       <main class="workspace-page">
         <WorkspaceHeading title="Trash" description="Deleted artifacts can be restored." />
 
-        <section aria-label="Trash" class={PANEL}>
+        <Panel label="Trash" padding="none">
           <Show when={page.error()}>
-            <button class={`${FORM_SECONDARY_BUTTON} m-3`} aria-label="Retry trash" onClick={() => void page.refresh(true)}>Could not refresh trash. Retry</button>
+            <Button variant="secondary" class="m-3" aria-label="Retry trash" onClick={() => void page.refresh(true)}>Could not refresh trash. Retry</Button>
           </Show>
           <div class="flex flex-wrap items-center gap-2 border-b border-edge bg-raised/30 px-4 py-3">
             <Search size={13} class="shrink-0 text-faint" />
@@ -113,7 +112,7 @@ export function TrashPage(): JSX.Element {
               </span>
             </Show>
             <Show when={filtering()}>
-              <span class="shrink-0 font-mono text-[10px] text-faint">{visible().length} / {files().length}</span>
+              <span class="shrink-0 font-mono text-micro text-faint">{visible().length} / {files().length}</span>
             </Show>
           </div>
 
@@ -138,7 +137,7 @@ export function TrashPage(): JSX.Element {
                     <tr class={`${TABLE_ROW} reveal`} style={{ 'animation-delay': `${index() * 40}ms` }}>
                       <td class="w-full max-w-0 px-3 py-3 sm:px-4 sm:py-2.5">
                         <span class="block truncate font-semibold text-fg">{name()}</span>
-                        <span class="mt-1 flex items-center gap-1.5 font-mono text-[10px] leading-none text-faint sm:hidden">
+                        <span class="mt-1 flex items-center gap-1.5 font-mono text-micro leading-none text-faint sm:hidden">
                           <span>{formatLabel(file.format)}</span>
                           <span aria-hidden="true">·</span>
                           <span>v{file.version}</span>
@@ -174,36 +173,20 @@ export function TrashPage(): JSX.Element {
 
           <Show when={visible().length > ROWS_PER_PAGE}>
             <div class="flex items-center justify-between border-t border-edge px-4 py-2">
-              <span aria-label="Page range" class="font-mono text-[10px] text-faint">
+              <span aria-label="Page range" class="font-mono text-micro text-faint">
                 {start() + 1}-{start() + rows().length} of {visible().length}
               </span>
               <span class="inline-flex items-center gap-1">
                 <Tooltip content="previous">
-                  <button
-                    type="button"
-                    class={`${ICON_ACTION} enabled:hover:text-accent disabled:cursor-default disabled:text-faint disabled:opacity-40`}
-                    aria-label="Previous page"
-                    disabled={currentPage() === 0}
-                    onClick={() => setPageIndex(currentPage() - 1)}
-                  >
-                    <ChevronLeft size={13} />
-                  </button>
+                  <Button variant="secondary" icon type="button" aria-label="Previous page" disabled={currentPage() === 0} onClick={() => setPageIndex(currentPage() - 1)}><ChevronLeft size={13} /></Button>
                 </Tooltip>
                 <Tooltip content="next">
-                  <button
-                    type="button"
-                    class={`${ICON_ACTION} enabled:hover:text-accent disabled:cursor-default disabled:text-faint disabled:opacity-40`}
-                    aria-label="Next page"
-                    disabled={currentPage() >= pageCount() - 1}
-                    onClick={() => setPageIndex(currentPage() + 1)}
-                  >
-                    <ChevronRight size={13} />
-                  </button>
+                  <Button variant="secondary" icon type="button" aria-label="Next page" disabled={currentPage() >= pageCount() - 1} onClick={() => setPageIndex(currentPage() + 1)}><ChevronRight size={13} /></Button>
                 </Tooltip>
               </span>
             </div>
           </Show>
-        </section>
+        </Panel>
       </main>
     </Show>
   );

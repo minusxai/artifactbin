@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack, type JSX } from 'solid-js';
 import { ChevronDown } from 'lucide-solid';
-import { Button } from '../ui/ui';
+import { Button } from '../ui/Button';
 import { artifactEditPath } from '@/lib/http/urls';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetColumn, Row } from '@/lib/dataflow';
@@ -102,8 +102,8 @@ export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: Catalo
   const choose = (schema: string, name: string) => { setResult(null); setError(''); setExecutedSql(null); setSelection({ schema, name, offset: 0 }); };
   return <section aria-label="Dataset catalog" class="mx-auto min-w-0 w-full max-w-6xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap items-center gap-2">
-      <Button aria-label="Table view" aria-pressed={mode() === 'table'} variant={mode() === 'table' ? 'solid' : 'ghost'} onClick={() => { setMode('table'); choose(selection().schema, selection().name); }}>Table view</Button>
-      <Button aria-label="SQL view" aria-pressed={mode() === 'sql'} variant={mode() === 'sql' ? 'solid' : 'ghost'} onClick={() => { setMode('sql'); if (!sqlDraft()) setSqlDraft(tableSql()); }}>Run SQL</Button>
+      <Button aria-label="Table view" aria-pressed={mode() === 'table'} variant={mode() === 'table' ? 'primary' : 'secondary'} onClick={() => { setMode('table'); choose(selection().schema, selection().name); }}>Table view</Button>
+      <Button aria-label="SQL view" aria-pressed={mode() === 'sql'} variant={mode() === 'sql' ? 'primary' : 'secondary'} onClick={() => { setMode('sql'); if (!sqlDraft()) setSqlDraft(tableSql()); }}>Run SQL</Button>
       <Show when={props.editHref}><a aria-label="Edit dataset" href={props.editHref} class="ml-auto text-sm text-accent underline underline-offset-4">Edit dataset</a></Show>
     </div>
     <Show when={props.schemaTables}><DatasetSchemaBrowser tables={props.schemaTables!} /></Show>
@@ -116,7 +116,7 @@ export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: Catalo
       <label class="grid min-w-0 gap-1 text-xs text-muted">Table<select aria-label="Dataset table" class={selectClass} value={selection().name} onChange={(event) => choose(selection().schema, event.currentTarget.value)}><For each={props.catalog.tables.filter((item) => item.schema === selection().schema)}>{(item) => <option>{item.name}</option>}</For></select></label>
     </div></Show>
     <div class="flex flex-wrap items-center gap-3">
-      <Button aria-label="Refresh dataset" variant="ghost" disabled={busy() || !sql()} onClick={() => setRefresh((n) => n + 1)}>{busy() ? 'Loading…' : 'Refresh'}</Button>
+      <Button aria-label="Refresh dataset" variant="secondary" disabled={busy() || !sql()} onClick={() => setRefresh((n) => n + 1)}>{busy() ? 'Loading…' : 'Refresh'}</Button>
       <p aria-label="Refresh status" aria-live="polite" class="font-mono text-xs text-faint">{result() ? `Last refreshed ${dateTime(result()!.data.refreshedAt)}${stale() ? ' · stale' : ''}` : busy() ? 'Loading preview…' : 'No preview yet'} · {props.catalog.refreshSeconds ? `Refresh interval ${props.catalog.refreshSeconds}s` : 'Manual refresh'}</p>
     </div>
     <Show when={error()}><p role="alert" aria-label="Dataset preview error" class="text-sm text-danger">{error()}</p></Show>
@@ -126,9 +126,9 @@ export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: Catalo
     </>}</Show>
     <Show when={!table() && mode() === 'table'}><p class="text-sm text-muted">Select tables or model outputs in the whitelist to explore them.</p></Show>
     <Show when={props.paginate !== false ? result() : null}>{(answer) => <div class="flex items-center gap-3">
-      <Button aria-label="Previous page" variant="ghost" disabled={busy() || selection().offset === 0} onClick={() => setSelection((value) => ({ ...value, offset: Math.max(0, value.offset - PAGE_SIZE) }))}>Previous</Button>
+      <Button aria-label="Previous page" variant="secondary" disabled={busy() || selection().offset === 0} onClick={() => setSelection((value) => ({ ...value, offset: Math.max(0, value.offset - PAGE_SIZE) }))}>Previous</Button>
       <span class="font-mono text-xs text-faint">{answer().data.rows.length ? `${answer().offset + 1}–${answer().offset + answer().data.rows.length}` : '0'} rows</span>
-      <Button aria-label="Next page" variant="ghost" disabled={busy() || !(answer().data.truncated ?? answer().data.rows.length === PAGE_SIZE)} onClick={() => setSelection((value) => ({ ...value, offset: value.offset + PAGE_SIZE }))}>Next</Button>
+      <Button aria-label="Next page" variant="secondary" disabled={busy() || !(answer().data.truncated ?? answer().data.rows.length === PAGE_SIZE)} onClick={() => setSelection((value) => ({ ...value, offset: value.offset + PAGE_SIZE }))}>Next</Button>
     </div>}</Show>
     <Show when={result() && props.paginate === false && result()?.data.truncated}><p class="text-xs text-faint">Preview is limited to 50 rows. Refine the SQL to inspect a different slice.</p></Show>
   </section>;

@@ -2,7 +2,8 @@
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { FORM_INPUT } from '../ui/FormControls';
 import { Copy } from 'lucide-solid';
-import { Badge, Button, PANEL } from '../ui/ui';
+import { Badge, PANEL } from '../ui/ui';
+import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { copyText } from '../lib/copy-text';
 import { CustomDomainPaths } from './CustomDomainPaths';

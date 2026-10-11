@@ -80,6 +80,24 @@
   --font-mono: var(--font-jb-mono), ui-monospace, 'SF Mono', Menlo, monospace;
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-cormorant), 'EB Garamond', Georgia, serif;
+
+  /*
+   * THE APP'S CONTROL GEOMETRY (solid/ui). NEW semantic names only: Tailwind's default --radius-*,
+   * --text-* and --spacing stay untouched, because this sheet is @source'd over lib/ and a changed
+   * default would reskin every artifact. chip = badges and menu items; control = buttons, inputs,
+   * selects and tabs; panel = cards, popovers and menus; dialog = modal panels.
+   */
+  --radius-chip: 4px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-dialog: 12px;
+  --text-micro: 10px;
+  --text-micro--line-height: 14px;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 16px;
+  /* Two control densities: md (form, h-control) and sm (chrome: toolbars, panels, menus, h-control-sm). */
+  --spacing-control: 2.5rem;
+  --spacing-control-sm: 2rem;
 }
 
 /* Kit overlays enter TrustedUi's shadow root, where document styles are absent.

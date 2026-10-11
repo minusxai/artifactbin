@@ -16,9 +16,11 @@ it('viewer can search people and open profiles without management controls',()=>
 it('keeps last-editor refusal visible and preserves member role',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'last_editor'},{status:409})));
  render(()=> <GroupManagement detail={detail} refresh={()=>{}} />);
- fireEvent.change(screen.getByRole('combobox',{name:'Role for Alice'}),{target:{value:'viewer'}});
+ fireEvent.click(screen.getByRole('button',{name:'Role for Alice'}));
+ fireEvent.click(screen.getByRole('option',{name:'Viewer'}));
  await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('Keep at least one editor'));
- expect(screen.getByRole('combobox',{name:'Role for Alice'})).toHaveValue('editor');
+ expect(screen.getByRole('button',{name:'Role for Alice'})).toHaveTextContent('Editor');
+ expect(fetch).toHaveBeenCalledWith('/api/groups/g1/members/u1',expect.objectContaining({method:'PUT',body:JSON.stringify({role:'viewer'})}));
 });
 
 it('finds a server search result outside the initially loaded people',async()=>{
@@ -26,6 +28,6 @@ it('finds a server search result outside the initially loaded people',async()=>{
  render(()=> <GroupManagement detail={detail} refresh={()=>{}}/>);
  fireEvent.input(screen.getByRole('searchbox',{name:'Search people'}),{target:{value:'Zoe'}});
  expect(await screen.findByRole('link',{name:'Zoe'})).toHaveAttribute('href','/@zoe');
- expect(screen.getByRole('combobox',{name:'Role for Zoe'})).toHaveValue('viewer');
+ expect(screen.getByRole('button',{name:'Role for Zoe'})).toHaveTextContent('Viewer');
  expect(fetch).toHaveBeenCalledWith('/api/groups/g1/members?query=Zoe',expect.objectContaining({credentials:'same-origin'}));
 });

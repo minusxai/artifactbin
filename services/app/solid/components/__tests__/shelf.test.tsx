@@ -39,7 +39,7 @@ it.each(['public', 'unlisted', 'private'] as const)('shows %s as an accessible i
   const menu = screen.getByRole('button', { name: 'More actions for Doc one' });
   expect(menu.closest('a')).toBeNull();
   fireEvent.click(menu);
-  expect(screen.getByRole('button', { name: 'Delete Doc one' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Delete Doc one' })).toBeInTheDocument();
 });
 
 it('creates a child folder at the selected location', async () => {
@@ -73,8 +73,8 @@ it('hands every keystroke in its search box to onQuery, for a caller filtering s
 it('opens a folder action menu without recursive updates', () => {
   render(() => <Shelf rows={[folder]} scopeParentId={null} actions="full" />);
   fireEvent.click(screen.getByRole('button', { name: 'More actions for Reports' }));
-  expect(screen.getByRole('button', { name: 'Delete Reports' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Delete Reports' }));
+  expect(screen.getByRole('menuitem', { name: 'Delete Reports' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Reports' }));
   expect(screen.getByRole('dialog', { name: 'Delete Reports?' })).toBeInTheDocument();
 });
 
@@ -83,7 +83,7 @@ it('filters the move picker to the account’s folders by name', () => {
   const row = doc('live01', { title: 'Live Note' });
   render(() => <Shelf rows={[folder, decks, row]} scopeParentId={null} actions="full" />);
   fireEvent.click(screen.getByRole('button', { name: 'More actions for Live Note' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Move Live Note' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Move Live Note' }));
   expect(screen.getByRole('dialog', { name: 'Move Live Note' })).toBeInTheDocument();
   expect(screen.getByLabelText('Move to root')).toBeInTheDocument();
   expect(screen.getByLabelText('Move to Reports')).toBeInTheDocument();

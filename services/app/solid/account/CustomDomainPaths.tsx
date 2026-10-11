@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
-import { Button } from '../ui/ui';
+import { Button } from '../ui/Button';
 import { FORM_INPUT } from '../ui/FormControls';
 
 interface PathMapping { path: string; artifactId: string }
@@ -40,13 +40,13 @@ export function CustomDomainPaths(props: {
   };
   const eligible = () => props.documents.some(document => document.id === artifactId());
   return <section aria-labelledby="domain-paths-heading" class="mt-5 border-t border-edge pt-4">
-    <div class="flex flex-wrap items-center justify-between gap-2"><h3 id="domain-paths-heading" class="text-sm font-medium">Custom paths</h3><Button type="button" variant="ghost" aria-label="Add custom path" disabled={props.busy || editing() || props.paths.length >= 50} onClick={() => open()}>Add path</Button></div>
+    <div class="flex flex-wrap items-center justify-between gap-2"><h3 id="domain-paths-heading" class="text-sm font-medium">Custom paths</h3><Button type="button" variant="secondary" aria-label="Add custom path" disabled={props.busy || editing() || props.paths.length >= 50} onClick={() => open()}>Add path</Button></div>
     <p class="mt-1 text-xs leading-relaxed text-muted">Give a public document a URL like /about or /guides/start. Existing document links keep working.</p>
     <Show when={props.paths.length > 0} fallback={<Show when={!editing()}><p class="mt-3 text-xs text-faint">No custom paths yet.</p></Show>}>
       <ul aria-label="Custom path mappings" class="mt-3 max-h-64 overflow-y-auto divide-y divide-edge">
         <For each={props.paths}>{mapping => <li class="flex flex-wrap items-center gap-3 py-3">
           <div class="min-w-0 flex-1"><a href={`https://${props.hostname}${mapping.path}`} target="_blank" rel="noopener noreferrer" class="break-all font-mono text-sm text-accent hover:underline">{mapping.path}</a><p class="mt-1 truncate text-xs text-muted">{props.documents.find(document => document.id === mapping.artifactId)?.title || 'Document unavailable — this URL returns not found'}</p></div>
-          <div class="flex shrink-0 gap-2"><Button type="button" variant="ghost" aria-label={`Edit path ${mapping.path}`} disabled={props.busy} onClick={() => open(mapping)}>Edit</Button><Button type="button" variant="danger" aria-label={`Remove path ${mapping.path}`} disabled={props.busy} onClick={() => void save(mapping)}>Remove</Button></div>
+          <div class="flex shrink-0 gap-2"><Button type="button" variant="secondary" aria-label={`Edit path ${mapping.path}`} disabled={props.busy} onClick={() => open(mapping)}>Edit</Button><Button type="button" variant="danger" aria-label={`Remove path ${mapping.path}`} disabled={props.busy} onClick={() => void save(mapping)}>Remove</Button></div>
         </li>}</For>
       </ul>
     </Show>
@@ -58,7 +58,7 @@ export function CustomDomainPaths(props: {
         <For each={props.documents}>{document => <option value={document.id} selected={artifactId() === document.id}>{document.title || 'Untitled document'}</option>}</For>
       </select></label></div>
       <p class="mt-2 break-all text-xs text-muted">{props.hostname}{path() || '/about'}</p>
-      <div class="mt-3 flex gap-2"><Button type="submit" aria-label="Save custom path" disabled={props.busy || !path().trim() || !eligible()}>Save path</Button><Button type="button" variant="ghost" disabled={props.busy} onClick={() => { setEditing(false); setMessage(null); }}>Cancel</Button></div>
+      <div class="mt-3 flex gap-2"><Button type="submit" aria-label="Save custom path" disabled={props.busy || !path().trim() || !eligible()}>Save path</Button><Button type="button" variant="secondary" disabled={props.busy} onClick={() => { setEditing(false); setMessage(null); }}>Cancel</Button></div>
     </form></Show>
     <Show when={message()}>{value => <p role={value().error ? 'alert' : 'status'} class={`mt-3 text-xs leading-relaxed ${value().error ? 'text-danger' : 'text-accent'}`}>{value().text}</p>}</Show>
   </section>;

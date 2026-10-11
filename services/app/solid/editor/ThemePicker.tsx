@@ -5,7 +5,7 @@
  * Picking reports metadata to the editor's existing save/preview path. A one-step revert also
  * supports legacy themes and an unset design. On a phone the grid lives in MobileSheet.
  */
-import { createSignal, For, Show, type JSX } from 'solid-js';
+import { createSignal, For, mergeProps, Show, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import X from 'lucide-solid/icons/x';
@@ -48,10 +48,10 @@ function AnchoredPanel(props: {
     </>;
   }
   const trigger = (attrs: PopoverTriggerAttrs) => props.tooltip
-    ? <Tooltip content={props.tooltip}>{props.trigger({ ...attrs, onClick: toggle })}</Tooltip>
-    : props.trigger({ ...attrs, onClick: toggle });
+    ? <Tooltip content={props.tooltip}>{props.trigger(mergeProps(attrs, { onClick: toggle }))}</Tooltip>
+    : props.trigger(mergeProps(attrs, { onClick: toggle }));
   return <Popover label={props.label} open={props.open} onOpenChange={props.onOpenChange} trigger={trigger}
-    class={`rounded-[6px] p-2 ${props.class}`}>{props.children}</Popover>;
+    class={`p-2 ${props.class}`}>{props.children}</Popover>;
 }
 
 export function ModeChip(props: { mode: 'light' | 'dark' | null; themeDefault: 'light' | 'dark'; onPick: (mode: 'light' | 'dark' | null) => void }): JSX.Element {

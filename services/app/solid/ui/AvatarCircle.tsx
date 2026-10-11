@@ -4,7 +4,7 @@ import { LoaderCircle, UserRound } from 'lucide-solid';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { pageDataChanged, profileChanged } from '@/solid/lib/page-data-events';
 import { Avatar } from './Avatar';
-import { Button } from './ui';
+import { Button } from './Button';
 
 const REFUSALS: Record<string, string> = {
   unsupported_image: 'that file is not a picture this can use — PNG, JPEG, WebP, GIF or AVIF',
@@ -41,7 +41,7 @@ export function AvatarCircle(props: { image: string | null; initial: string; use
       </div>
       <div class="min-w-0"><div class="flex flex-wrap justify-center gap-2 min-[400px]:justify-start">
         <Button type="button" aria-busy={pending() === 'upload'} disabled={!!pending()} onClick={pick}>{pending() === 'upload' ? 'Uploading…' : image() ? 'Change photo' : 'Upload a photo'}</Button>
-        <Show when={image() && props.onRemove}><Button variant="ghost" type="button" aria-label="Remove photo" disabled={!!pending()} onClick={() => void send('remove', { method: 'DELETE' })}>Remove photo</Button></Show>
+        <Show when={image() && props.onRemove}><Button variant="secondary" type="button" aria-label="Remove photo" disabled={!!pending()} onClick={() => void send('remove', { method: 'DELETE' })}>Remove photo</Button></Show>
       </div><Show when={status()}><p role="status" class="mt-2 text-xs text-danger">{status()}</p></Show></div>
     </div>
     <input ref={picker} type="file" accept={AVATAR_ACCEPT} class="sr-only" tabIndex={-1} aria-hidden="true" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void send('upload', { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file }); event.currentTarget.value = ''; }} />

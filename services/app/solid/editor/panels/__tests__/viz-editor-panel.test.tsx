@@ -69,7 +69,7 @@ function panel(overrides: Partial<typeof DEFAULTS & { onOpenQuery: (name: string
 const last = () => onChange.mock.calls.at(-1)![0];
 const enc = (viz: unknown) => (viz as { spec: { encoding: Record<string, { field: string; type: string }> } }).spec.encoding;
 
-/** Drive the house SelectMenu: open the labelled trigger, click the named option. */
+/** Drive the house Select: open the labelled trigger, click the named option. */
 const pick = (label: string, option: string | RegExp) => {
   fireEvent.click(screen.getByLabelText(label));
   fireEvent.click(screen.getByRole('option', { name: option }));

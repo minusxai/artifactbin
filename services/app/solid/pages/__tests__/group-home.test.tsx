@@ -89,7 +89,7 @@ it('moves Home to Personal after the default group is removed, reading the desti
 it('requires explicit confirmation after selecting a company group',async()=>{
  const fetcher=vi.fn(async(url:string)=>Response.json(url==='/api/groups'?{groups:[{...group,role:'editor'}]}:{}));vi.stubGlobal('fetch',fetcher);const complete=vi.fn();
  render(()=> <CompanySetup deployment={{mode:'company',setup_complete:false,is_owner:true,default_group:null}} complete={complete}/>);
- await screen.findByRole('option',{name:'Team'});fireEvent.change(screen.getByRole('combobox',{name:'Company group'}),{target:{value:'g1'}});expect(fetcher.mock.calls.filter(([url])=>url.includes('/setup'))).toHaveLength(0);
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledWith('/api/groups',expect.anything()));fireEvent.click(screen.getByRole('button',{name:'Company group'}));fireEvent.click(await screen.findByRole('option',{name:'Team'}));expect(screen.getByRole('button',{name:'Company group'})).toHaveTextContent('Team');expect(fetcher.mock.calls.filter(([url])=>url.includes('/setup'))).toHaveLength(0);
  fireEvent.click(screen.getByRole('button',{name:'Confirm company setup'}));await waitFor(()=>expect(complete).toHaveBeenCalledOnce());expect(fetcher).toHaveBeenCalledWith('/api/deployment/setup',expect.objectContaining({method:'POST',body:JSON.stringify({group_id:'g1'})}));
 });
 
@@ -114,8 +114,10 @@ it('shows the newly created company group when its option arrives after creation
  fireEvent.submit(screen.getByRole('button',{name:'Create group'}).closest('form')!);
  await waitFor(()=>expect(reads).toBe(2));
  release();
- await screen.findByRole('option',{name:'Team'});
- expect(screen.getByRole('combobox',{name:'Company group'})).toHaveValue('g1');
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Company group'})).toHaveTextContent('Team'));
+ fireEvent.click(screen.getByRole('button',{name:'Company group'}));
+ expect(screen.getByRole('option',{name:'Team'})).toHaveAttribute('aria-selected','true');
+ fireEvent.keyDown(screen.getByRole('listbox'),{key:'Escape'});
  expect(complete).not.toHaveBeenCalled();
  expect(fetcher.mock.calls.filter(([url])=>url.includes('/setup'))).toHaveLength(0);
  fireEvent.click(screen.getByRole('button',{name:'Confirm company setup'}));
@@ -137,7 +139,7 @@ it('keeps company setup for the owner and the recovery message for everyone else
  for(const owner of [true,false]){
   const fetcher=vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):Response.json({signedIn:true,accountId:'u1',deployment:{mode:'company',setup_complete:false,is_owner:owner,default_group:null},preferences:{default_destination:{type:'inherit'}},destination:{kind:'setup'}}));vi.stubGlobal('fetch',fetcher);
   const view=render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);
-  if(owner)expect(await screen.findByRole('combobox',{name:'Company group'})).toBeInTheDocument();
+  if(owner)expect(await screen.findByRole('button',{name:'Company group'})).toBeInTheDocument();
   else{expect(await screen.findByRole('alert')).toHaveTextContent('The company default group is unavailable');expect(screen.getByRole('link',{name:'Open Personal'})).toHaveAttribute('href','/?personal=1');}
   expect(fetcher.mock.calls.map(([url])=>String(url)).some(url=>url.includes('part=core'))).toBe(false);
   view.unmount();cleanup();
