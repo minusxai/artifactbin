@@ -8,7 +8,20 @@
  */
 import { createEffect, createSignal, createUniqueId, lazy, onCleanup, Show, Suspense } from 'solid-js';
 import type { SourceEditorProps } from './SourceEditor';
+import { Button } from '@/solid/ui/Button';
+import { StatusMessage } from '@/solid/ui/StatusMessage';
 import { useSourceEditorTools } from './source-editor-tools';
+
+/**
+ * The code editor's own dark theme, not the app palette: these are the CodeMirror theme's colors
+ * (lib/source-editor/codemirror.ts), repeated so the plain stand-in does not flash a different surface when the
+ * lazy editor replaces it. That module stays out of this import graph to keep the editor chunk lazy.
+ */
+const CODE = { 'background-color': '#1e1e1e', color: '#d4d4d4' } as const;
+const GUTTER = { color: '#858585' } as const;
+const DIVIDER = '1px solid #333';
+const STATUS = { color: '#a0a0a0', 'border-top': DIVIDER } as const;
+const RULE = { 'border-bottom': DIVIDER } as const;
 
 function PlainSourceFallback(props: SourceEditorProps & { unavailable?: string | null; remember: (selection: { start: number; end: number } | null) => void }) {
   let input!: HTMLTextAreaElement;
@@ -17,14 +30,14 @@ function PlainSourceFallback(props: SourceEditorProps & { unavailable?: string |
     if (input && scope?.activeElement === input)
       props.remember({ start: input.selectionStart, end: input.selectionEnd });
   });
-  return <div class="flex h-full w-full flex-col" style={{ 'background-color': '#1e1e1e', color: '#d4d4d4' }}>
+  return <div class="flex h-full w-full flex-col" style={CODE}>
     <div class="relative flex min-h-0 flex-1 overflow-hidden" style={{ 'font-family': 'Menlo, Monaco, Consolas, monospace', 'font-size': '12px', 'line-height': '18px' }}>
-      <div aria-hidden="true" class="w-12 shrink-0 overflow-hidden text-right" style={{ color: '#858585' }}>
+      <div aria-hidden="true" class="w-12 shrink-0 overflow-hidden text-right" style={GUTTER}>
         <pre data-source-line-numbers class="m-0 py-2 pr-3" style={{ font: 'inherit' }}>{props.value.split('\n').map((_, index) => index + 1).join('\n')}</pre>
       </div>
       <textarea ref={input} aria-label={props.ariaLabel ?? 'Markup source'} aria-description={props.unavailable ?? undefined} readOnly={props.readOnly}
         class="min-h-0 min-w-0 flex-1 resize-none border-0 px-1 py-2 outline-none"
-        style={{ 'background-color': '#1e1e1e', color: '#d4d4d4', font: 'inherit', 'tab-size': '2' }} wrap="off"
+        style={{ ...CODE, font: 'inherit', 'tab-size': '2' }} wrap="off"
         spellcheck={false} autocapitalize="off" value={props.value}
         on:input={(event) => {
           props.remember({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd });
@@ -32,7 +45,7 @@ function PlainSourceFallback(props: SourceEditorProps & { unavailable?: string |
         }}
         on:scroll={(event) => { const numbers = event.currentTarget.parentElement?.querySelector<HTMLElement>('[data-source-line-numbers]'); if (numbers) numbers.style.transform = `translateY(${-event.currentTarget.scrollTop}px)`; }} />
     </div>
-    <div class="px-3 py-2 text-xs" style={{ color: '#a0a0a0', 'border-top': '1px solid #333' }} role="status">{props.unavailable ?? 'Loading rich editor… You can keep editing.'}</div>
+    <div class="px-3 py-2 text-xs" style={STATUS} role="status">{props.unavailable ?? 'Loading rich editor… You can keep editing.'}</div>
   </div>;
 }
 
@@ -60,15 +73,14 @@ export default function SourceEditorPane(props: SourceEditorProps) {
   });
   const unavailable = () => (formatted() ? null : tools.formatterUnavailable);
 
-  return <div class="flex h-full flex-col" style={{ 'background-color': '#1e1e1e', color: '#d4d4d4' }}>
-    <div class="flex shrink-0 items-center justify-between gap-3 px-3 py-2 text-xs" style={{ 'border-bottom': '1px solid #333' }}>
+  return <div class="flex h-full flex-col" style={CODE}>
+    <div class="flex shrink-0 items-center justify-between gap-3 px-3 py-2 text-xs" style={RULE}>
       <span>{formatted() ? 'Formatted preview · read-only' : 'JSX source'}</span>
-      <button type="button" aria-label={formatted() ? 'Edit source' : 'View formatted'}
-        class="cursor-pointer rounded border border-current px-2 py-1 disabled:cursor-default disabled:opacity-50"
+      <Button variant="secondary" size="sm" aria-label={formatted() ? 'Edit source' : 'View formatted'}
         disabled={!!unavailable()} aria-describedby={unavailable() ? reasonId : undefined}
         on:click={() => setFormatted((value) => !value)}>
         {formatted() ? 'Edit source' : 'View formatted'}
-      </button>
+      </Button>
       <Show when={unavailable()}>{(reason) => <span id={reasonId} hidden>{reason()}</span>}</Show>
     </div>
     <div class={`min-h-0 flex-1 ${formatted() ? 'hidden' : ''}`}>
@@ -81,7 +93,7 @@ export default function SourceEditorPane(props: SourceEditorProps) {
     </div>
     <Show when={formatted()}>
       <div class="min-h-0 flex-1">
-        <Show when={!error()} fallback={<p role="alert" class="p-3 text-sm">Couldn’t format this draft. Check the JSX syntax in Edit source and try again.</p>}>
+        <Show when={!error()} fallback={<StatusMessage kind="error" class="m-3">Couldn’t format this draft. Check the JSX syntax in Edit source and try again.</StatusMessage>}>
           <Show when={preview()?.source === props.value ? preview() : null} fallback={<p role="status" class="p-3 text-sm">Formatting preview…</p>}>
             {(ready) => <Suspense><Editor value={ready().text} revision={props.revision} onChange={() => {}} readOnly ariaLabel="Formatted JSX" /></Suspense>}
           </Show>

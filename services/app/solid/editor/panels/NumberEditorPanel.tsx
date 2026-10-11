@@ -13,6 +13,7 @@
  * pick must be expressible without restating the binding.
  */
 import { createEffect, createSignal, on, Show, type JSX } from 'solid-js';
+import { Input } from '@/solid/ui/Field';
 import { Select } from '@/solid/ui/Select';
 import BoundQuery from '../BoundQuery';
 import type { TableChoice } from '@/lib/document/table-catalog';
@@ -47,12 +48,12 @@ function TextField(props: {
   };
   return (
     <label class="flex flex-col gap-1">
-      <span class="font-mono text-[11px] text-faint">{props.label}</span>
-      <input
+      <span class="font-mono text-2xs text-faint">{props.label}</span>
+      <Input
+        size="sm"
         type="text"
         aria-label={props.aria}
         placeholder={props.placeholder ?? '— none —'}
-        class="w-full rounded-[4px] border border-edge bg-surface px-2 py-1 font-mono text-xs text-fg"
         value={draft()}
         onInput={(e) => setDraft(e.currentTarget.value)}
         onBlur={commit}
@@ -70,7 +71,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
   return (
     <div class="flex flex-col gap-3" aria-label="Number editor">
       <div class="flex flex-col gap-1">
-        <span class="font-mono text-[11px] text-faint">data</span>
+        <span class="font-mono text-2xs text-faint">data</span>
         <Select size="sm"
           ariaLabel="Table"
           value={props.binding.table ?? ''}
@@ -89,7 +90,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
       </div>
       <BoundQuery table={bound()} onOpenQuery={props.onOpenQuery} />
       <Show when={props.binding.table && !bound()}>
-        <p class="font-sans text-[11px] text-amber-600" aria-label="Missing table notice">
+        <p class="font-sans text-2xs text-danger" aria-label="Missing table notice">
           This number points at a table the document does not declare.
         </p>
       </Show>
@@ -103,7 +104,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
         }
       >
         <div class="flex flex-col gap-1">
-          <span class="font-mono text-[11px] text-faint">column</span>
+          <span class="font-mono text-2xs text-faint">column</span>
           <Select size="sm"
             ariaLabel="Column"
             value={props.binding.col ?? ''}
@@ -117,7 +118,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
       </Show>
 
       <div class="flex flex-col gap-1">
-        <span class="font-mono text-[11px] text-faint">aggregate</span>
+        <span class="font-mono text-2xs text-faint">aggregate</span>
         <Select size="sm"
           ariaLabel="Aggregation"
           value={props.binding.agg ?? 'first'}
