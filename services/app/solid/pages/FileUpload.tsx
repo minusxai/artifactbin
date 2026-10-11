@@ -1,11 +1,15 @@
-import { FORM_INPUT, FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON } from '../ui/FormControls';
+import { FORM_PRIMARY_BUTTON } from '../ui/FormControls';
 /* @jsxImportSource solid-js */
 import { creationDestination } from '../lib/creation-destination';
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
 import { Check, Copy, FileUp } from 'lucide-solid';
 import AssetPageHeader from '../components/AssetPageHeader';
-import { FILE_ACTION as ACTION, FileViewer, extensionOf } from '../components/FileViewer';
+import { FileViewer, extensionOf } from '../components/FileViewer';
+import { Button } from '../ui/Button';
+import { Field, Input } from '../ui/Field';
+import { Panel } from '../ui/Panel';
+import { StatusMessage } from '../ui/StatusMessage';
 
 import { formatFileSize } from '@/lib/islands/file-display';
 import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@artifactbin/contracts';
@@ -79,8 +83,8 @@ export function FileUploadPage(): JSX.Element {
   return <Show when={!session()?.user && session()} fallback={
     <main class="workspace-page">
       <AssetPageHeader icon={FileUp} eyebrow="Asset upload" title="Upload a file" link={{ href: '/assets', label: 'Back to assets', text: 'all assets' }} />
-      <div class="mx-auto max-w-4xl space-y-6"><section aria-label="Upload a file" class="rounded-xl border border-edge bg-surface p-5">
-        <input ref={input} type="file" accept={ACCEPT} aria-label="Choose a file" class="hidden"
+      <div class="mx-auto max-w-4xl space-y-6"><Panel label="Upload a file" padding="sm">
+        <input ref={input} type="file" accept={ACCEPT} aria-label="Choose a file" hidden
           onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void pick(file); }} />
         <Show when={picked()} fallback={<button type="button" onClick={() => input.click()}
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}
@@ -93,34 +97,34 @@ export function FileUploadPage(): JSX.Element {
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span class="min-w-0 truncate font-medium text-fg">{selected().file.name}</span>
               <span class="text-xs text-muted">{formatFileSize(selected().file.size)}</span>
-              <Show when={!result()}><button type="button" onClick={() => input.click()} class={`ml-auto ${FORM_SECONDARY_BUTTON}`}>choose another</button></Show>
+              <Show when={!result()}><Button variant="secondary" size="sm" type="button" onClick={() => input.click()} class="ml-auto">choose another</Button></Show>
             </div>
             <div class="mt-4"><FileViewer name={selected().file.name} size={selected().file.size} url={selected().url} blob={selected().file} pdfUrl={result() ? `/a/${result()!.id}/raw` : null} downloadUrl={result() ? `/a/${result()!.id}/raw` : undefined} /></div>
             <Show when={result()} fallback={<div class="mt-5 flex flex-wrap items-end gap-3">
-              <label class="grid min-w-48 flex-1 gap-1.5 text-xs text-muted">Title
-                <input class={FORM_INPUT} value={title()} onInput={(event) => setTitle(event.currentTarget.value)} placeholder={selected().file.name} />
-              </label>
-              <button type="button" onClick={() => void upload()} disabled={busy()} class={FORM_PRIMARY_BUTTON}>
+              <Field label="Title" class="min-w-48 flex-1">
+                <Input value={title()} onInput={(event) => setTitle(event.currentTarget.value)} placeholder={selected().file.name} />
+              </Field>
+              <Button type="button" onClick={() => void upload()} disabled={busy()}>
                 <FileUp aria-hidden="true" size={13} />{busy() ? 'Uploading…' : 'Upload'}
-              </button>
+              </Button>
             </div>}>
-              {(uploaded) => <div aria-label="Uploaded file" class="mt-5 rounded-lg border border-edge bg-raised/40 p-4">
+              {(uploaded) => <Panel label="Uploaded file" padding="sm" class="mt-5">
                 <div class="flex flex-wrap items-center gap-3">
                   <p class="flex min-w-0 flex-1 items-center gap-2 text-sm text-fg"><Check aria-hidden="true" size={15} class="shrink-0 text-accent" /><span class="shrink-0">Uploaded as</span><span class="truncate font-medium">{title().trim() || selected().file.name}</span></p>
-                  <button type="button" aria-label="Copy file reference" onClick={() => { void copyText(`ref:${uploaded().id}`); setCopied(true); }} class={`${ACTION} shrink-0 border-edge-bright bg-surface text-accent hover:border-accent`}>
+                  <Button variant="secondary" size="sm" type="button" aria-label="Copy file reference" onClick={() => { void copyText(`ref:${uploaded().id}`); setCopied(true); }}>
                     ref:{uploaded().id}{copied() ? <Check aria-hidden="true" size={12} /> : <Copy aria-hidden="true" size={12} />}
-                  </button>
+                  </Button>
                 </div>
                 <div class="mt-4 grid gap-2 sm:grid-cols-2">
                   <a href={`/a/${uploaded().id}`} aria-label="Open artifact" class={FORM_PRIMARY_BUTTON}>Open artifact →</a>
-                  <button type="button" onClick={reset} class={FORM_SECONDARY_BUTTON}>Upload another</button>
+                  <Button variant="secondary" type="button" onClick={reset}>Upload another</Button>
                 </div>
-              </div>}
+              </Panel>}
             </Show>
           </>}
         </Show>
-        <Show when={error()}><p role="alert" class="mt-4 rounded border border-danger/30 bg-danger-soft p-3 text-sm text-danger">{error()}</p></Show>
-      </section></div>
+        <Show when={error()}><StatusMessage kind="error" class="mt-4">{error()}</StatusMessage></Show>
+      </Panel></div>
     </main>
   }><Navigate href="/login?callbackUrl=%2Ffiles%2Fnew" /></Show>;
 }

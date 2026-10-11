@@ -57,7 +57,7 @@ export default function ModelPreview(props: { source: Blob | string; title: stri
   });
   return <div class="relative">
     <canvas ref={canvas} aria-label={`3D preview of ${props.title}`} class="h-96 w-full rounded-lg border border-edge bg-raised/40" />
-    <Show when={status() !== 'ready'}><p role="status" class="absolute inset-x-0 bottom-2 text-center font-mono text-[11px] text-muted">{status() === 'loading' ? 'loading 3D preview…' : 'could not load this model for preview'}</p></Show>
-    <Show when={status() === 'ready'}><p class="absolute right-2 bottom-2 font-mono text-[10px] text-faint">drag to orbit · scroll to zoom</p></Show>
+    <Show when={status() !== 'ready'}><p role="status" class="absolute inset-x-0 bottom-2 text-center font-mono text-2xs text-muted">{status() === 'loading' ? 'loading 3D preview…' : 'could not load this model for preview'}</p></Show>
+    <Show when={status() === 'ready'}><p class="absolute right-2 bottom-2 font-mono text-micro text-faint">drag to orbit · scroll to zoom</p></Show>
   </div>;
 }
