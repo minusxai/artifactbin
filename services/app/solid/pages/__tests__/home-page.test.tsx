@@ -6,21 +6,22 @@ import { MemoryRouter, Route } from '@solidjs/router';
 import { SessionProvider } from '@/solid/lib/session';
 import { HomePage } from '@/solid/pages/Home';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
+import { withPersonalBootstrap } from './home-bootstrap-fetch';
 
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com', username: 'one', image: null }, onboarded: true };
 const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'markup', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
 const response = (value: unknown) => Response.json(value);
 const open = () => render(() => <MemoryRouter><Route path="*" component={() => <SessionProvider><HomePage /></SessionProvider>} /></MemoryRouter>);
-const workspaceFetch = (handler: (...args: any[]) => any) => vi.fn((url: string, init?: RequestInit) => url === '/api/deployment' ? Promise.resolve(Response.json({mode:'public',setup_complete:true,is_owner:false,default_group:null})) : url === '/api/me/preferences' ? Promise.resolve(Response.json({default_destination:{type:'personal'}})) : handler(url,init));
+const workspaceFetch = (handler: (...args: any[]) => any) => vi.fn(withPersonalBootstrap(handler));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it('starts the core request while identity is pending, then paints only after identity resolves', async () => {
+it('starts the bootstrap request while identity is pending, then paints only after identity resolves', async () => {
   let resolveSession!: (value: Response) => void;
   const pending = new Promise<Response>(resolve => { resolveSession = resolve; });
-  const calls: string[] = [];
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => { calls.push(url); return url.includes('/session') ? pending : Promise.resolve(response(url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {}, stats: { assets: 0 } })); }));
+  const fetcher = workspaceFetch((url: string) => url.includes('/session') ? pending : Promise.resolve(response(url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {}, stats: { assets: 0 } })));
+  vi.stubGlobal('fetch', fetcher);
   open();
-  expect(calls).toContain('/api/page/home?part=core');
+  expect(fetcher.mock.calls.map(([url]) => url)).toContain('/api/page/home?part=bootstrap');
   expect(screen.queryByLabelText('Open Private document')).toBeNull();
   resolveSession(response(session));
   expect(await screen.findByLabelText('Open Private document')).toBeInTheDocument();

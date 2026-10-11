@@ -10,6 +10,7 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from 'solid-js';
 import { createPageDataStore, type PageDataSnapshot } from '@/solid/lib/page-data-store';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
+import { homeBootstrapKey } from './home-resource';
 import { useSession } from './session';
 
 async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -23,8 +24,9 @@ async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
  * client navigation to `/a/:id` ends in a full load of the compiled page (ArtifactAddress), so its
  * JSON would be wasted work; the compiled page owns its own intent rule.
  */
-const PRELOADABLE: Array<[RegExp, (m: RegExpExecArray) => string]> = [
-  [/^\/$/, () => '/api/page/home?part=core'],
+const PRELOADABLE: Array<[RegExp, (m: RegExpExecArray, url: URL) => string]> = [
+  // Home's bootstrap resolves the destination server-side, so a group homepage never fetches the personal shelf.
+  [/^\/$/, (_m, url) => homeBootstrapKey(url.searchParams.get('personal') === '1')],
   [/^\/(@[^/]+)\/?$/, (m) => `/api/page/profile/${encodeURIComponent(m[1] ?? '')}`],
 ];
 
@@ -33,7 +35,7 @@ export function preloadKeyFor(href: string, origin = location.origin): string | 
   let url: URL;
   try { url = new URL(href, origin); } catch { return null; }
   if (url.origin !== origin) return null;
-  for (const [pattern, keyOf] of PRELOADABLE) { const m = pattern.exec(url.pathname); if (m) return keyOf(m); }
+  for (const [pattern, keyOf] of PRELOADABLE) { const m = pattern.exec(url.pathname); if (m) return keyOf(m, url); }
   return null;
 }
 

@@ -1,12 +1,11 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { ARTIFACT_ID_PATTERN, CARD_RENDER_GENERATION, type DatasetAccess, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { artifactEditPath } from '@/lib/http/urls';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { SharingVerdict } from '@/lib/workspace/visibility-icons';
 import { Tooltip } from '../ui/Tooltip';
-import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Input } from '../ui/Field';
@@ -18,6 +17,13 @@ import PenLine from 'lucide-solid/icons/pen-line';
 import X from 'lucide-solid/icons/x';
 import { copyText } from '../lib/copy-text';
 import { apiFetch } from '../lib/api';
+
+/**
+ * Lazy on purpose (a documented lazy-import exception): only the open sharing panel draws role selects, and
+ * every reader's document page carries this module, so Select and its Popover load on first open instead
+ * (the page-speed prose budget). Each use sits in its own <Suspense> so loading never suspends the page.
+ */
+const Select = lazy(() => import('../ui/Select').then((m) => ({ default: m.Select })));
 
 const ROLE_OPTIONS = SHARE_ROLES.map((role) => ({ value: role, label: SHARE_ROLE_LABEL[role] }));
 const VISIBILITY_TIPS = { public: 'anyone with the link · listed on your profile', unlisted: 'anyone with the link · not listed anywhere', private: 'only you and invited emails' } as const;
@@ -153,7 +159,7 @@ export function DocumentSharing(props: {
       }</For></div>
       <Show when={current().visibility !== 'private'}>
         <label class="mt-2 flex items-center justify-between gap-2 text-muted"><span>anyone with the link</span>
-          <span class="w-32 shrink-0"><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></span>
+          <span class="w-32 shrink-0"><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></Suspense></span>
         </label>
       </Show>
       <Show when={postgres()}><p aria-label="PostgreSQL read-only access" class="mt-5 border-t border-edge pt-4 leading-relaxed text-muted">Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.</p></Show>
@@ -185,8 +191,8 @@ export function DocumentSharing(props: {
           <span class="min-w-0 truncate">{person.email}</span>
           <span class="flex shrink-0 items-center gap-1">
             <Tooltip content="already viewable by link" disabled={current().visibility === 'private' || person.role === 'editor'}>
-              <span class="w-32 shrink-0" data-slot={current().visibility !== 'private' && person.role !== 'editor' ? 'tooltip-trigger' : undefined}><Select size="sm" ariaLabel={`Role for ${person.email}`} value={person.role} options={ROLE_OPTIONS}
-                onChange={role => void put({ shares: current().shares.map(entry => entry.email === person.email ? { ...entry, role: role as ShareRole } : entry) })} /></span>
+              <span class="w-32 shrink-0" data-slot={current().visibility !== 'private' && person.role !== 'editor' ? 'tooltip-trigger' : undefined}><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel={`Role for ${person.email}`} value={person.role} options={ROLE_OPTIONS}
+                onChange={role => void put({ shares: current().shares.map(entry => entry.email === person.email ? { ...entry, role: role as ShareRole } : entry) })} /></Suspense></span>
             </Tooltip>
             <Button variant="ghost" size="sm" icon aria-label={`Remove ${person.email}`} onClick={() => void put({ shares: current().shares.filter(entry => entry.email !== person.email) })}><X size={11} /></Button>
           </span>

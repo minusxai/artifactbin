@@ -1,6 +1,5 @@
 /* @jsxImportSource solid-js */
-import { TransferOwnershipDialog } from '../components/TransferOwnershipDialog';
-import { createSignal, Show, type JSX } from 'solid-js';
+import { createSignal, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Button } from '../ui/Button';
 import { MicroLabel } from '../ui/ui';
 import MessageSquare from 'lucide-solid/icons/message-square';
@@ -12,6 +11,12 @@ import { DocumentSharing } from './DocumentSharing';
 import { ForkArtifact } from './ForkArtifact';
 import { LikeAction } from './LikeAction';
 import { DocumentPeople } from './DocumentPeople';
+
+/**
+ * Lazy on purpose (a documented lazy-import exception): only an owner who picks "transfer ownership" needs the
+ * dialog, and every reader's document page would otherwise download it (the page-speed prose budget).
+ */
+const TransferOwnershipDialog = lazy(() => import('../components/TransferOwnershipDialog').then((m) => ({ default: m.TransferOwnershipDialog })));
 import { RefreshDocumentAssets } from './RefreshDocumentAssets';
 
 /** A link row of the controls panel, drawn like a ghost `sm` Button (a Button is a <button>; these rows navigate). */
@@ -60,6 +65,6 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <Show when={props.onDeleted}><DeleteAction id={props.id} title={props.title} onDeleted={props.onDeleted!} /></Show>
     </section></Show>
     <Show when={!activeOwner() && activeEditor()}><DocumentSharing id={props.id} title={props.title} owner={false} editable variant="menu" onOpen={props.onShare} /></Show>
-    <Show when={transferring()}><TransferOwnershipDialog id={props.id} title={props.title} currentGroupId={props.groupId} onClose={()=>setTransferring(false)} onTransferred={()=>window.location.assign(`/a/${encodeURIComponent(props.id)}`)}/></Show>
+    <Show when={transferring()}><Suspense><TransferOwnershipDialog id={props.id} title={props.title} currentGroupId={props.groupId} onClose={()=>setTransferring(false)} onTransferred={()=>window.location.assign(`/a/${encodeURIComponent(props.id)}`)}/></Suspense></Show>
   </div>;
 }
