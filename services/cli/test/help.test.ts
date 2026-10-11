@@ -573,7 +573,7 @@ test('user authoring help includes the actual typed-resource publish path',()=>{
 test('auth help and skill teach browserless email OTP recovery',()=>{
  for(const topic of ['auth','publishing-auth','brief'])assert.match(helpDocument(topic),/--email/);
  assert.match(helpDocument('publishing-auth'),/--otp/);
- for(const code of ['browser_unavailable','otp_required','otp_send_failed','otp_rejected'])assert.match(helpDocument('errors'),new RegExp(code));
+ for(const code of ['browser_unavailable','otp_required','otp_send_failed','otp_rejected','deployment_admission_required'])assert.match(helpDocument('errors'),new RegExp(code));
 });
 
 test('unknown write outcomes recover the original command and arguments', async () => {

@@ -100,3 +100,21 @@ it('shows email login without the retired guest-session notice, including signed
   expect(screen.queryByText(guestNote)).toBeNull();cleanup();
  }
 });
+
+it('explains operator outbox delivery and preserves it after reload without storing the code',async()=>{
+ vi.stubGlobal('fetch',vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({success:true},{headers:{'x-artifactbin-code-delivery':'operator_outbox'}})));
+ const first=render(()=> <LoginPage onAuthenticated={vi.fn()}/>);
+ fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_outbox@example.com'}});
+ fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
+ await screen.findByRole('textbox',{name:'Login code'});
+ expect(screen.getByText(/operator.*outbox/i)).toBeTruthy();expect(screen.queryByText(/We emailed/i)).toBeNull();
+ first.unmount();render(()=> <LoginPage onAuthenticated={vi.fn()}/>);
+ expect(screen.getByText(/operator.*outbox/i)).toBeTruthy();
+});
+it('keeps email delivery wording when the server confirms it',async()=>{
+ vi.stubGlobal('fetch',vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({success:true},{headers:{'x-artifactbin-code-delivery':'email'}})));
+ render(()=> <LoginPage onAuthenticated={vi.fn()}/>);
+ fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_email@example.com'}});
+ fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
+ await screen.findByRole('textbox',{name:'Login code'});expect(screen.getByText(/We emailed a code/)).toBeTruthy();
+});

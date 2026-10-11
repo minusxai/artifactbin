@@ -220,7 +220,7 @@ describe('which origin the approval uses', () => {
         :Response.json({access_token:'access',refresh_token:'refresh',client_id:'client',expires_in:3600});
       },
      });
-     assert.equal(code,0);
+     assert.equal(code,0,output.join(''));
      // Four requests, ONE origin: the identity document, the loopback probe, the pairing and the token
      // exchange all go to the origin this command selected, and to nothing else.
      assert.deepEqual(calls,[selected,selected,selected,selected]);
@@ -365,4 +365,22 @@ test('a rerun on a browserless machine collects a pairing approved on another de
   assert.equal(checks,1);
   assert.equal((await loadConnection(origin,home,{}))?.token,'new_access');
  }finally{await rm(home,{recursive:true,force:true});}
+});
+
+for(const [status,body,expected] of [[403,{error:'deployment_admission_required'},'deployment_admission_required'],[503,{error:'deployment_admission_required'},'otp_rejected'],[403,null,'otp_rejected']] as const)test('email admission feedback preserves credentials: '+status+' '+expected,async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-email-admission-'));const output:string[]=[];
+ try{
+  await saveConnection({server:origin,token:'previous'},home);
+  const result=await runCli(['auth','--email','mxmx_test_admission@example.com','--otp','123456','--server',origin,'--json'],{home,cwd:home,env:{ARTIFACTBIN_SKILLS:'off'},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async input=>{
+   const path=new URL(String(input)).pathname;if(path==='/api/server')return Response.json({origin,aliases:[]});assert.equal(path,'/api/auth/sign-in/email-otp');return body?Response.json(body,{status}):new Response('malformed',{status});
+  }});
+  assert.equal(result,2);const error=JSON.parse(output.join('')).error;assert.equal(error.code,expected);
+  if(expected==='deployment_admission_required'){assert.match(error.fix,/invite|invitation/i);assert.match(error.fix,/confirm|policy/i);assert.doesNotMatch(error.fix,/new code|request.*code/i);}
+  assert.equal((await loadConnection(origin,home,{}))?.token,'previous');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+test('local email auth explains operator outbox delivery',async()=>{
+ const output:string[]=[];
+ assert.equal(await runCli(['auth','--email','mxmx_test_outbox@example.com','--server',origin,'--json'],{env:{ARTIFACTBIN_SKILLS:'off'},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async input=>new URL(String(input)).pathname==='/api/server'?Response.json({origin,aliases:[]}):Response.json({success:true},{headers:{'x-artifactbin-code-delivery':'operator_outbox'}})}),2);
+ const error=JSON.parse(output.join('')).error;assert.equal(error.code,'otp_required');assert.match(error.message,/outbox/i);assert.doesNotMatch(error.message,/sent to your email/i);
 });
