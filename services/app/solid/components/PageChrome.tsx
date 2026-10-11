@@ -1,7 +1,8 @@
 /* @jsxImportSource solid-js */
-import { createContext, createEffect, createSignal, For, lazy, on, Show, Suspense, useContext, type Accessor, type JSX, type Setter } from 'solid-js';
+import { createContext, createEffect, createSignal, For, on, Show, useContext, type Accessor, type JSX, type Setter } from 'solid-js';
 /** Shared Solid app chrome. One owner closes one panel before another opens. */
 import { Bell, ChevronRight, CircleUser, SlidersVertical, X } from 'lucide-solid';
+import { Dynamic } from 'solid-js/web';
 import { useLocation } from '@solidjs/router';
 import { crumbsFor } from '@/lib/workspace/breadcrumb';
 import { PageBar } from './PageBar';
@@ -16,11 +17,11 @@ import { Avatar } from '../ui/Avatar';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
 
-// The three panels are interaction-only (see PageChromePanels), so the reader's bytes do not carry the Drawer or the inbox.
-const panels = () => import('./PageChromePanels');
-const MenuPanel = lazy(() => panels().then(m => ({ default: m.MenuPanel })));
-const ControlsPanel = lazy(() => panels().then(m => ({ default: m.ControlsPanel })));
-const NotificationsPanel = lazy(() => panels().then(m => ({ default: m.NotificationsPanel })));
+// The three panels are interaction-only (see PageChromePanels), so the reader's bytes do not carry the Drawer or the inbox: the module
+// is fetched when a panel first opens. Not `lazy()` in a <Suspense>: a boundary that lives as long as the page holds the router's
+// navigation transition (frame-navigation.test), so the page keeps its own signal and renders the panels once it is set.
+type Panels = typeof import('./PageChromePanels');
+const loadPanels = () => import('./PageChromePanels');
 
 /** Artifact controls from the editor seam; the named export below owns app pages. */
 export default function ArtifactPageChrome(props: { authed: boolean; anon: boolean; title: string; label: string; children: JSX.Element }): JSX.Element {
@@ -90,6 +91,8 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
     setMode(next);
     if (props.onMode) props.onMode(next); else chooseTheme(next);
   };
+  const [panels, setPanels] = createSignal<Panels>();
+  createEffect(() => { if (panel() && !panels()) void loadPanels().then(setPanels, () => {}); });
   const unread = () => Boolean(inbox?.state()?.unread);
   // Whatever closes a panel (Escape, scrim, its own close button, a link) returns focus to the bar button that opened it.
   createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
@@ -106,13 +109,13 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
         <Tooltip content={controlsName()}><Button icon size="bar" variant={panel() === 'controls' ? 'secondary' : 'ghost'} aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</Button></Tooltip>
         <Tooltip content="menu"><Button icon size="bar" variant={panel() === 'menu' ? 'secondary' : 'ghost'} aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></Button></Tooltip>
 </>} />
-    {/* Interaction-only, so loaded when first opened: each panel is a Drawer (own scrim, in the page's trusted overlay) from PageChromePanels. */}
-    <Suspense fallback={null}>
-      <Show when={panel() === 'menu'}><MenuPanel close={close} phone={phone()} /></Show>
-      <Show when={panel() === 'controls'}><ControlsPanel label={label()} title={controlsName()} mode={mode()} onMode={pick} onClose={close}>
+    {/* Each panel is a Drawer (own scrim, in the page's trusted overlay) from PageChromePanels, loaded when one first opens. */}
+    <Show when={panels()}>{loaded => <>
+      <Show when={panel() === 'menu'}><Dynamic component={loaded().MenuPanel} close={close} phone={phone()} /></Show>
+      <Show when={panel() === 'controls'}><Dynamic component={loaded().ControlsPanel} label={label()} title={controlsName()} mode={mode()} onMode={pick} onClose={close}>
         <Show when={props.controls}>{render => <div class="mt-4 border-t border-edge pt-3">{render()(close)}</div>}</Show>
-      </ControlsPanel></Show>
-      <Show when={panel() === 'notifications'}><NotificationsPanel close={close} /></Show>
-    </Suspense>
+      </Dynamic></Show>
+      <Show when={panel() === 'notifications'}><Dynamic component={loaded().NotificationsPanel} close={close} /></Show>
+    </>}</Show>
   </>;
 }
