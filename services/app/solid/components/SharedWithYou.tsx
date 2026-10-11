@@ -2,7 +2,11 @@
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import type { WorkspaceSharedItem } from '@/lib/workspace/dashboard';
 import { SHARE_ROLE_LABEL, SHARE_ROLES } from '@artifactbin/contracts';
-import { FormatBadge, formatLabel, LINK, MicroLabel, PANEL, TABLE_ROW, timeAgo } from '../ui/ui';
+import { FormatBadge, formatLabel, LINK, MicroLabel, timeAgo } from '../ui/ui';
+import { Button } from '../ui/Button';
+import { SearchField } from '../ui/Field';
+import { ListRow, Panel } from '../ui/Panel';
+import { StatusMessage } from '../ui/StatusMessage';
 
 const FORMAT_ORDER = ['markup', 'dataset', 'viz', 'image', 'pdf'];
 /** `query`: Home's own "search artifacts" box, ANDed with this panel's own — typing there filters
@@ -22,5 +26,26 @@ export default function SharedWithYou(props: { items: WorkspaceSharedItem[]; que
     const searchable = [item.title, item.description, item.id, item.owner_username ? `@${item.owner_username}` : null, formatLabel(format), SHARE_ROLE_LABEL[item.role]].filter(Boolean).join(' ').toLowerCase();
     return (!outer() || searchable.includes(outer())) && (!q() || searchable.includes(q())) && (!formatPicks().length || formatPicks().includes(format)) && (!rolePicks().length || rolePicks().includes(item.role));
   }));
-  return <Show when={props.items.length}><section aria-label="Shared with you" class="mt-8"><div class="mb-2"><MicroLabel>shared with you</MicroLabel></div><div class={PANEL}><div class="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2"><input aria-label="Search shared artifacts" placeholder="search shared artifacts" value={query()} onInput={event => setQuery(event.currentTarget.value)} class="min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none" /><Show when={formats().length >= 2 || roles().length >= 2}><span class="flex shrink-0 flex-wrap items-center gap-1.5 border-edge sm:ml-auto sm:border-l sm:pl-2"><Show when={formats().length >= 2}><For each={formats()}>{format => <button type="button" aria-label={`Filter ${format}`} aria-pressed={formatPicks().includes(format)} onClick={() => toggle('format', format)} class="rounded-full border border-edge px-2 py-0.5 font-mono text-[10px]">{formatLabel(format)}</button>}</For></Show><Show when={roles().length >= 2}><For each={roles()}>{role => <button type="button" aria-label={`Filter ${role}`} aria-pressed={rolePicks().includes(role)} onClick={() => toggle('role', role)} class="rounded-full border border-edge px-2 py-0.5 font-mono text-[10px]">{SHARE_ROLE_LABEL[role]}</button>}</For></Show></span></Show><Show when={filtering()}><span class="shrink-0 border-l border-edge pl-2 font-mono text-[10px] text-faint">{visible().length}/{props.items.length}</span></Show></div><div class="overflow-x-auto"><table class="w-full text-left font-mono text-xs"><tbody><Show when={visible().length === 0}><tr class={TABLE_ROW}><td colspan={5} class="px-4 py-6 text-center text-faint">{q() ? <>nothing matches &ldquo;{query().trim()}&rdquo;</> : outer() ? <>nothing matches &ldquo;{(props.query ?? '').trim()}&rdquo;</> : 'nothing matches the active filters'}</td></tr></Show><For each={visible()}>{item => <tr class={TABLE_ROW}><td class="px-3 py-2"><a href={`/a/${item.id}`} aria-label={`Open shared artifact ${item.id}`} class={LINK}>{item.title || item.id}</a></td><td class="px-3 py-2 text-muted">{item.owner_username ? `@${item.owner_username}` : ''}</td><td class="px-3 py-2 text-muted" aria-label={`Your role on ${item.id}`}>{SHARE_ROLE_LABEL[item.role]}</td><td class="px-3 py-2"><FormatBadge format={item.format} /></td><td class="px-3 py-2 text-right whitespace-nowrap text-muted">{timeAgo(item.updated_at)}</td></tr>}</For></tbody></table></div></div></section></Show>;
+  return <Show when={props.items.length}><section aria-label="Shared with you" class="mt-8"><div class="mb-2"><MicroLabel>shared with you</MicroLabel></div>
+    <Panel padding="none">
+      <div class="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">
+        <SearchField size="sm" class="min-w-32 flex-1" label="Search shared artifacts" placeholder="search shared artifacts" value={query()} onValue={setQuery} />
+        <Show when={formats().length >= 2 || roles().length >= 2}><span class="flex shrink-0 flex-wrap items-center gap-1.5 border-edge sm:ml-auto sm:border-l sm:pl-2">
+          <Show when={formats().length >= 2}><For each={formats()}>{format => <Button size="sm" variant={formatPicks().includes(format) ? 'secondary' : 'ghost'} aria-label={`Filter ${format}`} aria-pressed={formatPicks().includes(format)} onClick={() => toggle('format', format)}>{formatLabel(format)}</Button>}</For></Show>
+          <Show when={roles().length >= 2}><For each={roles()}>{role => <Button size="sm" variant={rolePicks().includes(role) ? 'secondary' : 'ghost'} aria-label={`Filter ${role}`} aria-pressed={rolePicks().includes(role)} onClick={() => toggle('role', role)}>{SHARE_ROLE_LABEL[role]}</Button>}</For></Show>
+        </span></Show>
+        <Show when={filtering()}><span class="shrink-0 border-l border-edge pl-2 font-mono text-micro text-faint">{visible().length}/{props.items.length}</span></Show>
+      </div>
+      <ul class="m-0 list-none px-3 p-0 font-mono text-xs">
+        <Show when={visible().length === 0}><li class="py-6"><StatusMessage kind="empty" class="justify-center">{q() ? <>nothing matches &ldquo;{query().trim()}&rdquo;</> : outer() ? <>nothing matches &ldquo;{(props.query ?? '').trim()}&rdquo;</> : 'nothing matches the active filters'}</StatusMessage></li></Show>
+        <For each={visible()}>{item => <ListRow class="gap-x-4">
+          <a href={`/a/${item.id}`} aria-label={`Open shared artifact ${item.id}`} class={`min-w-0 flex-1 truncate ${LINK}`}>{item.title || item.id}</a>
+          <span class="w-28 truncate text-muted">{item.owner_username ? `@${item.owner_username}` : ''}</span>
+          <span class="w-24 text-muted" aria-label={`Your role on ${item.id}`}>{SHARE_ROLE_LABEL[item.role]}</span>
+          <FormatBadge format={item.format} />
+          <span class="w-20 whitespace-nowrap text-right text-muted">{timeAgo(item.updated_at)}</span>
+        </ListRow>}</For>
+      </ul>
+    </Panel>
+  </section></Show>;
 }

@@ -16,6 +16,10 @@ import { forgetPagesSession } from './browser-session';
 import { loginHref } from '@/lib/http/login-href';
 import { useSession } from '../lib/session';
 import { Tooltip } from '../ui/Tooltip';
+import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
+import { Panel as Surface } from '../ui/Panel';
+import { MicroLabel } from '../ui/ui';
 import { PeopleInbox } from './PeopleInbox';
 import { useOptionalInbox } from '../lib/notifications';
 import { Avatar } from '../ui/Avatar';
@@ -27,8 +31,8 @@ import { createIsPhoneViewport } from '../ui/MobileSheet';
 export default function ArtifactPageChrome(props: { authed: boolean; anon: boolean; title: string; label: string; children: JSX.Element }): JSX.Element {
   const [open, setOpen] = createSignal(false);
   return <aside class="fixed right-4 top-4 z-40">
-    <button type="button" aria-label="Open artifact controls" aria-expanded={open()} onClick={() => setOpen(value => !value)} class="rounded border border-edge bg-surface px-3 py-2 text-xs text-fg">{props.title || 'Artifact'} ···</button>
-    <Show when={open()}><div role="dialog" aria-label={props.label} class="absolute right-0 mt-2 w-64 rounded border border-edge bg-surface p-3 shadow-xl"><div class="mb-3 flex items-center justify-between"><h1 class="font-mono text-xs font-semibold">{props.label.toLowerCase()}</h1><button type="button" aria-label={`Dismiss ${props.label.toLowerCase()}`} onClick={() => setOpen(false)}>×</button></div>{props.children}</div></Show>
+    <Button variant="secondary" size="sm" aria-label="Open artifact controls" aria-expanded={open()} onClick={() => setOpen(value => !value)}>{props.title || 'Artifact'} ···</Button>
+    <Show when={open()}><Dialog title={props.label} onClose={() => setOpen(false)} footer={<Button variant="secondary" aria-label={`Dismiss ${props.label.toLowerCase()}`} onClick={() => setOpen(false)}>Close</Button>}>{props.children}</Dialog></Show>
   </aside>;
 }
 
@@ -36,7 +40,6 @@ export type Panel = 'menu' | 'controls' | 'notifications' | null;
 /** A route may suppress the app bar while it owns the whole viewport (the 404 page). */
 export const ChromeVisibilityContext = createContext<Setter<boolean>>();
 export function useChromeVisibility(): Setter<boolean> | undefined { return useContext(ChromeVisibilityContext); }
-const BAR_BUTTON = 'flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] border-0 bg-transparent text-muted transition-colors hover:bg-raised hover:text-fg';
 
 function Star(props: { mobile: boolean }): JSX.Element {
   let root!: HTMLSpanElement;
@@ -85,7 +88,6 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const crumbs = () => crumbsFor(location.pathname, props.title);
   const label = () => props.label ?? 'Page controls';
   const controlsName = () => label().toLowerCase();
-  const modeClass = (value: 'light' | 'dark') => `flex flex-1 cursor-pointer items-center justify-center gap-2 border-0 px-3 py-2 font-mono text-xs transition-colors ${mode() === value ? 'bg-accent-soft text-accent' : 'bg-transparent text-muted hover:bg-raised hover:text-fg'}`;
   let opener: HTMLElement | undefined;
   const toggle = (next: Panel, event?: Event) => { opener = (event?.currentTarget as HTMLElement | null) ?? undefined; setPanel(current => current === next ? null : next); };
   const close = () => setPanel(null);
@@ -106,9 +108,9 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
         </>}>{props.byline}</Show>
 </>} actions={<>        <Show when={props.star !== false}><Star mobile={false} /><Star mobile={true} /></Show>
         {props.actions}
-        <Show when={person()}><Tooltip content="Notifications"><button type="button" aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class={`${BAR_BUTTON} relative`}><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" /></Show></button></Tooltip></Show>
-        <Tooltip content={controlsName()}><button type="button" aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)} class={`${BAR_BUTTON} ${panel() === 'controls' ? 'text-accent' : ''}`}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</button></Tooltip>
-        <Tooltip content="menu"><button type="button" aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)} class={BAR_BUTTON}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></button></Tooltip>
+        <Show when={person()}><Tooltip content="Notifications"><Button icon size="sm" variant={panel() === 'notifications' ? 'secondary' : 'ghost'} aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class="relative"><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" /></Show></Button></Tooltip></Show>
+        <Tooltip content={controlsName()}><Button icon size="sm" variant={panel() === 'controls' ? 'secondary' : 'ghost'} aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</Button></Tooltip>
+        <Tooltip content="menu"><Button icon size="sm" variant={panel() === 'menu' ? 'secondary' : 'ghost'} aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></Button></Tooltip>
 </>} />
     {/*
       * The panels open in the page's trusted overlay where it has one (the document page's "navigation" layer,
@@ -121,7 +123,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
       <Show when={panel() === 'menu'}>
         <PageMenuPanel close={close} phone={phone()} />
       </Show>
-      <Show when={panel() === 'controls'}><PageControlsPanel label={label()} title={controlsName()} onClose={close}><section aria-label="Appearance"><h2 class="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">appearance</h2><div role="group" aria-label="Color mode" class="flex overflow-hidden rounded-[5px] border border-edge"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => pick('light')} class={modeClass('light')}><Sun size={14} strokeWidth={1.5} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => pick('dark')} class={modeClass('dark')}><Moon size={14} strokeWidth={1.5} />dark</button></div></section>
+      <Show when={panel() === 'controls'}><PageControlsPanel label={label()} title={controlsName()} onClose={close}><section aria-label="Appearance"><h2 class="mb-2"><MicroLabel>appearance</MicroLabel></h2><div role="group" aria-label="Color mode" class="flex gap-1"><Button size="sm" variant={mode() === 'light' ? 'secondary' : 'ghost'} class="flex-1" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => pick('light')}><Sun size={14} strokeWidth={1.5} />light</Button><Button size="sm" variant={mode() === 'dark' ? 'secondary' : 'ghost'} class="flex-1" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => pick('dark')}><Moon size={14} strokeWidth={1.5} />dark</Button></div></section>
         <Show when={props.controls}>{render => <div class="mt-4 border-t border-edge pt-3">{render()(close)}</div>}</Show>
       </PageControlsPanel></Show>
       <Show when={panel() === 'notifications'}><NotificationsPanel close={close} /></Show>
@@ -129,7 +131,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   </>;
 }
 
-const MENU_ROW = 'flex w-full items-center gap-3 rounded-[5px] border-0 bg-transparent px-3 py-3 text-left font-mono text-sm no-underline transition-colors sm:gap-2.5 sm:px-2.5 sm:py-2 sm:text-xs';
+const MENU_ROW = 'flex w-full items-center gap-3 rounded-control border-0 bg-transparent px-3 py-3 text-left font-mono text-sm no-underline transition-colors sm:gap-2.5 sm:px-2.5 sm:py-2 sm:text-xs';
 
 /**
  * The app menu (links, then sign out / disconnect / login), shared by the app bar and the document
@@ -146,12 +148,11 @@ function PageMenuPanel(props: { close: () => void; phone?: boolean; top?: number
       class={`${MENU_ROW} cursor-pointer ${active() ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'}`} onClick={close}>{icon}{label}</a>;
   };
   const placement = () => props.phone
-    ? 'fixed inset-x-0 bottom-0 z-50 flex animate-[rise_.14s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(20px,env(safe-area-inset-bottom))] shadow-xl'
-    : 'fixed right-3 top-14 z-50 flex w-72 animate-[rise_.14s_ease-out] flex-col rounded-[7px] border border-edge bg-surface p-2 shadow-xl';
+    ? 'fixed inset-x-0 bottom-0 z-50 flex animate-[rise_.14s_ease-out] flex-col rounded-t-dialog border-t border-edge bg-surface p-3 pb-[max(20px,env(safe-area-inset-bottom))] shadow-xl'
+    : 'fixed right-3 top-14 z-50 flex w-72 animate-[rise_.14s_ease-out] flex-col rounded-panel border border-edge bg-surface p-2 shadow-xl';
   return (
     <nav aria-label="Menu" class={placement()} style={!props.phone && props.top !== undefined ? { top: `${props.top}px` } : undefined}>
-      <button type="button" aria-label="Dismiss menu" onClick={close} style={{ top: 'max(12px, env(safe-area-inset-top))' }}
-        class="absolute right-3 top-3 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-edge bg-surface text-muted hover:bg-raised hover:text-fg sm:hidden"><X size={17} stroke-width={1.5} /></button>
+      <Button variant="secondary" size="sm" icon aria-label="Dismiss menu" onClick={close} style={{ top: 'max(12px, env(safe-area-inset-top))' }} class="absolute right-3 top-3 sm:hidden"><X size={17} stroke-width={1.5} /></Button>
       <a href="/" aria-label="Hosted at artifactbin" class="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"><img src="/logo-128.png" alt="" class="h-7 w-7" />artifactbin</a>
       {link('/', 'Artifacts', <FileText size={15} stroke-width={1.5} />)}
       {link('/schedules', 'Schedules', <CalendarClock size={15} />)}
@@ -162,7 +163,7 @@ function PageMenuPanel(props: { close: () => void; phone?: boolean; top?: number
       <a href={REPO_URL} target="_blank" rel="noopener noreferrer" class={`${MENU_ROW} cursor-pointer text-muted hover:bg-raised hover:text-fg`} onClick={close}><GitHubIcon size={15} />Support artifactbin</a>
       <div class="mt-auto" /><div class="my-1 h-px bg-edge" />
       <Show when={person()} fallback={link(loginHref(window.location), 'Login', <LogIn size={15} stroke-width={1.5} />)}>
-        <button type="button" aria-label="Sign out" class={`${MENU_ROW} cursor-pointer text-muted hover:bg-raised hover:text-fg`} onClick={() => void Promise.all([forgetPagesSession(), fetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null)]).then(() => { window.location.href = '/'; })}><LogOut size={15} stroke-width={1.5} />Sign out</button>
+        <Button variant="ghost" size={props.phone ? 'md' : 'sm'} aria-label="Sign out" class="w-full justify-start" onClick={() => void Promise.all([forgetPagesSession(), fetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null)]).then(() => { window.location.href = '/'; })}><LogOut size={15} stroke-width={1.5} />Sign out</Button>
       </Show>
     </nav>
   );
@@ -171,5 +172,5 @@ function PageMenuPanel(props: { close: () => void; phone?: boolean; top?: number
 /** The notifications panel, shared by the app bar and the document page. */
 function NotificationsPanel(props: { close: () => void }): JSX.Element {
   const close = () => props.close();
-  return <section aria-label="Notifications" class="fixed right-3 top-14 z-50 w-80 rounded-[7px] border border-edge bg-surface p-4 shadow-xl"><div class="mb-3 flex items-center justify-between"><h2 class="text-sm font-semibold">Notifications</h2><button type="button" aria-label="Close notifications" onClick={close}><X size={18} /></button></div><div class="max-h-[55vh] overflow-y-auto"><PeopleInbox compact close={close} /></div><nav aria-label="Notification links" class="mt-2 flex flex-col gap-2 border-t border-edge pt-3"><a href="/notifications" onClick={close}>All notifications</a><a href="/account#notifications" onClick={close}>Notification settings</a></nav></section>;
+  return <Surface label="Notifications" title="Notifications" padding="sm" class="fixed right-3 top-14 z-50 w-80 shadow-xl" actions={<Button variant="ghost" size="sm" icon aria-label="Close notifications" onClick={close}><X size={18} /></Button>}><div class="max-h-[55vh] overflow-y-auto"><PeopleInbox compact close={close} /></div><nav aria-label="Notification links" class="mt-2 flex flex-col gap-2 border-t border-edge pt-3"><a href="/notifications" onClick={close}>All notifications</a><a href="/account#notifications" onClick={close}>Notification settings</a></nav></Surface>;
 }
