@@ -154,7 +154,7 @@ describe('Solid shell', () => {
     window.history.replaceState(null, '', '/');
     render(() => <App />);
     await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/welcome?callbackUrl=%2F'));
-    expect(await screen.findByRole('heading', { name: /welcome/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Welcome to artifactbin', level: 1 })).toBeInTheDocument();
   });
 
   it('renders the one 404 for an unknown path, with sign-in for a stranger', async () => {

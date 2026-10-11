@@ -42,7 +42,7 @@ describe('link intent', () => {
     fireEvent.pointerDown(link);
     fireEvent.focusIn(link);
     window.history.pushState(null, '', '/@sam'); window.dispatchEvent(new PopStateEvent('popstate'));
-    await waitFor(() => expect(screen.getByText(/public artifact/)).toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByText('0 public artifacts', { exact: true })).toBeInTheDocument(), { timeout: 4000 });
     expect(calls.filter((u) => u === '/api/page/profile/%40sam')).toHaveLength(1);
   });
 });
