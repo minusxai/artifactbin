@@ -428,6 +428,25 @@ const ANALYTICS_EVENTS: Table = {
 };
 
 /**
+ * An artifact's all-time view count, folded: `views` is the sum of its unique daily visitors over every
+ * UTC day up to and including `closed_through`. A day that has ended never gains a view (the visitor
+ * key is salted with the day, and events are stamped on arrival), so each read folds the days that
+ * closed since the last fold into this row once, and counts only the days after it live from
+ * analytics_events (lib/workspace/view-totals). The cost of a view count is then the views of
+ * the days since the last fold, not the artifact's whole history. The row is derived: deleting it
+ * costs one full count at the next read and changes no answer.
+ */
+const ARTIFACT_VIEW_TOTALS: Table = {
+  name: 'artifact_view_totals',
+  columns: [
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    { name: 'closed_through', type: 'DATE', notNull: true },
+    { name: 'views', type: 'INTEGER', notNull: true, default: '0' },
+  ],
+  primaryKey: ['artifact_id'],
+};
+
+/**
  * One-time codes: a hashed secret that expires and is spent once, keyed by
  * `kind` so several flows share one table.
  *
@@ -1001,7 +1020,7 @@ const OWNERSHIP_TRANSFERS:Table={name:'ownership_transfers',columns:[
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id'],indexes:[{name:'idx_ownership_transfers_artifact',columns:['artifact_id','created_at']}]};
 
-export const TABLES: Table[] = [GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);
