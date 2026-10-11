@@ -58,9 +58,9 @@ describe('POST /api/start', () => {
       expect(isStartPlaceholder(row.source, row.version)).toBe(template !== 'doc');
       if (template === 'doc') {
         expect(row.meta.theme).toBe('meridian');
-        expect(row.source).toContain('data-placeholder="Headline"');
-        expect(row.source).toContain('<Markdown id="body"');
+        expect(row.source).toContain('<Markdown id="body" data-placeholder-heading="Headline" data-placeholder="Start writing…"');
         expect(row.source).toContain('{``}</Markdown>');
+        expect(row.source).not.toContain('<h1');
         expect(row.source).not.toContain('<p id="body"');
         expect(row.source).not.toContain('>Headline<');
       }
