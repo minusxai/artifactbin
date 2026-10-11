@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-/** The page's one h1 with its description and actions, and the one h2 size every section uses. */
+/** The page's one h1 with its description and actions, the one h2 size every section uses, and FormPage, the narrow card a login or import page sits in. */
 import { Show, type JSX } from 'solid-js';
 
 export function PageHeader(props: { title: JSX.Element; description?: JSX.Element; actions?: JSX.Element; leading?: JSX.Element; badge?: JSX.Element; children?: JSX.Element; class?: string }): JSX.Element {
@@ -21,4 +21,9 @@ export function PageHeader(props: { title: JSX.Element; description?: JSX.Elemen
 
 export function SectionHeading(props: { id?: string; class?: string; children: JSX.Element }): JSX.Element {
   return <h2 id={props.id} class={`font-sans text-lg font-semibold text-fg ${props.class ?? ''}`}>{props.children}</h2>;
+}
+
+/** The login/import page spacing: a centred column holding one card (`narrow`, a single form) or a wider stack of sections. */
+export function FormPage(props: { narrow?: boolean; children: JSX.Element }): JSX.Element {
+  return <main class="mx-auto my-10 w-full max-w-2xl px-5 font-sans sm:my-16 sm:px-8"><div class={props.narrow ? 'mx-auto max-w-md rounded-2xl border border-edge bg-surface p-6 shadow-sm sm:p-8' : 'space-y-6 rounded-xl border border-edge bg-surface p-6 text-sm text-fg sm:p-8'}>{props.children}</div></main>;
 }

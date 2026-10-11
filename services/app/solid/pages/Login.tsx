@@ -5,7 +5,7 @@ import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 import { CODE_DELIVERY_HEADER, codeDeliveryOf, type CodeDelivery } from '@artifactbin/contracts';
 
-import { FormPage } from '../ui/FormControls';
+import { FormPage } from '../ui/PageHeader';
 import { Button } from '../ui/Button';
 import { Field, Input } from '../ui/Field';
 import { PageHeader } from '../ui/PageHeader';

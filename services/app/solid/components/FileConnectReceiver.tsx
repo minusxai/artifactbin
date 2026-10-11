@@ -3,7 +3,7 @@ import {createSignal,Show,onCleanup,type JSX} from 'solid-js';
 import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_MAX_BYTES,previewWorkspaceUrl,type PreviewConnectMessage} from '@artifactbin/contracts';
 import {PageBar,DocumentTitle} from './PageBar';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
-import {FormPage} from '../ui/FormControls';
+import { FormPage } from '../ui/PageHeader';
 import {Button} from '../ui/Button';
 import {Field,Input} from '../ui/Field';
 import {StatusMessage} from '../ui/StatusMessage';

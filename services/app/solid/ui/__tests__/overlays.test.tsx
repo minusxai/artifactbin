@@ -4,14 +4,14 @@ import { expect, it, vi } from 'vitest';
 import { createSignal, Show } from 'solid-js';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
-import { DialogShell } from '../DialogShell';
+import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 import { Popover } from '../Popover';
 import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
 
 function Dialog(props: { name: string; onClose: () => void; lock?: boolean }) {
-  return <DialogShell onClose={props.onClose} lockScroll={props.lock} initialFocus="[data-first]">
-    <div role="dialog" aria-label={props.name}><button data-first>{`${props.name} first`}</button><button>{`${props.name} last`}</button></div>
-  </DialogShell>;
+  let panel!: HTMLDivElement;
+  createDialogShell({ panel: () => panel, onClose: () => props.onClose(), lockScroll: props.lock, initialFocus: () => panel.querySelector<HTMLElement>('[data-first]') });
+  return <div ref={panel} role="dialog" aria-label={props.name}><button data-first>{`${props.name} first`}</button><button>{`${props.name} last`}</button></div>;
 }
 
 it('closes only the top dialog on Escape, traps Tab, restores focus and the scroll lock', () => {

@@ -5,7 +5,6 @@ import { Show, type JSX } from 'solid-js';
 import logoUrl from '../../public/logo-128.png';
 import { CHROME_IDENTITY } from './chrome-identity';
 import { Button } from '../ui/Button';
-import { Panel } from '../ui/Panel';
 
 export function PageBar(props: { home?: string | null; logo?: JSX.Element; navigation: JSX.Element; mobileTitle?: string; actions: JSX.Element }): JSX.Element {
   return <header aria-label="Page bar" class="sticky top-0 z-40 flex h-11 items-center gap-2 max-[380px]:gap-1 max-[380px]:px-2 border-b border-edge bg-surface/85 px-3 backdrop-blur-md sm:gap-3">
@@ -20,11 +19,6 @@ export function PageBar(props: { home?: string | null; logo?: JSX.Element; navig
 
 export function DocumentTitle(props: { title: string }): JSX.Element {
   return <span class="min-w-0 truncate font-semibold text-fg" data-mx-document-title="">{props.title}</span>;
-}
-
-/** Capability content varies; controls panel geometry and dismiss action do not. */
-export function PageControlsPanel(props: { label: string; title: string; onClose: () => void; children: JSX.Element }): JSX.Element {
-  return <Panel label={props.label} padding="sm" class="fixed right-3 top-14 z-50 max-h-[80vh] w-72 max-w-[calc(100vw-24px)] overflow-auto font-sans text-sm shadow-xl"><PageControlsBody title={props.title} onClose={props.onClose}>{props.children}</PageControlsBody></Panel>;
 }
 
 /** The controls panel's content — its title, the dismiss button and the rows — whichever surface holds it. */

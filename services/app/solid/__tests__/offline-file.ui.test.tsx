@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { EditorView } from 'prosemirror-view';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, waitFor } from '@testing-library/dom';
+import { fireEvent, waitFor, within } from '@testing-library/dom';
 import { screen, trustedText, trustedQuery } from './trusted-screen';
 import { storyBodyFor } from '@/lib/document/body';
 import { CHANGED_OUTSIDE } from '@/lib/offline/file-backend';
@@ -155,7 +155,7 @@ describe('Solid offline file', () => {
     await screen.findByRole('dialog', { name: 'What should we call you?' });
     fireEvent.input(screen.getByRole('textbox', { name: 'Your name' }), { target: { value: 'Asha' } });
     const dialog = screen.getByRole('dialog', { name: 'What should we call you?' });
-    fireEvent.click(dialog.querySelector('button')!);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.getByLabelText('Annotation thread').textContent).toContain('Asha'));
   });
 
@@ -388,7 +388,7 @@ describe('Solid offline file', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog', { name: 'What should we call you?' });
     fireEvent.input(screen.getByRole('textbox', { name: 'Your name' }), { target: { value: 'Asha' } });
-    fireEvent.click(dialog.querySelector('button')!);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(localStorage.getItem('afbin-offline-name')).toBe('Asha');
     fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));

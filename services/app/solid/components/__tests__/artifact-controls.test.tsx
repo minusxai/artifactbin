@@ -1,9 +1,8 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, within } from '@solidjs/testing-library';
-import { afterEach, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
+import { afterEach, expect, it } from 'vitest';
 import ArtifactPageChrome from '../PageChrome';
-import { PageControlsPanel } from '../PageBar';
 
 afterEach(cleanup);
 
@@ -26,14 +25,4 @@ it('is a modal over the page: Escape dismisses it and a second open starts fresh
   expect(screen.queryByRole('dialog', { name: 'Artifact controls' })).toBeNull();
   fireEvent.click(opener);
   expect(screen.getByRole('dialog', { name: 'Artifact controls' })).toBeInTheDocument();
-});
-
-it('draws the page controls panel as a named region with a dismiss button for its title', () => {
-  const onClose = vi.fn();
-  render(() => <PageControlsPanel label="Page controls" title="page controls" onClose={onClose}><p>row</p></PageControlsPanel>);
-  const region = screen.getByRole('region', { name: 'Page controls' });
-  expect(region).toHaveTextContent('row');
-  expect(within(region).getByRole('heading', { name: 'page controls' })).toBeInTheDocument();
-  fireEvent.click(within(region).getByRole('button', { name: 'Dismiss page controls' }));
-  expect(onClose).toHaveBeenCalledOnce();
 });

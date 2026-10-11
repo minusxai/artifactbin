@@ -1,6 +1,7 @@
 /**
  * The UI-primitive guard must bite: each rule is shown a synthetic offender outside solid/ui, the same
- * text inside solid/ui passes, and the allowlist ratchets (a count may neither rise nor silently fall).
+ * text inside solid/ui passes, the allowlist ratchets (a count may neither rise nor silently fall), and the
+ * documented exceptions (colors that are data) are exact, justified and never double-booked with the ratchet.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -17,7 +18,7 @@ afterEach(() => {
   for (const directory of temporary.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
 });
 
-function repository(files, allowlist = []) {
+function repository(files, allowlist = [], exceptions = []) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifactbin-ui-guard-'));
   temporary.push(root);
   for (const [file, content] of Object.entries(files)) {
@@ -27,12 +28,14 @@ function repository(files, allowlist = []) {
   }
   const allowlistPath = path.join(root, 'allowlist.json');
   fs.writeFileSync(allowlistPath, JSON.stringify(allowlist));
+  const exceptionsPath = path.join(root, 'exceptions.json');
+  fs.writeFileSync(exceptionsPath, JSON.stringify(exceptions));
   execFileSync('git', ['-C', root, 'init', '-q']);
-  return { root, allowlistPath };
+  return { root, allowlistPath, exceptionsPath };
 }
 
-const run = ({ root, allowlistPath }) => {
-  const result = spawnSync(process.execPath, [GUARD, '--root', root, '--allowlist', allowlistPath], { encoding: 'utf8' });
+const run = ({ root, allowlistPath, exceptionsPath }) => {
+  const result = spawnSync(process.execPath, [GUARD, '--root', root, '--allowlist', allowlistPath, '--exceptions', exceptionsPath], { encoding: 'utf8' });
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 };
 
@@ -47,7 +50,7 @@ const OFFENDERS = {
   'arbitrary-text': '<p class="text-[11px]" />',
   'raw-color': "const ink = '#c0392b';",
   'palette-color': '<p class="text-red-500 bg-black" />',
-  'style-constant': "import { FORM_INPUT } from '../ui/FormControls';",
+  'style-constant': "import { FOCUS_RING } from '../ui/control-styles';",
 };
 
 describe('UI-primitive guard', () => {
@@ -86,5 +89,63 @@ describe('UI-primitive guard', () => {
     const fell = run(repository(files, entry(3)));
     expect(fell.status).toBe(1);
     expect(fell.output).toContain('lower its allowlist entry');
+  });
+  it('refuses an exported class-string constant for a control inside solid/ui, but not the internal control-styles module', () => {
+    const constant = "export const FORM_INPUT = 'w-full rounded-control border';";
+    const inside = run(repository({ 'services/app/solid/ui/Thing.tsx': constant }));
+    expect(inside.status).toBe(1);
+    expect(inside.output).toContain('control-constant');
+    expect(run(repository({ 'services/app/solid/ui/control-styles.ts': "export const FOCUS_RING = 'outline-none';" })).status).toBe(0);
+    expect(run(repository({ 'services/app/solid/ui/Thing.tsx': "const LOCAL = 'w-full'; export const LAYER = { dialog: 40 };" })).status).toBe(0);
+  });
+
+  it('scans the offline file chrome in lib/ and leaves document content kits unscanned', () => {
+    const offender = '<button type="button" class="rounded px-2">Go</button>';
+    const offline = run(repository({ 'services/app/lib/offline/solid-entry.tsx': offender }));
+    expect(offline.status).toBe(1);
+    expect(offline.output).toContain('styled-button');
+    expect(run(repository({ 'services/app/lib/islands/kit/select.tsx': offender, 'services/app/lib/frame-edit/GridEdit.tsx': offender, 'services/app/lib/offline/__tests__/t.test.tsx': offender })).status).toBe(0);
+  });
+
+  describe('documented exceptions', () => {
+    const files = { 'services/app/solid/pages/Chat.tsx': "const a = '#111214', b = '#e6e6e6';" };
+    const exception = (count, reason = 'xterm paints its own canvas: the colors are data, not theme tokens') => [{ path: 'services/app/solid/pages/Chat.tsx', rule: 'raw-color', count, reason }];
+
+    it('allows exactly the documented count and prints both totals', () => {
+      const result = run(repository(files, [], exception(2)));
+      expect(result.status).toBe(0);
+      expect(result.output).toContain('0 ratcheted');
+      expect(result.output).toContain('1 documented exceptions');
+    });
+
+    it('refuses one more use than documented, and a documented use that went away', () => {
+      const more = run(repository(files, [], exception(1)));
+      expect(more.status).toBe(1);
+      expect(more.output).toContain('1 new raw-color');
+      const fewer = run(repository(files, [], exception(3)));
+      expect(fewer.status).toBe(1);
+      expect(fewer.output).toContain('exception');
+      expect(fewer.output).toContain('raw-color');
+    });
+
+    it.each([['', 'empty'], [undefined, 'missing'], ['   ', 'blank']])('requires a reason (%s)', (reason) => {
+      const entry = [{ path: 'services/app/solid/pages/Chat.tsx', rule: 'raw-color', count: 2, ...(reason === undefined ? {} : { reason }) }];
+      const result = run(repository(files, [], entry));
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('reason');
+    });
+
+    it('refuses an entry that is also in the migration ratchet', () => {
+      const result = run(repository(files, [{ path: 'services/app/solid/pages/Chat.tsx', rule: 'raw-color', count: 2 }], exception(2)));
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('both');
+    });
+
+    it('keeps the ratchet for everything else on the same file', () => {
+      const mixed = { 'services/app/solid/pages/Chat.tsx': "const a = '#111214';<select></select>" };
+      const entries = [{ path: 'services/app/solid/pages/Chat.tsx', rule: 'raw-color', count: 1, reason: 'terminal theme' }];
+      expect(run(repository(mixed, [], entries)).status).toBe(1);
+      expect(run(repository(mixed, [{ path: 'services/app/solid/pages/Chat.tsx', rule: 'native-select', count: 1 }], entries)).status).toBe(0);
+    });
   });
 });

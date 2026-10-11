@@ -7,13 +7,10 @@
   {"path":"services/app/solid/editor/PwaSettingsPanel.tsx","rule":"styled-field","count":2},
   {"path":"services/app/solid/editor/PwaSettingsPanel.tsx","rule":"raw-color","count":2},
   {"path":"services/app/solid/editor/SourceEditorPane.tsx","rule":"styled-field","count":1},
-  {"path":"services/app/solid/editor/SourceEditorPane.tsx","rule":"raw-color","count":5},
   {"path":"services/app/solid/editor/StoryFormatToolbar.tsx","rule":"styled-field","count":1},
   {"path":"services/app/solid/editor/StoryFormatToolbar.tsx","rule":"raw-color","count":1},
   {"path":"services/app/solid/editor/ThemePicker.tsx","rule":"styled-button","count":1},
   {"path":"services/app/solid/editor/panels/ProseRecoveryDialog.tsx","rule":"popup-role","count":1},
   {"path":"services/app/solid/editor/panels/ProseRecoveryDialog.tsx","rule":"overlay","count":1},
-  {"path":"services/app/solid/editor/panels/ProseRecoveryDialog.tsx","rule":"palette-color","count":1},
-  {"path":"services/app/solid/pages/Chat.tsx","rule":"raw-color","count":2},
-  {"path":"services/app/solid/pages/Document.tsx","rule":"raw-color","count":2}
+  {"path":"services/app/solid/editor/panels/ProseRecoveryDialog.tsx","rule":"palette-color","count":1}
 ]
