@@ -7,6 +7,7 @@
  */
 import type { JSX } from 'solid-js';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
+import { Button } from '@/solid/ui/Button';
 import { Popover } from '@/solid/ui/Popover';
 
 export function StoryToolbarMenu(props: {
@@ -27,19 +28,18 @@ export function StoryToolbarMenu(props: {
       class="max-w-[calc(100vw-16px)] p-2 text-fg"
       sideOffset={6}
       trigger={(attrs) => (
-        <button
+        <Button
           ref={attrs.ref}
-          type="button"
+          variant="ghost"
+          size="sm"
           aria-label={name()}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => props.onOpenChange(!props.open)}
-          class={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 font-mono text-[11px] font-normal leading-none hover:bg-surface ${
-            props.hint ? 'text-muted underline decoration-dotted underline-offset-4 hover:text-fg' : 'text-fg'
-          }`}
+          class="gap-1.5"
         >
-          {props.label}
+          <span class={props.hint ? 'underline decoration-dotted underline-offset-4' : undefined}>{props.label}</span>
           <ChevronDown size={12} />
-        </button>
+        </Button>
       )}
     >
       {props.children}
