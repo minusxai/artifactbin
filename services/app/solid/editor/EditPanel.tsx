@@ -9,13 +9,14 @@
  * There is no artifact-backend context in the app, so this takes `historyUnavailable` as an explicit
  * prop. Whoever wires this panel into a live page passes `backend.unavailable('versions')`.
  */
-import { createUniqueId, For, Show, type JSX } from 'solid-js';
+import { createUniqueId, Show, type JSX } from 'solid-js';
 import History from 'lucide-solid/icons/history';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import PanelRightClose from 'lucide-solid/icons/panel-right-close';
 import PanelRightOpen from 'lucide-solid/icons/panel-right-open';
 import SlidersHorizontal from 'lucide-solid/icons/sliders-horizontal';
 import { Button } from '@/solid/ui/Button';
+import { Tabs } from '@/solid/ui/Tabs';
 import { Tooltip } from '@/solid/ui/Tooltip';
 import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 
@@ -47,9 +48,20 @@ export default function EditPanel(props: {
   children: JSX.Element;
 }): JSX.Element {
   const id = createUniqueId();
-  const tabs = () => TABS.filter((t) => t.tab !== 'comments' || props.commentsAvailable);
+  const items = () => TABS.filter((t) => t.tab !== 'comments' || props.commentsAvailable).map(({ tab, label, Icon }) => ({
+    value: tab,
+    label,
+    icon: () => <Icon size={13} class="shrink-0" />,
+    id: `${id}-${tab}`,
+    controls: `${id}-body`,
+    badge: tab === 'selection' && props.selectionDot ? (true as const) : undefined,
+    disabled: !!unavailable(tab),
+    disabledReason: unavailable(tab) ?? undefined,
+  }));
   const unavailable = (t: EditPanelTab): string | null => (t === 'history' ? (props.historyUnavailable ?? null) : null);
-  const dot = <span aria-hidden="true" class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />;
+  const tabs = (extra: { orientation?: 'vertical'; iconOnly?: boolean; class?: string }) => (
+    <Tabs label="Edit panel tabs" variant="pill" size="sm" items={items()} value={props.tab} onChange={(t) => props.onTab(t as EditPanelTab)} {...extra} />
+  );
 
   return (
     <Show
@@ -65,39 +77,7 @@ export default function EditPanel(props: {
               <PanelRightOpen size={15} />
             </Button>
           </Tooltip>
-          <div role="tablist" aria-label="Edit panel tabs" aria-orientation="vertical" class="flex flex-col gap-1 border-t border-edge pt-1">
-            <For each={tabs()}>
-              {({ tab: t, label, Icon }) => {
-                const reason = () => unavailable(t);
-                const button = (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-label={label}
-                    aria-selected={props.tab === t}
-                    data-new-selection={t === 'selection' && props.selectionDot ? 'true' : undefined}
-                    disabled={!!reason() || undefined}
-                    aria-describedby={reason() ? `${id}-${t}-reason` : undefined}
-                    onClick={() => props.onTab(t)}
-                    class={`relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-chip disabled:cursor-default disabled:opacity-50 ${
-                      props.tab === t ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-                    }`}
-                  >
-                    <Icon size={14} />
-                    {t === 'selection' && props.selectionDot && dot}
-                  </button>
-                );
-                return (
-                  <>
-                    <Show when={reason()} fallback={<Tooltip content={label} side="left">{button}</Tooltip>}>
-                      {button}
-                    </Show>
-                    <Show when={reason()}>{(text) => <span id={`${id}-${t}-reason`} hidden>{text()}</span>}</Show>
-                  </>
-                );
-              }}
-            </For>
-          </div>
+          {tabs({ orientation: 'vertical', iconOnly: true, class: 'items-center border-t border-edge pt-1' })}
         </aside>
       }
     >
@@ -107,37 +87,7 @@ export default function EditPanel(props: {
         style={{ top: `${props.top}px`, width: `${RIGHT_RAIL_W}px` }}
       >
         <div class="flex h-10 shrink-0 items-center gap-1 border-b border-edge px-2">
-          <div role="tablist" aria-label="Edit panel tabs" class="flex min-w-0 flex-1 items-center gap-0.5">
-            <For each={tabs()}>
-              {({ tab: t, label, Icon }) => {
-                const reason = () => unavailable(t);
-                return (
-                  <>
-                    <button
-                      type="button"
-                      role="tab"
-                      id={`${id}-${t}`}
-                      aria-label={label}
-                      aria-selected={props.tab === t}
-                      aria-controls={`${id}-body`}
-                      data-new-selection={t === 'selection' && props.selectionDot ? 'true' : undefined}
-                      disabled={!!reason() || undefined}
-                      aria-describedby={reason() ? `${id}-${t}-reason` : undefined}
-                      onClick={() => props.onTab(t)}
-                      class={`relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-chip px-2 font-mono text-2xs disabled:cursor-default disabled:opacity-50 ${
-                        props.tab === t ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-                      }`}
-                    >
-                      <Icon size={13} class="shrink-0" />
-                      <span>{label}</span>
-                      {t === 'selection' && props.selectionDot && dot}
-                    </button>
-                    <Show when={reason()}>{(text) => <span id={`${id}-${t}-reason`} hidden>{text()}</span>}</Show>
-                  </>
-                );
-              }}
-            </For>
-          </div>
+          {tabs({ class: 'min-w-0 flex-1 items-center' })}
           <Tooltip content="Collapse panel" side="bottom">
             <Button variant="ghost" size="sm" icon aria-label="Collapse panel" aria-expanded="true" onClick={() => props.onCollapsedChange(true)}>
               <PanelRightClose size={15} />

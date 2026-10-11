@@ -71,3 +71,17 @@ it('shows the chosen color mode and the page type as a badge', () => {
   expect(screen.getByRole('button', { name: 'Color mode' })).toHaveTextContent('dark');
   expect(screen.getByLabelText('Page type: dashboard')).toHaveTextContent('dashboard');
 });
+
+it('draws the design trigger as a bordered Select-height control beside the Mode select', () => {
+  render(() => <><ThemePicker value="modernist" onPick={() => {}} /><ModeChip mode={null} themeDefault="light" onPick={() => {}} /></>);
+  const design = screen.getByRole('button', { name: 'Design system' });
+  const mode = screen.getByRole('button', { name: 'Color mode' });
+  for (const size of ['h-control-sm', 'rounded-control', 'border-edge-bright', 'bg-surface']) {
+    expect(design.className).toContain(size);
+    expect(mode.className).toContain(size);
+  }
+  expect(design).toHaveAttribute('aria-haspopup', 'true');
+  expect(design).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(design);
+  expect(design).toHaveAttribute('aria-expanded', 'true');
+});

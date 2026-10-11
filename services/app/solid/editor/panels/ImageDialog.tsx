@@ -17,7 +17,6 @@
 import { createSignal, createUniqueId, Show, type JSX } from 'solid-js';
 import ImagePlus from 'lucide-solid/icons/image-plus';
 import Link2 from 'lucide-solid/icons/link-2';
-import X from 'lucide-solid/icons/x';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { FeatureGate } from '@/solid/components/FeatureGate';
 import { rawUrl } from '@/lib/dataflow/ref-data';
@@ -110,15 +109,11 @@ export default function ImageDialog(props: {
   };
 
   return (
-    <Dialog title={title()} size="md" lockScroll onClose={props.onClose} initialFocus="[data-choose-file]:not([disabled])"
+    <Dialog title={title()} size="md" align="top" closeLabel="Close" lockScroll onClose={props.onClose} initialFocus="[data-choose-file]:not([disabled])"
       footer={<>
         <Button variant="secondary" onClick={props.onClose}>Cancel</Button>
         <Button disabled={!chosen() || busy() !== null} onClick={() => { const image = chosen(); if (image) props.onConfirm(image); }}>{action()}</Button>
       </>}>
-      <Button variant="ghost" size="sm" icon aria-label="Close" onClick={props.onClose} class="absolute right-3 top-3">
-        <X size={14} />
-      </Button>
-
       <section aria-label="Upload">
         <h3 class="mb-1.5"><MicroLabel>Upload</MicroLabel></h3>
         <div

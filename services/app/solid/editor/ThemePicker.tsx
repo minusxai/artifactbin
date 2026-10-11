@@ -91,15 +91,17 @@ export default function ThemePicker(props: { value: StoryDesignName | null; colo
       <h2><MicroLabel>Design systems</MicroLabel></h2>
       <Button variant="ghost" size="sm" icon class="ml-auto" aria-label="Close design systems" onClick={() => setOpen(false)}><X size={14} stroke-width={1.8} /></Button>
     </div>}
-    trigger={(attrs) => <Button variant="ghost" size="sm" aria-label="Design system" ref={(el) => attrs.ref?.(el)} onClick={() => attrs.onClick()} aria-haspopup="true" aria-expanded={open()}
-      class="w-full justify-start">
-      <ThemeDot theme={props.value} colorMode={props.colorMode} /><span class="truncate">{designLabel(props.value)}</span><ChevronDown size={12} class="ml-auto shrink-0 text-faint" />
+    trigger={(attrs) => <Button variant="secondary" size="sm" aria-label="Design system" ref={(el) => attrs.ref?.(el)} onClick={() => attrs.onClick()} aria-haspopup="true" aria-expanded={open()}
+      class="w-full font-normal">
+      <span class="flex min-w-0 flex-1 items-center gap-2"><ThemeDot theme={props.value} colorMode={props.colorMode} /><span class="truncate">{designLabel(props.value)}</span></span>
+      <ChevronDown size={12} aria-hidden="true" class="shrink-0 opacity-60" />
     </Button>}>
-    <For each={STORY_SYSTEMS}>{(system) => <button type="button" aria-label={`Design system ${system.label}`} aria-pressed={props.value === system.name}
+    {/* A thumbnail tile, not a text control: the link variant is the Button's auto-height geometry. */}
+    <For each={STORY_SYSTEMS}>{(system) => <Button variant="link" pressed={props.value === system.name} aria-label={`Design system ${system.label}`}
       onClick={() => pick(system.name)}
-      class={`group min-w-0 shrink-0 cursor-pointer overflow-hidden rounded-chip border text-left transition-[border-color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-accent ${props.value === system.name ? 'border-accent ring-1 ring-accent' : 'border-edge hover:border-edge-bright hover:shadow-md'}`}>
+      class="w-full min-w-0 overflow-hidden rounded-chip p-0 [&>span]:w-full">
       <DesignSystemSpecimen system={system} colorMode={props.colorMode} selected={props.value === system.name} />
-    </button>}</For>
+    </Button>}</For>
   </AnchoredPanel>
   <Show when={previous() && props.value === previous()!.after}>
     <Button variant="link" aria-label="Undo design change"
