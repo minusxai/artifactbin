@@ -71,7 +71,7 @@ On first startup, certificate issuance follows container startup and can take se
 
 Before using a candidate release, copy the **exact CI-tested npm tarball** to `packages/afbin.tgz`, verify its provenance/checksum, and build with `AFBIN_PACKAGE=/packages/afbin.tgz docker compose build`. The Dockerfile still checks its version is 0.5.25. After publishing, the normal build installs that exact pinned registry version. Record the image IDs/digests you deploy. Node's base image is pinned to supported major 22; pin its tested digest for your deployment when you finish acceptance. The Compose application image runs nonroot. A short, network-disabled root helper initializes artifact-volume ownership; it never starts the application.
 
-Only Caddy exposes ports. PostgreSQL uses an internal network and Docker secret file. The app's persistent volume contains uploaded artifacts, runtime state and its lazy Chromium cache; the database has its own volume. The image installs Chromium's Linux dependencies, and the first export downloads the package's matching Chromium build into `/data/chromium`. Outbound access to its download service and the login provider is required. Exercise PNG/PDF export during acceptance to warm and verify this path.
+Only Caddy exposes ports. PostgreSQL uses an internal network and Docker secret file. The app's persistent volume contains uploaded artifacts, runtime state and its lazy Chromium cache; the database has its own volume. The image installs Chromium's Linux dependencies, and the first export downloads the package's matching Chromium build into `/data/chromium`. Outbound access to its download service and the login provider is required. Exercise PNG/JPG export during acceptance to warm and verify this path.
 
 ## 4. Owner and colleagues
 
@@ -93,7 +93,7 @@ On a disposable external deployment, using normal login from another machine/net
 2. Install from the copied instructions in fresh isolated client directories. Verify real login delivery, owner confirmation, and rejection of an uninvited account.
 3. Invite editor/viewer colleagues; publish without a group override and verify both artifacts land in the company group and appear for every member in browser and CLI.
 4. Verify reads, editor edits/comments, viewer write denial, individual commenter permissions, anonymous private denial, and immediate membership/share revocation.
-5. Export PNG/PDF; restart the containers and verify identities, group defaults, edits, objects and exports persist.
+5. Export PNG/JPG; restart the containers and verify identities, group defaults, edits, objects and exports persist.
 6. Take a consistent backup, restore it on a fresh deployment with the same host/config, and verify login plus private artifact content and permissions. Keep the original stopped while verifying the replacement; never run two writers against one data volume.
 
 Finish these checks **before** provisioning the separate real company instance. Repeat acceptance on its actual origin and record source/package/image hashes and results.
