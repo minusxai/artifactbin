@@ -13,6 +13,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     calls.push(String(url));
     if (String(url) === '/api/page/session') return new Response(JSON.stringify({ user: { id: 'usr_1', email: 'o@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true }), { status: 200 });
+    if (String(url).startsWith('/api/page/home?part=bootstrap')) return new Response(JSON.stringify({ signedIn: true, accountId: 'usr_1', deployment: { mode: 'public', setup_complete: true, is_owner: false, default_group: null }, preferences: { default_destination: { type: 'group', id: 'g1' } }, destination: { kind: 'group', groupId: 'g1', detail: { group: { id: 'g1', handle: 'team', name: 'Team', description: '', role: 'editor' }, members: [], linked_groups: [] }, core: { artifacts: [], shared: [] } } }), { status: 200 });
     if (String(url).startsWith('/api/page/profile/')) return new Response(JSON.stringify({ kind: 'public-profile', handle: 'sam', files: [] }), { status: 200 });
     return new Response(JSON.stringify({ files: [] }), { status: 200 });
   }));
@@ -21,7 +22,9 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(
 
 describe('preloadKeyFor', () => {
   it.each([
-    ['/', '/api/page/home?part=core'],
+    ['/', '/api/page/home?part=bootstrap'],
+    ['/?personal=1', '/api/page/home?part=bootstrap&personal=1'],
+    ['/?utm=1', '/api/page/home?part=bootstrap'],
     ['/@sam', '/api/page/profile/%40sam'],
     ['/@sam/', '/api/page/profile/%40sam'],
     ['/a/abc', null],
@@ -44,5 +47,20 @@ describe('link intent', () => {
     window.history.pushState(null, '', '/@sam'); window.dispatchEvent(new PopStateEvent('popstate'));
     await waitFor(() => expect(screen.getByText('0 public artifacts', { exact: true })).toBeInTheDocument(), { timeout: 4000 });
     expect(calls.filter((u) => u === '/api/page/profile/%40sam')).toHaveLength(1);
+  });
+});
+
+describe('Home link intent', () => {
+  it('preloads the destination bootstrap, never the personal shelf, and the page adopts it without a second request', async () => {
+    render(() => <App />);
+    await screen.findByRole('region', { name: 'Trash' }, { timeout: 3000 });
+    const link = document.createElement('a');
+    link.href = '/'; link.textContent = 'home'; document.body.append(link);
+    fireEvent.pointerOver(link, { pointerType: 'mouse' });
+    await waitFor(() => expect(calls.filter((u) => u === '/api/page/home?part=bootstrap')).toHaveLength(1));
+    window.history.pushState(null, '', '/'); window.dispatchEvent(new PopStateEvent('popstate'));
+    await screen.findByRole('heading', { name: 'Team' }, { timeout: 4000 });
+    expect(calls.filter((u) => u === '/api/page/home?part=bootstrap')).toHaveLength(1);
+    expect(calls.filter((u) => u.includes('part=core') || u.startsWith('/api/me/preferences') || u.startsWith('/api/groups/'))).toEqual([]);
   });
 });

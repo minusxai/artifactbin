@@ -1,14 +1,13 @@
 import WorkspaceHeading from '../components/WorkspaceHeading';
 /* @jsxImportSource solid-js */
-import { createEffect, createMemo, createSignal, onMount, Show, type JSX } from 'solid-js';
-import type { AccountPreferences, DeploymentState } from '@artifactbin/contracts';
-import { GroupPage } from './Group';
+import { createEffect, createMemo, createSignal, onMount, Show, type Accessor, type JSX } from 'solid-js';
+import { GroupUnavailable, GroupWorkspace } from './Group';
 import { CompanySetup } from './CompanySetup';
 import { DefaultDestinationControl } from '../components/DefaultDestinationControl';
 import { useLocation } from '@solidjs/router';
 import { Navigate } from '@solidjs/router';
 import DatabasePlus from 'lucide-solid/icons/database-plus';
-import type { HomeCore, HomeInsights } from '@/solid/lib/home-resource';
+import { homeBootstrapKey, type HomeBootstrap, type HomeCore, type HomeInsights, type SignedInHome } from '@/solid/lib/home-resource';
 import { dropServedFrame } from '@/solid/lib/served-frame';
 import WorkspaceShell from '../components/WorkspaceShell';
 import GetStarted from '../components/GetStarted';
@@ -19,23 +18,54 @@ import WorkspaceLayout, { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '../co
 import { usePageData } from '../lib/use-page-data';
 import { useSession } from '../lib/session';
 
+/**
+ * Home is one request: `/api/page/home?part=bootstrap` resolves the destination (account preference,
+ * `?personal=1`, inherited company default) and carries what it renders. Nothing here waits for a
+ * preference, a deployment read or group details before the shelf, and one skeleton stands in until it lands.
+ */
 export function HomePage(): JSX.Element {
  const {session,sessionError,reload}=useSession(); const location=useLocation();
- const core=usePageData<HomeCore>('/api/page/home?part=core');
- createEffect(()=>{if(sessionError())core.invalidate();});
- const deployment=usePageData<DeploymentState>('/api/deployment');
- const preferences=usePageData<AccountPreferences>('/api/me/preferences',{enabled:()=>session()?.kind==='account'});
  const personal=()=>new URLSearchParams(location.search).get('personal')==='1';
- const destination=()=>{const value=preferences.data()?.default_destination;return value?.type==='group'?value.id:value?.type==='personal'?null:deployment.data()?.default_group?.id;};
- return <Show when={deployment.data()} fallback={<main class="p-8"><Show when={deployment.error()} fallback={<WorkspaceSkeleton/>}><p role="alert">Could not load workspace. <button type="button" aria-label={sessionError()?'Retry workspace':'Retry deployment'} onClick={()=>sessionError()?reload():void deployment.refresh(true)}>Retry</button></p></Show></main>}>
- {state=><Show when={personal()||state().mode!=='company'||state().setup_complete} fallback={<Show when={state().is_owner} fallback={<main class="p-8"><p role="alert">The company default group is unavailable. Your deployment owner can repair setup.</p><a href="/?personal=1">Open Personal</a></main>}><CompanySetup deployment={state()} complete={()=>void deployment.refresh(true)}/></Show>}>
- <Show when={personal()||(session()&&session()?.kind!=='account')||preferences.data()} fallback={<main class="p-8"><Show when={preferences.error()} fallback={<p role="status">Loading Home preference…</p>}><p role="alert">Could not load your Home preference.</p><a href="/?personal=1">Open Personal</a><button onClick={()=>void preferences.refresh(true)}>Retry preference</button></Show></main>}>
- <Show when={!personal()&&destination()} fallback={<><Show when={personal()}><div class="mx-auto max-w-4xl px-6 py-5 font-sans"><DefaultDestinationControl/></div></Show><PersonalHomePage core={core}/></>}>{identity=><GroupPage identity={identity()}/>}</Show>
- </Show></Show>}
- </Show>;
+ const home=usePageData<HomeBootstrap>(()=>homeBootstrapKey(personal()));
+ createEffect(()=>{if(sessionError())home.invalidate();});
+ // A bootstrap for another account is never shown, whatever the store retained.
+ const resolved=createMemo<'login'|'loading'|'error'|SignedInHome>(()=>{
+  const current=session();
+  if(current&&current.kind!=='account')return 'login';
+  const data=home.data();
+  if(!data)return home.error()?'error':'loading';
+  if(!data.signedIn)return 'login';
+  return current?.user&&data.accountId!==current.user.id?'error':data;
+ });
+ const loaded=()=>{const value=resolved();return typeof value==='object'?value:null;};
+ const retry=()=>sessionError()?reload():void home.refresh(true);
+ // Remove-default is the one edit that moves the homepage: read where it opens now.
+ const destinationMoved=()=>void home.refresh(true);
+ return <Show when={resolved()!=='login'} fallback={<Navigate href="/login"/>}>
+ <Show when={loaded()} fallback={<main class={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}><Show when={resolved()==='error'} fallback={<WorkspaceSkeleton/>}><div role="alert"><p>Could not load your workspace.</p><button type="button" aria-label="Retry workspace" onClick={retry}>Try again</button></div></Show></main>}>
+ {data=>{
+  const destination=()=>data().destination;
+  const setup=()=>destination().kind==='setup';
+  const unavailable=()=>destination().kind==='unavailable';
+  const group=()=>{const value=destination();return value.kind==='group'?value:null;};
+  const personalCore=()=>{const value=destination();return value.kind==='personal'?{signedIn:true as const,accountId:data().accountId,...value.core}:null;};
+  return <>
+  <Show when={setup()}><Show when={data().deployment.is_owner} fallback={<main class="p-8"><p role="alert">The company default group is unavailable. Your deployment owner can repair setup.</p><a href="/?personal=1">Open Personal</a></main>}><CompanySetup deployment={data().deployment} complete={()=>void home.refresh(true)}/></Show></Show>
+  <Show when={unavailable()}><main class={HOME_WORKSPACE_COLUMN}><div class="p-8"><GroupUnavailable retry={()=>void home.refresh(true)}/></div></main></Show>
+  <Show when={group()}>{value=><main class={HOME_WORKSPACE_COLUMN}>
+   <Show when={home.error()}><div role="alert">Could not refresh your workspace. <button type="button" aria-label="Retry workspace" onClick={retry}>Try again</button></div></Show>
+   <GroupWorkspace detail={value().detail} shelf={value().core} shelfFailed={false} retryShelf={retry} refresh={()=>void home.refresh(true)} defaults={{preferences:data().preferences,deployment:data().deployment}} onDefaultSaved={destinationMoved}/></main>}</Show>
+  <Show when={personalCore()}>{core=><>
+   <Show when={personal()}><div class="mx-auto max-w-4xl px-6 py-5 font-sans"><DefaultDestinationControl initial={{preferences:data().preferences,deployment:data().deployment}}/></div></Show>
+   <PersonalHomePage core={{data:core,error:home.error,refresh:home.refresh,invalidate:home.invalidate}}/></>}</Show>
+  </>;}}
+ </Show></Show>;
 }
 
-function PersonalHomePage(props:{core:ReturnType<typeof usePageData<HomeCore>>}): JSX.Element {
+/** The slice of the Home bootstrap's page data Personal reads and refreshes. */
+interface PersonalCore { data: Accessor<HomeCore | null>; error: Accessor<Error | null>; refresh: (force?: boolean) => Promise<void>; invalidate: () => void }
+
+function PersonalHomePage(props:{core:PersonalCore}): JSX.Element {
   const { session, sessionError, reload } = useSession();
   // "My artifacts"'s own search box (Shelf) also narrows "Shared with you" below it, the way one
   // search box on a page reads as one search to whoever is typing into it.
