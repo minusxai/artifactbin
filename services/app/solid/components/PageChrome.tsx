@@ -70,6 +70,7 @@ interface PageChromeProps {
   star?: boolean;
 }
 
+// The bar's icon buttons are 36px (h-9 w-9) over Button's 32px `sm` icon: the reader-shell gate holds every bar control to a 36px target on a 320px phone, and md (40px) does not fit there.
 export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const location = useLocation();
   const phone = createIsPhoneViewport();
@@ -108,9 +109,9 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
         </>}>{props.byline}</Show>
 </>} actions={<>        <Show when={props.star !== false}><Star mobile={false} /><Star mobile={true} /></Show>
         {props.actions}
-        <Show when={person()}><Tooltip content="Notifications"><Button icon size="sm" variant={panel() === 'notifications' ? 'secondary' : 'ghost'} aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class="relative"><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" /></Show></Button></Tooltip></Show>
-        <Tooltip content={controlsName()}><Button icon size="sm" variant={panel() === 'controls' ? 'secondary' : 'ghost'} aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</Button></Tooltip>
-        <Tooltip content="menu"><Button icon size="sm" variant={panel() === 'menu' ? 'secondary' : 'ghost'} aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></Button></Tooltip>
+        <Show when={person()}><Tooltip content="Notifications"><Button icon size="sm" variant={panel() === 'notifications' ? 'secondary' : 'ghost'} aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class="relative h-9 w-9"><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" /></Show></Button></Tooltip></Show>
+        <Tooltip content={controlsName()}><Button icon size="sm" variant={panel() === 'controls' ? 'secondary' : 'ghost'} aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)} class="h-9 w-9">{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</Button></Tooltip>
+        <Tooltip content="menu"><Button icon size="sm" variant={panel() === 'menu' ? 'secondary' : 'ghost'} aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)} class="h-9 w-9"><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></Button></Tooltip>
 </>} />
     {/*
       * The panels open in the page's trusted overlay where it has one (the document page's "navigation" layer,
