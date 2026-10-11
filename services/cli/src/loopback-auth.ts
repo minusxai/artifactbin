@@ -87,7 +87,7 @@ export async function loopbackAuthenticate(origin: string, options: LoopbackOpti
     try {
       const connection = await redeem(server, outcome.code, verifier, redirectUri, request, clock);
       await saveConnection(connection, options.home ?? homedir(), {ARTIFACTBIN_HOME: configDir(options.home ?? homedir(), options.env)});
-      await respond(outcome.response, 200, 'Signed in', 'Signed in — you can close this tab', 'Return to your terminal; the command is continuing.');
+      await respond(outcome.response, 200, 'Signed in', 'Signed in', 'Return to your terminal; the command is continuing. If this tab stays open, you can close it.', true);
       return connection;
     } catch (error) {
       await respond(outcome.response, 400, 'Sign-in failed', 'Return to your terminal and run afbin auth again.');
@@ -138,10 +138,13 @@ async function redeem(server: string, code: string, verifier: string, redirectUr
 }
 
 /** Resolves once the page is handed to the socket, so closing the listener never cuts it short. */
-function respond(response: ServerResponse, status: number, title: string, heading: string, detail = ''): Promise<void> {
+function respond(response: ServerResponse, status: number, title: string, heading: string, detail = '', closeTab = false): Promise<void> {
   if (response.headersSent) return Promise.resolve();
   const escape = (text: string) => text.replace(/[&<>"]/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[ch]!);
-  response.writeHead(status, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Referrer-Policy': 'no-referrer', Connection: 'close'});
-  response.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><style>body{font:16px system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222;background:#fff}@media(prefers-color-scheme:dark){body{color:#eee;background:#111}}</style><h1>${escape(heading)}</h1>${detail ? `<p>${escape(detail)}</p>` : ''}`);
+  // A browser may refuse to close an OS-opened tab with navigation history; keep the fallback visible.
+  const script = closeTab ? 'setTimeout(() => window.close(), 1000);' : '';
+  const scriptPolicy = script ? `; script-src 'sha256-${createHash('sha256').update(script).digest('base64')}'` : '';
+  response.writeHead(status, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'${scriptPolicy}`, 'Referrer-Policy': 'no-referrer', Connection: 'close'});
+  response.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><style>body{font:16px system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222;background:#fff}@media(prefers-color-scheme:dark){body{color:#eee;background:#111}}</style><h1>${escape(heading)}</h1>${detail ? `<p>${escape(detail)}</p>` : ''}${script ? `<script>${script}</script>` : ''}`);
   return new Promise(resolve => { response.once('finish', () => resolve()); response.once('close', () => resolve()); });
 }
