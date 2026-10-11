@@ -358,9 +358,10 @@ describe('the annotation composer', () => {
     const composer = await screen.findByLabelText('Annotation comment');
     const cancel = screen.getByLabelText('Cancel annotation');
     const comment = screen.getByLabelText('Save annotation');
-    expect(cancel).toHaveClass('bg-transparent');
-    expect(cancel).not.toHaveClass('border');
-    expect(comment).toHaveClass('border-accent', 'bg-accent', 'text-bg');
+    // Cancel is the library's ghost variant (no fill); Comment is its primary variant (the one filled control).
+    expect(cancel).toHaveClass('bg-transparent', 'border-transparent');
+    expect(cancel).not.toHaveClass('bg-action');
+    expect(comment).toHaveClass('border-action', 'bg-action', 'text-action-ink');
     replaceComment(composer, 'from the keyboard');
     fireEvent.keyDown(composer, { key: 'Enter', metaKey: true });
     await flush();

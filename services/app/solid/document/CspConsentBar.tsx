@@ -10,6 +10,7 @@
  */
 import { createSignal, Show, type JSX } from 'solid-js';
 import type { CspRequest } from '@/lib/document';
+import { Button } from '../ui/Button';
 import { DOCUMENT_FRAME_SELECTOR, freshFrameSrc } from './create-framed-story';
 
 /**
@@ -69,23 +70,22 @@ export function CspConsentBar(props: {
     } catch { setError('Could not save your choice — try again.'); }
     finally { setBusy(false); }
   };
-  const button = 'cursor-pointer rounded border border-edge px-2 py-1 font-mono text-xs hover:bg-raised disabled:opacity-60';
   return <Show when={request().status === 'blocked'}>
     {/* In the slot above the frame (Document's `[data-mx-frame-slot]`): it takes its own row, the frame shrinks. */}
     <section role="region" aria-label="Document network access" class="border-b border-edge bg-surface px-3 py-2 text-sm text-fg">
       <Show when={!request().denied} fallback={
         <p class="flex flex-wrap items-center gap-2 text-xs text-muted">
           <span>Blocked: this document cannot reach {listed(allHosts(request().asking))}.</span>
-          <button type="button" class={button} aria-label="Ask again" disabled={busy()} onClick={() => void send('DELETE', {})}>Ask again</button>
+          <Button type="button" variant="secondary" size="sm" aria-label="Ask again" disabled={busy()} onClick={() => void send('DELETE', {})}>Ask again</Button>
         </p>
       }>
         <div class="flex flex-wrap items-center gap-2">
           <p class="min-w-0 flex-1">{cspAskSentence(request().asking)}</p>
-          <button type="button" class={button} aria-label="Allow once" disabled={busy()} onClick={() => void send('POST', { grant: 'once' })}>Allow once</button>
+          <Button type="button" variant="secondary" size="sm" aria-label="Allow once" disabled={busy()} onClick={() => void send('POST', { grant: 'once' })}>Allow once</Button>
           <Show when={props.accountSession}>
-            <button type="button" class={button} aria-label="Always for this document" disabled={busy()} onClick={() => void send('POST', { grant: 'document' })}>Always for this document</button>
+            <Button type="button" variant="secondary" size="sm" aria-label="Always for this document" disabled={busy()} onClick={() => void send('POST', { grant: 'document' })}>Always for this document</Button>
           </Show>
-          <button type="button" class={button} aria-label="Never" disabled={busy()} onClick={() => void send('POST', { grant: 'never' })}>Never</button>
+          <Button type="button" variant="secondary" size="sm" aria-label="Never" disabled={busy()} onClick={() => void send('POST', { grant: 'never' })}>Never</Button>
         </div>
       </Show>
       <Show when={error()}><p role="alert" class="mt-1 text-xs text-muted">{error()}</p></Show>

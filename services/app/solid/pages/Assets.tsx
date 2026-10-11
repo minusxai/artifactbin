@@ -8,11 +8,14 @@ import FileUp from 'lucide-solid/icons/file-up';
 import ChevronLeft from 'lucide-solid/icons/chevron-left';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import Globe from 'lucide-solid/icons/globe';
-import Search from 'lucide-solid/icons/search';
 import type { AssetSelection, WorkspaceAssets } from '@/lib/workspace/inventory';
 import { rowTitle } from '@/lib/document/display-title';
 import type { ShelfRow } from '@/lib/workspace/shelf';
-import { MicroLabel, PANEL, FormatBadge, timeAgo } from '../ui/ui';
+import { Badge, MicroLabel, FormatBadge, timeAgo } from '../ui/ui';
+import { Button } from '../ui/Button';
+import { Panel } from '../ui/Panel';
+import { SearchField } from '../ui/Field';
+import { StatusMessage } from '../ui/StatusMessage';
 import { RowActions } from '../components/Shelf';
 import { usePageData } from '../lib/use-page-data';
 import { useSession } from '../lib/session';
@@ -50,22 +53,24 @@ export function AssetsPage(): JSX.Element {
           <a href="/datasets/new" aria-label="Create dataset" class={FORM_SECONDARY_BUTTON}><DatabasePlus aria-hidden="true" size={13} />Create dataset</a>
         </div>
       </WorkspaceHeading>
-      <Show when={!data()} fallback={<section aria-label="Assets" aria-busy={page.pending()} class={PANEL}>
-        <Show when={page.error()}><button type="button" class={`${FORM_SECONDARY_BUTTON} m-3`} aria-label="Retry assets" onClick={() => void page.refresh(true)}>Could not refresh assets. Retry</button></Show>
+      <Show when={!data()} fallback={<Panel label="Assets" padding="none">
+        <div aria-busy={page.pending()}>
+        <Show when={page.error()}><Button variant="secondary" size="sm" class="m-3" aria-label="Retry assets" onClick={() => void page.refresh(true)}>Could not refresh assets. Retry</Button></Show>
         <div class="flex flex-wrap items-center gap-2 border-b border-edge bg-raised/30 px-4 py-3">
-          <Search size={13} class="text-faint" /><input aria-label="Search assets" placeholder="search assets" value={selected().query} onInput={(event) => setSelection((current) => ({ ...current, query: event.currentTarget.value, page: 0 }))} class="min-h-10 min-w-32 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none" />
-          <Show when={(data()?.formats.length ?? 0) >= 2}><For each={data()?.formats ?? []}>{(format) => <button type="button" aria-label={`Filter ${format}`} aria-pressed={selected().formats.includes(format)} onClick={() => toggle('formats', format)} class="min-h-8 rounded-full border border-edge px-3 py-1 text-xs text-muted transition-colors hover:bg-raised aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent focus-visible:outline-2 focus-visible:outline-accent">{format}</button>}</For></Show>
-          <Show when={(data()?.visibilities.length ?? 0) >= 2}><For each={data()?.visibilities ?? []}>{(visibility) => <button type="button" aria-label={`Filter ${visibility}`} aria-pressed={selected().visibilities.includes(visibility)} onClick={() => toggle('visibilities', visibility)} class="min-h-8 rounded-full border border-edge px-3 py-1 text-xs text-muted transition-colors hover:bg-raised aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent focus-visible:outline-2 focus-visible:outline-accent">{visibility}</button>}</For></Show>
+          <SearchField size="sm" label="Search assets" placeholder="search assets" value={selected().query} onValue={(query) => setSelection((current) => ({ ...current, query, page: 0 }))} class="min-w-32 flex-1" />
+          <Show when={(data()?.formats.length ?? 0) >= 2}><For each={data()?.formats ?? []}>{(format) => <Button size="sm" variant={selected().formats.includes(format) ? 'secondary' : 'ghost'} aria-label={`Filter ${format}`} aria-pressed={selected().formats.includes(format)} onClick={() => toggle('formats', format)}>{format}</Button>}</For></Show>
+          <Show when={(data()?.visibilities.length ?? 0) >= 2}><For each={data()?.visibilities ?? []}>{(visibility) => <Button size="sm" variant={selected().visibilities.includes(visibility) ? 'secondary' : 'ghost'} aria-label={`Filter ${visibility}`} aria-pressed={selected().visibilities.includes(visibility)} onClick={() => toggle('visibilities', visibility)}>{visibility}</Button>}</For></Show>
         </div>
-        <Show when={(data()?.assets.length ?? 0) > 0 || selected().query || selected().formats.length || selected().visibilities.length} fallback={<p class="px-5 py-12 text-center text-sm text-muted">no assets yet</p>}>
+        <Show when={(data()?.assets.length ?? 0) > 0 || selected().query || selected().formats.length || selected().visibilities.length} fallback={<StatusMessage kind="empty" class="justify-center px-5 py-12">no assets yet</StatusMessage>}>
           <table class="w-full border-collapse text-left text-sm"><thead class="hidden sm:table-header-group"><tr><For each={['title', 'type', 'ver', 'updated', '']}>{label => <th class="px-4 py-2.5"><MicroLabel>{label}</MicroLabel></th>}</For></tr></thead><tbody>
-            <For each={assets()}>{(asset) => <tr class="border-t border-edge transition-colors hover:bg-raised/40"><td class="w-full max-w-0 px-4 py-2.5"><span class="flex items-center gap-2"><a aria-label={`Open ${asset.title}`} href={asset.url} class="min-w-0 flex-1 truncate font-semibold text-fg hover:text-accent">{asset.title}</a><Show when={asset.visibility === 'public'}><Globe aria-label={`${asset.title} is public`} size={13} class="text-accent" /></Show></span><span class="mt-1 block text-xs text-muted sm:hidden">{asset.format} · {timeAgo(asset.updated_at)}</span></td><td class="hidden px-4 py-2.5 sm:table-cell"><FormatBadge format={asset.format} /></td><td class="hidden px-4 py-2.5 sm:table-cell"><span class="rounded border border-edge px-1.5 font-mono text-[10px] text-faint">v{asset.version}</span></td><td class="hidden whitespace-nowrap px-4 py-2.5 text-xs text-muted sm:table-cell">{timeAgo(asset.updated_at)}</td><td class="px-4 py-2.5"><RowActions row={asset as ShelfRow} level="full" folders={(data()?.folders ?? []) as ShelfRow[]} childCount={0} showEdit={false} onRemoved={id => setRemoved(current => [...current, id])} onChanged={() => void page.refresh(true)} /></td></tr>}</For>
+            <For each={assets()}>{(asset) => <tr class="border-t border-edge transition-colors hover:bg-raised/40"><td class="w-full max-w-0 px-4 py-2.5"><span class="flex items-center gap-2"><a aria-label={`Open ${asset.title}`} href={asset.url} class="min-w-0 flex-1 truncate font-semibold text-fg hover:text-accent">{asset.title}</a><Show when={asset.visibility === 'public'}><Globe aria-label={`${asset.title} is public`} size={13} class="text-accent" /></Show></span><span class="mt-1 block text-xs text-muted sm:hidden">{asset.format} · {timeAgo(asset.updated_at)}</span></td><td class="hidden px-4 py-2.5 sm:table-cell"><FormatBadge format={asset.format} /></td><td class="hidden px-4 py-2.5 sm:table-cell"><Badge tone="dim">v{asset.version}</Badge></td><td class="hidden whitespace-nowrap px-4 py-2.5 text-xs text-muted sm:table-cell">{timeAgo(asset.updated_at)}</td><td class="px-4 py-2.5"><RowActions row={asset as ShelfRow} level="full" folders={(data()?.folders ?? []) as ShelfRow[]} childCount={0} showEdit={false} onRemoved={id => setRemoved(current => [...current, id])} onChanged={() => void page.refresh(true)} /></td></tr>}</For>
           </tbody></table>
-          <Show when={pageCount() > 1}><div class="flex items-center justify-between border-t border-edge px-4 py-2"><span aria-label="Page range" class="font-mono text-[10px] text-faint">{pageIndex() * (data()?.perPage ?? 50) + 1}-{Math.min((pageIndex() + 1) * (data()?.perPage ?? 50), data()?.total ?? 0)} of {data()?.total}</span><span class="flex gap-2"><button type="button" class={FORM_SECONDARY_BUTTON} aria-label="Previous page" disabled={pageIndex() === 0} onClick={() => setSelection((current) => ({ ...current, page: pageIndex() - 1 }))}><ChevronLeft size={14} /></button><button type="button" class={FORM_SECONDARY_BUTTON} aria-label="Next page" disabled={pageIndex() + 1 >= pageCount()} onClick={() => setSelection((current) => ({ ...current, page: pageIndex() + 1 }))}><ChevronRight size={14} /></button></span></div></Show>
+          <Show when={pageCount() > 1}><div class="flex items-center justify-between border-t border-edge px-4 py-2"><span aria-label="Page range" class="font-mono text-micro text-faint">{pageIndex() * (data()?.perPage ?? 50) + 1}-{Math.min((pageIndex() + 1) * (data()?.perPage ?? 50), data()?.total ?? 0)} of {data()?.total}</span><span class="flex gap-2"><Button variant="secondary" size="sm" icon aria-label="Previous page" disabled={pageIndex() === 0} onClick={() => setSelection((current) => ({ ...current, page: pageIndex() - 1 }))}><ChevronLeft size={14} /></Button><Button variant="secondary" size="sm" icon aria-label="Next page" disabled={pageIndex() + 1 >= pageCount()} onClick={() => setSelection((current) => ({ ...current, page: pageIndex() + 1 }))}><ChevronRight size={14} /></Button></span></div></Show>
         </Show>
-      </section>}>
-        <Show when={page.error()} fallback={<section aria-label="Loading assets" aria-busy="true" class={`${PANEL} flex h-32 items-center justify-center text-sm text-muted`}>loading assets…</section>}>
-          <section aria-label="Assets unavailable" class={`${PANEL} flex min-h-32 flex-wrap items-center justify-center gap-3 px-4 text-sm text-muted`}>could not load assets <button type="button" aria-label="Retry assets" onClick={() => void page.refresh(true)} class="text-accent underline">retry</button></section>
+        </div>
+      </Panel>}>
+        <Show when={page.error()} fallback={<Panel label="Loading assets" class="flex h-32 items-center justify-center"><StatusMessage kind="loading">loading assets…</StatusMessage></Panel>}>
+          <Panel label="Assets unavailable" class="flex min-h-32 items-center justify-center"><StatusMessage kind="error" action={<Button variant="link" aria-label="Retry assets" onClick={() => void page.refresh(true)}>retry</Button>}>could not load assets</StatusMessage></Panel>
         </Show>
       </Show>
     </main>
