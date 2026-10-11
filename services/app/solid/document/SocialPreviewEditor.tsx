@@ -1,10 +1,8 @@
 /* @jsxImportSource solid-js */
 import { createSignal, Show, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
-import { trustedPortalOf } from '@/lib/islands/trusted-portal';
-import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
-import X from 'lucide-solid/icons/x';
+import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
 import {
   DEFAULT_SOCIAL_PREVIEW_CROP,
@@ -76,8 +74,6 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
   const [error, setError] = createSignal('');
   const [base, setBase] = createSignal({ source: props.source, editId: props.editId });
 
-  let panel!: HTMLDivElement;
-  let closeButton!: HTMLButtonElement;
   let frame!: HTMLDivElement;
   let uploadInput!: HTMLInputElement;
   let interaction: Interaction | null = null;
@@ -98,8 +94,6 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
   const cameraWidth = () => camera().width * CAMERA_PADDING;
   const cameraX = () => camera().x - (cameraWidth() - camera().width) / 2;
   const cameraY = () => camera().y - (cameraHeight() - socialPreviewCropHeight(camera().width)) / 2;
-
-  createDialogShell({ panel: () => panel, onClose: () => props.onClose(), initialFocus: () => closeButton, focusable: 'button:not([disabled]), [tabindex="0"]' });
 
   const update = (next: SocialPreviewCrop) => {
     setCropDirty(true); setReset(false);
@@ -206,83 +200,67 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     setCrop(documentDraft.crop); setCamera(documentDraft.crop); setReset(documentDraft.reset); setCropDirty(documentDraft.dirty);
   };
 
-  return <Portal mount={trustedPortalOf(document) ?? document.body}><div class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
-    <button type="button" aria-label="Close social preview" onClick={props.onClose} class="absolute inset-0 cursor-default border-0 bg-black/50 p-0 backdrop-blur-[2px]" />
-    <div ref={panel} role="dialog" aria-modal="true" aria-label="Social preview" class="relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface shadow-2xl">
-      <header class="flex shrink-0 items-start justify-between border-b border-edge px-4 py-3">
-        <div>
-          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-accent">Share card</p>
-          <h2 class="mt-1 font-sans text-base font-semibold text-fg">Social preview</h2>
-          <p class="mt-1 font-sans text-xs text-muted">Drag to pan. Resize the locked 40:21 frame; release to focus.</p>
-        </div>
-        <button ref={closeButton} type="button" aria-label="Cancel social preview" onClick={props.onClose} class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-edge bg-transparent text-muted hover:bg-raised hover:text-fg"><X size={15} /></button>
-      </header>
-
-      <div class="flex items-center gap-3 border-b border-edge px-4 py-3">
-        <input ref={uploadInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" aria-label="Upload social preview image" class="hidden" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload(file); }} />
-        <button type="button" disabled={uploading() || saving()} onClick={() => uploadInput?.click()} class="cursor-pointer rounded-[5px] border border-edge px-3 py-2 font-mono text-xs text-fg disabled:opacity-60">{uploading() ? 'uploading…' : imageId() ? 'replace image' : 'upload image'}</button>
-        <Show when={imageId()}><button type="button" disabled={uploading() || saving()} onClick={useDocumentFraming} class="cursor-pointer rounded-[5px] border border-edge px-3 py-2 font-mono text-xs text-muted">use document framing</button></Show>
+  return <Dialog title="Social preview" size="lg" description="Drag to pan. Resize the locked 40:21 frame; release to focus." onClose={props.onClose} initialFocus="[data-cancel-preview]"
+    footer={<div class="flex w-full items-center justify-between gap-3">
+      <Button variant="ghost" aria-label="Reset social preview" disabled={!imageReady() || uploading() || saving()}
+        onClick={() => { setCropDirty(true); imageDraft = null; const next = imageId() ? defaultImageCrop(sourceHeight()) : DEFAULT_SOCIAL_PREVIEW_CROP; setCrop(next); setCamera(next); setReset(true); setError(''); }}>
+        <RotateCcw size={13} /> reset
+      </Button>
+      <div class="flex gap-2">
+        <Button variant="secondary" data-cancel-preview onClick={props.onClose}>cancel</Button>
+        <Button disabled={saving() || uploading() || !imageReady()} onClick={() => void save()}>{saving() ? 'saving…' : 'save preview'}</Button>
       </div>
-      <div class="min-h-0 flex-1 bg-ground p-3 sm:p-5">
-        <div class="relative mx-auto aspect-[40/21] max-h-full overflow-hidden border border-edge bg-surface" aria-label="Social preview canvas">
-          <img src={previewUrl()} alt={imageId() ? 'Uploaded social preview' : 'Artifact preview'} draggable={false}
-            onLoad={onImageLoad} onError={() => { setImageFailed(true); setImageReady(false); }}
-            class={`pointer-events-none absolute h-auto max-w-none select-none ease-out motion-reduce:transition-none ${interacting() ? '' : 'transition-[left,top,width] duration-200'}`}
-            style={{ width: `${SOCIAL_PREVIEW_WIDTH / cameraWidth() * 100}%`, left: `${-cameraX() / cameraWidth() * 100}%`, top: `${-cameraY() / cameraHeight() * 100}%` }} />
-          <Show when={!imageReady() && !imageFailed()}>
-            <div role="status" aria-live="polite" class="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
-              <span aria-hidden="true" class="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent motion-reduce:animate-none" />
-              <span>{imageId() ? 'loading image…' : 'rendering full-page overview…'}</span>
-              <Show when={!imageId()}><span class="text-[10px] text-faint">Complex artifacts can take a few seconds.</span></Show>
-            </div>
-          </Show>
-          <Show when={imageFailed()}>
-            <div role="status" class="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
-              <span>The preview could not be loaded.</span>
-              <button type="button" onClick={() => { setImageFailed(false); setPreviewAttempt(value => value + 1); }} class="cursor-pointer rounded-[5px] border border-edge-bright bg-raised px-3 py-2 text-fg hover:border-accent">retry</button>
-            </div>
-          </Show>
-          <Show when={imageReady()}>
-            <div ref={frame} role="group" tabIndex={0} aria-label="Move social preview crop" aria-valuetext={`x ${Math.round(crop().x)}, y ${Math.round(crop().y)}, width ${Math.round(crop().width)}`}
-              onKeyDown={moveByKey} onPointerDown={begin('move')} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
-              class={`absolute cursor-move border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] outline-none ease-out focus:ring-2 focus:ring-accent focus:ring-offset-2 motion-reduce:transition-none ${interacting() ? '' : 'transition-[left,top,width,height] duration-200'}`}
-              style={{ left: `${(crop().x - cameraX()) / cameraWidth() * 100}%`, top: `${(crop().y - cameraY()) / cameraHeight() * 100}%`, width: `${crop().width / cameraWidth() * 100}%`, height: `${height() / cameraHeight() * 100}%`, 'touch-action': 'none' }}>
-              <Show when={!imageId() && !interacting()}>
-                <img src={focusedUrl()} alt="" aria-hidden="true" draggable={false} onLoad={() => setLoadedFocusedUrl(focusedUrl())}
-                  class={`pointer-events-none absolute inset-0 h-full w-full select-none transition-opacity duration-150 motion-reduce:transition-none ${focusedReady() ? 'opacity-100' : 'opacity-0'}`} />
-                <Show when={!focusedReady()}>
-                  <span aria-live="polite" class="absolute right-1.5 top-1.5 flex items-center gap-1.5 bg-black/65 px-2 py-1 font-mono text-[9px] text-white">
-                    <span aria-hidden="true" class="h-2.5 w-2.5 animate-spin rounded-full border border-white/40 border-t-white motion-reduce:animate-none" />
-                    sharpening…
-                  </span>
-                </Show>
-              </Show>
-              <span class="absolute left-1 top-1 bg-accent px-1.5 py-1 font-mono text-[9px] text-white">1600 × 840 · {magnification()}%</span>
-              <div role="slider" tabIndex={0} aria-label="Resize social preview crop"
-                aria-valuemin={imageId() ? Math.min(SOCIAL_PREVIEW_MIN_CROP_WIDTH, imageCropMaxWidth(sourceHeight())) : SOCIAL_PREVIEW_MIN_CROP_WIDTH}
-                aria-valuemax={imageId() ? imageCropMaxWidth(sourceHeight()) : SOCIAL_PREVIEW_WIDTH}
-                aria-valuenow={Math.round(crop().width)}
-                onKeyDown={resizeByKey} onPointerDown={begin('resize')} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
-                class="absolute -bottom-2 -right-2 h-5 w-5 cursor-se-resize rounded-full border-2 border-white bg-accent shadow outline-none focus:ring-2 focus:ring-accent" style={{ 'touch-action': 'none' }} />
-            </div>
-          </Show>
-        </div>
-      </div>
-
-      <footer class="shrink-0 border-t border-edge bg-surface px-4 py-3">
-        <Show when={error()}><p role="status" class="mb-2 font-mono text-[11px] text-danger">{error()}</p></Show>
-        <div class="flex items-center justify-between gap-3">
-          <button type="button" aria-label="Reset social preview" disabled={!imageReady() || uploading() || saving()}
-            onClick={() => { setCropDirty(true); imageDraft = null; const next = imageId() ? defaultImageCrop(sourceHeight()) : DEFAULT_SOCIAL_PREVIEW_CROP; setCrop(next); setCamera(next); setReset(true); setError(''); }}
-            class="inline-flex cursor-pointer items-center gap-1.5 rounded-[5px] border-0 bg-transparent px-2 py-2 font-mono text-xs text-muted hover:bg-raised hover:text-fg">
-            <RotateCcw size={13} /> reset
-          </button>
-          <div class="flex gap-2">
-            <button type="button" onClick={props.onClose} class="cursor-pointer rounded-[5px] border border-edge bg-transparent px-3 py-2 font-mono text-xs text-muted hover:border-edge-bright hover:text-fg">cancel</button>
-            <button type="button" disabled={saving() || uploading() || !imageReady()} onClick={() => void save()} class="cursor-pointer rounded-[5px] border border-accent bg-accent px-3 py-2 font-mono text-xs font-semibold text-white disabled:cursor-default disabled:opacity-60">{saving() ? 'saving…' : 'save preview'}</button>
-          </div>
-        </div>
-      </footer>
+    </div>}>
+    <div class="mb-3 flex items-center gap-3">
+      <input ref={uploadInput} hidden type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" aria-label="Upload social preview image" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload(file); }} />
+      <Button variant="secondary" size="sm" disabled={uploading() || saving()} onClick={() => uploadInput?.click()}>{uploading() ? 'uploading…' : imageId() ? 'replace image' : 'upload image'}</Button>
+      <Show when={imageId()}><Button variant="ghost" size="sm" disabled={uploading() || saving()} onClick={useDocumentFraming}>use document framing</Button></Show>
     </div>
-  </div></Portal>;
+    <div class="min-h-0 flex-1 rounded-panel bg-raised p-3">
+      <div class="relative mx-auto aspect-[40/21] max-h-full overflow-hidden border border-edge bg-surface" aria-label="Social preview canvas">
+        <img src={previewUrl()} alt={imageId() ? 'Uploaded social preview' : 'Artifact preview'} draggable={false}
+          onLoad={onImageLoad} onError={() => { setImageFailed(true); setImageReady(false); }}
+          class={`pointer-events-none absolute h-auto max-w-none select-none ease-out motion-reduce:transition-none ${interacting() ? '' : 'transition-[left,top,width] duration-200'}`}
+          style={{ width: `${SOCIAL_PREVIEW_WIDTH / cameraWidth() * 100}%`, left: `${-cameraX() / cameraWidth() * 100}%`, top: `${-cameraY() / cameraHeight() * 100}%` }} />
+        <Show when={!imageReady() && !imageFailed()}>
+          <div role="status" aria-live="polite" class="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
+            <span aria-hidden="true" class="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent motion-reduce:animate-none" />
+            <span>{imageId() ? 'loading image…' : 'rendering full-page overview…'}</span>
+            <Show when={!imageId()}><span class="text-micro text-faint">Complex artifacts can take a few seconds.</span></Show>
+          </div>
+        </Show>
+        <Show when={imageFailed()}>
+          <div role="status" class="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
+            <span>The preview could not be loaded.</span>
+            <Button variant="secondary" size="sm" onClick={() => { setImageFailed(false); setPreviewAttempt(value => value + 1); }}>retry</Button>
+          </div>
+        </Show>
+        <Show when={imageReady()}>
+          <div ref={frame} role="group" tabIndex={0} aria-label="Move social preview crop" aria-valuetext={`x ${Math.round(crop().x)}, y ${Math.round(crop().y)}, width ${Math.round(crop().width)}`}
+            onKeyDown={moveByKey} onPointerDown={begin('move')} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+            class={`absolute cursor-move border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] outline-none ease-out focus:ring-2 focus:ring-accent focus:ring-offset-2 motion-reduce:transition-none ${interacting() ? '' : 'transition-[left,top,width,height] duration-200'}`}
+            style={{ left: `${(crop().x - cameraX()) / cameraWidth() * 100}%`, top: `${(crop().y - cameraY()) / cameraHeight() * 100}%`, width: `${crop().width / cameraWidth() * 100}%`, height: `${height() / cameraHeight() * 100}%`, 'touch-action': 'none' }}>
+            <Show when={!imageId() && !interacting()}>
+              <img src={focusedUrl()} alt="" aria-hidden="true" draggable={false} onLoad={() => setLoadedFocusedUrl(focusedUrl())}
+                class={`pointer-events-none absolute inset-0 h-full w-full select-none transition-opacity duration-150 motion-reduce:transition-none ${focusedReady() ? 'opacity-100' : 'opacity-0'}`} />
+              <Show when={!focusedReady()}>
+                <span aria-live="polite" class="absolute right-1.5 top-1.5 flex items-center gap-1.5 rounded-chip bg-surface/80 px-2 py-1 font-mono text-micro text-fg">
+                  <span aria-hidden="true" class="h-2.5 w-2.5 animate-spin rounded-full border border-edge-bright border-t-accent motion-reduce:animate-none" />
+                  sharpening…
+                </span>
+              </Show>
+            </Show>
+            <span class="absolute left-1 top-1 bg-accent px-1.5 py-1 font-mono text-micro text-action-ink">1600 × 840 · {magnification()}%</span>
+            <div role="slider" tabIndex={0} aria-label="Resize social preview crop"
+              aria-valuemin={imageId() ? Math.min(SOCIAL_PREVIEW_MIN_CROP_WIDTH, imageCropMaxWidth(sourceHeight())) : SOCIAL_PREVIEW_MIN_CROP_WIDTH}
+              aria-valuemax={imageId() ? imageCropMaxWidth(sourceHeight()) : SOCIAL_PREVIEW_WIDTH}
+              aria-valuenow={Math.round(crop().width)}
+              onKeyDown={resizeByKey} onPointerDown={begin('resize')} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+              class="absolute -bottom-2 -right-2 h-5 w-5 cursor-se-resize rounded-full border-2 border-surface bg-accent shadow outline-none focus:ring-2 focus:ring-accent" style={{ 'touch-action': 'none' }} />
+          </div>
+        </Show>
+      </div>
+    </div>
+    <Show when={error()}><p role="status" class="mt-3 font-mono text-2xs text-danger">{error()}</p></Show>
+  </Dialog>;
 }

@@ -1,6 +1,8 @@
 /* @jsxImportSource solid-js */
 import { TransferOwnershipDialog } from '../components/TransferOwnershipDialog';
 import { createSignal, Show, type JSX } from 'solid-js';
+import { Button } from '../ui/Button';
+import { MicroLabel } from '../ui/ui';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import Pencil from 'lucide-solid/icons/pencil';
 import { DeleteAction } from './DeleteAction';
@@ -12,7 +14,9 @@ import { LikeAction } from './LikeAction';
 import { DocumentPeople } from './DocumentPeople';
 import { RefreshDocumentAssets } from './RefreshDocumentAssets';
 
-const ROW = 'flex w-full items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg';
+/** A link row of the controls panel, drawn like a ghost `sm` Button (a Button is a <button>; these rows navigate). */
+const ROW = 'flex min-h-control-sm w-full items-center gap-2 rounded-control px-2.5 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg';
+const ROW_BUTTON = 'w-full justify-start';
 interface DocumentActionsProps {
   groupId?:string|null;
   pwaEnabled?: boolean; membershipAvailable?: boolean;
@@ -39,18 +43,18 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
   return <div class="space-y-4" aria-label="Document actions">
     <Show when={props.membershipAvailable}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} hideJoin /></Show>
     <section aria-label="Document actions" class="space-y-1">
-      <h2 class="px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
+      <h2 class="px-2"><MicroLabel>Artifact</MicroLabel></h2>
       <Show when={props.forkedFrom}>{source => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{href => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>
-      <Show when={activeCommenter()}><button type="button" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW}><MessageSquare size={14} /><span class="flex-1">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></button></Show>
-      <Show when={activeEditor()}><button type="button" aria-label="Edit artifact" onClick={props.onEdit} class={ROW}><Pencil size={14} />edit artifact</button></Show>
+      <Show when={activeCommenter()}><Button variant="ghost" size="sm" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW_BUTTON}><MessageSquare size={14} /><span class="flex-1 text-left">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></Button></Show>
+      <Show when={activeEditor()}><Button variant="ghost" size="sm" aria-label="Edit artifact" onClick={props.onEdit} class={ROW_BUTTON}><Pencil size={14} />edit artifact</Button></Show>
       <Show when={props.pwaEnabled && !props.archived}><InstallArtifactLink id={props.id} class={ROW} /></Show>
       <Show when={props.accountSession && !props.archived}><a href={`/schedules?artifact=${encodeURIComponent(props.id)}`} class={ROW}>Schedule artifact</a></Show>
       <DownloadOffline id={props.id} version={props.archived ? props.version : undefined} />
       <Show when={!props.hideFork}><ForkArtifact id={props.id} title={props.title} /></Show>
       <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} />
     </section>
-    <Show when={activeOwner()}><section aria-label="Owner actions" class="space-y-1"><h2 class="px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
-      <button type="button" class={ROW} aria-label={`Transfer ownership of ${props.title}`} onClick={()=>setTransferring(true)}>transfer ownership</button>
+    <Show when={activeOwner()}><section aria-label="Owner actions" class="space-y-1"><h2 class="px-2"><MicroLabel>owner</MicroLabel></h2>
+      <Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label={`Transfer ownership of ${props.title}`} onClick={()=>setTransferring(true)}>transfer ownership</Button>
       <RefreshDocumentAssets id={props.id} />
       <DocumentSharing id={props.id} title={props.title} owner variant="menu" onOpen={props.onShare} />
       <Show when={props.onDeleted}><DeleteAction id={props.id} title={props.title} onDeleted={props.onDeleted!} /></Show>

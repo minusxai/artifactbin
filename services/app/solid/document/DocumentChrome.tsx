@@ -21,9 +21,10 @@ import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { sharingIconFor, VISIBILITY_ICON_NODES } from '@/lib/workspace/visibility-icons';
 import type { Visibility } from '@artifactbin/contracts';
 import { PageChrome, type Panel } from '../components/PageChrome';
+import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { DocumentTitle } from '../components/PageBar';
-import { DocumentCommentAction, DocumentEditAction, DOCUMENT_ACTION_CLASS } from './DocumentBarActions';
+import { DocumentCommentAction, DocumentEditAction } from './DocumentBarActions';
 import { Avatar } from '../ui/Avatar';
 import { sendReaction } from './reactions';
 
@@ -63,8 +64,8 @@ interface DocumentChromeProps {
   controls: (close: () => void) => JSX.Element;
 }
 
-const RAIL_BUTTON = DOCUMENT_ACTION_CLASS;
-const PILL = 'shrink-0 cursor-pointer rounded-full border border-edge bg-transparent px-2 py-0.5 font-mono text-[11px] text-muted hover:border-accent hover:text-accent';
+/** The Install link is a link (it navigates to the app), drawn like the rail's ghost `sm` buttons. */
+const RAIL_LINK = 'flex h-control-sm min-w-control-sm items-center justify-center gap-1 rounded-control px-2.5 font-mono text-xs text-muted no-underline transition-colors hover:bg-raised hover:text-fg';
 
 function SharingGlyph(props: { visibility: Visibility; invited: boolean }): JSX.Element {
   const nodes = () => VISIBILITY_ICON_NODES[sharingIconFor({ visibility: props.visibility, hasInvitedUsers: props.invited })];
@@ -101,9 +102,9 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
         <Show when={props.author?.id}>{(authorId) => <Avatar image={props.author?.image ?? null} initial={handle()} userId={authorId()} size={20} />}</Show>@{handle()}
       </a>
       <Show when={follow()}>{(state) => (
-        <button type="button" class={PILL} aria-label={`${state().following ? 'Unfollow' : 'Follow'} @${handle()}`} aria-pressed={state().following} onClick={() => void toggleFollow()}>
+        <Button variant="secondary" size="sm" aria-label={`${state().following ? 'Unfollow' : 'Follow'} @${handle()}`} aria-pressed={state().following} onClick={() => void toggleFollow()}>
           {state().following ? 'following' : 'follow'}
-        </button>
+        </Button>
       )}</Show>
     </>}</Show>
     <ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" />
@@ -111,9 +112,9 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
       <span class="min-w-0 flex-1" ref={(element) => props.titleHost?.(element)} />
     </Show>
     <Show when={!props.archived && !editing() && props.membership}>
-      <button type="button" class={PILL} aria-label={membershipLabel()} onClick={() => props.onMembership()}>
+      <Button variant="secondary" size="sm" aria-label={membershipLabel()} onClick={() => props.onMembership()}>
         {props.membership === 'joined' ? 'Joined' : props.membership === 'pending' ? 'Pending' : 'Join'}
-      </button>
+      </Button>
     </Show>
     <Show when={props.archived}>{(at) => (
       <span class="shrink-0 truncate text-muted" data-mx-archived-version={at().version} data-mx-archived-head={at().head}>{archivedBanner(at().version, at().head)}</span>
@@ -123,17 +124,17 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const actions = <>
     <Show when={reading()}>
       <Tooltip content={like().liked ? 'Unlike' : 'Like'}>
-        <button type="button" class={RAIL_BUTTON} aria-label={like().liked ? 'Unlike' : 'Like'} aria-pressed={like().liked} onClick={() => void toggleLike()}>
+        <Button variant="ghost" size="sm" aria-label={like().liked ? 'Unlike' : 'Like'} aria-pressed={like().liked} onClick={() => void toggleLike()}>
           <Heart size={18} stroke-width={1.5} fill={like().liked ? 'currentColor' : 'none'} />
           <Show when={like().count > 0}><span>{like().count}</span></Show>
-        </button>
+        </Button>
       </Tooltip>
       <DocumentCommentAction count={props.comments()} onClick={props.onComment} />
       <Show when={props.canFork}>
-        <Tooltip content="Fork artifact"><button type="button" class={`${RAIL_BUTTON} hidden sm:flex`} aria-label="Fork artifact" onClick={() => props.onFork()}><GitFork size={18} stroke-width={1.5} /></button></Tooltip>
+        <span class="hidden sm:contents"><Tooltip content="Fork artifact"><Button variant="ghost" size="sm" icon aria-label="Fork artifact" onClick={() => props.onFork()}><GitFork size={18} stroke-width={1.5} /></Button></Tooltip></span>
       </Show>
       <Show when={props.install}>
-        <Tooltip content="Install app"><a class={`${RAIL_BUTTON} hidden sm:flex`} href={`${artifactAppPath(props.id)}?install=1`} aria-label="Install app"><Download size={18} stroke-width={1.5} /></a></Tooltip>
+        <Tooltip content="Install app"><a class={`${RAIL_LINK} hidden sm:flex`} href={`${artifactAppPath(props.id)}?install=1`} aria-label="Install app"><Download size={18} stroke-width={1.5} /></a></Tooltip>
       </Show>
     </Show>
     <Show when={props.canEdit && !props.archived}>
@@ -141,9 +142,9 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
     </Show>
     <Show when={props.owner && !props.archived}>
       <Tooltip content="Share">
-        <button type="button" class={`${RAIL_BUTTON} border border-edge px-2.5`} aria-label="Share" onClick={() => props.onShare()}>
+        <Button variant="secondary" size="sm" aria-label="Share" onClick={() => props.onShare()}>
           <SharingGlyph visibility={props.visibility ?? 'private'} invited={props.hasInvitedUsers ?? false} /><span class="hidden sm:inline">Share</span>
-        </button>
+        </Button>
       </Tooltip>
     </Show>
   </>;

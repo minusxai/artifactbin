@@ -10,6 +10,7 @@ import Eye from 'lucide-solid/icons/eye';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import X from 'lucide-solid/icons/x';
 import { timeAgo } from '../ui/ui';
+import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import MobileSheet, { isPhoneViewport } from '../ui/MobileSheet';
 import type { ArtifactVersionSummary } from '@/lib/artifact-backend/types';
@@ -21,6 +22,7 @@ interface VersionHistoryProps {
   topOffset?: number; embedded?: boolean; sheet?: boolean;
 }
 const ROW = (selected: boolean) =>
+  // GAP (solid/ui): a selectable list row (a full-width, two-line, bordered item with a selected state) has no primitive; ListRow is not interactive.
   `border-b border-edge px-3 py-2.5 transition-colors ${selected ? 'border-l-2 border-l-accent bg-accent-soft' : 'border-l-2 border-l-transparent hover:bg-raised'}`;
 
 export function VersionHistory(props: VersionHistoryProps): JSX.Element {
@@ -31,15 +33,15 @@ export function VersionHistory(props: VersionHistoryProps): JSX.Element {
   });
   const head = () => <header class="flex items-center justify-between border-b border-edge px-3 py-2">
     <span class="font-mono text-xs font-semibold text-fg">history</span>
-    <Tooltip content="close"><button type="button" aria-label="Close version history" onClick={() => props.onClose()} class="cursor-pointer rounded p-1 text-muted hover:text-fg"><X size={13} /></button></Tooltip>
+    <Tooltip content="close"><Button variant="ghost" size="sm" icon aria-label="Close version history" onClick={() => props.onClose()}><X size={13} /></Button></Tooltip>
   </header>;
   const content = () => <>
     <div class="flex-1 overflow-y-auto">
       <button type="button" aria-label="Show the current version" onClick={() => props.onBackToCurrent()} class={`flex w-full items-baseline justify-between text-left ${ROW(props.previewing === null)}`}>
         <span class={`font-mono text-xs font-semibold ${props.previewing === null ? 'text-accent' : 'text-fg'}`}>v{props.currentVersion}</span>
-        <span class="font-mono text-[10px] text-muted">current</span>
+        <span class="font-mono text-micro text-muted">current</span>
       </button>
-      <Show when={props.versions.length === 0}><p class="px-3 py-3 font-mono text-[11px] text-muted">no earlier versions yet.</p></Show>
+      <Show when={props.versions.length === 0}><p class="px-3 py-3 font-mono text-2xs text-muted">no earlier versions yet.</p></Show>
       <For each={props.versions}>{(version) => {
         const selected = () => props.previewing === version.version;
         return <div role="button" tabIndex={0} aria-label={`Preview version ${version.version}`} aria-pressed={selected()}
@@ -48,24 +50,24 @@ export function VersionHistory(props: VersionHistoryProps): JSX.Element {
           class={`group cursor-pointer ${ROW(selected())}`}>
           <div class="flex min-w-0 items-baseline gap-1.5">
             <span class={`shrink-0 font-mono text-xs ${selected() ? 'font-semibold text-accent' : 'text-fg'}`}>v{version.version}</span>
-            <Show when={version.title}><span class="truncate font-sans text-[11px] text-muted">· {version.title}</span></Show>
-            <span class="ml-auto flex shrink-0 items-center gap-1.5 font-mono text-[10px] text-muted">
+            <Show when={version.title}><span class="truncate font-sans text-2xs text-muted">· {version.title}</span></Show>
+            <span class="ml-auto flex shrink-0 items-center gap-1.5 font-mono text-micro text-muted">
               <Eye size={11} aria-hidden="true" class={`transition-opacity ${selected() ? 'opacity-0' : 'opacity-0 group-hover:opacity-70'}`} />
               <Show when={version.by}><span aria-label={`Version ${version.version} by ${version.by}`}>@{version.by} ·</span></Show>
               {timeAgo(version.created_at)}
             </span>
           </div>
           <Show when={selected()}>
-            <button type="button" aria-label={`Restore version ${version.version}`} disabled={props.busy}
+            <Button variant="secondary" size="sm" aria-label={`Restore version ${version.version}`} disabled={props.busy}
               onClick={(event) => { event.stopPropagation(); props.onRestore(version.version); }}
-              class="mt-1.5 inline-flex cursor-pointer items-center gap-1 rounded-[4px] border border-accent/40 px-1.5 py-0.5 font-mono text-[10px] text-accent hover:bg-accent/10 disabled:opacity-50">
+              class="mt-1.5">
               <RotateCcw size={11} /> restore
-            </button>
+            </Button>
           </Show>
         </div>;
       }}</For>
     </div>
-    <p class="border-t border-edge px-3 py-2 font-mono text-[10px] leading-relaxed text-muted">Restoring creates a new version and keeps the current version in history.</p>
+    <p class="border-t border-edge px-3 py-2 font-mono text-micro leading-relaxed text-muted">Restoring creates a new version and keeps the current version in history.</p>
   </>;
   if (isPhoneViewport() || props.sheet) {
     return <MobileSheet label="Version history" onClose={() => props.onClose()} size="half" header={head()} swipeToClose={props.sheet}>
