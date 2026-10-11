@@ -474,7 +474,7 @@ it('does not fetch the editor part on idle for a writer reading a large document
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(editorDoorFetches()).toBe(0);
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  fireEvent.click(within(controls()).getByRole('button', { name: 'Edit artifact' }));
+  fireEvent.click(within(await controls()).getByRole('button', { name: 'Edit artifact' }));
   await waitFor(() => expect(editorDoorFetches()).toBe(1));
 });
 
