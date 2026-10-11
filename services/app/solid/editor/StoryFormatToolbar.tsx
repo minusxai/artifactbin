@@ -51,7 +51,7 @@ import { selectionToolbarPlan } from '@/solid/lib/selection-toolbar';
 import type { MarkdownBlockKind, MarkdownTableAction, StoryEditSelection } from '@/lib/edit-protocol';
 import type { ComposableFormatEdit } from '@/lib/document/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
-import { SelectMenu } from '@/solid/ui/SelectMenu';
+import { Select } from '@/solid/ui/Select';
 import { Tooltip } from '@/solid/ui/Tooltip';
 import { nodeName } from '@/lib/story-ui/node-names';
 
@@ -218,7 +218,7 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
                 <Chip label="Toggle italic" on={selection().inline?.em ?? currentChoice(cls(), 'fontStyle') === 'italic'} onClick={() => toggle('fontStyle', 'italic')}><Italic size={14} /></Chip>
                 <Show when={selection().tag !== 'Markdown'}><Chip label="Toggle underline" on={selection().inline?.u ?? currentChoice(cls(), 'decoration') === 'underline'} onClick={() => toggle('decoration', 'underline')}><Underline size={14} /></Chip></Show>
                 <Show when={selection().tag === 'Markdown' && props.onMarkdownBlock}>
-                  <SelectMenu ariaLabel="Markdown block style" value={selection().markdownBlock ?? ''}
+                  <Select size="sm" ariaLabel="Markdown block style" value={selection().markdownBlock ?? ''}
                     placeholder={selection().markdownBlock === 'mixed' ? 'Mixed styles' : 'Text style'}
                     options={MARKDOWN_BLOCK_OPTIONS} disabled={selection().markdownBlock === 'table'}
                     onChange={value => props.onMarkdownBlock?.(value as MarkdownBlockKind)} />

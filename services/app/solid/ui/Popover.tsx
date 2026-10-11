@@ -11,11 +11,12 @@
  * closes any other open popup. Opening never steals focus from the trigger (Radix's onOpenAutoFocus prevented) — a
  * field inside the panel that wants focus asks for it itself (the `autofocus` attribute, or a ref).
  */
-import { createEffect, createSignal, createUniqueId, on, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, createUniqueId, on, onCleanup, Show, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { placePopper, type Align, type Side } from '@/lib/islands/kit/popper';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
+import { LAYER } from './layers';
 
 export interface PopoverTriggerAttrs {
   ref: (el: HTMLElement) => void;
@@ -35,8 +36,8 @@ export function Popover(props: {
   sideOffset?: number;
   /** Extra classes on the panel surface. */
   class?: string;
-  /** role="listbox" for a select-style panel; omitted (plain group) for a menu of controls. */
-  role?: 'listbox';
+  /** role="listbox" for a Select's panel, "menu" for a Menu's; omitted (plain group) for a panel of controls. */
+  role?: 'listbox' | 'menu';
   onPanelKeyDown?: (event: KeyboardEvent) => void;
   children: JSX.Element;
 }): JSX.Element {
@@ -45,9 +46,12 @@ export function Popover(props: {
   const id = createUniqueId();
   const announce = popupDismiss(() => props.open, () => props.onOpenChange(false), anchor, panel);
   createEffect(on(() => props.open, (open) => { if (open) announce(); }));
+  // The trigger is built ONCE; `aria-expanded` is a getter, so opening updates the attribute in place and
+  // never recreates the trigger node (focus, tooltips and a caller's captured element all survive).
+  const attrs: PopoverTriggerAttrs = { ref: setAnchor, 'aria-haspopup': 'true', get 'aria-expanded'() { return props.open; } };
   return (
     <>
-      {props.trigger({ ref: setAnchor, 'aria-haspopup': 'true', 'aria-expanded': props.open })}
+      {untrack(() => props.trigger(attrs))}
       <Show when={props.open}>
         <Portal mount={trustedPortalOf(document) ?? document.body}>
           <PopoverPanel
@@ -78,7 +82,7 @@ function PopoverPanel(p: {
   align: Align;
   sideOffset: number;
   class?: string;
-  role?: 'listbox';
+  role?: 'listbox' | 'menu';
   onKeyDown?: (event: KeyboardEvent) => void;
   ref: (el: HTMLElement) => void;
   children: JSX.Element;
@@ -98,7 +102,7 @@ function PopoverPanel(p: {
       <div
         ref={(el) => { wrapper = el; p.ref(el); }}
         data-story-popper-wrapper=""
-        style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content', 'z-index': '200' }}
+        style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content', 'z-index': String(LAYER.popover) }}
       >
         <div
           id={p.id}
@@ -106,7 +110,7 @@ function PopoverPanel(p: {
           aria-label={p.label}
           data-story-floating=""
           onKeyDown={p.onKeyDown}
-          class={`border border-edge bg-surface shadow-lg ${p.class ?? ''}`}
+          class={`rounded-panel border border-edge bg-surface shadow-lg ${p.class ?? ''}`}
         >
           {p.children}
         </div>

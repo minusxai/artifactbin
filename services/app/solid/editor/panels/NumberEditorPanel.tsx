@@ -13,7 +13,7 @@
  * pick must be expressible without restating the binding.
  */
 import { createEffect, createSignal, on, Show, type JSX } from 'solid-js';
-import { SelectMenu } from '@/solid/ui/SelectMenu';
+import { Select } from '@/solid/ui/Select';
 import BoundQuery from '../BoundQuery';
 import type { TableChoice } from '@/lib/document/table-catalog';
 import { NUMBER_AGGS, type NumberEmbedBinding, type NumberEmbedEdit } from '@/lib/data/story/story-number';
@@ -71,7 +71,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
     <div class="flex flex-col gap-3" aria-label="Number editor">
       <div class="flex flex-col gap-1">
         <span class="font-mono text-[11px] text-faint">data</span>
-        <SelectMenu
+        <Select size="sm"
           ariaLabel="Table"
           value={props.binding.table ?? ''}
           onChange={(v) => {
@@ -104,7 +104,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
       >
         <div class="flex flex-col gap-1">
           <span class="font-mono text-[11px] text-faint">column</span>
-          <SelectMenu
+          <Select size="sm"
             ariaLabel="Column"
             value={props.binding.col ?? ''}
             onChange={(name) => { if ((name || null) !== props.binding.col) props.onChange({ col: name || null }); }}
@@ -118,7 +118,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
 
       <div class="flex flex-col gap-1">
         <span class="font-mono text-[11px] text-faint">aggregate</span>
-        <SelectMenu
+        <Select size="sm"
           ariaLabel="Aggregation"
           value={props.binding.agg ?? 'first'}
           onChange={(agg) => {

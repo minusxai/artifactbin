@@ -4,6 +4,7 @@ import type { ImageChoice } from '@/lib/artifact-backend/types';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/document/pwa-settings';
 import { InstallArtifactLink } from '../document/InstallArtifact';
+import { Switch } from '../ui/Checkbox';
 
 interface PwaSettingsPanelProps { id: string; title: string; source: string; onChange: (source: string) => void; onUpload: (file: File) => Promise<ImageChoice>; beforeInstall?: () => Promise<boolean> }
 const INPUT = 'mt-1 w-full rounded-md border border-edge bg-ground px-3 py-2 text-sm text-fg';
@@ -57,16 +58,11 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
 export function PwaSharingSetting(props: { source: string; onChange: (source: string) => void }) {
   const settings = () => readPwaSettings(props.source);
   return <section aria-label="App installation" class="mx-auto max-w-3xl border-t border-edge pt-5">
-    <label class="flex cursor-pointer items-center justify-between gap-4 text-sm font-medium text-fg">
+    <div class="flex items-center justify-between gap-4 text-sm font-medium text-fg">
       <span>Allow installation as a PWA</span>
-      <span class="relative inline-flex shrink-0"><input type="checkbox" role="switch" aria-label="Allow installation as a PWA" checked={settings().enabled === true}
-        onChange={event => props.onChange(writePwaSettings(props.source, { ...settings(), enabled: event.currentTarget.checked }))}
-        class="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0" />
-        <span aria-hidden="true" class="relative h-6 w-11 rounded-full bg-raised ring-1 ring-edge transition-colors peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
-          <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform" style={{ transform: settings().enabled ? 'translateX(20px)' : 'translateX(0)' }} />
-        </span>
-      </span>
-    </label>
+      <Switch label="Allow installation as a PWA" checked={settings().enabled === true}
+        onChange={enabled => props.onChange(writePwaSettings(props.source, { ...settings(), enabled }))} />
+    </div>
     <p class="mt-2 text-sm text-muted">Let readers install this artifact on their home screen or desktop. Sharing permissions still apply.</p>
     <Show when={settings().enabled}><p class="mt-2 text-xs text-muted">Customize its name, icon and colors in the PWA tab.</p></Show>
   </section>;

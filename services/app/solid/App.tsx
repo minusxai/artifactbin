@@ -114,6 +114,9 @@ export function App(): JSX.Element {
       <Route path="/docs-human" component={DocsPage} />
       <Route path="/groups" component={GroupsPage} />
       <Route path="/getting-started" component={GettingStartedPage} />
+      {/* The component gallery, development builds only: Vite folds `import.meta.env.DEV` to false in a production
+        * build, so this branch and its lazy chunk drop out of the bundle (the one documented lazy-import exception). */}
+      {import.meta.env.DEV && <Route path="/dev/ui" component={lazy(() => import('./pages/UiGallery'))} />}
       <Route path="/:user" component={ProfilePage} />
       {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/ProfileAlias.tsx
         * ProfileAliasRoute); a sibling `/:user/:alias` route here would overlap it and win first for

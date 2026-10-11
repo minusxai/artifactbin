@@ -21,6 +21,7 @@ import { Portal } from 'solid-js/web';
 import { placePopper, type Placed, type Side } from '@/lib/islands/kit/popper';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { ARROW_ORIGIN, ARROW_TRANSFORM, createTooltipTiming } from '@/lib/islands/kit/tooltip-core';
+import { LAYER } from './layers';
 
 export function Tooltip(props: { content: JSX.Element; children: JSX.Element; side?: Side; disabled?: boolean }): JSX.Element {
   const child = resolveChildren(() => props.children);
@@ -70,12 +71,12 @@ function TooltipPopper(p: { anchor: HTMLElement | undefined; id: string; side: S
   });
   const side = () => p.placed()?.side ?? p.side;
   return <div data-mx-theme-host="">
-    <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content', 'z-index': '100' }}>
+    <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content', 'z-index': String(LAYER.tooltip) }}>
       <div role="tooltip" id={p.id} data-side={p.placed()?.side} data-slot="tooltip-content" data-story-floating=""
-        class="pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md border border-edge-bright bg-surface px-2.5 py-1.5 text-left text-xs leading-normal text-fg shadow-md">
+        class="pointer-events-none w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-control border border-edge-bright bg-surface px-2.5 py-1.5 text-left text-xs leading-normal text-fg shadow-md">
         {p.children}
         <span ref={arrow} style={{ position: 'absolute', left: side() === 'right' ? '0px' : p.placed()?.arrowX !== undefined ? `${p.placed()!.arrowX}px` : undefined, top: side() === 'bottom' ? '0px' : p.placed()?.arrowY !== undefined ? `${p.placed()!.arrowY}px` : undefined, right: side() === 'left' ? '0px' : undefined, bottom: side() === 'top' ? '0px' : undefined, 'transform-origin': ARROW_ORIGIN[side()] || undefined, transform: ARROW_TRANSFORM[side()], visibility: p.placed()?.hideArrow ? 'hidden' : undefined }}>
-          <svg stroke="var(--color-edge-bright)" stroke-width="1" stroke-linejoin="round" class="z-[100] fill-surface" width="10" height="5" viewBox="0 0 30 10" preserveAspectRatio="none" style={{ display: 'block' }}><polygon points="0,0 30,0 15,10" /></svg>
+          <svg stroke="var(--color-edge-bright)" stroke-width="1" stroke-linejoin="round" class="fill-surface" width="10" height="5" viewBox="0 0 30 10" preserveAspectRatio="none" style={{ display: 'block' }}><polygon points="0,0 30,0 15,10" /></svg>
         </span>
       </div>
     </div>

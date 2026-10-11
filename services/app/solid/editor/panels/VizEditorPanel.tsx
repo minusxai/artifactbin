@@ -20,7 +20,7 @@
  * flat scale — wrong without looking wrong.
  */
 import { createEffect, createSignal, For, on, Show, type JSX } from 'solid-js';
-import { SelectMenu } from '@/solid/ui/SelectMenu';
+import { Select } from '@/solid/ui/Select';
 import BoundQuery from '../BoundQuery';
 import type { TableChoice } from '@/lib/document/table-catalog';
 import {
@@ -223,7 +223,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
         <TitleField title={props.title} onCommit={props.onTitleChange} />
         <div class="flex flex-col gap-1">
           <span class="font-mono text-[11px] text-faint">data</span>
-          <SelectMenu
+          <Select size="sm"
             ariaLabel="Table"
             value={props.table ?? ''}
             onChange={(v) => emit(envelope(), v || null)}
@@ -249,7 +249,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
           fallback={
             <div class="flex flex-col gap-1">
               <span class="font-mono text-[11px] text-faint">chart</span>
-              <SelectMenu
+              <Select size="sm"
                 ariaLabel="Chart type"
                 value={chartType()}
                 onChange={(type) => {
@@ -274,7 +274,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
             return (
               <div class="flex flex-col gap-1">
                 <span class="font-mono text-[11px] text-faint">{zone.label.toLowerCase()}</span>
-                <SelectMenu
+                <Select size="sm"
                   ariaLabel={zone.label}
                   value={current()}
                   disabled={columns().length === 0}

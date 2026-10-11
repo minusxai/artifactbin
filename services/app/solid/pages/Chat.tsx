@@ -20,7 +20,8 @@ import { REMOTE_NAME } from '../../../contracts/src/remote';
 import { connectedAgentStatus, isConnectedAgent } from '../lib/connected-agents';
 import { isTerminalProtocolReply } from '../lib/terminal-input';
 import { Tooltip } from '../ui/Tooltip';
-import { Button } from '../ui/ui';
+import { Button } from '../ui/Button';
+import { Textarea } from '../ui/Field';
 import { usePageData } from '../lib/use-page-data';
 import { copyText } from '../lib/copy-text';
 import { startManagedRun } from '../lib/managed-run-retry';
@@ -292,7 +293,7 @@ function ManagedRunSetup(props:{onCreated:(session:RemoteSessionInfo)=>void}):JS
     <h2 class="font-semibold">Start a hosted box</h2><p class="text-xs text-muted">Run a shell or agent on a hosted machine. Sign in to Claude or Codex after the terminal opens.</p>
     <AgentNameField value={name()} onInput={setName} disabled={busy()} />
     <div><p class="mb-2 text-sm">Program</p><div class="agent-harness-choices" role="group" aria-label="Hosted program"><For each={([['bash', 'Shell'], ['claude', 'Claude Code'], ['codex', 'Codex'], ['pi', 'Pi'], ['opencode', 'OpenCode']] as const)}>{([value, label]) => <button type="button" disabled={busy()} aria-pressed={command() === value} onClick={() => setCommand(value)}>{label}</button>}</For></div></div>
-    <label class="block text-sm">SSH public key (optional)<textarea aria-label="SSH public key" disabled={busy()} class="mt-1 w-full rounded border border-edge bg-surface p-2" value={key()} onInput={e=>setKey(e.currentTarget.value)} placeholder="ssh-ed25519 …" /></label>
+    <label class="block text-sm">SSH public key (optional)<Textarea aria-label="SSH public key" disabled={busy()} class="mt-1" value={key()} onInput={e=>setKey(e.currentTarget.value)} placeholder="ssh-ed25519 …" /></label>
     <p class="text-xs text-muted">Up to 1 hour per run. Sign in to your agent in the terminal. The same agent keeps its login, files and conversation across restarts.</p>
     <button class="rounded bg-accent px-3 py-2 text-bg disabled:opacity-40" disabled={busy()}>{busy()?'Starting…':'Start hosted box'}</button>
     <Show when={busy()}><button type="button" class="rounded border border-edge px-3 py-2" onClick={stopWaiting}>Stop waiting</button></Show>

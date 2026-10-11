@@ -8,7 +8,7 @@ import { artifactEditPath } from '@/lib/http/urls';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { SharingVerdict } from '@/lib/workspace/visibility-icons';
 import { Tooltip } from '../ui/Tooltip';
-import { SelectMenu } from '../ui/SelectMenu';
+import { Select } from '../ui/Select';
 import { sharingIconFor, VISIBILITY_ICON_NODES, type SharingIcon } from '@/lib/workspace/visibility-icons';
 import Check from 'lucide-solid/icons/check';
 import LinkIcon from 'lucide-solid/icons/link';
@@ -152,7 +152,7 @@ export function DocumentSharing(props: {
       }</For></div>
       <Show when={current().visibility !== 'private'}>
         <label class="mt-2 flex items-center justify-between gap-2 text-muted"><span>anyone with the link</span>
-          <span class="w-32 shrink-0"><SelectMenu ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></span>
+          <span class="w-32 shrink-0"><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></span>
         </label>
       </Show>
       <Show when={postgres()}><p aria-label="PostgreSQL read-only access" class="mt-5 border-t border-edge pt-4 leading-relaxed text-muted">Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.</p></Show>
@@ -184,7 +184,7 @@ export function DocumentSharing(props: {
           <span class="min-w-0 truncate">{person.email}</span>
           <span class="flex shrink-0 items-center gap-1">
             <Tooltip content="already viewable by link" disabled={current().visibility === 'private' || person.role === 'editor'}>
-              <span class="w-32 shrink-0" data-slot={current().visibility !== 'private' && person.role !== 'editor' ? 'tooltip-trigger' : undefined}><SelectMenu ariaLabel={`Role for ${person.email}`} value={person.role} options={ROLE_OPTIONS}
+              <span class="w-32 shrink-0" data-slot={current().visibility !== 'private' && person.role !== 'editor' ? 'tooltip-trigger' : undefined}><Select size="sm" ariaLabel={`Role for ${person.email}`} value={person.role} options={ROLE_OPTIONS}
                 onChange={role => void put({ shares: current().shares.map(entry => entry.email === person.email ? { ...entry, role: role as ShareRole } : entry) })} /></span>
             </Tooltip>
             <button type="button" aria-label={`Remove ${person.email}`} onClick={() => void put({ shares: current().shares.filter(entry => entry.email !== person.email) })} class="cursor-pointer text-muted hover:text-fg"><X size={11} /></button>

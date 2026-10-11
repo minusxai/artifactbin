@@ -53,12 +53,12 @@ it('keeps a folder menu open when deferred insights arrive', async () => {
   open();
   const trigger = await screen.findByRole('button', { name: 'More actions for Reports' });
   fireEvent.click(trigger);
-  expect(screen.getByRole('button', { name: 'Delete Reports' })).toHaveTextContent('1 inside');
+  expect(screen.getByRole('menuitem', { name: 'Delete Reports' })).toHaveTextContent('1 inside');
   pending.resolve(response({ signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 7 }, viewsOverTime: [], views: { ABC123: 7 }, likes: 0, likesOverTime: [], followers: 0, forks: 0, sparklines: {} }));
   expect(await screen.findByLabelText('Dashboard metrics')).toHaveTextContent('7');
   expect(screen.getByRole('button', { name: 'More actions for Reports' })).toBe(trigger);
-  expect(screen.getByRole('button', { name: 'Delete Reports' })).toHaveTextContent('1 inside');
-  expect(screen.getByRole('button', { name: 'Rename Reports' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Delete Reports' })).toHaveTextContent('1 inside');
+  expect(screen.getByRole('menuitem', { name: 'Rename Reports' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Edit Reports' })).toBeNull();
 });
 

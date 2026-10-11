@@ -2,7 +2,8 @@
 import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from 'solid-js';
 import Users from 'lucide-solid/icons/users';
 import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
-import { Button, Input } from '../ui/ui';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Field';
 import { apiFetch } from '../lib/api';
 import { primeShared, sharedRequest } from '@/lib/http/shared-request';
 type Person = { user_id: string; username: string; name: string | null };
@@ -63,14 +64,14 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
               <p class="text-xs">{self()?.direction === 'request' ? 'Waiting for an owner or editor to approve.' : 'You’ve been invited to join.'}</p>
               <div class="flex gap-2">
                 <Show when={self()?.direction === 'invitation' || current().canManage}><Button disabled={busy()} onClick={() => void act({ action: current().canManage && self()?.direction === 'request' ? 'join' : 'accept' })}>{current().canManage && self()?.direction === 'request' ? 'Join artifact' : 'Accept invitation'}</Button></Show>
-                <Button variant="ghost" disabled={busy()} onClick={() => void act({ action: 'dismiss' })}>{self()?.direction === 'request' ? 'Withdraw request' : 'Decline'}</Button>
+                <Button variant="secondary" disabled={busy()} onClick={() => void act({ action: 'dismiss' })}>{self()?.direction === 'request' ? 'Withdraw request' : 'Decline'}</Button>
               </div>
             </div>
           </Show>}>
           <div class="flex items-center justify-between gap-2">
             <span class="text-xs text-accent">{self()?.explicit_join ? 'You’re a member' : 'Invitation automatically accepted'}</span>
             <Show when={!self()?.explicit_join}><Button disabled={busy()} onClick={() => void act({ action: 'join' })}>Join artifact</Button></Show>
-            <Button variant="ghost" disabled={busy()} onClick={() => void act({ action: 'leave' })}>Leave</Button>
+            <Button variant="secondary" disabled={busy()} onClick={() => void act({ action: 'leave' })}>Leave</Button>
           </div>
         </Show>
         <ul class="divide-y divide-edge"><For each={current().members}>{member => <li class="flex items-center gap-3 py-2.5">
@@ -82,7 +83,7 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
           <p class="text-xs">@{member.username ?? member.user_id} · {member.direction === 'invitation' ? 'Invitation pending' : 'Wants to join'}</p>
           <div class="flex gap-2">
             <Show when={member.direction === 'request'}><Button disabled={busy()} onClick={() => void act({ action: 'approve', userId: member.user_id })}>Approve @{member.username ?? member.user_id}</Button></Show>
-            <Button variant="ghost" disabled={busy()} onClick={() => void act({ action: 'dismiss', userId: member.user_id })}>Dismiss</Button>
+            <Button variant="secondary" disabled={busy()} onClick={() => void act({ action: 'dismiss', userId: member.user_id })}>Dismiss</Button>
           </div>
         </div>}</For></Show>
         <Show when={current().canInvite}><div class="space-y-2 border-t border-edge pt-4">
