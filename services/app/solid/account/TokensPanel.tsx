@@ -2,10 +2,11 @@
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { Ban } from 'lucide-solid';
 import { usePageData } from '../lib/use-page-data';
-import { TABLE_ROW } from '../ui/ui';
 import { Button } from '../ui/Button';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../ui/Table';
+import { ToggleGroup } from '../ui/ToggleGroup';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface UserTokenView { id: string; name: string | null; status: 'active' | 'expired' | 'revoked'; created_at: string; deleted_at: string | null; expires_at: string | null; last_used_at: string | null }
@@ -17,6 +18,8 @@ export function TokensPanel(): JSX.Element {
   const [pageIndex, setPageIndex] = createSignal(0);
   const active = createMemo(() => (page.data()?.tokens ?? []).filter(token => token.status === 'active'));
   const history = createMemo(() => (page.data()?.tokens ?? []).filter(token => token.status !== 'active'));
+  // Stable option objects with live labels: ToggleGroup keys its buttons by option identity, so counts that change on a refresh must not rebuild them.
+  const viewOptions = [{ value: 'active', get label() { return `Active (${active().length})`; } }, { value: 'history', get label() { return `History (${history().length})`; } }];
   const filtered = () => view() === 'active' ? active() : history();
   const lastPage = () => Math.max(0, Math.ceil(filtered().length / 5) - 1);
   const currentPage = () => Math.min(pageIndex(), lastPage());
@@ -37,25 +40,23 @@ export function TokensPanel(): JSX.Element {
   return <Panel label="CLI connections" padding="none" class="overflow-hidden">
     <Show when={selected()}>{token => <ConfirmDialog title={`Revoke “${token().name ?? token().id}”?`} description="Agents using this token will stop working immediately. This cannot be undone." action="Revoke token" confirmLabel="Confirm revoke" danger busy={busy()} error={error()} onCancel={() => setSelected(null)} onConfirm={() => void revoke()} />}</Show>
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3">
-      <div class="flex gap-2" role="group" aria-label="Connection status">
-        <Button type="button" size="sm" variant={view() === 'active' ? 'primary' : 'secondary'} aria-pressed={view() === 'active'} onClick={() => switchView('active')}>Active ({active().length})</Button>
-        <Button type="button" size="sm" variant={view() === 'history' ? 'primary' : 'secondary'} aria-pressed={view() === 'history'} onClick={() => switchView('history')}>History ({history().length})</Button>
-      </div>
+      <ToggleGroup label="Connection status" value={view()} onChange={next => switchView(next as 'active' | 'history')}
+        options={viewOptions} />
       <span class="text-xs text-muted">{view() === 'active' ? 'Can access your account' : 'Expired and revoked connections'}</span>
     </div>
     <Show when={page.error()}><StatusMessage kind="error" class="m-4" action={<Button variant="secondary" size="sm" onClick={() => void page.refresh(true)}>Retry connections</Button>}>Could not load connections.</StatusMessage></Show>
     <Show when={!page.data() && !page.error()}><StatusMessage kind="loading" class="p-4">Loading connections…</StatusMessage></Show>
     <Show when={page.data()}>
       <Show when={visible().length} fallback={<StatusMessage kind="empty" class="p-5">{view() === 'active' ? 'No active connections. Run afbin auth to connect an agent.' : 'No connection history yet.'}</StatusMessage>}>
-        <div class="overflow-x-auto"><table aria-label="Connections" class="w-full table-fixed border-collapse text-left text-sm"><thead><tr class="text-xs text-muted">
-          <th scope="col" class="px-4 py-2.5 font-medium">Name</th><th scope="col" class="hidden w-24 px-3 py-2.5 font-medium lg:table-cell">Status</th><th scope="col" class="hidden w-28 px-3 py-2.5 font-medium lg:table-cell">Expires</th><th scope="col" class="hidden w-28 px-3 py-2.5 font-medium lg:table-cell">Last used</th><th scope="col" class="w-32 px-4 py-2.5 text-right font-medium">Action</th>
-        </tr></thead><tbody><For each={visible()}>{token => <tr aria-label={`Token row ${token.name ?? token.id}`} class={TABLE_ROW}>
-          <td class="px-4 py-2.5 align-middle"><div class="flex min-w-0 items-center gap-2"><span aria-label={`Token ${token.name ?? token.id} ${token.status} status dot`} class={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${token.status === 'active' ? 'bg-accent' : token.status === 'expired' ? 'bg-danger' : 'bg-faint'}`} /><span class="truncate font-mono text-xs">{token.name ?? '(unnamed)'}</span></div><div class="mt-1 text-xs text-muted lg:hidden">{token.status} · {token.expires_at ? `Expires ${relativeTime(token.expires_at)}` : 'No expiry'} · Last used {relativeTime(token.last_used_at)}</div></td>
-          <td aria-label={`Token ${token.name ?? token.id} status`} class="hidden px-3 py-2.5 text-xs text-muted lg:table-cell">{token.status}</td>
-          <td aria-label={`Token ${token.name ?? token.id} expires`} class="hidden whitespace-nowrap px-3 py-2.5 text-xs text-muted lg:table-cell">{token.expires_at ? relativeTime(token.expires_at) : 'No expiry'}</td>
-          <td aria-label={`Token ${token.name ?? token.id} last used`} class="hidden whitespace-nowrap px-3 py-2.5 text-xs text-muted lg:table-cell">{relativeTime(token.last_used_at)}</td>
-          <td class="px-4 py-2.5 text-right align-middle"><Show when={token.status !== 'revoked'} fallback={<span class="text-xs text-muted">Revoked</span>}><Button variant="danger" type="button" size="sm" aria-label={`Revoke token ${token.name ?? token.id}`} onClick={() => setSelected(token)}><Ban size={12} />Revoke</Button></Show></td>
-        </tr>}</For></tbody></table></div>
+        <Table label="Connections" fixed><TableHead>
+          <TableHeaderCell>Name</TableHeaderCell><TableHeaderCell class="hidden w-24 lg:table-cell">Status</TableHeaderCell><TableHeaderCell class="hidden w-28 lg:table-cell">Expires</TableHeaderCell><TableHeaderCell class="hidden w-28 lg:table-cell">Last used</TableHeaderCell><TableHeaderCell align="right" class="w-32">Action</TableHeaderCell>
+        </TableHead><TableBody><For each={visible()}>{token => <TableRow aria-label={`Token row ${token.name ?? token.id}`}>
+          <TableCell><div class="flex min-w-0 items-center gap-2"><span aria-label={`Token ${token.name ?? token.id} ${token.status} status dot`} class={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${token.status === 'active' ? 'bg-accent' : token.status === 'expired' ? 'bg-danger' : 'bg-faint'}`} /><span class="truncate font-mono text-xs">{token.name ?? '(unnamed)'}</span></div><div class="mt-1 text-xs text-muted lg:hidden">{token.status} · {token.expires_at ? `Expires ${relativeTime(token.expires_at)}` : 'No expiry'} · Last used {relativeTime(token.last_used_at)}</div></TableCell>
+          <TableCell aria-label={`Token ${token.name ?? token.id} status`} class="hidden text-xs text-muted lg:table-cell">{token.status}</TableCell>
+          <TableCell aria-label={`Token ${token.name ?? token.id} expires`} class="hidden whitespace-nowrap text-xs text-muted lg:table-cell">{token.expires_at ? relativeTime(token.expires_at) : 'No expiry'}</TableCell>
+          <TableCell aria-label={`Token ${token.name ?? token.id} last used`} class="hidden whitespace-nowrap text-xs text-muted lg:table-cell">{relativeTime(token.last_used_at)}</TableCell>
+          <TableCell align="right"><Show when={token.status !== 'revoked'} fallback={<span class="text-xs text-muted">Revoked</span>}><Button variant="danger" type="button" size="sm" aria-label={`Revoke token ${token.name ?? token.id}`} onClick={() => setSelected(token)}><Ban size={12} />Revoke</Button></Show></TableCell>
+        </TableRow>}</For></TableBody></Table>
       </Show>
       <Show when={filtered().length > 5}><div class="flex items-center justify-between gap-2 border-t border-edge px-4 py-3"><span role="status" class="text-xs text-muted">{currentPage() * 5 + 1}–{Math.min(currentPage() * 5 + 5, filtered().length)} of {filtered().length}</span><div class="flex gap-2"><Button variant="secondary" size="sm" aria-label="Previous connections page" disabled={currentPage() === 0} onClick={() => setPageIndex(currentPage() - 1)}>Previous</Button><Button variant="secondary" size="sm" aria-label="Next connections page" disabled={currentPage() === lastPage()} onClick={() => setPageIndex(currentPage() + 1)}>Next</Button></div></div></Show>
     </Show>

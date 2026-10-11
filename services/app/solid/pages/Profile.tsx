@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createMemo, createSignal, For, lazy, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation, useParams } from '@solidjs/router';
-import { Folder, LayoutGrid, List, Search } from 'lucide-solid';
+import { Folder, LayoutGrid, List } from 'lucide-solid';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/workspace/shelf';
 import type { ProfileSocial } from '@/lib/accounts';
@@ -13,8 +13,9 @@ import { Avatar } from '../ui/Avatar';
 import { usePageData } from '../lib/use-page-data';
 import { NotFoundPage } from './NotFound';
 import { apiFetch } from '../lib/api';
-import { FORM_PRIMARY_BUTTON } from '../ui/FormControls';
 import { Button } from '../ui/Button';
+import { SearchField } from '../ui/Field';
+import { ToggleGroup } from '../ui/ToggleGroup';
 import { Panel } from '../ui/Panel';
 import { SectionHeading } from '../ui/PageHeader';
 import { Badge } from '../ui/ui';
@@ -73,7 +74,7 @@ function Social(props: { ownerId: string; social: ProfileSocial; signedIn: boole
     finally { inFlight = false; setBusy(false); }
   };
   const label = () => following() ? 'Following' : props.social.relation?.followsYou ? 'Follow back' : 'Follow';
-  return <div role="group" aria-label="Follows" class="mt-3 flex flex-col gap-2"><div class="flex flex-wrap items-center gap-x-4 gap-y-2"><p class="flex flex-wrap items-center gap-x-3 text-sm text-muted"><span><strong class="text-fg">{props.social.following.toLocaleString('en-US')}</strong> Following</span><span><strong class="text-fg">{followers().toLocaleString('en-US')}</strong> {followers() === 1 ? 'Follower' : 'Followers'}</span><Show when={props.social.relation?.followsYou}><Badge>Follows you</Badge></Show></p><Show when={props.social.relation || !props.signedIn}><Show when={props.signedIn} fallback={<a href={loginHref(window.location)} aria-label="Follow" class={FORM_PRIMARY_BUTTON}>Follow</a>}><Button variant="secondary" type="button" aria-label={label()} aria-pressed={following()} disabled={busy()} onClick={() => void toggle()}>{label()}</Button></Show></Show></div><Show when={props.social.relation?.knownTotal}><p class="text-xs text-muted">Followed by <For each={props.social.relation?.known}>{(person, i) => <><Show when={i() > 0}>, </Show><a href={`/@${person.username}`}>{person.username}</a></>}</For></p></Show></div>;
+  return <div role="group" aria-label="Follows" class="mt-3 flex flex-col gap-2"><div class="flex flex-wrap items-center gap-x-4 gap-y-2"><p class="flex flex-wrap items-center gap-x-3 text-sm text-muted"><span><strong class="text-fg">{props.social.following.toLocaleString('en-US')}</strong> Following</span><span><strong class="text-fg">{followers().toLocaleString('en-US')}</strong> {followers() === 1 ? 'Follower' : 'Followers'}</span><Show when={props.social.relation?.followsYou}><Badge>Follows you</Badge></Show></p><Show when={props.social.relation || !props.signedIn}><Show when={props.signedIn} fallback={<Button href={loginHref(window.location)} aria-label="Follow">Follow</Button>}><Button type="button" aria-label={label()} pressed={following()} disabled={busy()} onClick={() => void toggle()}>{label()}</Button></Show></Show></div><Show when={props.social.relation?.knownTotal}><p class="text-xs text-muted">Followed by <For each={props.social.relation?.known}>{(person, i) => <><Show when={i() > 0}>, </Show><a href={`/@${person.username}`}>{person.username}</a></>}</For></p></Show></div>;
 }
 
 function ProfileShelf(props: { handle: string; rows: ShelfRow[] }): JSX.Element {
@@ -84,7 +85,7 @@ function ProfileShelf(props: { handle: string; rows: ShelfRow[] }): JSX.Element 
   const visible = createMemo(() => buildShelf(props.rows.filter(row => (row.format === 'markup' || row.format === 'folder') && `${row.title ?? ''} ${row.description ?? ''} ${row.format}`.toLowerCase().includes(query().trim().toLowerCase()))));
   const url = (row: ShelfRow) => canonicalArtifactPath(row, props.handle);
   return <section aria-label="Shelf" data-shelf-view={view()} class="flex flex-col gap-4">
-    <div class="flex min-h-12 items-center gap-3 rounded-lg border border-edge bg-surface px-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20"><Search size={18} class="text-faint" /><input aria-label="Search artifacts" placeholder="Search artifacts" value={query()} onInput={e => setQuery(e.currentTarget.value)} class="min-h-11 min-w-0 flex-1 border-0 bg-transparent text-sm text-fg focus:outline-none" /><div role="group" aria-label="Shelf view" class="ml-auto flex gap-1 border-l border-edge pl-2"><Button variant={view() === 'grid' ? 'secondary' : 'ghost'} icon type="button" aria-label="Grid view" aria-pressed={view() === 'grid'} onClick={() => choose('grid')}><LayoutGrid size={18} /></Button><Button variant={view() === 'list' ? 'secondary' : 'ghost'} icon type="button" aria-label="List view" aria-pressed={view() === 'list'} onClick={() => choose('list')}><List size={18} /></Button></div></div>
+    <div class="flex items-center gap-3"><SearchField label="Search artifacts" value={query()} onValue={setQuery} class="flex-1" /><ToggleGroup label="Shelf view" iconOnly size="md" value={view()} onChange={next => choose(next as 'grid' | 'list')} options={[{ value: 'grid', label: 'Grid view', icon: () => <LayoutGrid size={18} /> }, { value: 'list', label: 'List view', icon: () => <List size={18} /> }]} /></div>
     <Show when={query() && visible().documents.length + visible().folders.length === 0}><p aria-label="No matches" class="rounded-lg border border-edge bg-surface p-6 text-sm text-muted">No artifacts match your search.</p></Show>
     <Show when={view() === 'grid'} fallback={<div aria-label="Artifact list" role="region"><For each={[...visible().folders, ...visible().documents]}>{row => <a href={url(row)} rel="external" aria-label={`Open ${row.title ?? row.id}`} class="flex items-center justify-between gap-4 border-b border-edge px-3 py-4 text-sm text-fg no-underline transition-colors hover:bg-raised"><span>{row.title ?? 'Untitled'}</span><span class="font-mono text-xs text-muted">{new Date(row.updated_at).toLocaleDateString('en-US')}</span></a>}</For></div>}>
       <Show when={visible().folders.length}><section aria-label="Folders"><h2 class="mb-3 text-sm font-semibold text-fg">Folders</h2><ul class="grid grid-cols-2 gap-3 lg:grid-cols-4"><For each={visible().folders}>{row => <li class="rounded-lg border border-edge bg-surface p-4 transition-colors hover:bg-raised"><a href={url(row)} rel="external" aria-label={`Open folder ${row.title ?? row.id}`} class="block text-sm font-semibold text-fg no-underline"><Folder size={24} class="mb-4 text-accent" />{row.title ?? 'Untitled'}</a></li>}</For></ul></section></Show>

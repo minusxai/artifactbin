@@ -538,7 +538,7 @@ export function DatasetEditorPage({
   const content =
       <AssetWorkspace workspace="Dataset" tabs={loading() || loadFailed() ? [] : ['source', 'data', ...(id && kind() === 'stored' ? ['actions' as const] : []), ...(id ? ['sharing' as const] : [])]} active={section()} onSelect={setSection}
         actions={id && !loading() && !loadFailed() ? <div class="flex items-center gap-3 py-1">
-          <a href={`/a/${id}`} aria-label="Cancel editing" class="inline-flex min-h-9 items-center rounded-md border border-edge bg-surface px-3 text-sm text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent">Cancel</a>
+          <Button variant="secondary" href={`/a/${id}`} aria-label="Cancel editing">Cancel</Button>
           <span hidden={section() !== 'actions'} ref={setPolicySaveTarget} />
           <span hidden={section() === 'actions' || section() === 'sharing'}><Button aria-label="Save dataset" disabled={!title().trim() || Boolean(busy()) || sourceText() !== null} onClick={saveDataset}>{busy() === 'save' ? 'Saving…' : 'Save'}</Button></span>
         </div> : undefined}>
@@ -695,15 +695,10 @@ export function DatasetEditorPage({
                           <Input size="sm" aria-label={`Cell name ${index + 1}`} class="min-w-24 max-w-64 flex-1" placeholder="model_name" value={model.cell.name} onInput={e => updateModel(index, {
                       name: e.target.value
                     })} />
-                          {!model.legacy && <label class="ml-auto flex items-center gap-2 text-xs text-muted">
-                              <input aria-label={`Expose cell ${index + 1}`} type="checkbox" class="accent-accent" disabled={model.stale || !model.columns.length} checked={!model.stale && model.selected.length === model.columns.length && model.columns.length > 0} aria-checked={!model.stale && model.selected.length > 0 && model.selected.length < model.columns.length ? "mixed" : !model.stale && model.selected.length > 0} ref={node => {
-                        if (node) node.indeterminate = !model.stale && model.selected.length > 0 && model.selected.length < model.columns.length;
-                      }} onChange={e => setModels(items => items.map(m => m.cell.id === model.cell.id ? {
+                          {!model.legacy && <Checkbox size="sm" class="ml-auto text-muted" ariaLabel={`Expose cell ${index + 1}`} label="Expose" disabled={model.stale || !model.columns.length} checked={!model.stale && model.selected.length === model.columns.length && model.columns.length > 0} indeterminate={!model.stale && model.selected.length > 0 && model.selected.length < model.columns.length} onChange={checked => setModels(items => items.map(m => m.cell.id === model.cell.id ? {
                         ...m,
-                        selected: e.target.checked ? m.columns.map(c => c.name) : []
-                      } : m))} />
-                              Expose
-                            </label>}
+                        selected: checked ? m.columns.map(c => c.name) : []
+                      } : m))} />}
                           <Button aria-label={`Run cell ${index + 1}`} aria-keyshortcuts="Meta+Enter Control+Enter" variant="secondary" size="sm" disabled={!model.cell.name.trim() || !model.cell.sql.trim()} onClick={() => runCell(index)}>
                             <Play size={12} />
                             Run

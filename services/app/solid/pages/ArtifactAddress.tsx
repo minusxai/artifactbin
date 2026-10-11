@@ -13,6 +13,7 @@
  *    an answer the server inlined without its compiled page is a dead end (the 404 page), never a reload
  *    that would ask for the same answer again.
  */
+import { Button } from '../ui/Button';
 import { createEffect, lazy, Match, Show, Switch, type JSX } from 'solid-js';
 import { useLocation, useParams } from '@solidjs/router';
 import type { FolderPage as FolderData } from '@/lib/workspace/folders';
@@ -68,7 +69,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
     // A document found by a client navigation: the server's page for it is the compiled one.
     if (compiledDocument() && !served) replaceDocument(window.location.pathname + window.location.search + window.location.hash);
   });
-  return <Switch fallback={<main aria-label="Loading artifact" class={`${PAGE_COLUMN} mt-8 pb-24`}><Show when={page.error()} fallback="Loading artifact…"><button type="button" aria-label="Retry artifact" onClick={() => void page.refresh(true)}>Could not load artifact. Retry</button></Show></main>}>
+  return <Switch fallback={<main aria-label="Loading artifact" class={`${PAGE_COLUMN} mt-8 pb-24`}><Show when={page.error()} fallback="Loading artifact…"><Button variant="secondary" size="sm" aria-label="Retry artifact" onClick={() => void page.refresh(true)}>Could not load artifact. Retry</Button></Show></main>}>
     {/* The page door answers a uniform 404 for a missing artifact and a private one alike (canReadArtifact): that
         is the not-found page, not a load failure to retry. */}
     <Match when={(page.error() as { status?: number } | undefined)?.status === 404}><NotFoundPage /></Match>

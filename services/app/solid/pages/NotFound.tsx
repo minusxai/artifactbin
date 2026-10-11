@@ -3,7 +3,7 @@
  * The app's ONE 404. The login href is a signal set on mount and re-read on click.
  */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON } from '../ui/FormControls';
+import { Button } from '../ui/Button';
 import { loginHref } from '@/lib/http/login-href';
 import { useSession } from '../lib/session';
 import { useChromeVisibility } from '../components/PageChrome';
@@ -26,12 +26,11 @@ export function NotFoundPage(): JSX.Element {
         look identical from outside, and we won&rsquo;t say which this is. Hmph.
       </p>
       <p class="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm">
-        <a href="/" rel="external" aria-label="Back to artifacts" class={FORM_PRIMARY_BUTTON}>← back to your artifacts</a>
+        <Button href="/" rel="external" aria-label="Back to artifacts">← back to your artifacts</Button>
         <Show when={!session()?.user}>
-          <a href={href()} rel="external" onClick={(event) => { event.currentTarget.href = loginHref(window.location); }} aria-label="Sign in"
-            class={FORM_SECONDARY_BUTTON}>
+          <Button variant="secondary" href={href()} rel="external" onClick={(event) => { event.currentTarget.href = loginHref(window.location); }} aria-label="Sign in">
             sign in — if it&rsquo;s yours to see
-          </a>
+          </Button>
         </Show>
       </p>
     </main>

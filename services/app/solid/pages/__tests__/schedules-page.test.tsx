@@ -80,3 +80,13 @@ it('wires each schedule field to its label and hint, and an edit moves focus to 
  expect(cron).toHaveFocus();
  expect(screen.getByRole('heading',{name:'Edit schedule'})).toBeInTheDocument();
 });
+
+it('shows the retry line when the first load fails, and recovers on retry',async()=>{
+ let failing=true;
+ vi.stubGlobal('fetch',vi.fn(async()=>failing?Response.json({error:'unavailable'},{status:503}):Response.json({schedules:[]})));
+ render(()=><SchedulesPage artifactId="doc-one"/>);
+ expect(await screen.findByRole('alert')).toHaveTextContent('Could not load schedules.');
+ failing=false;fireEvent.click(screen.getByRole('button',{name:'Retry'}));
+ await screen.findByText('No schedules yet.');
+ expect(screen.queryByText('Could not load schedules.')).toBeNull();
+});

@@ -9,13 +9,10 @@ import type { DiscoveredTable } from '@/lib/datasets/types';
 
 export type SourceDraft = { discovery: DiscoveredTable; included: boolean; schema: string; name: string; columns: string[]; modelCellId?: string; stale?: boolean };
 
-/** Tri-state (`mixed`) exposure box. ui/Checkbox has no `indeterminate` or aria-label, so this one native input stays (see the UI-migration report). */
+/** Tri-state exposure box: mixed while some, not all, of what it covers is selected. */
 function Selection(props: { label: string; selected: number; total: number; disabled: boolean; onChange: (checked: boolean) => void }): JSX.Element {
-  let input!: HTMLInputElement;
-  const mixed = () => props.selected > 0 && props.selected < props.total;
-  return <input ref={input} type="checkbox" aria-label={props.label} aria-checked={mixed() ? 'mixed' : props.selected > 0}
-    checked={props.total > 0 && props.selected === props.total} disabled={props.disabled || props.total === 0}
-    onChange={(event) => props.onChange(event.currentTarget.checked)} class="size-3.5 shrink-0 accent-accent" />;
+  return <Checkbox size="sm" ariaLabel={props.label} indeterminate={props.selected > 0 && props.selected < props.total}
+    checked={props.total > 0 && props.selected === props.total} disabled={props.disabled || props.total === 0} onChange={props.onChange} />;
 }
 
 /** A source's selected leaf columns define exposure; expanding a row only changes presentation. */

@@ -28,7 +28,8 @@ function open(search = '') {
 }
 
 function choose(file: File) {
-  fireEvent.change(screen.getByLabelText('Choose a file'), { target: { files: [file] } });
+  // The DropZone's picker is a hidden input beside its button; the button carries the name "Choose a file".
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
 }
 
 function sentBody(): Record<string, unknown> {
@@ -85,12 +86,12 @@ describe('the file upload page', () => {
     choose(new File(['%PDF-1.4'], 'deck.pdf', { type: 'application/pdf' }));
     // Before upload only a card: the app frames its own origin, not a blob.
     expect(await screen.findByLabelText('File summary of deck.pdf')).toHaveTextContent(/previews once uploaded/);
-    expect(screen.queryByTitle('deck.pdf')).toBeNull();
+    expect(screen.queryByLabelText('deck.pdf')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
     await screen.findByLabelText('Uploaded file');
     expect(String(sentBody().pdf).startsWith('data:application/pdf;base64,')).toBe(true);
-    expect(screen.getByTitle('deck.pdf')).toHaveAttribute('src', '/a/art_1/raw');
+    expect(screen.getByLabelText('deck.pdf')).toHaveAttribute('src', '/a/art_1/raw');
   });
 
   it('shows the first lines of a text file', async () => {

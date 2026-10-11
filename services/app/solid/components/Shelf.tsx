@@ -22,6 +22,7 @@ import { Input, SearchField } from '../ui/Field';
 import { Panel } from '../ui/Panel';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { RowMenu } from '../ui/Menu';
+import { ToggleGroup } from '../ui/ToggleGroup';
 import ShareLink from './ShareLink';
 import { TransferOwnershipDialog } from './TransferOwnershipDialog';
 import { MoveToFolderDialog } from './MoveToFolderDialog';
@@ -153,11 +154,9 @@ export default function Shelf(props: Props): JSX.Element {
     <Panel padding="none" class="mb-5 flex flex-col gap-2 px-3 py-1.5 sm:flex-row sm:flex-wrap sm:items-center">
       <div class="min-w-0 sm:flex-1"><SearchField size="sm" label="Search artifacts" placeholder="search artifacts" value={query()} onValue={value => { setQuery(value); setPage(0); props.onQuery?.(value); }} /></div>
       <div class="flex flex-wrap items-center gap-2 sm:contents">
-        <Show when={availableFilters().length >= 2}><For each={availableFilters()}>{value => <Button size="sm" variant={filters().includes(value) ? 'secondary' : 'ghost'} aria-label={`Filter ${value}`} aria-pressed={filters().includes(value)} onClick={() => toggle(value)}>{value}</Button>}</For></Show>
-        <span role="group" aria-label="Shelf view" class="ml-auto inline-flex shrink-0 gap-1 border-l border-edge pl-1.5">
-          <Button icon size="sm" variant={view() === 'grid' ? 'secondary' : 'ghost'} aria-label="Grid view" aria-pressed={view() === 'grid'} onClick={() => setView('grid')}><GridIcon size={14} /></Button>
-          <Button icon size="sm" variant={view() === 'list' ? 'secondary' : 'ghost'} aria-label="List view" aria-pressed={view() === 'list'} onClick={() => setView('list')}><ListIcon size={14} /></Button>
-        </span>
+        <Show when={availableFilters().length >= 2}><For each={availableFilters()}>{value => <Button size="sm" variant="ghost" aria-label={`Filter ${value}`} pressed={filters().includes(value)} onClick={() => toggle(value)}>{value}</Button>}</For></Show>
+        <ToggleGroup label="Shelf view" iconOnly value={view()} onChange={next => setView(next as 'grid' | 'list')} class="ml-auto shrink-0 border-l border-edge pl-1.5"
+          options={[{ value: 'grid', label: 'Grid view', icon: () => <GridIcon size={14} /> }, { value: 'list', label: 'List view', icon: () => <ListIcon size={14} /> }]} />
         <Show when={props.canCreateFolders}>
           <Show when={naming()} fallback={<Tooltip content="create a folder here"><Button size="sm" variant="ghost" aria-label="New folder" onClick={() => setNaming(true)}><FolderPlus size={12} />new folder</Button></Tooltip>}>
             <Input size="sm" aria-label="Folder name" autofocus value={name()} onInput={event => setName(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') void createFolder(); if (event.key === 'Escape') setNaming(false); }} class="w-36" />
