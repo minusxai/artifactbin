@@ -7,7 +7,7 @@ import { useAppHarness, request } from './harness';
 import { cliWorkspace } from './cli-harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, claimToken } from '@/lib/accounts';
-import { createArtifact, getArtifactFor } from '@/lib/artifacts';
+import { createArtifact, getArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import * as annotations from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as createComment, GET as listComments } from '@/app/api/artifacts/[id]/annotations/route';
 import { DELETE as removeComment, POST as updateComment } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
@@ -23,7 +23,9 @@ it('private comment creation and reply refusals release the CLI journal without 
   const owner=await mintToken('mxmx_test_comment_refusal_owner');
   const made=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:owner.token,json:{markup:'<p id="finding">Private finding</p>',visibility:'private'}}));
   expect(made.status).toBe(201);const artifact=await made.json();
-  await cli.connect('mxmx_test_comment_refusal_outsider');
+  const recipient=await createUser({email:'mxmx_test_comment_refusal_viewer@example.com'});
+  await cli.connect('mxmx_test_comment_refusal_viewer',recipient.id);
+  await updateSharingFor({tokenId:owner.id,userId:owner.userId},artifact.id,{shares:[{email:recipient.email!,role:'viewer'}]});
   for(const id of [artifact.id,'zzzzzz'])for(const reply of [false,true]){
    const ctx={params:Promise.resolve({id})};
    let rejected:Response|undefined;
