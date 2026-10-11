@@ -227,9 +227,9 @@ try {
     await wide.waitForTimeout(300);
     // The mode dropdown shares the scroller and so shared the bug.
     await wide.locator('[aria-label="Color mode"]').click({ timeout: 30_000 });
-    await wide.waitForSelector('[aria-label="Color modes"]', { timeout: 10_000 });
+    await wide.waitForSelector('[aria-label="Color mode options"]', { timeout: 10_000 });
     await wide.waitForTimeout(200);
-    const option = await reachable(wide, '[aria-label="Color mode dark"]');
+    const option = await reachable(wide, '[aria-label="Color mode options"] [role="option"]:last-child');
     check(option.reachable, `desktop: a colour-mode option can actually be clicked (hit ${option.hit})`);
     await wide.close();
   }

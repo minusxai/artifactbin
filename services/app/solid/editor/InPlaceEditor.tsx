@@ -87,6 +87,12 @@ import ImageDialog, { IMAGE_ACCEPT, type ChosenImage, type ImageChoice } from '.
 import ThemePicker, { ModeChip, TemplateChip } from './ThemePicker';
 import { VersionHistory } from '../document/VersionHistory';
 import { Tooltip } from '../ui/Tooltip';
+import { Button } from '../ui/Button';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Input } from '../ui/Field';
+import { Panel } from '../ui/Panel';
+import { StatusMessage } from '../ui/StatusMessage';
+import { MicroLabel } from '../ui/ui';
 import { FeatureGate } from '../components/FeatureGate';
 import MobileSheet, { createIsPhoneViewport } from '../ui/MobileSheet';
 import { copyText } from '../lib/copy-text';
@@ -97,10 +103,8 @@ const INSPECT_LABEL = { chart: 'Edit chart', number: 'Edit number', diagram: 'Ed
 const INSPECT_ICON = { chart: ChartColumn, number: Hash, diagram: Workflow } as const;
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_PX = 24;
-const narrowTabClass = (active: boolean) =>
-  `inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
-    active ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
-  }`;
+/** The narrow bar's sheet toggles: the open one reads as the raised (secondary) button. */
+const narrowTab = (active: boolean) => (active ? 'secondary' : 'ghost') as 'secondary' | 'ghost';
 
 
 export interface EditorArtifact {
@@ -641,20 +645,17 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     const { canUndo, canRedo } = editorSource;
   const historyControls = () => <>
     <Tooltip content="Undo (Ctrl/Cmd Z)">
-      <button type="button" aria-label="Undo" disabled={!canUndo()} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('undo')}
-        class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg disabled:opacity-30"><Undo2 size={14} /></button>
+      <Button variant="ghost" size="sm" icon aria-label="Undo" disabled={!canUndo()} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('undo')}><Undo2 size={14} /></Button>
     </Tooltip>
     <Tooltip content="Redo (Ctrl/Cmd Shift Z)">
-      <button type="button" aria-label="Redo" disabled={!canRedo()} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('redo')}
-        class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg disabled:opacity-30"><Redo2 size={14} /></button>
+      <Button variant="ghost" size="sm" icon aria-label="Redo" disabled={!canRedo()} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('redo')}><Redo2 size={14} /></Button>
     </Tooltip>
   </>;
   const insertionControls = () => (
     <StoryToolbarMenu label={wide() ? 'Insert' : '+'} name="Insert" open={imageMenuOpen()} onOpenChange={setImageMenuOpen}>
       <div class="flex w-44 flex-col">
-        <button type="button" onClick={openInsertDialog} class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-raised">Image…</button>
-        <button type="button" aria-label="Insert Markdown" onClick={() => void insertMarkdown()}
-          class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-raised">Markdown</button>
+        <Button variant="ghost" size="sm" class="w-full justify-start" onClick={openInsertDialog}>Image…</Button>
+        <Button variant="ghost" size="sm" class="w-full justify-start" aria-label="Insert Markdown" onClick={() => void insertMarkdown()}>Markdown</Button>
       </div>
     </StoryToolbarMenu>
   );
@@ -665,9 +666,9 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     if (!kind || mode() !== 'design' || preview()) return null;
     return <section aria-label={INSPECTOR_LABEL[kind]}>
       <div class="mb-3 flex items-center justify-between">
-        <span class="font-mono text-[11px] uppercase tracking-wide text-faint">{kind}</span>
+        <MicroLabel>{kind}</MicroLabel>
         <Show when={wide()}>
-          <button type="button" aria-label={`Close ${INSPECTOR_LABEL[kind].toLowerCase()}`} onClick={() => inPlace.select(null)} class="cursor-pointer font-mono text-[11px] text-muted hover:text-fg">close</button>
+          <Button variant="ghost" size="sm" aria-label={`Close ${INSPECTOR_LABEL[kind].toLowerCase()}`} onClick={() => inPlace.select(null)}>close</Button>
         </Show>
       </div>
       <Show when={chart()} fallback={<Show when={numberEmbed()} fallback={<Show when={mermaidEmbed()}>{(embed) => <MermaidEditorPanel embed={embed()} onChange={onMermaidChange} />}</Show>}>
@@ -687,10 +688,9 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       onSelect={inPlace.select} onDelete={deleteSelected} onComment={props.onComment} image={imageControls()} backend={formatBackend} />
   </Show>;
   const titleEditor = () => (
-    <input aria-label="Title" value={shownTitle()} placeholder="untitled"
+    <Input size="sm" aria-label="Title" value={shownTitle()} placeholder="untitled"
       onInput={(e) => { const value = e.currentTarget.value; setTitle(value); queue({ title: value }); }}
-      style={{ width: `calc(${Math.max(9, Math.min(shownTitle().length + 2, 64))}ch + 14px)`, 'max-width': '100%' }}
-      class="min-w-0 text-ellipsis rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none" />
+      style={{ width: `calc(${Math.max(9, Math.min(shownTitle().length + 2, 64))}ch + 14px)`, 'max-width': '100%' }} />
   );
   const selectionBody = () => <>
     <section aria-label="Document appearance" class="px-1 py-1">
@@ -712,12 +712,10 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       </div>
     </section>
     <section aria-label="Insert content" class="mt-3 border-t border-edge px-1 pt-3 pb-1">
-      <h3 class="mb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-faint">Insert</h3>
+      <h3 class="mb-2"><MicroLabel>Insert</MicroLabel></h3>
       <div class="grid grid-cols-2 gap-2">
-        <button type="button" aria-label="Insert image" onMouseDown={event => event.preventDefault()} onClick={openInsertDialog}
-          class="flex h-8 cursor-pointer items-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-fg hover:border-edge-bright hover:bg-raised"><ImagePlus size={14} class="text-muted" />Image</button>
-        <button type="button" aria-label="Insert Markdown" onMouseDown={event => event.preventDefault()} onClick={() => void insertMarkdown()}
-          class="flex h-8 cursor-pointer items-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-fg hover:border-edge-bright hover:bg-raised"><FileCode size={14} class="text-muted" />Markdown</button>
+        <Button variant="secondary" size="sm" class="justify-start" aria-label="Insert image" onMouseDown={event => event.preventDefault()} onClick={openInsertDialog}><ImagePlus size={14} class="text-muted" />Image</Button>
+        <Button variant="secondary" size="sm" class="justify-start" aria-label="Insert Markdown" onMouseDown={event => event.preventDefault()} onClick={() => void insertMarkdown()}><FileCode size={14} class="text-muted" />Markdown</Button>
       </div>
     </section>
     <hr class="my-3 border-edge" />
@@ -756,7 +754,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           onCancel={() => { setLinkEditing(false); inPlace.focusText(); }}
           onDismiss={() => setLinkEditing(false)} />
       )}</Show>
-      <input ref={replaceInput} type="file" accept={IMAGE_ACCEPT} aria-label="Replacement image file" class="hidden" onChange={(e) => {
+      <input ref={replaceInput} type="file" accept={IMAGE_ACCEPT} aria-label="Replacement image file" hidden onChange={(e) => {
         const f = e.currentTarget.files?.[0];
         const target = replacePick;
         replacePick = null;
@@ -774,19 +772,19 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           }} />
       )}</Show>
       <Show when={live.state.status.startsWith('not saved')}>
-        <div role="alert" class="fixed bottom-4 right-4 z-50 max-w-md rounded border border-edge bg-surface p-3 text-sm">
-          <p>{live.state.status}</p>
-          <div class="mt-2 flex flex-wrap gap-3">
-            <button type="button" onClick={() => void live.recover('retry')}>Retry save</button>
-            <button type="button" onClick={() => void copyRecoverableDraft()}>Copy draft</button>
-            <button type="button" onClick={() => setDiscardDraft(true)}>Use server version</button>
-          </div>
-          <Show when={discardDraft()}>
-            <div role="alertdialog" aria-label="Discard unsaved draft" class="mt-3 border-t border-edge pt-3">
-              <p>Replace your unsaved draft with the server version? Copy your draft first if you want to keep it.</p>
-              <button type="button" onClick={() => { setDiscardDraft(false); void live.recover('server'); }}>Discard draft and load server</button>
-              <button type="button" onClick={() => setDiscardDraft(false)}>Keep editing</button>
+        <div role="alert" class="fixed bottom-4 right-4 z-50 max-w-md">
+          <Panel padding="sm" class="text-sm shadow-md">
+            <p>{live.state.status}</p>
+            <div class="mt-2 flex flex-wrap gap-3">
+              <Button variant="secondary" size="sm" onClick={() => void live.recover('retry')}>Retry save</Button>
+              <Button variant="secondary" size="sm" onClick={() => void copyRecoverableDraft()}>Copy draft</Button>
+              <Button variant="secondary" size="sm" onClick={() => setDiscardDraft(true)}>Use server version</Button>
             </div>
+          </Panel>
+          <Show when={discardDraft()}>
+            <ConfirmDialog title="Discard unsaved draft" danger action="Discard draft and load server" cancelLabel="Keep editing"
+              description="Replace your unsaved draft with the server version? Copy your draft first if you want to keep it."
+              onConfirm={() => { setDiscardDraft(false); void live.recover('server'); }} onCancel={() => setDiscardDraft(false)} />
           </Show>
         </div>
       </Show>
@@ -800,9 +798,10 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           }} />
       </Show>
       <Show when={historyError()}>
-        <div role="alert" class="fixed bottom-4 left-4 z-50 rounded border border-edge bg-surface p-3 text-sm">
-          {historyError()}
-          <button type="button" onClick={() => setHistoryError(null)} aria-label="Dismiss undo message">{' '}×</button>
+        <div class="fixed bottom-4 left-4 z-50 max-w-md">
+          <StatusMessage kind="error" class="shadow-md" action={<Button variant="ghost" size="sm" icon aria-label="Dismiss undo message" onClick={() => setHistoryError(null)}>×</Button>}>
+            {historyError()}
+          </StatusMessage>
         </div>
       </Show>
       <EditorToolbar top={barTop()} right={props.rightInset}>
@@ -813,54 +812,51 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           <span role="status" class="hidden text-xs text-muted lg:inline">{live.state.status || (live.state.pending ? 'Saving…' : `v${live.state.version} · Saved`)}</span>
           <Show when={wide() && appView() && inspectable() && inspector()}>{(kind) => (
             <Tooltip content={`${INSPECT_LABEL[kind()]} settings`}>
-              <button type="button" aria-label={INSPECT_LABEL[kind()]} onClick={inspectSelection}
-                class="inline-flex h-6 cursor-pointer items-center gap-1 rounded-[4px] border border-edge px-1.5 font-mono text-[11px] text-muted hover:border-edge-bright hover:text-fg">
+              <Button variant="secondary" size="sm" class="gap-1" aria-label={INSPECT_LABEL[kind()]} onClick={inspectSelection}>
                 <InspectIcon size={12} class="shrink-0" /><span class="hidden lg:inline">{INSPECT_LABEL[kind()]}</span>
-              </button>
+              </Button>
             </Tooltip>
           )}</Show>
           <Show when={!wide() && appView()}>
             <Tooltip content={inspectable() && inspector() ? `${INSPECT_LABEL[inspector()!]} settings` : 'selection settings'}>
-              <button type="button" aria-label={inspectable() && inspector() ? INSPECT_LABEL[inspector()!] : 'Show selection settings'} aria-expanded={sheet() === 'selection'}
-                onClick={() => openSheet(sheet() === 'selection' ? null : 'selection')} class={narrowTabClass(sheet() === 'selection')}>
+              <Button variant={narrowTab(sheet() === 'selection')} size="sm" icon aria-label={inspectable() && inspector() ? INSPECT_LABEL[inspector()!] : 'Show selection settings'} aria-expanded={sheet() === 'selection'}
+                onClick={() => openSheet(sheet() === 'selection' ? null : 'selection')}>
                 <Show when={inspectable()} fallback={<SlidersHorizontal size={12} class="shrink-0" />}><InspectIcon size={12} class="shrink-0" /></Show>
-              </button>
+              </Button>
             </Tooltip>
             <FeatureGate reason={historyUnavailable}>
               {(gate) => {
-                const button = <button type="button" aria-label="Open version history" aria-expanded={sheet() === 'history'} disabled={gate.disabled} aria-describedby={gate['aria-describedby']}
-                  onClick={() => openSheet(sheet() === 'history' ? null : 'history')} class={`${narrowTabClass(sheet() === 'history')} disabled:cursor-default disabled:opacity-50`}>
+                const button = <Button variant={narrowTab(sheet() === 'history')} size="sm" icon aria-label="Open version history" aria-expanded={sheet() === 'history'} disabled={gate.disabled} aria-describedby={gate['aria-describedby']}
+                  onClick={() => openSheet(sheet() === 'history' ? null : 'history')}>
                   <History size={12} class="shrink-0" />
-                </button>;
+                </Button>;
                 return gate.disabled ? button : <Tooltip content="version history">{button}</Tooltip>;
               }}
             </FeatureGate>
             <Show when={commentsTab()}>
               <Tooltip content="comments">
-                <button type="button" aria-label="Show comments" aria-expanded={!!props.commentsOpen} onClick={() => { setSheet(null); props.onCommentsOpenChange?.(!props.commentsOpen); }} class={narrowTabClass(!!props.commentsOpen)}>
+                <Button variant={narrowTab(!!props.commentsOpen)} size="sm" icon aria-label="Show comments" aria-expanded={!!props.commentsOpen} onClick={() => { setSheet(null); props.onCommentsOpenChange?.(!props.commentsOpen); }}>
                   <MessageSquare size={12} class="shrink-0" />
-                </button>
+                </Button>
               </Tooltip>
             </Show>
           </Show>
           <Show when={appView() && (!wide() || collapsed() || panelTab() !== 'selection')}>{insertionControls()}</Show>
           <Show when={appView()}><div aria-label="Editing history" class="flex items-center">{historyControls()}</div></Show>
           <Tooltip content="done editing">
-            <button type="button" aria-label="Exit edit mode" onClick={(event) => {
+            <Button size="sm" class="gap-1" aria-label="Exit edit mode" onClick={(event) => {
               event.currentTarget.blur();
               try { window.sessionStorage.removeItem(viewKey); } catch { /* unavailable */ }
               void props.onDone?.();
-            }} class="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[4px] border border-accent/40 bg-accent-soft px-2 font-mono text-[11px] text-accent hover:border-accent">
+            }}>
               <Check size={13} /><span class="hidden sm:inline">Done</span>
-            </button>
+            </Button>
           </Tooltip>
         </div>
       </EditorToolbar>
       <Show when={imageError()}>
-        <div aria-label="Image upload error" class="fixed z-30 flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-1.5 font-mono text-[11px] text-red-800"
-          style={{ top: `${barTop() + barH}px`, left: '0px', right: `${panelWidth()}px` }}>
-          <span>{imageError()}</span>
-          <button type="button" aria-label="Dismiss image error" onClick={() => setImageError(null)} class="cursor-pointer rounded border border-red-300 px-2 py-0.5 hover:bg-red-100">dismiss</button>
+        <div aria-label="Image upload error" class="fixed z-30 px-4 py-2" style={{ top: `${barTop() + barH}px`, left: '0px', right: `${panelWidth()}px` }}>
+          <StatusMessage kind="error" action={<Button variant="secondary" size="sm" aria-label="Dismiss image error" onClick={() => setImageError(null)}>dismiss</Button>}>{imageError()}</StatusMessage>
         </div>
       </Show>
       <Show when={mode() === 'code'}>
@@ -885,7 +881,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
         <MobileSheet label="Selection settings" size="half" swipeToClose onClose={() => setSheet(null)} header={
           <div class="flex items-center justify-between px-1 pb-2">
             <span class="font-mono text-xs font-semibold text-fg">selection</span>
-            <button type="button" aria-label="Close selection settings" onClick={() => setSheet(null)} class="cursor-pointer rounded p-1 text-muted hover:text-fg"><X size={13} /></button>
+            <Button variant="ghost" size="sm" icon aria-label="Close selection settings" onClick={() => setSheet(null)}><X size={13} /></Button>
           </div>
         }>{selectionBody()}</MobileSheet>
       </Show>
