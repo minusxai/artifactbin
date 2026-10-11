@@ -133,7 +133,8 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
           await endPagesSession(cookie);
           const line = cookieLine(site, minted.cookie);
           if (before && sameReader(before.actor, minted.actor)) {
-            return new Response(null, { status: 302, headers: { location: url.href, 'set-cookie': line, ...NO_STORE, 'referrer-policy': 'no-referrer' } });
+            // Relative: behind the TLS-terminating proxy `url` is http://, and an http Location in an https frame is refused.
+            return new Response(null, { status: 302, headers: { location: `${url.pathname}${url.search}`, 'set-cookie': line, ...NO_STORE, 'referrer-policy': 'no-referrer' } });
           }
           session = minted;
           setCookie = line;
