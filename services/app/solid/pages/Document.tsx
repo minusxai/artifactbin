@@ -457,11 +457,11 @@ export function DocumentPage(): JSX.Element {
         panelWidth={editing() && wide() ? editorRightInset() : undefined} />
     </Show>
     <Show when={ready() && editing()}>
-      <EditEntryChrome top={APP_BAR_H} mode={mode()} panelWidth={wide() ? editorRightInset() : 0}
+      <EditEntryChrome top={APP_BAR_H} panelWidth={wide() ? editorRightInset() : 0}
         skeleton={!editorMounted()} loading={!editorReady() && !editorPartFailed()} />
     </Show>
     <Show when={ready() && !editing() && restoring()}>
-      <EditEntryChrome top={APP_BAR_H} mode={mode()} panelWidth={0} skeleton={false} loading leaving />
+      <EditEntryChrome top={APP_BAR_H} panelWidth={0} skeleton={false} loading leaving />
     </Show>
     <Show when={ready() && editing() && backend && (editorSeed() || editorPartFailed())}>
       <Suspense fallback={null}>

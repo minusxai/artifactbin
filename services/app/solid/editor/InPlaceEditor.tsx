@@ -61,6 +61,7 @@ import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
 import { tableChoices } from '@/lib/document/table-catalog';
 import { queryCells, updateQuerySqlInJsx } from '@/lib/document/query-notebook';
 import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
+import { createAppAppearance } from '../ui/theme';
 import type { DataflowState } from '@/lib/dataflow';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
@@ -213,11 +214,14 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const barTop = () => (phone() ? 0 : APP_BAR_H);
   const barH = EDIT_BAR_H;
   let compiledFlow = art.dataflow?.flow ?? null;
-  const surfaceMode = () => colorMode() ?? storyThemeDefaultMode(theme()) ?? 'light';
+  /** The DOCUMENT's colour mode, sent to its frame: the author's pick, else its design system's default. */
+  const documentMode = () => colorMode() ?? storyThemeDefaultMode(theme()) ?? 'light';
+  /** The APP's appearance, which the editor's own chrome (bar, panels, their portals) follows — never the document's mode. */
+  const appAppearance = createAppAppearance();
 
   /** Show a version of the document in the adopted runtime WITHOUT replacing it, in the theme and mode shown now. */
   const showInDocument = createEditDraftSender(runtimeRef, {
-    editId: () => previewEditId, theme: () => untrack(theme), colorMode: () => untrack(surfaceMode),
+    editId: () => previewEditId, theme: () => untrack(theme), colorMode: () => untrack(documentMode),
   });
 
   let edit: InPlaceEditController | null = null;
@@ -746,7 +750,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   };
 
   return (
-    <div class="contents" data-app-appearance={surfaceMode()}>
+    <div class="contents" data-app-appearance={appAppearance()}>
       <Show when={props.titleHost}>{(host) => <Portal mount={host()}>{titleEditor()}</Portal>}</Show>
       <Show when={linkCardAt()}>{(at) => (
         <LinkCard at={at()} href={selection()?.link ?? null} editing={linkEditing()} onEdit={() => setLinkEditing(true)}

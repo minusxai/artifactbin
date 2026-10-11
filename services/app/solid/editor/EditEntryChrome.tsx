@@ -8,6 +8,7 @@
  */
 import { Show, type JSX } from 'solid-js';
 import { EDIT_BAR_H } from '@/lib/story-ui/edit-bar';
+import { createAppAppearance } from '../ui/theme';
 
 const LOADING_CSS = `@keyframes mx-edit-loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
 @media (prefers-reduced-motion: reduce) { [data-mx-edit-loading] > span { animation: none !important; transform: none !important; width: 100% !important; opacity: .5; } }`;
@@ -15,7 +16,6 @@ const LOADING_CSS = `@keyframes mx-edit-loading { 0% { transform: translateX(-10
 interface EditEntryChromeProps {
   /** Where the editor bar sits (under the app bar; 0 on a phone). */
   top: number;
-  mode: 'light' | 'dark';
   /** The edit panel's width beside the document; 0 when it opens as sheets instead. */
   panelWidth: number;
   /** The editor has not drawn its bar yet: hold its place. */
@@ -26,9 +26,11 @@ interface EditEntryChromeProps {
   leaving?: boolean;
 }
 
+/** Drawn in the app's appearance, as the editor chrome it stands in for is (never the document's mode). */
 export function EditEntryChrome(props: EditEntryChromeProps): JSX.Element {
+  const appAppearance = createAppAppearance();
   return (
-    <div class="contents" data-app-appearance={props.mode}>
+    <div class="contents" data-app-appearance={appAppearance()}>
       <Show when={props.skeleton}>
         <div aria-hidden="true" data-mx-edit-skeleton="bar" class="fixed z-[29] border-b border-edge bg-surface"
           style={{ top: `${props.top}px`, height: `${EDIT_BAR_H}px`, left: '0px', right: '0px' }} />
