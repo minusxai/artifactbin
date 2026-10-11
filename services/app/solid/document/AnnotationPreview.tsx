@@ -23,6 +23,7 @@ import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
 import { Avatar } from '../ui/Avatar';
+import { Button } from '../ui/Button';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeIcon } from '../ui/brand-icons';
 import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
@@ -104,17 +105,17 @@ export function AuthorIdentity(props: { author: Author }): JSX.Element {
     </Show>
     <Show when={props.author.sessionId} fallback={
       <Show when={props.author.kind === 'human' && props.author.label && !offline} fallback={
-        <span style={props.author.kind === 'agent' ? {color:agentNameColor(label())} : undefined} class={`truncate text-[11px] font-semibold ${props.author.kind === 'agent' ? 'text-accent' : 'text-fg'}`}>{label()}</span>
+        <span style={props.author.kind === 'agent' ? {color:agentNameColor(label())} : undefined} class={`truncate text-2xs font-semibold ${props.author.kind === 'agent' ? 'text-accent' : 'text-fg'}`}>{label()}</span>
       }>
         <a href={`/@${encodeURIComponent(props.author.label!)}`} aria-label={`View @${props.author.label} profile`}
-          class="pointer-events-auto truncate text-[11px] font-semibold text-fg underline-offset-2 hover:text-accent hover:underline">{label()}</a>
+          class="pointer-events-auto truncate text-2xs font-semibold text-fg underline-offset-2 hover:text-accent hover:underline">{label()}</a>
       </Show>
     }>{(sessionId) => (
-      <a href={`/chat?session=${sessionId()}`} target="_blank" rel="noopener noreferrer" class="truncate text-[11px] font-semibold"
+      <a href={`/chat?session=${sessionId()}`} target="_blank" rel="noopener noreferrer" class="truncate text-2xs font-semibold"
         style={{ color: agentNameColor(label()) }}>@{label()}</a>
     )}</Show>
     <Show when={props.author.kind === 'agent'}>
-      <span aria-label={`Agent type ${agentProgram(props.author)}`} class="shrink-0 font-sans text-[10px] text-faint">· {agentProgram(props.author)}</span>
+      <span aria-label={`Agent type ${agentProgram(props.author)}`} class="shrink-0 font-sans text-micro text-faint">· {agentProgram(props.author)}</span>
     </Show>
   </span>;
 }
@@ -278,6 +279,7 @@ export function AnnotationPreview(props: {
       'overflow-y': expanded() ? 'auto' : undefined,
       'border-radius': radius(),
     }}>
+    {/* The card's stretched hit target: an invisible full-card button, not a visible control, so ui/Button (which draws one) does not fit. */}
     <button type="button" aria-label={`Open annotation conversation by ${label()}, ${messages()} message${messages() === 1 ? '' : 's'}`} 
       onPointerDown={(event) => { touched = event.pointerType === 'touch'; }}
       onClick={() => {
@@ -291,7 +293,7 @@ export function AnnotationPreview(props: {
     </Show>
     <Show when={props.row.status === 'resolved'}><span aria-label="Resolved" class="pointer-events-none absolute bottom-0 right-0 z-10 text-xs text-accent">✓</span></Show>
     <Show when={work()}>{(current) => <span class="sr-only">{remoteWorkLabel(current())}{agents().length > 1 ? ` · ${agents().length} agents` : null}</span>}</Show>
-    <Show when={props.hovered && agents().length > 1}><span class="absolute right-2 top-1 text-[10px] text-muted">{agents().length} agents</span></Show>
+    <Show when={props.hovered && agents().length > 1}><span class="absolute right-2 top-1 text-micro text-muted">{agents().length} agents</span></Show>
     <Show when={props.remaining !== undefined}><span role="status" class="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil((props.remaining ?? 0) / 1000)} seconds</span></Show>
     <Show when={first() && !props.hovered}>
       <span class="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]">
@@ -302,7 +304,7 @@ export function AnnotationPreview(props: {
           <CompactAuthorMark author={first()!.author} />
         </span>
         <Show when={messages() > 1}>
-          <span data-thread-count aria-hidden="true" class="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-[9px] font-bold leading-none text-fg">{messages() > 9 ? '9+' : messages()}</span>
+          <span data-thread-count aria-hidden="true" class="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-micro font-bold leading-none text-fg">{messages() > 9 ? '9+' : messages()}</span>
         </Show>
       </span>
     </Show>
@@ -311,17 +313,16 @@ export function AnnotationPreview(props: {
         <span class="flex items-center justify-between gap-2">
           <AuthorIdentity author={first()!.author} />
           <span class="pointer-events-auto relative z-10 flex shrink-0 items-center gap-2">
-            <CommentTimestamp iso={first()!.created_at} class="whitespace-nowrap font-mono text-[10px] text-faint" />
+            <CommentTimestamp iso={first()!.created_at} class="whitespace-nowrap font-mono text-micro text-faint" />
             <Show when={props.row.status === 'open' && props.onResolve}>
               <Tooltip content="resolve thread">
-                <button type="button" aria-label="Resolve thread" disabled={props.resolving} onClick={(event) => { event.stopPropagation(); props.onResolve?.(); }}
-                  class="inline-flex h-6 items-center gap-1 rounded-[3px] px-1.5 text-[10px] font-semibold text-muted hover:bg-accent-soft hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-40">
+                <Button type="button" variant="ghost" size="sm" aria-label="Resolve thread" disabled={props.resolving} onClick={(event) => { event.stopPropagation(); props.onResolve?.(); }} class="-mr-1">
                   <Check size={12} strokeWidth={2} />Resolve
-                </button>
+                </Button>
               </Tooltip>
             </Show>
-            {/* Room for the close button, which comes LAST in keyboard order (Resolve leads into the reply box). */}
-            <Show when={props.pinned}><span aria-hidden="true" class="w-6 shrink-0" /></Show>
+            {/* Room for the close button (32px, over the card's 12px padding), which comes LAST in keyboard order (Resolve leads into the reply box). */}
+            <Show when={props.pinned}><span aria-hidden="true" class="w-5 shrink-0" /></Show>
           </span>
         </span>
         {/* Next after Resolve for the keyboard, last on screen: the thread's own reply box, stuck to the card's bottom. */}
@@ -342,19 +343,18 @@ export function AnnotationPreview(props: {
           </div>
         </Show>
         <span data-card-body class="mb-1 mt-1.5 line-clamp-2 shrink-0 font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
-        <Show when={props.resolveError}><span role="alert" class="mt-1 font-mono text-[10px] text-danger">{props.resolveError}</span></Show>
+        <Show when={props.resolveError}><span role="alert" class="mt-1 font-mono text-micro text-danger">{props.resolveError}</span></Show>
         {/* The count (and "+N more", which expands the replies) on the left; Reply and the way to the rail on the right. */}
-        <span data-card-footer class={`mt-auto flex min-h-[22px] items-center justify-between gap-2 font-mono text-[10px] text-faint ${repliesExpanded() ? 'pt-2' : ''}`}>
+        <span data-card-footer class={`mt-auto flex min-h-[22px] items-center justify-between gap-2 font-mono text-micro text-faint ${repliesExpanded() ? 'pt-2' : ''}`}>
           <Show when={messages() > 1} fallback={<ThreadContinuation thread={props.row.thread} />}>
-            <button ref={setContinuation} type="button" aria-label="Expand replies" aria-expanded={repliesExpanded()} onClick={() => setRepliesExpanded(true)}
-              class="pointer-events-auto min-w-0 cursor-pointer rounded-sm text-left hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"><ThreadContinuation thread={props.row.thread} /></button>
+            <Button ref={setContinuation} type="button" variant="ghost" size="sm" aria-label="Expand replies" aria-expanded={repliesExpanded()} onClick={() => setRepliesExpanded(true)}
+              class="pointer-events-auto min-w-0"><ThreadContinuation thread={props.row.thread} /></Button>
           </Show>
           <span class="flex shrink-0 items-center gap-2">
             <Show when={canReply() && !repliesExpanded()}>
-              <button type="button" aria-label="Reply" onClick={(event) => { event.stopPropagation(); startReply(); }}
-                class="pointer-events-auto inline-flex h-[22px] cursor-pointer items-center gap-1 rounded-[3px] border border-edge-bright bg-surface px-2 font-sans text-[11px] font-semibold text-fg hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent">
+              <Button type="button" variant="secondary" size="sm" aria-label="Reply" onClick={(event) => { event.stopPropagation(); startReply(); }} class="pointer-events-auto">
                 <Reply size={12} strokeWidth={2} aria-hidden="true" />Reply
-              </button>
+              </Button>
             </Show>
             <span class="transition-colors group-hover:text-accent">open →</span>
           </span>
@@ -373,8 +373,7 @@ export function AnnotationPreview(props: {
         <Show when={props.pinned}>
           <span class="pointer-events-auto absolute right-0 top-0 z-30">
             <Tooltip content="close">
-              <button type="button" aria-label="Close comment preview" onClick={(event) => { event.stopPropagation(); props.onClose?.(); }}
-                class="inline-flex h-6 w-6 items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"><X size={13} strokeWidth={1.8} /></button>
+              <Button type="button" variant="ghost" size="sm" icon aria-label="Close comment preview" onClick={(event) => { event.stopPropagation(); props.onClose?.(); }}><X size={13} strokeWidth={1.8} /></Button>
             </Tooltip>
           </span>
         </Show>
