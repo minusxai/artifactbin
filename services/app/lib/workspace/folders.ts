@@ -54,7 +54,8 @@ export interface FolderPage {
  * by the app page WITH the session — which a sandboxed frame cannot do, since
  * it carries no cookie and a private child's card 404s for its own owner.
  * Numbers follow the same rule the virtual table uses: only a viewer who may
- * EDIT the folder gets them.
+ * EDIT the folder gets them. They are counts: the shelf draws no per-child
+ * picture, so no sparkline is read, drawn or sent.
  */
 export async function folderPageFor(
   folder: ArtifactRow,
@@ -81,7 +82,7 @@ export async function folderPageFor(
       ancestor_ids: [...(folder.ancestor_ids ?? []), folder.id],
       // ABSENT, never zero: 'not counted for you' and 'nobody came' are
       // different facts, and the shelf omits the mark for the first.
-      ...(picked.numbers ? { views: c.views, sparkline: await picked.sparkline(c.id) } : {}),
+      ...(picked.numbers ? { views: picked.views.get(c.id) ?? 0 } : {}),
     });
   }
   const group=folder.group_id?await getGroupById(folder.group_id):null;

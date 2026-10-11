@@ -141,7 +141,7 @@ describe('the folder page bootstrap', () => {
     expect(typeof doc.version).toBe('number');
     expect(typeof doc.updated_at).toBe('string');
     expect(typeof doc.views).toBe('number');
-    expect(typeof doc.sparkline).toBe('string');
+    expect(doc, 'the shelf draws no sparkline, so none travels').not.toHaveProperty('sparkline');
     // A PRIVATE child gets a real row on the app page: the shelf loads its card
     // WITH the session, which is the one thing the sandboxed frame could not do.
     expect(folder.rows.find((x: any) => x.id === priv.id)).toMatchObject({ visibility: 'private', title: 'Hiring plan' });
