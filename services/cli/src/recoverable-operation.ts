@@ -43,7 +43,7 @@ export async function recoverableOperation(workspace:Workspace,client:HttpClient
     // A scope refusal precedes durable admission, so there is no mutation receipt.
     // Only the explicit definitive refusal may release this local intent; uncertain
     // transport/server failures retain the same recovery identity.
-    if(details?.mutation_receipt===saved.key||details?.admission_refused===true&&details.http_status===403)archive({pending:saved,refusal:error instanceof CliError?error.details:undefined});
+    if(details?.mutation_receipt===saved.key||details?.admission_refused===true&&(details.http_status===403||details.http_status===404))archive({pending:saved,refusal:error instanceof CliError?error.details:undefined});
     throw error;
    }
    const {checksum:_old,...value}=saved;const next={...value,response,account:value.account??client.account??null};saved={...next,checksum:checksum(next)};state.put(workspace.root,'pending-operation',CURRENT,saved);
