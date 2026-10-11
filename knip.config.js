@@ -91,6 +91,8 @@ export default {
         '@tailwindcss/oxide',
       ],
     },
+    // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.
+    'services/auth': { ignoreBinaries: ['openssl'] },
     'services/runner': {
       entry: ['src/server.ts', 'prove-postgres.ts'],
       // Bundled into each user program by specifier (src/compiler.ts).
