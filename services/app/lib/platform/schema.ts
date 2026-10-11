@@ -226,7 +226,10 @@ const ARTIFACTS: Table = {
     { name: 'idx_artifacts_ancestors', columns: ['ancestor_ids'], using: 'gin' },
     { name: 'idx_artifacts_parent', columns: ['(ancestor_ids[cardinality(ancestor_ids)])'] },
     { name: 'idx_artifacts_user_level', columns: ['user_id', '(cardinality(ancestor_ids))'] },
-
+    // A group's live documents newest first: the group workspace listing (lib/workspace/inventory) and the
+    // owner scope of a group-owned listing (lib/artifacts/table ownerPredicate) filter `group_id = $1` over the
+    // live rows and sort by recency — without it, every one reads the whole table.
+    { name: 'idx_artifacts_group_updated', columns: ['group_id', 'updated_at DESC'], where: 'deleted_at IS NULL' },
   ],
   // `folder` was a materialized PATH of names ('2026/08/reports'). Placement is
   // `ancestor_ids` now — ids, so two sibling folders may share a name and a
@@ -329,6 +332,14 @@ const ARTIFACT_SHARES: Table = {
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['artifact_id', 'email'],
+  indexes: [
+    // The primary key leads with artifact_id; the readers that start from a PERSON do not. By the resolved
+    // account, and by the ADDRESS: "shared with me" (lib/workspace listSharedWithEmail and the dashboard) matches
+    // `email = $1` whatever `user_id` says, so the index is over every row — a partial `WHERE user_id IS NULL`
+    // would serve only the invitations nobody has accepted and leave that listing a table scan.
+    { name: 'idx_artifact_shares_user', columns: ['user_id'] },
+    { name: 'idx_artifact_shares_email', columns: ['email'] },
+  ],
 };
 
 /**
@@ -963,7 +974,11 @@ const GROUP_INVITATIONS:Table={name:'group_invitations',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'email',type:'TEXT',notNull:true},
  {name:'role',type:'TEXT',notNull:true},{name:'invited_by',type:'TEXT',notNull:true},
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['id'],indexes:[{name:'idx_group_invitations_email',columns:['group_id','email'],unique:true}]};
+],primaryKey:['id'],indexes:[
+ {name:'idx_group_invitations_email',columns:['group_id','email'],unique:true},
+ // acceptGroupInvitations asks by the verified address alone, which the unique (group_id, email) cannot lead.
+ {name:'idx_group_invitations_by_email',columns:['email']},
+]};
 const GROUP_LINKS:Table={name:'group_links',columns:[
  {name:'group_id',type:'TEXT',notNull:true},{name:'linked_group_id',type:'TEXT',notNull:true},
 ],primaryKey:['group_id','linked_group_id']};

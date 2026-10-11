@@ -33,7 +33,7 @@ import { Hono, type Context } from 'hono';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { ID_RE, verifyExportKey } from '@/lib/platform';
-import { runWithRequest } from '@/lib/platform';
+import { measureQueries, runWithRequest } from '@/lib/platform';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { SPA_PATHS } from '@/lib/http/app-pages';
@@ -92,12 +92,29 @@ function withGenericSocial(html: string, origin: string): string {
 }
 
 /**
+ * The frame's two new connections, started from the head: its first URL is on the pages apex, which 302s to the
+ * document's own origin (`next`). Both origins come from the frame the server drew (lib/serving/artifact-page), never
+ * from the request. They follow the agent pointer, which stays the head's first element.
+ */
+function withPreconnects(html: string, frame: DocumentFrame): string {
+  let origins: string[];
+  try {
+    const src = new URL(frame.src);
+    const next = src.searchParams.get('next');
+    origins = [...new Set([src.origin, ...(next ? [new URL(next).origin] : [])])];
+  } catch { return html; }
+  const tags = origins.map((origin) => `<link rel="preconnect" href="${escapeHtml(origin)}">`).join('');
+  const after = /<meta name="afbin"[^>]*>/i.exec(html) ?? /<head(?:\s[^>]*)?>/i.exec(html);
+  return after ? `${html.slice(0, after.index + after[0].length)}${tags}${html.slice(after.index + after[0].length)}` : html;
+}
+
+/**
  * THE APP PAGE FOR A DOCUMENT: the shell, named in its head as the document (its title, description and social
  * card replace the shell's), with the document's frame as the body's first element — drawn by the server, so the
  * document loads with the page, not after the app's code (lib/serving/document-frame; solid/pages/Document adopts it).
  */
 function withDocumentFrame(html: string, frame: DocumentFrame): string {
-  const head = html
+  const head = withPreconnects(html, frame)
     .replace(/<title>[\s\S]*?<\/title>/i, '')
     .replace(/<meta name="description"[^>]*>/i, '')
     .replace('</head>', () => `${documentHeadTags(frame.head)}<style data-mx-frame-css>${DOCUMENT_FRAME_CSS}</style></head>`);
@@ -298,8 +315,31 @@ function archiveLiveBuild(): void {
   } catch { liveBuildArchived = false; /* no island build yet (a test or a fresh checkout) */ }
 }
 
+/**
+ * `Server-Timing` on every response: the whole chain's wall time (`total`) and what it waited on the database
+ * (`db`, with the statement COUNT — never a statement, an id or a URL), so a deployment is measurable from the
+ * browser's network panel. APPENDED, so the phases a route reports itself (the offline download's) stay in the same
+ * one header. A stream keeps streaming: only the headers are touched, the body passes through.
+ */
+const serverTiming = async (c: Context, next: () => Promise<void>): Promise<void> => {
+  const started = performance.now();
+  const { stats } = await measureQueries(next);
+  const timing = `total;dur=${(performance.now() - started).toFixed(1)}, db;dur=${stats.ms.toFixed(1)};desc="${stats.count} queries"`;
+  try {
+    c.res.headers.append('Server-Timing', timing);
+  } catch {
+    // Immutable headers (a redirect, a fetched response): copy the response rather than lose the measurement.
+    try {
+      const copy = new Response(c.res.body, c.res);
+      copy.headers.append('Server-Timing', timing);
+      c.res = copy;
+    } catch { /* a response that cannot be copied (a protocol switch) goes out as it is */ }
+  }
+};
+
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
+  app.use('*', serverTiming);
   // A page route that reads a stored document the current code does not serve answers its 410 by name (lib/artifacts/servable), never a bare 500.
   app.onError((error, c) => {
     if (error instanceof UnservableDocument) return error.response();

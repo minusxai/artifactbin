@@ -122,3 +122,13 @@ it('custom-domain path overrides belong to the domain and migrate existing accou
  expect(renderedSchema().schema).toContain("path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb");
  expect(renderedSchema().schema).toContain('ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS path_overrides JSONB');
 });
+
+it('the hot-path indexes are declared, created at boot only when missing, and partial where the live rows are what is read',()=>{
+ const sql=renderedSchema().schema;
+ expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_artifacts_group_updated ON app.artifacts (group_id, updated_at DESC) WHERE deleted_at IS NULL');
+ expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_artifact_shares_user ON app.artifact_shares (user_id)');
+ expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_artifact_shares_email ON app.artifact_shares (email)');
+ // The unique (group_id, email) index stays; the lookup by address alone is a second, plain one.
+ expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON app.group_invitations (group_id, email)');
+ expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON app.group_invitations (email)');
+});

@@ -101,6 +101,8 @@ ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPT
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON app.group_invitations (group_id, email);
 
+CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON app.group_invitations (email);
+
 CREATE TABLE IF NOT EXISTS app.group_links (
   group_id TEXT NOT NULL,
   linked_group_id TEXT NOT NULL,
@@ -1165,6 +1167,8 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_parent ON app.artifacts ((ancestor_ids[
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_user_level ON app.artifacts (user_id, (cardinality(ancestor_ids)));
 
+CREATE INDEX IF NOT EXISTS idx_artifacts_group_updated ON app.artifacts (group_id, updated_at DESC) WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS app.artifact_versions (
   artifact_id TEXT NOT NULL,
   version INTEGER NOT NULL,
@@ -1290,6 +1294,10 @@ ALTER TABLE app.artifact_shares ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFA
 ALTER TABLE app.artifact_shares ADD COLUMN IF NOT EXISTS user_id TEXT;
 
 ALTER TABLE app.artifact_shares ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_artifact_shares_user ON app.artifact_shares (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_artifact_shares_email ON app.artifact_shares (email);
 
 CREATE TABLE IF NOT EXISTS app.annotations (
   revision INTEGER NOT NULL DEFAULT 1,

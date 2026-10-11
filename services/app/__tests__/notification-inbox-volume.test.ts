@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { request, setSession, useAppHarness } from './harness';
-import { GET } from '@/app/api/my/people/route';
+import { createAppServer } from '../server/app';
 import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import { getDb, measureQueries } from '@/lib/platform';
 import { RECIPIENT, inboxVolumeBase, seedInboxVolume } from './inbox-volume';
@@ -88,12 +88,14 @@ it('reports total and database time on the inbox route', async () => {
   const db = await getDb(), base = await inboxVolumeBase(db);
   await seedInboxVolume(db, base, 1, 30);
   setSession({ user: { id: RECIPIENT.id, email: RECIPIENT.email } });
-  const response = await GET(request('/api/my/people?offset=0'));
+  // The header is the app server's (server/app serverTiming), so the route is called through it.
+  const app = createAppServer({ indexHtml: async () => '<html><head></head><body></body></html>' });
+  const response = await app.request(request('/api/my/people?offset=0'));
   expect(response.status).toBe(200);
   expect(response.headers.get('Server-Timing')).toMatch(/^total;dur=\d+\.\d, db;dur=\d+\.\d;desc="\d+ queries"$/);
   expect((await response.json()).notifications.map((n: { id: string }) => n.id)).toEqual(expectedInbox(1, 30).ids.slice(0, 50));
   setSession(null);
-  const anonymous = await GET(request('/api/my/people'));
+  const anonymous = await app.request(request('/api/my/people'));
   expect(anonymous.status).toBe(401);
   expect(anonymous.headers.get('Server-Timing')).toMatch(/^total;dur=/);
 });
