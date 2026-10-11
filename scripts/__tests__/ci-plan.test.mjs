@@ -719,7 +719,7 @@ describe('GitHub CI adapter', () => {
 
 describe('required CI result', () => {
   const plan = () => planCi(['services/cli/src/runner.ts'], { cliRelease: true });
-  const results = (p) => ({ ...Object.fromEntries(CI_JOBS.map((j) => [j, p.jobs[j] ? 'success' : 'skipped'])), 'cli-pack': p.cliPack ? 'success' : 'skipped' });
+  const results = (p) => ({ ...Object.fromEntries(CI_JOBS.map((j) => [j, p.jobs[j] ? 'success' : 'skipped'])), 'cli-pack': p.cliPack ? 'success' : 'skipped', 'company-container': p.companyContainer ? 'success' : 'skipped' });
 
   it('accepts intentional skips and successful selected jobs', () => {
     const p = plan();

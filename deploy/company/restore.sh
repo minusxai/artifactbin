@@ -3,6 +3,9 @@
 set -eu
 cd "$(dirname "$0")"
 umask 077
+mkdir -p backups
+exec 9>backups/.lock
+flock -n 9 || { echo 'Another backup/restore is running' >&2; exit 1; }
 [ "$#" = 1 ] || { echo 'Usage: ./restore.sh /absolute/backup-directory' >&2; exit 1; }
 source=$(cd "$1" && pwd)
 for file in database.dump artifacts.tar.gz configuration.tar.gz; do [ -s "$source/$file" ] || { echo "Missing $file" >&2; exit 1; }; done
