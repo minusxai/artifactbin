@@ -2,7 +2,7 @@
 
 `afbin serve --config /path/to/team/server.env` runs a foreground, multi-user server. It uses the existing public login, OAuth, session and application authorization modules in one process. It never grants a local owner implicitly.
 
-`afbin serve --dir ./team --port 7445` initializes private loopback settings automatically. Use `--config ./team/server.env` for an existing operator configuration. `--db-url postgres://…` or `--db-url pglite://…` overrides only the application database; objects remain in the operator directory. There is no background daemon.
+`afbin serve --dir ./team --owner-email owner@example.com --port 7445` initializes private loopback company settings automatically. Replace the address with the designated owner’s email. The owner must sign in and confirm company setup before colleagues can join. Omitting the owner generates a private settings template and refuses startup with its path and repair command. `--owner-email` applies to newly generated settings; it never changes an existing owner, and cannot be combined with `--config`. Set `APP__DEPLOYMENT_OWNER_EMAIL` in an explicit file instead. Use `--config ./team/server.env` for an existing operator configuration. `--db-url postgres://…` or `--db-url pglite://…` overrides only the application database; objects remain in the operator directory. There is no background daemon.
 
 For a network host, the operator configures a persistent settings file (mode 0600):
 
@@ -10,6 +10,10 @@ For a network host, the operator configures a persistent settings file (mode 060
 APP__HOST=0.0.0.0
 APP__PORT=7445
 APP__PUBLIC_BASE_URL=https://artifacts.example.com
+APP__DEPLOYMENT_MODE=company
+APP__DEPLOYMENT_OWNER_EMAIL=owner@example.com
+AUTH__INVITE_ONLY=true
+AUTH__ALLOWED_EMAIL_PATTERNS=*@example.com
 AUTH__SECRET=<persistent random secret of at least 32 characters>
 EMAIL__RESEND_API_KEY=<mail provider credential>
 EMAIL__FROM=Artifactbin <login@example.com>
@@ -28,8 +32,28 @@ For local development, use `APP__HOST=127.0.0.1` and `APP__PUBLIC_BASE_URL=http:
 - **DNS and TLS for the pages host.** Every document is served on its own origin, `https://<id>.<pages host>`, which must be on the public URL's site. `APP__PAGES_HOST` names it; unset, the host serves documents under `pages.<public hostname>` (`lvh.me` for a loopback or `lvh.me` public URL, such as the generated `http://app.lvh.me:<port>`), and an IP-address public URL must set it. Point DNS and a certificate for the pages host and `*.<pages host>` at the server; startup names both.
 - **`APP__PUBLIC_BASE_URL` exactly as teammates type it.** Approval and login both happen at that origin, and `http://localhost:7445` and `http://127.0.0.1:7445` are different origins: a mismatch fails with `approval_origin_mismatch`. `APP__HOST=0.0.0.0` with a loopback public URL is refused for the same reason.
 
-Then:
+## Owner setup and colleague permissions
 
+1. Start the server, open its printed origin, and sign in with the verified `APP__DEPLOYMENT_OWNER_EMAIL` address. On a loopback host, startup names the protected outbox file where the operator reads the login code; no email is sent. On a network host, use a configured email provider or Google/OIDC.
+2. In deployment setup, create a company group or select one where the owner is an editor, then explicitly confirm it. The server stores this default group; do not put a group ID in the environment. No other account can join before confirmation. If the default group becomes unavailable, new admissions stop until the owner repairs setup.
+3. Invite each colleague’s email to that company group as an editor or viewer. Invite-only admission requires this group invitation, separately from any document share. Colleagues sign in as themselves on the same origin; they must also match the email patterns.
+4. Publish documents to the company group for its members, or use Personal and share individual documents by email. A saved default controls where new artifacts are created; it never transfers existing ownership. Colleagues can explicitly choose Personal or another accessible group.
+
+Group editors can create, edit and manage group artifacts; group viewers can read them. For individually shared documents:
+
+| Document role | Read | Comment | Edit |
+| --- | --- | --- | --- |
+| viewer | Yes | No | No |
+| commenter | Yes | Yes | No |
+| editor | Yes | Yes | Yes |
+
+A document share does not grant company admission or group management rights. Changing a share takes effect on subsequent authorized requests; do not send your own credentials to recipients.
+
+## Colleague setup and operations
+
+After owner confirmation and invitations:
+
+- **Teammates select their company destination** after signing in: `afbin setup --server https://artifacts.example.com --group <company-handle> --set-default`. This verifies membership, saves their account’s default group and selects this host for future CLI commands. Replace the example origin and handle with this deployment’s values. `--personal --set-default` explicitly chooses Personal; `--inherit --set-default` clears the account override and inherits the deployment default.
 - **Teammates install from the host**: `curl -fsSL <origin>/chat/install.sh | sh` downloads the CLI that server was built with and presets the origin as their client default (`~/.artifactbin/config.json`). An existing default is kept, so `afbin config set host <origin>` changes it deliberately.
 - **Sharing is by email**, through the share menu in the reader or the YAML `shares:` list in a document's fence, which push applies:
 
@@ -39,7 +63,7 @@ Then:
       role: viewer     # viewer | commenter | editor
   ```
 
-- **Anyone who can reach the server can create an account.** There is no allowlist or domain restriction yet; put the host where only the team can reach it.
+- **Company admission is invite-only by default** (`AUTH__INVITE_ONLY=true`). `AUTH__ALLOWED_EMAIL_PATTERNS` is a comma-separated list of email globs (default `*`); invitations never bypass it. The owner must match the patterns too. Setting `AUTH__INVITE_ONLY=false` permits new verified accounts matching these patterns after company setup is confirmed. Existing admitted accounts stay admitted when these settings change.
 - **Datasets and images are born `unlisted`**: not listed anywhere, but readable by anyone with the ID and no login. Documents are private to their owner until shared. See [serving and security](../serving-and-security.md).
 - **Changing the public URL later strands clients.** A working directory tracks one server and account, and credentials are saved per origin, so teammates must re-authenticate and re-point workspaces bound to the old origin. Choose the final name before inviting people.
 - **Back up by stopping the server and copying `<dir>`.** The database, uploaded objects and settings all live under it; a running server owns its PGLite directory, so a copy taken while it runs is not a consistent backup. An external `--db-url postgres://…` moves only the database; `<dir>` still holds the objects.

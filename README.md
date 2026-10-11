@@ -35,14 +35,17 @@ For downloaded `.jsx.html` files, **Save** or **Cmd/Ctrl+S** keeps edits and com
 ## Run your own server
 
 ```sh
-afbin serve --dir ./artifactbin-data --port 7445
-# In another terminal:
+afbin serve --dir ./artifactbin-data --owner-email owner@example.com --port 7445
+# After the owner signs in and confirms a company group in the browser,
+# in another terminal:
 afbin config set host http://app.lvh.me:7445
 afbin auth
 afbin add report.jsx --json
 afbin preview report.jsx
 afbin push report.jsx
 ```
+
+The first command creates a company server with private persistent settings. Replace `owner@example.com` with the operator's email. Open the printed origin, sign in as that verified owner, create or select a group where you are an editor, and confirm deployment setup. Other accounts cannot join until this confirmation. Invite colleagues to that company group before they sign in; company admission is invite-only by default. A document share alone does not admit a colleague.
 
 Use the origin the server prints (`http://app.lvh.me:7445` by default). Approval and login must happen at that exact origin; `localhost` and `127.0.0.1` are different origins and fail with `approval_origin_mismatch`. `lvh.me` and its subdomains resolve to loopback; app and document origins need the same site for private document cookies.
 

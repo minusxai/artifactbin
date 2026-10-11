@@ -255,3 +255,29 @@ test('first serve creates private persistent operator settings without client de
   await assert.rejects(stat(join(home,'.artifactbin/config.json')),{code:'ENOENT'});
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+test('missing company owner names the generated file and repair command without leaking its secret',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-serve-owner-'));
+ try{
+  const config=join(home,'team','server.env');
+  await assert.rejects(prepareServe({home,cwd:home,directory:'team'}),error=>{
+   assert.ok(error instanceof Error);assert.ok(error.message.includes(config));
+   assert.match(error.message,/APP__DEPLOYMENT_OWNER_EMAIL/);assert.match(error.message,/afbin serve --config/);
+   assert.doesNotMatch(error.message,/AUTH__SECRET=/);return true;
+  });
+  assert.match(await readFile(config,'utf8'),/APP__DEPLOYMENT_OWNER_EMAIL=\n/);
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+test('invalid initial owner creates no settings and existing operator owners are never rewritten',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-serve-owner-'));
+ try{
+  const options={home,cwd:home,directory:'team'};
+  for(const ownerEmail of ['bad','owner@example.com\nAUTH__SECRET=oops'])await assert.rejects(prepareServe({...options,ownerEmail}),/valid email/);
+  await assert.rejects(stat(join(home,'team')),{code:'ENOENT'});
+  const first=await prepareServe({...options,ownerEmail:'OWNER@example.com'}),bytes=await readFile(first.config,'utf8');
+  await prepareServe({...options,ownerEmail:'owner@example.com'});
+  await assert.rejects(prepareServe({...options,ownerEmail:'other@example.com'}),/APP__DEPLOYMENT_OWNER_EMAIL.*server.env/);
+  await assert.rejects(prepareServe({...options,config:first.config,ownerEmail:'owner@example.com'}),/--owner-email.*--config/);
+  assert.equal(await readFile(first.config,'utf8'),bytes);
+ }finally{await rm(home,{recursive:true,force:true});}
+});

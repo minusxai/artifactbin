@@ -72,3 +72,12 @@ test('serve ignores client defaults even when the client configuration is invali
   assert.equal(code,0,errors.join(''));
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+test('serve accepts a designated owner without authentication or client defaults',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-team-owner-'));
+ try{
+  const errors:string[]=[];
+  const code=await runCli(['serve','--dir','team','--owner-email','owner@example.com'],{home,cwd:home,env:{},interactive:false,stdout:()=>{},stderr:s=>errors.push(s),team:async options=>{assert.equal(options.ownerEmail,'owner@example.com');return 0;}});
+  assert.equal(code,0,errors.join(''));await assert.rejects(stat(join(home,'.artifactbin')),{code:'ENOENT'});
+ }finally{await rm(home,{recursive:true,force:true});}
+});
