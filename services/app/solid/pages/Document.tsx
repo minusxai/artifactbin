@@ -214,6 +214,13 @@ export function DocumentPage(): JSX.Element {
     lifecycle.enter(selectionPath);
   };
   const enterEdit = () => beginEdit(null);
+  /**
+   * The Edit control was approached (hover, focus or press): fetch what editing needs now, so the click that follows
+   * finds it on its way or here. One request however many of these and the click itself arrive (the loader shares it);
+   * a pointer that moves on does not cancel it. Only leaving the page does (the cleanup below).
+   */
+  const intendEdit = () => { if (editable() && !editing()) { void loadEditorPart(); prefetchEditorCode(); } };
+  onCleanup(() => parts.abort());
   createEffect(on(lifecycle.phase, (now, before) => {
     if (now === 'entering') {
       setEditorTitle(null);
@@ -401,13 +408,13 @@ export function DocumentPage(): JSX.Element {
       membership={page!.surface?.membership}
       titleSlot={() => editing() && !phone() && editorMounted()} titleHost={setTitleHost}
       panel={panel} setPanel={setPanel} mode={mode} onMode={chooseMode}
-      onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onEdit={() => act('edit')} onMembership={() => act('membership')}
+      onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onEdit={() => act('edit')} onEditIntent={intendEdit} onMembership={() => act('membership')}
       controls={(close) => <DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         owner={isOwner() && !editing()} canEdit={editable() && !editing()} canAnnotate={annotatable()} accountSession={accountSession()}
         like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { close(); setRailOpen(open); }}
         openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork={!phone()}
         membershipRevision={membershipRevision()} onMembershipChange={() => setMembershipRevision((n) => n + 1)}
-        onEdit={() => { close(); enterEdit(); }}
+        onEdit={() => { close(); enterEdit(); }} onEditIntent={intendEdit}
         onShare={() => { close(); setSharingOpen(true); }}
         onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />} />
     <div ref={host} aria-label="Artifact viewport" />
@@ -458,7 +465,7 @@ export function DocumentPage(): JSX.Element {
     </Show>
     <Show when={ready() && editing() && backend && (editorSeed() || editorPartFailed())}>
       <Suspense fallback={null}>
-        <ArtifactEditor id={id!} backend={backend!} seed={editorSeed()} onExit={() => void lifecycle.done()} flushRef={editorFlush}
+        <ArtifactEditor id={id!} backend={backend!} seed={editorSeed()} admitted={parts.admitted} onExit={() => void lifecycle.done()} flushRef={editorFlush}
           runtimeRef={runtimeRef} sessionNonce={nonce()} initialSelectionPath={lifecycle.selectionPath()}
           onComment={editable() ? (selection) => setInitialAnnotationSelection(selection) : undefined}
           onRightInsetChange={setEditorRightInset}

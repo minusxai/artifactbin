@@ -20,6 +20,12 @@ type ArtifactEditorProps = Omit<InPlaceEditorProps, 'art'> & {
   backend: ArtifactBackend;
   /** What the page already holds; absent, the editor waits for the load. */
   seed?: EditorArtifact;
+  /**
+   * Asked once as a seeded editor opens: false draws the locked card (a seed prefetched earlier may have outlived the
+   * access). The seed itself was admitted by the editor door; this is that same admission, repeated, for the cases
+   * where time has passed. Absent, the seed is trusted.
+   */
+  admitted?: () => Promise<boolean>;
   onExit: () => void;
 };
 
@@ -29,7 +35,7 @@ export default function ArtifactEditor(props: ArtifactEditorProps): JSX.Element 
   // The locked card is this session's whole editor: the page's entry chrome and loading bar end with it.
   const lock = () => { setLocked(true); props.onEditorMount?.(); props.onEditorReady?.(); };
   onMount(() => {
-    if (art()) return;
+    if (art()) { void props.admitted?.().then((ok) => { if (!ok) lock(); }); return; }
     void props.backend.load().then((head) => {
       if (!head) { lock(); return; }
       setLocked(false);

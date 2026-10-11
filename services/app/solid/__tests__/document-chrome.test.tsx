@@ -490,3 +490,32 @@ it('prefetches nothing for a page that does not say how large the document is', 
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(editorDoorFetches()).toBe(0);
 });
+
+it.each([['hover', (el: Element) => fireEvent.pointerEnter(el)], ['focus', (el: Element) => fireEvent.focus(el)], ['press', (el: Element) => fireEvent.pointerDown(el)]])(
+  'starts the editor part when the Edit control is approached (%s), and the click that follows shares that one request', async (_name, approach) => {
+    mockRole = 'owner'; mockSourceLength = 450_000;
+    answerEditorDoor(); idleNow();
+    mount();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(editorDoorFetches()).toBe(0);
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    approach(edit);
+    await waitFor(() => expect(editorDoorFetches()).toBe(1));
+    fireEvent.click(edit);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(editorDoorFetches()).toBe(1);
+  });
+
+it('keeps the intent request running when the pointer moves on, and the later click still issues no second one', async () => {
+  mockRole = 'owner'; mockSourceLength = 450_000;
+  answerEditorDoor(); idleNow();
+  mount();
+  const edit = screen.getByRole('button', { name: 'Edit' });
+  fireEvent.pointerEnter(edit); fireEvent.pointerLeave(edit);
+  await waitFor(() => expect(editorDoorFetches()).toBe(1));
+  const signal = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes('?part=editor'))![1]!.signal!;
+  expect(signal.aborted).toBe(false);
+  fireEvent.click(edit);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(editorDoorFetches()).toBe(1);
+});

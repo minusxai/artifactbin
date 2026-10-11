@@ -227,6 +227,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   if (search.get('part') === 'editor') {
     if (!isDoc || at || exporting || !canEdit(role)) return notFound();
     const row = await servedRow(artifact, null);
+    // `?probe=1`: only the admission above (and the 410 servedRow throws for a retired shape), for an editor that was
+    // seeded earlier (solid/editor/ArtifactEditor asks again before it trusts a seed that may have outlived the access).
+    if (search.get('probe') === '1') return { status: 200, body: { editId: artifact.edit_id, version: artifact.version } };
     const source = row.source ?? '';
     const stored = artifact.document?.kind === 'graph' ? artifact.document : null;
     const packed = stored && search.get('graph') !== 'full' ? packDocumentGraph(stored, source) : null;

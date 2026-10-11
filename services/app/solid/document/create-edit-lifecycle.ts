@@ -162,7 +162,7 @@ const editorUrl = (id: string, whole: boolean) => `/api/page/artifact/${encodeUR
  * main chunk, which every reader loads, and only a writer's edit mode inflates. It is the same chunk the editor
  * already loads (solid/editor/ArtifactEditor), so it costs the writer nothing extra.
  */
-async function inflate(answer: EditorAnswer, id: string): Promise<EditorPart> {
+async function inflate(answer: EditorAnswer, id: string, signal: AbortSignal): Promise<EditorPart> {
   const { graph, document, ...part } = answer;
   if (!graph) return { ...part, ...(document ? { document } : {}) };
   try {
@@ -170,37 +170,56 @@ async function inflate(answer: EditorAnswer, id: string): Promise<EditorPart> {
     const inflated = unpackDocumentGraph(graph, answer.source);
     if (graphSource(inflated) === answer.source) return { ...part, document: inflated };
   } catch { /* fall through to the whole graph */ }
-  const whole = await fetch(editorUrl(id, true), { credentials: 'same-origin' });
+  const whole = await fetch(editorUrl(id, true), { credentials: 'same-origin', signal });
   if (!whole.ok) throw new Error('editor part unavailable');
   const { document: stored, ...rest } = (await whole.json()) as EditorAnswer;
   return { ...rest, ...(stored ? { document: stored } : {}) };
 }
 
+/** A part fetched this recently was admitted this recently: edit mode opening on it need not ask again. */
+const ADMISSION_FRESH_MS = 5000;
+
 /**
- * Fetched when edit mode opens (or the social preview does), and on idle when the document is small enough for that
- * to be cheap (`prefetch`: solid/pages/Document decides from the page's `sourceLength`). Concurrent loads share one
- * request; a failure retries.
+ * The editor part. Fetched on INTENT (the Edit control hovered, focused or pressed: solid/pages/Document), when edit
+ * mode opens, and on idle when the document is small enough for that to be cheap (the page decides from its
+ * `sourceLength`). Every caller shares one request; a failure retries. Only leaving the page aborts it (`abort`):
+ * a pointer that passes over the control and away leaves the request running for the click that usually follows.
  */
 export function createEditorPartLoader(id: string | null, editable: Accessor<boolean>) {
   const [part, setPart] = createSignal<EditorPart | null>(null);
   const [failed, setFailed] = createSignal(false);
   let request: Promise<EditorPart | null> | null = null;
+  let loadedAt = 0;
+  const controller = new AbortController();
   return {
     part,
     failed,
     load(): Promise<EditorPart | null> {
       if (!id || !editable()) return Promise.resolve(null);
-      return request ??= fetch(editorUrl(id, false), { credentials: 'same-origin' })
+      return request ??= fetch(editorUrl(id, false), { credentials: 'same-origin', signal: controller.signal })
         .then((response) => (response.ok ? response.json() as Promise<EditorAnswer> : null))
-        .then((answer) => (answer ? inflate(answer, id) : null))
+        .then((answer) => (answer ? inflate(answer, id, controller.signal) : null))
         .catch(() => null)
         .then((loaded) => {
-          if (loaded) { setPart(loaded); setFailed(false); }
-          else { request = null; setFailed(true); }
+          if (loaded) { setPart(loaded); setFailed(false); loadedAt = Date.now(); }
+          else if (!controller.signal.aborted) { request = null; setFailed(true); }
           return loaded;
         });
     },
+    /**
+     * May this browser still write? A part prefetched minutes ago proves nothing about now (access can be withdrawn
+     * meanwhile), so edit mode opening on one asks the door's admission alone (`?probe=1`: the same refusals as the
+     * part, a few bytes). A part fetched a moment ago is its own proof. Unreachable counts as refused, as the head
+     * read this replaces did.
+     */
+    async admitted(): Promise<boolean> {
+      if (!id) return false;
+      if (request && Date.now() - loadedAt < ADMISSION_FRESH_MS) return true;
+      try { return (await fetch(`${editorUrl(id, false)}&probe=1`, { credentials: 'same-origin', signal: controller.signal })).ok; } catch { return false; }
+    },
     /** The next edit opens on the version just saved, not the part this session opened on. */
     reset() { request = null; setPart(null); },
+    /** Leaving the page: nothing in flight survives it. */
+    abort() { controller.abort(); },
   };
 }
