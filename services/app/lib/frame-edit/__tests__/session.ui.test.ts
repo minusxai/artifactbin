@@ -1,5 +1,5 @@
 /**
- * THE EDIT SESSION, THROUGH ITS INTERFACE (lib/story-runtime/edit/session).
+ * THE EDIT SESSION, THROUGH ITS INTERFACE (lib/frame-edit/session).
  *
  * A real `mountCompiledEditRegions` over a compiled-shaped DOM, a captured `channel.post`, and
  * nothing mocked inside the session: each case drives the document the way a user or the page does
@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { $getSelection, $isRangeSelection } from 'lexical';
 import { markdownEditorFor } from '@/lib/markdown/editor';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { mountCompiledEditRegions } from '@/lib/story-runtime/edit/dom-mounter';
+import { mountCompiledEditRegions } from '@/lib/frame-edit/dom-mounter';
 import { morphDraftDom } from '@/lib/islands/morph/engine';
 import { createFrameEditSession, type FrameEditSession } from '../session';
 

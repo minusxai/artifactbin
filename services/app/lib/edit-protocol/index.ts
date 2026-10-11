@@ -55,7 +55,7 @@ interface StoryFlowEditMessage { selection?:EditorSelectionChange; type: 'mx:flo
 interface StoryTextEditMessage { type: 'mx:text-edit'; nonce: string; path: string; innerHtml: string }
 
 /**
- * Frame → parent: the person pressed "Edit script" on a script component's mount badge (lib/story-runtime/edit/dom-mounter).
+ * Frame → parent: the person pressed "Edit script" on a script component's mount badge (lib/frame-edit/dom-mounter).
  * `component` is the mount's name; the parent opens the Helmet script in the source editor at its export.
  */
 interface StoryOpenScriptMessage { type: 'mx:open-script'; nonce: string; component: string }
@@ -215,7 +215,7 @@ interface StoryLayoutEditMessage {
 /**
  * Frame → parent: a slide was renamed from the deck's own rail.
  *
- * The rail is the DOCUMENT's chrome (lib/story-runtime/slides), so the
+ * The rail is the DOCUMENT's chrome (lib/reader-chrome/slides), so the
  * affordance has to live there; the write-back is the parent's as always.
  */
 interface StorySlideTitleMessage {

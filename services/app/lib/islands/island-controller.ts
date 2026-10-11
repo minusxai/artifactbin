@@ -2,8 +2,8 @@
  * THE ADOPTED COMPILED DOCUMENT'S CONTROLLER, framework-free (docs/phase2-architecture.md §7.2–§7.5).
  *
  * The page's private handle on the served story root: comments, selections, reader mode, data
- * wakeups, in-place editing (lib/story-runtime/edit/session over the compiled DOM, mounted by
- * lib/story-runtime/edit/dom-mounter) and new versions morphed in place (lib/islands/live-update). A page
+ * wakeups, in-place editing (lib/frame-edit/session over the compiled DOM, mounted by
+ * lib/frame-edit/dom-mounter) and new versions morphed in place (lib/islands/live-update). A page
  * shell (the Solid document page) moves the root into its tree (`moveInto`), creates this
  * controller, and hands its `nonce` to the page's annotation and editor chrome.
  */
@@ -12,9 +12,9 @@ import { serializeJsx } from '@/lib/jsx/serialize';
 import type { JsxNode } from '@/lib/jsx/types';
 import type { IslandStoryController } from '@/lib/story-runtime/contract';
 import { type RuntimeChannel, isEditParentMessage } from '@/lib/edit-protocol';
-import type { FrameEditSession } from '@/lib/story-runtime/edit/session';
-import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
-import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
+import type { FrameEditSession } from '@/lib/frame-edit/session';
+import type { FrameAnnotateSession } from '@/lib/frame-edit/annotate';
+import type { FrameSelectionActions } from '@/lib/frame-edit/selection-actions';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
@@ -166,7 +166,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
   let annotationCommand: Parameters<FrameAnnotateSession['update']>[0] | null = null;
   let annotationLoading = false;
   let selection: FrameSelectionActions | null = null;
-  let selectionFactory: typeof import('@/lib/story-runtime/edit/selection-actions').createFrameSelectionActions | null = null;
+  let selectionFactory: typeof import('@/lib/frame-edit/selection-actions').createFrameSelectionActions | null = null;
   let selectionCommand: Parameters<FrameSelectionActions['update']>[0] | null = null;
   let selectionLoading = false;
   let edit: FrameEditSession | null = null;
@@ -575,7 +575,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         frozen = true;
         const stale = nodesVersion !== shownVersion();
         void Promise.all([
-          import('@/lib/story-runtime/edit/session'), import('@/lib/story-runtime/edit/dom-mounter'),
+          import('@/lib/frame-edit/session'), import('@/lib/frame-edit/dom-mounter'),
           stale ? import('@/lib/document/update-parts') : null, stale ? import('@/lib/document/asset-url') : null,
         ]).then(async ([{ createFrameEditSession }, { mountCompiledEditRegions }, parts, assets]) => {
           if (disposed || !editRequested) return;
@@ -608,7 +608,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         if (annotate) { annotate.update(command); return; }
         if (command.mode === 'off' || annotationLoading) return;
         annotationLoading = true;
-        void import('@/lib/story-runtime/edit/annotate').then(({ createFrameAnnotateSession }) => {
+        void import('@/lib/frame-edit/annotate').then(({ createFrameAnnotateSession }) => {
           if (disposed) return;
           annotate = createFrameAnnotateSession({ win, root, channel, isEditing: () => editRequested });
           annotate.setNodes(nodes);
@@ -622,7 +622,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         if (selectionFactory) { ensureSelection(); return; }
         if ((!command.edit && !command.annotate) || selectionLoading) return;
         selectionLoading = true;
-        void import('@/lib/story-runtime/edit/selection-actions').then(({ createFrameSelectionActions }) => {
+        void import('@/lib/frame-edit/selection-actions').then(({ createFrameSelectionActions }) => {
           selectionFactory = createFrameSelectionActions;
           ensureSelection();
         }).catch((error) => { if (!disposed) console.error('Failed to load artifact selection actions', error); }).finally(() => { selectionLoading = false; });

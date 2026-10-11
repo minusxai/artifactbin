@@ -1,5 +1,5 @@
 /**
- * ARROWS ACROSS TEXT REGIONS (lib/story-runtime/edit/arrow-navigation): the decision, with the
+ * ARROWS ACROSS TEXT REGIONS (lib/frame-edit/arrow-navigation): the decision, with the
  * layout faked behind `RegionGeometry`. A caret on a region's edge line moves on to the next
  * region; anywhere else the key stays with the browser.
  */

@@ -31,7 +31,7 @@ where the author script runs in [serving and security](../../../../docs/serving-
   editing attributes as source.
 - Grid geometry belongs to `grid-layout.ts`; edit and view placement must use the same arithmetic.
   Grid drag/resize writes source through `lib/data/story/jsx-edit.ts`. Slide discovery belongs to
-  `lib/story-runtime/slides.ts`; previews must not introduce a second live data subscription.
+  `lib/reader-chrome/slides.ts`; previews must not introduce a second live data subscription.
 - Besides the renderer, this module holds the reader kit's pure helpers: table and comment-target
   identity (`data-table`, `row-key`, `repeat-identity`, `comment-target`, `control-options`), reading
   geometry (`scroll-anchor`, `edit-bar`, `edit-panel-fit`) and the document's third-party sources

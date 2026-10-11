@@ -1,7 +1,7 @@
 /**
  * WHAT IS SELECTED IN EDIT MODE, AND WHAT THE POINTER IS OVER.
  *
- * One half of the edit session (lib/story-runtime/edit/session): it decides what a click, a caret
+ * One half of the edit session (lib/frame-edit/session): it decides what a click, a caret
  * move, a hover or a page request selects, stamps it for the selection chrome, and tells the page
  * over `post` (`mx:selection`). TYPING (a caret in text: no outline, no handles) and BLOCK SELECTED
  * (the block's outline, handles and toolbar options; no caret) are never both.

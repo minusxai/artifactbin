@@ -6,7 +6,7 @@
  * text node.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
+import { createFrameAnnotateSession } from '@/lib/frame-edit/annotate';
 import { NONCE, PIN, channel, disposeAnnotateSession, env, installAnnotateSession, layouts, state } from '@/test/helpers/annotate-session';
 
 beforeEach(installAnnotateSession);

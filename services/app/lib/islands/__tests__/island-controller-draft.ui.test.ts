@@ -50,10 +50,10 @@ const editSession = vi.hoisted(() => ({
     mountCompiledDom: async () => { editSession.mounts++; },
   },
 }));
-vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () => editSession.session }));
-vi.mock('@/lib/story-runtime/edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
+vi.mock('@/lib/frame-edit/session', () => ({ createFrameEditSession: () => editSession.session }));
+vi.mock('@/lib/frame-edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 const selectionActions = vi.hoisted(() => ({ nodes: [] as unknown[][] }));
-vi.mock('@/lib/story-runtime/edit/selection-actions', () => ({
+vi.mock('@/lib/frame-edit/selection-actions', () => ({
   createFrameSelectionActions: () => ({ update() {}, setNodes: (nodes: unknown[]) => { selectionActions.nodes.push(nodes); }, dispose() {} }),
 }));
 

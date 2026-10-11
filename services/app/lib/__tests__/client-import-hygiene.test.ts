@@ -38,7 +38,7 @@ describe('client-import hygiene', () => {
     .filter((p) => isClientFile(readFileSync(p, 'utf8')));
 
   it('finds the client components it is meant to police', () => {
-    expect(clientFiles.some((p) => p.endsWith('lib/story-runtime/edit/session.ts'))).toBe(true);
+    expect(clientFiles.some((p) => p.endsWith('lib/frame-edit/session.ts'))).toBe(true);
   });
 
   it("no 'use client' file imports a value from a server module", () => {

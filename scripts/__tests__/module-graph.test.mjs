@@ -359,14 +359,15 @@ describe('module graph', () => {
       expect(violations).not.toContain('compiler.ts');
     });
 
-    it('holds the shipped lib/story-runtime index server-only', () => {
-      const shipped = files => checkModuleGraph(scanModuleGraph(tree({ 'services/app/lib/story-runtime/index.ts': '', ...files })), allowList([]), undefined,
-        { 'lib/story-runtime': (({ browserLeaves, ...row }) => row)(DEEP_MODULES['lib/story-runtime']) }).violations.join('\n');
-      const entries = DEEP_MODULES['lib/story-runtime'].entries.filter(entry => entry !== '').map(entry => [`services/app/lib/story-runtime/${entry}.ts`, '']);
-      const used = Object.fromEntries([...entries, ['services/app/lib/compiled-page/assembler.ts', DEEP_MODULES['lib/story-runtime'].entries.filter(entry => entry !== '').map(entry => `import '@/lib/story-runtime/${entry}';`).join('\n')]]);
-      expect(shipped({ ...used, 'services/app/web/outline.ts': "import type { OutlineEntry } from '@/lib/story-runtime';\n" })).toBe('');
-      expect(shipped({ ...used, 'services/app/web/outline.ts': "import { discoverOutline } from '@/lib/story-runtime';\n" }))
-        .toContain('services/app/web/outline.ts imports @/lib/story-runtime (the index is server-only)');
+    it('holds the shipped lib/reader-chrome index server-only', () => {
+      const shipped = files => checkModuleGraph(scanModuleGraph(tree({ 'services/app/lib/reader-chrome/index.ts': '', ...files })), allowList([]), undefined,
+        // lib/story-runtime's row only lends its browser importers: a serverOnly entry is refused to every row's.
+        { 'lib/reader-chrome': DEEP_MODULES['lib/reader-chrome'], 'lib/story-runtime': { entries: [], browserImporters: DEEP_MODULES['lib/story-runtime'].browserImporters } }).violations.join('\n');
+      const entries = DEEP_MODULES['lib/reader-chrome'].entries.filter(entry => entry !== '').map(entry => [`services/app/lib/reader-chrome/${entry}.ts`, '']);
+      const used = Object.fromEntries([...entries, ['services/app/lib/compiled-page/assembler.ts', DEEP_MODULES['lib/reader-chrome'].entries.filter(entry => entry !== '').map(entry => `import '@/lib/reader-chrome/${entry}';`).join('\n')]]);
+      expect(shipped({ ...used, 'services/app/web/outline.ts': "import type { OutlineEntry } from '@/lib/reader-chrome';\n" })).toBe('');
+      expect(shipped({ ...used, 'services/app/web/outline.ts': "import { discoverOutline } from '@/lib/reader-chrome';\n" }))
+        .toContain('services/app/web/outline.ts imports @/lib/reader-chrome (the index is server-only)');
     });
   });
 
@@ -386,13 +387,13 @@ describe('module graph', () => {
     it('refuses a deep import of app code from CLI source, naming the rule and every import', () => {
       const violations = check({
         'services/cli/src/a.ts': "import { parseJsx } from '../../app/lib/jsx';\n",
-        'services/cli/src/preview/e.ts': "export const morph = () => import('../../../app/lib/story-runtime/edit/session');\n",
+        'services/cli/src/preview/e.ts': "export const morph = () => import('../../../app/lib/frame-edit/session');\n",
         'services/cli/src/t.ts': "export type T = import('@/solid/components/PageBar').T;\n",
         'services/cli/src/k.ts': "import '../../app/lib/cli-toolkit/other';\n",
       });
       expect(violations).toContain('The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs)');
       expect(violations).toContain('services/cli/src/a.ts imports ../../app/lib/jsx');
-      expect(violations).toContain('services/cli/src/preview/e.ts imports ../../../app/lib/story-runtime/edit/session');
+      expect(violations).toContain('services/cli/src/preview/e.ts imports ../../../app/lib/frame-edit/session');
       expect(violations).toContain('services/cli/src/t.ts imports @/solid/components/PageBar');
       expect(violations).toContain('services/cli/src/k.ts imports ../../app/lib/cli-toolkit/other');
     });

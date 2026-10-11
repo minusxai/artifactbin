@@ -122,7 +122,7 @@ async function build() {
     name: 'offline-solid-transform',
     setup(b) {
       b.onLoad({ filter: /\.[jt]sx$/ }, async (args) => {
-        if (![path.join(root, 'solid'), path.join(root, 'lib/story-runtime/edit')].some((dir) => args.path.startsWith(dir + path.sep)) && args.path !== path.join(root, 'lib/offline/solid-entry.tsx')) return undefined;
+        if (![path.join(root, 'solid'), path.join(root, 'lib/frame-edit')].some((dir) => args.path.startsWith(dir + path.sep)) && args.path !== path.join(root, 'lib/offline/solid-entry.tsx')) return undefined;
         const source = fs.readFileSync(args.path, 'utf8');
         const stripped = (await esbuild.transform(source, { loader: args.path.endsWith('.tsx') ? 'tsx' : 'jsx', jsx: 'preserve', sourcefile: args.path })).code;
         const out = await transformAsync(stripped, { filename: args.path, babelrc: false, configFile: false, sourceType: 'module', compact: false,

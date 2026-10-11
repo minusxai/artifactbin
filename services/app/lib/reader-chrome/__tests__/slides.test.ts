@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { JsxNode } from '@/lib/jsx';
-import { discoverSlides, hasSlideRail } from '@/lib/story-runtime/slides';
+import { discoverSlides, hasSlideRail } from '@/lib/reader-chrome/slides';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {

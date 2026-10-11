@@ -25,15 +25,15 @@ export { isStoryDocumentUpdate } from '../story-runtime/document-update';
 // The edit protocol: the preview writes its wire strings, which the protocol's unions check.
 export { isEditParentMessage } from '../edit-protocol';
 export type { RuntimeChannel } from '../edit-protocol';
-export type { FrameEditSession } from '../story-runtime/edit/session';
-export type { FrameSelectionActions } from '../story-runtime/edit/selection-actions';
-export type { FrameAnnotateSession } from '../story-runtime/edit/annotate';
+export type { FrameEditSession } from '../frame-edit/session';
+export type { FrameSelectionActions } from '../frame-edit/selection-actions';
+export type { FrameAnnotateSession } from '../frame-edit/annotate';
 
 // ---- Editing, comments and draft morphing, loaded on demand (each its own chunk).
-export const loadFrameEditSession = () => import('../story-runtime/edit/session');
-export const loadCompiledEditRegions = () => import('../story-runtime/edit/dom-mounter');
-export const loadFrameAnnotateSession = () => import('../story-runtime/edit/annotate');
-export const loadFrameSelectionActions = () => import('../story-runtime/edit/selection-actions');
+export const loadFrameEditSession = () => import('../frame-edit/session');
+export const loadCompiledEditRegions = () => import('../frame-edit/dom-mounter');
+export const loadFrameAnnotateSession = () => import('../frame-edit/annotate');
+export const loadFrameSelectionActions = () => import('../frame-edit/selection-actions');
 export const loadStoryUpdateParts = () => import('../document/update-parts');
 export const loadDraftMorph = () => import('../islands/morph/engine');
 

@@ -18,7 +18,7 @@ import type { JsxNode } from '@/lib/jsx';
 import { createMarkdownRegions } from './markdown-regions';
 import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-engine/bookmark';
 import { flushFlowView } from '@/lib/editor-engine/flow-view';
-import { syncDocumentOutline } from '../outline-view';
+import { syncDocumentOutline } from '@/lib/reader-chrome/outline-view';
 import { toggleInline, pasteFragment } from '@/lib/editor-engine/model';
 import { clipboardAst } from '@/lib/editor-engine/clipboard';
 import { SELECTION_PRESENTATION } from '@/lib/editor-engine/selection-presentation';
@@ -99,7 +99,7 @@ export interface FrameEditSession {
   canApplyDraft(): boolean;
   /**
    * Adopt a draft that changes only the prose the editors already show, keeping every live editor
-   * (lib/story-runtime/edit/dom-mounter `reconcile`); false when it must be drawn.
+   * (lib/frame-edit/dom-mounter `reconcile`); false when it must be drawn.
    */
   reconcileDraft(before: JsxNode[], after: JsxNode[], next: JsxNode[], draft: HTMLElement | null, options?: ReconcileOptions): boolean;
   /** The nodes currently rendered — selection is classified against the SOURCE, not the DOM. */
@@ -125,7 +125,7 @@ interface FrameEditSessionOptions {
   root: HTMLElement;
   /** Ask the runtime to re-render (a new body epoch releases the focus guard). */
   requestRender: () => void;
-  /** Browser-only Solid boundary (lib/story-runtime/edit/dom-mounter). */
+  /** Browser-only Solid boundary (lib/frame-edit/dom-mounter). */
   mountCompiled: (root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks, held?: HeldEditors) => CompiledEditMount;
 }
 
@@ -248,7 +248,7 @@ export function createFrameEditSession({
     return true;
   };
 
-  /** A text host's focus, typing and blur, as lib/story-runtime/edit/dom-mounter reports them. */
+  /** A text host's focus, typing and blur, as lib/frame-edit/dom-mounter reports them. */
   const hostSession = {
     onFocus(path: string, el: HTMLElement) {
       views.last = null;

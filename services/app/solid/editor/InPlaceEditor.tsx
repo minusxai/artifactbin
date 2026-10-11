@@ -6,7 +6,7 @@
  * place; this component owns the editing chrome, source composition, persistence and history.
  *
  * Division of labour:
- *   runtime (lib/story-runtime/edit/session) — makes hosts editable, says what is selected, stages
+ *   runtime (lib/frame-edit/session) — makes hosts editable, says what is selected, stages
  *          what was typed, applies a format instantly.
  *   here   — composes every edit into the source, persists through the save-less protocol
  *          (solid/editor/create-live-edits), and pushes structural changes back down as

@@ -129,7 +129,7 @@ const STANDALONE_LAZY = [
  * closure. It is its OWN graph, not an entry of the shared one: an entry there would re-partition the shared
  * chunks under the rt+boot budget for a module no reader loads. Split, so the controller and the relay load on
  * attach and the editor (ProseMirror, the edit session, the DOM mounter) only on edit mode, through the
- * controller's own dynamic imports. The editor's Solid modules (lib/story-runtime/edit, services/app/solid) compile as the app compiles
+ * controller's own dynamic imports. The editor's Solid modules (lib/frame-edit, services/app/solid) compile as the app compiles
  * them (dom, not hydratable); the graph carries its own copy of Solid's runtime, which shares nothing with the
  * islands' (the editor mounts its own roots).
  */

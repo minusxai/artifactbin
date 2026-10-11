@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import type { JsxNode } from '@/lib/jsx';
 import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { ISLANDS_READY_EVENT } from '@/lib/islands/contract';
-import { mountCompiledEditRegions, type CompiledEditMount } from '@/lib/story-runtime/edit/dom-mounter';
+import { mountCompiledEditRegions, type CompiledEditMount } from '@/lib/frame-edit/dom-mounter';
 import { createLiveEditsCore, type LiveEditsCore } from '@/solid/lib/live-edits-core';
 import { createFileBackend, rebuildArtifactFile, sourceChangedOutside } from './file-backend';
 import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OFFLINE } from './extras';

@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
-import { discoverOutline, hasOutline, MIN_OUTLINE_SECTIONS } from '@/lib/story-runtime/outline';
+import { discoverOutline, hasOutline, MIN_OUTLINE_SECTIONS } from '@/lib/reader-chrome/outline';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {
