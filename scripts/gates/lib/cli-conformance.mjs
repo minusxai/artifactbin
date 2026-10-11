@@ -21,7 +21,7 @@ import { join, resolve } from 'node:path';
 import { tsImport } from 'tsx/esm/api';
 import { lane } from './lane.mjs';
 import { fixtureFetch as fetch } from './fixture-http.mjs';
-import { connectAgent, signInAccount } from './cli-connection.mjs';
+import { connectAgent, connectionBrowserCookie, signInAccount } from './cli-connection.mjs';
 import { connectConformanceNonOwner } from '../../lib/conformance-account.mjs';
 import { checkGuestHttpIssuance, checkDirectHttp } from './http-conformance.mjs';
 import { loginViaEmail } from '../../lib/mail-login.mjs';
@@ -60,10 +60,10 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
     })
     : await signInAccount(BASE, { sink, email: accountEmail });
   let browserCookie = approvingAccount.cookie;
-  async function invoke(args, { cwd = workspace, expected = 0, approve = false } = {}) {
+  async function invoke(args, { cwd = workspace, expected = 0, approve = false, credential } = {}) {
     const child = spawn(cli.endsWith('.mjs') ? process.execPath : cli,
       [...(cli.endsWith('.mjs') ? [cli] : []), ...args, '--server', BASE, '--yes', '--json'],
-      { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      { cwd, env: credential ? {...env,ARTIFACTBIN_HOME:join(root,'recipient-home'),ARTIFACTBIN_TOKEN:credential,ARTIFACTBIN_SKILLS:'off'} : env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '', diagnostic = '';
     child.stdout.on('data', chunk => { output += chunk; });
     child.stderr.on('data', chunk => { diagnostic += chunk; });
@@ -160,17 +160,57 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
         assert.equal(read.status, 200);
         assert.match((await read.json()).markup, /<Import name="sales_data" src="ref:/);
       });
+      let otherAccount;
       await scenario('owner/non-owner/anonymous private access; leak negative control', async () => {
-        const other = (await connectConformanceNonOwner({ base: BASE, accountEmail, stamp, credentialSource, env: process.env }, {
+        otherAccount = await connectConformanceNonOwner({ base: BASE, accountEmail, stamp, credentialSource, env: process.env }, {
           connectAgent,
           acquireCredential: async (...args) => (await tsImport('../../lib/credential.ts', import.meta.url)).acquireCredential(...args),
-        })).token;
+        });
+        const other=otherAccount.token;
         const hidden = status => assert.equal(status, 404, 'private read must remain hidden');
         assert.equal((await api(`/api/artifacts/${id}`, null)).status, 401, 'API requires authentication');
         hidden((await api(`/a/${id}`, null)).status);
         hidden((await api(`/api/artifacts/${id}`, other)).status);
         // Controlled contract violation: the same assertion must reject a leaked private response.
         assert.throws(() => hidden(read.status), /private read must remain hidden/);
+      });
+      await scenario('colleague share roles, rejected comment recovery and immediate revocation',async()=>{
+        assert.ok(otherAccount?.token,'Separate verified colleague account is required');
+        const otherCookie=credentialSource?otherAccount.cookie:connectionBrowserCookie(BASE,otherAccount.token);
+        const session=await fetch(`${BASE}/api/auth/get-session`,{headers:{cookie:otherCookie}});
+        assert.equal(session.status,200);const email=(await session.json())?.user?.email;assert.ok(email);
+        const share=async(role)=>{
+          const response=await fetch(`${BASE}/api/my/artifacts/${id}/sharing`,{method:'PUT',headers:{cookie:accountCookie,origin:BASE,'content-type':'application/json'},body:JSON.stringify({shares:role?[{email,role}]:[]})});
+          assert.equal(response.status,200,'Owner can update the colleague share');
+        };
+        try{
+          for(const role of ['viewer','commenter','editor']){
+            await share(role);
+            const cwd=join(root,`colleague-${role}`);await mkdir(cwd);
+            const opts={cwd,credential:otherAccount.token};
+            const comment=await invoke(['comment',id,'--quote','Baseline report','--body',`mxmx_test_${role}_review`],{...opts,expected:role==='viewer'?1:0});
+            if(role==='viewer')assert.equal(comment.error?.code,'not_found');
+            // This read immediately after a denied comment catches a stuck local journal.
+            await invoke(['pull',id,'--output','shared.jsx'],opts);
+            const file=join(cwd,'shared.jsx');const before=await readFile(file,'utf8');
+            await writeFile(file,before.replace('Baseline report',`mxmx_test_${role}_edit`));
+            const edited=await invoke(['push','shared.jsx'],{...opts,expected:role==='editor'?0:1});
+            if(role!=='editor')assert.equal(edited.error?.code,'not_found');
+            else{
+              const state=await api(`/api/artifacts/${id}`);assert.equal(state.status,200);
+              assert.match((await state.json()).markup,/mxmx_test_editor_edit/);
+            }
+          }
+          await share(null);
+          assert.equal((await api(`/api/artifacts/${id}`,otherAccount.token)).status,404,'Revoked recipient cannot read the private document');
+          const published=await readFile(join(workspace,'report.jsx'),'utf8');
+          // Restore the owner draft from the canonical shared head before later conflict scenarios.
+          await invoke(['pull','report.jsx','--force']);
+          const current=await readFile(join(workspace,'report.jsx'),'utf8');
+          await writeFile(join(workspace,'report.jsx'),current.replace('mxmx_test_editor_edit','Baseline report'));
+          await invoke(['push','report.jsx']);
+          assert.match(published,/Baseline report/);
+        }finally{await share(null);}
       });
       await scenario('CLI query executes on the host with bound parameters', async () => {
         const query = await invoke(['query', id, '--name', 'sales', '--param', 'region=EU']);
