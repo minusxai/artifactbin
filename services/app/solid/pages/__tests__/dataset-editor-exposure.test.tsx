@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
  */
 import { cleanup, fireEvent, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addCell, catalog, change, click, discover, editor, installDatasetFetch, savedDefinition, selectOrders, state, tables } from '@/solid/test/dataset-catalog';
+import { addCell, catalog, change, click, discover, editor, installDatasetFetch, pick, savedDefinition, selectOrders, state, tables } from '@/solid/test/dataset-catalog';
 
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => state.viewerSession }) }));
 beforeEach(installDatasetFetch);
@@ -22,7 +22,7 @@ describe('dataset editor — exposure and saving', () => {
     expect(screen.getByLabelText('Expose cell 1')).not.toBeChecked(); click('Expose cell 1');
     expect(screen.getByLabelText('Expose table models.totals')).toBeChecked(); click('Toggle table models.totals'); click('Expose column models.totals.total');
     expect(screen.getByLabelText('Expose cell 1')).toBePartiallyChecked(); click('Expose table models.totals');
-    expect(screen.getByLabelText('Expose cell 1')).toBeChecked(); change('Default schema', 'models'); click('Save dataset');
+    expect(screen.getByLabelText('Expose cell 1')).toBeChecked(); pick('Default schema', 'models'); expect(screen.getByLabelText('Default schema')).toHaveTextContent('models'); click('Save dataset');
     await waitFor(() => expect(savedDefinition()?.tables).toEqual([{ schema: 'models', name: 'totals', modelCellId: expect.any(String), columns: ['id', 'total'] }]));
     expect(typeof state.calls.find(c => c.url === '/api/my/artifacts')?.body.dataset).toBe('string');
     expect(savedDefinition()?.connection?.passwordSecretId).toBe('secret-new');
@@ -47,7 +47,7 @@ describe('dataset editor — exposure and saving', () => {
   });
 
   it('exposes only selected columns and keeps the explicit default schema stable as tables are added', async () => {
-    editor(); change('Dataset title', 'Orders'); await selectOrders(); click('Expose table crm.people'); expect(screen.getByLabelText('Default schema')).toHaveValue('sales');
+    editor(); change('Dataset title', 'Orders'); await selectOrders(); click('Expose table crm.people'); expect(screen.getByLabelText('Default schema')).toHaveTextContent('sales');
     click('Save dataset'); await waitFor(() => expect(savedDefinition()?.tables).toHaveLength(2));
     expect(state.calls.find(c => c.url === '/api/my/artifacts')?.body.visibility).toBe('private');
   });
@@ -89,7 +89,7 @@ describe('dataset editor — exposure and saving', () => {
   });
 
   it('adds stored JSON rows in a named table', async () => {
-    editor(); change('Dataset title', 'Orders'); click('JSON'); click('Add JSON table'); change('Stored schema 1','main'); change('Stored table name 1','rows'); change('Stored rows 1','[{"id":1}]'); change('Default schema','main'); click('Save dataset');
+    editor(); change('Dataset title', 'Orders'); click('JSON'); click('Add JSON table'); change('Stored schema 1','main'); change('Stored table name 1','rows'); change('Stored rows 1','[{"id":1}]'); pick('Default schema','main'); click('Save dataset');
     await waitFor(() => expect(savedDefinition()).toMatchObject({kind:'stored',defaultSchema:'main',tables:[{schema:'main',name:'rows',rows:[{id:1}]}]}));
   });
 

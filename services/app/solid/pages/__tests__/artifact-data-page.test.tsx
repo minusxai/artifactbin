@@ -135,7 +135,7 @@ it('follows a dataset on its live stream: a new version re-reads the page and ad
   const stream = streams.find((candidate) => candidate.url === '/a/art001/events')!;
   stream.onmessage?.({ data: JSON.stringify({ editId: 'e2', version: 2, by: null }) });
   await waitFor(() => expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some(([url]) => url === '/api/page/artifact/art001')).toBe(true));
-  await waitFor(() => expect(within(screen.getByLabelText('Dataset table')).getByRole('option', { name: 'orders' })).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByLabelText('Dataset table')).toHaveTextContent('orders'));
 });
 
 it('photographs a capture without opening a live stream, its image read with the capture key', () => {
