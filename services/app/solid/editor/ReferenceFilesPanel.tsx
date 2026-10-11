@@ -1,6 +1,9 @@
 /* @jsxImportSource solid-js */
 /** A read-only index of referenced files. */
 import { For, Show, type JSX } from 'solid-js';
+import { Panel } from '../ui/Panel';
+import { SectionHeading } from '../ui/PageHeader';
+import { StatusMessage } from '../ui/StatusMessage';
 
 const LABELS: Record<string, string> = { image: 'Image', pdf: 'PDF', file: 'File', asset: 'Asset', viz: 'Visualization' };
 
@@ -10,11 +13,11 @@ export default function ReferenceFilesPanel(props: {
   const files = () => [...new Map(props.refs.filter((ref) => ref.kind !== 'dataset').map((ref) => [ref.id, ref])).values()];
   return (
     <section>
-      <h2 class="mb-3 font-mono text-sm font-semibold text-fg">Files</h2>
-      <Show when={files().length > 0} fallback={<p class="text-sm text-muted">No referenced files.</p>}>
-        <div class="overflow-x-auto rounded-[4px] border border-edge">
+      <SectionHeading class="mb-3">Files</SectionHeading>
+      <Show when={files().length > 0} fallback={<StatusMessage kind="empty">No referenced files.</StatusMessage>}>
+        <Panel padding="none" class="overflow-x-auto">
           <table aria-label="Referenced files" class="w-full border-collapse text-left font-mono text-xs">
-            <thead class="bg-raised text-[11px] text-muted">
+            <thead class="bg-raised text-2xs text-muted">
               <tr>
                 <th scope="col" class="border-b border-edge px-3 py-2 font-medium">File</th>
                 <th scope="col" class="border-b border-edge px-3 py-2 font-medium">Type</th>
@@ -33,7 +36,7 @@ export default function ReferenceFilesPanel(props: {
               </For>
             </tbody>
           </table>
-        </div>
+        </Panel>
       </Show>
     </section>
   );

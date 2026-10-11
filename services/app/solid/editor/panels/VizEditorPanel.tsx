@@ -20,6 +20,8 @@
  * flat scale — wrong without looking wrong.
  */
 import { createEffect, createSignal, For, on, Show, type JSX } from 'solid-js';
+import { Button } from '@/solid/ui/Button';
+import { Input, Textarea } from '@/solid/ui/Field';
 import { Select } from '@/solid/ui/Select';
 import BoundQuery from '../BoundQuery';
 import type { TableChoice } from '@/lib/document/table-catalog';
@@ -78,12 +80,12 @@ function TitleField(props: { title: string | null; onCommit: (title: string | nu
   };
   return (
     <label class="flex flex-col gap-1">
-      <span class="font-mono text-[11px] text-faint">title</span>
-      <input
+      <span class="font-mono text-2xs text-faint">title</span>
+      <Input
+        size="sm"
         type="text"
         aria-label="Chart title"
         placeholder="— no title —"
-        class="w-full rounded-[4px] border border-edge bg-surface px-2 py-1 font-mono text-xs text-fg"
         value={draft()}
         onInput={(e) => setDraft(e.currentTarget.value)}
         onBlur={commit}
@@ -127,28 +129,23 @@ function SpecEditor(props: { specJson: string; onApply: (parsed: Record<string, 
 
   return (
     <div class="flex flex-col gap-1">
-      <span class="font-mono text-[11px] text-faint">spec</span>
-      <textarea
+      <span class="font-mono text-2xs text-faint">spec</span>
+      <Textarea
+        size="sm"
         aria-label="Chart spec"
         spellcheck={false}
         wrap="off"
         rows={14}
-        class="w-full resize-y overflow-auto rounded-[4px] border border-edge bg-surface p-2 font-mono text-[11px] leading-[1.5] text-fg"
+        class="resize-y overflow-auto"
         value={draft()}
         onInput={(e) => { setDraft(e.currentTarget.value); setError(null); }}
       />
       <Show when={error()}>
-        {(msg) => <p class="font-sans text-[11px] text-red-500" aria-label="Chart spec error">{msg()}</p>}
+        {(msg) => <p class="font-sans text-2xs text-danger" aria-label="Chart spec error">{msg()}</p>}
       </Show>
-      <button
-        type="button"
-        aria-label="Apply chart spec"
-        disabled={!dirty()}
-        onClick={apply}
-        class="cursor-pointer self-end rounded-[4px] border border-edge px-2 py-0.5 font-mono text-[11px] text-fg hover:bg-raised disabled:cursor-default disabled:opacity-40"
-      >
+      <Button variant="secondary" size="sm" aria-label="Apply chart spec" disabled={!dirty()} onClick={apply} class="self-end">
         update
-      </button>
+      </Button>
     </div>
   );
 }
@@ -196,7 +193,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
               behind it — read-only here; the spec box below owns the rewrite. */}
           <Show when={props.table}>
             <div class="flex flex-col gap-1">
-              <span class="font-mono text-[11px] text-faint">data</span>
+              <span class="font-mono text-2xs text-faint">data</span>
               <span aria-label="Table" class="font-mono text-xs text-fg">${props.table}</span>
             </div>
           </Show>
@@ -222,7 +219,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
       <div class="flex flex-col gap-3" aria-label="Chart editor">
         <TitleField title={props.title} onCommit={props.onTitleChange} />
         <div class="flex flex-col gap-1">
-          <span class="font-mono text-[11px] text-faint">data</span>
+          <span class="font-mono text-2xs text-faint">data</span>
           <Select size="sm"
             ariaLabel="Table"
             value={props.table ?? ''}
@@ -239,7 +236,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
         </div>
         <BoundQuery table={bound()} onOpenQuery={props.onOpenQuery} />
         <Show when={props.table && !bound()}>
-          <p class="font-sans text-[11px] text-amber-600" aria-label="Missing table notice">
+          <p class="font-sans text-2xs text-danger" aria-label="Missing table notice">
             This chart points at a table the document does not declare — add a &lt;Query&gt; or &lt;Value&gt; in &lt;Helmet&gt;.
           </p>
         </Show>
@@ -248,7 +245,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
           when={custom()}
           fallback={
             <div class="flex flex-col gap-1">
-              <span class="font-mono text-[11px] text-faint">chart</span>
+              <span class="font-mono text-2xs text-faint">chart</span>
               <Select size="sm"
                 ariaLabel="Chart type"
                 value={chartType()}
@@ -273,7 +270,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
             const current = () => getChannelField(spec(), zone.channel) ?? '';
             return (
               <div class="flex flex-col gap-1">
-                <span class="font-mono text-[11px] text-faint">{zone.label.toLowerCase()}</span>
+                <span class="font-mono text-2xs text-faint">{zone.label.toLowerCase()}</span>
                 <Select size="sm"
                   ariaLabel={zone.label}
                   value={current()}
@@ -293,7 +290,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
         </For>
 
         <Show when={chartType() !== 'table' && columns().length === 0}>
-          <p class="font-sans text-[11px] text-muted" aria-label="No table notice">
+          <p class="font-sans text-2xs text-muted" aria-label="No table notice">
             Pick a table to choose fields.
           </p>
         </Show>

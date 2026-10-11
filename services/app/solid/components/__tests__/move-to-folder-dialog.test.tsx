@@ -81,3 +81,28 @@ it('renders outside the card so transformed shelf rows cannot clip the dialog', 
   render(() => <div data-testid="card" style={{transform: 'translateY(0)'}}><MoveToFolderDialog title="Sales" artifactId="sales" currentParentId={null} folders={folders} onMove={async () => true} onClose={() => {}} /></div>);
   expect(screen.getByTestId('card')).not.toContainElement(screen.getByRole('dialog', {name: 'Move Sales'}));
 });
+
+it('is a modal named for the item, describes its job and closes on Escape', () => {
+  const {onClose} = open();
+  const dialog = screen.getByRole('dialog', {name: 'Move Sales'});
+  expect(dialog).toHaveAttribute('aria-modal', 'true');
+  expect(dialog).toHaveAccessibleDescription('Choose a destination folder.');
+  expect(screen.getByLabelText('Filter folders')).toHaveFocus();
+  fireEvent.keyDown(dialog, {key: 'Escape'});
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+it('keeps the picker open and locked while a move is in flight', async () => {
+  let finish!: (ok: boolean) => void;
+  const onMove = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+  const {onClose} = open({onMove});
+  fireEvent.click(screen.getByLabelText('Move to Design'));
+  fireEvent.click(screen.getByRole('button', {name: 'Move here'}));
+  expect(await screen.findByRole('button', {name: 'Moving…'})).toBeDisabled();
+  expect(screen.getByRole('button', {name: 'Close folder picker'})).toBeDisabled();
+  expect(screen.getByLabelText('Filter folders')).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole('dialog', {name: 'Move Sales'}), {key: 'Escape'});
+  expect(onClose).not.toHaveBeenCalled();
+  finish(true);
+  await waitFor(() => expect(screen.getByRole('button', {name: 'Move here'})).toBeEnabled());
+});

@@ -2,6 +2,8 @@
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { pageDataChanged, profileChanged } from '@/solid/lib/page-data-events';
 import { Button } from '../ui/Button';
+import { Field, Input } from '../ui/Field';
+import { StatusMessage } from '../ui/StatusMessage';
 import { apiFetch } from '../lib/api';
 
 const HANDLE_REFUSALS: Record<string, string> = { username_taken: 'that handle is taken — pick another', invalid_username: '3–32 characters: lowercase letters, numbers, underscore (no hyphens)' };
@@ -20,9 +22,10 @@ export function UsernameCard(props: { username: string | null }): JSX.Element {
     if (response.ok && body.username) { setValue(body.username); setStatus('saved'); pageDataChanged(); profileChanged(); return; }
     setStatus(HANDLE_REFUSALS[body.error ?? ''] ?? 'could not save that handle');
   };
-  return <section class="min-w-0"><label for="profile-username" class="text-sm font-medium">Handle</label>
-    <form class="mt-3 flex flex-wrap items-center gap-3" onSubmit={event => { event.preventDefault(); void save(); }}><div class="flex min-h-11 min-w-0 flex-1 items-center rounded-lg border border-edge bg-surface focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20"><span aria-hidden="true" class="pl-3 font-mono text-sm text-faint">@</span><input id="profile-username" aria-label="Username" autocomplete="off" spellcheck={false} value={value()} onInput={event => setValue(event.currentTarget.value)} class="min-w-0 w-full border-0 bg-transparent px-2 py-2 text-sm outline-none" /></div><Button type="submit" aria-label="Save username" disabled={busy() || !value().trim()} class="min-h-11 shrink-0">{busy() ? 'Saving…' : 'Save'}</Button></form>
-    <p class="mt-2 text-sm leading-relaxed text-muted">Renaming is safe: links already shared keep working.</p>
-    <Show when={status()}><p role="status" class={`mt-2 text-xs ${status() === 'saved' ? 'text-accent' : 'text-danger'}`}>{status()}</p></Show>
+  return <section class="min-w-0">
+    <form onSubmit={event => { event.preventDefault(); void save(); }}><Field label="Handle" hint="Renaming is safe: links already shared keep working.">
+      <div class="flex items-center gap-2"><span aria-hidden="true" class="w-4 text-center font-mono text-sm text-faint">@</span><Input aria-label="Username" autocomplete="off" spellcheck={false} value={value()} onInput={event => setValue(event.currentTarget.value)} class="min-w-0 flex-1" /><Button type="submit" aria-label="Save username" disabled={busy() || !value().trim()}>{busy() ? 'Saving…' : 'Save'}</Button></div>
+    </Field></form>
+    <Show when={status()}><StatusMessage kind={status() === 'saved' ? 'notice' : 'error'} class="mt-2">{status()}</StatusMessage></Show>
   </section>;
 }

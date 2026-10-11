@@ -1,17 +1,16 @@
 /* @jsxImportSource solid-js */
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
-import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import Folder from 'lucide-solid/icons/folder';
 import FolderOpen from 'lucide-solid/icons/folder-open';
 import House from 'lucide-solid/icons/house';
-import Search from 'lucide-solid/icons/search';
 import Check from 'lucide-solid/icons/check';
 import { parentOfRow, type ShelfRow } from '@/lib/workspace/shelf';
 import { rowTitle } from '@/lib/document/display-title';
-import { DialogShell } from '../ui/DialogShell';
 import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
+import { SearchField } from '../ui/Field';
+import { StatusMessage } from '../ui/StatusMessage';
 
 type FolderNode = {id: string | null; name: string; parent: string | null; children: FolderNode[]};
 
@@ -88,33 +87,25 @@ export function MoveToFolderDialog(props: {
     catch {setError('Could not move this item. Try another folder or retry.');}
     finally {setBusy(false);}
   };
-  const close = () => {if (!busy()) props.onClose();};
-  return <Portal mount={trustedPortalOf(document) ?? document.body}><DialogShell onClose={close} initialFocus="[autofocus]" lockScroll>
-    <div role="dialog" aria-modal="true" aria-label={`Move ${props.title}`} class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
-      <div class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-edge bg-surface text-sm text-fg shadow-2xl">
-        <header class="border-b border-edge px-5 py-4"><h2 class="truncate text-base font-semibold">Move {props.title}</h2><p class="mt-1 text-xs text-muted">Choose a destination folder.</p></header>
-        <div class="px-4 pt-4"><label class="flex items-center gap-2 rounded-md border border-edge bg-raised/40 px-3 focus-within:border-accent"><Search size={15} class="shrink-0 text-faint" /><input aria-label="Filter folders" placeholder="Find a folder…" autofocus disabled={busy()} value={query()} onInput={event => setQuery(event.currentTarget.value)} class="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none" /></label></div>
-        <div class="min-h-48 overflow-y-auto p-3">
-          <div role="tree" aria-label="Destination folders" aria-busy={busy()}><For each={visible()}>{node => <div role="treeitem" aria-label={node.id === null ? 'Move to root' : `Move to ${node.name}`}
-            aria-level={ancestors(node.id).length + 1} aria-selected={selected() === node.id} aria-expanded={node.children.length ? isExpanded(node.id) : undefined} aria-disabled={blocked(node.id) || busy()}
-            aria-current={props.currentParentId === node.id ? 'location' : undefined} tabIndex={selected() === node.id ? 0 : -1}
-            onClick={() => select(node.id)} onKeyDown={event => keydown(event, node, visible().indexOf(node))}
-            class={`my-0.5 flex min-h-9 cursor-pointer items-center gap-2 rounded-md pr-3 outline-none focus-visible:ring-2 focus-visible:ring-accent ${blocked(node.id) ? 'opacity-40' : ''} ${selected() === node.id ? 'bg-accent-soft text-accent' : 'hover:bg-raised'}`}
-            style={{'padding-left': `${8 + ancestors(node.id).length * 20}px`}}>
-            <Show when={node.children.length} fallback={<span class="w-5 shrink-0" />}><button type="button" tabIndex={-1} aria-label={`${isExpanded(node.id) ? 'Collapse' : 'Expand'} ${node.name}`} disabled={busy() || !!query()} onClick={event => {event.stopPropagation(); toggle(node.id);}} class="inline-flex h-6 w-5 shrink-0 items-center justify-center rounded hover:bg-edge/50"><ChevronRight size={13} class={isExpanded(node.id) ? 'rotate-90' : ''} /></button></Show>
-            <Show when={node.id !== null} fallback={<House size={17} class="shrink-0 text-muted" />}><Show when={isExpanded(node.id) && node.children.length} fallback={<Folder size={18} class="shrink-0 fill-sky-500/15 text-sky-500" />}><FolderOpen size={18} class="shrink-0 fill-sky-500/15 text-sky-500" /></Show></Show>
-            <span class="min-w-0 flex-1 truncate">{node.name}</span>
-            <Show when={props.currentParentId === node.id}><span class="text-[10px] text-muted">Current</span></Show>
-            <Show when={selected() === node.id}><Check size={14} class="shrink-0" /></Show>
-          </div>}</For></div>
-          <Show when={query().trim() && visible().length === 1}><p class="px-3 py-6 text-center text-xs text-muted">No folders match your search.</p></Show>
-        </div>
-        <footer class="border-t border-edge bg-raised/30 px-5 py-4">
-          <p aria-label="Selected destination" class="mb-3 break-words text-xs text-muted">{['Workspace', ...ancestors(selected()).map(node => node.name)].join(' / ')}</p>
-          <Show when={error()}><p role="alert" class="mb-3 text-xs text-danger">{error()}</p></Show>
-          <div class="flex justify-end gap-2"><Button variant="secondary" aria-label="Close folder picker" disabled={busy()} onClick={close}>Cancel</Button><Button disabled={busy() || blocked(selected()) || selected() === props.currentParentId} onClick={() => void move()}>{busy() ? 'Moving…' : 'Move here'}</Button></div>
-        </footer>
-      </div>
+  return <Dialog title={`Move ${props.title}`} description="Choose a destination folder." size="md" busy={busy()} onClose={props.onClose} lockScroll
+    footer={<><Button variant="secondary" aria-label="Close folder picker" disabled={busy()} onClick={props.onClose}>Cancel</Button><Button disabled={busy() || blocked(selected()) || selected() === props.currentParentId} onClick={() => void move()}>{busy() ? 'Moving…' : 'Move here'}</Button></>}>
+    <SearchField label="Filter folders" placeholder="Find a folder…" disabled={busy()} value={query()} onValue={setQuery} />
+    <div class="mt-3 max-h-72 min-h-48 overflow-y-auto">
+      <div role="tree" aria-label="Destination folders" aria-busy={busy()}><For each={visible()}>{node => <div role="treeitem" aria-label={node.id === null ? 'Move to root' : `Move to ${node.name}`}
+        aria-level={ancestors(node.id).length + 1} aria-selected={selected() === node.id} aria-expanded={node.children.length ? isExpanded(node.id) : undefined} aria-disabled={blocked(node.id) || busy()}
+        aria-current={props.currentParentId === node.id ? 'location' : undefined} tabIndex={selected() === node.id ? 0 : -1}
+        onClick={() => select(node.id)} onKeyDown={event => keydown(event, node, visible().indexOf(node))}
+        class={`my-0.5 flex min-h-9 cursor-pointer items-center gap-2 rounded-control pr-3 outline-none focus-visible:ring-2 focus-visible:ring-accent ${blocked(node.id) ? 'opacity-40' : ''} ${selected() === node.id ? 'bg-accent-soft text-accent' : 'hover:bg-raised'}`}
+        style={{'padding-left': `${8 + ancestors(node.id).length * 20}px`}}>
+        <Show when={node.children.length} fallback={<span class="w-5 shrink-0" />}><Button variant="ghost" size="sm" icon tabIndex={-1} aria-label={`${isExpanded(node.id) ? 'Collapse' : 'Expand'} ${node.name}`} disabled={busy() || !!query()} onClick={event => {event.stopPropagation(); toggle(node.id);}} class="h-6 w-5"><ChevronRight size={13} class={isExpanded(node.id) ? 'rotate-90' : ''} /></Button></Show>
+        <Show when={node.id !== null} fallback={<House size={17} class="shrink-0 text-muted" />}><Show when={isExpanded(node.id) && node.children.length} fallback={<Folder size={18} class="shrink-0 fill-accent/15 text-accent" />}><FolderOpen size={18} class="shrink-0 fill-accent/15 text-accent" /></Show></Show>
+        <span class="min-w-0 flex-1 truncate">{node.name}</span>
+        <Show when={props.currentParentId === node.id}><span class="text-micro text-muted">Current</span></Show>
+        <Show when={selected() === node.id}><Check size={14} class="shrink-0" /></Show>
+      </div>}</For></div>
+      <Show when={query().trim() && visible().length === 1}><StatusMessage kind="empty" class="justify-center py-6">No folders match your search.</StatusMessage></Show>
     </div>
-  </DialogShell></Portal>;
+    <p aria-label="Selected destination" class="mt-3 break-words text-xs text-muted">{['Workspace', ...ancestors(selected()).map(node => node.name)].join(' / ')}</p>
+    <Show when={error()}><StatusMessage kind="error" class="mt-3">{error()}</StatusMessage></Show>
+  </Dialog>;
 }

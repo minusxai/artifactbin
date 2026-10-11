@@ -9,6 +9,9 @@
  * `{ mentionsUnavailable: string | null; members?: (query: string, opts: { signal }) => Promise<{ people: [...] } | null> }`.
  * Whoever wires this toolbar into a live page passes the app's ArtifactBackend (it satisfies this
  * shape already — `unavailable('mentions')` and `members(...)`).
+ *
+ * The text-color control is a native color input behind an icon label: no solid/ui primitive draws a color well,
+ * and its black default is data.
  */
 import { createEffect, createSignal, createUniqueId, For, on, Show, type JSX } from 'solid-js';
 import AArrowDown from 'lucide-solid/icons/a-arrow-down';
@@ -51,6 +54,8 @@ import { selectionToolbarPlan } from '@/solid/lib/selection-toolbar';
 import type { MarkdownBlockKind, MarkdownTableAction, StoryEditSelection } from '@/lib/edit-protocol';
 import type { ComposableFormatEdit } from '@/lib/document/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
+import { Button } from '@/solid/ui/Button';
+import { Input } from '@/solid/ui/Field';
 import { Select } from '@/solid/ui/Select';
 import { Tooltip } from '@/solid/ui/Tooltip';
 import { nodeName } from '@/lib/story-ui/node-names';
@@ -107,18 +112,17 @@ interface StoryFormatToolbarProps {
 function Chip(props: { label: string; on?: boolean | 'mixed'; onClick: () => void; children: JSX.Element }): JSX.Element {
   return (
     <Tooltip content={props.label}>
-      <button
-        type="button"
+      <Button
+        variant={props.on ? 'secondary' : 'ghost'}
+        size="sm"
+        icon
         aria-label={props.label}
         aria-pressed={props.on}
         onMouseDown={(e) => e.preventDefault()}
         onClick={props.onClick}
-        class={`inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[3px] ${
-          props.on ? 'bg-accent-soft text-accent' : 'text-fg hover:bg-raised'
-        }`}
       >
         {props.children}
-      </button>
+      </Button>
     </Tooltip>
   );
 }
@@ -177,24 +181,23 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
               aria-label="Selection breadcrumb"
             >
               <div ref={crumbs} class="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
-                <button type="button" aria-label="Document options" onClick={() => props.onSelect(null)} class="shrink-0 rounded px-1.5 py-1 text-[11px] text-muted hover:bg-raised">
+                <Button variant="ghost" size="sm" aria-label="Document options" onClick={() => props.onSelect(null)}>
                   Document
-                </button>
-                <span class="text-[11px] text-muted">{'>'}</span>
+                </Button>
+                <span class="text-2xs text-muted">{'>'}</span>
                 <For each={selection().ancestors}>
                   {(crumb) => (
                     <>
                       <Tooltip content={crumb.hint || crumb.tag}>
-                        <button type="button" aria-label={`Select ${nodeName(crumb.tag)}`} onMouseDown={keepFocus} onClick={() => props.onSelect(crumb.path)}
-                          class="cursor-pointer rounded-[3px] px-1 text-[11px] text-muted hover:bg-raised hover:text-fg">
+                        <Button variant="ghost" size="sm" aria-label={`Select ${nodeName(crumb.tag)}`} onMouseDown={keepFocus} onClick={() => props.onSelect(crumb.path)}>
                           {nodeName(crumb.tag)}
-                        </button>
+                        </Button>
                       </Tooltip>
-                      <span class="text-[11px] text-muted">{'>'}</span>
+                      <span class="text-2xs text-muted">{'>'}</span>
                     </>
                   )}
                 </For>
-                <span class="shrink-0 px-1 text-[11px] text-accent">{nodeName(selection().tag)}</span>
+                <span class="shrink-0 px-1 text-2xs text-accent">{nodeName(selection().tag)}</span>
               </div>
             </div>
             <div
@@ -205,8 +208,8 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
               <Show when={props.historyControls}><span class="mx-1 h-4 w-px shrink-0 bg-edge" /></Show>
 
               <Show when={props.onAutoHeight && selection().customHeight}>
-                <span class="text-[11px] text-muted">Height: custom</span>
-                <button type="button" aria-label="Auto height" onClick={props.onAutoHeight} class="rounded border border-edge px-1.5 py-1 text-[11px]">Auto height</button>
+                <span class="text-2xs text-muted">Height: custom</span>
+                <Button variant="secondary" size="sm" aria-label="Auto height" onClick={props.onAutoHeight}>Auto height</Button>
               </Show>
 
               <Show when={plan().text}>
@@ -232,8 +235,8 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
                     ['row-before', 'Add row above'], ['row-after', 'Add row below'],
                     ['column-before', 'Add column left'], ['column-after', 'Add column right'],
                     ['delete-row', 'Delete row'], ['delete-column', 'Delete column'], ['delete-table', 'Delete table'],
-                  ] as const}>{([action, label]) => <button type="button" aria-label={label} onMouseDown={keepFocus}
-                    onClick={() => props.onMarkdownTable?.(action)} class="rounded border border-edge px-2 py-1 text-xs hover:bg-surface">{label}</button>}</For>
+                  ] as const}>{([action, label]) => <Button variant="secondary" size="sm" aria-label={label} onMouseDown={keepFocus}
+                    onClick={() => props.onMarkdownTable?.(action)}>{label}</Button>}</For>
                 </div>
               </Show>
 
@@ -245,10 +248,9 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
               <Show when={plan().image && props.image}>
                 {(image) => (
                   <>
-                    <button type="button" aria-label="Replace image" onMouseDown={keepFocus} onClick={() => image().onReplace()}
-                      class="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 font-mono text-[11px] leading-none text-fg hover:bg-surface">
+                    <Button variant="ghost" size="sm" aria-label="Replace image" onMouseDown={keepFocus} onClick={() => image().onReplace()} class="gap-1.5">
                       <ImageUp size={12} /><span class="hidden sm:inline">Replace</span>
-                    </button>
+                    </Button>
                     <StoryToolbarMenu
                       label={image().alt === null ? 'Add alt text' : 'Alt text'}
                       hint={image().alt === null}
@@ -256,7 +258,8 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
                       onOpenChange={(open) => setAltDraft(open ? (image().alt ?? '') : null)}
                     >
                       <div class="flex w-72 max-w-full gap-1.5">
-                        <input
+                        <Input
+                          size="sm"
                           aria-label="Image alt text"
                           autofocus
                           ref={(el) => queueMicrotask(() => el.focus())}
@@ -267,9 +270,9 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
                             if (e.key === 'Enter') { e.preventDefault(); commitAlt(); }
                             else if (e.key === 'Escape') { e.preventDefault(); setAltDraft(null); }
                           }}
-                          class="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-1 text-[12px] text-fg focus:border-edge-bright focus:outline-none"
+                          class="flex-1"
                         />
-                        <button type="button" aria-label="Save alt text" onClick={commitAlt} class="cursor-pointer rounded-[4px] border border-edge px-2 py-1 font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised">save</button>
+                        <Button variant="secondary" size="sm" aria-label="Save alt text" onClick={commitAlt}>save</Button>
                       </div>
                     </StoryToolbarMenu>
                     <span class="mx-0.5 h-4 w-px bg-edge" />
@@ -298,7 +301,7 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
                 <Show when={plan().color}>
                   <span class="mx-0.5 h-4 w-px bg-edge" />
                   <Tooltip content="text color">
-                    <label aria-label="Text color" class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-fg hover:bg-raised">
+                    <label aria-label="Text color" class="inline-flex size-control-sm shrink-0 cursor-pointer items-center justify-center rounded-control text-fg hover:bg-raised">
                       <Baseline size={14} />
                       <input type="color" aria-label="Pick text color" value={currentStoryColor(cls(), 'text') ?? '#000000'}
                         onInput={(e) => apply(applyStoryColor(cls(), 'text', e.currentTarget.value))} class="absolute h-0 w-0 opacity-0" />
@@ -318,30 +321,28 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
                     if (href) props.onApplyLink(selection().path, href);
                     setLinkDraft(null);
                   }}>
-                    <input ref={linkInput} aria-label="Link URL" value={linkDraft() ?? ''} onInput={(e) => setLinkDraft(e.currentTarget.value)}
-                      onKeyDown={(e) => { if (e.key === 'Escape') setLinkDraft(null); }} placeholder="https://…"
-                      class="w-44 rounded-[3px] border border-edge bg-raised px-1.5 py-0.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none" />
+                    <div class="w-44"><Input size="sm" ref={linkInput} aria-label="Link URL" value={linkDraft() ?? ''} onInput={(e) => setLinkDraft(e.currentTarget.value)}
+                      onKeyDown={(e) => { if (e.key === 'Escape') setLinkDraft(null); }} placeholder="https://…" /></div>
                     <Show when={linkDraft()?.startsWith('@')}>
                       <div aria-label="People to mention" class="flex max-w-64 flex-wrap gap-1">
                         <For each={people()}>
                           {(p) => (
-                            <button type="button" class="rounded-md bg-accent-soft px-2 py-1 text-xs text-accent" onMouseDown={(e) => e.preventDefault()}
+                            <Button variant="secondary" size="sm" onMouseDown={(e) => e.preventDefault()}
                               onClick={() => { props.onApplyLink(selection().path, `/people/${p.user_id}`); setLinkDraft(null); }}>
                               @{p.username}
-                            </button>
+                            </Button>
                           )}
                         </For>
                       </div>
                     </Show>
-                    <button type="submit" aria-label="Apply link" class="cursor-pointer rounded-[3px] px-1 font-mono text-[10px] text-accent hover:bg-raised">ok</button>
+                    <Button type="submit" variant="ghost" size="sm" aria-label="Apply link">ok</Button>
                   </form>
                 }>
                   <Chip label="Insert link" onClick={() => (props.onEditLink && selection().editor === 'prose' ? props.onEditLink() : setLinkDraft(''))}><Link2 size={14} /></Chip>
                   <Show when={props.artifactId}>
                     <Show when={!mentionsUnavailable()} fallback={
                       <span tabIndex={0} data-feature-unavailable="" class="inline-flex [&>:disabled]:pointer-events-none">
-                        <button type="button" aria-label="Mention person" aria-describedby={urlReason} disabled
-                          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] text-fg opacity-50">@</button>
+                        <Button variant="ghost" size="sm" icon aria-label="Mention person" aria-describedby={urlReason} disabled>@</Button>
                         <span id={urlReason} hidden>{mentionsUnavailable()}</span>
                       </span>
                     }>
@@ -356,19 +357,19 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
                 <StoryToolbarMenu label="Spacing" name="More formatting controls" open={moreOpen()} onOpenChange={setMoreOpen}>
                   <div class="flex flex-wrap items-center gap-0.5" aria-label="Spacing controls">
                     <Chip label="Decrease space above" onClick={() => apply(stepSpacingClass(cls(), 'above', -1))}><ArrowUpToLine size={14} /></Chip>
-                    <span class="min-w-[26px] text-center font-mono text-[10px] text-muted">{Number(currentSpacingStep(cls(), 'above') ?? '0') * 4}px</span>
+                    <span class="min-w-[26px] text-center font-mono text-micro text-muted">{Number(currentSpacingStep(cls(), 'above') ?? '0') * 4}px</span>
                     <Chip label="Increase space above" onClick={() => apply(stepSpacingClass(cls(), 'above', 1))}><ArrowUpFromLine size={14} /></Chip>
                     <span class="mx-0.5 h-4 w-px bg-edge" />
                     <Chip label="Decrease space below" onClick={() => apply(stepSpacingClass(cls(), 'below', -1))}><ArrowDownToLine size={14} /></Chip>
-                    <span class="min-w-[26px] text-center font-mono text-[10px] text-muted">{Number(currentSpacingStep(cls(), 'below') ?? '0') * 4}px</span>
+                    <span class="min-w-[26px] text-center font-mono text-micro text-muted">{Number(currentSpacingStep(cls(), 'below') ?? '0') * 4}px</span>
                     <Chip label="Increase space below" onClick={() => apply(stepSpacingClass(cls(), 'below', 1))}><ArrowDownFromLine size={14} /></Chip>
                     <span class="mx-0.5 h-4 w-px bg-edge" />
                     <Chip label="Decrease space left" onClick={() => apply(stepPaddingClass(cls(), 'left', -1))}><ArrowLeftToLine size={14} /></Chip>
-                    <span class="min-w-[26px] text-center font-mono text-[10px] text-muted">{Number(currentPaddingStep(cls(), 'left') ?? '0') * 4}px</span>
+                    <span class="min-w-[26px] text-center font-mono text-micro text-muted">{Number(currentPaddingStep(cls(), 'left') ?? '0') * 4}px</span>
                     <Chip label="Increase space left" onClick={() => apply(stepPaddingClass(cls(), 'left', 1))}><ArrowLeftFromLine size={14} /></Chip>
                     <span class="mx-0.5 h-4 w-px bg-edge" />
                     <Chip label="Decrease space right" onClick={() => apply(stepPaddingClass(cls(), 'right', -1))}><ArrowRightToLine size={14} /></Chip>
-                    <span class="min-w-[26px] text-center font-mono text-[10px] text-muted">{Number(currentPaddingStep(cls(), 'right') ?? '0') * 4}px</span>
+                    <span class="min-w-[26px] text-center font-mono text-micro text-muted">{Number(currentPaddingStep(cls(), 'right') ?? '0') * 4}px</span>
                     <Chip label="Increase space right" onClick={() => apply(stepPaddingClass(cls(), 'right', 1))}><ArrowRightFromLine size={14} /></Chip>
                     <span class="mx-0.5 h-4 w-px bg-edge" />
                   </div>
@@ -380,17 +381,16 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
               <Show when={props.onComment}>
                 {(onComment) => (
                   <Tooltip content="comment on this (⌘⌥M)">
-                    <button type="button" aria-label="Comment on selection" onMouseDown={keepFocus} onClick={() => onComment()(selection())}
-                      class={props.layout === 'panel' ? 'inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-fg hover:border-edge-bright hover:bg-raised' : 'inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 font-mono text-[11px] font-normal leading-none text-fg hover:bg-surface'}>
+                    <Button variant={props.layout === 'panel' ? 'secondary' : 'ghost'} size="sm" aria-label="Comment on selection" onMouseDown={keepFocus} onClick={() => onComment()(selection())}
+                      class={props.layout === 'panel' ? 'flex-1' : 'gap-1.5'}>
                       <MessageSquare size={14} /><span class={props.layout === 'panel' ? '' : 'hidden sm:inline'}>Comment</span>
-                    </button>
+                    </Button>
                   </Tooltip>
                 )}
               </Show>
               <Show when={props.layout === 'panel'} fallback={<Chip label="Delete element" onClick={props.onDelete}><Trash2 size={14} /></Chip>}>
                 <Tooltip content="Delete selected block">
-                  <button type="button" aria-label="Delete element" onMouseDown={keepFocus} onClick={props.onDelete}
-                    class="inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-edge px-2.5 font-sans text-xs text-muted hover:border-danger/40 hover:bg-raised hover:text-danger"><Trash2 size={14} />Delete</button>
+                  <Button variant="danger" size="sm" aria-label="Delete element" onMouseDown={keepFocus} onClick={props.onDelete} class="flex-1"><Trash2 size={14} />Delete</Button>
                 </Tooltip>
               </Show>
             </div>
