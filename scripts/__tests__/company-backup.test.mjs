@@ -1,0 +1,46 @@
+import {it,expect} from 'vitest';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,copyFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+const bundle=new URL('../../deploy/company/',import.meta.url);
+function fixture(run){
+ const root=mkdtempSync(join(tmpdir(),'company-backup-'));
+ try{
+  const bin=join(root,'bin');mkdirSync(bin);
+  writeFileSync(join(bin,'flock'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+  writeFileSync(join(bin,'docker'),`#!/bin/sh
+set -eu
+case "$*" in
+ 'compose build') test -d packages ;;
+ *pg_dump*) printf 'database snapshot' ;;
+ *'SELECT count('* ) printf '0\\n' ;;
+esac
+`,{mode:0o755});
+  const env={...process.env,PATH:bin+':'+process.env.PATH};
+  run(root,env);
+ }finally{rmSync(root,{recursive:true,force:true});}
+}
+function configuration(directory,withPackage){
+ mkdirSync(directory,{recursive:true});
+ for(const name of ['config','secrets'])mkdirSync(join(directory,name));
+ for(const name of ['.env','config/server.env','Caddyfile','dns-provider.caddy','compose.yaml','Dockerfile','Caddy.Dockerfile','caddy-entrypoint.sh'])writeFileSync(join(directory,name),'operator configuration');
+ if(withPackage){mkdirSync(join(directory,'packages'));writeFileSync(join(directory,'packages/afbin.tgz'),'exact package');}
+}
+it('backup includes the exact local package needed to rebuild on another host',()=>fixture((root,env)=>{
+ const first=join(root,'first'),snapshot=join(root,'snapshot');configuration(first,true);
+ copyFileSync(new URL('backup.sh',bundle),join(first,'backup.sh'));
+ execFileSync('sh',['backup.sh',snapshot],{cwd:first,env});
+ const unpack=join(root,'unpack');mkdirSync(unpack);
+ execFileSync('tar',['-xzf',join(snapshot,'configuration.tar.gz'),'-C',unpack]);
+ expect(readFileSync(join(unpack,'packages/afbin.tgz'),'utf8')).toBe('exact package');
+}));
+it('older registry-backed snapshots restore with only the restore script in a fresh directory',()=>fixture((root,env)=>{
+ const first=join(root,'first'),snapshot=join(root,'snapshot'),restored=join(root,'restored');configuration(first,false);
+ mkdirSync(snapshot);mkdirSync(restored);
+ execFileSync('tar',['-czf',join(snapshot,'configuration.tar.gz'),'.'],{cwd:first});
+ for(const name of ['database.dump','artifacts.tar.gz'])writeFileSync(join(snapshot,name),'snapshot');
+ copyFileSync(new URL('restore.sh',bundle),join(restored,'restore.sh'));
+ execFileSync('sh',['restore.sh',snapshot],{cwd:restored,env});
+ expect(readFileSync(join(restored,'config/server.env'),'utf8')).toBe('operator configuration');
+}));

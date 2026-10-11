@@ -11,7 +11,9 @@ source=$(cd "$1" && pwd)
 for file in database.dump artifacts.tar.gz configuration.tar.gz; do [ -s "$source/$file" ] || { echo "Missing $file" >&2; exit 1; }; done
 [ ! -e .env ] && [ ! -e config/server.env ] || { echo 'Restore requires a fresh deployment directory; existing secrets will not be overwritten' >&2; exit 1; }
 # The archive is trusted operator output; never restore an untrusted archive.
+# Older registry-backed snapshots omitted the empty optional package context.
 tar -xzf "$source/configuration.tar.gz"
+mkdir -p packages
 docker compose build
 docker compose up -d --wait postgres
 docker compose run -T --rm volume-init

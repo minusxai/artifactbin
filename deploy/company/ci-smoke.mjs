@@ -21,6 +21,10 @@ function compose(directory,args,options){return run(directory,'docker',['compose
 async function copyBundle(directory){
  await cp(bundle,directory,{recursive:true,filter:source=>!/(?:^|\/)(?:config|secrets|backups|node_modules|\.env|Caddyfile|dns-provider\.caddy)$/.test(source)});
  await cp(join(candidate,tarballs[0]),join(directory,'packages/afbin.tgz'));
+ await configureFixture(directory);
+}
+async function configureFixture(directory){
+ await cp(join(bundle,'CI.smtp.Dockerfile'),join(directory,'CI.smtp.Dockerfile'));
  // No caddy service runs in CI: real wildcard DNS/TLS acceptance belongs to the external host.
  await mkdir(join(directory,'ci-tls'));
  run(directory,'openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=smtpfixture','-addext','subjectAltName=DNS:smtpfixture','-keyout','ci-tls/key.pem','-out','ci-tls/cert.pem']);
@@ -76,7 +80,10 @@ try{
  const backup=join(scratch,'backup');run(first,'sh',['backup.sh',backup]);
  const config=await readFile(join(first,'config/server.env'));
  compose(first,['stop','app']);
- await copyBundle(restored);run(restored,'sh',['restore.sh',backup],{timeout:180_000});
+ // Recovery starts with the restore script and test-only SMTP fixtures; all build inputs come from the backup.
+ await mkdir(restored);
+ await cp(join(bundle,'restore.sh'),join(restored,'restore.sh'));
+ await configureFixture(restored);run(restored,'sh',['restore.sh',backup],{timeout:180_000});
  compose(restored,['up','-d','--wait','--wait-timeout','90','app']);
  assert.equal(databaseMarker(restored),marker);assert.equal(artifactMarker(restored),marker);
  assert.deepEqual(await readFile(join(restored,'config/server.env')),config,'Persistent auth secret and database configuration survived restore');
