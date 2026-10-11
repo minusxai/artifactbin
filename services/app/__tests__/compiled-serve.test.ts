@@ -99,7 +99,7 @@ describe('the reader mode on /raw', () => {
 
   it('stores the compile beside the prepared page, keyed by the compiler build', async () => {
     const id = pages().kit;
-    const stored = (await (await harness.db()).query<{ page: { compiled?: { build: string; html?: string; error?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    const stored = (await (await harness.db()).query<{ page: { compiled?: { build: string; html?: string; error?: string } } }>(`SELECT page || jsonb_build_object('compiled', compiled) AS page FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
     expect(stored.page.compiled?.build).toMatch(/^[0-9a-f]{16}$/);
     expect(stored.page.compiled?.html).toContain('role="tablist"');
   });
@@ -109,12 +109,12 @@ describe('the reader mode on /raw', () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
     const db = await harness.db();
-    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"0000000000000000"') WHERE artifact_id = $1`, [id]);
+    await db.query(`UPDATE prepared_pages SET compiled = jsonb_set(compiled, '{build}', '"0000000000000000"') WHERE artifact_id = $1`, [id]);
     const res = await raw(id, '?reader=compiled');
     expect(res.status).toBe(200);
     const mode = res.headers.get(READER_MODE_HEADER);
     expect(mode).toBe('compiled');
-    expect((await db.query<{ build: string }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build).toBe('0000000000000000');
+    expect((await db.query<{ build: string }>(`SELECT compiled->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build).toBe('0000000000000000');
   });
 
   it('server and compiler version changes preserve a stored compile; an edit makes a new one', async () => {
@@ -174,11 +174,11 @@ describe('the reader mode on /raw', () => {
     const id = await publish(who.token, { title: 'Older build', markup: fixture('kit.jsx') });
     const db = await harness.db();
     const snapshot = async () => (await db.query<{ page: unknown; page_key: string; handover_contract: number; updated_at: string }>(
-      'SELECT page, page_key, handover_contract, updated_at::text AS updated_at FROM prepared_pages WHERE artifact_id = $1', [id],
+      `SELECT page || jsonb_build_object('compiled', compiled) AS page, page_key, handover_contract, updated_at::text AS updated_at FROM prepared_pages WHERE artifact_id = $1`, [id],
     )).rows[0]!;
     const live = loadCompilerBuild();
     // The row was compiled on "another deploy": a different island build, unresolved specifiers in the module.
-    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"older-build"'), island_build = 'older-build' WHERE artifact_id = $1`, [id]);
+    await db.query(`UPDATE prepared_pages SET compiled = jsonb_set(compiled, '{build}', '"older-build"'), island_build = 'older-build' WHERE artifact_id = $1`, [id]);
     const before = await snapshot();
     const stored = before.page as { compiled: { module: { url: string; specifiers: string[] } } };
     expect(stored.compiled.module.specifiers).toContain('@mx/boot');
@@ -225,14 +225,14 @@ describe('the reader mode on /raw', () => {
     const db = await harness.db();
     const live = loadCompilerBuild();
     const row = async () => (await db.query<{ handover_contract: number; island_build: string; build: string }>(
-      `SELECT handover_contract, island_build, page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
+      `SELECT handover_contract, island_build, compiled->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
     expect((await row()).handover_contract).toBe(MIN_HANDOVER_CONTRACT);
     // A page compiled on an older deploy under an older contract: its build's manifest was archived there.
     const older = 'bbbbbbbbbbbbbbbb';
     const olderBoot = '/islands/boot-bbbbbbbbbbbbbbbb.js';
     const manifest = JSON.parse(readFileSync(path.resolve(process.cwd(), 'public/islands/manifest.json'), 'utf8')) as { manifest: Record<string, string> };
     await objectStore().put(`island-builds/manifest-${older}.json`, JSON.stringify({ ...manifest, build: older, manifest: { ...manifest.manifest, '@mx/boot': olderBoot } }), 'application/json');
-    await db.query(`UPDATE prepared_pages SET handover_contract = $2, island_build = $3, page = jsonb_set(page, '{compiled,build}', to_jsonb($3::text)) WHERE artifact_id = $1`, [id, MIN_HANDOVER_CONTRACT - 1, older]);
+    await db.query(`UPDATE prepared_pages SET handover_contract = $2, island_build = $3, compiled = jsonb_set(compiled, '{build}', to_jsonb($3::text)) WHERE artifact_id = $1`, [id, MIN_HANDOVER_CONTRACT - 1, older]);
     const pinned = await raw(id);
     expect(pinned.status).toBe(200);
     const html = await pinned.text();
@@ -246,9 +246,9 @@ describe('the reader mode on /raw', () => {
     expect(upgraded).toContain(`?b=${live.id}`);
     expect(upgraded).toContain(live.manifest['@mx/boot']!);
     // A module naming a specifier neither the live build nor its own carries cannot run anywhere: recompiled inline.
-    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,module,specifiers}', '["@mx/boot","@mx/removed"]'::jsonb) WHERE artifact_id = $1`, [id]);
+    await db.query(`UPDATE prepared_pages SET compiled = jsonb_set(compiled, '{module,specifiers}', '["@mx/boot","@mx/removed"]'::jsonb) WHERE artifact_id = $1`, [id]);
     expect((await raw(id)).status).toBe(200);
-    const healed = (await db.query<{ specifiers: string[] }>(`SELECT page->'compiled'->'module'->'specifiers' AS specifiers FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
+    const healed = (await db.query<{ specifiers: string[] }>(`SELECT compiled->'module'->'specifiers' AS specifiers FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
     expect(healed.specifiers).not.toContain('@mx/removed');
   });
 
@@ -257,7 +257,7 @@ describe('the reader mode on /raw', () => {
     const id = await publish(who.token, { title: 'Half', markup: fixture('kit.jsx') });
     const db = await harness.db();
     const live = loadCompilerBuild();
-    const compiled = (await db.query<{ page: { compiled: CompiledPage } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.page.compiled;
+    const compiled = (await db.query<{ page: { compiled: CompiledPage } }>(`SELECT page || jsonb_build_object('compiled', compiled) AS page FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.page.compiled;
     expect(compiled.ssrHalf).toBe(live.ssr!.url);
     const stale = { ...compiled, html: `<p data-stale-story>rendered by an older kit</p>${compiled.html}` };
     const plain = { values: {}, results: null, mermaidImages: {}, drawings: {}, resultsId: null, build: live, flow: null };
@@ -275,8 +275,8 @@ describe('the reader mode on /raw', () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
     const db = await harness.db();
-    const build = (await db.query<{ build: string }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
-    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
+    const build = (await db.query<{ build: string }>(`SELECT compiled->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
+    await db.query(`UPDATE prepared_pages SET compiled = $2::jsonb WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
     const res = await raw(id, '?reader=compiled');
     expect(res.status).toBe(500);
     expect(await res.text()).toContain('could not be rendered');
@@ -556,7 +556,7 @@ describe('a version with an author script', () => {
   it('a compile that does not carry the script (made before the field existed) never serves the page without it', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Scripted', markup: SCRIPTED });
-    await (await harness.db()).query(`UPDATE prepared_pages SET page = page #- '{compiled,authorScript}' WHERE artifact_id = $1`, [id]);
+    await (await harness.db()).query(`UPDATE prepared_pages SET compiled = compiled #- '{authorScript}' WHERE artifact_id = $1`, [id]);
     const res = await raw(id, '?reader=compiled');
     expect(res.status).toBe(500);
     expect(await res.text()).toContain('could not be rendered');
@@ -821,7 +821,7 @@ describe('the compiled-page backfill', () => {
     return { asked, fetch };
   }
   const compiledBuilds = async () => Object.fromEntries((await (await harness.db()).query<{ artifact_id: string; slot: string; build: string | null }>(
-    `SELECT artifact_id, slot, page->'compiled'->>'build' AS build FROM prepared_pages`,
+    `SELECT artifact_id, slot, compiled->>'build' AS build FROM prepared_pages`,
   )).rows.map((r) => [`${r.artifact_id}/${r.slot}`, r.build]));
 
   describe('backfillCompiledPages', () => {
@@ -887,7 +887,7 @@ describe('the compiled-page backfill', () => {
       const db = await harness.db();
       await db.query(`UPDATE prepared_pages SET island_build = '0000000000000000' WHERE artifact_id = $1`, [stale]);
       // A prepared page with its stored compile removed.
-      await db.query(`UPDATE prepared_pages SET page = page - 'compiled' WHERE artifact_id = $1`, [missing]);
+      await db.query(`UPDATE prepared_pages SET compiled = NULL WHERE artifact_id = $1`, [missing]);
       await db.query(`DELETE FROM prepared_pages WHERE artifact_id = $1`, [never]);
       // A dry run reads and counts: nothing is requested, nothing written.
       const dry = server();

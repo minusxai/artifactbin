@@ -330,7 +330,7 @@ async function revalidateKey(key: SnapshotKey, given?: Recipe & { build?: string
   // The shared queries' tables and errors, and NOTHING else the run attaches: its mutation access, user
   // options and person cards are computed for whoever the run is for (the viewer overlay's to answer).
   const results = sharedResults({ tables: pick(state.tables, answered), errors: pick(state.errors, answered) });
-  const { page } = await preparedPageFor(row, null);
+  const { page } = await preparedPageFor(row, null, { nodes: true });
   // Drawing with vega is CPU-bound and never yields (a heavy chart set held the request thread ~15 s): on a prepare thread when this process has them.
   const chartOptions = { colorMode: page.data.colorMode, template: page.data.template };
   const threads = prepareWorkers();

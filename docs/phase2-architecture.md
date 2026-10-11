@@ -56,7 +56,7 @@ Routes translate results to HTTP; every module above returns data or a string an
 ## 2. Data flow
 
 ```
-publish ──► prepare (prepared-page.server build)        stored: prepared_pages.page
+publish ──► prepare (prepared-page.server build)        stored: prepared_pages (page, nodes, compiled)
              │  nodes, css, glyphs, declared dataflow
              ▼
            compile (compiler.ts, off the write path, in warmPreparedPage)
@@ -155,7 +155,7 @@ its place.
   `unported.length > 0` means the compile is refused, never a page with holes.
 - `behaviors`: framework-free behaviour chunks the page needs (`deck`).
 
-Stored inside `prepared_pages.page` as `compiled`. `page_key` is only the document version (`v:<n>`)
+Stored in its own `prepared_pages.compiled` column (the shell is `page`, the node tree `nodes`; a view reads only the parts it uses). `page_key` is only the document version (`v:<n>`)
 within its head or archived slot. `compiler_version`, `island_build`, `css_version`, `ssr_bundle`,
 `page_format` and `handover_contract` are separate, queryable columns. The compiler fingerprint comes
 from the esbuild input graph of preparation and compilation and is emitted with the server build
@@ -407,8 +407,8 @@ A1. Solid 1.9 is the stable version used by the kit and runtime. Its measured br
 A2. The object store (`lib/object-store`) is the home for per-document module bytes: content-addressed,
     already used for datasets, no schema change. Module URLs are served by a route, not a static mount,
     because the bytes live in the store, not on disk.
-A3. `prepared_pages.page` (JSONB) carries the compiled HTML and plan without a size problem (no node
-    tree in the payload).
+A3. `prepared_pages.compiled` (JSONB) carries the compiled HTML and plan without a size problem (no node
+    tree in the payload); the node tree is `prepared_pages.nodes`, read only by the views that use it.
 A4. The lab's `bytes.*.gzip` (wire bytes) is the measurement the targets are checked against; brotli
     is what the server emits for dynamic HTML and precompressed assets, gzip only where the gateway
     compressed identity responses.

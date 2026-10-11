@@ -109,7 +109,7 @@ describe('the story fragment', () => {
     expect(ordinary.headers.get(READER_MODE_HEADER)).toBe('compiled');
     expect(await ordinary.text()).toContain('A plain prose document');
     const db = await harness.db();
-    await db.query(`UPDATE prepared_pages SET page = page - 'compiled' WHERE artifact_id = $1`, [id]);
+    await db.query(`UPDATE prepared_pages SET compiled = NULL WHERE artifact_id = $1`, [id]);
     const notYet = await story(id, '?reader=compiled');
     expect(notYet.status).toBe(200);
     expect(notYet.headers.get(READER_MODE_HEADER)).toBe('compiled');

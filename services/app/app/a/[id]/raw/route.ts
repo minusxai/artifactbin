@@ -312,7 +312,8 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       const appStory = fragment?.surface === 'app';
       {
         const capture = byExportKey && !chrome;
-        let prepared = await preparedPageFor(artifact, at);
+        // The shell and the compiled page: the tree is read only for a fragment (below) or a recompile (which reads it itself).
+        let prepared = await preparedPageFor(artifact, at, { compiled: true });
         if (byExportKey && request.headers.get('x-mx-compiled-backfill') === 'recompile') {
           // A page prepared under an older stylesheet is prepared again whole (its compile with it); otherwise only recompiled.
           if (prepared.stale) prepared = await reprepareStoredPage(artifact, at);
@@ -391,7 +392,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
           });
           // A fragment carries its version's own source nodes: the morph hands them to the document's selections and
           // comments in the task it draws the version, so neither is ever classified against another version.
-          const html = fragment ? withVersionNodes(answer.html, prepared.page.data.nodes) : answer.html;
+          const html = fragment ? withVersionNodes(answer.html, (await preparedPageFor(artifact, at, { nodes: true })).page.data.nodes) : answer.html;
           return new Response(html, {
             status: 200,
             headers: {

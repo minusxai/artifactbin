@@ -49,11 +49,14 @@ import { createHash } from 'node:crypto';
 import { type ArchivedRender, type ArtifactRow } from '@/lib/artifacts';
 import { holdableImports } from '@/lib/document-data';
 import type { RoleActor } from '@/lib/accounts';
-import { mermaidImagesFor } from '@/lib/mermaid-images/store';
+import { mermaidImagesForCodes } from '@/lib/mermaid-images/store';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import { type Scalar, readUrlValues } from '@/lib/dataflow';
-import { recompilePage, type PreparedPage } from './prepared-page.server';
+import { recompilePage, type PreparedView } from './prepared-page.server';
+
+/** What serving a version reads of its prepared page: the shell and the compiled page, never the tree (a recompile reads that itself). */
+type Prepared = PreparedView<{ compiled: true }>;
 import { SERVED_RESULTS_BUDGET_MS, tokenOf } from './served-results.server';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { DOMAIN_FOOTER_CSS } from '@/lib/page-styles';
@@ -157,7 +160,7 @@ const compiling = new Map<string, Promise<StoredCompile | null>>();
  * This build's compile of the version, made now and WAITED for. The budget no longer
  * decides the answer, only whether the compile is logged as slow.
  */
-async function compileAndWait(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null, build: CompilerBuild): Promise<Usable> {
+async function compileAndWait(row: ArtifactRow, page: Prepared, at: ArchivedRender | null, build: CompilerBuild): Promise<Usable> {
   const key = `${row.id}\u0000${at ? `v:${at.version}` : 'head'}\u0000${row.version}\u0000${build.id}`;
   let running = compiling.get(key);
   if (!running) {
@@ -186,7 +189,7 @@ const UPGRADES_QUEUED = 256;
 const upgrades = new Map<string, () => Promise<unknown>>();
 const upgrading = new Set<string>();
 let upgradeRuns: Promise<void>[] = [];
-function queueUpgrade(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null): void {
+function queueUpgrade(row: ArtifactRow, page: Prepared, at: ArchivedRender | null): void {
   const key = `${row.id}\u0000${at ? `v:${at.version}` : 'head'}\u0000${row.version}`;
   if (upgrades.has(key) || upgrading.has(key) || upgrades.size >= UPGRADES_QUEUED) return;
   upgrades.set(key, () => recompilePage(row, at, page));
@@ -227,7 +230,7 @@ async function pinnedBuildOf(stored: CompiledPage): Promise<CompilerBuild | null
  * on the build it was compiled with while it recompiles in the background. Only a page with no such
  * build (or a raised page format) compiles inline and waits.
  */
-async function compiledOf(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null, build: CompilerBuild): Promise<Usable> {
+async function compiledOf(row: ArtifactRow, page: Prepared, at: ArchivedRender | null, build: CompilerBuild): Promise<Usable> {
   const stored = page.compiled;
   if (stored && page.pageFormat >= MIN_PAGE_FORMAT) {
     if (isCompileFailure(stored)) {
@@ -281,7 +284,7 @@ async function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
  * The guest snapshot this request may be served, or null. Only for the head of a document a guest
  * may read: a private document has no guest snapshot and never runs the anonymous cold path.
  */
-async function snapshotFor(row: ArtifactRow, compiled: CompiledPage, flow: NonNullable<PreparedPage['declared']>['flow'], values: Record<string, Scalar>): Promise<DataSnapshot | null> {
+async function snapshotFor(row: ArtifactRow, compiled: CompiledPage, flow: NonNullable<Prepared['declared']>['flow'], values: Record<string, Scalar>): Promise<DataSnapshot | null> {
   const plan = compiled.plan;
   if (!plan || !plan.queries.some((q) => q.scope === 'shared') || row.visibility === 'private') return null;
   const key = snapshotKeyFor(row.id, 'head', plan, values);
@@ -326,7 +329,7 @@ interface StoryInput {
    */
   build?: CompilerBuild;
   /** The version's declared dataflow: a stored story re-rendered for a newer half starts, as its compile did, from the declared values. */
-  flow?: NonNullable<PreparedPage['declared']>['flow'] | null;
+  flow?: NonNullable<Prepared['declared']>['flow'] | null;
 }
 
 /** The declared state: every scalar at its default — what the compile rendered `html` with (compiler declaredValues). */
@@ -402,7 +405,7 @@ export const domainFooter = (href: string): { html: string; css: string } => ({
  * THE COMPILED PAGE for one admitted request over one prepared version, or the reason it could not be
  * made (a reported 500, spec §6).
  */
-export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, reader: CompiledReaderRequest): Promise<CompiledReaderAnswer> {
+export async function compiledPageFor(row: ArtifactRow, page: Prepared, reader: CompiledReaderRequest): Promise<CompiledReaderAnswer> {
   const refuse = (reason: ReaderFallbackReason, detail: string): CompiledReaderAnswer => failed(row, reason, detail);
   try {
     let build: CompilerBuild;
@@ -438,7 +441,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     const values = flow ? readUrlValues(reader.search, flow) : {};
     const [mermaidImages, snapshot, hold] = await Promise.all([
       reader.drawings
-        ? mermaidImagesFor({ artifactId: row.id, version: reader.at?.version ?? row.version, surface: reader.drawings, head: !reader.at, visibility: row.visibility }, page.data.nodes)
+        ? mermaidImagesForCodes({ artifactId: row.id, version: reader.at?.version ?? row.version, surface: reader.drawings, head: !reader.at, visibility: row.visibility }, page.mermaidCodes)
         : Promise.resolve({}),
       // A capture brings its own settled run; an archived version and a version that cannot run have no snapshot.
       reader.results !== undefined || reader.at || !flow || failedState ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
