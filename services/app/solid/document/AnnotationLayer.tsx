@@ -73,6 +73,8 @@ export interface AnnotationLayerProps {
   liveAnnotations?: AnnotationWire[] | null;
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count follows it. */
   onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
+  /** Changes whenever the document's membership does (the live `_members` event); mention statuses read again. */
+  membershipRevision?: number;
   /** Open threads mark the document edge (the ambient surface). */
   showViewComments?: boolean;
   /** A text selection — from the view-mode bubble or the editor — that seeds the composer. */
@@ -839,7 +841,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     }),
   });
 
-  return <CommentImagesProvider backend={backend} editId={() => props.editId}><PersonMentionProvider artifactId={props.id} backend={backend}>
+  return <CommentImagesProvider backend={backend} editId={() => props.editId}><PersonMentionProvider artifactId={props.id} backend={backend} revision={props.membershipRevision}>
     <CommentsOffline.Provider value={backend.mode === 'offline'}>
       <style ref={chromeAnchor}>{CAPTURE_CHROME_CSS}</style>
       <Show when={capture.busy() && !selection()}>

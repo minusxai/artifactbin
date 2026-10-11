@@ -3,15 +3,17 @@
  * One membership-status read per comment surface (the layer
  * mounts one provider, not one per rendered body): only explicitly saved mentions come back, never
  * private invite details, and a mention of someone who has not accepted yet reads "· Pending".
+ * The read repeats on the document's membership signal (`revision`, bumped by the live `_members` event) and on
+ * window focus; there is no timer.
  */
-import { createContext, createSignal, onCleanup, onMount, Show, useContext, type Accessor, type JSX } from 'solid-js';
+import { createContext, createEffect, createSignal, on, onCleanup, onMount, Show, useContext, type Accessor, type JSX } from 'solid-js';
 import type { MembershipStatus } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { isPersonMentionHref } from '@/lib/document/person-mentions';
 
 const MentionStatuses = createContext<Accessor<Record<string, MembershipStatus>>>(() => ({}));
 
-export function PersonMentionProvider(props: { artifactId?: string; backend?: ArtifactBackend; children: JSX.Element }): JSX.Element {
+export function PersonMentionProvider(props: { artifactId?: string; backend?: ArtifactBackend; /** Changes whenever the document's membership does. */ revision?: number; children: JSX.Element }): JSX.Element {
   const [statuses, setStatuses] = createSignal<Record<string, MembershipStatus>>({});
   onMount(() => {
     const backend = props.backend;
@@ -23,9 +25,9 @@ export function PersonMentionProvider(props: { artifactId?: string; backend?: Ar
         .catch(() => {});
     };
     refresh();
-    const timer = setInterval(refresh, 15000);
+    createEffect(on(() => props.revision, refresh, { defer: true }));
     window.addEventListener('focus', refresh);
-    onCleanup(() => { abort.abort(); clearInterval(timer); window.removeEventListener('focus', refresh); });
+    onCleanup(() => { abort.abort(); window.removeEventListener('focus', refresh); });
   });
   return <MentionStatuses.Provider value={statuses}>{props.children}</MentionStatuses.Provider>;
 }

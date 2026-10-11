@@ -1,5 +1,7 @@
 import {afterEach, expect, it, vi} from 'vitest';
 import { getDb } from '@/lib/platform/db';
+import { measureQueries } from '@/lib/platform';
+import { readCommentChangesFor } from '@/lib/annotations/changes';
 import * as live from '@/lib/publish/realtime/live';
 import { createAnnotationFor, actOnAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import type { AnnotationAuthor, CommentChangesPage } from '@artifactbin/contracts';
@@ -227,3 +229,21 @@ it.each(['viewer','editor'] as const)('revokes a group %s ongoing private monito
  expect((await polling).status).toBe(404);expect(live.liveChannelCount()).toBe(0);
  expect((await f.read(cursor,'wait=0',undefined,f.doc.id,member.token)).status).toBe(404);
 });
+
+it('spends a handful of statements on an idle ten second wait, not three per second',async()=>{
+ const f=await fixture();
+ const idle=await measureQueries(()=>readCommentChangesFor({tokenId:f.token.id,userId:f.token.userId},f.doc.id,{after:f.cursor,limit:100,waitSeconds:10,signal:new AbortController().signal}));
+ expect(idle.value).toMatchObject({events:[],has_more:false});
+ expect(idle.stats.count).toBeLessThanOrEqual(10);
+},20000);
+it('refuses a waiter whose access is revoked mid-wait within the access recheck interval, not at the deadline',async()=>{
+ const f=await fixture();const stranger=await mintAccountToken('commenter');const db=await getDb();
+ await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.doc.id]);
+ await db.query("INSERT INTO artifact_shares (artifact_id,email,user_id,role) VALUES ($1,$2,$3,'commenter')",[f.doc.id,stranger.email,stranger.userId]);
+ const cursor=(await (await f.read('now','',undefined,f.doc.id,stranger.token)).json()).next_cursor;
+ const polling=f.read(cursor,'wait=30',undefined,f.doc.id,stranger.token);
+ await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));const revoked=Date.now();
+ await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[f.doc.id]);
+ expect((await polling).status).toBe(404);
+ expect(Date.now()-revoked).toBeLessThan(7000);expect(live.liveChannelCount()).toBe(0);
+},20000);

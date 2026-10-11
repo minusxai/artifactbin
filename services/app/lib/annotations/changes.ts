@@ -12,6 +12,10 @@ import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish/realt
 export class InvalidCommentCursor extends Error {}
 export class CommentWaitCapacityError extends Error {}
 
+/** A wait that hears nothing re-checks access this often. Revoking a share sends no annotation wakeup, so this
+ * bounds how long a revoked monitor keeps its wait; every wake costs one statement, where a scan costs two. */
+const ACCESS_RECHECK_MS = 5000;
+
 // Concurrency leases, not historical request buckets: keys disappear when their
 // last wait finishes, and the process cap bounds the registry to 128 keys.
 // Each replica enforces its own caps; this is not a distributed account quota.
@@ -73,9 +77,9 @@ export async function readCommentChangesFor(actor: TokenActor, id: string, optio
     checkAbort();
     return await authorized() ? page([], false) : null;
   }
+  // One scan is the bounded read plus one access check AFTER it: access still held then covers the rows read.
   const scan = async (): Promise<CommentChangesPage | null> => {
     checkAbort();
-    if (!await authorized()) return null;
     const result = await db.query<ChangeRow>(
       `SELECT id,seq::text,root_id,body,author_kind,author_label,author_user_id,created_at,deleted_at
        FROM annotations WHERE artifact_id=$1 AND seq>$2::bigint ORDER BY seq LIMIT $3`, [id, position, options.limit + 1]);
@@ -105,21 +109,27 @@ export async function readCommentChangesFor(actor: TokenActor, id: string, optio
       result = await scan();
       if (!result || result.events.length || result.has_more || Date.now() >= deadline) return result;
       checkAbort();
-      if (pending) continue;
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = () => { clearTimeout(timer); options.signal.removeEventListener('abort', abort); wake = undefined; };
-        const finish = () => { cleanup(); resolve(); };
-        const abort = () => { cleanup(); reject(options.signal.reason); };
-        // Membership revocation need not send an annotation wakeup. Revalidate at
-        // least once each second; the wait holds no database transaction or lock.
-        const timer = setTimeout(finish, Math.min(1000, Math.max(0, deadline - Date.now())));
-        wake = finish;
-        options.signal.addEventListener('abort', abort, {once: true});
-        if (options.signal.aborted) abort();
-        else if (pending) finish();
-      });
+      // Idle: sleep until a notification, the deadline, or the next access check; only a notification or the
+      // deadline earns a scan.
+      while (!pending && Date.now() < deadline) {
+        await sleep(Math.min(ACCESS_RECHECK_MS, Math.max(0, deadline - Date.now())));
+        if (!pending && Date.now() < deadline) { checkAbort(); if (!await authorized()) return null; }
+      }
     }
   } finally {
     try { await unsubscribe?.(); } finally { releaseWait(); }
+  }
+  /** Resolves on a notification or after `ms`; rejects with the abort reason. */
+  function sleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const cleanup = () => { clearTimeout(timer); options.signal.removeEventListener('abort', abort); wake = undefined; };
+      const finish = () => { cleanup(); resolve(); };
+      const abort = () => { cleanup(); reject(options.signal.reason); };
+      const timer = setTimeout(finish, ms);
+      wake = finish;
+      options.signal.addEventListener('abort', abort, {once: true});
+      if (options.signal.aborted) abort();
+      else if (pending) finish();
+    });
   }
 }
