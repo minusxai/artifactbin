@@ -355,6 +355,11 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
          * its own run), not an archived version (never cached), and not the live morph's fragment, which is asked for
          * exactly when the version changed.
          */
+        // The document's policy: a header of this answer, so it is one of the things its validator names (a 304 keeps the
+        // policy of the 200 it revalidates).
+        const policy = pages
+          ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN, ...(extensions ? { extensions } : {}) })
+          : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions);
         const revalidated = !!pages && !key && !fragment && !at;
         const etag = revalidated ? await documentEtag({
           row: prepared.row, artifact, at, page: prepared.page, stale: !!prepared.stale, search: new URL(request.url).search, drawings, holder,
@@ -364,7 +369,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
             role: await roleFor(artifact, actor), trust: extensions ?? null,
             // The surface and the addresses written into it.
             surface: pages ? { self: pages.self, app: pages.site.app } : null,
-            chrome, canonical, design,
+            chrome, canonical, design, policy,
           },
         }) : null;
         const held = etag ? matchingTag(request.headers.get('if-none-match'), etag) : null;
@@ -431,9 +436,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
               // On its own origin the document needs no sandbox: the origin is its alone (lib/page-styles/document-csp).
-              'Content-Security-Policy': pages
-                ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN, ...(extensions ? { extensions } : {}) })
-                : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions),
+              'Content-Security-Policy': policy,
               ...answer.headers,
               [READER_MODE_HEADER]: 'compiled',
               // The /raw copy asks from an opaque origin; an anonymous answer is what anyone with the link reads.

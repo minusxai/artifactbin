@@ -97,6 +97,27 @@ describe('linkedDocumentSheets', () => {
     for (const url of urls.filter((u) => !u.startsWith('%23') && !u.startsWith('#'))) expect(url.startsWith('/fonts/') || url.startsWith('data:'), url).toBe(true);
   });
 
+  it('carries a sheet inline, in its place, when the store cannot take it, and stores the rest concurrently', async () => {
+    const original = await sheetsFor('mt-auto', { authorCss: '.mine{color:red}' });
+    let inFlight = 0, peak = 0;
+    const failing = { put: async (css: string) => {
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      if (css.includes('[data-theme')) throw new Error('store down');
+      return store.put(css);
+    } };
+    const out = await linkedDocumentSheets(original, { origin: ORIGIN, store: failing });
+    const base = out.find((s) => s.attr === 'data-mx-base')!;
+    expect(base.href).toBeUndefined();
+    expect(base.css).toContain('[data-theme');
+    expect(attrs(out).indexOf('data-mx-base')).toBeGreaterThan(attrs(out).indexOf('data-mx-tw-s7'));
+    expect(hrefs(out).length).toBeGreaterThanOrEqual(7);
+    expect(peak).toBeGreaterThan(1);
+    const carried = new Set(unitsOf(out));
+    for (const unit of unitsOf(original)) expect(carried.has(unit), unit.slice(0, 60)).toBe(true);
+  });
+
   it('does not touch the standalone sheets themselves: documentStyleSheets is what the offline file and a capture still inline', async () => {
     const original = await sheetsFor('mt-auto');
     const copy = JSON.stringify(original);

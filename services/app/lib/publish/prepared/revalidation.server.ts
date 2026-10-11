@@ -12,12 +12,15 @@
  *  - the imports this reader may hold (the page's `hold`, which a grant on a dataset changes without touching the document).
  * Not the bytes: that is the work a 304 exists not to do.
  *
- * Null when the stored page is not one `compiledPageFor` serves as it is (no compile, a recorded failure, below the
- * compatibility minimum): the answer is then made, and sent without a validator.
+ * Null when the answer cannot be named before it is made, and it is then sent without a validator: the stored page is
+ * not one `compiledPageFor` serves as it is (no compile, a recorded failure, below the compatibility minimum), or the guest
+ * snapshot is cold — `compiledPageFor` then waits for a run within a budget and renders its rows or none, so the bytes
+ * depend on timing, not on any fact a validator could name (the next answer carries the stored snapshot and a tag).
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ArchivedRender, ArtifactRow } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts';
 import { type DataPlan, isCompileFailure, loadCompilerBuild, MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, planOf } from '@/lib/compiled-page';
@@ -51,6 +54,20 @@ export interface DocumentEtagInput {
 
 // eslint-disable-next-line no-restricted-syntax -- the sources fingerprint is a build artifact read once per process
 let sources: string | null = null;
+// eslint-disable-next-line no-restricted-syntax -- the code identity of this process, computed once
+let bundle: string | null = null;
+
+/**
+ * The identity of the code that makes the bytes. A production server is ONE bundled file (scripts/build/build-server.mjs),
+ * so the content hash of the file this module runs from names every module that shapes a page — the assembler, the
+ * serve path, the route, the sheets — and is the same on every instance of one build, which a per-process value would not
+ * be (behind a load balancer no validator would ever match). Unbundled (a dev server, a test) there is no such file: a
+ * per-process nonce, so a restart or a reload of the module is a new identity.
+ */
+function codeIdentity(url: string): string {
+  const file = fileURLToPath(url);
+  return /\.[cm]?js$/.test(file) ? createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 16) : `unbundled:${randomUUID()}`;
+}
 /** The fingerprint of the sources a prepared page is made by (the same file `prepared_pages.compiler_version` stores). */
 function sourceFingerprint(): string {
   if (sources === null) {
@@ -60,16 +77,18 @@ function sourceFingerprint(): string {
 }
 
 /** What the code a page is made by is: the live island build, the prepared sources and the stylesheet environment. For any validator over a prepared page's output. */
-export function codeFingerprint(): string[] {
+export function codeFingerprint(from: string = import.meta.url): string[] {
   let live = '';
   try { live = loadCompilerBuild().id; } catch { /* a process with no island build has no compiled pages either */ }
-  return [live, sourceFingerprint(), preparedCssVersion(), storyCssCompileVersion()];
+  // `from` is the module whose file names the code: this one, unless a test says otherwise.
+  const identity = from === import.meta.url ? (bundle ??= codeIdentity(from)) : codeIdentity(from);
+  return [live, sourceFingerprint(), identity, preparedCssVersion(), storyCssCompileVersion()];
 }
 
 const digest = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 
-/** What the guest snapshot lookup `compiledPageFor` makes will find, named: its key and the time it was computed, or the cold path. */
-async function snapshotIdentity(input: DocumentEtagInput, plan: DataPlan, values: ReturnType<typeof readUrlValues>): Promise<string> {
+/** What the guest snapshot lookup `compiledPageFor` makes will find, named: its key and the time it was computed; null for the cold path. */
+async function snapshotIdentity(input: DocumentEtagInput, plan: DataPlan, values: ReturnType<typeof readUrlValues>): Promise<string | null> {
   const { row, page } = input;
   const flow = page.declared?.flow;
   if (!flow || !plan.queries.some((q) => q.scope === 'shared') || row.visibility === 'private') return 'none';
@@ -79,9 +98,9 @@ async function snapshotIdentity(input: DocumentEtagInput, plan: DataPlan, values
   if (read && Date.now() - read.snapshot.computedAt <= SNAPSHOT_MAX_AGE_MS) {
     // Stale but young: served only while the guest's access derives the same plan (compiledPageFor snapshotFor).
     const current = planOf(flow, await anonymousAccessFacts(row, flow));
-    return snapshotKeyFor(row.id, 'head', current, values).planKey === key.planKey ? `young:${read.snapshot.computedAt}` : 'cold';
+    return snapshotKeyFor(row.id, 'head', current, values).planKey === key.planKey ? `young:${read.snapshot.computedAt}` : null;
   }
-  return 'cold';
+  return null;
 }
 
 export async function documentEtag(input: DocumentEtagInput): Promise<string | null> {
@@ -101,6 +120,8 @@ export async function documentEtag(input: DocumentEtagInput): Promise<string | n
     flow && input.holder !== undefined ? holdableImports(row, flow, input.holder) : Promise.resolve([] as string[]),
   ]);
 
+  // A cold snapshot: whether its rows are in the answer is decided by a race, not by anything named here.
+  if (snapshot === null) return null;
   return etagOf({
     v: 1,
     facts: input.facts,

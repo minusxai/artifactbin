@@ -191,11 +191,15 @@ describe('the document on its own origin', () => {
     const fixtures = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
     const sales = await w.publish('', 'public', { markup: undefined, dataset: readFileSync(path.join(fixtures, 'sales.csv'), 'utf8'), title: 'Perf sales' });
     const id = await w.publish(readFileSync(path.join(fixtures, 'dashboard.jsx'), 'utf8').replaceAll('{{sales}}', sales), 'public', { template: 'dashboard' });
-    // The cold path answers within the served-results budget and stores the guest snapshot either way.
-    let first = await read(id);
+    // The cold path answers within the served-results budget and stores the guest snapshot either way. Whether its rows made
+    // it into that answer is a race with the budget, not something a validator could name: it carries none and stays uncached.
+    const cold = await read(id);
+    expect(cold.headers.get('etag')).toBeNull();
+    expect(cold.headers.get('cache-control')).toBe('no-store');
+    let first = cold;
     for (const end = Date.now() + 10_000; Date.now() < end && !(await first.clone().text()).includes('744,503');) { await new Promise((r) => setTimeout(r, 100)); first = await read(id); }
     expect(await first.clone().text()).toContain('744,503');
-    // The answer that computed the snapshot was tagged before it existed; the next carries it.
+    // The next one finds the stored snapshot and carries a tag.
     const tag = tagOf(await read(id));
     expect((await read(id, { 'if-none-match': tag })).status).toBe(304);
     const db = await getDb();

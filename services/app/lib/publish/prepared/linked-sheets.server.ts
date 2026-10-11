@@ -51,17 +51,19 @@ interface LinkTarget {
   store: Pick<ReturnType<typeof stylesheetStore>, 'put'>;
 }
 
-/** `sheets` (documentStyleSheets) with every shared one linked from `target.origin`. */
+/**
+ * `sheets` (documentStyleSheets) with every shared one linked from `target.origin`. The sheets are stored (once per
+ * process each, concurrently) before the page that names them is answered; a sheet the store fails to take is carried
+ * inline in its place — the document is as it was, just heavier — never a page that names a sheet nothing can serve.
+ */
 export async function linkedDocumentSheets(sheets: readonly DocumentSheet[], target: LinkTarget): Promise<DocumentSheet[]> {
   const { store } = target;
   const origin = target.origin.replace(/\/+$/, '');
-  const link = async (attr: string, css: string): Promise<DocumentSheet> => ({ attr, css, href: `${origin}${await store.put(css)}` });
-
-  const out: DocumentSheet[] = [];
+  /** In document order: a sheet to link (stored below) or one to keep inline. */
+  const parts: Array<{ attr: string; css: string; link: boolean }> = [];
   let pending: string[] = [];
-  const flushBase = async (): Promise<void> => {
-    if (!pending.length) return;
-    out.push(await link('data-mx-base', pending.join('\n')));
+  const flushBase = (): void => {
+    if (pending.length) parts.push({ attr: 'data-mx-base', css: pending.join('\n'), link: true });
     pending = [];
   };
 
@@ -69,23 +71,30 @@ export async function linkedDocumentSheets(sheets: readonly DocumentSheet[], tar
     if (sheet.attr === TAILWIND_ATTR) {
       const base = await currentBase();
       const segments = base ? splitStoryCss(sheet.css, base) : null;
-      if (!base || !segments) { out.push(sheet); continue; }
+      if (!base || !segments) { parts.push({ ...sheet, link: false }); continue; }
       let inline = 0;
       for (const segment of segments) {
-        out.push('shard' in segment ? await link(`data-mx-tw-s${segment.shard}`, base.shards[segment.shard]!) : { attr: `data-mx-tw-i${inline++}`, css: segment.inline });
+        parts.push('shard' in segment ? { attr: `data-mx-tw-s${segment.shard}`, css: base.shards[segment.shard]!, link: true } : { attr: `data-mx-tw-i${inline++}`, css: segment.inline, link: false });
       }
       // Every compile ends with the themes' tokens: the same text in every document, first in the base sheet.
       pending.push(base.themes);
     } else if (BASE_ATTRS.has(sheet.attr)) {
       pending.push(sheet.css);
     } else if (sheet.attr === SYSTEM_ATTR) {
-      await flushBase();
-      out.push(await link(SYSTEM_ATTR, sheet.css));
+      flushBase();
+      parts.push({ attr: SYSTEM_ATTR, css: sheet.css, link: true });
     } else {
-      await flushBase();
-      out.push(sheet);
+      flushBase();
+      parts.push({ ...sheet, link: false });
     }
   }
-  await flushBase();
-  return out;
+  flushBase();
+
+  return Promise.all(parts.map(async ({ attr, css, link }): Promise<DocumentSheet> => {
+    if (!link) return { attr, css };
+    try { return { attr, css, href: `${origin}${await store.put(css)}` }; } catch (error) {
+      console.warn('[linked-sheets] a shared sheet could not be stored; carried inline', attr, error);
+      return { attr, css };
+    }
+  }));
 }
