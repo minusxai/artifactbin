@@ -13,7 +13,7 @@ it('opens the owner sharing dialog and changes link visibility through the scope
   vi.stubGlobal('fetch', fetcher);
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
-  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Sharing' })).toHaveTextContent('anyone with the link'));
+  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Share “Report”' })).toHaveTextContent('anyone with the link'));
   fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/my/artifacts/abc123/sharing', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ visibility: 'public' }) })));
 });
@@ -37,7 +37,7 @@ it('keeps the owner verdict current and closes with Escape', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
   await waitFor(() => expect(view.getByRole('button', { name: 'Share' })).toHaveTextContent('public'));
   fireEvent.keyDown(window, { key: 'Escape' });
-  expect(screen.queryByRole('dialog', { name: 'Sharing' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Share “Report”' })).toBeNull();
 });
 
 it('invites an email, changes its role, and removes it under public visibility', async () => {
@@ -52,9 +52,8 @@ it('invites an email, changes its role, and removes it under public visibility',
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
-  expect(screen.getByRole('button', { name: 'Make public' })).toHaveClass('bg-accent-soft');
-  expect(screen.getByRole('button', { name: 'Make private' })).not.toHaveClass('bg-accent-soft');
-  expect(screen.getByRole('button', { name: 'Make public' })).toHaveClass('whitespace-nowrap');
+  expect(screen.getByRole('button', { name: 'Make public' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Make private' })).toHaveAttribute('aria-pressed', 'false');
   fireEvent.input(screen.getByRole('textbox', { name: 'Invite email' }), { target: { value: 'Friend@Example.com' } });
   fireEvent.click(screen.getByRole('button', { name: 'Add email' }));
   await waitFor(() => expect(state.shares).toEqual([{ email: 'friend@example.com', role: 'viewer' }]));
@@ -138,7 +137,7 @@ it('offers social preview to an editor without sharing controls and keeps the ed
   const edit = vi.fn(); const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner={false} onSocialPreview={edit} version={3} />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
-  expect(screen.getByRole('dialog', { name: 'Sharing' })).toBeTruthy();
+  expect(screen.getByRole('dialog', { name: 'Share “Report”' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Make public' })).toBeNull();
   expect(fetcher).not.toHaveBeenCalled();
   const image = screen.getByAltText('Current social preview');
@@ -147,7 +146,7 @@ it('offers social preview to an editor without sharing controls and keeps the ed
   expect(screen.getByText('Preview unavailable')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Edit social preview' }));
   expect(edit).toHaveBeenCalledOnce();
-  expect(screen.queryByRole('dialog', { name: 'Sharing' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Share “Report”' })).toBeNull();
 });
 
 it('refreshes the social thumbnail and loading state when the saved document version changes', () => {

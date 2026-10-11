@@ -248,7 +248,7 @@ await section('owner', async () => {
   );
   await openArtifactControls(page);
   await page.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
-  const sharingDialog = page.locator('[role="dialog"][aria-label="Sharing"]');
+  const sharingDialog = page.getByRole('dialog', { name: /^Share “/ });
   await sharingDialog.waitFor({ timeout: 15000 });
   await page.waitForTimeout(250); // let the restrained entrance transform settle before measuring its center
   const [sharingBox, sharingViewport] = await Promise.all([
