@@ -66,8 +66,13 @@ async function pagesCookie(id: string, actor: Actor | null, appCookie: string | 
   const page = await app.request(as(`${APP}/a/${id}`, actor, { headers: { accept: 'text/html', ...(appCookie ? { cookie: appCookie } : {}) } }));
   const src = /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&');
   const exchanged = await app.request(src);
-  const value = /afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie') ?? '')?.[1];
-  return value ? `afbin_pages=${value}` : null;
+  const value = /__Host-afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie') ?? '')?.[1];
+  return value ? `__Host-afbin_pages=${value}` : null;
+}
+/** The frame's first URL (the ticket-bearing request) the app page draws for `actor`. */
+async function frameSrc(id: string, actor: Actor | null): Promise<string> {
+  const page = await app.request(as(`${APP}/a/${id}`, actor, { headers: { accept: 'text/html' } }));
+  return /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&');
 }
 const read = (id: string, headers: Record<string, string> = {}, init: RequestInit = {}) =>
   app.request(`${pagesOriginFor(id, site)}/`, { headers: { accept: 'text/html', ...headers }, ...init });
@@ -152,6 +157,38 @@ describe('the document on its own origin', () => {
     expect(editor.status).toBe(200);
     expect(tagOf(editor)).not.toBe(viewer);
     expect((await read(id, { cookie, 'if-none-match': tagOf(editor) })).status).toBe(304);
+  });
+
+  it('settles who is asking before it answers a 304: a ticket-bearing request is never a 304 for a different viewer', async () => {
+    const w = await world();
+    const id = await w.publish(BODY, 'public');
+    const stranger = await createUser({ email: 'mxmx_test_reval_ticket_stranger@example.com' });
+    const strangerActor: Actor = { credential: 'session', userId: stranger.id, email: stranger.email!, emailVerified: true };
+    const mine = await app.request(await frameSrc(id, w.actor));
+    expect(mine.status).toBe(200);
+    const ownerTag = tagOf(mine);
+    const ownerCookie = mine.headers.get('set-cookie')!.split(';')[0]!;
+    // The owner's validator on the stranger's ticket: the stranger is who is asking, so the page is sent, and their session set.
+    const theirs = await app.request(await frameSrc(id, strangerActor), { headers: { 'if-none-match': ownerTag } });
+    expect(theirs.status).toBe(200);
+    expect(tagOf(theirs)).not.toBe(ownerTag);
+    expect(theirs.headers.get('set-cookie')).toMatch(/^__Host-afbin_pages=/);
+    // …and on a guest's frame, even with the owner's cookie held: nobody is asking, the owner's tag answers for nothing, the cookie goes.
+    const guest = await app.request(await frameSrc(id, null), { headers: { 'if-none-match': ownerTag, cookie: ownerCookie } });
+    expect(guest.status).toBe(200);
+    expect(tagOf(guest)).not.toBe(ownerTag);
+    expect(guest.headers.get('set-cookie')).toMatch(/Max-Age=0/);
+    // A spent ticket replayed with someone else's validator and no cookie of its own is nobody's page too.
+    const spent = await frameSrc(id, w.actor);
+    expect((await app.request(spent)).status).toBe(200);
+    const replay = await app.request(spent, { headers: { 'if-none-match': ownerTag } });
+    expect(replay.status).toBe(200);
+    expect(tagOf(replay)).not.toBe(ownerTag);
+    // The same viewer's own validator is still a 304 — and the session the ticket buys is set on it all the same.
+    const again = await app.request(await frameSrc(id, w.actor), { headers: { 'if-none-match': ownerTag } });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe('');
+    expect(again.headers.get('set-cookie')).toMatch(/^__Host-afbin_pages=[A-Za-z0-9_-]{40,}/);
   });
 
   it('changes the tag with what the reader trusts: a reader who allowed the declared hosts once', async () => {

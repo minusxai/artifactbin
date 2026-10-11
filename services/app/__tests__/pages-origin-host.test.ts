@@ -183,7 +183,7 @@ describe('the pages session', () => {
     expect(res.headers.get('location')).toBeNull();
     expect(res.headers.get('set-cookie')).toMatch(/^__Host-afbin_pages=[A-Za-z0-9_-]{40,}; Path=\/; HttpOnly; SameSite=Lax; Secure$/);
     expect(res.headers.get('referrer-policy')).toBe('no-referrer');
-    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('cache-control')).toBe('private, no-cache');
     const html = await res.text();
     expect(html).toContain('Private plan');
     expect(island(html)).toMatchObject({ direct: true, signedIn: true });
@@ -355,8 +355,8 @@ describe('the pages session', () => {
       expect(again.headers.get('set-cookie'), url).toBeNull();
     }
     expect(text).not.toContain(src.searchParams.get('_pt')!);
-    // The response that carried it is never cached and never sent on as a referrer.
-    expect(first.headers.get('cache-control')).toBe('no-store');
+    // The response that carried it is private and revalidated on every use (never shared), and never sent on as a referrer.
+    expect(first.headers.get('cache-control')).toBe('private, no-cache');
     expect(first.headers.get('referrer-policy')).toBe('no-referrer');
     // …and a script cannot ask for a new one: a pages origin is refused on every app route.
     const asked = await app.request(`${APP}/api/page/frame/${w.secret}`, { headers: { origin: src.origin } });
