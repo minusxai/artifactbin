@@ -9,6 +9,7 @@ import {apiRequest} from '../lib/api';
 import {runFailureMessage} from '../lib/run-failure-message';
 import {useSession} from '../lib/session';
 import {DocumentSharing} from '../document/DocumentSharing';
+import { Disclosure } from '../ui/Disclosure';
 import {Button} from '../ui/Button';
 import {Field,Input,Textarea} from '../ui/Field';
 import {SectionHeading} from '../ui/PageHeader';
@@ -64,5 +65,5 @@ export function ProgramPage(props:{artifactId?:string;owner?:boolean}={}):JSX.El
  <p class="text-xs text-muted">Version 1 requires a command array. Compute and environment configuration are optional. Defaults: 1 vCPU, 2 GiB RAM. Runtime authentication is supplied separately.</p>
  <Show when={canManage()} fallback={<p>Only the owner can run or schedule this program.</p>}><div class="flex flex-wrap gap-2"><Button type="submit" disabled={busy()||loading()}>Save program</Button><Show when={id()}><Button variant="secondary" type="button" disabled={busy()||dirty()||['queued','running'].includes(run()?.status??'')} onClick={()=>void invoke()}>Run program</Button><Button variant="secondary" aria-label="Schedule program" href={`/schedules?artifact=${encodeURIComponent(id()!)}`}>Schedule</Button></Show></div><Show when={dirty()&&id()}><p class="mt-2 text-xs text-muted">Save your changes before running.</p></Show></Show>
  </Panel></form></Show></Show><Show when={canManage()&&id()}><DocumentSharing id={id()!} title={title()} owner version={version()} format="program" /></Show><Show when={id()}><a {...artifactLink(`/a/${id()}`, 'program')} class="text-sm underline">Open saved program</a></Show>
- <Show when={run()}>{state=><Panel label="Program run"><SectionHeading class="break-all">Run {state().runId}</SectionHeading><StatusMessage kind="notice" class="mt-2">{state().status}</StatusMessage><Show when={state().receipt?.reason}><StatusMessage kind="error">{runFailureMessage(state().receipt!.reason!)}</StatusMessage></Show><Show when={state().output!==null}><details><summary>Output</summary><pre class="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(state().output,null,2)}</pre></details></Show></Panel>}</Show></main>;
+ <Show when={run()}>{state=><Panel label="Program run"><SectionHeading class="break-all">Run {state().runId}</SectionHeading><StatusMessage kind="notice" class="mt-2">{state().status}</StatusMessage><Show when={state().receipt?.reason}><StatusMessage kind="error">{runFailureMessage(state().receipt!.reason!)}</StatusMessage></Show><Show when={state().output!==null}><Disclosure size="sm" summary="Output"><pre class="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(state().output,null,2)}</pre></Disclosure></Show></Panel>}</Show></main>;
 }

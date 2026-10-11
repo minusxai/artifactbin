@@ -95,7 +95,6 @@ export function TrashPage(): JSX.Element {
           </Show>
           <div class="flex flex-wrap items-center gap-2 border-b border-edge bg-raised/30 px-4 py-3">
             <SearchField
-              size="sm"
               label="Search trash"
               placeholder="search artifacts"
               value={query()}

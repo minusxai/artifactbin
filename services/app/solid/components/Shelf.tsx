@@ -153,7 +153,7 @@ export default function Shelf(props: Props): JSX.Element {
   const docs = () => shelf().documents.slice(view() === 'list' ? page() * 10 : 0, view() === 'list' ? page() * 10 + 10 : undefined);
   return <div aria-label="Shelf" class="min-w-0">
     <Panel padding="none" class="mb-5 flex flex-col gap-2 px-3 py-1.5 sm:flex-row sm:flex-wrap sm:items-center">
-      <div class="min-w-0 sm:flex-1"><SearchField size="sm" label="Search artifacts" placeholder="search artifacts" value={query()} onValue={value => { setQuery(value); setPage(0); props.onQuery?.(value); }} /></div>
+      <div class="min-w-0 sm:flex-1"><SearchField label="Search artifacts" value={query()} onValue={value => { setQuery(value); setPage(0); props.onQuery?.(value); }} /></div>
       <div class="flex flex-wrap items-center gap-2 sm:contents">
         <Show when={availableFilters().length >= 2}><For each={availableFilters()}>{value => <Button size="sm" variant="ghost" aria-label={`Filter ${value}`} pressed={filters().includes(value)} onClick={() => toggle(value)}>{value}</Button>}</For></Show>
         <ToggleGroup label="Shelf view" iconOnly value={view()} onChange={next => setView(next as 'grid' | 'list')} class="ml-auto shrink-0 border-l border-edge pl-1.5"

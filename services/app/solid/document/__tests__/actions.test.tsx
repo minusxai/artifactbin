@@ -25,3 +25,21 @@ it('omits app membership controls from read-only artifacts', () => {
     like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} />);
   expect(view.queryByRole('button', { name: 'People' })).toBeNull();
 });
+
+it('draws every row of the controls panel alike: a ghost row with one icon and a lower-case label', () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: false }));
+  try {
+    const view = render(() => <DocumentActions id="abc123" title="Report" version={1} owner canEdit canAnnotate pwaEnabled
+      like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} onDeleted={() => {}} />);
+    const schedule = view.getByRole('link', { name: 'Schedule artifact' });
+    expect(schedule).toHaveAttribute('href', '/schedules?artifact=abc123');
+    const rows = ['Toggle comments', 'Edit artifact', 'Install app', 'Schedule artifact', 'Download for offline', 'Fork artifact', 'Like artifact', 'Transfer ownership of Report', 'Refresh external images', 'Share', 'Delete Report']
+      .map(name => view.getAllByRole(name === 'Install app' || name === 'Schedule artifact' || name === 'Download for offline' ? 'link' : 'button', { name })[0]!);
+    const look = (row: HTMLElement) => row.className.split(/\s+/).filter(token => /^(h-control|rounded-|px-|font-mono|text-xs|hover:bg-)/.test(token)).sort().join(' ');
+    for (const row of rows) {
+      expect(row.querySelectorAll(':scope svg, :scope > span > svg').length, `${row.getAttribute('aria-label')} has one icon`).toBe(1);
+      expect(row.textContent!.trim(), `${row.getAttribute('aria-label')} is lower-case`).toMatch(/^[a-z0-9]/);
+      expect(look(row), `${row.getAttribute('aria-label')} is drawn as a ghost sm row`).toBe(look(rows[0]!));
+    }
+  } finally { vi.unstubAllGlobals(); }
+});

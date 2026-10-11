@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, Show, type JSX } from 'solid-js';
 import Download from 'lucide-solid/icons/download';
+import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 
 export function DownloadOffline(props: { id: string; version?: number }): JSX.Element {
@@ -27,5 +28,5 @@ export function DownloadOffline(props: { id: string; version?: number }): JSX.El
     } catch { setError('The offline file could not be downloaded. Check the connection and try again.'); }
     finally { setBusy(false); }
   };
-  return <><Tooltip content="One HTML file you can open, edit and comment on without a connection."><a href={href()} download="" aria-label="Download for offline" aria-busy={busy() ? 'true' : undefined} onClick={event => void save(event)} class="flex w-full items-center gap-2 rounded px-2 py-2 font-mono text-xs text-muted hover:bg-raised"><Download size={14} />{busy() ? 'preparing file…' : 'download for offline'}</a></Tooltip><Show when={error()}><p role="alert" class="text-xs text-danger">{error()}</p></Show></>;
+  return <><Tooltip content="One HTML file you can open, edit and comment on without a connection."><Button variant="ghost" size="sm" href={href()} download="" aria-label="Download for offline" aria-busy={busy() ? 'true' : undefined} onClick={(event: MouseEvent) => void save(event)} class="w-full justify-start"><Download size={14} />{busy() ? 'preparing file…' : 'download for offline'}</Button></Tooltip><Show when={error()}><p role="alert" class="text-xs text-danger">{error()}</p></Show></>;
 }

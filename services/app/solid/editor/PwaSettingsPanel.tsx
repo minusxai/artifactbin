@@ -78,7 +78,7 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
       <Field label="Background color" hint="Loading screen and padding around your app icon."><ColorField value={backgroundColor.value()} onChange={backgroundColor.set} /></Field>
     </div>
     <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
-    <div class="space-y-3 border-t border-edge pt-5"><InstallArtifactLink id={props.id} beforeNavigate={props.beforeInstall} class="inline-flex items-center gap-2 text-sm font-semibold text-accent" />
+    <div class="space-y-3 border-t border-edge pt-5"><InstallArtifactLink id={props.id} beforeNavigate={props.beforeInstall} />
       <p class="text-sm text-muted">Opens the latest saved version in its own window. Internet access and the artifact’s existing sharing permissions still apply.</p>
       <p class="text-xs text-muted">Names and icons may take time to update in installed apps. Reinstall to see changes immediately.</p>
       <a href={artifactAppPath(props.id)} target="_self" class="block break-all text-xs text-muted underline">{window.location.origin}{artifactAppPath(props.id)}</a>
@@ -88,13 +88,14 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
 
 export function PwaSharingSetting(props: { source: string; onChange: (source: string) => void }) {
   const settings = () => readPwaSettings(props.source);
-  return <section aria-label="App installation" class="mx-auto max-w-3xl border-t border-edge pt-5">
-    <div class="flex items-center justify-between gap-4 text-sm font-medium text-fg">
-      <span>Allow installation as a PWA</span>
+  // Sans throughout, like the sharing heading above it: the editor shell around this tab is mono chrome.
+  return <section aria-label="App installation" class="mx-auto max-w-3xl border-t border-edge pt-5 font-sans">
+    <div class="flex items-center justify-between gap-4">
+      <h3 class="text-sm font-medium text-fg">Allow installation as a PWA</h3>
       <Switch label="Allow installation as a PWA" checked={settings().enabled === true}
         onChange={enabled => props.onChange(writePwaSettings(props.source, { ...settings(), enabled }))} />
     </div>
-    <p class="mt-2 text-sm text-muted">Let readers install this artifact on their home screen or desktop. Sharing permissions still apply.</p>
-    <Show when={settings().enabled}><p class="mt-2 text-xs text-muted">Customize its name, icon and colors in the PWA tab.</p></Show>
+    <p class="mt-2 text-sm leading-relaxed text-muted">Let readers install this artifact on their home screen or desktop. Sharing permissions still apply.</p>
+    <Show when={settings().enabled}><p class="mt-2 text-sm leading-relaxed text-muted">Customize its name, icon and colors in the PWA tab.</p></Show>
   </section>;
 }

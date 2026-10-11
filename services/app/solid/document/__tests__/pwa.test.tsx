@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { InstallArtifact, InstallArtifactLink } from '../InstallArtifact';
+import { DocumentSharing } from '../DocumentSharing';
 import { captureInstallPrompt, currentInstall } from '@/lib/serving/pwa-install';
 import { PwaSettingsPanel, PwaSharingSetting } from '../../editor/PwaSettingsPanel';
 import { readPwaSettings } from '@/lib/document/pwa-settings';
@@ -74,4 +75,18 @@ it('offers an off-by-default Sharing switch that preserves existing PWA details'
   expect(toggle).not.toBeChecked();
   fireEvent.click(toggle);
   expect(readPwaSettings(change.mock.lastCall![0])).toEqual({ enabled: true, name: 'Saved name' });
+});
+
+it('heads the Sharing tab like the Share dialog: sans headings and descriptions over the mono controls', () => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+  try {
+    render(() => <div class="font-mono"><DocumentSharing id="Abc123" title="Report" owner variant="embedded" /><PwaSharingSetting source="<p>Hello</p>" onChange={vi.fn()} /></div>);
+    const sans = (el: HTMLElement) => !!el.closest('.font-sans') || el.className.split(/\s+/).includes('font-sans');
+    const heading = screen.getByRole('heading', { name: 'Share “Report”' });
+    expect(sans(heading)).toBe(true);
+    const description = screen.getByText('Manage access, invite people, or copy the link.');
+    expect(sans(description)).toBe(true);
+    expect(sans(screen.getByRole('heading', { name: 'Allow installation as a PWA' }))).toBe(true);
+    expect(sans(screen.getByText(/Let readers install this artifact/))).toBe(true);
+  } finally { vi.unstubAllGlobals(); }
 });

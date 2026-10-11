@@ -60,9 +60,9 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
-function mountEditor(source = SOURCE, backend = fakeBackend()) {
+function mountEditor(source = SOURCE, backend = fakeBackend(), colorMode: 'light' | 'dark' | null = null) {
   const runtime = fakeRuntime();
-  const art = { id: 'doc12345', version: 3, edit_id: 'edit-3', title: 'A note', theme: null, template: null, colorMode: null, markup: source,
+  const art = { id: 'doc12345', version: 3, edit_id: 'edit-3', title: 'A note', theme: null, template: null, colorMode, markup: source,
     document: { schema: 3 as const, kind: 'graph' as const, policy: '', nodes: {}, claimedIds: {}, bytes: 0 } };
   const view = render(() => <Router><Route path="/" component={() => (
     <InPlaceEditor art={art} backend={backend} runtimeRef={runtime.runtimeRef} sessionNonce={NONCE} />
@@ -291,4 +291,31 @@ it('saves the color mode picked in the panel, and confirms before discarding an 
   fireEvent.click(view.getByRole('button', { name: 'Use server version' }));
   fireEvent.click(within(screen.getByRole('dialog', { name: 'Discard unsaved draft' })).getByRole('button', { name: 'Discard draft and load server' }));
   expect(screen.queryByRole('dialog', { name: 'Discard unsaved draft' })).toBeNull();
+});
+
+it('draws its chrome in the app appearance while the document keeps its own mode', async () => {
+  document.documentElement.dataset.theme = 'dark';
+  try {
+    const { sent, view } = mountEditor(SOURCE, fakeBackend(), 'light');
+    const chrome = () => view.getByRole('tab', { name: 'Show context' }).closest('[data-app-appearance]');
+    expect(chrome()).toHaveAttribute('data-app-appearance', 'dark');
+    fireEvent.click(view.getByRole('button', { name: 'Color mode' }));
+    expect(screen.getByRole('listbox').closest('[data-app-appearance]')).toHaveAttribute('data-app-appearance', 'dark');
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
+    fireEvent.click(view.getByRole('tab', { name: 'Edit the source' }));
+    fireEvent.input(await view.findByRole('textbox', { name: 'Markup source' }), { target: { value: '<p>Changed</p>' } });
+    await vi.waitFor(() => expect(sent.filter(m => m.type === STORY_DOCUMENT_MESSAGE).at(-1)).toMatchObject({ source: '<p>Changed</p>', colorMode: 'light' }));
+    delete document.documentElement.dataset.theme;
+    await vi.waitFor(() => expect(chrome()).toHaveAttribute('data-app-appearance', 'light'));
+  } finally { delete document.documentElement.dataset.theme; }
+});
+
+it.each([[390, false], [800, true]])('offers the bar Insert menu at %ipx only when the bar has room (%s); the selection sheet always has Insert', (width, inBar) => {
+  vi.stubGlobal('innerWidth', width);
+  const { view } = mountEditor();
+  const bar = view.getAllByLabelText('Document actions', { exact: true }).at(-1)!;
+  expect(!!within(bar).queryByRole('button', { name: /^Insert$/ })).toBe(inBar);
+  fireEvent.click(view.getByRole('button', { name: 'Show selection settings' }));
+  const insert = within(screen.getByRole('region', { name: 'Insert content' }));
+  expect(insert.getByRole('button', { name: 'Insert image' })).toBeInTheDocument();
 });

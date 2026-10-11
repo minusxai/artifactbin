@@ -19,8 +19,6 @@ import { useSourceEditorTools } from './source-editor-tools';
  * lazy editor replaces it. That module stays out of this import graph to keep the editor chunk lazy.
  */
 const CODE = { 'background-color': '#1e1e1e', color: '#d4d4d4' } as const;
-/** The plain stand-in is an edge-to-edge code surface, not a form field: no border, radius or minimum height. */
-const BARE = { border: '0', 'border-radius': '0', 'min-height': '0', padding: '8px 4px' } as const;
 const GUTTER = { color: '#858585' } as const;
 const DIVIDER = '1px solid #333';
 const STATUS = { color: '#a0a0a0', 'border-top': DIVIDER } as const;
@@ -38,9 +36,8 @@ function PlainSourceFallback(props: SourceEditorProps & { unavailable?: string |
       <div aria-hidden="true" class="w-12 shrink-0 overflow-hidden text-right" style={GUTTER}>
         <pre data-source-line-numbers class="m-0 py-2 pr-3" style={{ font: 'inherit' }}>{props.value.split('\n').map((_, index) => index + 1).join('\n')}</pre>
       </div>
-      <Textarea ref={input} size="sm" aria-label={props.ariaLabel ?? 'Markup source'} aria-description={props.unavailable ?? undefined} readOnly={props.readOnly}
-        class="min-h-0 min-w-0 flex-1 resize-none"
-        style={{ ...CODE, ...BARE, font: 'inherit', 'tab-size': '2' }} wrap="off"
+      <Textarea ref={input} surface="code" aria-label={props.ariaLabel ?? 'Markup source'} aria-description={props.unavailable ?? undefined} readOnly={props.readOnly}
+        class="flex-1 [tab-size:2]" style={CODE} wrap="off"
         spellcheck={false} autocapitalize="off" value={props.value}
         on:input={(event) => {
           props.remember({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd });

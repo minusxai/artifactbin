@@ -96,10 +96,8 @@ export default function ThemePicker(props: { value: StoryDesignName | null; colo
       <span class="flex min-w-0 flex-1 items-center gap-2"><ThemeDot theme={props.value} colorMode={props.colorMode} /><span class="truncate">{designLabel(props.value)}</span></span>
       <ChevronDown size={12} aria-hidden="true" class="shrink-0 opacity-60" />
     </Button>}>
-    {/* A thumbnail tile, not a text control: the link variant is the Button's auto-height geometry. */}
-    <For each={STORY_SYSTEMS}>{(system) => <Button variant="link" pressed={props.value === system.name} aria-label={`Design system ${system.label}`}
-      onClick={() => pick(system.name)}
-      class="w-full min-w-0 overflow-hidden rounded-chip p-0 [&>span]:w-full">
+    <For each={STORY_SYSTEMS}>{(system) => <Button shape="tile" pressed={props.value === system.name} aria-label={`Design system ${system.label}`}
+      onClick={() => pick(system.name)} class="w-full">
       <DesignSystemSpecimen system={system} colorMode={props.colorMode} selected={props.value === system.name} />
     </Button>}</For>
   </AnchoredPanel>

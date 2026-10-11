@@ -36,6 +36,7 @@ import { Checkbox, Switch } from '../ui/Checkbox';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CopyBlock } from '../ui/CopyBlock';
 import { Dialog } from '../ui/Dialog';
+import { Disclosure } from '../ui/Disclosure';
 import { Field, Input, SearchField, Textarea } from '../ui/Field';
 import { Menu, RowMenu } from '../ui/Menu';
 import { PageHeader, SectionHeading } from '../ui/PageHeader';
@@ -78,6 +79,7 @@ export default function UiGallery(): JSX.Element {
   const [color, setColor] = createSignal(SWATCHES[2]!.value);
   const [brush, setBrush] = createSignal(SWATCHES[0]!.value);
   const [width, setWidth] = createSignal(4);
+  const [tile, setTile] = createSignal('tile one');
   const [person, setPerson] = createSignal('');
   const [invited, setInvited] = createSignal<string[]>([]);
   const [version, setVersion] = createSignal(3);
@@ -115,6 +117,13 @@ export default function UiGallery(): JSX.Element {
           <Button size="xs" variant="secondary">xs text</Button>
         </Row>
         <Row label="bar (36px)"><Button size="bar" variant="ghost" icon aria-label="Notifications bar"><MessageSquare size={18} /></Button><Button size="bar" variant="secondary">bar text</Button></Row>
+        <Row label="nav rows"><div class="grid w-56 gap-1">
+          <Button variant="ghost" size="sm" href="#nav" current class="w-full justify-start"><FolderPlus size={14} />current page</Button>
+          <Button variant="ghost" size="sm" href="#nav" current={false} class="w-full justify-start"><Pencil size={14} />another page</Button>
+        </div></Row>
+        <Row label="tile"><div class="grid w-72 grid-cols-2 gap-2"><For each={['tile one', 'tile two']}>{(name) => <Button shape="tile" pressed={tile() === name} aria-label={`Pick ${name}`} onClick={() => setTile(name)} class="w-full">
+          <span class="grid aspect-[4/3] place-items-center bg-raised font-mono text-xs text-muted">{name}</span>
+        </Button>}</For></div></Row>
       </Section>
 
       <Section title="Fields">
@@ -134,6 +143,7 @@ export default function UiGallery(): JSX.Element {
           <Field label="New owner" error={selected() ? null : 'Choose a destination.'}><Select value={selected()} options={[{ value: 'personal', label: 'Personal' }, { value: 'team', label: 'Team' }]} placeholder="Choose a destination" onChange={setSelected} /></Field>
           <Field label="Notes" hint="Markdown is fine."><Textarea rows={3} placeholder="Why this change" /></Field>
           <Field label="Chrome notes"><Textarea size="sm" rows={3} placeholder="sm density" /></Field>
+          <Field label="Code surface" hint="surface=&quot;code&quot;: takes the ground and font it sits on."><div class="flex h-24 rounded-chip bg-raised font-mono text-xs"><Textarea surface="code" wrap="off" value={'<p>Edge-to-edge source</p>'} /></div></Field>
           <Field label="Add people" hint={invited().length ? `Invited: ${invited().map((u) => `@${u}`).join(', ')}` : 'Arrow keys walk the suggestions.'}>
             <Combobox value={person()} onValue={setPerson} options={matches()} optionKey={(p) => p.id} placeholder="@username"
               renderOption={(p) => <span>@{p.username} <span class="text-xs text-muted">{p.name}</span></span>}
@@ -154,6 +164,9 @@ export default function UiGallery(): JSX.Element {
           <Switch size={size} label={`Disabled switch ${size}`} checked onChange={setOn} disabled />
         </Row>}</For>
         <Checkbox label="Automatically accept invitations from people I follow." description="You can review invitations from everyone else before joining." checked={checked()} onChange={setChecked} />
+        <For each={SIZES}>{(size) => <Row label={`disclosure ${size}`}><Disclosure size={size} open={size === 'md'} summary="DNS records" class="w-full">
+          <p class={`mt-2 text-muted ${size === 'md' ? 'font-sans text-sm' : 'font-mono text-xs'}`}>Add these two records at your DNS host, then press verify.</p>
+        </Disclosure></Row>}</For>
         <For each={SIZES}>{(size) => <>
           <Row label={`underline ${size}`}><Tabs label={`Source ${size}`} size={size} items={TABS} value={tab()} onChange={setTab} /></Row>
           <Row label={`segmented ${size}`}><Tabs label={`Segmented ${size}`} variant="segmented" size={size} items={TABS} value={tab()} onChange={setTab} /></Row>

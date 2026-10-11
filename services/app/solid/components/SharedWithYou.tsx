@@ -30,7 +30,7 @@ export default function SharedWithYou(props: { items: WorkspaceSharedItem[]; que
   return <Show when={props.items.length}><section aria-label="Shared with you" class="mt-8"><div class="mb-2"><MicroLabel>shared with you</MicroLabel></div>
     <Panel padding="none">
       <div class="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">
-        <SearchField size="sm" class="min-w-32 flex-1" label="Search shared artifacts" placeholder="search shared artifacts" value={query()} onValue={setQuery} />
+        <SearchField class="min-w-32 flex-1" label="Search shared artifacts" value={query()} onValue={setQuery} />
         <Show when={formats().length >= 2 || roles().length >= 2}><span class="flex shrink-0 flex-wrap items-center gap-1.5 border-edge sm:ml-auto sm:border-l sm:pl-2">
           <Show when={formats().length >= 2}><For each={formats()}>{format => <Button size="sm" variant="ghost" aria-label={`Filter ${format}`} pressed={formatPicks().includes(format)} onClick={() => toggle('format', format)}>{formatLabel(format)}</Button>}</For></Show>
           <Show when={roles().length >= 2}><For each={roles()}>{role => <Button size="sm" variant="ghost" aria-label={`Filter ${role}`} pressed={rolePicks().includes(role)} onClick={() => toggle('role', role)}>{SHARE_ROLE_LABEL[role]}</Button>}</For></Show>

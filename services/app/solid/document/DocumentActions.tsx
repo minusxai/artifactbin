@@ -2,6 +2,8 @@
 import { createSignal, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Button } from '../ui/Button';
 import { MicroLabel } from '../ui/ui';
+import CalendarClock from 'lucide-solid/icons/calendar-clock';
+import FolderInput from 'lucide-solid/icons/folder-input';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import Pencil from 'lucide-solid/icons/pencil';
 import { DeleteAction } from './DeleteAction';
@@ -20,8 +22,7 @@ const DocumentPeople = lazy(() => import('./DocumentPeople').then((m) => ({ defa
 const TransferOwnershipDialog = lazy(() => import('../components/TransferOwnershipDialog').then((m) => ({ default: m.TransferOwnershipDialog })));
 import { RefreshDocumentAssets } from './RefreshDocumentAssets';
 
-/** A link row of the controls panel, drawn like a ghost `sm` Button (a Button is a <button>; these rows navigate). */
-const ROW = 'flex min-h-control-sm w-full items-center gap-2 rounded-control px-2.5 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg';
+/** Every row of the controls panel is a ghost `sm` Button (a link row takes `href`), lower-case, with one 14px icon. */
 const ROW_BUTTON = 'w-full justify-start';
 interface DocumentActionsProps {
   groupId?:string|null;
@@ -53,14 +54,14 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <Show when={props.forkedFrom}>{source => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{href => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>
       <Show when={activeCommenter()}><Button variant="ghost" size="sm" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW_BUTTON}><MessageSquare size={14} /><span class="flex-1 text-left">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></Button></Show>
       <Show when={activeEditor()}><Button variant="ghost" size="sm" aria-label="Edit artifact" onClick={props.onEdit} onPointerEnter={props.onEditIntent} onFocus={props.onEditIntent} onPointerDown={props.onEditIntent} class={ROW_BUTTON}><Pencil size={14} />edit artifact</Button></Show>
-      <Show when={props.pwaEnabled && !props.archived}><InstallArtifactLink id={props.id} class={ROW} /></Show>
-      <Show when={props.accountSession && !props.archived}><a href={`/schedules?artifact=${encodeURIComponent(props.id)}`} class={ROW}>Schedule artifact</a></Show>
+      <Show when={props.pwaEnabled && !props.archived}><InstallArtifactLink id={props.id} look="row" /></Show>
+      <Show when={props.accountSession && !props.archived}><Button variant="ghost" size="sm" href={`/schedules?artifact=${encodeURIComponent(props.id)}`} aria-label="Schedule artifact" class={ROW_BUTTON}><CalendarClock size={14} />schedule artifact</Button></Show>
       <DownloadOffline id={props.id} version={props.archived ? props.version : undefined} />
       <Show when={!props.hideFork}><ForkArtifact id={props.id} title={props.title} /></Show>
       <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} />
     </section>
     <Show when={activeOwner()}><section aria-label="Owner actions" class="space-y-1"><h2 class="px-2"><MicroLabel>owner</MicroLabel></h2>
-      <Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label={`Transfer ownership of ${props.title}`} onClick={()=>setTransferring(true)}>transfer ownership</Button>
+      <Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label={`Transfer ownership of ${props.title}`} onClick={()=>setTransferring(true)}><FolderInput size={14} />transfer ownership</Button>
       <RefreshDocumentAssets id={props.id} />
       <DocumentSharing id={props.id} title={props.title} owner variant="menu" onOpen={props.onShare} />
       <Show when={props.onDeleted}><DeleteAction id={props.id} title={props.title} onDeleted={props.onDeleted!} /></Show>

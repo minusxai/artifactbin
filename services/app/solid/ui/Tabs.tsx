@@ -30,7 +30,8 @@ interface TabItem {
 type TabVariant = 'underline' | 'segmented' | 'pill';
 
 const STRIP: Record<TabVariant, string> = {
-  underline: 'flex gap-4 border-b border-edge',
+  // The gap is the label's: an icon-only strip packs its square tabs (STRIP_GAP), as the vertical strip does.
+  underline: 'flex border-b border-edge',
   segmented: 'inline-flex gap-0.5 rounded-control border border-edge-bright bg-raised p-0.5',
   pill: 'flex gap-0.5',
 };
@@ -45,6 +46,7 @@ const TAB_SIZE: Record<TabVariant, Record<ControlSize, string>> = {
   pill: { md: 'h-control-sm rounded-chip px-2.5 font-sans text-sm', sm: 'h-7 rounded-chip px-2 font-mono text-2xs' },
 };
 const ICON_TAB: Record<ControlSize, string> = { md: 'w-control-sm px-0', sm: 'w-7 px-0' };
+const STRIP_GAP = { label: 'gap-4', icon: 'gap-1' } as const;
 const NEXT: Record<'horizontal' | 'vertical', [string, string]> = { horizontal: ['ArrowLeft', 'ArrowRight'], vertical: ['ArrowUp', 'ArrowDown'] };
 
 export function Tabs(props: {
@@ -78,7 +80,7 @@ export function Tabs(props: {
     tabs[next]!.click();
   };
   return <div role="tablist" aria-label={props.label} aria-orientation={orientation() === 'vertical' ? 'vertical' : undefined} onKeyDown={onKeyDown}
-    class={`${(orientation() === 'vertical' ? VERTICAL : STRIP)[variant()]} ${props.class ?? ''}`}>
+    class={`${(orientation() === 'vertical' ? VERTICAL : STRIP)[variant()]} ${variant() === 'underline' && orientation() !== 'vertical' ? STRIP_GAP[props.iconOnly ? 'icon' : 'label'] : ''} ${props.class ?? ''}`}>
     <For each={props.items}>{(item) => {
       const selected = () => item.value === props.value;
       const reason = () => (item.disabled ? item.disabledReason : undefined);

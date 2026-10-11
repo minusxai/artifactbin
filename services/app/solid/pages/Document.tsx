@@ -33,6 +33,7 @@ import { moveInto } from '@/lib/islands/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
 import { EditEntryChrome } from '../editor/EditEntryChrome';
+import { createAppAppearance } from '../ui/theme';
 import { Button } from '../ui/Button';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
@@ -118,7 +119,10 @@ export function DocumentPage(): JSX.Element {
   const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
   const [panel, setPanel] = createSignal<Panel>(null);
   const [fork, setFork] = createSignal(false);
-  const [mode, setMode] = createSignal<'light' | 'dark'>(page?.surface?.colorMode === 'dark' ? 'dark' : 'light');
+  /** The DOCUMENT's colour mode (its ground around the frame, and what a reloaded frame is told): the author's, until the reader picks. */
+  const [documentMode, setDocumentMode] = createSignal<'light' | 'dark'>(page?.surface?.colorMode === 'dark' ? 'dark' : 'light');
+  /** The APP's appearance, which the bar's controls panel shows: never the document's mode (see bug: a light document read the app's toggle as light). */
+  const appAppearance = createAppAppearance();
   /** The editor's bar is on screen (it replaces the entry skeleton). */
   const [editorMounted, setEditorMounted] = createSignal(false);
   const [editorCodeOpen, setEditorCodeOpen] = createSignal(false);
@@ -163,7 +167,7 @@ export function DocumentPage(): JSX.Element {
     chooseTheme(next);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode: next });
     modeChosen = true;
-    setMode(next);
+    setDocumentMode(next);
   };
 
   // ── the editor's door, and the edit mode's one owner (enter → ready → done → restored) ──
@@ -247,7 +251,7 @@ export function DocumentPage(): JSX.Element {
     if (!host) return;
     Object.assign(host.style, {
       position: 'fixed', top: `${APP_BAR_H}px`, left: '0px', right: railInset() ? `${railInset()}px` : '0px', bottom: '0px',
-      display: 'flex', flexDirection: 'column', background: DOCUMENT_GROUND[mode()], padding: '0px', minHeight: '0px',
+      display: 'flex', flexDirection: 'column', background: DOCUMENT_GROUND[documentMode()], padding: '0px', minHeight: '0px',
     });
   });
 
@@ -347,7 +351,7 @@ export function DocumentPage(): JSX.Element {
     // anew, which also takes the reader's colour choice again).
     createEffect(on(() => story?.nonce() ?? null, (next) => {
       setNonce(next);
-      if (next && modeChosen) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode: untrack(mode) });
+      if (next && modeChosen) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode: untrack(documentMode) });
     }));
     setReady(true);
     window.addEventListener('hashchange', lifecycle.sync);
@@ -407,7 +411,7 @@ export function DocumentPage(): JSX.Element {
       install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={page!.surface?.hasInvitedUsers}
       membership={page!.surface?.membership}
       titleSlot={() => editing() && !phone() && editorMounted()} titleHost={setTitleHost}
-      panel={panel} setPanel={setPanel} mode={mode} onMode={chooseMode}
+      panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onEdit={() => act('edit')} onEditIntent={intendEdit} onMembership={() => act('membership')}
       controls={(close) => <DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         owner={isOwner() && !editing()} canEdit={editable() && !editing()} canAnnotate={annotatable()} accountSession={accountSession()}
@@ -457,11 +461,11 @@ export function DocumentPage(): JSX.Element {
         panelWidth={editing() && wide() ? editorRightInset() : undefined} />
     </Show>
     <Show when={ready() && editing()}>
-      <EditEntryChrome top={APP_BAR_H} mode={mode()} panelWidth={wide() ? editorRightInset() : 0}
+      <EditEntryChrome top={APP_BAR_H} panelWidth={wide() ? editorRightInset() : 0}
         skeleton={!editorMounted()} loading={!editorReady() && !editorPartFailed()} />
     </Show>
     <Show when={ready() && !editing() && restoring()}>
-      <EditEntryChrome top={APP_BAR_H} mode={mode()} panelWidth={0} skeleton={false} loading leaving />
+      <EditEntryChrome top={APP_BAR_H} panelWidth={0} skeleton={false} loading leaving />
     </Show>
     <Show when={ready() && editing() && backend && (editorSeed() || editorPartFailed())}>
       <Suspense fallback={null}>

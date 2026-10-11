@@ -4,6 +4,7 @@ import { Portal } from 'solid-js/web';
 import { parse as parseYaml } from 'yaml';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils/dataset-grants';
 import type { DatasetAccessPolicy, DatasetOperation, DatasetTablePolicy, InsertPermission, UpdatePermission, DeletePermission } from '@artifactbin/contracts';
+import { Disclosure } from '../ui/Disclosure';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Field, Input, Textarea } from '../ui/Field';
@@ -100,7 +101,7 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
         <Field label="Policy JSON or YAML"><Textarea size="sm" rows={24} aria-label="Policy JSON or YAML" spellcheck={false} value={source() ?? ''} onInput={event => setSource(event.currentTarget.value)} /></Field>
         <div class="flex gap-2"><Button onClick={() => { try { change(parseDatasetAccessPolicy(parseYaml(source()!))); setSource(null); setTableIndex(0); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid policy'); } }}>Apply policy source</Button><Button variant="secondary" onClick={() => setSource(null)}>Cancel source changes</Button></div>
       </Show>
-      <details><summary>Review permission changes</summary><pre>{pretty(draft())}</pre></details>
+      <Disclosure summary="Review permission changes"><pre class="mt-2 overflow-x-auto font-mono text-xs">{pretty(draft())}</pre></Disclosure>
       <Panel padding="sm" class="flex items-center justify-between gap-3"><p role="status">{notice() || (pretty(draft()) !== pretty(state()?.policy) ? 'You have unsaved rule changes.' : 'Rules are up to date.')}</p><Show when={props.saveTarget} fallback={saveButton()}>{target => <Portal mount={target()}>{saveButton(true)}</Portal>}</Show></Panel>
     </Show>
   </section>;
