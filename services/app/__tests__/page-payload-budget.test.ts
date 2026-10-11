@@ -62,17 +62,49 @@ describe('the page payload does not carry the document tree', () => {
   it('leaves the node tree out of both doors and keeps the framed runtime to what the page reads', async () => {
     const w = await ownerWorld();
     as(w.owner, OWNER);
-    const whole = JSON.stringify((await json(w.id).then((r) => r.json())));
+    const jsonAnswer = await json(w.id).then((r) => r.json()) as { surface: { runtime: { title: string; data: Record<string, unknown> } & Record<string, unknown> } };
+    const whole = JSON.stringify(jsonAnswer);
     const html = await framed(w.id);
     const htmlBytes = JSON.stringify(html.body).length;
     const runtime = ((html.body as { surface: { runtime: { title: string; data: Record<string, unknown> } & Record<string, unknown> } }).surface.runtime);
     // The tree of 300 rows is far larger than anything else in the answer; it is no longer in it.
-    expect(whole.length).toBeLessThan(120_000);
     expect(whole).not.toContain('"Research note 299');
     expect(htmlBytes).toBeLessThan(6_000);
     expect(runtime.data).not.toHaveProperty('nodes');
     expect(Object.keys(runtime).sort()).toEqual(['data', 'title']);
     expect(Object.keys(runtime.data)).not.toContain('refData');
+    // The JSON door answers a framed document with the SAME runtime as the HTML door (it measured 211 KB for a large
+    // document: sheet 96 KB, system sheet 41 KB, author script 72 KB, none of which the app reads).
+    expect(jsonAnswer.surface.runtime).toEqual(runtime);
+    for (const gone of ['"css"', '"systemCss"', '"authorScript"', '"overrides"']) expect(whole).not.toContain(gone);
+    // 6 KB is the HTML door's budget for the same page; the whole JSON answer (shell props, author, canonical)
+    // carries about 1 KB more than the runtime, so the same ceiling holds for both doors.
+    expect(whole.length).toBeLessThan(6_000);
+  });
+
+  it('carries none of a document\'s author script or sheet, however large they are', async () => {
+    // The production page measured 211 KB: sheet 96 KB, system sheet 41 KB, author script 72 KB. A script of that size, and a
+    // class for every row, must still leave the JSON door at the framed runtime's few hundred bytes.
+    const script = `export const marker = "AUTHOR_SCRIPT_MARKER";\n${Array.from({ length: 1500 }, (_, i) => `export const v${i} = ${JSON.stringify(`author script padding line ${i} that nothing in the app reads`)};`).join('\n')}`;
+    const markup = `<Helmet><script>{${JSON.stringify(script)}}</script></Helmet>${bigMarkup(120).replace('<tr id="r0">', '<tr id="r0" className="bg-emerald-500 text-rose-600 ring-2 divide-y">')}`;
+    const w = await ownerWorld(markup);
+    as(w.owner, OWNER);
+    const body = await json(w.id).then((r) => r.text());
+    expect(script.length).toBeGreaterThan(70_000);
+    expect(body).not.toContain('AUTHOR_SCRIPT_MARKER');
+    expect(body).not.toContain('author script padding');
+    for (const gone of ['"css"', '"systemCss"', '"authorScript"', '"overrides"', '"fontPreloads"']) expect(body).not.toContain(gone);
+    expect(body.length).toBeLessThan(6_000);
+    expect(JSON.parse(body).surface.runtime).toEqual({ title: expect.any(String), data: {} });
+  });
+
+  it('answers a small framed document the same shape through both doors', async () => {
+    const small = await ownerWorld('<h1 id="t">Small</h1>');
+    as(small.owner, OWNER);
+    const viaJson = await json(small.id).then((r) => r.json()) as { surface: { runtime: unknown } };
+    const viaHtml = (await framed(small.id)).body as { surface: { runtime: unknown } };
+    expect(viaJson.surface.runtime).toEqual(viaHtml.surface.runtime);
+    expect(viaJson.surface.runtime).toEqual({ title: expect.any(String), data: {} });
   });
 
   it('serves the tree as its own part, the prepared page\'s nodes for the version asked', async () => {
