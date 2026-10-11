@@ -26,6 +26,15 @@ it('shows only immediate children and keeps the root shelf separate', () => {
   expect(screen.getByLabelText('Open Doc root')).toHaveAttribute('rel', 'external');
 });
 
+it('lets the server draw a document link and keeps a folder link in the app, telling the address what it is', () => {
+  render(() => <Shelf rows={[folder, doc('root')]} scopeParentId={null} actions="full" />);
+  const folderLink = screen.getByLabelText('Open folder Reports');
+  expect(folderLink).not.toHaveAttribute('rel');
+  expect(folderLink).toHaveAttribute('state', JSON.stringify({ format: 'folder' }));
+  expect(screen.getByLabelText('Open Doc root')).not.toHaveAttribute('state');
+  expect(screen.getByLabelText('Edit Doc root')).toHaveAttribute('rel', 'external');
+});
+
 it.each(['public', 'unlisted', 'private'] as const)('shows %s as an accessible icon and keeps artifact actions separate from navigation', async (visibility) => {
   render(() => <Shelf rows={[doc('one', { visibility })]} actions="full" />);
   const badge = screen.getByLabelText(`Doc one is ${visibility}`);

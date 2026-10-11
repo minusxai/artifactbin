@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 import { SearchField } from '../ui/Field';
 import { ListRow, Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
+import { artifactLink } from '../lib/artifact-link';
 
 const FORMAT_ORDER = ['markup', 'dataset', 'viz', 'image', 'pdf'];
 /** `query`: Home's own "search artifacts" box, ANDed with this panel's own — typing there filters
@@ -39,7 +40,7 @@ export default function SharedWithYou(props: { items: WorkspaceSharedItem[]; que
       <ul class="m-0 list-none px-3 p-0 font-mono text-xs">
         <Show when={visible().length === 0}><li class="py-6"><StatusMessage kind="empty" class="justify-center">{q() ? <>nothing matches &ldquo;{query().trim()}&rdquo;</> : outer() ? <>nothing matches &ldquo;{(props.query ?? '').trim()}&rdquo;</> : 'nothing matches the active filters'}</StatusMessage></li></Show>
         <For each={visible()}>{item => <ListRow class="gap-x-4">
-          <a href={`/a/${item.id}`} aria-label={`Open shared artifact ${item.id}`} class={`min-w-0 flex-1 truncate ${LINK}`}>{item.title || item.id}</a>
+          <a {...artifactLink(`/a/${item.id}`, item.format ?? 'markup')} aria-label={`Open shared artifact ${item.id}`} class={`min-w-0 flex-1 truncate ${LINK}`}>{item.title || item.id}</a>
           <span class="w-28 truncate text-muted">{item.owner_username ? `@${item.owner_username}` : ''}</span>
           <span class="w-24 text-muted" aria-label={`Your role on ${item.id}`}>{SHARE_ROLE_LABEL[item.role]}</span>
           <FormatBadge format={item.format} />
