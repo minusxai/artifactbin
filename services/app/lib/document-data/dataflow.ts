@@ -1,7 +1,7 @@
 import { canReadArtifact, ownsArtifact } from '@/lib/artifacts';
 import { type ArtifactRow, writerFor } from '@/lib/artifacts';
 import type { RoleActor, TokenActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactFor, getLinkReadableArtifact } from '@/lib/artifacts';
+import { getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts } from '@/lib/artifacts';
 import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from '@/lib/artifacts';
 import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
 import { JOIN_RELATIONS } from '../accounts';
@@ -620,15 +620,20 @@ export async function refDataForRow(
   // A dataset a <Query> reads is a ref (ownership, dependents) but NOT page
   // data: its rows go through the engine (dataflowForRow) and only the query's
   // RESULT reaches the document.
-  for (const ref of meta.refs ?? []) {
-    if (ref.kind === 'dataset' || ref.kind === 'document') continue;
-    // Resolve by the doc's token first, then — for a user-owned doc — by the
-    // account, then anything link-readable. A signed-in human's docs and their
-    // pasted images can sit under DIFFERENT tokens of the same user (the doc on
-    // a claimed agent token, the image on the account's 'web' token), and the
-    // widened publish door admits any public/unlisted asset besides — whatever
-    // it admitted, this must resolve, or the accepted image renders broken.
-    const r = await referencedArtifactForRow(row, ref.id);
+  const wanted = (meta.refs ?? []).filter((ref) => ref.kind !== 'dataset' && ref.kind !== 'document');
+  // Resolve by the doc's token first, then — for a user-owned doc — by the
+  // account, then anything link-readable. A signed-in human's docs and their
+  // pasted images can sit under DIFFERENT tokens of the same user (the doc on
+  // a claimed agent token, the image on the account's 'web' token), and the
+  // widened publish door admits any public/unlisted asset besides — whatever
+  // it admitted, this must resolve, or the accepted image renders broken.
+  // Both rungs are ONE read each however many refs the document names (never one per ref).
+  const ids = [...new Set(wanted.map((ref) => ref.id))];
+  const reached = new Map((await getArtifactsFor(writerFor(row), ids)).map((found) => [found.id, found]));
+  const rest = ids.filter((id) => !reached.has(id));
+  const linked = new Map((await getLinkReadableArtifacts(rest)).map((found) => [found.id, found]));
+  for (const ref of wanted) {
+    const r = reached.get(ref.id) ?? linked.get(ref.id);
     if (!r) continue; // deleted ref → the embed degrades to its fallback
     if (r.format === 'viz') {
       try { out[r.id] = { kind: 'viz', recipe: JSON.parse(r.source ?? '') }; } catch { /* skip */ }

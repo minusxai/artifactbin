@@ -48,17 +48,18 @@ export function liveAccessFacts(actor: RoleActor, query?: Queryable): AccessFact
     },
     async namedRole(artifactId) {
       const q = await db();
-      // Stamp `user_id` on every still-unresolved share matching this account's current email — the
-      // moment of RESOLUTION. Idempotent; a no-op once stamped.
-      await q.query(RESOLVE_SHARES_SQL('= $1'), [artifactId, actor.userId]);
-      const r = await q.query<{ role: ArtifactRole }>(
-        `SELECT s.role FROM artifact_shares s
+      // The shares naming this actor, read first. `unresolved` marks an invitation still addressed only by the
+      // account's own email: those are stamped with the account's id — the moment of RESOLUTION — and only then,
+      // so a role read that finds every share already resolved (nearly all of them) writes nothing.
+      const r = await q.query<{ role: ArtifactRole; unresolved: boolean }>(
+        `SELECT s.role, (s.user_id IS NULL AND s.email = (SELECT email FROM users WHERE id = $2)) AS unresolved FROM artifact_shares s
          WHERE s.artifact_id = $1 AND (
            s.user_id = $2
            OR (s.user_id IS NULL AND (s.email = $3 OR s.email = (SELECT email FROM users WHERE id = $2)))
          )`,
         [artifactId, actor.userId, sessionEmail(actor)],
       );
+      if (r.rows.some((x) => x.unresolved)) await q.query(RESOLVE_SHARES_SQL('= $1'), [artifactId, actor.userId]);
       return maxRole(...r.rows.map((x) => x.role));
     },
     async editorGroupIds() {
