@@ -198,6 +198,8 @@ export type IslandHost = HTMLElement & { [ISLAND_DOCUMENT_KEY]?: IslandDocument 
 
 /** The story element the islands live in (the assembler's `inlineStoryElement`). */
 export const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
+/** The shared base sheet of a document that links its shared sheets (lib/publish/prepared/linked-sheets.server): the mark of a standalone styled document where `style[data-mx-tw]` is not inline. */
+export const LINKED_BASE_SELECTOR = 'link[rel~="stylesheet"][data-mx-base]';
 /** The document's live identity on `<body>` (lib/publish/document's convention, read as anchor-entry reads it). */
 export const LIVE_ID_ATTR = 'data-mx-live-id';
 /** The version the page shows, on `<body>` beside `LIVE_ID_ATTR`. */

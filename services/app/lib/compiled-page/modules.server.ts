@@ -17,6 +17,9 @@ import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-s
 import { DOCUMENT_MODULE_RE, type LinkHints, type ModuleRef, type ModuleStore } from './contract';
 import { contentSha, speculationRulesOf, SPECULATION_RULES_CONTENT_TYPE, type SpeculationRules } from './speculation';
 import { DOCUMENT_MODULE_PATH } from '@/lib/story-runtime/contract';
+import { STYLESHEET_PATH } from '@/lib/page-styles';
+
+export { STYLESHEET_PATH };
 
 /** The object-store prefix of per-document modules (`islands/<sha>`). */
 const MODULE_PREFIX = 'islands';
@@ -24,6 +27,7 @@ const MODULE_PREFIX = 'islands';
 const RULES_PREFIX = 'islands/s';
 const TEMPLATES_PREFIX = 'islands/t';
 export const TEMPLATE_RESOURCE_PATH = '/islands/t';
+const STYLESHEETS_PREFIX = 'islands/c';
 
 /** One resource per compiled version; old content addresses remain readable with pinned builds. */
 export function createTemplateResourceStore(objects: ObjectStore = objectStore()) {
@@ -37,6 +41,33 @@ export function createTemplateResourceStore(objects: ObjectStore = objectStore()
     get: (sha: string) => read(objects, TEMPLATES_PREFIX, sha),
   };
 }
+
+/**
+ * The stylesheets every document of a build shares (lib/page-styles/linked-sheets.server): the union's Tailwind
+ * shards, the base sheet, a design system's classes. Content-addressed like the rest, so the same text is the
+ * same key on every instance, and a page assembled by one instance is styled by any other (a rolling deploy).
+ */
+export function createStylesheetStore(objects: ObjectStore = objectStore()) {
+  /** What this process wrote already: a document read must not pay an object-store write for a sheet it linked a thousand times. */
+  const written = new Set<string>();
+  return {
+    async put(css: string): Promise<string> {
+      const bytes = new TextEncoder().encode(css);
+      const sha = contentSha(bytes);
+      if (!written.has(sha)) {
+        await objects.put(`${STYLESHEETS_PREFIX}/${sha}`, Buffer.from(bytes), 'text/css');
+        written.add(sha);
+      }
+      return `${STYLESHEET_PATH}/${sha}.css`;
+    },
+    get: (sha: string) => read(objects, STYLESHEETS_PREFIX, sha),
+  };
+}
+
+// eslint-disable-next-line no-restricted-syntax -- process-lifetime handle: its written-set is the point (a sheet is stored once per process, not once per document view)
+let shared: ReturnType<typeof createStylesheetStore> | null = null;
+/** This process's stylesheet store, the one a document read and the route that serves the sheet both use. */
+export const stylesheetStore = (): ReturnType<typeof createStylesheetStore> => (shared ??= createStylesheetStore());
 
 /** The bytes at `<prefix>/<sha>`, or null for a malformed sha (never looked up) or one nothing wrote. */
 async function read(objects: ObjectStore, prefix: string, sha: string): Promise<Uint8Array | null> {

@@ -4,5 +4,7 @@
  * code imports the leaf files directly: the island and app bundlers cannot drop the rest of a barrel.
  */
 export { compiledPageFor, domainFooter } from './serve.server';
+export { documentEtag } from './revalidation.server';
+export { linkedDocumentSheets } from './linked-sheets.server';
 export { anonymousAccessFacts, enableSnapshotRevalidations } from './snapshots.server';
 export { installStoryCommitHooks } from './commit-hooks.server';

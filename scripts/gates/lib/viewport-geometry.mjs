@@ -48,7 +48,8 @@ export async function checkViewportGeometry(BASE, browser, check) {
   const measured = await docFrame.evaluate(() => {
     const root = document.querySelector('[data-mx-inline-story]') ?? document.body;
     const heading = root?.querySelector('h1');
-    const sheet = document.querySelector('style[data-mx-tw]')?.textContent ?? '';
+    // Every rule the document carries: its Tailwind is linked shared shards plus inline additions (lib/page-styles/story-css-split).
+    const sheet = [...document.styleSheets].map((s) => { try { return [...s.cssRules].map((r) => r.cssText).join(''); } catch { return ''; } }).join('');
     return {
       viewport: window.innerHeight,
       contentHeight: root ? root.scrollHeight : null,

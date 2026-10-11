@@ -43,7 +43,8 @@ interface DocumentStylesInput {
   authorCss: string | null;
 }
 
-interface DocumentSheet { attr: string; css: string }
+/** One stylesheet of a served document: the attribute that names it and its text; `href` when it is linked instead of inlined (./linked-sheets.server). */
+export interface DocumentSheet { attr: string; css: string; href?: string }
 
 /** Every stylesheet after the root rule, as `{ attr, css }`, in the order the document carries them. */
 export function documentStyleSheets(input: DocumentStylesInput): DocumentSheet[] {
