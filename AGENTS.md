@@ -62,7 +62,7 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
   deferral accurately; require selected checks before merge. Full suites, Docker/Chromium integration, gates and builds are CI-only. On a red PR: fetch every failed job's log in ONE command, fix all
   failures together (independent ones in parallel agents), never retry unchanged code.
 - **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same
-  arguments). One-hour receipts need matching sources, command, environment, lock and generated inputs;
+  arguments). One-hour receipts need matching sources, command, environment, runtime, lock and generated inputs;
   failed/deferred/empty runs never count. Label prior evidence, never fresh/CI; omit reuse after manual
   external-state changes; never copy receipts. See [docs/agent-workflows.md](docs/agent-workflows.md).
 - **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output/sections; skip irrelevant fixtures,
