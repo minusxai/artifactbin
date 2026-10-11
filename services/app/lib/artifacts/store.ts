@@ -1,6 +1,6 @@
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type Scope } from './table';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type Scope } from './table';
 import type { TokenActor } from '@/lib/accounts';
 import { compiledForRow, isEmptyCompiled } from './row-compile';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
@@ -916,7 +916,8 @@ export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
 interface ArtifactCollectionFilters {type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
 export async function listArtifactPageFor(actor: TokenActor, limit: number, cursor?: {created: string; id: string}, filters:ArtifactCollectionFilters={}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {
   const owner=ownerPredicate(actor);const values:unknown[]=[owner.val,limit+1];
-  const shared=actor.userId?SHARE_PREDICATE(['viewer','commenter','editor'],'$1'):'FALSE';
+  // Membership is a discovery relationship even when it grants read access only.
+  const shared=actor.userId?`(${SHARE_PREDICATE(['viewer','commenter','editor'],'$1')} OR ${groupMemberPredicate('$1')})`:'FALSE';
   const relationship=filters.relationship??'all';
   const reach=relationship==='owned'?owner.where('$1'):relationship==='shared'?`(${shared} AND NOT (${owner.where('$1')}))`:`(${owner.where('$1')} OR ${shared})`;
   const predicates=[LIVE_ARTIFACT_SQL,`(${reach})`];
