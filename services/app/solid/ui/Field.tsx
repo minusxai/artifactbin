@@ -23,7 +23,7 @@ export function Field(props: { label: string; hint?: JSX.Element; error?: string
     get describedBy() { return [props.hint ? `${id}-hint` : '', props.error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined; },
     get invalid() { return !!props.error; },
   };
-  return <div class={`grid gap-1.5 ${props.class ?? ''}`}>
+  return <div class={`grid content-start gap-1.5 ${props.class ?? ''}`}>
     <label id={wiring.labelId} for={id} class="font-sans text-sm font-medium text-fg">{props.label}</label>
     <FieldContext.Provider value={wiring}>{props.children}</FieldContext.Provider>
     <Show when={props.hint}><p id={`${id}-hint`} class="font-sans text-xs text-muted">{props.hint}</p></Show>
