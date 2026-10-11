@@ -138,7 +138,7 @@ describe('a published Mermaid document', () => {
     const served = island(html).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src;
     expect(served).toMatch(/^\/assets\/mermaid\//);
     expect(html).toContain(`src="${served}"`);
-    const stored = (await (await getDb()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>(`SELECT page FROM prepared_pages WHERE artifact_id = $1 AND slot = 'head'`, [id])).rows[0]!;
+    const stored = (await (await getDb()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>(`SELECT page || jsonb_build_object('compiled', compiled) AS page FROM prepared_pages WHERE artifact_id = $1 AND slot = 'head'`, [id])).rows[0]!;
     expect(stored.page.ssr).toBeUndefined();
     expect(stored.page.compiled?.html).not.toContain('aria-label="Live number">42<');
   });

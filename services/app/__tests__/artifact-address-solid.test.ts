@@ -79,8 +79,8 @@ describe('a compile that cannot be served', () => {
     const db = await harness.db();
     // The first read stores this version's compile.
     expect((await raw(id)).status).toBe(200);
-    const build = (await db.query<{ build: string | null }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
-    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
+    const build = (await db.query<{ build: string | null }>(`SELECT compiled->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
+    await db.query(`UPDATE prepared_pages SET compiled = $2::jsonb WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect((await raw(id)).status).toBe(500);
     error.mockRestore();

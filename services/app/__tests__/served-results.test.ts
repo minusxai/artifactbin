@@ -99,7 +99,7 @@ describe('the reader page carries its first results', () => {
   it('never stores snapshot rows in the prepared page', async () => {
     const { id } = board();
     expect(storyText(await html(id))).toContain(KPI);
-    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>(`SELECT page || jsonb_build_object('compiled', compiled) AS page FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
     expect(stored.page.ssr).toBeUndefined();
     expect(stored.page.compiled?.html).not.toContain(KPI);
   });
