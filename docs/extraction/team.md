@@ -23,6 +23,10 @@ For local development, use `APP__HOST=127.0.0.1` and `APP__PUBLIC_BASE_URL=http:
 
 `--port` selects the listener for one run and is never written back to `server.env`, so a later `afbin serve --dir <path>` listens on the port that file names. The full set of settings the host accepts is [`server.env.example`](server.env.example); the repository's own `.env.example` is for `npm run dev` and is refused here (`Unsupported team setting: OBJECT_STORE__LOCAL_DIR`).
 
+## Docker company deployment
+
+For a repeatable external company server with PostgreSQL, HTTPS and persistent storage, use the [Docker Compose hosting bundle](../../deploy/company/README.md). It builds a pinned npm CLI image, runs `afbin serve` inside it, and documents wildcard DNS/TLS, real login, normal owner onboarding, isolated client installation, consistent backups and recovery. Colleagues install their own CLI; they do not operate the server container.
+
 ## Team on a network
 
 `afbin serve` refuses at startup rather than serving a login page nobody can complete, so a shared host needs all of:
