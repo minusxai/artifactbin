@@ -220,8 +220,12 @@ describe('attaching an image to a reply', () => {
     const open = within(items[1]!).getByRole('button', { name: 'Open comment image' });
     expect(open).toHaveTextContent('Image');
     expect(open).not.toHaveTextContent('Screenshot');
-    expect(items[1]!.querySelector('dialog')).toHaveAttribute('aria-label', 'Comment image');
-    expect(items[1]!.querySelector('dialog a')).toHaveAttribute('aria-label', 'Open image at full size');
+    fireEvent.click(open);
+    const reader = await screen.findByRole('dialog', { name: 'Comment image' });
+    expect(within(reader).getByRole('link', { name: 'Open image at full size' })).toHaveAttribute('href', '/i/cim_reply?variant=preview');
+    expect(within(reader).getByRole('img', { name: 'Full comment image' })).toHaveAttribute('src', '/i/cim_reply?variant=preview');
+    fireEvent.click(within(reader).getByRole('button', { name: 'Close image' }));
+    expect(screen.queryByRole('dialog', { name: 'Comment image' })).toBeNull();
   });
 
   it.each([

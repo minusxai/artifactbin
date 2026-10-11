@@ -309,3 +309,13 @@ it('draws its chrome in the app appearance while the document keeps its own mode
     await vi.waitFor(() => expect(chrome()).toHaveAttribute('data-app-appearance', 'light'));
   } finally { delete document.documentElement.dataset.theme; }
 });
+
+it.each([[390, false], [800, true]])('offers the bar Insert menu at %ipx only when the bar has room (%s); the selection sheet always has Insert', (width, inBar) => {
+  vi.stubGlobal('innerWidth', width);
+  const { view } = mountEditor();
+  const bar = view.getAllByLabelText('Document actions', { exact: true }).at(-1)!;
+  expect(!!within(bar).queryByRole('button', { name: /^Insert$/ })).toBe(inBar);
+  fireEvent.click(view.getByRole('button', { name: 'Show selection settings' }));
+  const insert = within(screen.getByRole('region', { name: 'Insert content' }));
+  expect(insert.getByRole('button', { name: 'Insert image' })).toBeInTheDocument();
+});

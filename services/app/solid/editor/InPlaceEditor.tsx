@@ -845,7 +845,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
               </Tooltip>
             </Show>
           </Show>
-          <Show when={appView() && (!wide() || collapsed() || panelTab() !== 'selection')}>{insertionControls()}</Show>
+          {/* Not on a phone: the bar has no room for it beside every view tab (390px holds 10 touch targets, not 11), and the selection sheet carries the same Insert section. */}
+          <Show when={appView() && !phone() && (!wide() || collapsed() || panelTab() !== 'selection')}>{insertionControls()}</Show>
           <Show when={appView()}><div aria-label="Editing history" class="flex items-center">{historyControls()}</div></Show>
           <Tooltip content="done editing">
             <Button size="sm" class="gap-1" aria-label="Exit edit mode" onClick={(event) => {

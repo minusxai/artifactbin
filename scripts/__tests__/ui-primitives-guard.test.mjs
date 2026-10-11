@@ -43,6 +43,7 @@ const OFFENDERS = {
   'native-select': '<select aria-label="Role"><option>a</option></select>',
   'popup-role': '<div role="menu">x</div>',
   overlay: '<div class="fixed inset-0 bg-surface" />',
+  'native-dialog': '<dialog ref={dialog} aria-label="Comment image"><p>x</p></dialog>',
   'native-disclosure': '<details open><summary>DNS records</summary><p>x</p></details>',
   'native-title': '<span title="hint">x</span>',
   'styled-button': '<button type="button"\n  class="rounded px-2">Go</button>',

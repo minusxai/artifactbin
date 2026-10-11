@@ -59,6 +59,8 @@ const RULES = [
   // On an HTML element only: `<Dialog role="alertdialog">` is the primitive being used, not hand-rolled.
   { id: 'popup-role', use: 'ui/Menu, ui/Select, ui/Dialog, ui/Tabs or ui/Switch', pattern: new RegExp(`<[a-z][a-z0-9]*\\b${IN_TAG}\\srole=["'{]+(?:menu|listbox|dialog|alertdialog|tablist|switch)\\b`, 'g') },
   { id: 'overlay', use: 'ui/Dialog', pattern: /\bfixed inset-0\b/g },
+  // A native <dialog> has its own backdrop, focus and layer, outside the app's one modal contract and appearance.
+  { id: 'native-dialog', use: 'ui/Dialog', pattern: /<dialog\b/g },
   // A bare <details> draws the browser's own triangle in the browser's own type, whatever the page around it uses.
   { id: 'native-disclosure', use: 'ui/Disclosure', pattern: /<details\b/g },
   { id: 'native-title', use: 'ui/Tooltip', pattern: new RegExp(`<(?!iframe\\b)[a-z][a-z0-9]*\\b${IN_TAG}\\stitle=`, 'g') },

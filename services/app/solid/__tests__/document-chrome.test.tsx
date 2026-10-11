@@ -144,16 +144,38 @@ it('adopts the served frame into the page instead of rendering the document', ()
 });
 
 it('opens the artifact controls and the menu from the app bar', async () => {
+  delete document.documentElement.dataset.theme;
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   const panel = await controls();
   fireEvent.click(within(panel).getByRole('button', { name: 'Dark mode' }));
-  expect(within(panel).getByRole('button', { name: 'Dark mode' })).toHaveAttribute('aria-pressed', 'true');
+  // The toggle shows the app's appearance, which follows <html data-theme> (observed, so a microtask later).
+  await waitFor(() => expect(within(panel).getByRole('button', { name: 'Dark mode' })).toHaveAttribute('aria-pressed', 'true'));
   fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
   const menu = await menuPanel();
   expect(menu).toHaveClass('right-3'); expect(menu.style.top).toBe('44px');
   expect(menu).not.toHaveClass('left-0', 'inset-y-0');
   expect(within(panelRoot()).getByRole('link', { name: 'Artifacts' })).toBeInTheDocument();
+});
+
+it('shows and sets the APP appearance in the controls panel, while the light document keeps its own ground', async () => {
+  document.documentElement.dataset.theme = 'dark';
+  mockRole = 'viewer'; mockSelectionBridge = true;
+  try {
+    mount();
+    const viewport = screen.getByLabelText('Artifact viewport');
+    const ground = viewport.style.background;
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+    const panel = await controls();
+    expect(within(panel).getByRole('button', { name: 'Dark mode' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(panel).getByRole('button', { name: 'Light mode' })).toHaveAttribute('aria-pressed', 'false');
+    expect(viewport.style.background).toBe(ground);
+    fireEvent.click(within(panel).getByRole('button', { name: 'Light mode' }));
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    await waitFor(() => expect(within(panel).getByRole('button', { name: 'Light mode' })).toHaveAttribute('aria-pressed', 'true'));
+    // The reader's pick is still sent into the frame (one choice, both surfaces).
+    expect(selectionSend).toHaveBeenCalledWith(expect.objectContaining({ mode: 'light' }));
+  } finally { delete document.documentElement.dataset.theme; }
 });
 
 it('places the artifact menu in a bottom sheet on phones and a dropdown after resizing', async () => {
