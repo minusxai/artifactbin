@@ -22,9 +22,6 @@ function writeProgress(email: string, sent: boolean) {
   } catch { /* storage unavailable */ }
 }
 
-/** Visitors sent here by a signed-out redirect (a document or `/start` that wanted a session, or a browser with an old guest cookie). */
-const cameFromSignedOutRedirect = () => { const query = new URLSearchParams(window.location.search); return query.has('callbackUrl') || query.get('signedOut') === '1'; };
-
 export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
   const { session, sessionError } = useSession();
   const saved = readProgress();
@@ -80,7 +77,6 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
         </form>
         <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted"><button type="button" aria-label="Change email" class="min-h-11 cursor-pointer rounded-md px-1 underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress('', false); }}>Change email</button><button type="button" aria-label="Resend code" class="min-h-11 cursor-pointer rounded-md px-1 underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50" disabled={busy()} onClick={() => void requestCode()}>Resend code</button></div>
       </>}>
-        <Show when={cameFromSignedOutRedirect()}><p role="note" class="mt-4 rounded-lg border border-edge bg-raised p-3 text-sm leading-relaxed text-fg">Guest sessions ended on 8 October 2026. Sign in with your email on this browser and documents you made as a guest will join your account.</p></Show>
         <p class="mt-3 text-sm leading-relaxed text-muted">We’ll email you a 6-digit code. No password to remember.</p>
         <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void requestCode(); }}>
           <label for="login-email" class="text-sm font-medium text-fg">Email address</label>
