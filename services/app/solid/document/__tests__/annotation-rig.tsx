@@ -8,7 +8,7 @@
  * StoryController whose viewport sits 100px down an 800×600 window, the geometry the React rig's
  * iframe reported, and every request goes through the real HTTP backend over a stubbed `fetch`.
  */
-import { vi } from 'vitest';
+import { beforeAll, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
@@ -17,7 +17,11 @@ import { type StoryController } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { render } from '../../__tests__/helpers';
 import { TrustedUi } from '../../components/TrustedUi';
-import { AnnotationLayer, type AnnotationLayerProps } from '../AnnotationLayer';
+import { AnnotationLayer, preloadScreenshotUpload, type AnnotationLayerProps } from '../AnnotationLayer';
+import { preloadThreadMenu } from '../AnnotationThread';
+
+// The rail's delete menu and the upload fallback are lazy chunks: have them in before a test renders.
+beforeAll(() => Promise.all([preloadThreadMenu(), preloadScreenshotUpload()]));
 
 export const NONCE = 'n'.repeat(32);
 
