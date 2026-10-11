@@ -939,13 +939,14 @@ const DATASET_IMAGES: Table = {name:'dataset_images',columns:[
  {name:'idx_dataset_images_dataset',columns:['dataset_id','created_at']},
 ]};
 /**
- * THE PAGES SESSIONS (lib/accounts/pages-sessions, server/pages-host): what the `afbin_pages` cookie on
- * the documents' own origins (APP__PAGES_HOST) refers to. The app page mints a one-time ticket for its
- * reader (a `codes` row, 60 s), the pages apex exchanges it for a row here and sets the cookie, and the
- * documents' doors read the reader back from it. Only the cookie's sha256 is stored. The row is an
+ * THE PAGES SESSIONS (lib/accounts/pages-sessions, server/pages-host): what the pages cookie on
+ * a document's own origin (APP__PAGES_HOST) refers to. The app page mints a one-time ticket for its
+ * reader and one document (a `codes` row, 60 s), the document's origin exchanges it for a row here bound to
+ * that document (`artifact_id`) and sets its host-only cookie, and the document's doors read the reader back
+ * from it. Only the cookie's sha256 is stored. The row is an
  * actor snapshot of who the app page served — never the authentication session, which the app does not
- * see — so a token behind it is re-resolved on every read, and logout deletes the row
- * (`DELETE <pages apex>/pages-session`); `expires_at` bounds the rest. Erased with a test user
+ * see — so a token behind it is re-resolved on every read, and logout deletes every row of the reader
+ * (`DELETE /api/session/token`, by `user_id` and `token_id`); `expires_at` bounds the rest. Erased with a test user
  * (`user_id`, lib/operations/testusers).
  */
 const PAGES_SESSIONS: Table = {
@@ -961,13 +962,18 @@ const PAGES_SESSIONS: Table = {
     // App-origin decisions the app page carried across with the ticket (a reader's one-time consent
     // grant, which lives in an app-origin cookie the document's origin never sees). Data, never a credential.
     { name: 'carried', type: 'JSONB', notNull: true, default: "'{}'" },
+    // The one document this session was minted for (its cookie is host-only on that document's origin). NULL only on a
+    // row from before the binding, which no cookie names any more: it matches no document.
+    { name: 'artifact_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'expires_at', type: 'TIMESTAMPTZ', notNull: true },
   ],
   primaryKey: ['id_hash'],
   indexes: [
     { name: 'idx_pages_sessions_expires', columns: ['expires_at'] },
+    // Logout ends every session of a reader, by account and by token.
     { name: 'idx_pages_sessions_user', columns: ['user_id'] },
+    { name: 'idx_pages_sessions_token', columns: ['token_id'] },
   ],
 };
 

@@ -212,7 +212,7 @@ try {
     const appCsp = appResponse.headers()['content-security-policy'] ?? '';
     const scriptSrc = appCsp.split('; ').find((d) => d.startsWith('script-src')) ?? '';
     check(!/\bblob:|\bhttps:/.test(scriptSrc), `the app page carries the strict policy: ${scriptSrc.slice(0, 60)}…`);
-    check((appCsp.split('; ').find((d) => d.startsWith('frame-src')) ?? '') === `frame-src 'self' http://${PAGES_HOST}:${pages.port} http://*.${PAGES_HOST}:${pages.port}`, 'the app page frames only the pages origins');
+    check((appCsp.split('; ').find((d) => d.startsWith('frame-src')) ?? '') === `frame-src 'self' http://*.${PAGES_HOST}:${pages.port}`, 'the app page frames only the pages origins');
     check(await page.locator(DOCUMENT_FRAME).count() === 1, 'the app page holds exactly one document frame');
     const frame = documentLocator(page);
     await frame.locator('#intro').waitFor({ timeout: 30_000 }).catch(() => {});
@@ -221,7 +221,8 @@ try {
     check(await frame.locator('#intro').textContent().catch(() => null) === 'Pages origin', 'the private document renders in the frame for its signed-in owner');
     const cookies = await ctx.cookies(selfA);
     const pagesCookie = cookies.find((c) => c.name === 'afbin_pages');
-    check(!!pagesCookie && pagesCookie.httpOnly && pagesCookie.domain === `.${PAGES_HOST}` && pagesCookie.sameSite === 'Lax', `the pages cookie is HttpOnly, Lax, for .${PAGES_HOST} (${JSON.stringify(pagesCookie && { domain: pagesCookie.domain, httpOnly: pagesCookie.httpOnly, sameSite: pagesCookie.sameSite })})`);
+    check(!!pagesCookie && pagesCookie.httpOnly && pagesCookie.domain === new URL(selfA).hostname && pagesCookie.sameSite === 'Lax', `the pages cookie is HttpOnly, Lax, host-only for ${new URL(selfA).hostname} (${JSON.stringify(pagesCookie && { domain: pagesCookie.domain, httpOnly: pagesCookie.httpOnly, sameSite: pagesCookie.sameSite })})`);
+    check((await ctx.cookies(pagesOrigin(B))).every((c) => c.name !== 'afbin_pages'), "another document's origin does not receive it");
     const docHead = await ctx.request.get(`${selfA}/`, { headers: { cookie: `afbin_pages=${pagesCookie?.value ?? ''}` } }).catch(() => null);
     const docCsp = docHead?.headers()['content-security-policy'] ?? '';
     check(docHead?.status() === 200 && !/(^|; )sandbox/.test(docCsp) && docCsp.includes(`frame-ancestors ${APP}`), `the document carries its own policy, framed by the app alone, no sandbox (${docHead?.status()})`);

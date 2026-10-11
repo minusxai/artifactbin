@@ -1,7 +1,7 @@
 /** Every document on its own origin: the APP__PAGES_HOST setting and the hostname ⇄ id mapping. */
 import { describe, expect, it } from 'vitest';
 import { parsePagesHost, requirePagesHost } from '@/lib/platform/config';
-import { idFromPagesHost, idFromPagesLabel, idFromPagesOrigin, isPagesApexHost, pagesApexOrigin, pagesLabel, pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
+import { idFromPagesHost, idFromPagesLabel, idFromPagesOrigin, isPagesApexHost, pagesCookieName, pagesFrameUrl, pagesLabel, pagesOriginFor, pagesSiteFor, withoutPagesTicket } from '@/lib/http/pages-origin';
 
 const prod = pagesSiteFor('pages.example.com', 'https://app.example.com')!;
 const dev = pagesSiteFor('lvh.me', 'http://app.lvh.me:11001')!;
@@ -29,8 +29,19 @@ describe('the hostname ⇄ id mapping', () => {
   });
   it('takes the public URL\'s scheme and port, so development appends its port', () => {
     expect(pagesOriginFor('Ab3xK9', dev)).toBe('http://416233784b39.lvh.me:11001');
-    expect(pagesApexOrigin(dev)).toBe('http://lvh.me:11001');
-    expect(pagesApexOrigin(prod)).toBe('https://pages.example.com');
+  });
+  it('names the host-only cookie with the __Host- prefix on https only (the prefix needs Secure)', () => {
+    expect(pagesCookieName(prod)).toBe('__Host-afbin_pages');
+    expect(pagesCookieName(dev)).toBe('afbin_pages');
+  });
+  it('builds the frame\'s first URL on the document\'s own origin, the reader\'s selection kept and a reader-supplied ticket dropped', () => {
+    const origin = pagesOriginFor('Ab3xK9', prod);
+    expect(pagesFrameUrl(origin, '', 'T-1_x')).toBe(`${origin}/?_pt=T-1_x`);
+    expect(pagesFrameUrl(origin, '?$region=west&$zoom=5', null)).toBe(`${origin}/?$region=west&$zoom=5&_pt=-`);
+    expect(pagesFrameUrl(origin, '?_pt=stolen&$a=1&_pt=again', 'real')).toBe(`${origin}/?$a=1&_pt=real`);
+    expect(withoutPagesTicket('?$a=1&_pt=x&b=%20c')).toBe('?$a=1&b=%20c');
+    expect(withoutPagesTicket('?_pt=x')).toBe('');
+    expect(withoutPagesTicket('')).toBe('');
   });
   it('round-trips every id shape and survives the browser lowercasing the host', () => {
     for (const id of ['Ab3xK9', 'zzzzzz', 'A1B2C3D4E5F6']) {

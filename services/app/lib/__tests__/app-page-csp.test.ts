@@ -128,13 +128,13 @@ describe('the app CSP', () => {
 
   it('frames exactly the pages origins when documents have their own, and stays strict on every page', async () => {
     const site = pagesSiteFor('pages.example.com', 'https://app.example.com');
-    expect(pagesFrameSources(site)).toEqual(['https://pages.example.com', 'https://*.pages.example.com']);
-    expect(pagesFrameSources(pagesSiteFor('lvh.me', 'http://app.lvh.me:11001'))).toEqual(['http://lvh.me:11001', 'http://*.lvh.me:11001']);
+    expect(pagesFrameSources(site)).toEqual(['https://*.pages.example.com']);
+    expect(pagesFrameSources(pagesSiteFor('lvh.me', 'http://app.lvh.me:11001'))).toEqual(['http://*.lvh.me:11001']);
     const framing = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>', pagesSite: site });
     const csp = (await framing.request('https://app.example.com/login')).headers.get('content-security-policy')!;
-    expect(csp.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self' https://pages.example.com https://*.pages.example.com");
-    // …and connects to the apex alone, where sign-out ends the pages session.
-    expect(csp.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob: https://pages.example.com");
-    expect(csp.replace(/frame-src [^;]*/, "frame-src 'self'").replace(/connect-src [^;]*/, "connect-src 'self' blob:")).toBe(APP_CSP);
+    expect(csp.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self' https://*.pages.example.com");
+    // …the apex is never framed and never connected to: sign-out is the app's own call.
+    expect(csp.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob:");
+    expect(csp.replace(/frame-src [^;]*/, "frame-src 'self'")).toBe(APP_CSP);
   });
 });

@@ -53,7 +53,7 @@ import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { firstHeadingTitle, packDocumentGraph } from '@/lib/document';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
-import { pagesOriginFor, pagesSessionUrl, type PagesSite } from '../http/pages-origin';
+import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http/pages-origin';
 import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';
 
@@ -78,7 +78,7 @@ interface ArtifactPageOptions {
   admitted?: ArtifactRow;
   /**
    * The app page (the HTML door): it frames the document on its own origin, after handing the reader
-   * across with a one-time ticket (lib/accounts/pages-sessions) in the frame's first URL. The JSON door
+   * across with a one-time ticket (lib/accounts/pages-sessions) in the frame's first URL, on its own origin. The JSON door
    * passes nothing and mints no ticket.
    */
   pages?: PagesSite;
@@ -105,8 +105,9 @@ const accessMoved = (decided: ArtifactHeader, loaded: ArtifactRow): boolean =>
   || (decided.group_id ?? null) !== (loaded.group_id ?? null) || decided.token_id !== loaded.token_id || (decided.sharing_revision ?? 0) !== (loaded.sharing_revision ?? 0);
 
 /**
- * A document frame's first URL for this request's reader (APP__PAGES_HOST): the pages apex exchange with
- * a one-time ticket (none for a guest), redirecting to the document's own origin — or null when the reader
+ * A document frame's first URL for this request's reader (APP__PAGES_HOST): the document's own origin carrying a
+ * one-time ticket for exactly that document (the explicit guest marker for a guest), spent in the response that
+ * serves the document (server/pages-host) — or null when the reader
  * may not read the document or it is not a document. `search` carries the reader's `$` values across.
  * The app page draws its frame with it; brief B's framed story asks for a fresh one (app/api/page/frame).
  */
@@ -127,8 +128,9 @@ async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'i
   // ticket, and the document's origin reads them back as `pagesRequestOf(request).carried` (app/a/[id]/raw, /fetch).
   const carried = carriedTrust(request, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null });
   // A browser session's scripted browser reads its frame as the session's actor (lib/accounts/pages-sessions).
-  const ticket = await issuePagesTicket(actor, carried, Date.now(), { browserSession: isBrowserSessionRequest(request) });
-  return { src: pagesSessionUrl(site, `${origin}/${search}`, ticket), origin };
+  // The ticket is for THIS document at this exact origin, and is spent there (server/pages-host): the frame's first URL is the document's own.
+  const ticket = await issuePagesTicket(actor, carried, Date.now(), { browserSession: isBrowserSessionRequest(request), artifactId: artifact.id, origin });
+  return { src: pagesFrameUrl(origin, search, ticket), origin };
 }
 
 /** The page's answer; a stored shape the current code no longer serves is its 410 (lib/artifacts/servable). */

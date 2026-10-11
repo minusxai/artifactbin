@@ -46,7 +46,7 @@ may be owned by exactly one process, so a second checkout changes its port in
 
 Every document is served at `<hex(id)>.<pages host>` and the app page frames it (services/app/server/pages-host.ts,
 services/app/lib/serving/document-frame.ts); there is no other renderer, so the server refuses to boot without
-`APP__PAGES_HOST`. The frame reads its reader from an `afbin_pages` cookie that is `SameSite=Lax`, so the app and the
+`APP__PAGES_HOST`. The frame's document reads its reader from a host-only `afbin_pages` cookie (`__Host-afbin_pages` over https) that is `SameSite=Lax`, so the app and the
 pages host must be the **same site**. In development that means browsing the app at a name under the pages host, not
 at `localhost` — which is what `npm run setup` writes by default:
 

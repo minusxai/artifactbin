@@ -1,7 +1,7 @@
 /**
- * THE APP PAGE OF A DOCUMENT WARMS ITS TWO CONNECTIONS (server/app withDocumentFrame): the frame's first URL is on
- * the pages apex, which 302s to `<hex(id)>.<pages host>` — two new TLS handshakes the browser can start from the head.
- * The origins are the server's own (the frame it drew), never the request's.
+ * THE APP PAGE OF A DOCUMENT WARMS ITS ONE CONNECTION (server/app withDocumentFrame): the frame's first URL is on
+ * the document's own origin `<hex(id)>.<pages host>` — one new TLS handshake the browser can start from the head.
+ * The origin is the server's own (the frame it drew), never the request's.
  */
 import { describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
@@ -10,7 +10,7 @@ import { useAppHarness, request, mintAccountToken as mintToken } from '@/__tests
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
-import { pagesApexOrigin, pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
+import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
 import { createAppServer } from '../server/app';
 
 useAppHarness();
@@ -34,25 +34,25 @@ async function publish(visibility: string) {
 }
 
 describe('preconnect on the document\'s app page', () => {
-  it('names the pages apex and the document\'s own origin, early in the head, for a signed-in reader', async () => {
+  it('names the document\'s own origin alone, early in the head, for a signed-in reader', async () => {
     const w = await publish('private');
     const res = await app().request(attachActor(new Request(`${APP}/a/${w.id}`, { headers: { accept: 'text/html' } }), w.actor));
     const html = await res.text();
-    expect(preconnects(html)).toEqual([pagesApexOrigin(site), pagesOriginFor(w.id, site)]);
+    expect(preconnects(html)).toEqual([pagesOriginFor(w.id, site)]);
     const head = html.slice(0, html.indexOf('</head>'));
     expect(head.indexOf('rel="preconnect"'), 'before the app\'s own stylesheet-and-code links').toBeLessThan(head.indexOf('<title>'));
     // The agent pointer stays the first thing in the head.
     expect(head.indexOf('rel="help"')).toBeLessThan(head.indexOf('rel="preconnect"'));
     // The frame itself is unchanged.
     const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
-    expect(src.origin).toBe(pagesApexOrigin(site));
-    expect(src.searchParams.get('next')).toBe(`${pagesOriginFor(w.id, site)}/`);
+    expect(src.origin).toBe(pagesOriginFor(w.id, site));
+    expect(src.searchParams.get('_pt')).toMatch(/^[A-Za-z0-9_-]{30,}$/);
   });
 
   it('does the same for a guest on a public document, and takes no origin from the request', async () => {
     const w = await publish('unlisted');
     const res = await app().request(`${APP}/a/${w.id}?$x=1`, { headers: { accept: 'text/html', host: 'evil.example', 'x-forwarded-host': 'evil.example' } });
-    expect(preconnects(await res.text())).toEqual([pagesApexOrigin(site), pagesOriginFor(w.id, site)]);
+    expect(preconnects(await res.text())).toEqual([pagesOriginFor(w.id, site)]);
   });
 
   it('names nothing on a page that is not a document', async () => {

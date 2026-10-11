@@ -1,6 +1,6 @@
 /**
  * EVERY DOCUMENT ON ITS OWN ORIGIN, through the real app server (server/pages-host): the app page frames
- * `<hex(id)>.<pages host>`, the pages apex exchanges a one-time ticket for the `afbin_pages` cookie, the
+ * `<hex(id)>.<pages host>`, whose own origin spends the one-time ticket in the response that serves the document and sets its host-only cookie, the
  * document's origin serves only that document and its doors, and a pages Origin may call only its own
  * document's doors — anywhere. With the setting off, nothing changes.
  */
@@ -11,6 +11,8 @@ import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, pagesSessionActor, revokeToken } from '@/lib/accounts';
+import { DELETE as clearSession } from '@/app/api/session/token/route';
+import { measureQueries } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
@@ -28,6 +30,8 @@ useAppHarness();
 const APP = 'https://app.example.test';
 const site = pagesSiteFor('pages.example.test', APP)!;
 const APEX = 'https://pages.example.test';
+/** The statements the whole first framed load (ticket to document) may issue: 10 now; the old apex-then-document flow issued 11 on the same fixture. */
+const BUDGET = { exchange: 10 };
 const SHELL = '<!doctype html><html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>';
 const framing = () => createAppServer({ indexHtml: async () => SHELL, pagesSite: site });
 
@@ -57,18 +61,24 @@ const island = (html: string): Record<string, unknown> | null => {
   const match = new RegExp(`<script type="application/json" id="${ISLAND_DATA_ID}">([^<]*)<\\/script>`).exec(html);
   return match ? JSON.parse(match[1]!) as Record<string, unknown> : null;
 };
-/** Sign in on the pages domain the way the frame does: the app page's ticket through the apex. */
+/** Sign in on the document's own origin the way the frame does: the app page's ticket, spent by the document's response. */
 async function pagesCookie(app: ReturnType<typeof framing>, actor: Actor, id: string): Promise<string> {
-  const page = await app.request(as(`${APP}/a/${id}`, actor, { headers: { accept: 'text/html' } }));
-  const src = /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&');
-  const res = await app.request(src);
-  const set = res.headers.get('set-cookie')!;
-  return /afbin_pages=([^;]+)/.exec(set)![1]!;
+  const res = await app.request((await frameSrc(app, actor, id)).href);
+  expect(res.status).toBe(200);
+  return cookieOf(res)!;
+}
+/** The https site's cookie: host-only, `__Host-` prefixed (lib/http/pages-origin pagesCookieName). */
+const COOKIE = '__Host-afbin_pages';
+const cookieOf = (res: Response): string | null => new RegExp(`${COOKIE}=([^;]+)`).exec(res.headers.get('set-cookie') ?? '')?.[1] ?? null;
+/** The frame's first URL the app page drew for `actor`. */
+async function frameSrc(app: ReturnType<typeof framing>, actor: Actor | null, id: string, search = ''): Promise<URL> {
+  const page = await app.request(as(`${APP}/a/${id}${search}`, actor, { headers: { accept: 'text/html' } }));
+  return new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
 }
 const query = (_id: string) => JSON.stringify({ values: {}, only: ['counted'] });
 
 describe('the app page frames the document on its own origin', () => {
-  it('draws one sandboxed frame whose first URL spends a ticket, under the strict policy that frames only the pages origins', async () => {
+  it('draws one sandboxed frame whose first URL is the document\'s own origin carrying a ticket, under the strict policy that frames only the pages origins', async () => {
     const w = await world();
     const res = await framing().request(as(`${APP}/a/${w.secret}`, w.actor, { headers: { accept: 'text/html' } }));
     expect(res.status).toBe(200);
@@ -76,10 +86,10 @@ describe('the app page frames the document on its own origin', () => {
     const frame = /<iframe data-mx-document-frame="" src="([^"]+)"[^>]*>/.exec(html);
     expect(frame).not.toBeNull();
     const src = new URL(frame![1]!.replaceAll('&amp;', '&'));
-    expect(src.origin).toBe(APEX);
-    expect(src.pathname).toBe('/pages-session');
-    expect(src.searchParams.get('ticket')).toMatch(/^[A-Za-z0-9_-]{30,}$/);
-    expect(src.searchParams.get('next')).toBe(`${pagesOriginFor(w.secret, site)}/`);
+    expect(src.origin).toBe(pagesOriginFor(w.secret, site));
+    expect(src.pathname).toBe('/');
+    expect(src.searchParams.get('_pt')).toMatch(/^[A-Za-z0-9_-]{30,}$/);
+    expect(html).not.toContain(APEX);
     expect(frame![0]).toContain('sandbox="allow-scripts allow-same-origin');
     // The document runs in the frame: none of its story, data or code is in the app page.
     expect(html).not.toContain('Private plan</h1>');
@@ -88,23 +98,23 @@ describe('the app page frames the document on its own origin', () => {
     // The bar around it is the app's own (solid/document/DocumentChrome), drawn by the app, not the server.
     expect(html).not.toContain('data-mx-reader-chrome');
     const csp = res.headers.get('content-security-policy')!;
-    expect(csp.split('; ').find((d) => d.startsWith('frame-src'))).toBe(`frame-src 'self' ${APEX} https://*.pages.example.test`);
+    expect(csp.split('; ').find((d) => d.startsWith('frame-src'))).toBe(`frame-src 'self' https://*.pages.example.test`);
     expect(csp.split('; ').find((d) => d.startsWith('script-src'))).not.toMatch(/blob:|https:/);
-    // Sign-out ends the pages session at the address the page names (solid/components/browser-session).
-    expect(html).toContain(`<meta name="mx-pages-session" content="${APEX}/pages-session">`);
+    // Sign-out is the app's own call: the page names no pages address to ask.
+    expect(html).not.toContain('mx-pages-session');
   });
 
-  it('frames a guest\'s page with no ticket, so the apex clears whatever the browser held', async () => {
+  it('frames a guest\'s page with the explicit guest marker, so the document origin clears whatever the browser held', async () => {
     const t = await mintToken('public-owner');
     const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Open</h1>', visibility: 'unlisted' } }));
     const { id } = (await res.json()) as { id: string };
     await drainPreparedPageWarmups();
     const html = await (await framing().request(`${APP}/a/${id}`, { headers: { accept: 'text/html' } })).text();
     const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
-    expect(src.searchParams.has('ticket')).toBe(false);
-    const cleared = await framing().request(src.href, { headers: { cookie: 'afbin_pages=stale-value-from-before-0123456789' } });
-    expect(cleared.status).toBe(302);
-    expect(cleared.headers.get('set-cookie')).toMatch(/^afbin_pages=; Domain=\.pages\.example\.test; .*Max-Age=0/);
+    expect(src.searchParams.get('_pt')).toBe('-');
+    const cleared = await framing().request(src.href, { headers: { cookie: `${COOKIE}=stale-value-from-before-0123456789` } });
+    expect(cleared.status).toBe(200);
+    expect(cleared.headers.get('set-cookie')).toBe(`${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`);
   });
 });
 
@@ -117,54 +127,77 @@ describe('the reader\'s selection in the app page\'s address reaches the frame',
     const self = pagesOriginFor(id, site);
     const page = await app.request(as(`${APP}/a/${id}?$region=west&$zoom=5`, w.actor, { headers: { accept: 'text/html' } }));
     const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
-    expect(src.searchParams.get('next')).toBe(`${self}/?$region=west&$zoom=5`);
-    // The apex spends the ticket and lands the frame on the document's origin with the selection intact.
-    const exchanged = await app.request(src.href);
-    expect(exchanged.status).toBe(302);
-    const landed = exchanged.headers.get('location')!;
-    expect(new URL(landed).search).toBe('?$region=west&$zoom=5');
-    const cookie = /afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie')!)![1]!;
-    const html = await (await app.request(landed, { headers: { cookie: `afbin_pages=${cookie}` } })).text();
-    expect(island(html)).toMatchObject({ values: { region: 'west', zoom: 5 } });
+    expect(src.origin).toBe(self);
+    expect(src.search).toMatch(/^\?\$region=west&\$zoom=5&_pt=[A-Za-z0-9_-]+$/);
+    // The document's origin spends the ticket and serves the document, starting from the selection, in one response.
+    const served = await app.request(src.href);
+    expect(served.status).toBe(200);
+    expect(cookieOf(served)).not.toBeNull();
+    expect(island(await served.text())).toMatchObject({ values: { region: 'west', zoom: 5 } });
     // A fresh frame URL (a consent grant's reload) carries the page's address the same way.
     const fresh = await framedDocumentSrc(as(`${APP}/api/page/frame/${id}?$region=east`, w.actor), id, site, '?$region=east');
-    expect(new URL(fresh!.src).searchParams.get('next')).toBe(`${self}/?$region=east`);
+    expect(new URL(fresh!.src).origin).toBe(self);
+    expect(new URL(fresh!.src).searchParams.get('$region')).toBe('east');
   });
 });
 
 describe('a fresh frame URL (app/api/page/frame, for an app page that builds its own frame)', () => {
-  it('carries a one-time ticket for this reader to the document\'s origin, and nothing for a reader who may not read it', async () => {
+  it('carries a one-time ticket for this reader on the document\'s own origin, and nothing for a reader who may not read it', async () => {
     const w = await world();
     const fresh = await framedDocumentSrc(as(`${APP}/api/page/frame/${w.secret}`, w.actor), w.secret, site);
     expect(fresh?.origin).toBe(pagesOriginFor(w.secret, site));
     const src = new URL(fresh!.src);
-    expect(src.searchParams.get('next')).toBe(`${fresh!.origin}/`);
+    expect(src.origin).toBe(fresh!.origin);
     const res = await framing().request(fresh!.src);
-    expect(res.headers.get('set-cookie')).toMatch(/^afbin_pages=[A-Za-z0-9_-]{40,};/);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toMatch(new RegExp(`^${COOKIE}=[A-Za-z0-9_-]{40,};`));
     expect(await framedDocumentSrc(as(`${APP}/api/page/frame/${w.secret}`, null), w.secret, site)).toBeNull();
   });
 });
 
+/** The ticket a document's app page would carry for `actor`, bound to `id` at its own origin. */
+const bindingOf = (id: string) => ({ artifactId: id, origin: pagesOriginFor(id, site) });
+/** Follow a frame's first URL the way a browser does: through a redirect, with the cookie it holds for that host, if there is one. */
+async function loadFrame(app: ReturnType<typeof framing>, src: string, held: string | null = null): Promise<{ res: Response; cookie: string | null }> {
+  let url = src, cookie = held;
+  for (let hops = 0; hops < 3; hops++) {
+    const res = await app.request(url, { headers: cookie ? { cookie: `${COOKIE}=${cookie}` } : {} });
+    cookie = cookieOf(res) ?? cookie;
+    const next = res.headers.get('location');
+    if (res.status < 300 || res.status >= 400 || !next) return { res, cookie };
+    url = next;
+  }
+  throw new Error('too many redirects');
+}
+
 describe('the pages session', () => {
-  it('sets an HttpOnly, Secure, Lax cookie for the whole pages domain from a single-use ticket, and redirects only to a document origin', async () => {
+  it('spends the ticket on the document\'s own origin, in the response that serves the document, and sets that origin\'s host-only cookie', async () => {
     const w = await world();
     const app = framing();
-    const ticket = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }))!;
-    const next = `${pagesOriginFor(w.secret, site)}/`;
-    const url = `${APEX}/pages-session?ticket=${ticket}&next=${encodeURIComponent(next)}`;
+    const self = pagesOriginFor(w.secret, site);
+    const ticket = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, Date.now(), bindingOf(w.secret)))!;
+    const url = `${self}/?_pt=${ticket}`;
     const res = await app.request(url);
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(next);
+    expect(res.status).toBe(200);
+    // One response: no redirect, no other host. The cookie has no Domain and no Max-Age (a session cookie; the row carries the 8 h).
+    expect(res.headers.get('location')).toBeNull();
+    expect(res.headers.get('set-cookie')).toMatch(/^__Host-afbin_pages=[A-Za-z0-9_-]{40,}; Path=\/; HttpOnly; SameSite=Lax; Secure$/);
     expect(res.headers.get('referrer-policy')).toBe('no-referrer');
-    expect(res.headers.get('set-cookie')).toMatch(/^afbin_pages=[A-Za-z0-9_-]{40,}; Domain=\.pages\.example\.test; Path=\/; HttpOnly; SameSite=Lax; Max-Age=\d+; Secure$/);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const html = await res.text();
+    expect(html).toContain('Private plan');
+    expect(island(html)).toMatchObject({ direct: true, signedIn: true });
+    expect(html).not.toContain(ticket);
+    // The replay (a back navigation to the frame's first URL) mints nothing, and reads as nobody: the uniform 404.
     const replay = await app.request(url);
-    expect(replay.status).toBe(302);
+    expect(replay.status).toBe(404);
     expect(replay.headers.get('set-cookie')).toBeNull();
-    for (const bad of ['https://evil.test/', `${APEX}/`, 'https://app.example.test/', `http://${new URL(next).host}/`, 'javascript:alert(1)']) {
-      expect((await app.request(`${APEX}/pages-session?next=${encodeURIComponent(bad)}`)).status, bad).toBe(400);
+    // The apex mints nothing and answers nothing: not the old exchange, not logout's old call.
+    for (const [method, path] of [['GET', `/pages-session?ticket=${ticket}&next=${encodeURIComponent(`${self}/`)}`], ['DELETE', '/pages-session'], ['GET', '/'], ['GET', '/api/artifacts']] as const) {
+      const apex = await app.request(`${APEX}${path}`, { method });
+      expect(apex.status, `${method} ${path}`).toBe(404);
+      expect(apex.headers.get('set-cookie')).toBeNull();
     }
-    expect((await app.request(`${APEX}/`)).status).toBe(404);
-    expect((await app.request(`${APEX}/api/artifacts`)).status).toBe(404);
   });
 
   it('hands a browser session\'s scripted browser across as its token, and a plain bearer page fetch nothing', async () => {
@@ -173,58 +206,215 @@ describe('the pages session', () => {
     // What the session transport (services/browser forwardSessionFetch) sends: the session's actor attached, the
     // session mark, the addressed host, no Origin — and, on the pages site, the cookie the parent holds.
     const owner: Actor = { credential: 'bearer', tokenId: w.token.id, userId: w.user.id, email: w.user.email!, emailVerified: true };
-    const frameSrc = async (headers: Record<string, string>) => {
+    const frameOf = async (headers: Record<string, string>) => {
       const html = await (await app.request(as(`${APP}/a/${w.secret}`, owner, { headers: { accept: 'text/html', ...headers } }))).text();
       return new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
     };
-    expect((await frameSrc({})).searchParams.has('ticket')).toBe(false);
-    const src = await frameSrc({ [BROWSER_SESSION_HEADER]: '1' });
-    expect(src.searchParams.get('ticket')).toMatch(/^[A-Za-z0-9_-]{30,}$/);
+    expect((await frameOf({})).searchParams.get('_pt')).toBe('-');
+    const src = await frameOf({ [BROWSER_SESSION_HEADER]: '1' });
+    expect(src.searchParams.get('_pt')).toMatch(/^[A-Za-z0-9_-]{30,}$/);
     const exchanged = await app.request(as(src.href, owner, { headers: { [BROWSER_SESSION_HEADER]: '1' } }));
-    expect(exchanged.status).toBe(302);
-    const cookie = /afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie')!)![1]!;
-    expect(await pagesSessionActor(cookie)).toEqual({ credential: 'agent-cookie', userId: w.user.id, tokenId: w.token.id, email: w.user.email! });
+    expect(exchanged.status).toBe(200);
+    const cookie = cookieOf(exchanged)!;
+    expect(await pagesSessionActor(cookie, w.secret)).toEqual({ credential: 'agent-cookie', userId: w.user.id, tokenId: w.token.id, email: w.user.email! });
     // The document's own door reads the private document as the session's reader.
     const self = pagesOriginFor(w.secret, site);
-    const read = await app.request(as(`${self}/a/${w.secret}/query`, owner, { method: 'POST', headers: { [BROWSER_SESSION_HEADER]: '1', 'x-forwarded-host': new URL(self).host, cookie: `afbin_pages=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) }));
+    const read = await app.request(as(`${self}/a/${w.secret}/query`, owner, { method: 'POST', headers: { [BROWSER_SESSION_HEADER]: '1', 'x-forwarded-host': new URL(self).host, cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) }));
     expect(read.status, await read.clone().text()).toBe(200);
     expect(((await read.json()) as { tables: Record<string, { rows: Array<Record<string, unknown>> }> }).tables.counted!.rows[0]).toMatchObject({ n: 2 });
-    // The session mark with no transport behind it is nobody's session: a guest page, no ticket.
-    const unmarked = await (await app.request(`${APP}/a/${w.secret}`, { headers: { accept: 'text/html', [BROWSER_SESSION_HEADER]: '1', authorization: `Bearer ${w.token.token}` } })).text();
-    expect(unmarked).not.toMatch(/ticket=/);
+    // The session mark with no transport behind it is nobody's session: a guest page, the guest marker.
+    const open = await w.publish('<h1>Open</h1>', 'unlisted');
+    await drainPreparedPageWarmups();
+    const unmarked = await (await app.request(`${APP}/a/${open}`, { headers: { accept: 'text/html', [BROWSER_SESSION_HEADER]: '1', authorization: `Bearer ${w.token.token}` } })).text();
+    expect(unmarked).toMatch(/_pt=-/);
   });
 
   it('spends a ticket once, within 60 s; a guest gets none; a revoked token ends the session it rode', async () => {
     const w = await world();
-    expect(await issuePagesTicket({ viewer: null, tokenId: null, credential: 'none' })).toBeNull();
+    const bind = bindingOf(w.secret);
+    expect(await issuePagesTicket({ viewer: null, tokenId: null, credential: 'none' }, {}, Date.now(), bind)).toBeNull();
     const now = Date.now();
-    const late = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, now))!;
-    expect(await exchangePagesTicket(late, now + 61_000)).toBeNull();
+    const late = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, now, bind))!;
+    expect(await exchangePagesTicket(late, bind, now + 61_000)).toBeNull();
     const guest = await mintToken('guest-owner', null);
-    expect(await issuePagesTicket({ viewer: null, tokenId: guest.id, credential: 'agent-cookie' })).toBeNull();
-    const ticket = (await issuePagesTicket({ viewer: {userId:w.user.id,email:w.user.email!,emailVerified:true}, tokenId: w.token.id, credential: 'bearer' }, {}, now, {browserSession:true}))!;
-    const session = (await exchangePagesTicket(ticket))!;
-    expect(await pagesSessionActor(session.cookie)).toEqual({ credential: 'agent-cookie', userId:w.user.id, email:w.user.email!, emailVerified:true, tokenId: w.token.id });
+    expect(await issuePagesTicket({ viewer: null, tokenId: guest.id, credential: 'agent-cookie' }, {}, Date.now(), bind)).toBeNull();
+    const ticket = (await issuePagesTicket({ viewer: {userId:w.user.id,email:w.user.email!,emailVerified:true}, tokenId: w.token.id, credential: 'bearer' }, {}, now, { ...bind, browserSession: true }))!;
+    const session = (await exchangePagesTicket(ticket, bind))!;
+    expect(await exchangePagesTicket(ticket, bind)).toBeNull();
+    expect(await pagesSessionActor(session.cookie, w.secret)).toEqual({ credential: 'agent-cookie', userId:w.user.id, email:w.user.email!, emailVerified:true, tokenId: w.token.id });
     await revokeToken(w.token.id);
-    expect(await pagesSessionActor(session.cookie)).toBeNull();
+    expect(await pagesSessionActor(session.cookie, w.secret)).toBeNull();
+    // …and a token revoked between the app page and the exchange never renders once: the reader is read back.
+    const stale = (await issuePagesTicket({ viewer: {userId:w.user.id,email:w.user.email!,emailVerified:true}, tokenId: w.token.id, credential: 'bearer' }, {}, now, { ...bind, browserSession: true }))!;
+    expect(await exchangePagesTicket(stale, bind)).toBeNull();
   });
 
-  it('ends at logout: the app origin deletes it, a document origin may not', async () => {
+  it('is bound to its document and its exact origin: a foreign ticket mints nothing and renders as nobody', async () => {
+    const w = await world();
+    const app = framing();
+    const actor = { viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' } as const;
+    const forX = (await issuePagesTicket(actor, {}, Date.now(), bindingOf(w.secret)))!;
+    // Spent at another document's origin: refused, and consumed (a wrong guess is never tried twice).
+    const atOther = await app.request(`${pagesOriginFor(w.other, site)}/?_pt=${forX}`);
+    expect(atOther.status).toBe(404);
+    expect(atOther.headers.get('set-cookie')).toBeNull();
+    expect((await app.request(`${pagesOriginFor(w.secret, site)}/?_pt=${forX}`)).status).toBe(404);
+    // The right id at another origin is refused the same way.
+    const wrongOrigin = (await issuePagesTicket(actor, {}, Date.now(), { artifactId: w.secret, origin: 'https://evil.pages.example.test' }))!;
+    const atRight = await app.request(`${pagesOriginFor(w.secret, site)}/?_pt=${wrongOrigin}`);
+    expect(atRight.status).toBe(404);
+    expect(atRight.headers.get('set-cookie')).toBeNull();
+    expect(await exchangePagesTicket(forX, bindingOf(w.secret))).toBeNull();
+    // A malformed value is a spent ticket.
+    expect((await app.request(`${pagesOriginFor(w.secret, site)}/?_pt=not%20a%20ticket`)).status).toBe(404);
+  });
+
+  it('renders a guest as nobody even when a cookie is held, and clears it in the same response', async () => {
     const w = await world();
     const app = framing();
     const cookie = await pagesCookie(app, w.actor, w.secret);
     const self = pagesOriginFor(w.secret, site);
-    const refused = await app.request(`${APEX}/pages-session`, { method: 'DELETE', headers: { origin: self, cookie: `afbin_pages=${cookie}` } });
-    expect(refused.status).toBe(403);
-    const preflight = await app.request(`${APEX}/pages-session`, { method: 'OPTIONS', headers: { origin: APP, 'access-control-request-method': 'DELETE' } });
-    expect(preflight.headers.get('access-control-allow-origin')).toBe(APP);
-    expect(preflight.headers.get('access-control-allow-credentials')).toBe('true');
-    const out = await app.request(`${APEX}/pages-session`, { method: 'DELETE', headers: { origin: APP, cookie: `afbin_pages=${cookie}` } });
-    expect(out.status).toBe(204);
-    expect(out.headers.get('access-control-allow-origin')).toBe(APP);
-    expect(out.headers.get('set-cookie')).toMatch(/^afbin_pages=; .*Max-Age=0/);
-    const after = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, cookie: `afbin_pages=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) });
+    const held = { cookie: `${COOKIE}=${cookie}` };
+    expect((await app.request(`${self}/`, { headers: held })).status).toBe(200);
+    // The guest frame of the SAME private document: nobody sees it, whoever this browser was signed in as before.
+    const guest = await app.request(`${self}/?_pt=-`, { headers: held });
+    expect(guest.status).toBe(404);
+    expect(await guest.text()).not.toContain('Private plan');
+    expect(guest.headers.get('set-cookie')).toBe(`${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`);
+    // The row is gone too: the old cookie value names nobody on the doors.
+    const after = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, ...held, 'content-type': 'text/plain' }, body: query(w.secret) });
     expect(after.status).toBe(404);
+    // A public document rendered to a guest carries nothing of the reader's.
+    const open = await w.publish('<Helmet><Value name="region" type="string" default="north" /></Helmet><p>{$region}</p>', 'unlisted');
+    await drainPreparedPageWarmups();
+    const reader = await pagesCookie(app, w.actor, open);
+    const asGuest = await app.request(`${pagesOriginFor(open, site)}/?_pt=-`, { headers: { cookie: `${COOKIE}=${reader}` } });
+    expect(asGuest.status).toBe(200);
+    expect(island(await asGuest.text())).toMatchObject({ signedIn: false });
+  });
+
+  it('keeps today\'s behaviour for a visit with no parameter: the browser\'s own cookie for this host decides', async () => {
+    const w = await world();
+    const app = framing();
+    const cookie = await pagesCookie(app, w.actor, w.secret);
+    const self = pagesOriginFor(w.secret, site);
+    expect((await app.request(`${self}/`, { headers: { cookie: `${COOKIE}=${cookie}` } })).status).toBe(200);
+    expect((await app.request(`${self}/`)).status).toBe(404);
+    // A replayed (spent) ticket keeps what the browser holds, and nothing more.
+    const spent = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, Date.now(), bindingOf(w.secret)))!;
+    expect((await app.request(`${self}/?_pt=${spent}`)).status).toBe(200);
+    const replayHeld = await app.request(`${self}/?_pt=${spent}`, { headers: { cookie: `${COOKIE}=${cookie}` } });
+    expect(replayHeld.status).toBe(200);
+    expect(replayHeld.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('never spends a ticket on a HEAD, and never lets the parameter reach the document', async () => {
+    const w = await world();
+    const app = framing();
+    const self = pagesOriginFor(w.secret, site);
+    const ticket = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, Date.now(), bindingOf(w.secret)))!;
+    const head = await app.request(`${self}/?_pt=${ticket}`, { method: 'HEAD' });
+    expect(head.headers.get('set-cookie')).toBeNull();
+    expect((await app.request(`${self}/?_pt=${ticket}`)).status).toBe(200);
+    const id = await w.publish('<Helmet><Value name="region" type="string" default="north" /></Helmet><p>{$region}</p>', 'public');
+    await drainPreparedPageWarmups();
+    const html = await (await app.request(`${pagesOriginFor(id, site)}/?$region=west&_pt=-&x=1`)).text();
+    expect(island(html)).toMatchObject({ values: { region: 'west' } });
+    expect(html).not.toContain('_pt');
+  });
+
+  it('keeps the cookie the document origin\'s alone: another document never receives it, and a cookie shown there names nobody', async () => {
+    const w = await world();
+    const app = framing();
+    const cookie = await pagesCookie(app, w.actor, w.secret);
+    const readable = await w.publish('<h1>Second</h1>', 'private');
+    await drainPreparedPageWarmups();
+    // The same value presented at another document's origin (a buggy proxy, a stolen value) is not that document's session.
+    expect((await app.request(`${pagesOriginFor(readable, site)}/`, { headers: { cookie: `${COOKIE}=${cookie}` } })).status).toBe(404);
+    const door = await app.request(`${pagesOriginFor(readable, site)}/a/${readable}/query`, { method: 'POST', headers: { origin: pagesOriginFor(readable, site), cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' }, body: '{}' });
+    expect(door.status).toBe(404);
+    // The server reads only the prefixed name: a planted plain-named cookie (a sibling's toss) is ignored, first or last.
+    const self = pagesOriginFor(w.secret, site);
+    const planted = await app.request(`${self}/`, { headers: { cookie: `afbin_pages=${cookie}` } });
+    expect(planted.status).toBe(404);
+    const both = await app.request(`${self}/`, { headers: { cookie: `afbin_pages=junk-0123456789abcdef; ${COOKIE}=${cookie}` } });
+    expect(both.status).toBe(200);
+  });
+
+  it('keeps a spent ticket in a document\'s location from being a credential', async () => {
+    const w = await world();
+    const app = framing();
+    const src = await frameSrc(app, w.actor, w.secret);
+    const first = await app.request(src.href);
+    expect(first.status).toBe(200);
+    const text = await first.text();
+    // What a script reading `location.href` holds is the frame's first URL. Presented again, anywhere, it buys nothing.
+    for (const url of [src.href, `${src.origin}/${src.search}`, `${pagesOriginFor(w.other, site)}/${src.search}`]) {
+      const again = await app.request(url);
+      expect(again.status, url).toBe(404);
+      expect(again.headers.get('set-cookie'), url).toBeNull();
+    }
+    expect(text).not.toContain(src.searchParams.get('_pt')!);
+    // The response that carried it is never cached and never sent on as a referrer.
+    expect(first.headers.get('cache-control')).toBe('no-store');
+    expect(first.headers.get('referrer-policy')).toBe('no-referrer');
+    // …and a script cannot ask for a new one: a pages origin is refused on every app route.
+    const asked = await app.request(`${APP}/api/page/frame/${w.secret}`, { headers: { origin: src.origin } });
+    expect(asked.status).toBe(403);
+  });
+
+  it('ends at logout: the app ends every session of the reader, a document origin may not end any', async () => {
+    const w = await world();
+    const app = framing();
+    const cookie = await pagesCookie(app, w.actor, w.secret);
+    const second = await w.publish('<h1>Second</h1>', 'private');
+    await drainPreparedPageWarmups();
+    const cookie2 = await pagesCookie(app, w.actor, second);
+    const self = pagesOriginFor(w.secret, site);
+    const door = (id: string, value: string) => app.request(`${pagesOriginFor(id, site)}/a/${id}/query`, { method: 'POST', headers: { origin: pagesOriginFor(id, site), cookie: `${COOKIE}=${value}`, 'content-type': 'text/plain' }, body: query(id) });
+    expect((await door(w.secret, cookie)).status).toBe(200);
+    // A document origin has no way to end a session (nor the apex).
+    for (const base of [self, APEX]) expect((await app.request(`${base}/pages-session`, { method: 'DELETE', headers: { origin: self, cookie: `${COOKIE}=${cookie}` } })).status).toBe(404);
+    expect((await door(w.secret, cookie)).status).toBe(200);
+    // Someone else's sign-out ends nothing of theirs.
+    const stranger = await createUser({ email: 'pages-stranger@example.com' });
+    await clearSession(as(`${APP}/api/session/token`, { credential: 'session', userId: stranger.id, email: 'pages-stranger@example.com', emailVerified: true }, { method: 'DELETE' }));
+    expect((await door(w.secret, cookie)).status).toBe(200);
+    // The app's own sign-out call ends them all, whichever document, whatever cookies the browser still holds.
+    const out = await clearSession(as(`${APP}/api/session/token`, w.actor, { method: 'DELETE' }));
+    expect(out.status).toBe(204);
+    expect((await door(w.secret, cookie)).status).toBe(404);
+    expect((await door(second, cookie2)).status).toBe(404);
+    expect((await app.request(`${self}/`, { headers: { cookie: `${COOKIE}=${cookie}` } })).status).toBe(404);
+  });
+
+  it('loads the framed document in a query budget, without the apex\'s statements', async () => {
+    const w = await world();
+    const app = framing();
+    const src = await frameSrc(app, w.actor, w.secret);
+    const { value, stats } = await measureQueries(() => loadFrame(app, src.href));
+    expect(value.res.status).toBe(200);
+    expect(value.cookie).not.toBeNull();
+    // ticket claim + expired sweep + insert + the account check + the document's own statements: no second session read.
+    expect(stats.count).toBeLessThanOrEqual(BUDGET.exchange);
+  });
+
+  it('on a development http site uses the plain host-only name, still HttpOnly and Lax, never Secure', async () => {
+    const dev = pagesSiteFor('lvh.me', 'http://app.lvh.me:11001')!;
+    const w = await world();
+    const devApp = createAppServer({ indexHtml: async () => SHELL, pagesSite: dev });
+    const page = await devApp.request(as('http://app.lvh.me:11001/a/' + w.secret, w.actor, { headers: { accept: 'text/html' } }));
+    const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+    expect(src.origin).toBe(pagesOriginFor(w.secret, dev));
+    const res = await devApp.request(src.href);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toMatch(/^afbin_pages=[A-Za-z0-9_-]{40,}; Path=\/; HttpOnly; SameSite=Lax$/);
+    const value = /^afbin_pages=([^;]+)/.exec(res.headers.get('set-cookie')!)![1]!;
+    expect((await devApp.request(`${src.origin}/`, { headers: { cookie: `afbin_pages=${value}` } })).status).toBe(200);
+    // …and the prefixed name is not read there.
+    expect((await devApp.request(`${src.origin}/`, { headers: { cookie: `__Host-afbin_pages=${value}` } })).status).toBe(404);
+    const guest = await devApp.request(`${src.origin}/?_pt=-`, { headers: { cookie: `afbin_pages=${value}` } });
+    expect(guest.headers.get('set-cookie')).toBe('afbin_pages=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
   });
 });
 
@@ -249,7 +439,7 @@ describe('a document\'s own origin', () => {
     const app = framing();
     const cookie = await pagesCookie(app, w.actor, w.secret);
     const self = pagesOriginFor(w.secret, site);
-    const res = await app.request(`${self}/`, { headers: { cookie: `afbin_pages=${cookie}` } });
+    const res = await app.request(`${self}/`, { headers: { cookie: `${COOKIE}=${cookie}` } });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-security-policy')).toBe(buildDocumentCsp({ self, app: APP, id: w.secret }));
     expect(res.headers.get('content-security-policy')).not.toMatch(/(^|; )sandbox/);
@@ -262,7 +452,7 @@ describe('a document\'s own origin', () => {
     expect(data).toMatchObject({ direct: true, signedIn: true, queryUrl: `${self}/a/${w.secret}/query` });
     // Nobody's cookie, or no cookie: the uniform 404 a private document answers.
     expect((await app.request(`${self}/`)).status).toBe(404);
-    expect((await app.request(`${self}/`, { headers: { cookie: 'afbin_pages=not-a-session-0123456789abcdef' } })).status).toBe(404);
+    expect((await app.request(`${self}/`, { headers: { cookie: `${COOKIE}=not-a-session-0123456789abcdef` } })).status).toBe(404);
   });
 
   it('answers its own doors with its reader and credentialed CORS for exactly its own origin', async () => {
@@ -270,7 +460,7 @@ describe('a document\'s own origin', () => {
     const app = framing();
     const cookie = await pagesCookie(app, w.actor, w.secret);
     const self = pagesOriginFor(w.secret, site);
-    const res = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, cookie: `afbin_pages=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) });
+    const res = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) });
     expect(res.status, await res.clone().text()).toBe(200);
     expect(res.headers.get('access-control-allow-origin')).toBe(self);
     expect(res.headers.get('access-control-allow-credentials')).toBe('true');
@@ -288,7 +478,7 @@ describe('a document\'s own origin', () => {
   it('streams its own live events and frames to its reader', async () => {
     const w = await world();
     const app = framing();
-    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
+    const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, w.secret)}`;
     const self = pagesOriginFor(w.secret, site);
     const events = await app.request(`${self}/a/${w.secret}/events`, { headers: { cookie } });
     expect(events.status).toBe(200);
@@ -303,7 +493,7 @@ describe('a document\'s own origin', () => {
   it('loads another artifact\'s embedded bytes anonymously — what anyone with the link may — and never with its reader', async () => {
     const w = await world();
     const app = framing();
-    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
+    const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, w.secret)}`;
     const self = pagesOriginFor(w.secret, site);
     const t = await mintToken('embedded-owner');
     const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Open</h1>', visibility: 'unlisted' } }));
@@ -317,7 +507,7 @@ describe('a document\'s own origin', () => {
   it('serves nothing else: not the app, not another document, not its own raw or export', async () => {
     const w = await world();
     const app = framing();
-    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
+    const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, w.secret)}`;
     const self = pagesOriginFor(w.secret, site);
     for (const path of ['/login', '/api/artifacts', `/a/${w.secret}`, `/a/${w.secret}/raw`, `/a/${w.secret}/export`, `/a/${w.other}/query`, '/@someone']) {
       expect((await app.request(`${self}${path}`, { headers: { cookie } })).status, path).toBe(404);
@@ -331,7 +521,7 @@ describe('the origin gate', () => {
   it('refuses another document\'s origin with 403 forbidden_origin, on its host and on the app\'s', async () => {
     const w = await world();
     const app = framing();
-    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
+    const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, w.secret)}`;
     const self = pagesOriginFor(w.secret, site);
     const intruder = pagesOriginFor(w.other, site);
     for (const url of [`${self}/a/${w.secret}/query`, `${APP}/a/${w.secret}/query`]) {
@@ -392,7 +582,7 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     // twin), as the dev switch does.
     setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
     const id = await declaring(w, [`https://127.0.0.1:${port}`]);
-    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, id)}`;
+    const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, id)}`;
     const self = pagesOriginFor(id, site);
     const res = await app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(`${upstream}/rates?base=eur`)}`, { headers: { origin: self, cookie } });
     expect(res.status, await res.clone().text()).toBe(200);
@@ -411,7 +601,7 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     const app = framing();
     setWebIngestPolicyForTests({ allowPrivate: false, allowHttp: false });
     const id = await declaring(w, ['https://api.example.org', 'https://127.0.0.1', 'https://10.0.0.7']);
-    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, id)}`;
+    const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, id)}`;
     const self = pagesOriginFor(id, site);
     const door = (url: string, init: RequestInit = {}) => app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(url)}`, { ...init, headers: { origin: self, cookie, ...(init.headers ?? {}) } });
     const undeclared = await door('https://evil.example.net/steal');
@@ -455,7 +645,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
       const page = await app.request(as(`${APP}/a/${id}`, reader, { headers: { accept: 'text/html', ...(appCookie ? { cookie: appCookie } : {}) } }));
       const src = /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&');
       const exchanged = await app.request(src);
-      const cookie = `afbin_pages=${/afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie')!)![1]!}`;
+      const cookie = `${COOKIE}=${cookieOf(exchanged)!}`;
       const doc = await app.request(`${self}/`, { headers: { cookie } });
       expect(doc.status).toBe(200);
       const script = (doc.headers.get('content-security-policy') ?? '').split('; ').find((d) => d.startsWith('script-src ')) ?? '';
@@ -493,12 +683,12 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
       const page = await app.request(`${APP}/a/${id}`, { headers: { accept: 'text/html', ...(appCookie ? { cookie: appCookie } : {}) } });
       const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
       const exchanged = await app.request(src.href);
-      expect(exchanged.status).toBe(302);
-      const pages = /afbin_pages=([^;]*)/.exec(exchanged.headers.get('set-cookie') ?? '')?.[1] || null;
-      const doc = await app.request(`${self}/`, { headers: pages ? { cookie: `afbin_pages=${pages}` } : {} });
+      expect(exchanged.status).toBe(200);
+      const pages = cookieOf(exchanged);
+      const doc = await app.request(`${self}/`, { headers: pages ? { cookie: `${COOKIE}=${pages}` } : {} });
       expect(doc.status).toBe(200);
       const script = (doc.headers.get('content-security-policy') ?? '').split('; ').find((d) => d.startsWith('script-src ')) ?? '';
-      return { ticket: src.searchParams.has('ticket'), pages, script };
+      return { ticket: src.searchParams.get('_pt') !== '-', pages, script };
     };
 
     const before = await framedAsGuest(null);
@@ -514,7 +704,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     expect(after.script.split(' ')).toContain(PLOTLY);
     // The session it made is nobody's: the doors read the guest as anonymous, it only holds what was carried.
     expect(after.pages).not.toBeNull();
-    expect(await pagesSessionActor(after.pages)).toBeNull();
+    expect(await pagesSessionActor(after.pages, id)).toBeNull();
   });
 });
 

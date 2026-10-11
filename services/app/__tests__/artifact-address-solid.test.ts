@@ -38,7 +38,8 @@ describe('the starter placeholder', () => {
     expect(read.frame).toBeUndefined();
     expect((read.body as { surface: { starter: boolean } }).surface.starter).toBe(true);
     const edit = await artifactPageAnswer(request(`/a/${id}/edit`, { token }), id, PAGES);
-    expect(edit.frame?.src).toContain('/pages-session?');
+    expect(new URL(edit.frame!.src).origin).toMatch(/^https?:\/\/[0-9a-f]+\./);
+    expect(edit.frame?.src).toContain('_pt=');
   });
 
   it('is photographed as the document it is: a keyed capture of /raw is compiled', async () => {
@@ -54,8 +55,8 @@ describe('a document on the app page', () => {
     const { id, token } = await publish({ title: 'Framed', markup: '<h1>Framed heading</h1>' });
     const answer = await artifactPageAnswer(request(`/a/${id}`, { token }), id, PAGES);
     expect(answer.reader).toEqual({ mode: 'compiled' });
-    expect(answer.frame?.src).toMatch(/\/pages-session\?(?:ticket=[^&]+&)?next=/);
-    expect(decodeURIComponent(answer.frame!.src)).toContain(`.${pagesSite().host}`);
+    expect(answer.frame?.src).toMatch(/[?&]_pt=[A-Za-z0-9_-]+$/);
+    expect(new URL(answer.frame!.src).host).toContain(`.${pagesSite().host}`);
     expect(answer.frame?.head.title).toBe('Framed');
     // The JSON door mints no ticket and draws no frame.
     expect((await artifactPageAnswer(request(`/a/${id}`, { token }), id)).frame).toBeUndefined();
