@@ -7,7 +7,7 @@ import { AvatarCircle } from '../ui/AvatarCircle';
 import { replaceDocument } from '../lib/document-navigation';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
-import { FormPage } from '../ui/FormControls';
+import { FormPage } from '../ui/PageHeader';
 import { Button } from '../ui/Button';
 import { Field, Input } from '../ui/Field';
 import { PageHeader } from '../ui/PageHeader';

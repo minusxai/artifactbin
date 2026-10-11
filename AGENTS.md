@@ -9,11 +9,10 @@
 
 **SLOW — EXACTLY ONCE, at the end before merge. NEVER per edit or mid-task:** gate containers, pushing for PR CI, bare `npm test`.
 
-- **Finish the entire change on FAST checks, then SLOW once.** No gate or push per edit.
+- **Finish the entire change on FAST checks, then SLOW once.** Never push, poll CI or gate per edit.
 - **Gates belong to PR CI** (7 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
 - **Pre-merge is one sequence, run once:** FAST tier clean → commit and push ONCE → PR CI green →
   the exact user scenario verified end to end on the built artifact → merge.
-- Never push, poll CI or gate per edit.
 
 ## CI speed contract
 
@@ -37,12 +36,11 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 - TDD for features and refactors: contracts, then behavioral tests, observe the failure, implement.
   Refactors: existing tests pass, prove the assertion detects broken behavior, restore it (Blue → Red → Blue).
   Report only observed runs and red/green/end-to-end evidence.
-- Probe risky assumptions; record evidence/unknowns. Order milestones by plan-changing risk; finish
+- Probe risky assumptions; record evidence/unknowns. Order milestones by plan-changing risk; end
   with runnable checks.
 - Verify user-facing changes on the task's running app (`npm run dev`, port `APP__PORT` in `.env`;
   a worktree has its own). Changed `services/cli` or the skill: `npm run afbin -- <args>` runs the
-  branch's CLI against that server, state in `~/.artifactbin-dev/<port>` (home and released `afbin`
-  untouched); `npm run eval -- --tasks <name>` shows an agent using them. Both take `APP__PORT=<n>`.
+  branch's CLI against that server, state in `~/.artifactbin-dev/<port>`; `npm run eval` shows an agent using them. Both take `APP__PORT=<n>`.
   Never iterate/test on production; confirm after deploy.
 - **Local evals use the real product contract.** Supply target origin and exact candidate CLI/skill
   assets independently. Local/deployed briefs and scorers are identical: no local-only prompts, auth
@@ -60,21 +58,19 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 - **50 test files TOTAL across Vitest + CLI.** Above 50, neither suite runs; exit 2:
   **DEFERRED TO CI, NOT PASSED**. No affected tests means unverified (exit 2); discovery errors fail visibly. Never count/preview, raise the cap, use `--all`, bypass the wrapper or batch a deferred suite.
 - **Mid-task deferral is the wrong command**: return to `--files`. At FAST-clean completion:
-  commit, push ONCE, open/update an empty-body PR and inspect CI (branch pushes start none). Report
+  commit, push ONCE, open/update an empty-body PR (no descriptive comments unless requested) and inspect CI. Report
   deferral accurately; require selected checks before merge. Full suites, Docker/Chromium integration, gates and builds are CI-only. On a red PR: fetch every failed job's log in ONE command, fix all
   failures together (independent ones in parallel agents), never retry unchanged code.
 - **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same
-  arguments). One-hour receipts require matching sources, command, environment, runtime, lock and
-  generated inputs; failed/deferred/empty runs never count. Label prior evidence, never fresh/CI.
-  Never copy receipts; omit reuse after manual ignored-dependency/external-state changes.
-  See [docs/agent-workflows.md](docs/agent-workflows.md).
+  arguments). One-hour receipts need matching sources, command, environment, runtime, lock and generated inputs;
+  failed/deferred/empty runs never count. Label prior evidence, never fresh/CI; omit reuse after manual
+  external-state changes; never copy receipts. See [docs/agent-workflows.md](docs/agent-workflows.md).
 - **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output/sections; skip irrelevant fixtures,
   transcripts/assets/dependencies; batch reads, never repeat searches.
 - Changing pinned docs/copy/errors: find their tests and gates (`buildQuickSheet`, `agentDiscovery`,
   `renderDoc`, exact text) and update them together. Skill guide edits also run
   `services/app/lib/__tests__/skill-tree.test.ts`: each rendered guide must stay within 8,192 bytes.
-  PR bodies stay empty, with no descriptive PR
-  comments unless requested. Reuse only the task's own current dev server.
+  Reuse only the task's own dev server.
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a
   new exception at the boundary and verify the bundle.
@@ -85,8 +81,10 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 - Keep bearer secrets out of URLs/docs/logs/storage; test tokens are not credentials.
   Use `mxmx_test_*` accounts for disposable browser flows; read local OTPs with `npm run dev:otp`,
   never a public app endpoint.
-- UI tests use accessible names; label controls. Tooltips use
-  `solid/ui/Tooltip.tsx`, not native `title` tooltips.
+- **App chrome composes `services/app/solid/ui`** (md forms, sm chrome; `rounded-chip|control|panel|dialog`,
+  `text-micro|2xs`, `h-control*`); `/dev/ui` shows all. `scripts/ci/check-ui-primitives.mjs` refuses
+  hand-rolled controls, overlays and one-off styles: add needs to ui. UI tests use accessible names;
+  tooltips use `ui/Tooltip`, not `title`.
 - Tests use real handlers on isolated state; reset database/limiter between cases.
   Merge gates use deterministic third-party fixtures; live-provider checks are separate.
 - Generate routes/schemas/CSS candidate lists; never hand-edit. Review diffs.
@@ -100,7 +98,7 @@ From repo root. Keep current.
 - `npm run afbin -- <args>` — the branch's CLI against this checkout's dev server.
 - `npm run eval -- --tasks <name>` — the agent eval against that server (`--deployment`, `--help`).
   `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo (its README is the guide): copy
-  it from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale, so recopy.
+  it from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale.
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
 - `npm run validate` — FAST: name guard, incremental TypeScript (`tsgo` where installed, else
   tsc) with unused declarations, the module-graph check (`scripts/ci/module-graph.mjs`);
@@ -112,13 +110,12 @@ From repo root. Keep current.
   ONLY, NEVER AFTER AN EDIT**: named browser gates in a Linux container, built (CI's gate build, reused
   until a build input changes) and served as CI does.
   `node scripts/gate-container.mjs kit-and-fonts` verifies the compiled reader handover (reader/islands changes).
-- CI-only: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
-  Never use them to bypass deferral.
+- CI-only, never a deferral bypass: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
 - `npm run build:islands -w services/app` — the shared reader islands and manifest.
 - Generated inputs: `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`,
-  `generate:og`, `generate:design-systems` (the runtime registry and the
-  agent references from `design-systems/specs`; `-- pages` the specimen pages into `tmp/`).
-- `npm run release:cli` — bump the CLI release; see Change checks.
+  `generate:og`, `generate:design-systems` (runtime registry and agent
+  references from `design-systems/specs`; `-- pages`: specimen pages into `tmp/`).
+- `npm run release:cli` — bump the CLI release.
 
 ## Change checks
 
@@ -131,7 +128,7 @@ From repo root. Keep current.
   main). `checks` refuses a CLI PR without a bump; a version-only diff packs npm and verifies native consumers; a tree PR
   CI passed is not re-tested on merge. [Steps](services/cli/README.md). Teaching is generated before
   install/check/dev/build; never commit `services/cli/src/generated/teaching.json`. Main CI publishes
-  the tested assets; deploys advance their source pin and verify the release before serving its installer.
+  the tested assets; deploys advance their source pin and verify the release before serving the installer.
 - Schema changes update `services/app/lib/platform/schema.ts`, schema ownership tests, and SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
   setup planner's snapshot via `npm run generate:env-snapshot` (its test fails on drift).
