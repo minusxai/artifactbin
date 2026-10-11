@@ -20,6 +20,7 @@ import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import type { Context, MiddlewareHandler } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { withEncoding } from '@/lib/http/revalidation';
 
 type ServeStaticOptions = Parameters<typeof serveStatic>[0];
 const SIBLING = /\.(?:br|gz)$/;
@@ -134,6 +135,9 @@ export async function compressDynamic(request: Request, response: Response): Pro
   } });
   headers.set('content-encoding', 'br');
   headers.set('content-length', String(encoded.byteLength));
+  // A strong validator names one representation (lib/http/revalidation): the encoded body carries its own.
+  const tag = headers.get('etag');
+  if (tag && !tag.startsWith('W/')) headers.set('etag', withEncoding(tag, 'br'));
   return new Response(new Uint8Array(encoded), { status: response.status, statusText: response.statusText, headers });
 }
 

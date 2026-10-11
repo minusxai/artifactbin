@@ -30,14 +30,19 @@ import { applyColorMode, readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import { ISLAND_DOCUMENT_KEY, LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
+import { ISLAND_DOCUMENT_KEY, LINKED_BASE_SELECTOR, LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
 import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR, LITERALS_ATTR, STORY_NODES_ID, STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
 
 const HK = 'data-hk';
-/** Sheets that belong to one version and may be absent from the next (lib/page-styles/document-styles, the assembler). */
-const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-font-vars', 'data-mx-system', 'data-mx-author'];
+/**
+ * Sheets that belong to one version and may be absent from the next (lib/page-styles/document-styles, the assembler):
+ * the Tailwind in all its parts (`data-mx-tw`, and on a document with linked shared sheets its shards `-s<n>` and the
+ * rules it carries itself `-i<n>`, lib/page-styles/linked-sheets.server), the Helmet's fonts, the design system, the author's CSS.
+ */
+const isVersionSheet = (key: string): boolean =>
+  key.startsWith('data-mx-tw') || ['data-mx-story-css', 'data-mx-font-vars', 'data-mx-system', 'data-mx-author'].includes(key);
 /** How often a version the server is still compiling is asked for again, and how long apart. */
 const NOT_READY_RETRIES = 6;
 const NOT_READY_DELAY_MS = 250;
@@ -698,7 +703,8 @@ const withMode = (classes: string, mode: 'light' | 'dark'): string =>
  * The page around the story
  * ────────────────────────────────────────────────────────────────────────── */
 
-const standaloneStyles = (doc: Document): boolean => !!doc.head.querySelector('style[data-mx-bare-type]');
+const SHEETS = 'style, link[rel~="stylesheet"]';
+const standaloneStyles = (doc: Document): boolean => !!doc.head.querySelector(`style[data-mx-bare-type], ${LINKED_BASE_SELECTOR}`);
 
 /** Apply a compiled draft's appearance on its isolated document, before the body is morphed. */
 export function syncDraftHead(doc: Document, next: Document): void {
@@ -706,26 +712,53 @@ export function syncDraftHead(doc: Document, next: Document): void {
   if (standaloneStyles(next)) syncHead(doc, next, { adopted: false, override: null });
 }
 
-/** The version's sheets (new classes, fonts, the author's own CSS), its title, and the document's colour. */
+/**
+ * The version's sheets (new classes, fonts, the author's own CSS), its title, and the document's colour.
+ *
+ * A sheet is a `<style>` or a `<link rel=stylesheet>` named by its first `data-mx-*` attribute. The ones the next
+ * version also has are left where they are (a shared link is not fetched again; an inline sheet takes the new text), the
+ * ones only it has are put in their place in the order it names them, and a version sheet it no longer has goes. A link
+ * that changes address is replaced once the new one has loaded, so the page is never left without its rules.
+ */
 function syncHead(doc: Document, next: Document, { adopted, override }: { adopted: boolean; override: 'light' | 'dark' | null }): void {
-  const sheetKey = (style: Element): string | null => [...style.attributes].find((a) => a.name.startsWith('data-mx-'))?.name ?? null;
-  const incoming = new Map<string, string>();
-  for (const style of next.head.querySelectorAll('style')) { const key = sheetKey(style); if (key) incoming.set(key, style.textContent ?? ''); }
-  const present = new Set<string>();
-  for (const style of [...doc.head.querySelectorAll('style')]) {
-    const key = sheetKey(style);
+  const sheetKey = (sheet: Element): string | null => sheet.getAttributeNames().find((name) => name.startsWith('data-mx-')) ?? null;
+  const incoming = [...next.head.querySelectorAll(SHEETS)].flatMap((sheet) => { const key = sheetKey(sheet); return key ? [{ key, sheet }] : []; });
+  const wanted = new Map(incoming.map(({ key, sheet }) => [key, sheet]));
+  const present = new Map<string, Element>();
+  for (const sheet of [...doc.head.querySelectorAll(SHEETS)]) {
+    const key = sheetKey(sheet);
     if (!key) continue;
-    present.add(key);
-    const css = incoming.get(key);
-    if (css === undefined) { if (VERSION_SHEETS.includes(key)) style.remove(); continue; }
-    if (style.textContent !== css) style.textContent = css;
+    const want = wanted.get(key);
+    if (!want) { if (isVersionSheet(key)) sheet.remove(); continue; }
+    if (sheet.localName === 'style' && want.localName === 'style') {
+      if (sheet.textContent !== want.textContent) sheet.textContent = want.textContent;
+      present.set(key, sheet);
+    } else if (sheet.localName === 'link' && want.localName === 'link' && sheet.getAttribute('href') === want.getAttribute('href')) {
+      present.set(key, sheet);
+    } else {
+      // Another address, or the other kind of sheet: the new one arrives, the old one leaves when it is there to take over.
+      const fresh = doc.importNode(want, true);
+      sheet.after(fresh);
+      if (fresh.localName === 'link') {
+        const retire = () => sheet.remove();
+        fresh.addEventListener('load', retire, { once: true });
+        fresh.addEventListener('error', retire, { once: true });
+      } else sheet.remove();
+      present.set(key, fresh);
+    }
   }
-  for (const [key, css] of incoming) {
-    if (present.has(key)) continue;
-    const style = doc.createElement('style');
-    style.setAttribute(key, '');
-    style.textContent = css;
-    doc.head.append(style);
+  // Sheets only the next version has go where it puts them: after the one it lists before them, else with the first it lists.
+  let anchor: Element | null = null;
+  for (const { key, sheet } of incoming) {
+    const here = present.get(key);
+    if (here) { anchor = here; continue; }
+    const fresh = doc.importNode(sheet, true);
+    if (anchor) anchor.after(fresh);
+    else {
+      const first = incoming.map((entry) => present.get(entry.key)).find((el) => el?.isConnected);
+      if (first) first.before(fresh); else doc.head.append(fresh);
+    }
+    anchor = fresh;
   }
   if (adopted) return;
   // The page's own title and colour are the story's until the app holds the page.

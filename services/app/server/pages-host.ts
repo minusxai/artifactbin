@@ -33,6 +33,7 @@ import { endPagesSession, exchangePagesTicket, PAGES_COOKIE, pagesSessionOf } fr
 import { runWithRequest } from '@/lib/platform';
 import { idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_SESSION_PATH, pagesOriginFor, type PagesSite } from '@/lib/http/pages-origin';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
+import { compressDynamic } from './content-encoding';
 
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
 const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch'] as const;
@@ -92,7 +93,9 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
     if (request.method !== 'GET' && request.method !== 'HEAD') return notFound();
     await asReader(request, id);
     const ctx = { params: Promise.resolve({ id }) };
-    return runWithRequest(request, () => (request.method === 'HEAD' ? rawHead(request, ctx) : rawGet(request, ctx)));
+    const answer = await runWithRequest(request, () => (request.method === 'HEAD' ? rawHead(request, ctx) : rawGet(request, ctx)));
+    // Brotli for a client that takes it, like the app page (server/content-encoding); identity otherwise.
+    return compressDynamic(request, answer);
   };
 
   /** The apex: the pages session exchange and logout, nothing else. */

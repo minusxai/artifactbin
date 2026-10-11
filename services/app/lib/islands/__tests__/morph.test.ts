@@ -60,7 +60,8 @@ function served({ edit, lede = 'the first version', extra = '', islands = [['s0-
   return `<!doctype html><html class="${mode}"><head><title>${title}</title>`
     + (module ? `<link rel="modulepreload" href="${module}" crossorigin><link rel="modulepreload" href="${bootUrl}" crossorigin>` : '')
     + '<style>:root{--mx-vh:100vh}</style>'
-    + Object.entries(sheets).map(([attr, css]) => `<style ${attr}>${css}</style>`).join('')
+    // `href:<url>` is a shared sheet linked (the document on its own origin), anything else is inline.
+    + Object.entries(sheets).map(([attr, css]) => (css.startsWith('href:') ? `<link rel="stylesheet" href="${css.slice(5)}" ${attr}>` : `<style ${attr}>${css}</style>`)).join('')
     + `</head><body data-mx-live-id="doc1" data-mx-live-edit="${edit}">`
     + `<div id="mx-story-root" data-mx-inline-story="" data-mx-story-root="" class="${mode}"><div class="mx-doc"><div id="${wrapper}" data-mx-ast="0" class="p-10">`
     + `<h1 id="h" data-mx-ast="0.0">Live</h1><p id="lede" data-mx-ast="0.1">${lede}</p>${extra}<section id="s" data-mx-ast="0.2">${islandHtml}</section><p id="tail" data-mx-ast="0.3">tail</p>`
@@ -382,6 +383,56 @@ describe('the live morph', () => {
     expect(document.head.querySelector('style[data-mx-author]')).toBeNull();
     expect(document.head.querySelector('style[data-mx-chrome]'), 'the page\'s chrome sheet is not the version\'s').not.toBeNull();
     expect(document.title).toBe('Renamed');
+  });
+
+  describe('a document whose shared sheets are linked', () => {
+    const linked = (inline: string, over: Record<string, string> = {}) => ({
+      'data-mx-tw-s0': 'href:https://app.test/islands/c/0000000000000001.css', 'data-mx-tw-i0': inline, 'data-mx-tw-s2': 'href:https://app.test/islands/c/0000000000000002.css',
+      'data-mx-base': 'href:https://app.test/islands/c/00000000000000b1.css', 'data-mx-author': '.mine{}', ...over,
+    });
+    const hrefs = () => [...document.head.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.getAttribute('href')!.slice(-8, -4));
+    const names = () => [...document.head.querySelectorAll('style, link[rel="stylesheet"]')].map((e) => e.getAttributeNames().find((n) => n.startsWith('data-mx-'))).filter(Boolean);
+
+    it('leaves the shared links the next version names too, as they are, and brings only the document\'s own rules', async () => {
+      load(served({ edit: 'e1', sheets: linked('.a{}') }));
+      start();
+      const before = [...document.head.querySelectorAll('link[rel="stylesheet"]')];
+      await morph(window, { fetch: answer(served({ edit: 'e2', sheets: linked('.a{}.b{}') })) });
+      expect([...document.head.querySelectorAll('link[rel="stylesheet"]')]).toEqual(before);
+      expect(document.head.querySelector('style[data-mx-tw-i0]')!.textContent).toBe('.a{}.b{}');
+      expect(names()).toEqual(['data-mx-tw-s0', 'data-mx-tw-i0', 'data-mx-tw-s2', 'data-mx-base', 'data-mx-author']);
+    });
+
+    it('swaps a shard for the inline rules that replace it, in the place they stand, and drops the link', async () => {
+      load(served({ edit: 'e1', sheets: linked('.a{}') }));
+      start();
+      const next = { 'data-mx-tw-s0': 'href:https://app.test/islands/c/0000000000000001.css', 'data-mx-tw-i0': '.a{}', 'data-mx-tw-i1': '.shard2-with-mine{}', 'data-mx-base': 'href:https://app.test/islands/c/00000000000000b1.css', 'data-mx-author': '.mine{}' };
+      await morph(window, { fetch: answer(served({ edit: 'e2', sheets: next })) });
+      expect(names()).toEqual(['data-mx-tw-s0', 'data-mx-tw-i0', 'data-mx-tw-i1', 'data-mx-base', 'data-mx-author']);
+      expect(hrefs()).toEqual(['0001', '00b1']);
+    });
+
+    it('takes another base sheet (a changed theme) only once it has loaded, so the page is never left unstyled', async () => {
+      load(served({ edit: 'e1', sheets: linked('.a{}') }));
+      start();
+      const old = document.head.querySelector('link[data-mx-base]')!;
+      await morph(window, { fetch: answer(served({ edit: 'e2', sheets: linked('.a{}', { 'data-mx-base': 'href:https://app.test/islands/c/00000000000000b2.css' }) })) });
+      const next = document.head.querySelector('link[data-mx-base][href$="00b2.css"]')!;
+      expect(next).not.toBeNull();
+      expect(old.isConnected).toBe(true);
+      next.dispatchEvent(new Event('load'));
+      expect(old.isConnected).toBe(false);
+      expect(names().filter((n) => n === 'data-mx-base')).toHaveLength(1);
+      expect(names()).toEqual(['data-mx-tw-s0', 'data-mx-tw-i0', 'data-mx-tw-s2', 'data-mx-base', 'data-mx-author']);
+    });
+
+    it('drops a shared sheet the next version no longer links', async () => {
+      load(served({ edit: 'e1', sheets: linked('.a{}') }));
+      start();
+      const { 'data-mx-tw-s2': _gone, ...rest } = linked('.a{}');
+      await morph(window, { fetch: answer(served({ edit: 'e2', sheets: rest })) });
+      expect(names()).toEqual(['data-mx-tw-s0', 'data-mx-tw-i0', 'data-mx-base', 'data-mx-author']);
+    });
   });
 
   it('keeps focus on a control the new version still has', async () => {

@@ -47,6 +47,8 @@ import { canonicalArtifactPath } from '@/lib/http/urls';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage, type TreelessServedRuntime } from '@/lib/publish/prepared/prepared-page.server';
+import { codeFingerprint } from '@/lib/publish/prepared/revalidation.server';
+import { etagOf, matchingTag, notModified, revalidationHeaders } from '@/lib/http/revalidation';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { firstHeadingTitle, packDocumentGraph } from '@/lib/document';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
@@ -62,6 +64,8 @@ export interface ArtifactPageAnswer {
   frame?: DocumentFrame;
   /** Which renderer answered a document's page (the page's `x-mx-reader` header): the compiled page, in its frame. */
   reader?: { mode: 'compiled' };
+  /** The validator of a node or editor answer (lib/http/revalidation); with status 304 the body is the reader's own copy. */
+  etag?: string;
 }
 
 /** What the app page (never the JSON door) hands the answer. */
@@ -223,10 +227,14 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // `?probe=1`: only the admission above (and the 410 servedRow throws for a retired shape), for an editor that was
     // seeded earlier (solid/editor/ArtifactEditor asks again before it trusts a seed that may have outlived the access).
     if (search.get('probe') === '1') return { status: 200, body: { editId: artifact.edit_id, version: artifact.version } };
+    // Revalidated like the document itself (lib/http/revalidation), after the access decision above: a tag is never an admission.
+    const etag = partEtag('editor', artifact, role, at, search.get('graph'));
+    const held = matchingTag(request.headers.get('if-none-match'), etag);
+    if (held) return { status: 304, body: null, etag: held };
     const source = row.source ?? '';
     const stored = artifact.document?.kind === 'graph' ? artifact.document : null;
     const packed = stored && search.get('graph') !== 'full' ? packDocumentGraph(stored, source) : null;
-    return { status: 200, body: {
+    return { status: 200, etag, body: {
       editId: artifact.edit_id, version: artifact.version, source,
       ...(packed ? { graph: packed } : stored ? { document: stored } : {}),
     } };
@@ -240,8 +248,11 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    */
   if (search.get('part') === 'nodes') {
     if (!isDoc || exporting) return notFound();
+    const etag = partEtag('nodes', artifact, role, at, null);
+    const held = matchingTag(request.headers.get('if-none-match'), etag);
+    if (held) return { status: 304, body: null, etag: held };
     const { row, page } = await preparedPageFor(artifact, at, { nodes: true });
-    return { status: 200, body: { editId: artifact.edit_id, version: row.version, nodes: page.data.nodes } };
+    return { status: 200, etag, body: { editId: artifact.edit_id, version: row.version, nodes: page.data.nodes } };
   }
 
   // Everything below reads THIS row: the artifact wearing that version's bytes
@@ -442,5 +453,14 @@ async function membershipOf(viewer: Awaited<ReturnType<typeof sessionActor>>, id
  */
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);
-  return answer.status === 200 ? json(answer.body, 200, { 'Cache-Control': 'no-store' }) : json(answer.body, answer.status);
+  if (answer.status === 304 && answer.etag) return notModified(answer.etag);
+  return answer.status === 200 ? json(answer.body, 200, answer.etag ? revalidationHeaders(answer.etag) : { 'Cache-Control': 'no-store' }) : json(answer.body, answer.status);
+}
+
+/**
+ * The validator of a node or editor answer: what determines the bytes is the version and edit it reads, the role that was
+ * admitted to it, and the code that prepares a page (a deploy that changes how nodes are made changes the tag).
+ */
+function partEtag(part: 'nodes' | 'editor', artifact: ArtifactRow, role: string, at: { version: number } | null, graph: string | null): string {
+  return etagOf({ part, id: artifact.id, version: artifact.version, edit: artifact.edit_id, updated: artifact.updated_at, stored: artifact.document?.kind ?? null, graph, role, at: at?.version ?? null, code: codeFingerprint() });
 }

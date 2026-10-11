@@ -20,6 +20,7 @@
  * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
+import { STYLESHEET_PATH } from './shared-paths';
 import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from '@/lib/story-ui/document-sources';
 import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/document';
 
@@ -69,8 +70,10 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     // Never a declared host (`extensions.connect`): a script reaches those through its own `/fetch`
     // door (app/a/[id]/fetch), so the reader's address never leaves for them.
     join('connect-src', "'self'", appDoors, MODULE_CDNS, asset, 'blob: data:'),
-    join('style-src', "'self'", "'unsafe-inline'", FONT_STYLES, ext.style),
-    join('font-src', "'self'", 'data:', FONT_FILES, asset, ext.style),
+    // The shared document sheets (lib/page-styles/linked-sheets.server) are the app's own, content-addressed under
+    // /islands/c/ — one URL for every document, so one cache entry — and the faces they declare are its /fonts.
+    join('style-src', "'self'", "'unsafe-inline'", `${appOrigin}${STYLESHEET_PATH}/`, FONT_STYLES, ext.style),
+    join('font-src', "'self'", 'data:', `${appOrigin}/fonts/`, FONT_FILES, asset, ext.style),
     join('img-src', "'self'", 'https:', 'data:', 'blob:', `${appOrigin}/api/users/`, asset, ext.img),
     join('media-src', "'self'", 'https:', 'blob:', asset, ext.media),
     // An author `<iframe>` (lib/jsx/validate): the default players, then the hosts the document declares.
