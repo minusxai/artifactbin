@@ -104,7 +104,7 @@ it('keeps the welcome form when the handle is refused', async () => {
   render(() => <App />);
   await waitFor(() => expect((screen.getByRole('textbox', { name: 'Username' }) as HTMLInputElement).value).toBe('initial'));
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-  expect(await screen.findByRole('status')).toHaveTextContent('that handle is taken');
+  expect(await screen.findByRole('alert')).toHaveTextContent('that handle is taken');
   expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
 });
 

@@ -24,6 +24,12 @@ import type { TableResult } from '@/lib/dataflow';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { formatCount } from '../../lib/format';
+import { Button } from '@/solid/ui/Button';
+import { Textarea } from '@/solid/ui/Field';
+import { Panel } from '@/solid/ui/Panel';
+import { StatusMessage } from '@/solid/ui/StatusMessage';
+import { Tooltip } from '@/solid/ui/Tooltip';
+import { Badge, LINK, MicroLabel } from '@/solid/ui/ui';
 
 interface QueryNotebookPanelProps {
   cells: QueryCell[];
@@ -57,12 +63,13 @@ function SqlField(props: { name: string; sql: string; onCommit: (sql: string) =>
     props.onCommit(draft());
   };
   return (
-    <textarea
+    <Textarea
+      size="sm"
       aria-label={`Query $${props.name} SQL`}
       spellcheck={false}
       wrap="off"
       rows={Math.min(12, Math.max(3, props.sql.split('\n').length + 1))}
-      class="w-full resize-y overflow-auto border-0 bg-surface px-3 py-2 font-mono text-[11px] leading-[1.5] text-fg focus:outline-none"
+      class="resize-y overflow-auto"
       value={draft()}
       onInput={(e) => setDraft(e.currentTarget.value)}
       onFocus={props.onFocus}
@@ -95,18 +102,20 @@ function Powers(props: { bound: BoundEmbed[]; onSpotlight: (paths: string[] | nu
       aria-label={`Spotlight ${text}`}
       onMouseEnter={() => props.onSpotlight(paths)}
       onMouseLeave={() => props.onSpotlight(null)}
-      class="inline-flex cursor-default items-baseline gap-1 rounded-[4px] border border-edge bg-raised px-1.5 py-0.5 text-fg hover:border-edge-bright"
+      class="inline-flex cursor-default"
     >
-      <span>{text}</span>
-      <Show when={sub}>{(s) => <span class="text-faint">{s()}</span>}</Show>
+      <Badge>
+        <span>{text}</span>
+        <Show when={sub}>{(s) => <span class="ml-1 text-faint">{s()}</span>}</Show>
+      </Badge>
     </span>
   );
   return (
     <Show
       when={props.bound.length > 0}
-      fallback={<span class="font-mono text-[11px] text-faint">powers nothing yet</span>}
+      fallback={<span class="font-mono text-2xs text-faint">powers nothing yet</span>}
     >
-      <div class="flex flex-wrap items-center gap-1 font-mono text-[11px]">
+      <div class="flex flex-wrap items-center gap-1 font-mono text-2xs">
         <span class="text-faint">powers</span>
         <For each={titled()}>{(b) => chip(b.label!, kindOf(b.tag), [b.path])}</For>
         <For each={byKind()}>{([kind, paths]) => chip(paths.length === 1 ? kind : `${paths.length} ${kind}s`, null, paths)}</For>
@@ -125,7 +134,7 @@ function ResultTable(props: { name: string; result: TableResult }): JSX.Element 
   return (
     <div aria-label={`Query $${props.name} result`} class="flex flex-col">
       <div class="max-h-64 overflow-auto">
-        <table class="w-full border-collapse font-mono text-[11px] leading-[1.4]">
+        <table class="w-full border-collapse font-mono text-2xs leading-[1.4]">
           <thead class="sticky top-0 bg-raised">
             <tr>
               <For each={props.result.columns}>
@@ -153,7 +162,7 @@ function ResultTable(props: { name: string; result: TableResult }): JSX.Element 
           </tbody>
         </table>
       </div>
-      <span class="px-3 py-1.5 font-mono text-[11px] text-faint">{count()}</span>
+      <span class="px-3 py-1.5 font-mono text-2xs text-faint">{count()}</span>
     </div>
   );
 }
@@ -179,50 +188,54 @@ function Cell(props: {
    * output at a glance rather than by reading.
    */
   return (
-    <section
-      ref={(el) => { section = el; }}
-      aria-label={`Query $${props.cell.name}`}
+    <Panel
+      label={`Query $${props.cell.name}`}
+      padding="none"
       /*
        * The header wears the accent because a query IS one of the named, live
        * things the accent marks everywhere else — the active view, the current
        * version. Which cell is CURRENT then needs a different signal, or every
        * header saying "current" says nothing: that is the left stripe.
        */
-      class={`my-3 overflow-hidden rounded-[6px] border bg-surface ${props.selected ? 'border-accent border-l-[3px]' : 'border-edge'}`}
+      class={`my-3 overflow-hidden ${props.selected ? 'border-l-[3px] border-l-accent ring-1 ring-accent/40' : ''}`}
     >
-      <header class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-accent/20 bg-accent-soft px-3 py-1.5">
-        <span class="font-mono text-xs font-medium text-accent">${props.cell.name}</span>
-        <Powers bound={props.cell.bound} onSpotlight={point} />
-      </header>
+      <div ref={(el) => { section = el; }}>
+        <header class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-accent/20 bg-accent-soft px-3 py-1.5">
+          <span class="font-mono text-xs font-medium text-accent">${props.cell.name}</span>
+          <Powers bound={props.cell.bound} onSpotlight={point} />
+        </header>
 
-      <SqlField
-        name={props.cell.name}
-        sql={props.cell.sql}
-        onCommit={(sql) => props.onSqlChange(props.cell.name, sql)}
-        onFocus={() => { setFocused(true); props.onSpotlight?.(all()); }}
-        onBlur={() => { setFocused(false); props.onSpotlight?.([]); }}
-      />
+        <div class="p-2">
+          <SqlField
+            name={props.cell.name}
+            sql={props.cell.sql}
+            onCommit={(sql) => props.onSqlChange(props.cell.name, sql)}
+            onFocus={() => { setFocused(true); props.onSpotlight?.(all()); }}
+            onBlur={() => { setFocused(false); props.onSpotlight?.([]); }}
+          />
+        </div>
 
-      <div class="border-t border-edge">
-        <Show
-          when={props.cell.error}
-          fallback={
-            <Show
-              when={props.cell.result}
-              fallback={<span class="block px-3 py-2 font-mono text-[11px] text-muted">{props.cell.pending ? 'running…' : 'not run yet'}</span>}
-            >
-              {(result) => <ResultTable name={props.cell.name} result={result()} />}
-            </Show>
-          }
-        >
-          {(error) => (
-            <p aria-label={`Query $${props.cell.name} error`} class="m-3 rounded-[4px] border border-red-300 bg-red-50 px-2 py-1 font-mono text-[11px] text-red-800">
-              {error()}
-            </p>
-          )}
-        </Show>
+        <div class="border-t border-edge">
+          <Show
+            when={props.cell.error}
+            fallback={
+              <Show
+                when={props.cell.result}
+                fallback={<StatusMessage kind={props.cell.pending ? 'loading' : 'empty'} class="px-3 py-2">{props.cell.pending ? 'running…' : 'not run yet'}</StatusMessage>}
+              >
+                {(result) => <ResultTable name={props.cell.name} result={result()} />}
+              </Show>
+            }
+          >
+            {(error) => (
+              <div aria-label={`Query $${props.cell.name} error`} class="m-3">
+                <StatusMessage kind="error" class="font-mono">{error()}</StatusMessage>
+              </div>
+            )}
+          </Show>
+        </div>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -328,32 +341,35 @@ export default function QueryNotebookPanel(props: QueryNotebookPanelProps): JSX.
         <For each={groups()}>
           {(group) => (
             <div class="mb-5">
-              <p class="font-mono text-[11px] uppercase tracking-wide text-faint">
-                {group.key === LOCAL ? 'derived' : `dataset · ${titles()[group.key] ?? group.key}`}
+              <p>
+                <MicroLabel>{group.key === LOCAL ? 'derived' : `dataset · ${titles()[group.key] ?? group.key}`}</MicroLabel>
               </p>
               {/* A bare group of names does not say what KIND of query is in it;
                   one line does, and it is the difference between a round trip to
                   the server and a run over rows already in the page. */}
-              <p class="mb-1.5 font-sans text-[10px] leading-snug text-faint">
+              <p class="mb-1.5 font-sans text-micro leading-snug text-faint">
                 {group.key === LOCAL ? 'runs in the page over other queries' : 'runs on the server'}
               </p>
-              <div class="flex items-baseline justify-between gap-2 border-b border-edge px-1.5 pb-0.5 font-mono text-[10px] uppercase tracking-wide text-faint">
-                <span>query</span>
-                <span>rows</span>
+              <div class="flex items-baseline justify-between gap-2 border-b border-edge px-1.5 pb-0.5">
+                <MicroLabel>query</MicroLabel>
+                <MicroLabel>rows</MicroLabel>
               </div>
               <For each={group.cells}>
                 {(cell) => (
-                  <button
-                    type="button"
-                    onClick={() => { setPicked(cell.name); jump(cell.name); }}
-                    title={`Go to ${cell.name} — ${countOf(cell)} rows`}
-                    class={`flex w-full cursor-pointer items-baseline justify-between gap-2 rounded-[3px] px-1.5 py-0.5 text-left font-mono text-[11px] ${
-                      (picked() ?? props.focus) === cell.name ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-                    }`}
-                  >
-                    <span class="truncate">{cell.name}</span>
-                    <span class="shrink-0 tabular-nums text-faint">{countOf(cell)}</span>
-                  </button>
+                  <Tooltip content={`Go to ${cell.name} — ${countOf(cell)} rows`}>
+                    <Button
+                      variant={(picked() ?? props.focus) === cell.name ? 'secondary' : 'ghost'}
+                      size="sm"
+                      aria-current={(picked() ?? props.focus) === cell.name ? 'true' : undefined}
+                      onClick={() => { setPicked(cell.name); jump(cell.name); }}
+                      class="w-full"
+                    >
+                      <span class="flex w-full min-w-0 items-baseline justify-between gap-2">
+                        <span class="truncate">{cell.name}</span>
+                        <span class="shrink-0 tabular-nums text-faint">{countOf(cell)}</span>
+                      </span>
+                    </Button>
+                  </Tooltip>
                 )}
               </For>
             </div>
@@ -364,10 +380,10 @@ export default function QueryNotebookPanel(props: QueryNotebookPanelProps): JSX.
       <div class="min-w-0 flex-1">
         <Show when={datasets().length > 0}>
           <section aria-label="Datasets" class="mb-6">
-            <h2 class="mb-2 font-mono text-[11px] uppercase tracking-wide text-faint">datasets</h2>
-            <div class="overflow-x-auto rounded-[4px] border border-edge">
+            <h2 class="mb-2"><MicroLabel>datasets</MicroLabel></h2>
+            <Panel padding="none" class="overflow-x-auto">
               <table aria-label="Datasets" class="w-full border-collapse text-left font-mono text-xs">
-                <thead class="bg-raised text-[11px] text-muted">
+                <thead class="bg-raised text-2xs text-muted">
                   <tr>
                     <For each={['Dataset', 'Rows', 'Columns', 'Used by']}>
                       {(label) => <th scope="col" class="border-b border-edge px-3 py-2 font-medium">{label}</th>}
@@ -381,8 +397,8 @@ export default function QueryNotebookPanel(props: QueryNotebookPanelProps): JSX.
                       return (
                         <tr class="border-b border-edge align-top last:border-b-0">
                           <th scope="row" class="px-3 py-3 text-left font-normal">
-                            <a href={`/a/${group.key}`} target="_blank" rel="noreferrer" class="text-accent underline-offset-2 hover:underline">{titles()[group.key] ?? group.key}</a>
-                            <Show when={titles()[group.key]}><p class="mt-1 text-[10px] text-faint">{group.key}</p></Show>
+                            <a href={`/a/${group.key}`} target="_blank" rel="noreferrer" class={LINK}>{titles()[group.key] ?? group.key}</a>
+                            <Show when={titles()[group.key]}><p class="mt-1 text-micro text-faint">{group.key}</p></Show>
                           </th>
                           <td class="whitespace-nowrap px-3 py-3 tabular-nums text-muted">
                             {shape()?.rows !== null && shape()?.rows !== undefined ? formatCount(shape()!.rows!) : '—'}
@@ -395,12 +411,12 @@ export default function QueryNotebookPanel(props: QueryNotebookPanelProps): JSX.
                   </For>
                 </tbody>
               </table>
-            </div>
+            </Panel>
           </section>
         </Show>
 
         <section aria-label="Queries">
-          <h2 class="mb-2 font-mono text-[11px] uppercase tracking-wide text-faint">queries</h2>
+          <h2 class="mb-2"><MicroLabel>queries</MicroLabel></h2>
           <div class="flex flex-col">
             <For each={props.cells}>
               {(cell) => (
@@ -415,7 +431,7 @@ export default function QueryNotebookPanel(props: QueryNotebookPanelProps): JSX.
                 </div>
               )}
             </For>
-            <p class="pt-3 font-sans text-[11px] text-faint">Edits apply when you leave a cell or press ⌘⏎; the document re-runs and charts bound to the query redraw.</p>
+            <p class="pt-3 font-sans text-2xs text-faint">Edits apply when you leave a cell or press ⌘⏎; the document re-runs and charts bound to the query redraw.</p>
           </div>
         </section>
       </div>

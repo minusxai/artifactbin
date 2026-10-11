@@ -54,3 +54,43 @@ it('preserves group destination in folder creation and asset editor links', asyn
  fireEvent.click(screen.getByRole('button',{name:'create folder'}));
  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/my/artifacts',expect.objectContaining({body:JSON.stringify({format:'folder',title:'Reports',parent_id:null,destination:{type:'group',id:'g1'}})})));
 });
+
+it('names the folder dialog, keeps the form closed on Escape without a request, and reopens it empty', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'folder3' })));
+  render(() => <WorkspaceCreate onCreated={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Folder' }));
+  const dialog = screen.getByRole('dialog', { name: 'Create new folder' });
+  expect(within(dialog).getByRole('textbox', { name: 'Folder name' })).toHaveFocus();
+  expect(within(dialog).getByRole('button', { name: 'create folder' })).toBeDisabled();
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'Create new folder' })).not.toBeInTheDocument();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('creates a folder from the dialog form and closes it, calling onCreated once', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'folder4' })));
+  const onCreated = vi.fn();
+  render(() => <WorkspaceCreate parentId="p1" onCreated={onCreated} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Folder' }));
+  const dialog = screen.getByRole('dialog', { name: 'Create new folder' });
+  fireEvent.input(within(dialog).getByRole('textbox', { name: 'Folder name' }), { target: { value: ' Plans ' } });
+  fireEvent.submit(within(dialog).getByRole('textbox', { name: 'Folder name' }).closest('form')!);
+  await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
+  expect(JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string)).toEqual({ format: 'folder', title: 'Plans', parent_id: 'p1' });
+  expect(screen.queryByRole('dialog', { name: 'Create new folder' })).not.toBeInTheDocument();
+});
+
+it('shows a failed folder creation inside the dialog and keeps the name for another try', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'nope' }, { status: 500 })));
+  render(() => <WorkspaceCreate onCreated={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Folder' }));
+  const dialog = screen.getByRole('dialog', { name: 'Create new folder' });
+  fireEvent.input(within(dialog).getByRole('textbox', { name: 'Folder name' }), { target: { value: 'Plans' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'create folder' }));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not create the folder');
+  expect(within(dialog).getByRole('textbox', { name: 'Folder name' })).toHaveValue('Plans');
+  expect(within(dialog).getByRole('button', { name: 'create folder' })).toBeEnabled();
+});

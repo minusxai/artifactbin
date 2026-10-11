@@ -74,6 +74,11 @@ export function editor(edit = false) {
 
 export const change = (label: string, value: string) => fireEvent.input(screen.getByLabelText(label), { target: { value } });
 export const click = (label: string) => fireEvent.click(screen.getByLabelText(label));
+/** Drive a ui/Select: open the trigger named `label`, then choose the option named `option`. */
+export function pick(label: string, option: string) {
+  fireEvent.click(screen.getByLabelText(label));
+  fireEvent.click(screen.getByRole('option', { name: option }));
+}
 
 export async function discover() {
   click('PostgreSQL');
@@ -83,7 +88,7 @@ export async function discover() {
 }
 
 export async function selectOrders() {
-  await discover(); click('Toggle table sales.orders'); click('Expose column sales.orders.id'); change('Default schema', 'sales');
+  await discover(); click('Toggle table sales.orders'); click('Expose column sales.orders.id'); pick('Default schema', 'sales');
 }
 
 export async function addCell(name: string, sql: string, index = 1) {

@@ -8,7 +8,7 @@ import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
 import { getDb } from '@/lib/platform/db';
 import { effectiveRole } from '../access';
 import { type ArtifactRow } from '../table';
-import { getArtifactById } from '../rows';
+import { getArtifactById, getArtifactHeaderById } from '../rows';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 import { can } from '../capabilities';
 
@@ -32,10 +32,23 @@ async function account(actor: RoleActor, artifact: ArtifactRow) {
 }
 const memberFields = 'm.user_id,u.username,u.name,m.status,m.direction,m.initiated_by,m.joined_at,m.explicit_join';
 export async function membershipState(actor: RoleActor, id: string): Promise<MembershipState> {
-  const {role,artifact}=await opened(actor,id), db=await getDb();
+  // The decision is made from the header; the document is read only if it could name a person (mentionStatesFor).
+  const header = await getArtifactHeaderById(id);
+  const role = header ? await effectiveRole(header,actor) : 'none';
+  if (!header || !canRead(role)) return fail('Artifact not found',404);
+  const db=await getDb();
   const rows=(await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND (m.status='accepted' OR m.user_id=$2 OR ($3 AND m.status='pending')) ORDER BY m.joined_at NULLS LAST,u.username`,[id,actor.userId,canEdit(role)])).rows;
-  const mentions=await savedMentionStates(artifact);
+  const mentions=await mentionStatesFor(id);
   return {mentions,members:rows.filter(m=>m.status==='accepted'),pending:rows.filter(m=>m.status==='pending'),self:rows.find(m=>m.user_id===actor.userId)??null,canManage:canEdit(role),canInvite:!!actor.userId&&canAnnotate(role)};
+}
+/**
+ * The viewer's own membership row on a document the caller has ALREADY admitted them to (the page's Join/Joined/Pending
+ * pill): the one row, not the member list, the mentions or a second admission. Null without an account or a row.
+ */
+export async function selfMembership(actor: RoleActor, id: string): Promise<ArtifactMember | null> {
+  if (!actor.userId) return null;
+  const db=await getDb();
+  return (await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND m.user_id=$2`,[id,actor.userId])).rows[0]??null;
 }
 async function blocked(tx: Queryable, a: string, b: string): Promise<boolean> {
   return !!(await tx.query('SELECT 1 FROM user_blocks WHERE (user_id=$1 AND blocked_user_id=$2) OR (user_id=$2 AND blocked_user_id=$1)',[a,b])).rows.length;
@@ -169,9 +182,23 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
 
 /** Caller must establish read access to this artifact before exposing these public tag states. */
 export async function savedMentionStates(artifact:ArtifactRow){
+ return mentionStatesOf(artifact.id,artifact.source??'');
+}
+/**
+ * {@link savedMentionStates} for a caller that holds the artifact's header and no document. The document is read only
+ * when its stored text mentions "people" at all — a superset of the `/people/<id>` the mention scan looks for, decided
+ * by the database over the stored value — so a page that names no one (nearly all of them) never ships its document
+ * for this. Same answer either way: a document that passes the check is read whole and scanned as ever.
+ */
+async function mentionStatesFor(id:string){
  const db=await getDb();
-  const savedText=[artifact.source??'',...(await db.query<{body:string}>('SELECT body FROM annotations WHERE artifact_id=$1 AND deleted_at IS NULL',[artifact.id])).rows.map(r=>r.body)].join('\n');
+ const named=(await db.query<{named:boolean}>("SELECT strpos(coalesce(document::text,'')||coalesce(source,''),'people')>0 AS named FROM artifacts WHERE id=$1 AND deleted_at IS NULL",[id])).rows[0]?.named===true;
+ return mentionStatesOf(id,named?(await getArtifactById(id))?.source??'':'');
+}
+async function mentionStatesOf(id:string,source:string){
+ const db=await getDb();
+  const savedText=[source,...(await db.query<{body:string}>('SELECT body FROM annotations WHERE artifact_id=$1 AND deleted_at IS NULL',[id])).rows.map(r=>r.body)].join('\n');
   const mentioned=[...savedText.matchAll(/\/people\/([A-Za-z0-9_-]{1,128})/g)].map(m=>m[1]);
-  const mentions=Object.fromEntries((await db.query<{user_id:string;status:MembershipStatus}>(`SELECT user_id,status FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=ANY($2::text[])`,[artifact.id,mentioned])).rows.map(m=>[m.user_id,m.status]));
+  const mentions=Object.fromEntries((await db.query<{user_id:string;status:MembershipStatus}>(`SELECT user_id,status FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=ANY($2::text[])`,[id,mentioned])).rows.map(m=>[m.user_id,m.status]));
  return mentions;
 }

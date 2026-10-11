@@ -5,10 +5,24 @@
  */
 import type { TokenActor } from '@/lib/accounts';
 import { getDb } from '../platform/db';
-import { loadArtifactDocument } from './document';
+import { artifactQuery, loadArtifactDocument } from './document';
 import { grantsOf, grantsPermitRead } from './dataset-policy/grants';
 import { servableDocument } from './servable';
 import { LIVE_ARTIFACT_SQL, editorScope, ownerScope, type ArtifactRow, type Scope } from './table';
+
+/** A row without its content: every column but the two that carry it, `document` and `source`. */
+export type ArtifactHeader = Omit<ArtifactRow, 'document' | 'source'>;
+/**
+ * The header's columns, spelled out because Postgres cannot say "all but". A column added to `artifacts` must be named
+ * here, or a decision read from a header could consult a column it never loaded: the schema test
+ * (__tests__/artifact-header.test.ts) fails on any drift.
+ */
+export const ARTIFACT_HEADER_COLUMNS = [
+  'id', 'token_id', 'user_id', 'group_id', 'creator_user_id', 'visibility', 'dataset_policy', 'sharing_revision', 'policy_revision',
+  'link_role', 'access', 'ancestor_ids', 'title', 'description', 'format', 'document_archived_at', 'meta', 'version', 'edit_id',
+  'actor_user_id', 'actor_token_id', 'created_at', 'updated_at', 'forked_from', 'deleted_at',
+] as const;
+const HEADER_SELECT = ARTIFACT_HEADER_COLUMNS.join(', ');
 
 export async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
@@ -23,6 +37,48 @@ export async function getArtifact(tokenId: string, id: string): Promise<Artifact
 export async function getArtifactById(id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
   return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id]);
+}
+
+/**
+ * The row's header — everything an access or role decision reads, and not the document: a JSONB value that is
+ * megabytes for a large page, which the database would otherwise ship and the server decode just to be told no
+ * (or to decide a role). Same trash gate and same row as {@link getArtifactById}.
+ */
+export async function getArtifactHeaderById(id: string): Promise<ArtifactHeader | null> {
+  const db = await getDb();
+  return (await db.query<ArtifactHeader>(`SELECT ${HEADER_SELECT} FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0] ?? null;
+}
+
+/**
+ * Does the actor's reach (the same editor scope as {@link getArtifactFor}) include this row, and is it shared with
+ * anyone? One EXISTS instead of loading the row and its share list to test `shares.length > 0`.
+ */
+export async function hasInvitedUsersFor(actor: TokenActor, id: string): Promise<boolean> {
+  const db = await getDb();
+  const scope = editorScope(actor);
+  const found = await db.query<{ shared: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM artifact_shares s WHERE s.artifact_id = artifacts.id) AS shared FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`,
+    [id, scope.val],
+  );
+  return found.rows[0]?.shared === true;
+}
+
+/** The actor's reach over several rows at once ({@link getArtifactFor}'s scope, `id = ANY`): the ones they own or may edit, without share lists. */
+export async function getArtifactsFor(actor: TokenActor, ids: readonly string[]): Promise<ArtifactRow[]> {
+  if (!ids.length) return [];
+  const db = await getDb();
+  const scope = editorScope(actor);
+  return (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = ANY($1::text[]) AND ${scope.where('$2')}`, [[...ids], scope.val])).rows;
+}
+
+/** {@link getLinkReadableArtifact} for several ids in one read: the rows any caller may use, in the order the database returns them. */
+export async function getLinkReadableArtifacts(ids: readonly string[]): Promise<ArtifactRow[]> {
+  if (!ids.length) return [];
+  const db = await getDb();
+  const rows = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`, [[...ids]])).rows;
+  const readable: ArtifactRow[] = [];
+  for (const row of rows) if (grantsOf(row) ? await grantsPermitRead(row, { userId: null, tokenId: null }) : row.visibility !== 'private') readable.push(row);
+  return readable;
 }
 
 const SHARES_PROJECTION="COALESCE((SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=artifacts.id),'[]'::jsonb) AS shares";

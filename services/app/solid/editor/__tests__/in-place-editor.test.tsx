@@ -271,3 +271,21 @@ it('keeps recovery modal until explicit restore and copies the rejected draft wi
   expect(view.queryByRole('alertdialog', { name: 'Recover uncommitted text' })).toBeNull();
   expect(drafts(sent).at(-1)).toBe('<p id="a">Current document</p>');
 });
+
+it('saves the color mode picked in the panel, and confirms before discarding an unsaved draft', async () => {
+  const backend = fakeBackend({}, { commitEdit: vi.fn(async () => ({ ok: false as const, status: 404, body: { error: 'not_found' } as never })) });
+  const { view } = mountEditor(SOURCE, backend);
+  fireEvent.click(view.getByRole('button', { name: 'Color mode' }));
+  fireEvent.click(screen.getByRole('option', { name: 'dark' }));
+  expect(queued.at(-1)).toEqual({ colorMode: 'dark' });
+
+  await vi.waitFor(() => expect(view.getByRole('button', { name: 'Use server version' })).toBeInTheDocument());
+  fireEvent.click(view.getByRole('button', { name: 'Use server version' }));
+  const dialog = screen.getByRole('dialog', { name: 'Discard unsaved draft' });
+  expect(dialog).toHaveTextContent('Copy your draft first');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
+  expect(screen.queryByRole('dialog', { name: 'Discard unsaved draft' })).toBeNull();
+  fireEvent.click(view.getByRole('button', { name: 'Use server version' }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Discard unsaved draft' })).getByRole('button', { name: 'Discard draft and load server' }));
+  expect(screen.queryByRole('dialog', { name: 'Discard unsaved draft' })).toBeNull();
+});

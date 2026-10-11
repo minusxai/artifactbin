@@ -65,7 +65,11 @@ describe('the document page and its page data', () => {
     for (const accept of ['gzip', 'br;q=0, gzip', 'identity']) {
       const res = await app.request(doc.canonical, { headers: { ...stranger, 'accept-encoding': accept } });
       expect(res.headers.get('content-encoding'), accept).toBeNull();
-      expect((await res.text()), accept).toContain('public words');
+      expect((await res.text()), accept).toContain(doc.id);
+      // The document's words are the nodes door's now (the page's data no longer carries the tree), and it is identity for these clients too.
+      const nodes = await app.request(`/api/page/artifact/${doc.id}?part=nodes`, { headers: { ...stranger, 'accept-encoding': accept } });
+      expect(nodes.headers.get('content-encoding'), accept).toBeNull();
+      expect(await nodes.text(), accept).toContain('public words');
     }
   });
   it('answer HEAD without a body and compress the discovery-bearing HTML shell', async () => {

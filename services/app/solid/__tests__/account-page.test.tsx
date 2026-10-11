@@ -5,6 +5,12 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 import { CustomDomainCard } from '@/solid/account/CustomDomainCard';
 
+/** Drives the house Select: open its trigger, pick the option. */
+async function choose(name: string, option: string, trigger?: HTMLElement) {
+  fireEvent.click(trigger ?? screen.getByRole('button', { name }));
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(option.replace(/[()]/g, '\\$&')) }));
+}
+
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
 it('creates, edits and removes a custom path while preserving homepage settings', async () => {
@@ -22,17 +28,18 @@ it('creates, edits and removes a custom path while preserving homepage settings'
   render(() => <CustomDomainCard />);
   fireEvent.click(await screen.findByRole('button', { name: 'Add custom path' }));
   fireEvent.input(screen.getByRole('textbox', { name: 'Custom path' }), { target: { value: '/about' } });
-  fireEvent.change(screen.getByRole('combobox', { name: 'Path document' }), { target: { value: 'doc_1' } });
+  await choose('Path document', 'About us');
   fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
   expect(await screen.findByRole('link', { name: '/about' })).toHaveAttribute('href', 'https://blog.example.com/about');
   expect(saves).toEqual([{ path: '/about', artifactId: 'doc_1' }]);
-  expect(screen.getByRole('combobox', { name: 'Domain homepage' })).toHaveValue('doc_2');
+  await waitFor(() => expect(screen.queryByRole('form', { name: 'Custom path editor' })).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: 'Domain homepage' })).toHaveTextContent('Our story');
   fireEvent.click(screen.getByRole('button', { name: 'Edit path /about' }));
-  expect(screen.getByRole('combobox', { name: 'Path document' })).toHaveValue('doc_1');
-  fireEvent.change(screen.getByRole('combobox', { name: 'Path document' }), { target: { value: 'doc_2' } });
+  expect(screen.getByRole('button', { name: 'Path document' })).toHaveTextContent('About us');
+  await choose('Path document', 'Our story');
   fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
   await waitFor(() => expect(saves).toHaveLength(2));
-  await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Path document' })).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Path document' })).not.toBeInTheDocument());
   fireEvent.click(screen.getByRole('button', { name: 'Remove path /about' }));
   await waitFor(() => expect(saves).toEqual([{ path: '/about', artifactId: 'doc_1' }, { path: '/about', artifactId: 'doc_2' }, { path: '/about', artifactId: null }]));
   await waitFor(() => expect(screen.queryByRole('link', { name: '/about' })).not.toBeInTheDocument());
@@ -46,7 +53,7 @@ it('keeps a failed path edit available to correct and reports the refusal', asyn
   render(() => <CustomDomainCard />);
   fireEvent.click(await screen.findByRole('button', { name: 'Add custom path' }));
   fireEvent.input(screen.getByRole('textbox', { name: 'Custom path' }), { target: { value: '/api/test' } });
-  fireEvent.change(screen.getByRole('combobox', { name: 'Path document' }), { target: { value: 'doc_1' } });
+  await choose('Path document', 'About us');
   fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Choose a path');
   expect(screen.getByRole('textbox', { name: 'Custom path' })).toHaveValue('/api/test');
@@ -174,14 +181,13 @@ it('saves a custom-domain homepage and can restore the document listing', async 
   }));
   window.history.replaceState(null, '', '/account');
   render(() => <App />);
-  const select = await screen.findByRole('combobox', { name: 'Domain homepage' });
-  fireEvent.change(select, { target: { value: 'doc_1' } });
+  await choose('Domain homepage', 'My homepage', await screen.findByRole('button', { name: 'Domain homepage' }));
   fireEvent.click(screen.getByRole('button', { name: 'Save homepage' }));
   await waitFor(() => expect(saves).toEqual([{ homepageArtifactId: 'doc_1' }]));
   expect(await screen.findByText('Homepage saved.')).toBeInTheDocument();
-  expect(screen.getByRole('combobox', { name: 'Domain homepage' })).toHaveValue('doc_1');
+  expect(screen.getByRole('button', { name: 'Domain homepage' })).toHaveTextContent('My homepage');
   expect(screen.getByRole('button', { name: 'Save homepage' })).toBeDisabled();
-  fireEvent.change(screen.getByRole('combobox', { name: 'Domain homepage' }), { target: { value: '' } });
+  await choose('Domain homepage', 'Document listing (default)');
   fireEvent.click(screen.getByRole('button', { name: 'Save homepage' }));
   await waitFor(() => expect(saves).toEqual([{ homepageArtifactId: 'doc_1' }, { homepageArtifactId: null }]));
 });

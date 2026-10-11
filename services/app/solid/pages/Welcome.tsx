@@ -7,7 +7,11 @@ import { AvatarCircle } from '../ui/AvatarCircle';
 import { replaceDocument } from '../lib/document-navigation';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
-import { FormPage, FORM_INPUT, FORM_PRIMARY_BUTTON } from '../ui/FormControls';
+import { FormPage } from '../ui/FormControls';
+import { Button } from '../ui/Button';
+import { Field, Input } from '../ui/Field';
+import { PageHeader } from '../ui/PageHeader';
+import { StatusMessage } from '../ui/StatusMessage';
 
 const HANDLE_REFUSALS: Record<string, string> = {
   username_taken: 'that handle is taken — pick another',
@@ -43,14 +47,14 @@ export function WelcomePage(): JSX.Element {
   return <Show when={leaving() || !session() || !!session()?.user} fallback={<Navigate href={`/login?callbackUrl=${encodeURIComponent(`/welcome${search.toString() ? `?${search}` : ''}`)}`} />}>
     <Show when={leaving() || !session()?.onboarded} fallback={<Navigate href="/account" />}>
       <FormPage narrow>
-        <h1 class="text-3xl font-semibold tracking-tight text-fg">Welcome to artifactbin</h1>
-        <p class="mt-3 text-sm leading-relaxed text-muted">Choose a handle for your profile and the documents you share.</p>
+        <PageHeader title="Welcome to artifactbin" description="Choose a handle for your profile and the documents you share." />
         <div class="mt-6"><AvatarCircle image={image()} initial={username() || 'a'} userId={session()?.user?.id ?? ''} onChange={setImage} /></div>
         <form class="mt-6" onSubmit={event => { event.preventDefault(); void confirm(); }}>
-          <label for="welcome-username" class="text-sm font-medium text-fg">Handle</label>
-          <div class="mt-2 flex items-center gap-2"><span class="w-4 text-center font-mono text-sm text-muted">@</span><input id="welcome-username" aria-label="Username" autocomplete="off" spellcheck={false} value={username()} onInput={event => setUsername(event.currentTarget.value)} class={`${FORM_INPUT} min-w-0 flex-1`} /></div>
-          <Show when={status()}><p role="status" class="mt-2 ml-6 text-sm text-danger">{status()}</p></Show>
-          <div class="mt-6"><button type="submit" disabled={busy() || !username().trim()} class={`${FORM_PRIMARY_BUTTON} w-full`}>{busy() ? 'Saving…' : 'Confirm'}</button></div>
+          <Field label="Handle">
+            <div class="flex items-center gap-2"><span class="w-4 text-center font-mono text-sm text-muted">@</span><Input aria-label="Username" autocomplete="off" spellcheck={false} value={username()} onInput={event => setUsername(event.currentTarget.value)} class="min-w-0 flex-1" /></div>
+          </Field>
+          <Show when={status()}><StatusMessage kind="error" class="mt-2 ml-6">{status()}</StatusMessage></Show>
+          <div class="mt-6"><Button type="submit" disabled={busy() || !username().trim()} class="w-full">{busy() ? 'Saving…' : 'Confirm'}</Button></div>
         </form>
       </FormPage>
     </Show>

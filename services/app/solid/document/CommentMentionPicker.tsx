@@ -12,6 +12,7 @@ import { personMention } from '@/lib/document/person-mentions';
 import { remoteMention } from '@/lib/annotations/remote-reply';
 import { type RemoteSessionInfo } from '../../../contracts/src/remote';
 import { agentNameColor } from '../lib/agent-identity';
+import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 const agentLabel = (name: string) => (({ claude: 'Claude Code', codex: 'Codex', pi: 'Pi', opencode: 'OpenCode' } as Record<string, string>)[name] ?? name);
 /** Hosted native generations own the comment relay; raw run terminals do not.
@@ -79,14 +80,14 @@ export function CommentMentionPicker(props: {
     finally { setRemoving(null); }
   };
   const keep = (event: MouseEvent) => event.preventDefault();
-  return <div aria-label="Agent sessions" class="mb-2 overflow-hidden rounded-lg border border-edge bg-surface p-1.5 font-sans text-sm shadow-lg">
+  return <div aria-label="Agent sessions" class="mb-2 overflow-hidden rounded-panel border border-edge bg-surface p-1.5 font-sans text-sm shadow-lg">
     <Show when={props.artifactId}>
       <p class="px-2 py-1.5 text-xs font-medium text-muted">Mention a person</p>
       <For each={people()}>{(person, index) => (
-        <button type="button" aria-label={`Mention @${person.username}`} class={`block w-full rounded-md px-2 py-2 text-left ${index() === active() ? 'bg-accent-soft' : 'hover:bg-bg'}`}
+        <Button type="button" size="sm" variant={index() === active() ? 'secondary' : 'ghost'} aria-label={`Mention @${person.username}`} class="w-full"
           onMouseDown={keep} onMouseEnter={() => setActive(index())} onClick={() => props.onSelect(personMention(person))}>
-          @{person.username}<span class="ml-2 text-xs text-muted">{person.name}</span>
-        </button>
+          <span class="flex w-full min-w-0 items-baseline gap-2 text-left font-sans"><span class="text-sm text-fg">@{person.username}</span><span class="truncate text-xs text-muted">{person.name}</span></span>
+        </Button>
       )}</For>
       <Show when={peopleUnavailable} fallback={<Show when={!people().length}><p class="px-2 py-1 text-xs text-muted">No matching followers or members.</p></Show>}>
         <p role="note" class="px-2 py-1 text-xs text-muted">{peopleUnavailable}</p>
@@ -95,22 +96,23 @@ export function CommentMentionPicker(props: {
     <p class="px-2 py-1.5 text-xs font-medium text-muted">Mention an agent</p>
     <For each={matches()}>{(session, index) => (
       <div class="flex items-center">
-        <button type="button" aria-label={`Mention ${session.name} (${session.harness})`}
-          class={`flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors ${index() + people().length === active() ? 'bg-accent-soft' : 'hover:bg-bg'}`}
+        {/* Two lines tall: min-h-12 grows the control past its fixed height without fighting it. */}
+        <Button type="button" size="sm" variant={index() + people().length === active() ? 'secondary' : 'ghost'} aria-label={`Mention ${session.name} (${session.harness})`}
+          class="min-h-12 min-w-0 flex-1 py-1"
           onMouseEnter={() => setActive(index() + people().length)} onMouseDown={keep} onClick={() => choose(session)}>
-          <span aria-hidden="true" style={{ color: agentNameColor(session.name) }} class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft font-semibold text-accent">@</span>
-          <span class="min-w-0 flex-1">
-            <span class="block truncate font-medium text-fg">{session.name}</span>
+          <span aria-hidden="true" style={{ color: agentNameColor(session.name) }} class="flex size-8 shrink-0 items-center justify-center rounded-control bg-accent-soft font-semibold text-accent">@</span>
+          <span class="min-w-0 flex-1 text-left font-sans">
+            <span class="block truncate text-sm font-medium text-fg">{session.name}</span>
             <span class="block truncate text-xs text-muted">{agentLabel(session.harness)} · {session.machine}</span>
           </span>
-          <span class="flex shrink-0 items-center gap-1 text-[10px] text-muted"><span class={`h-1.5 w-1.5 rounded-full ${session.online ? 'bg-green-500' : 'bg-muted'}`} />{session.online ? (session.activity ?? 'Online') : 'Offline'}</span>
-        </button>
+          <span class="flex shrink-0 items-center gap-1 font-sans text-micro text-muted"><span class={`h-1.5 w-1.5 rounded-full ${session.online ? 'bg-accent' : 'bg-muted'}`} />{session.online ? (session.activity ?? 'Online') : 'Offline'}</span>
+        </Button>
         <Show when={!session.online}>
           <Tooltip content="Remove agent">
-            <button type="button" aria-label={`Remove ${session.name}`} disabled={removing() !== null}
-              class="rounded-md p-2 text-muted hover:text-fg disabled:opacity-40" onMouseDown={keep} onClick={() => void remove(session.id)}>
+            <Button type="button" variant="ghost" size="sm" icon aria-label={`Remove ${session.name}`} disabled={removing() !== null}
+              onMouseDown={keep} onClick={() => void remove(session.id)}>
               <X size={14} aria-hidden="true" />
-            </button>
+            </Button>
           </Tooltip>
         </Show>
       </div>

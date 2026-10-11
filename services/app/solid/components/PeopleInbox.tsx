@@ -1,10 +1,11 @@
-import { FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON } from '../ui/FormControls';
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
 import { isMutationNotification, type InboxItem, type MemberNotificationItem } from '@/lib/notifications/inbox';
 import type { MutationNotificationView } from '@artifactbin/contracts';
 import { timeAgo } from '../ui/ui';
+import { Button } from '../ui/Button';
+import { StatusMessage } from '../ui/StatusMessage';
 import { useInbox } from '../lib/notifications';
 import { apiFetch } from '../lib/api';
 
@@ -24,11 +25,11 @@ export function InboxAlert(props: { message?: string; dismiss?: () => void; clas
   const inbox = useInbox();
   const message = () => props.message || inbox.error();
   const retry = () => { props.dismiss?.(); void inbox.load(); };
-  return <Show when={message()}><div role="alert" class={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-danger ${props.class ?? ''}`}>
-    <span>{message()}</span>
-    <Show when={!props.message && inbox.failedAt()}>{at => <time dateTime={new Date(at()).toISOString()} class="text-xs text-muted">Tried {new Date(at()).toLocaleTimeString()}</time>}</Show>
-    <button type="button" disabled={inbox.loading()} onClick={retry} class={FORM_SECONDARY_BUTTON}>{inbox.loading() ? 'Retrying…' : 'Retry'}</button>
-  </div></Show>;
+  return <Show when={message()}><StatusMessage kind="error" class={props.class}
+    action={<Button size="sm" variant="secondary" disabled={inbox.loading()} onClick={retry}>{inbox.loading() ? 'Retrying…' : 'Retry'}</Button>}>
+    {message()}
+    <Show when={!props.message && inbox.failedAt()}>{at => <time dateTime={new Date(at()).toISOString()} class="ml-2 text-xs text-muted">Tried {new Date(at()).toLocaleTimeString()}</time>}</Show>
+  </StatusMessage></Show>;
 }
 
 export function PeopleInbox(props: { compact?: boolean; close?: () => void }): JSX.Element {
@@ -57,19 +58,19 @@ export function PeopleInbox(props: { compact?: boolean; close?: () => void }): J
   const memberSummary = (item: MemberNotificationItem) => <>
     <a class="block break-words text-sm leading-5 text-fg hover:text-accent" href={destination(item)} onClick={() => markRead(item)}><span class="font-semibold">{senderLabel(item)}</span> {ACTION[item.kind] ?? 'mentioned you in'} <span class="font-semibold">{item.title ?? 'Untitled artifact'}</span></a>
     <Show when={item.created_at}><time dateTime={item.created_at} class="mt-1 block text-xs text-muted">{timeAgo(item.created_at!)}</time></Show>
-    <Show when={item.status === 'pending' && ['invitation', 'request', 'joined'].includes(item.kind)}><div class="mt-3 flex flex-wrap gap-2"><button type="button" disabled={busy()} onClick={() => void respond(item, item.direction === 'request' ? 'approve' : 'accept')} class={FORM_PRIMARY_BUTTON}>{item.direction === 'request' ? 'Approve request' : 'Accept invitation'}</button><button type="button" class={FORM_SECONDARY_BUTTON} disabled={busy()} onClick={() => void respond(item, 'dismiss')}>Dismiss</button></div></Show>
+    <Show when={item.status === 'pending' && ['invitation', 'request', 'joined'].includes(item.kind)}><div class="mt-3 flex flex-wrap gap-2"><Button size="sm" disabled={busy()} onClick={() => void respond(item, item.direction === 'request' ? 'approve' : 'accept')}>{item.direction === 'request' ? 'Approve request' : 'Accept invitation'}</Button><Button size="sm" variant="secondary" disabled={busy()} onClick={() => void respond(item, 'dismiss')}>Dismiss</Button></div></Show>
     <Show when={item.status === 'accepted' && ['invitation', 'request', 'joined'].includes(item.kind)}><p role="status" class="mt-2 text-xs text-accent"><Check size={14} class="inline" /> Invitation accepted</p></Show>
   </>;
   return <section aria-label="Notification list" class="font-sans">
-    <Show when={inbox.state()?.unread}><div class="flex justify-end border-b border-edge px-3 py-2"><button type="button" disabled={busy()} onClick={() => void markAllRead()} class={FORM_SECONDARY_BUTTON}>Mark all as read</button></div></Show>
+    <Show when={inbox.state()?.unread}><div class="flex justify-end border-b border-edge px-3 py-2"><Button size="sm" variant="secondary" disabled={busy()} onClick={() => void markAllRead()}>Mark all as read</Button></div></Show>
     <InboxAlert message={actionError()} dismiss={() => setActionError('')} class="p-3" />
     <Show when={inbox.reconnecting() && inbox.state()}><p role="status" aria-label="Live updates" class="px-3 pt-2 text-xs text-muted">Live updates paused. Reconnecting…</p></Show>
-    <Show when={!inbox.state() && !inbox.error()}><p role="status" class="p-4 text-sm text-muted">Loading notifications…</p></Show>
+    <Show when={!inbox.state() && !inbox.error()}><StatusMessage kind="loading" class="p-4">Loading notifications…</StatusMessage></Show>
     <Show when={inbox.state() && !items().length}><div class="px-6 py-10 text-center"><Bell size={24} class="mx-auto mb-3 text-muted" /><p class="text-sm font-medium">You’re all caught up.</p><p class="mt-1 text-xs leading-5 text-muted">Invitations, replies and activity will appear here.</p></div></Show>
     <ul class="m-0 list-none divide-y divide-edge p-0"><For each={items()}>{item => <li data-notification-id={item.id} class={`relative flex gap-3 px-3 py-3.5 ${item.read_at ? '' : 'bg-accent-soft/40'}`}>
       <div class="min-w-0 flex-1">{isMutationNotification(item) ? mutationSummary(item) : memberSummary(item)}</div>
       <Show when={!item.read_at}><span aria-label="Unread" class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" /></Show>
     </li>}</For></ul>
-    <Show when={!props.compact && inbox.state()?.next != null}><div class="border-t border-edge p-3 text-center"><button class={FORM_SECONDARY_BUTTON} onClick={() => void inbox.loadMore()}>Load more</button></div></Show>
+    <Show when={!props.compact && inbox.state()?.next != null}><div class="border-t border-edge p-3 text-center"><Button size="sm" variant="secondary" onClick={() => void inbox.loadMore()}>Load more</Button></div></Show>
   </section>;
 }

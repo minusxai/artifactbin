@@ -13,6 +13,7 @@ import { createSignal, Show, type JSX } from 'solid-js';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
+import { Button } from '../ui/Button';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { createCommentImageDraft, type CommentImageAttachment, type CommentImageDraft } from './CommentImageAttach';
@@ -74,12 +75,11 @@ export function AnnotationReplyBox(props: AnnotationReplyBoxProps): JSX.Element 
       label="Reply to annotation" quickAgents placeholder={props.placeholder} image={image} busy={props.busy || sending()}
       value={props.value} onChange={props.onChange} onSubmit={() => void send()}
       rows={props.rows ?? 3} autoFocus={props.autoFocus} />
-    <Show when={error()}><p role="alert" class="text-xs text-red-500">{error()}</p></Show>
+    <Show when={error()}><p role="alert" class="text-xs text-danger">{error()}</p></Show>
     <div data-reply-actions class="flex items-center justify-end gap-2">
       <CommentSubmitHint action="reply" />
       {props.actions}
-      <button type="button" aria-label="Send reply" disabled={props.busy || sending() || imageBusy() || !hasReplyText(props.value)} onClick={() => void send()}
-        class="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40">reply</button>
+      <Button type="button" size="sm" aria-label="Send reply" disabled={props.busy || sending() || imageBusy() || !hasReplyText(props.value)} onClick={() => void send()}>reply</Button>
     </div>
   </>;
 }

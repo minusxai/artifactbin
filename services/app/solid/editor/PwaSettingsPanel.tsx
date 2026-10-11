@@ -4,10 +4,15 @@ import type { ImageChoice } from '@/lib/artifact-backend/types';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/document/pwa-settings';
 import { InstallArtifactLink } from '../document/InstallArtifact';
+import { Button } from '../ui/Button';
 import { Switch } from '../ui/Checkbox';
+import { Field, Input } from '../ui/Field';
+import { SectionHeading } from '../ui/PageHeader';
+import { StatusMessage } from '../ui/StatusMessage';
 
 interface PwaSettingsPanelProps { id: string; title: string; source: string; onChange: (source: string) => void; onUpload: (file: File) => Promise<ImageChoice>; beforeInstall?: () => Promise<boolean> }
-const INPUT = 'mt-1 w-full rounded-md border border-edge bg-ground px-3 py-2 text-sm text-fg';
+// No ui primitive draws a color well; the two `type="color"` inputs below stay native (their white defaults are data, the colour a settings value falls back to).
+const COLOR_WELL = 'mt-1 h-10 w-full cursor-pointer rounded-control border border-edge bg-ground p-1';
 
 /** Uses the editor's source queue: settings participate in autosave, conflicts and undo. */
 export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
@@ -29,24 +34,27 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
     } catch { setError('Could not upload the icon. Try again.'); }
     finally { setUploading(false); }
   };
+  let iconFile: HTMLInputElement | undefined;
   const preview = () => uploaded() && uploaded()!.id === settings().icon ? uploaded()!.url : settings().icon ? `/a/${settings().icon}/raw` : `${artifactAppPath(props.id)}icon-192.png`;
   return <section aria-label="PWA settings" class="mx-auto max-w-3xl space-y-8">
-    <header><h2 class="text-xl font-semibold text-fg">Install as an app</h2><p class="mt-2 text-sm text-muted">This artifact is ready to install. Give it a name and icon for the home screen or desktop.</p></header>
-    <div class="flex items-center gap-4"><img src={preview()} alt="App icon preview" class="h-20 w-20 rounded-xl border border-edge object-contain" /><div><p class="font-semibold text-fg">{settings().name ?? props.title ?? 'Untitled artifact'}</p><p class="mt-1 text-sm text-muted">{settings().icon ? 'Custom app icon' : 'Generated icon · unique to this artifact'}</p></div></div>
+    <header><SectionHeading>Install as an app</SectionHeading><p class="mt-2 text-sm text-muted">This artifact is ready to install. Give it a name and icon for the home screen or desktop.</p></header>
+    <div class="flex items-center gap-4"><img src={preview()} alt="App icon preview" class="size-20 rounded-panel border border-edge object-contain" /><div><p class="font-semibold text-fg">{settings().name ?? props.title ?? 'Untitled artifact'}</p><p class="mt-1 text-sm text-muted">{settings().icon ? 'Custom app icon' : 'Generated icon · unique to this artifact'}</p></div></div>
     <div class="grid gap-5 sm:grid-cols-2">
-      <label class="text-sm text-muted">App name<input aria-label="App name" class={INPUT} maxLength={100} placeholder={props.title || 'Untitled artifact'} value={settings().name ?? ''} onBlur={e => update({ name: e.currentTarget.value.trim() || undefined })} /></label>
-      <label class="text-sm text-muted">Short name<input aria-label="Short name" class={INPUT} maxLength={30} placeholder="Uses app name" value={settings().shortName ?? ''} onBlur={e => update({ shortName: e.currentTarget.value.trim() || undefined })} /></label>
+      <Field label="App name"><Input maxLength={100} placeholder={props.title || 'Untitled artifact'} value={settings().name ?? ''} onBlur={e => update({ name: e.currentTarget.value.trim() || undefined })} /></Field>
+      <Field label="Short name"><Input maxLength={30} placeholder="Uses app name" value={settings().shortName ?? ''} onBlur={e => update({ shortName: e.currentTarget.value.trim() || undefined })} /></Field>
     </div>
-    <div class="space-y-3"><label class="block text-sm text-muted">App icon<input type="file" aria-label="Upload app icon" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" disabled={uploading()} class={INPUT} onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload(file); event.currentTarget.value = ''; }} /></label>
+    <div class="space-y-3"><div class="grid gap-1.5"><span class="font-sans text-sm font-medium text-fg">App icon</span>
+      <input ref={iconFile} hidden type="file" aria-label="Upload app icon" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" disabled={uploading()} onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload(file); event.currentTarget.value = ''; }} />
+      <Button variant="secondary" class="justify-self-start" disabled={uploading()} onClick={() => iconFile?.click()}>Choose icon…</Button></div>
       <p class="text-xs text-muted">A separate image from your social preview. Square artwork works best; we pad it and create the required icon sizes.</p>
-      <Show when={settings().icon}><button type="button" disabled={uploading()} class="text-sm text-accent underline" onClick={() => update({ icon: undefined })}>Use generated icon</button></Show>
-      <Show when={uploading()}><p role="status" class="text-sm text-muted">Uploading icon…</p></Show>
+      <Show when={settings().icon}><Button variant="link" disabled={uploading()} onClick={() => update({ icon: undefined })}>Use generated icon</Button></Show>
+      <Show when={uploading()}><StatusMessage kind="loading">Uploading icon…</StatusMessage></Show>
     </div>
     <div class="grid gap-5 sm:grid-cols-2">
-      <label class="text-sm text-muted">Theme color<input type="color" aria-label="Theme color" class="mt-1 h-10 w-full cursor-pointer rounded-md border border-edge bg-ground p-1" value={settings().themeColor ?? '#ffffff'} onChange={e => update({ themeColor: e.currentTarget.value })} /><span class="mt-1 block text-xs">App title bar and browser toolbar, where supported.</span></label>
-      <label class="text-sm text-muted">Background color<input type="color" aria-label="Background color" class="mt-1 h-10 w-full cursor-pointer rounded-md border border-edge bg-ground p-1" value={settings().backgroundColor ?? '#ffffff'} onChange={e => update({ backgroundColor: e.currentTarget.value })} /><span class="mt-1 block text-xs">Loading screen and padding around your app icon.</span></label>
+      <label class="text-sm text-muted">Theme color<input type="color" aria-label="Theme color" class={COLOR_WELL} value={settings().themeColor ?? '#ffffff'} onChange={e => update({ themeColor: e.currentTarget.value })} /><span class="mt-1 block text-xs">App title bar and browser toolbar, where supported.</span></label>
+      <label class="text-sm text-muted">Background color<input type="color" aria-label="Background color" class={COLOR_WELL} value={settings().backgroundColor ?? '#ffffff'} onChange={e => update({ backgroundColor: e.currentTarget.value })} /><span class="mt-1 block text-xs">Loading screen and padding around your app icon.</span></label>
     </div>
-    <Show when={error()}><p role="alert" class="text-sm text-danger">{error()}</p></Show>
+    <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
     <div class="space-y-3 border-t border-edge pt-5"><InstallArtifactLink id={props.id} beforeNavigate={props.beforeInstall} class="inline-flex items-center gap-2 text-sm font-semibold text-accent" />
       <p class="text-sm text-muted">Opens the latest saved version in its own window. Internet access and the artifact’s existing sharing permissions still apply.</p>
       <p class="text-xs text-muted">Names and icons may take time to update in installed apps. Reinstall to see changes immediately.</p>

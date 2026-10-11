@@ -1,4 +1,4 @@
-import { getArtifactById } from './rows';
+import { getArtifactHeaderById } from './rows';
 import { grantsOf, grantsPermitRead } from './dataset-policy/grants';
 import { hasDocumentEditorAccess } from './document-policy';
 import type { RequestActor, RoleActor, Viewer } from '@/lib/accounts';
@@ -16,7 +16,8 @@ export async function canReadArtifact(
   viewer: Viewer,
 ): Promise<boolean> {
   if(row.format==='dataset'||row.format===undefined){
-    const dataset=await getArtifactById(row.id);
+    // A dataset's policy and visibility are columns of its header; its rows (the `source`) are never consulted here.
+    const dataset=await getArtifactHeaderById(row.id);
     if(!dataset)return false;
     if(grantsOf(dataset))return grantsPermitRead(dataset,{userId:viewer?.userId??null,tokenId:null,email:viewer?.email});
   }

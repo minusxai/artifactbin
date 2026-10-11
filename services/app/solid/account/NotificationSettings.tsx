@@ -5,6 +5,7 @@ import { InboxAlert } from '../components/PeopleInbox';
 import { apiFetch } from '../lib/api';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
+import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 
 type EmailPreferences = { invitations: boolean; comments: boolean; activity: boolean };
@@ -23,11 +24,11 @@ export function NotificationSettings(): JSX.Element {
     catch { setNotice('Could not save email preferences. Try again.'); }
     finally { setSaving(false); }
   };
-  return <section id="notifications" aria-label="Notification settings" class="rounded-xl border border-edge bg-surface p-5 sm:p-6 font-sans"><div class="flex flex-wrap items-center justify-between gap-2"><h2 class="text-base font-semibold">Notification settings</h2><a href="/notifications" class="text-sm text-muted hover:text-fg">All notifications</a></div><p class="mt-1 text-sm text-muted">Choose how invitations and updates reach you.</p>
+  return <div id="notifications"><Panel label="Notification settings" title="Notification settings" actions={<a href="/notifications" class="text-sm text-muted hover:text-fg">All notifications</a>} class="font-sans"><p class="text-sm text-muted">Choose how invitations and updates reach you.</p>
     <InboxAlert class="mt-3" />
     <Show when={inbox.state()}><div class="mt-5 border-t border-edge pt-4"><h3 class="mb-3 text-sm font-medium">Invitations</h3><Checkbox label="Automatically accept invitations from people I follow." description="You can review invitations from everyone else before joining." checked={!!inbox.state()?.autoAccept} onChange={checked => void inbox.load({ autoAccept: checked })} /></div></Show>
     <Show when={email()}><fieldset disabled={saving()} class="mt-5 space-y-3 border-t border-edge pt-4"><legend class="text-sm font-medium">Email notifications</legend><For each={KEYS}>{key => <Checkbox label={LABELS[key]} checked={!!email()?.[key]} onChange={checked => void saveEmail({ ...email()!, [key]: checked })} />}</For></fieldset></Show>
     <Show when={notice()}><StatusMessage kind="notice" class="mt-3">{notice()}</StatusMessage></Show>
     <Show when={inbox.state()?.blocks.length}><div class="mt-5 border-t border-edge pt-4"><h3 class="mb-2 text-sm font-medium">Blocked people</h3><For each={inbox.state()?.blocks}>{block => <div class="flex items-center justify-between py-2"><span class="text-sm">@{block.username ?? block.user_id}</span><Button variant="secondary" size="sm" type="button" onClick={() => void inbox.load({ unblock: block.user_id })}>Unblock</Button></div>}</For></div></Show>
-  </section>;
+  </Panel></div>;
 }

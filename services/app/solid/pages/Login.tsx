@@ -5,7 +5,11 @@ import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 import { CODE_DELIVERY_HEADER, codeDeliveryOf, type CodeDelivery } from '@artifactbin/contracts';
 
-import { FormPage, FORM_INPUT as INPUT, FORM_PRIMARY_BUTTON as BUTTON } from '../ui/FormControls';
+import { FormPage } from '../ui/FormControls';
+import { Button } from '../ui/Button';
+import { Field, Input } from '../ui/Field';
+import { PageHeader } from '../ui/PageHeader';
+import { StatusMessage } from '../ui/StatusMessage';
 
 /** Email and the sent flag (never the code) survive a reload, e.g. an in-app browser that reloads on app switch. */
 const progressKey = () => `afbin:login:${new URLSearchParams(window.location.search).get('callbackUrl') ?? ''}`;
@@ -72,25 +76,22 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
   };
   return <Show when={!session()?.user && (session() || sessionError())}>
     <FormPage narrow>
-      <h1 class="text-3xl font-semibold tracking-tight text-fg">Log in to artifactbin</h1>
       <Show when={!sent()} fallback={<>
-        <p class="mt-3 text-sm leading-relaxed text-muted">{delivery() === 'email' ? 'We emailed a code to ' : 'A login code was generated for '}<span class="text-fg">{email()}</span>. It expires in 10 minutes.<Show when={delivery() === 'operator_outbox'}> Ask the server operator for the code from the protected local outbox or server output.</Show></p>
+        <PageHeader title="Log in to artifactbin" description={<>{delivery() === 'email' ? 'We emailed a code to ' : 'A login code was generated for '}<span class="text-fg">{email()}</span>. It expires in 10 minutes.<Show when={delivery() === 'operator_outbox'}> Ask the server operator for the code from the protected local outbox or server output.</Show></>} />
         <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void verify(); }}>
-          <label for="login-code" class="text-sm font-medium text-fg">Verification code</label>
-          <input id="login-code" type="text" autofocus inputMode="numeric" autocomplete="one-time-code" maxLength={6} aria-label="Login code" placeholder="6-digit code" value={code()} onInput={event => setCode(event.currentTarget.value)} class={INPUT} />
-          <button type="submit" aria-label="Verify code" disabled={busy() || !code()} class={BUTTON}>{busy() ? 'Checking…' : 'Log in'}</button>
+          <Field label="Verification code"><Input type="text" autofocus inputMode="numeric" autocomplete="one-time-code" maxLength={6} aria-label="Login code" placeholder="6-digit code" value={code()} onInput={event => setCode(event.currentTarget.value)} /></Field>
+          <Button type="submit" aria-label="Verify code" disabled={busy() || !code()}>{busy() ? 'Checking…' : 'Log in'}</Button>
         </form>
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted"><button type="button" aria-label="Change email" class="min-h-11 cursor-pointer rounded-md px-1 underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress('', false); }}>Change email</button><button type="button" aria-label="Resend code" class="min-h-11 cursor-pointer rounded-md px-1 underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50" disabled={busy()} onClick={() => void requestCode()}>Resend code</button></div>
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted"><Button variant="link" type="button" aria-label="Change email" class="min-h-11" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress('', false); }}>Change email</Button><Button variant="link" type="button" aria-label="Resend code" class="min-h-11" disabled={busy()} onClick={() => void requestCode()}>Resend code</Button></div>
       </>}>
-        <p class="mt-3 text-sm leading-relaxed text-muted">Request a 6-digit login code. No password to remember.</p>
+        <PageHeader title="Log in to artifactbin" description="Request a 6-digit login code. No password to remember." />
         <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void requestCode(); }}>
-          <label for="login-email" class="text-sm font-medium text-fg">Email address</label>
-          <input id="login-email" type="email" autofocus autocomplete="email" aria-label="Email" placeholder="you@example.com" value={email()} onInput={event => setEmail(event.currentTarget.value)} class={INPUT} />
-          <button type="submit" aria-label="Log in with email" disabled={busy() || !email()} class={BUTTON}>{busy() ? 'Sending…' : 'Log in with email'}</button>
+          <Field label="Email address"><Input type="email" autofocus autocomplete="email" aria-label="Email" placeholder="you@example.com" value={email()} onInput={event => setEmail(event.currentTarget.value)} /></Field>
+          <Button type="submit" aria-label="Log in with email" disabled={busy() || !email()}>{busy() ? 'Sending…' : 'Log in with email'}</Button>
         </form>
         <p class="mt-6 border-t border-edge pt-5 text-sm leading-relaxed text-muted">Previously saved guest artifacts and connected agents will join this account.</p>
       </Show>
-      <Show when={error()}><p role="alert" class="mt-4 text-sm leading-relaxed text-danger">{error()}</p></Show>
+      <Show when={error()}><StatusMessage kind="error" class="mt-4">{error()}</StatusMessage></Show>
     </FormPage>
   </Show>;
 }

@@ -57,7 +57,7 @@ export default function DocsHuman() {
         The link is unguessable, permanent, and safe to forward.
       </p>
 
-      <nav aria-label="Contents" class="mt-6 rounded-[6px] border border-edge bg-surface px-4 py-3">
+      <nav aria-label="Contents" class="mt-6 rounded-panel border border-edge bg-surface px-4 py-3">
         <span class={SECTION}>contents</span>
         <ol class="mt-2 grid gap-x-8 gap-y-2 font-sans text-sm sm:grid-cols-2">
           {TOC.map((s, i) => (
@@ -137,7 +137,7 @@ export default function DocsHuman() {
         </p>
         <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {STORY_SYSTEMS.map(system => (
-            <figure class="overflow-hidden rounded-[6px] border border-edge">
+            <figure class="overflow-hidden rounded-panel border border-edge">
               <DesignSystemSpecimen system={system} />
               <figcaption class="sr-only">{system.label}</figcaption>
             </figure>

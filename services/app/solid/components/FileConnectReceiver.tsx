@@ -3,7 +3,10 @@ import {createSignal,Show,onCleanup,type JSX} from 'solid-js';
 import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_MAX_BYTES,previewWorkspaceUrl,type PreviewConnectMessage} from '@artifactbin/contracts';
 import {PageBar,DocumentTitle} from './PageBar';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
-import {FormPage,FORM_INPUT,FORM_PRIMARY_BUTTON,FORM_SECONDARY_BUTTON} from '../ui/FormControls';
+import {FormPage} from '../ui/FormControls';
+import {Button} from '../ui/Button';
+import {Field,Input} from '../ui/Field';
+import {StatusMessage} from '../ui/StatusMessage';
 interface ConnectOffer {html:string;filename:string}
 interface ConnectInspection {title:string|null;comments:number;target:string;kind?:'local'|'update'|'copy';requiresAuth?:boolean;reason?:string}
 export interface ConnectAdapter {
@@ -55,19 +58,19 @@ export function FileConnectReceiver(props:{adapter:ConnectAdapter;authentication
   <p class="text-muted">Choose an artifactbin .jsx.html file, or use Connect to server in your offline file.</p>
   <p class="text-muted">{props.adapter.hosted?'Review the destination and confirm before anything is published. Your original HTML file stays unchanged.':'Importing creates or reconciles a copy in this server’s workspace. Your original HTML file stays unchanged. Nothing is published.'}</p>
   <Show when={offer()}>{incoming=><p class="break-words">Received file: <b>{incoming().filename}</b></p>}</Show>
-  <label class="block space-y-2">{offer()?'Choose another file':'HTML file'} <input class={FORM_INPUT} aria-label="HTML file" type="file" accept=".html" disabled={busy()} onChange={event=>void choose(event)}/></label>
-  <Show when={busy()}><p role="status">Working…</p></Show>
-  <Show when={error()}><p role="alert" class="text-danger">{error()}</p><p>Your file and unsaved edits are still here.</p></Show>
-  <Show when={offer()&&!inspection()&&!busy()}><button class={FORM_PRIMARY_BUTTON} onClick={()=>void inspect(offer()!,false)}>Retry review</button></Show>
+  <Field label={offer()?'Choose another file':'HTML file'}><Input aria-label="HTML file" type="file" accept=".html" disabled={busy()} onChange={event=>void choose(event)}/></Field>
+  <Show when={busy()}><StatusMessage kind="loading">Working…</StatusMessage></Show>
+  <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage><p>Your file and unsaved edits are still here.</p></Show>
+  <Show when={offer()&&!inspection()&&!busy()}><Button onClick={()=>void inspect(offer()!,false)}>Retry review</Button></Show>
   <Show when={inspection()}>{value=><Show when={!value().requiresAuth} fallback={<><p>Log in with email to continue. This file stays in this tab.</p>{props.authentication?.(()=>{const current=offer();if(current)void inspect(current,false);})}</>}>
    <form class="space-y-4" onSubmit={event=>{event.preventDefault();void submit(value().kind??'local');}}>
-    <p role="status">Ready to {value().kind==='update'?'apply':'import'} “{value().title??'Untitled'}” with {value().comments} comment {value().comments===1?'thread':'threads'}.</p>
-    <Show when={props.adapter.hosted} fallback={<><label class="block space-y-2">Workspace file <input class={FORM_INPUT} aria-label="Workspace file" required value={target()} onInput={event=>setTarget(event.currentTarget.value)} disabled={busy()}/></label><p>Existing files use the same conflict checks as CLI import. If both copies changed, the server retains both and reports the conflict.</p></>}>
+    <StatusMessage kind="notice">Ready to {value().kind==='update'?'apply':'import'} “{value().title??'Untitled'}” with {value().comments} comment {value().comments===1?'thread':'threads'}.</StatusMessage>
+    <Show when={props.adapter.hosted} fallback={<><Field label="Workspace file"><Input required value={target()} onInput={event=>setTarget(event.currentTarget.value)} disabled={busy()}/></Field><p>Existing files use the same conflict checks as CLI import. If both copies changed, the server retains both and reports the conflict.</p></>}>
      <Show when={value().kind==='update'} fallback={<p>{value().reason} Creating an independent copy makes a new unlisted document; it does not update the original.</p>}><p>Verified original: <b>{value().target}</b> on this server. Apply uses the same conflict checks as the live editor. Independent edits are retained; overlapping edits are refused.</p></Show>
     </Show>
     <div class="flex flex-wrap items-center gap-3">
-    <button class={FORM_PRIMARY_BUTTON} type="submit" disabled={busy()}>{value().kind==='update'?'Apply to original':value().kind==='copy'?'Create independent copy':'Import and open'}</button>
-    <Show when={value().kind==='update'}><button class={FORM_SECONDARY_BUTTON} type="button" disabled={busy()} onClick={()=>void submit('copy')}>Create independent copy instead</button></Show>
+    <Button type="submit" disabled={busy()}>{value().kind==='update'?'Apply to original':value().kind==='copy'?'Create independent copy':'Import and open'}</Button>
+    <Show when={value().kind==='update'}><Button variant="secondary" type="button" disabled={busy()} onClick={()=>void submit('copy')}>Create independent copy instead</Button></Show>
     </div>
    </form>
   </Show>}</Show>

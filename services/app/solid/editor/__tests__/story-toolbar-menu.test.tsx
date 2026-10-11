@@ -34,5 +34,11 @@ it('closes on an outside click', () => {
 
 it('hints with a dashed underline when asked', () => {
   render(() => <Harness hint />);
-  expect(screen.getByLabelText('Alignment').className).toContain('underline');
+  // The hint rides on the label inside the ui Button, whose own class is layout only.
+  expect(screen.getByLabelText('Alignment').querySelector('.underline')).not.toBeNull();
+});
+
+it('does not hint by default', () => {
+  render(() => <Harness />);
+  expect(screen.getByLabelText('Alignment').querySelector('.underline')).toBeNull();
 });

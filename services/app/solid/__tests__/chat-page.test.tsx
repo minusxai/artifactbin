@@ -250,6 +250,20 @@ it('keeps connection commands on demand without installation instructions', asyn
   expect(screen.getByRole('dialog', {name:'Connect your agent'})).toBeInTheDocument();
 });
 
+it('closes the agent setup dialog from its Close button and returns focus to the opener', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url === '/api/remote/sessions' ? { sessions: [] } : {} })));
+  open('');
+  const trigger = sidebar().getByRole('button', { name: 'Connect your agent' });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = screen.getByRole('dialog', { name: 'Connect your agent' });
+  expect(within(dialog).getByRole('group', { name: 'Choose your agent' })).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Close agent setup' }));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(trigger).toHaveFocus();
+});
+
 it('offers native hosted boxes only when the configured service advertises managed processes',async()=>{
  vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
  const session={id:'native',runId:'run-one',name:'my-agent',harness:'codex',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null};
