@@ -290,8 +290,8 @@ describe('the app page and the one renderer', () => {
     const pages = { pages: pagesSite() };
     const guest = await artifactPageAnswer(request(`/a/${id}`), id, pages);
     const writer = await artifactPageAnswer(request(`/a/${id}`, { actor: { credential: 'session', userId: who.user.id, email: who.user.email!, emailVerified: true } }), id, pages);
-    expect(guest.frame?.src).toContain('/pages-session?');
-    expect(writer.frame?.src).toContain('/pages-session?ticket=');
+    expect(new URL(guest.frame!.src).searchParams.get('_pt')).toBe('-');
+    expect(new URL(writer.frame!.src).searchParams.get('_pt')).toMatch(/^[A-Za-z0-9_-]{30,}$/);
   });
   it('serves a plan outline in the initial compiled HTML and omits it from a capture', async () => {
     const who = await owner();
@@ -316,7 +316,7 @@ describe('the app page and the one renderer', () => {
     expect(doc.byId('mx-story-root'), 'the app page renders no document').toBeNull();
     expect([doc.find('*', { 'data-mx-reader-chrome': true }), doc.find('*', { 'data-mx-spa-idle': true }), doc.find('style', { 'data-mx-story-css': true })]).toEqual([null, null, null]);
     const frame = doc.body.child('*', { 'data-mx-framed': true })?.child('iframe', { 'data-mx-document-frame': true });
-    expect(frame?.attr('src')).toContain('/pages-session?');
+    expect(frame?.attr('src')).toContain('_pt=');
     expect(doc.title).toBe('Perf C dashboard');
     expect(doc.find('meta', { property: 'og:image' })?.attr('content')).toContain(`/a/${id}/export?mode=card`);
     expect(storyText(rawHtml)).toContain('$744,503');

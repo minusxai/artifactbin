@@ -23,4 +23,5 @@ export { USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensB
 export type { UserRow } from './users';
 export { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, isCookieCredential, requestOrSessionActor, sessionActor, tokenActorForRequest } from './viewer';
 export type { RequestActor } from './viewer';
-export { PAGES_COOKIE, endPagesSession, exchangePagesTicket, issuePagesTicket, pagesSessionActor, pagesSessionOf } from './pages-sessions';
+export { endPagesSession, endPagesSessionsFor, exchangePagesTicket, issuePagesTicket, pagesSessionActor, pagesSessionOf } from './pages-sessions';
+export type { PagesSession } from './pages-sessions';

@@ -69,7 +69,7 @@ describe('the persona matrix', () => {
       expect(got.html).toMatch(/<title>[^<]*Crawlable doc/);
       expect(got.html).toContain(`/a/${w.pub.id}/export`);
       expect(got.html).toMatch(/property="og:title"|name="og:title"/);
-      expect(new URL(got.frame!).origin === pagesOriginFor(w.pub.id, pagesSite()) || new URL(got.frame!).pathname === '/pages-session').toBe(true);
+      expect(new URL(got.frame!).origin).toBe(pagesOriginFor(w.pub.id, pagesSite()));
       expect(got.document).toContain('PUBLIC-WORDS');
     });
 

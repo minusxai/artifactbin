@@ -403,6 +403,7 @@ CREATE TABLE IF NOT EXISTS app.pages_sessions (
   email TEXT,
   email_verified BOOLEAN,
   carried JSONB NOT NULL DEFAULT '{}',
+  artifact_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (id_hash)
@@ -422,6 +423,8 @@ ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS email_verified BOOLEAN;
 
 ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS carried JSONB NOT NULL DEFAULT '{}';
 
+ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS artifact_id TEXT;
+
 ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL;
@@ -429,6 +432,8 @@ ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ N
 CREATE INDEX IF NOT EXISTS idx_pages_sessions_expires ON app.pages_sessions (expires_at);
 
 CREATE INDEX IF NOT EXISTS idx_pages_sessions_user ON app.pages_sessions (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_pages_sessions_token ON app.pages_sessions (token_id);
 
 CREATE TABLE IF NOT EXISTS app.document_trust (
   user_id TEXT NOT NULL,

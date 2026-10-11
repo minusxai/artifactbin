@@ -1,8 +1,8 @@
 /**
  * GET /api/page/frame/:id — a FRESH first URL for a document's frame (APP__PAGES_HOST), for an app page
  * that builds the frame itself rather than adopting the one the server drew (brief B's framed story):
- * `{ src, origin }`, where `src` is the pages session exchange carrying a one-time ticket for THIS reader
- * (lib/accounts/pages-sessions, with the reader's once-grants carried) and redirecting to `origin`, the document's own. Same read ACL as the
+ * `{ src, origin }`, where `src` is the document's own address carrying a one-time ticket for THIS reader and
+ * document (lib/accounts/pages-sessions, with the reader's once-grants carried), spent at `origin`. Same read ACL as the
  * page; a document the reader may not read is the uniform 404.
  * Never cached, and readable only by the app's own origin (no CORS; a pages origin is refused before
  * it gets here, server/pages-host).

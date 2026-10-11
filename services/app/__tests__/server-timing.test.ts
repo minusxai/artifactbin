@@ -72,9 +72,13 @@ describe('Server-Timing', () => {
     expect(timing(page).queries).toBeGreaterThan(0);
     const shell = await server.request(`${APP}/login`, { headers: { accept: 'text/html' } });
     timing(shell);
-    // The apex exchange 302s to the document's origin: headers of a redirect are immutable and must still carry it.
-    const src = /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&');
-    const redirect = await server.request(src);
+    // A repeat view of the same reader (the browser holds the document origin's cookie) is sent on by a 302 to the clean
+    // address: headers of a redirect are immutable and must still carry it.
+    const frameOf = async (res: Response) => /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await res.text())![1]!.replaceAll('&amp;', '&');
+    const first = await server.request(await frameOf(page));
+    const cookie = /__Host-afbin_pages=([^;]+)/.exec(first.headers.get('set-cookie')!)![1]!;
+    const again = await server.request(as(`${APP}/a/${w.id}`, w.actor, { headers: { accept: 'text/html' } }));
+    const redirect = await server.request(await frameOf(again), { headers: { cookie: `__Host-afbin_pages=${cookie}` } });
     expect(redirect.status).toBe(302);
     timing(redirect);
   });
@@ -94,11 +98,10 @@ describe('Server-Timing', () => {
     const server = app();
     const page = await server.request(as(`${APP}/a/${w.id}`, w.actor, { headers: { accept: 'text/html' } }));
     const src = /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&');
-    const exchanged = await server.request(src);
-    const cookie = /afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie')!)![1]!;
-    const doc = await server.request(exchanged.headers.get('location')!, { headers: { cookie: `afbin_pages=${cookie}` } });
+    // The frame's first URL is the document's own origin: the ticket is spent and the document served in one response.
+    const doc = await server.request(src);
     expect(doc.status).toBe(200);
-    expect(new URL(exchanged.headers.get('location')!).origin).toBe(pagesOriginFor(w.id, site));
+    expect(new URL(src).origin).toBe(pagesOriginFor(w.id, site));
     timing(doc);
   });
 

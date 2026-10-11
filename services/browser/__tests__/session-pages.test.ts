@@ -1,6 +1,7 @@
 /**
- * A SESSION OVER A FRAMED DOCUMENT, in a real worker and a real Chromium: the app page frames the document
- * from the pages apex's ticket exchange, the exchange redirects to the document's own origin, and the
+ * A SESSION OVER A FRAMED DOCUMENT, in a real worker and a real Chromium: the app page frames the document's
+ * own origin with the reader's one-time ticket, that origin spends it and answers with the document and its own
+ * host-only cookie, and the
  * session script's `page.evaluate(() => window.page.get(...))` reads the document's declared value — as the
  * reader the ticket named, with the pages cookie held by the parent and never by the worker's browser.
  *
@@ -21,7 +22,7 @@ const COOKIE = 'cookie-0123456789abcdef0123456789';
 
 interface Seen { url: string; host: string | null; cookie: string | null; actor: Actor }
 
-/** The app's three answers a framed read needs: the app page, the apex exchange, the document. */
+/** The app's two answers a framed read needs: the app page, and the document (which spends the ticket). */
 function framingApp(seen: Seen[]) {
   let spent = false;
   return async (request: Request, actor: Actor): Promise<Response> => {
@@ -29,21 +30,17 @@ function framingApp(seen: Seen[]) {
     seen.push({ url: url.href, host: request.headers.get(FORWARDED_HOST), cookie: request.headers.get('cookie'), actor });
     const html = (body: string, headers: Record<string, string> = {}) => new Response(body, { headers: { 'content-type': 'text/html', ...headers } });
     if (url.origin === BASE && url.pathname === '/a/doc1') {
-      const src = `http://${PAGES}:7999/pages-session?ticket=${TICKET}&next=${encodeURIComponent(`${DOC_ORIGIN}/`)}`;
+      const src = `${DOC_ORIGIN}/?_pt=${TICKET}`;
       return html(`<!doctype html><html><body><header>App bar</header><iframe data-mx-document-frame="" name="mx-document" src="${src}"></iframe></body></html>`);
     }
-    if (url.origin === `http://${PAGES}:7999` && url.pathname === '/pages-session') {
-      const ticket = url.searchParams.get('ticket');
-      const headers = new Headers({ location: url.searchParams.get('next') ?? '/' });
-      if (ticket === TICKET && !spent) { spent = true; headers.append('set-cookie', `afbin_pages=${COOKIE}; Domain=.${PAGES}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`); }
-      return new Response(null, { status: 302, headers });
-    }
     if (url.origin === DOC_ORIGIN && url.pathname === '/') {
-      // The reader is whoever the pages cookie names; without it the document reads as a guest.
-      const reader = request.headers.get('cookie')?.split('; ').includes(`afbin_pages=${COOKIE}`) ? 'reader' : 'guest';
+      // The ticket is spent here, in the response that serves the document, which sets this origin's host-only cookie.
+      const headers: Record<string, string> = {};
+      let reader = request.headers.get('cookie')?.split('; ').includes(`afbin_pages=${COOKIE}`) ? 'reader' : 'guest';
+      if (url.searchParams.get('_pt') === TICKET && !spent) { spent = true; reader = 'reader'; headers['set-cookie'] = `afbin_pages=${COOKIE}; Path=/; HttpOnly; SameSite=Lax`; }
       // window.page and the ready mark arrive after the load, as the page runtime's import does.
       return html(`<!doctype html><html><body><p id="who">${reader}</p><script id="mx-story-data" type="application/json">{}</script>`
-        + `<script>setTimeout(() => { window.page = Object.freeze({ get: name => name === 'count' ? (${JSON.stringify(reader)} === 'reader' ? 3 : 0) : undefined }); document.documentElement.setAttribute('data-mx-ready', ''); }, 300);</script></body></html>`);
+        + `<script>setTimeout(() => { window.page = Object.freeze({ get: name => name === 'count' ? (${JSON.stringify(reader)} === 'reader' ? 3 : 0) : undefined }); document.documentElement.setAttribute('data-mx-ready', ''); }, 300);</script></body></html>`, headers);
     }
     return new Response('not found', { status: 404 });
   };
@@ -74,10 +71,9 @@ it('reads window.page of the framed document as the session reader, with the pag
   expect(out.error).toBeUndefined();
   expect(out.result).toEqual({ declared: 'object', count: 3, who: 'reader', appBar: 'App bar', url: `${BASE}/a/doc1`, cookies: [] });
   expect(out.pages.map(page => page.url)).toEqual([`${BASE}/a/doc1`]);
-  const document = seen.find(entry => entry.url === `${DOC_ORIGIN}/`);
+  const document = seen.find(entry => entry.url === `${DOC_ORIGIN}/?_pt=${TICKET}`);
   expect(document, JSON.stringify(seen)).toBeDefined();
   expect(document!.host).toBe(`${DOC}.${PAGES}:7999`);
-  expect(document!.cookie).toBe(`afbin_pages=${COOKIE}`);
   expect(document!.actor).toEqual(owner);
   // The app's own origin never receives the pages cookie.
   expect(seen.filter(entry => entry.url.startsWith(BASE)).every(entry => entry.cookie === null)).toBe(true);

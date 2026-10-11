@@ -11,7 +11,7 @@ import { BookOpen, FileText, LogIn, LogOut, Moon, Sun, User, X } from 'lucide-so
 import { useLocation } from '@solidjs/router';
 import { REPO_URL } from '@/lib/serving/repo';
 import { loginHref } from '@/lib/http/login-href';
-import { forgetPagesSession } from './browser-session';
+import { endPagesSessions } from './browser-session';
 import { PageControlsBody } from './PageBar';
 import { PeopleInbox } from './PeopleInbox';
 import { useSession } from '../lib/session';
@@ -53,7 +53,7 @@ export function MenuPanel(props: { close: () => void; phone?: boolean; top?: num
       <a href={REPO_URL} target="_blank" rel="noopener noreferrer" class={`${MENU_ROW} cursor-pointer text-muted hover:bg-raised hover:text-fg`} onClick={close}><GitHubIcon size={15} />Support artifactbin</a>
       <div class="mt-auto" /><div class="my-1 h-px bg-edge" />
       <Show when={person()} fallback={link(loginHref(window.location), 'Login', <LogIn size={15} stroke-width={1.5} />)}>
-        <Button variant="ghost" size={props.phone ? 'md' : 'sm'} aria-label="Sign out" class="w-full justify-start" onClick={() => void Promise.all([forgetPagesSession(), fetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null)]).then(() => { window.location.href = '/'; })}><LogOut size={15} stroke-width={1.5} />Sign out</Button>
+        <Button variant="ghost" size={props.phone ? 'md' : 'sm'} aria-label="Sign out" class="w-full justify-start" onClick={() => void endPagesSessions().then(() => fetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null)).then(() => { window.location.href = '/'; })}><LogOut size={15} stroke-width={1.5} />Sign out</Button>
       </Show>
     </Drawer>
   );

@@ -4,7 +4,7 @@
  * A document is served at `<label>.<pages host>`, where the label is the id's bytes as LOWERCASE hex:
  * ids are case-sensitive (`Ab3xK9` and `ab3xk9` are two documents) and every browser lowercases a
  * hostname, so the id cannot ride as itself. The apex (`<pages host>` alone) is not a document: it
- * answers only the pages session exchange (server/pages-host).
+ * answers nothing (server/pages-host).
  *
  * The scheme and port are the public URL's, so development (`http://app.lvh.me:11001`) gets
  * `http://<hex>.lvh.me:11001` and production gets `https://<hex>.pages.example.com`. Hosts are matched
@@ -55,11 +55,6 @@ export function pagesOriginFor(id: string, site: PagesSite): string {
   return `${site.scheme}//${pagesLabel(id)}.${site.host}${suffix(site)}`;
 }
 
-/** The apex pages origin, where the pages session is exchanged (`https://<pages host>`). */
-export function pagesApexOrigin(site: PagesSite): string {
-  return `${site.scheme}//${site.host}${suffix(site)}`;
-}
-
 /** A `Host` header's hostname: lowercase, without its port or a trailing dot. */
 function hostnameOf(host: string): string {
   const trimmed = host.trim().toLowerCase();
@@ -91,20 +86,38 @@ export function idFromPagesOrigin(origin: string | null | undefined, site: Pages
   return idFromPagesHost(url.host, site);
 }
 
-/** The pages apex's session exchange (server/pages-host): a ticket in, the `afbin_pages` cookie out. */
-export const PAGES_SESSION_PATH = '/pages-session';
-/** The app page's `<meta name>` naming that address, which sign-out asks to end the session (solid/components/browser-session). */
-export const PAGES_SESSION_META = 'mx-pages-session';
+/**
+ * THE DOCUMENT'S FIRST URL. The ticket that hands the app page's reader across rides ON the document's own
+ * address, in this reserved query parameter, and is spent by the document's origin in the same response that
+ * serves the document (server/pages-host): there is no hop through another host. `GUEST_TICKET` is the app
+ * page's explicit "nobody": the frame renders as nobody whatever cookie the browser holds and the response
+ * clears it. A visit with no parameter at all (a bookmark, a direct link) reads whatever session the browser's
+ * own host-only cookie names.
+ */
+export const PAGES_TICKET_PARAM = '_pt';
+export const GUEST_TICKET = '-';
 
 /**
- * The frame's first URL: the apex exchanges `ticket` for the pages cookie (or, with no ticket — a guest
- * page — clears a stale one) and redirects to `next`, the document's own origin.
+ * The cookie a document's origin reads its reader from. HOST-ONLY (no `Domain`), so no other document's origin ever
+ * receives it and no sibling can set it; on https the `__Host-` prefix makes the browser enforce that (Secure, Path=/,
+ * no Domain), so a sibling's script cannot plant or shadow it. Development is http (lvh.me), where the prefix is
+ * unavailable: the plain name, host-only all the same.
  */
-export function pagesSessionUrl(site: PagesSite, next: string, ticket: string | null): string {
-  const url = new URL(PAGES_SESSION_PATH, pagesApexOrigin(site));
-  if (ticket) url.searchParams.set('ticket', ticket);
-  url.searchParams.set('next', next);
-  return url.href;
+export const pagesCookieName = (site: PagesSite): string => (site.scheme === 'https:' ? '__Host-afbin_pages' : 'afbin_pages');
+
+/** The query with every `_pt` removed (the reader's own copy of one never reaches the frame), byte for byte otherwise. */
+export function withoutPagesTicket(search: string): string {
+  const kept = search.replace(/^\?/, '').split('&').filter((part) => part && part.split('=')[0] !== PAGES_TICKET_PARAM);
+  return kept.length ? `?${kept.join('&')}` : '';
+}
+
+/**
+ * The frame's first URL: the document's own origin, the reader's `$` selection (`search`) and the one-time ticket
+ * (`GUEST_TICKET` when the app page has nothing to hand across).
+ */
+export function pagesFrameUrl(origin: string, search: string, ticket: string | null): string {
+  const kept = withoutPagesTicket(search);
+  return `${origin}/${kept}${kept ? '&' : '?'}${PAGES_TICKET_PARAM}=${encodeURIComponent(ticket ?? GUEST_TICKET)}`;
 }
 
 /** A request server/pages-host routed to a document on its own origin: which document, at which origin. */

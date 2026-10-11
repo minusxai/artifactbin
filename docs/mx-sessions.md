@@ -43,13 +43,13 @@ Session routes use `/api/browser-sessions`; existing remote terminal resources
 under `/api/sessions` retain their contract. Credentials remain in the parent
 broker. Workers have no network namespace access to the host, no host checkout,
 and only private writable storage. The broker admits the configured app origin and, under
-`APP__PAGES_HOST`, the pages apex and the document origins the app page frames (`<hex id>.<pages host>`),
+`APP__PAGES_HOST`, the document origins the app page frames (`<hex id>.<pages host>`),
 forwards the authenticated actor (revalidating its token on each app request), strips supplied credential headers, and bounds
 request and response bodies. Canonical redirects are resolved by the broker (at most ten same-origin hops).
 The broker fulfills the originally requested URL; the app may then update its displayed URL through client-side navigation.
-A redirect to another admitted origin (the pages apex sending a document's frame to the document's own origin) is
-navigated by the page itself, so the frame is that origin. The pages cookie the apex sets for the frame's one-time
-ticket is held by the broker and attached only to the pages origins; the worker's browser never holds it. On a page
+The frame's first URL is the document's own origin, which spends the frame's one-time ticket and sets its own
+host-only pages cookie in the response that serves the document. That cookie is held by the broker per document host
+and attached only to requests for that host; the worker's browser never holds it. On a page
 that frames a document, `page.evaluate`, `waitForFunction`, locators and selector actions resolve in the document
 frame (after it has loaded and booted), where `window.page` lives; `page.url()`, `goto` and `screenshot` stay the app page's.
 

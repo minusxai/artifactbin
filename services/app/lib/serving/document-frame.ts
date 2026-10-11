@@ -16,7 +16,7 @@ import { APP_BAR_H } from '@/lib/story-ui/edit-bar';
 
 /** What the app page needs to draw a document's frame and name the document in its head. */
 export interface DocumentFrame {
-  /** The frame's first URL: the pages apex's session exchange, carrying this reader's one-time ticket. */
+  /** The frame's first URL: the document's own origin, carrying this reader's one-time ticket (lib/http/pages-origin pagesFrameUrl). */
   src: string;
   /** The frame's accessible name. */
   title: string;

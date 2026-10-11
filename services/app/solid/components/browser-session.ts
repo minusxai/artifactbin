@@ -1,27 +1,16 @@
 /**
- * The browser's side of the token exchange: hand the token to the server
- * once, and from then on the httpOnly cookie authorizes every request
- * automatically. Nothing here reads a credential back, because nothing can —
- * that is the point, and it is why call sites build no `Authorization`
- * header: a same-origin fetch already sends the cookie.
+ * The browser's side of sign-out for the documents' own origins (APP__PAGES_HOST).
  *
- * One entry point: `forgetTokens`, the anonymous owner's sign-out. A token
- * ENTERS the browser through `POST /api/session/token` — the CLI's browser
- * approval and the /start flow both call that route directly, so no page
- * script has to hold the secret even for a moment.
+ * A document's origin holds its own host-only cookie that the app's sign-out cannot touch, and a document's
+ * script may not end its reader's session. So sign-out asks the APP (same origin, credentialed) to end every
+ * pages session of the reader on the server — `DELETE /api/session/token`, which also clears the old ownership
+ * cookie — BEFORE the account session itself goes. A cookie a browser still holds then names no row and reads as
+ * nobody; there is no call to any pages host.
  */
-
-/**
- * End this browser's pages session (APP__PAGES_HOST): the cookie the documents' own origins read their
- * reader from lives on the pages domain, which the app's sign-out cannot touch, so the pages apex is
- * asked directly (server/pages-host DELETE). A page with no pages host names none, and this does nothing.
- */
-export async function forgetPagesSession(doc: Document = document): Promise<void> {
-  const url = doc.querySelector('meta[name="mx-pages-session"]')?.getAttribute('content');
-  if (!url) return;
+export async function endPagesSessions(): Promise<void> {
   try {
-    await fetch(url, { method: 'DELETE', credentials: 'include', mode: 'cors' });
+    await fetch('/api/session/token', { method: 'DELETE', credentials: 'same-origin' });
   } catch {
-    /* the cookie expires on its own; the next framed page re-mints or clears it */
+    /* the sessions expire on their own (8 h); the next framed page mints or clears them */
   }
 }

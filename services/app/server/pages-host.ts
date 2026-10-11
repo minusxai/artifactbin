@@ -1,20 +1,26 @@
 /**
  * EVERY DOCUMENT ON ITS OWN ORIGIN — the one place the app reads a pages hostname, a pages Origin or
- * the `afbin_pages` cookie (APP__PAGES_HOST, lib/http/pages-origin).
+ * the pages cookie (APP__PAGES_HOST, lib/http/pages-origin).
  *
  * Mounted ahead of every other host boundary when the setting is on; with it off nothing here exists
  * and every request is answered as before. Three kinds of request are decided here:
  *
- *  1. HOST `<pages host>` (the apex): only the pages session exchange, `/pages-session`.
- *       GET ?ticket=&next=  spends the ticket the app page minted for its reader (lib/accounts/
- *                           pages-sessions) and sets `afbin_pages` for `.<pages host>`, then redirects
- *                           to `next` — which must be a document's own origin. No ticket (a guest page)
- *                           ends and clears a stale cookie instead.
- *       DELETE              logout's half, from the app origin (credentialed CORS): the row and the cookie go.
+ *  1. HOST `<pages host>` (the apex): nothing. It is not a document and mints no session; every path is 404.
  *  2. HOST `<hex(id)>.<pages host>`: that document and nothing else — its standalone page at `/` (the
  *     `/raw` page under the document CSP, reader chrome off), its own doors (`/a/<id>/query`, `/mutate`,
  *     `/events`, …) and the public static runtime directories; and, anonymously, another artifact's
  *     `/a/<other>/raw` bytes the document embeds (a `ref:` image). Everything else is 404.
+ *     THE PAGE IS WHERE THE READER ARRIVES. The app page's frame is `https://<hex>.<pages host>/?…&_pt=<ticket>`:
+ *     the ticket is spent here, before any byte of the document is produced, and the response that serves
+ *     the document sets this document's own HOST-ONLY cookie (`__Host-afbin_pages` on https). Three cases:
+ *       `_pt=<ticket>`  a ticket minted for THIS document and origin: a new session replaces whatever the browser
+ *                       held — and serves the document in the same response, unless the browser held a live session of the
+ *                       SAME reader (a repeat view), when it is a 302 to the same URL without `_pt` so the clean address revalidates (304). A replayed, expired or foreign ticket mints nothing and renders as what the
+ *                       browser's own cookie says, or nobody (a back navigation replaying the frame's first URL).
+ *       `_pt=-`         the app page decided "nobody": the document renders as nobody even if a cookie is held,
+ *                       and the same response ends and clears it.
+ *       no `_pt`        a bookmark or a direct visit: whatever the browser's cookie for this host says, as it always did.
+ *     The parameter never reaches the document's handlers, and the response is never cached or sent as a referrer.
  *  3. ORIGIN `<hex(id)>.<pages host>` on any other host: the same doors of the SAME id with credentialed
  *     CORS for exactly that origin, the static directories, and 403 `forbidden_origin` for everything
  *     else. That last rule is load-bearing: a pages origin is SAME-SITE with the app, so the app's
@@ -28,10 +34,10 @@
  */
 import type { Context, MiddlewareHandler, Next } from 'hono';
 import { attachActor, readCookie } from '@artifactbin/utils';
-import { ANONYMOUS } from '@artifactbin/contracts';
-import { endPagesSession, exchangePagesTicket, PAGES_COOKIE, pagesSessionOf } from '@/lib/accounts';
+import { ANONYMOUS, type Actor } from '@artifactbin/contracts';
+import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
-import { idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_SESSION_PATH, pagesOriginFor, type PagesSite } from '@/lib/http/pages-origin';
+import { GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http/pages-origin';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { compressDynamic } from './content-encoding';
 
@@ -56,19 +62,26 @@ function doorOf(pathname: string, id: string): string | null {
 
 const forbidden = (origin: string | null, detail: string): Response =>
   Response.json({ error: 'forbidden_origin', detail: `${origin ?? 'this origin'} ${detail}` }, { status: 403, headers: { ...NO_STORE, vary: 'Origin' } });
+/** The same person (or token) on both sides: a ticket for a different reader than the held session names is a first view. */
+const sameReader = (a: Actor, b: Actor): boolean => (a.userId ?? null) === (b.userId ?? null) && (a.tokenId ?? null) === (b.tokenId ?? null);
 const notFound = (): Response => Response.json({ error: 'not_found' }, { status: 404, headers: { ...NO_STORE } });
 
-function cookieLine(site: PagesSite, value: string, maxAgeSeconds: number): string {
-  return `${PAGES_COOKIE}=${value}; Domain=.${site.host}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${site.scheme === 'https:' ? '; Secure' : ''}`;
+/** The document origin's own cookie: host-only (no `Domain`), a session cookie (the row carries the 8 h), `Max-Age=0` to clear. */
+function cookieLine(site: PagesSite, value: string, clear = false): string {
+  return `${pagesCookieName(site)}=${value}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : ''}${site.scheme === 'https:' ? '; Secure' : ''}`;
 }
 
 export function pagesHost(site: PagesSite): MiddlewareHandler {
-  /** Hand the request to the document's own handlers as its pages session's reader. */
-  const asReader = async (request: Request, id: string): Promise<void> => {
-    const session = await pagesSessionOf(readCookie(request.headers.get('cookie'), PAGES_COOKIE));
+  const cookieName = pagesCookieName(site);
+  const held = (request: Request): string | undefined => readCookie(request.headers.get('cookie'), cookieName);
+
+  /** Hand the request to the document's own handlers as `session`'s reader (nobody when there is none). */
+  const asSession = (request: Request, id: string, session: PagesSession | null): void => {
     attachActor(request, session?.actor ?? ANONYMOUS);
     markPagesRequest(request, { id, self: pagesOriginFor(id, site), site, carried: session?.carried ?? {} });
   };
+  /** Hand the request to the document's own handlers as the reader the browser's own cookie names for THIS document. */
+  const asReader = async (request: Request, id: string): Promise<void> => asSession(request, id, await pagesSessionOf(held(request), Date.now(), id));
 
   /** A door of `id`: the reader attached, and credentialed CORS for exactly the caller's pages origin. */
   const door = async (c: Context, next: Next, id: string, origin: string | null): Promise<Response | void> => {
@@ -88,60 +101,70 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
     if (!/(^|,\s*)origin(\s*,|$)/i.test(headers.get('vary') ?? '')) headers.append('vary', 'Origin');
   };
 
-  /** The standalone page, at the document origin's root. */
+  /**
+   * The standalone page, at the document origin's root — and where the app page's ticket is spent (see the header).
+   * The reader is decided BEFORE the document is produced, and the Set-Cookie rides the document's own response.
+   */
   const page = async (request: Request, id: string): Promise<Response> => {
     if (request.method !== 'GET' && request.method !== 'HEAD') return notFound();
-    await asReader(request, id);
+    const url = new URL(request.url);
+    const marker = url.searchParams.get(PAGES_TICKET_PARAM);
+    let forwarded = request;
+    let session: PagesSession | null;
+    let setCookie: string | null = null;
+    if (marker === null) {
+      session = await pagesSessionOf(held(request), Date.now(), id);
+    } else {
+      // The handlers never see the parameter: neither the ticket nor the marker is part of the document's address.
+      url.search = withoutPagesTicket(url.search);
+      forwarded = new Request(url, request);
+      const cookie = held(request);
+      if (marker === GUEST_TICKET) {
+        // The app page decided "nobody": whoever this browser was signed in as before, this document reads as nobody now.
+        session = null;
+        if (cookie) { await endPagesSession(cookie); setCookie = cookieLine(site, '', true); }
+      } else if (request.method === 'GET') {
+        const minted = await exchangePagesTicket(marker, { artifactId: id, origin: pagesOriginFor(id, site) });
+        if (minted) {
+          // A repeat view of the SAME reader: the browser very likely holds this document under its clean address, which
+          // revalidates (document-revalidation) — but only if the frame ends there. So the ticket is spent as ever (the new
+          // session replaces the old, and carries the app page's current decisions), and the frame is sent to the clean URL.
+          const before = cookie ? await pagesSessionOf(cookie, Date.now(), id) : null;
+          await endPagesSession(cookie);
+          const line = cookieLine(site, minted.cookie);
+          if (before && sameReader(before.actor, minted.actor)) {
+            return new Response(null, { status: 302, headers: { location: url.href, 'set-cookie': line, ...NO_STORE, 'referrer-policy': 'no-referrer' } });
+          }
+          session = minted;
+          setCookie = line;
+        } else {
+          // Spent, expired or foreign (a back navigation replaying the frame's first URL): what the browser's own cookie says, or nobody.
+          session = await pagesSessionOf(cookie, Date.now(), id);
+        }
+      } else {
+        // A HEAD never spends a ticket.
+        session = await pagesSessionOf(cookie, Date.now(), id);
+      }
+    }
+    asSession(forwarded, id, session);
     const ctx = { params: Promise.resolve({ id }) };
-    const answer = await runWithRequest(request, () => (request.method === 'HEAD' ? rawHead(request, ctx) : rawGet(request, ctx)));
-    // Brotli for a client that takes it, like the app page (server/content-encoding); identity otherwise.
-    return compressDynamic(request, answer);
+    const response = await runWithRequest(forwarded, () => (forwarded.method === 'HEAD' ? rawHead(forwarded, ctx) : rawGet(forwarded, ctx)));
+    // Brotli for a client that takes it, like the app page (server/content-encoding); identity otherwise. The reader was decided
+    // above, BEFORE the document's own handler could answer a 304 for it: the validator names who is asking (document-revalidation).
+    const answer = await compressDynamic(forwarded, response);
+    if (!setCookie) return answer;
+    const headers = new Headers(answer.headers);
+    headers.append('set-cookie', setCookie);
+    return new Response(answer.body, { status: answer.status, statusText: answer.statusText, headers });
   };
 
-  /** The apex: the pages session exchange and logout, nothing else. */
-  const apex = async (c: Context): Promise<Response> => {
-    const request = c.req.raw;
-    const url = new URL(request.url);
-    if (url.pathname !== PAGES_SESSION_PATH) return notFound();
-    const held = readCookie(request.headers.get('cookie'), PAGES_COOKIE);
-    const origin = request.headers.get('origin');
-    const appCors: Record<string, string> = origin === site.app ? { 'access-control-allow-origin': site.app, 'access-control-allow-credentials': 'true', vary: 'Origin' } : { vary: 'Origin' };
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: { ...appCors, ...NO_STORE, 'access-control-allow-methods': 'DELETE', 'access-control-max-age': '600' } });
-    }
-    if (request.method === 'DELETE') {
-      // Logout is the app page's to ask for: a document's own script may not end its reader's session.
-      if (origin && origin !== site.app) return forbidden(origin, 'may not end the pages session');
-      await endPagesSession(held);
-      return new Response(null, { status: 204, headers: { ...appCors, ...NO_STORE, 'set-cookie': cookieLine(site, '', 0) } });
-    }
-    if (request.method !== 'GET') return notFound();
-    // Only ever onward to a document's own origin: never an open redirect.
-    let next: URL;
-    try { next = new URL(url.searchParams.get('next') ?? ''); } catch { return Response.json({ error: 'invalid_next' }, { status: 400, headers: NO_STORE }); }
-    const id = idFromPagesOrigin(next.origin, site);
-    if (!id || next.origin !== pagesOriginFor(id, site) || next.username || next.password) return Response.json({ error: 'invalid_next' }, { status: 400, headers: NO_STORE });
-    const headers = new Headers({ location: next.href, ...NO_STORE, 'referrer-policy': 'no-referrer' });
-    const ticket = url.searchParams.get('ticket');
-    if (ticket) {
-      const session = await exchangePagesTicket(ticket);
-      // A spent or expired ticket (a back navigation replaying the frame's first URL) keeps what the browser holds.
-      if (session) {
-        await endPagesSession(held);
-        headers.append('set-cookie', cookieLine(site, session.cookie, session.maxAgeSeconds));
-      }
-    } else if (held) {
-      // A guest page: whoever this browser was signed in as before, the frame reads as nobody now.
-      await endPagesSession(held);
-      headers.append('set-cookie', cookieLine(site, '', 0));
-    }
-    return new Response(null, { status: 302, headers });
-  };
+  /** The apex is not a document and mints nothing. */
+  const apex = (): Response => notFound();
 
   return async (c, next) => {
     const request = c.req.raw;
     const host = addressedHost(request);
-    if (isPagesApexHost(host, site)) return apex(c);
+    if (isPagesApexHost(host, site)) return apex();
     const pathname = new URL(request.url).pathname;
     const origin = request.headers.get('origin');
     const hostId = idFromPagesHost(host, site);
