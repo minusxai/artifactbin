@@ -13,7 +13,7 @@
  * `closed_through`, so racing readers add a day once. The table is derived and disposable: with no row
  * the live range starts at the beginning of time and the answer is the same, only slower once.
  */
-import { getDb } from '@/lib/platform/db';
+import { getDb } from './db';
 
 const TODAY = "(now() AT TIME ZONE 'UTC')::date";
 
