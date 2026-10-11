@@ -14,6 +14,8 @@ import List from 'lucide-solid/icons/list';
 import type { MdMarker } from '@/lib/annotations/markdown-lite';
 import { commentDocument, mountCommentEditor, type MentionQuery } from './comment-editor';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Field';
 import { Tooltip } from '../ui/Tooltip';
 import { remoteMention } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
@@ -30,7 +32,6 @@ const TOOLBAR = [
   { marker: 'link', label: 'Link', hint: 'link', Icon: Link2 },
   { marker: 'list', label: 'List', hint: 'list', Icon: List },
 ] satisfies Array<{ marker: MdMarker; label: string; hint: string; Icon: typeof Bold }>;
-const toolButton = 'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg';
 
 export interface CommentMarkdownFieldProps {
   /** The editable root's accessible name. */
@@ -125,24 +126,25 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   return <div ref={drop.ref} class={`relative min-w-0 ${props.class??''}`}>
     <ImageDropTarget over={drop.over()} />
     <Show when={props.image}>{image => <CommentImageDraftView image={image()} busy={props.busy} />}</Show>
-    <div class="comment-editor-tools" classList={{'has-context': !!context()}}>
-    <Show when={context()}><div class="comment-editor-context">{context()}</div></Show>
-    <div role="toolbar" aria-label={`${props.label} formatting`} class="comment-editor-toolbar">
-      <For each={TOOLBAR}>{tool=><Tooltip content={tool.hint}><button type="button" aria-label={tool.label} onMouseDown={event=>event.preventDefault()} onClick={()=>apply(tool.marker)} class={toolButton}><tool.Icon size={13} strokeWidth={1.8}/></button></Tooltip>}</For>
+    {/* The context (the composer's breadcrumb) shares the row with the toolbar: it takes what the six 32px tools leave. */}
+    <div class="comment-editor-tools gap-2">
+    <Show when={context()}><div class="comment-editor-context min-w-0 flex-1">{context()}</div></Show>
+    <div role="toolbar" aria-label={`${props.label} formatting`} class="comment-editor-toolbar shrink-0">
+      <For each={TOOLBAR}>{tool=><Tooltip content={tool.hint}><Button type="button" variant="ghost" size="sm" icon aria-label={tool.label} onMouseDown={event=>event.preventDefault()} onClick={()=>apply(tool.marker)}><tool.Icon size={13} strokeWidth={1.8}/></Button></Tooltip>}</For>
       <Show when={props.image}>{image => <AttachImageButton image={image()} />}</Show>
     </div>
     </div>
-    <Show when={linkOpen()}><div class="mb-2 flex gap-2"><input aria-label="Link URL" value={href()} onInput={event=>setHref(event.currentTarget.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();if(editor?.link(href()))setLinkOpen(false);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setLinkOpen(false);editor?.view.focus();}}} class="min-w-0 flex-1 rounded border border-edge bg-surface p-1 text-xs"/><button type="button" class="text-xs text-accent" onClick={()=>{if(editor?.link(href()))setLinkOpen(false);}}>Apply link</button></div></Show>
+    <Show when={linkOpen()}><div class="mb-2 flex gap-2"><Input size="sm" aria-label="Link URL" value={href()} onInput={event=>setHref(event.currentTarget.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();if(editor?.link(href()))setLinkOpen(false);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setLinkOpen(false);editor?.view.focus();}}} class="flex-1"/><Button type="button" variant="secondary" size="sm" onClick={()=>{if(editor?.link(href()))setLinkOpen(false);}}>Apply link</Button></div></Show>
     <div ref={mount} style={{'--comment-min-height':`${Math.max(props.rows??3,2)*1.5+1.5}rem`}} />
     <Show when={mention()&&props.backend}><CommentMentionPicker backend={props.backend!} artifactId={props.artifactId} query={mention()!.query} onSelect={insertMention} onReady={handle=>{keyboard=handle;}}/></Show>
     <Show when={props.quickAgents && canMention()}>
       <div class="comment-agents" role="group" aria-label="Tag agent">
         <div class="comment-agent-choices">
         <Show when={untaggedAgents().length}><span>Tag agent</span></Show>
-        <For each={untaggedAgents().slice(0,2)}>{agent=><button type="button" aria-label={`Tag ${agent.name}`} class="comment-agent-choice" style={{'--mention-color':agentNameColor(agent.name)}} onMouseDown={event=>event.preventDefault()} onClick={()=>insertMention(remoteMention(agent))}><span aria-hidden="true">●</span> {agent.name}</button>}</For>
-        <Show when={untaggedAgents().length>2}><button type="button" class="comment-agent-more" aria-expanded={!!mention()} onMouseDown={event=>event.preventDefault()} onClick={showAgents}>+{untaggedAgents().length-2} {untaggedAgents().length===3?'other':'others'}</button></Show>
+        <For each={untaggedAgents().slice(0,2)}>{agent=><Button type="button" variant="ghost" size="sm" aria-label={`Tag ${agent.name}`} onMouseDown={event=>event.preventDefault()} onClick={()=>insertMention(remoteMention(agent))}><span aria-hidden="true" class="text-micro" style={{color:agentNameColor(agent.name)}}>●</span> {agent.name}</Button>}</For>
+        <Show when={untaggedAgents().length>2}><Button type="button" variant="link" aria-expanded={!!mention()} onMouseDown={event=>event.preventDefault()} onClick={showAgents}>+{untaggedAgents().length-2} {untaggedAgents().length===3?'other':'others'}</Button></Show>
         <Show when={agentsLoad()==='loading'}><span role="status">Loading agents…</span></Show>
-        <Show when={agentsLoad()==='error'}><span role="alert">Could not load agents.</span><button type="button" aria-label="Retry loading agents" onClick={loadAgents}>Retry</button></Show>
+        <Show when={agentsLoad()==='error'}><span role="alert">Could not load agents.</span><Button type="button" variant="link" aria-label="Retry loading agents" onClick={loadAgents}>Retry</Button></Show>
         <Show when={agentsLoad()==='ready' && !agents().length}><span>No agents available</span></Show>
         <Show when={agents().length && !untaggedAgents().length}><span>All agents tagged</span></Show>
         </div>

@@ -199,14 +199,18 @@ export function createImageDropTarget(draft: () => CommentImageDraft | null | un
 /** The visible drop target while a file is over the box. It takes no pointer events, so the drag still lands. */
 export function ImageDropTarget(props: { over: boolean }): JSX.Element {
   return <Show when={props.over}>
-    <div role="status" class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[6px] border-2 border-dashed border-accent bg-accent-soft/90 text-sm font-semibold text-accent">Drop image to attach</div>
+    <div role="status" class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-panel border-2 border-dashed border-accent bg-accent-soft/90 text-sm font-semibold text-accent">Drop image to attach</div>
   </Show>;
 }
 
-/** A file picker that looks like a toolbar button; always offered, disabled with its reason where images are unavailable. */
+/**
+ * A file picker that looks like a toolbar button; always offered, disabled with its reason where images are unavailable.
+ * Its sr-only <input type="file"> is wrapped by a <label> (the click target): ui/Button cannot be a label or open a picker
+ * without changing the control's role from file input to button, so the input stays hand-drawn (allowlisted styled-field).
+ */
 export function AttachImageButton(props: { image: CommentImageDraft }): JSX.Element {
   const control = (gate: { disabled?: true; 'aria-describedby'?: string }) => (
-    <label class="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg focus-within:outline-2 focus-within:outline-accent has-[:disabled]:cursor-default has-[:disabled]:opacity-50">
+    <label class="inline-flex size-control-sm cursor-pointer items-center justify-center rounded-control text-muted hover:bg-raised hover:text-fg focus-within:outline-2 focus-within:outline-accent has-[:disabled]:cursor-default has-[:disabled]:opacity-50">
       <ImagePlus size={13} strokeWidth={1.8} aria-hidden="true" />
       <input type="file" class="sr-only" accept={COMMENT_IMAGE_TYPES.join(',')} aria-label="Attach image" {...gate}
         onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) props.image.attach(file); event.currentTarget.value = ''; }} />

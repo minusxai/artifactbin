@@ -7,7 +7,8 @@ import { Tooltip } from '../ui/Tooltip';
 import { agentNameColor } from '../lib/agent-identity';
 import { PersonMention } from './PersonMention';
 
-const CODE_CLASS = 'break-all rounded-[3px] bg-raised px-1 py-0.5 font-mono text-[0.92em] text-fg';
+// Inline code scales with its paragraph (0.92em), which no px-based text token expresses.
+const CODE_CLASS = 'break-all rounded-chip bg-raised px-1 py-0.5 font-mono text-[0.92em] text-fg';
 
 function inline(nodes: MdInline[]): JSX.Element {
   return <For each={nodes}>{(node) => {
@@ -35,7 +36,7 @@ function block(node: MdNode): JSX.Element {
   switch (node.kind) {
     case 'heading': return <div role="heading" aria-level={node.level} class="comment-heading" data-level={node.level}>{inline(node.children)}</div>;
     case 'paragraph': return <p class="leading-normal">{inline(node.children)}</p>;
-    case 'code_block': return <pre class="min-w-0 max-w-full overflow-x-auto rounded-[4px] border border-edge bg-raised p-2 font-mono text-[11px] leading-snug text-fg"><code>{node.text}</code></pre>;
+    case 'code_block': return <pre class="min-w-0 max-w-full overflow-x-auto rounded-chip border border-edge bg-raised p-2 font-mono text-2xs leading-snug text-fg"><code>{node.text}</code></pre>;
     case 'list': {
       const items = () => <For each={node.items}>{(item) => <li class="min-w-0 leading-normal"><For each={item.children}>{block}</For></li>}</For>;
       return node.ordered
@@ -55,5 +56,5 @@ export function CommentMarkdown(props: { text: string; label?: string; class?: s
 
 /** Shared footer hint keeps new comments and replies visually consistent. */
 export function CommentSubmitHint(props: { action: 'comment' | 'reply' }): JSX.Element {
-  return <span class="mr-auto hidden items-center gap-1.5 font-sans text-[11px] text-muted sm:inline-flex" aria-label={`Keyboard shortcut to send ${props.action}`}><kbd class="rounded border border-edge bg-surface px-1.5 py-0.5 font-sans text-[10px]">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd><span aria-hidden="true">+</span><kbd class="rounded border border-edge bg-surface px-1.5 py-0.5 font-sans text-[10px]">Enter</kbd><span class="ml-1">to {props.action}</span></span>;
+  return <span class="mr-auto hidden items-center gap-1.5 font-sans text-2xs text-muted sm:inline-flex" aria-label={`Keyboard shortcut to send ${props.action}`}><kbd class="rounded-chip border border-edge bg-surface px-1.5 py-0.5 font-sans text-micro">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd><span aria-hidden="true">+</span><kbd class="rounded-chip border border-edge bg-surface px-1.5 py-0.5 font-sans text-micro">Enter</kbd><span class="ml-1">to {props.action}</span></span>;
 }
