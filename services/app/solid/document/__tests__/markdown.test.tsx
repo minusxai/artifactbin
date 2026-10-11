@@ -7,7 +7,8 @@ import { replaceComment, selectCommentText } from './comment-input';
  * draft TEXT at the caret, so what ⌘↵ sends is exactly what was typed.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, within } from '@testing-library/dom';
+import { screen, waitFor, within } from '@testing-library/dom';
+import { createSignal } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { fireEvent, render } from '../../__tests__/helpers';
@@ -91,6 +92,29 @@ it('marks a mentioned person who has not accepted yet, from one status read for 
   expect(screen.getByRole('link', { name: /@asha/ }).getAttribute('href')).toBe('/people/usr_asha');
   expect(screen.getAllByLabelText('Invitation pending')).toHaveLength(1);
   expect(backend.members).toHaveBeenCalledTimes(1);
+});
+
+it('reads statuses again on the membership signal and on focus, never on a timer', async () => {
+  const answers: Array<Record<string, 'pending' | 'accepted'>> = [{ usr_asha: 'pending' }, { usr_asha: 'accepted' }, { usr_asha: 'pending' }];
+  const members = vi.fn(async () => ({ people: [], mentions: answers[Math.min(members.mock.calls.length - 1, answers.length - 1)] }));
+  const backend = { unavailable: () => null, members } as unknown as ArtifactBackend;
+  const [revision, setRevision] = createSignal(0);
+  vi.useFakeTimers({ toFake: ['setInterval', 'setTimeout', 'clearInterval', 'clearTimeout'] });
+  try {
+    render(() => <PersonMentionProvider artifactId="doc1" backend={backend} revision={revision()}>
+      <CommentMarkdown text="ask [@asha](/people/usr_asha)" />
+    </PersonMentionProvider>);
+    expect(await screen.findByLabelText('Invitation pending')).toBeTruthy();
+    expect(members).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(members).toHaveBeenCalledTimes(1);
+    setRevision(1);
+    await waitFor(() => expect(screen.queryByLabelText('Invitation pending')).toBeNull());
+    expect(members).toHaveBeenCalledTimes(2);
+    window.dispatchEvent(new Event('focus'));
+    expect(await screen.findByLabelText('Invitation pending')).toBeTruthy();
+    expect(members).toHaveBeenCalledTimes(3);
+  } finally { vi.useRealTimers(); }
 });
 
 describe('the compact surfaces show the plain text', () => {
