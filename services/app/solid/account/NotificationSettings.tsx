@@ -3,6 +3,7 @@ import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { useInbox } from '../lib/notifications';
 import { InboxAlert } from '../components/PeopleInbox';
 import { apiFetch } from '../lib/api';
+import { FORM_SECONDARY_BUTTON } from '../ui/FormControls';
 
 type EmailPreferences = { invitations: boolean; comments: boolean; activity: boolean };
 const KEYS = ['invitations', 'comments', 'activity'] as const;
@@ -20,11 +21,11 @@ export function NotificationSettings(): JSX.Element {
     catch { setNotice('Could not save email preferences. Try again.'); }
     finally { setSaving(false); }
   };
-  return <section id="notifications" aria-label="Notification settings" class="rounded-lg border border-edge bg-surface p-5 font-sans"><div class="flex flex-wrap items-center justify-between gap-2"><h2 class="text-base font-semibold">Notification settings</h2><a href="/notifications" class="text-sm text-muted hover:text-fg">All notifications</a></div><p class="mt-1 text-sm text-muted">Choose how invitations and updates reach you.</p>
+  return <section id="notifications" aria-label="Notification settings" class="rounded-xl border border-edge bg-surface p-5 sm:p-6 font-sans"><div class="flex flex-wrap items-center justify-between gap-2"><h2 class="text-base font-semibold">Notification settings</h2><a href="/notifications" class="text-sm text-muted hover:text-fg">All notifications</a></div><p class="mt-1 text-sm text-muted">Choose how invitations and updates reach you.</p>
     <InboxAlert class="mt-3" />
-    <Show when={inbox.state()}><div class="mt-5 border-t border-edge pt-4"><h3 class="mb-3 text-sm font-medium">Invitations</h3><label class="flex cursor-pointer items-start gap-3 text-sm"><input type="checkbox" class="mt-1 accent-accent" checked={inbox.state()?.autoAccept} onChange={event => void inbox.load({ autoAccept: event.currentTarget.checked })} /><span>Automatically accept invitations from people I follow.<span class="mt-1 block text-xs leading-5 text-muted">You can review invitations from everyone else before joining.</span></span></label></div></Show>
-    <Show when={email()}><fieldset disabled={saving()} class="mt-5 space-y-3 border-t border-edge pt-4"><legend class="text-sm font-medium">Email notifications</legend><For each={KEYS}>{key => <label class="flex cursor-pointer items-start gap-3 text-sm"><input type="checkbox" class="mt-1 accent-accent" checked={email()?.[key]} onChange={event => void saveEmail({ ...email()!, [key]: event.currentTarget.checked })} /><span>{LABELS[key]}</span></label>}</For></fieldset></Show>
+    <Show when={inbox.state()}><div class="mt-5 border-t border-edge pt-4"><h3 class="mb-3 text-sm font-medium">Invitations</h3><label class="flex cursor-pointer items-start gap-3 text-sm"><input type="checkbox" class="mt-0.5 size-4 shrink-0 accent-accent" checked={inbox.state()?.autoAccept} onChange={event => void inbox.load({ autoAccept: event.currentTarget.checked })} /><span>Automatically accept invitations from people I follow.<span class="mt-1 block text-xs leading-5 text-muted">You can review invitations from everyone else before joining.</span></span></label></div></Show>
+    <Show when={email()}><fieldset disabled={saving()} class="mt-5 space-y-3 border-t border-edge pt-4"><legend class="text-sm font-medium">Email notifications</legend><For each={KEYS}>{key => <label class="flex cursor-pointer items-start gap-3 text-sm"><input type="checkbox" class="mt-0.5 size-4 shrink-0 accent-accent" checked={email()?.[key]} onChange={event => void saveEmail({ ...email()!, [key]: event.currentTarget.checked })} /><span>{LABELS[key]}</span></label>}</For></fieldset></Show>
     <Show when={notice()}><p role="status" class="mt-3 text-xs text-muted">{notice()}</p></Show>
-    <Show when={inbox.state()?.blocks.length}><div class="mt-5 border-t border-edge pt-4"><h3 class="mb-2 text-sm font-medium">Blocked people</h3><For each={inbox.state()?.blocks}>{block => <div class="flex items-center justify-between py-2"><span class="text-sm">@{block.username ?? block.user_id}</span><button type="button" onClick={() => void inbox.load({ unblock: block.user_id })}>Unblock</button></div>}</For></div></Show>
+    <Show when={inbox.state()?.blocks.length}><div class="mt-5 border-t border-edge pt-4"><h3 class="mb-2 text-sm font-medium">Blocked people</h3><For each={inbox.state()?.blocks}>{block => <div class="flex items-center justify-between py-2"><span class="text-sm">@{block.username ?? block.user_id}</span><button type="button" class={FORM_SECONDARY_BUTTON} onClick={() => void inbox.load({ unblock: block.user_id })}>Unblock</button></div>}</For></div></Show>
   </section>;
 }
