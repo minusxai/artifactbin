@@ -191,6 +191,56 @@ describe('the document on its own origin', () => {
     expect(again.headers.get('set-cookie')).toMatch(/^__Host-afbin_pages=[A-Za-z0-9_-]{40,}/);
   });
 
+  it('sends a repeat view of the same reader to the clean address, which is a 304; a different reader gets the page directly', async () => {
+    const w = await world();
+    const id = await w.publish(BODY, 'public');
+    const self = pagesOriginFor(id, site);
+    // First view: no cookie held, so no extra hop — the document, its tag and the session in ONE response.
+    const first = await app.request(await frameSrc(id, w.actor));
+    expect(first.status).toBe(200);
+    const cookie = first.headers.get('set-cookie')!.split(';')[0]!;
+    // The clean address is what the browser holds now: it revalidates.
+    const clean = await app.request(`${self}/`, { headers: { cookie } });
+    expect(clean.status).toBe(200);
+    const tag = tagOf(clean);
+    expect(tag).toBe(tagOf(first));
+    // Repeat view, same reader, cookie held: the ticket is spent and the frame is sent to the clean URL — no body at all.
+    const src = await frameSrc(id, w.actor);
+    const hop = await app.request(src, { headers: { cookie } });
+    expect(hop.status).toBe(302);
+    expect(hop.headers.get('location')).toBe(`${self}/`);
+    expect(hop.headers.get('cache-control')).toBe('no-store');
+    expect(hop.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(await hop.text()).toBe('');
+    const fresh = hop.headers.get('set-cookie')!.split(';')[0]!;
+    expect(fresh).not.toBe(cookie);
+    // …where the new session revalidates: a 304 with no bytes, for the same viewer.
+    const again = await app.request(hop.headers.get('location')!, { headers: { cookie: fresh, 'if-none-match': tag } });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe('');
+    // The ticket was spent on the hop: replayed, it mints nothing and is not a second hop.
+    const replay = await app.request(src, { headers: { cookie: fresh } });
+    expect(replay.status).toBe(200);
+    expect(replay.headers.get('set-cookie')).toBeNull();
+    // The reader's selection survives the hop.
+    const withSelection = new URL(await frameSrc(id, w.actor));
+    withSelection.search = `?$region=west&_pt=${withSelection.searchParams.get('_pt')}`;
+    const selected = await app.request(withSelection.href, { headers: { cookie: fresh } });
+    expect(selected.status).toBe(302);
+    expect(selected.headers.get('location')).toBe(`${self}/?$region=west`);
+
+    // A different reader on a browser holding the first one's cookie: a first view for them — the page directly, never the old
+    // reader's validator, and the old session is gone.
+    const stranger = await createUser({ email: 'mxmx_test_reval_hop_stranger@example.com' });
+    const strangerActor: Actor = { credential: 'session', userId: stranger.id, email: stranger.email!, emailVerified: true };
+    const theirs = await app.request(await frameSrc(id, strangerActor), { headers: { cookie: fresh, 'if-none-match': tag } });
+    expect(theirs.status).toBe(200);
+    expect(tagOf(theirs)).not.toBe(tag);
+    expect(theirs.headers.get('set-cookie')).toMatch(/^__Host-afbin_pages=/);
+    expect((await app.request(`${self}/`, { headers: { cookie: fresh, 'if-none-match': tag } })).status).toBe(200);
+    expect(tagOf(await app.request(`${self}/`, { headers: { cookie: fresh } }))).toBe(tagOf(await app.request(`${self}/`)));
+  });
+
   it('changes the tag with what the reader trusts: a reader who allowed the declared hosts once', async () => {
     const w = await world();
     const id = await w.publish(`<Helmet><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Chart</h1>`, 'public');
