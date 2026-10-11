@@ -38,10 +38,30 @@ export async function setupDeployment(userId:string,groupId:string):Promise<Depl
   await tx.query('UPDATE deployment_state SET default_group_id=$2,setup_complete=true WHERE id=$1',[ID,groupId]);
  });return getDeploymentState(userId);
 }
+/**
+ * The verdict a plain read already settles, or undefined when only the writing path can decide. Every
+ * authenticated request in a non-public deployment asks, and nearly all are people already admitted (or
+ * plainly refused), so they must not queue on the one `deployment_state` lock. Only first-owner binding and
+ * admitting a new member write, and those still take it. A refusal read without the lock can lose a race
+ * with a concurrent admission by at most one request; an admission is never taken back.
+ */
+async function settledAdmission(db:Queryable,identity:{userId:string;emailVerified?:boolean},email:string|undefined,config:ReturnType<typeof deploymentConfig>,matches:(email:string)=>boolean):Promise<boolean|undefined> {
+ const s=(await db.query<State>('SELECT owner_user_id,default_group_id,setup_complete FROM deployment_state WHERE id=$1',[ID])).rows[0];
+ if(!s)return undefined;
+ if(s.owner_user_id===identity.userId)return true;
+ if((await db.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[identity.userId])).rows.length)return true;
+ if(await canUseDelegatedDeploymentIdentity(identity.userId,db))return true;
+ if(!email||identity.emailVerified!==true)return false;
+ if(!s.owner_user_id&&email===config.ownerEmail&&matches(email))return undefined;
+ if(!s.setup_complete||!matches(email))return false;
+ return undefined;
+}
 export async function admitDeploymentIdentity(identity:{userId:string;email?:string;emailVerified?:boolean}):Promise<boolean> {
  const config=deploymentConfig();if(config.mode==='public')return true;
  const policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  const email=identity.email?.trim().toLowerCase(),db=await getDb();
+ const settled=await settledAdmission(db,identity,email,config,e=>policy.matches(e));
+ if(settled!==undefined)return settled;
  return db.transaction(async tx=>{
   const s=await state(tx,true);
   if(s.owner_user_id===identity.userId)return true;
