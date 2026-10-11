@@ -13,6 +13,7 @@ import { Select } from '../ui/Select';
 import { StatusMessage } from '../ui/StatusMessage';
 import { PolicyConditions } from './PolicyConditions';
 import { apiFetch } from '../lib/api';
+import { artifactLink } from '../lib/artifact-link';
 
 type Table = { schema: string; name: string; columns: Array<{ name: string }> };
 type PolicyState = { canManage?: boolean; policy: DatasetAccessPolicy | null; revision: number; tables: Table[]; writtenBy: Array<{ id: string; title: string | null; mutations: string[] }> };
@@ -94,7 +95,7 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
           </Panel>;
         }}</For></Show>
         <Field label="Blocked functions"><Input aria-label="Denied functions" value={deniedText()} onInput={event => { const text = event.currentTarget.value; setDeniedText(text); const policy = draft(); if (policy) change({ ...policy, execution: { ...policy.execution, functions: { ...policy.execution?.functions, deny: text.split(',').map(item => item.trim()).filter(Boolean) } } }); }} /></Field>
-        <section><h3 class="font-semibold">Connected apps</h3><Show when={state()?.writtenBy?.length} fallback={<p>No apps use these actions yet.</p>}><For each={state()?.writtenBy}>{item => <p><a href={`/a/${item.id}`}>{item.title ?? item.id}</a> · {item.mutations.join(', ')}</p>}</For></Show></section>
+        <section><h3 class="font-semibold">Connected apps</h3><Show when={state()?.writtenBy?.length} fallback={<p>No apps use these actions yet.</p>}><For each={state()?.writtenBy}>{item => <p><a {...artifactLink(`/a/${item.id}`, 'markup')}>{item.title ?? item.id}</a> · {item.mutations.join(', ')}</p>}</For></Show></section>
       </>}>
         <Field label="Policy JSON or YAML"><Textarea size="sm" rows={24} aria-label="Policy JSON or YAML" spellcheck={false} value={source() ?? ''} onInput={event => setSource(event.currentTarget.value)} /></Field>
         <div class="flex gap-2"><Button onClick={() => { try { change(parseDatasetAccessPolicy(parseYaml(source()!))); setSource(null); setTableIndex(0); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid policy'); } }}>Apply policy source</Button><Button variant="secondary" onClick={() => setSource(null)}>Cancel source changes</Button></div>

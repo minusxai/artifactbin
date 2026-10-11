@@ -133,6 +133,15 @@ async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'i
   return { src: pagesFrameUrl(origin, search, ticket), origin };
 }
 
+/**
+ * THE KIND DOOR (`?part=kind`): only what a client navigation to an address it knows nothing about needs first, to
+ * decide between crossing to the server (a document, whose page carries its own bootstrap) and asking for the full
+ * answer (everything else) — solid/pages/ArtifactAddress. Admitted by the caller exactly as the page is, then answered
+ * from the header alone: no document, no runtime, no social reads, and the 410 of a retired stored shape is the full
+ * door's to give once the document is asked for.
+ */
+const kindAnswer = (header: Pick<ArtifactHeader, 'format'>): ArtifactPageAnswer => ({ status: 200, body: { format: header.format } });
+
 /** The page's answer; a stored shape the current code no longer serves is its 410 (lib/artifacts/servable). */
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {
   try { return await answerArtifactPage(request, id, options); }
@@ -154,6 +163,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const actor = await sessionActor(request);
   if (!admitted && !exporting && actor.tokenId !== header.token_id && !(await canReadArtifact(header, actor.viewer))) return notFound();
   if (!ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
+  if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
   const artifact = admitted ?? await getArtifactById(id);
   if (!artifact) return notFound();
   // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
@@ -449,13 +459,14 @@ async function membershipOf(viewer: Awaited<ReturnType<typeof sessionActor>>, id
  * The JSON door (app/api/page/artifact/[id]).
  *
  * Every role reads a markup document in the frame the HTML door draws (solid/pages/Document adopts it);
- * nothing renders a document from this answer. A client-side link to a document
- * reads it only to learn that the address is a document (solid/pages/ArtifactAddress `replaceDocument`), the
- * writer's editor reads `?part=editor`, the framed document's edit controller reads `?part=nodes`, and a dataset
- * reader re-reads its catalog. So a framed document's answer carries the same `FramedRuntime` as the HTML door's
- * (the title and declared dataflow, nothing the frame draws from): measured at 211 KB on a large document, of which
- * the sheet, system sheet and author script were 209 KB that nothing here reads. The full served runtime is built
- * for /raw, draft preview and prepared pages, none of which come through this door. It never names an app entry.
+ * nothing renders a document from this answer. A client navigation to an address of unknown kind asks `?part=kind`
+ * first and crosses to the server for a document without reading this answer (solid/pages/ArtifactAddress
+ * `replaceDocument`), the writer's editor reads `?part=editor`, the framed document's edit controller reads
+ * `?part=nodes`, and a dataset reader re-reads its catalog. So a framed document's answer carries the same
+ * `FramedRuntime` as the HTML door's (the title and declared dataflow, nothing the frame draws from): measured at
+ * 211 KB on a large document, of which the sheet, system sheet and author script were 209 KB that nothing here
+ * reads. The full served runtime is built for /raw, draft preview and prepared pages, none of which come through
+ * this door. It never names an app entry.
  */
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);

@@ -20,9 +20,10 @@ async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
 }
 
 /**
- * Pages whose data is worth fetching before their chunk lands. Documents are deliberately absent: a
- * client navigation to `/a/:id` ends in a full load of the compiled page (ArtifactAddress), so its
- * JSON would be wasted work; the compiled page owns its own intent rule.
+ * Pages whose data is worth fetching before their chunk lands. Documents are deliberately absent: their links are
+ * not the router's at all (solid/lib/artifact-link), and an address that was told nothing asks the kind door
+ * (ArtifactAddress) before it fetches anything, so a document's JSON is never wasted work; the compiled page owns
+ * its own intent rule.
  */
 const PRELOADABLE: Array<[RegExp, (m: RegExpExecArray, url: URL) => string]> = [
   // Home's bootstrap resolves the destination server-side, so a group homepage never fetches the personal shelf.
