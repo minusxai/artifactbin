@@ -64,15 +64,16 @@ const ISLANDS_BROWSER_LEAVES = [
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
 /*
- * lib/story-runtime's doors: contract, story-fragment and the four lazy edit/ chunks. It has no index: the
- * compile-time reader chrome is lib/reader-chrome's, whose index is serverOnly (the outline pulls in markdown).
- * Re-export entries grow the island chunks (measured in row 40.2: esbuild reaches every file an entry re-exports),
- * so browser-bundled code imports values from the listed leaf files instead.
+ * lib/story-runtime's doors: contract and story-fragment. It has no index: the compile-time reader chrome is
+ * lib/reader-chrome's, whose index is serverOnly (the outline pulls in markdown), and the frame's edit chunks are
+ * lib/frame-edit's. Re-export entries grow the island chunks (measured in row 40.2: esbuild reaches every file an
+ * entry re-exports), so browser-bundled code imports values from the listed leaf files instead.
  */
-const STORY_RUNTIME_ENTRIES = ['contract', 'story-fragment', 'edit/annotate', 'edit/dom-mounter', 'edit/selection-actions', 'edit/session'];
+const STORY_RUNTIME_ENTRIES = ['contract', 'story-fragment'];
 const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/web/',
+  'services/app/lib/frame-edit/',
   'services/app/lib/islands/',
   'services/app/lib/cli-toolkit/browser.ts',
   'services/app/lib/page-styles/document-root.ts',
@@ -154,7 +155,7 @@ const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/lib/editor-engine/',
   'services/app/lib/islands/',
-  'services/app/lib/story-runtime/',
+  'services/app/lib/frame-edit/',
   'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/artifact-backend/browser-artifact-write.ts',
   'services/app/lib/cli-toolkit/browser.ts',
@@ -195,6 +196,8 @@ export const DEEP_MODULES = {
   'lib/document-data': { entries: [''], serverOnly: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/reader-chrome': { entries: ['', 'outline-view', 'script-mount', 'slides'], serverOnly: [''] },
+  // The frame's four lazy edit chunks, one door each and no index on purpose: an index would merge the chunks.
+  'lib/frame-edit': { entries: ['annotate', 'dom-mounter', 'selection-actions', 'session'] },
   'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },

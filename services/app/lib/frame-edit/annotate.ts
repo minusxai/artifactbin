@@ -1,8 +1,8 @@
-import { clearPendingCommentState } from '../comment-state';
+import { clearPendingCommentState } from '@/lib/story-runtime/comment-state';
 import { restoreSavedView, withCommentState } from './comment-state-capture';
 'use client';
 
-import { COMMENT_PRESENTATION } from '../comment-presentation';
+import { COMMENT_PRESENTATION } from './comment-presentation';
 import { COMMENT_TARGET_ATTR, COMMENT_OWNER_ATTR, parseCommentTarget } from '@/lib/story-ui/comment-target';
 
 /**

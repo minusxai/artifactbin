@@ -190,8 +190,8 @@ export function DocumentPage(): JSX.Element {
   const prefetchEditor = () => {
     void loadEditorPart();
     void import('../editor/ArtifactEditor').catch(() => {});
-    void import('@/lib/story-runtime/edit/session').catch(() => {});
-    void import('@/lib/story-runtime/edit/dom-mounter').catch(() => {});
+    void import('@/lib/frame-edit/session').catch(() => {});
+    void import('@/lib/frame-edit/dom-mounter').catch(() => {});
   };
   const beginEdit = (selectionPath: string | null) => {
     if (editable() && !editing()) prefetchEditor();

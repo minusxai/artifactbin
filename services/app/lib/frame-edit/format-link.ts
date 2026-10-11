@@ -1,7 +1,7 @@
 /**
  * THE TOOLBAR'S FORMAT AND LINK, APPLIED INSIDE THE DOCUMENT.
  *
- * Part of the edit session (lib/story-runtime/edit/session). Only this document holds the live
+ * Part of the edit session (lib/frame-edit/session). Only this document holds the live
  * Selection and the ProseMirror views, so the page asks and this applies: a class or style on the
  * block at `path`, or a link around the selected words. Inside a prose flow the change is a
  * ProseMirror transaction (the flow reports it as an ordinary edit); on a plain text host the

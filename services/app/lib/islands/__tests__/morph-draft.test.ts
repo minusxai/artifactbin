@@ -18,8 +18,8 @@ const editSession = vi.hoisted(() => ({
     mountCompiledDom: async () => { editSession.mounts++; },
   },
 }));
-vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () => editSession.session }));
-vi.mock('@/lib/story-runtime/edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
+vi.mock('@/lib/frame-edit/session', () => ({ createFrameEditSession: () => editSession.session }));
+vi.mock('@/lib/frame-edit/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
 import { createIslandController } from '@/lib/islands/island-controller';
 import { STORY_DOCUMENT_MESSAGE } from '@/lib/story-runtime/contract';

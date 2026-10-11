@@ -7,7 +7,7 @@ import { updateJsxElementAtPath, setStaticJsxAttr } from './jsx-edit';
 
 /**
  * Set (or, for a blank title, remove) a Slide's `title` attribute. Removing lets the
- * rail fall back to the slide's first heading — see lib/story-runtime/slides.ts.
+ * rail fall back to the slide's first heading — see lib/reader-chrome/slides.ts.
  */
 export function updateSlideTitleInJsx(source: string, astPath: string, title: string): string {
   const trimmed = title.trim();

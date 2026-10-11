@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 /**
- * lib/story-runtime/edit/grid-edit in SOLID, WITHOUT react-grid-layout's component: tiles are
+ * lib/frame-edit/grid-edit in SOLID, WITHOUT react-grid-layout's component: tiles are
  * positioned by the same arithmetic RGL uses at margin [0,0] (x·colWidth, y·rowHeight), moved by
  * pointer or keyboard, and every staged layout goes through RGL's own kernel (moveElement + vertical
  * compact) so the rects handed to `onLayout` (via lib/story-ui/grid-layout diffLayouts) are the ones

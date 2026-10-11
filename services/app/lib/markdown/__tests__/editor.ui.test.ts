@@ -5,8 +5,8 @@ import { $getRoot, $isTextNode, KEY_TAB_COMMAND } from 'lexical';
 import { mountMarkdownEditor, type MarkdownEditor } from '../editor';
 import { markdownContent } from '../content';
 import { prepareEditorMarkdown } from '../transformers';
-import { describeRange, resolveParts } from '@/lib/story-runtime/edit/selection-range';
-import { createMarkdownRegions } from '@/lib/story-runtime/edit/markdown-regions';
+import { describeRange, resolveParts } from '@/lib/frame-edit/selection-range';
+import { createMarkdownRegions } from '@/lib/frame-edit/markdown-regions';
 import { parseJsx, serializeJsx } from '@/lib/jsx';
 
 const mounted: MarkdownEditor[] = [];

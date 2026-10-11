@@ -3,11 +3,11 @@
  * document, so view-mode comment cards follow a signed, scroll-live layout
  * report rather than guessing from source paths.
  *
- * One rig for the three `lib/story-runtime/edit/__tests__/annotate-*.ui.test.ts`
+ * One rig for the three `lib/frame-edit/__tests__/annotate-*.ui.test.ts`
  * files: the document under test, the pristine channel, and the session itself.
  */
 import { vi } from 'vitest';
-import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
+import { createFrameAnnotateSession } from '@/lib/frame-edit/annotate';
 import type { StoryAnnotationsMessage, RuntimeChannel } from '@/lib/edit-protocol';
 
 export const NONCE = 'l'.repeat(32);

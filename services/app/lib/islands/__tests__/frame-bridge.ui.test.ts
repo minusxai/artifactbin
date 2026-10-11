@@ -148,7 +148,7 @@ describe('the frame bridge', () => {
     expect(controller.input.initialSource()).toBe('<p>newer</p>');
 
     controller.emit({ type: 'mx:edit-ready', nonce: controller.nonce });
-    // A script mount's "Edit script" badge (lib/story-runtime/edit/session) crosses like every controller event.
+    // A script mount's "Edit script" badge (lib/frame-edit/session) crosses like every controller event.
     controller.emit({ type: 'mx:open-script', nonce: controller.nonce, component: 'Sparkline' });
     await settle(() => events.length > 1);
     expect(events).toEqual([{ type: 'mx:edit-ready', nonce: controller.nonce }, { type: 'mx:open-script', nonce: controller.nonce, component: 'Sparkline' }]);

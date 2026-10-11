@@ -1,6 +1,6 @@
 /** The frame editor's side of comment state: capture validated as bounded JSON for the wire, and a saved view checked before it is put back. */
-import { parseCommentViewState, type CommentViewState } from '../../../../contracts/src/comment-view-state';
-import { captureCommentState, restoreCommentState } from '../comment-state-io';
+import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
+import { captureCommentState, restoreCommentState } from '@/lib/story-runtime/comment-state-io';
 
 /** Freeze context at the selection gesture, before the composer changes focus. */
 export function withCommentState<T extends object>(doc: Document, selection: T): T & { viewState?: CommentViewState; viewStateError?: string } {

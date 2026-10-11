@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 /**
- * services/app/lib/story-runtime/edit/__tests__/grid-edit.ui.test.tsx, PORTED to the Solid GridEdit.
+ * services/app/lib/frame-edit/__tests__/grid-edit.ui.test.tsx, PORTED to the Solid GridEdit.
  * Same assertions; two translations: the positioned-mode marker is the component's own class
  * (`.mx-grid-positioned`, there is no `.react-grid-layout` any more), and React's `rerender` with
  * new children becomes a signal. `act()` has no Solid counterpart: updates are synchronous.

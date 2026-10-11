@@ -321,7 +321,7 @@ story only through the frame bridge.
    (`lib/islands/morph/engine`), preserving unchanged nodes, islands, reader values and the store. The
    app refreshes its comment anchors and selections after the morph.
 3. In-place editing. `setMode('edit')` unmounts the islands and the editor
-   (`solid/editor/InPlaceEditor.tsx`, with the runtime's `lib/story-runtime/edit/session`) makes the
+   (`solid/editor/InPlaceEditor.tsx`, with the runtime's `lib/frame-edit/session`) makes the
    same story element editable. Every edit is composed into the source, saved through the save-less
    protocol (`solid/editor/create-live-edits.ts`) and previewed by sending the draft (`EditDraft`,
    `solid/editor/edit-draft.ts`) through the controller to the server compiler. "Done" returns the page to

@@ -6,7 +6,7 @@
  * against the new text, and — the words being gone — drop the highlight for the whole-node tint.
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
+import { createFrameAnnotateSession } from '@/lib/frame-edit/annotate';
 import { morphStory } from '@/lib/islands/morph/engine';
 import type { RuntimeChannel } from '@/lib/edit-protocol';
 

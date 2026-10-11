@@ -387,13 +387,13 @@ describe('module graph', () => {
     it('refuses a deep import of app code from CLI source, naming the rule and every import', () => {
       const violations = check({
         'services/cli/src/a.ts': "import { parseJsx } from '../../app/lib/jsx';\n",
-        'services/cli/src/preview/e.ts': "export const morph = () => import('../../../app/lib/story-runtime/edit/session');\n",
+        'services/cli/src/preview/e.ts': "export const morph = () => import('../../../app/lib/frame-edit/session');\n",
         'services/cli/src/t.ts': "export type T = import('@/solid/components/PageBar').T;\n",
         'services/cli/src/k.ts': "import '../../app/lib/cli-toolkit/other';\n",
       });
       expect(violations).toContain('The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs)');
       expect(violations).toContain('services/cli/src/a.ts imports ../../app/lib/jsx');
-      expect(violations).toContain('services/cli/src/preview/e.ts imports ../../../app/lib/story-runtime/edit/session');
+      expect(violations).toContain('services/cli/src/preview/e.ts imports ../../../app/lib/frame-edit/session');
       expect(violations).toContain('services/cli/src/t.ts imports @/solid/components/PageBar');
       expect(violations).toContain('services/cli/src/k.ts imports ../../app/lib/cli-toolkit/other');
     });

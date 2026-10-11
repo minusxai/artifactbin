@@ -1,7 +1,7 @@
 /**
  * AN IMAGE PASTED, DROPPED OR DOUBLE-CLICKED IN EDIT MODE.
  *
- * Part of the edit session (lib/story-runtime/edit/session). Paste and drop are ONE door: both
+ * Part of the edit session (lib/frame-edit/session). Paste and drop are ONE door: both
  * carry a DataTransfer, and an image in either means the same insert (`mx:image-drop`): onto a
  * plain `<img>` it replaces that image, elsewhere a drop lands in the gap it was dropped in and a
  * paste is placed by the page. A double-click on an image asks the page for its replace picker

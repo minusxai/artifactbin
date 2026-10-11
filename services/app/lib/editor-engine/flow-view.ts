@@ -1,7 +1,7 @@
 /**
  * A continuous prose region's PROSEMIRROR view, framework-free: the schema-bound editor state,
  * key bindings, node views, AST-path decorations, the guarded transaction pipeline, paste and
- * composition handling. lib/story-runtime/edit/FlowEditor.tsx adapts it with onMount + one effect.
+ * composition handling. lib/frame-edit/FlowEditor.tsx adapts it with onMount + one effect.
  */
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { DOMSerializer } from 'prosemirror-model';
