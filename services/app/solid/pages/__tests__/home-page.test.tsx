@@ -18,7 +18,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it('starts the bootstrap request while identity is pending, then paints only after identity resolves', async () => {
   let resolveSession!: (value: Response) => void;
   const pending = new Promise<Response>(resolve => { resolveSession = resolve; });
-  const fetcher = workspaceFetch((url: string) => url.includes('/session') ? pending : Promise.resolve(response(url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {}, stats: { assets: 0 } })));
+  const fetcher = workspaceFetch((url: string) => url.includes('/session') ? pending : Promise.resolve(response(url.includes('part=core') ? core : { signedIn: true, accountId: 'one', stats: { assets: 0 } })));
   vi.stubGlobal('fetch', fetcher);
   open();
   expect(fetcher.mock.calls.map(([url]) => url)).toContain('/api/page/home?part=bootstrap');
@@ -34,13 +34,13 @@ it('paints the core shelf while insights load', async () => {
   open();
   expect(await screen.findByLabelText('Open Private document')).toBeInTheDocument();
   expect(screen.getByLabelText('Loading workspace insights')).toBeInTheDocument();
-  finish(response({ signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 0 }, viewsOverTime: [], views: {}, likes: 0, likesOverTime: [], followers: 0, forks: 0, sparklines: {} }));
+  finish(response({ signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 0 }, viewsOverTime: [], views: {}, likes: 0, likesOverTime: [], followers: 0, forks: 0 }));
   expect(await screen.findByLabelText('Dashboard metrics')).toBeInTheDocument();
 });
 
 it('offers retry on core failure and never paints another account', async () => {
   let fail = true;
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(url.includes('/session') ? response(session) : url.includes('part=core') ? fail ? response({ signedIn: true, accountId: 'other', artifacts: core.artifacts, shared: [] }) : response(core) : response({ signedIn: true, accountId: 'one', sparklines: {} }))));
+  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(url.includes('/session') ? response(session) : url.includes('part=core') ? fail ? response({ signedIn: true, accountId: 'other', artifacts: core.artifacts, shared: [] }) : response(core) : response({ signedIn: true, accountId: 'one' }))));
   open();
   await screen.findByLabelText('Retry workspace');
   expect(screen.queryByLabelText('Open Private document')).toBeNull();
@@ -60,14 +60,14 @@ it('explains first creation on an empty account', async () => {
 it('renders a populated folder workspace without recursive updates', async () => {
   const folderRow = { ...core.artifacts[0], id: 'fold01', url: '/a/fold01', title: 'Reports', format: 'folder', ancestor_ids: [] };
   const childRow = { ...core.artifacts[0], id: 'child', title: 'Child', ancestor_ids: ['fold01'] };
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, artifacts: [folderRow, childRow] } : { signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 0 }, views: {}, viewsOverTime: [], likes: 0, likesOverTime: [], followers: 0, forks: 0, sparklines: {} }))));
+  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, artifacts: [folderRow, childRow] } : { signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 0 }, views: {}, viewsOverTime: [], likes: 0, likesOverTime: [], followers: 0, forks: 0 }))));
   open();
   expect(await screen.findByLabelText('Open folder Reports')).toBeInTheDocument();
   expect(screen.queryByLabelText('Open Child')).toBeNull();
 });
 
 it('keeps the working shelf before the account dashboard and links to assets, trash, and dataset creation', async () => {
-  const insights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2, sparklines: {} };
+  const insights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2 };
   vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : url.includes('claimable') ? { claimable: [] } : insights))));
   const view = open();
   const shelf = await screen.findByLabelText('Shelf');
@@ -95,8 +95,8 @@ it.each(['none', 'anon'])('redirects %s sessions with held drafts to login', asy
   expect(screen.queryByText('Private draft')).toBeNull();
 });
 
-const doc = (id: string) => ({ id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'markup', version: 1, visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0, sparkline: null });
-const richInsights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2, sparklines: {} };
+const doc = (id: string) => ({ id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'markup', version: 1, visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0 });
+const richInsights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2 };
 function homeFetch(home: unknown, insights: unknown = richInsights) {
   vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? home : url.includes('claimable') ? { claimable: [] } : insights))));
 }
