@@ -1,9 +1,12 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterEach, expect, it } from 'vitest';
 import { request, useAppHarness, mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { listAnnotationPageFor, listAnnotationsFor } from '@/lib/annotations';
+import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotations/route';
+import { GET as myListAnnotationsRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { getDb, measureQueries } from '@/lib/platform';
 import { setHostedRemoteAgent } from '@/lib/remote/hosted-interface';
 import { hostedAgentClient, hostedAgentSessionId } from '@artifactbin/utils';
@@ -100,4 +103,84 @@ it('answers the artifact GET with the open count and the inline threads, in a nu
   expect(large.value.annotations.map(a => a.id)).toEqual(ten.ids);
   expect(large.value.annotations.map(a => a.remote_work.length)).toEqual(ten.ids.map((_, i) => (i % 2 === 0 ? 1 : 0)));
   expect(large.stats.count).toBe(small.stats.count);
+});
+
+/** A ~2.5 MB page: the access decision for its comments must not read it. */
+const BIG_DOC = `<Helmet><title>Big report</title></Helmet><p id="intro">An introduction paragraph.</p><div id="findings">Revenue grew 40% in Q3.</div>${Array.from({ length: 12000 }, (_, i) => `<p>Filler paragraph number ${i} with enough words to weigh about two hundred bytes of markup, repeated until the page is large.</p>`).join('')}`;
+
+async function seedBig(threads: number) {
+  const t = await mintToken('agent');
+  const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: BIG_DOC } }));
+  const doc = (await made.json()) as { id: string; edit_id: string };
+  expect(made.status).toBe(201);
+  const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
+  const tokenActor = { userId: t.userId!, tokenId: t.id, email: t.email! };
+  for (let i = 0; i < threads; i++) {
+    const res = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { node_id: i % 2 ? 'findings' : 'intro', edit_id: doc.edit_id, body: `thread ${i}` } }), params({ id: doc.id }));
+    expect(res.status, await res.clone().text()).toBe(201);
+  }
+  return { t, doc, actor, tokenActor };
+}
+
+/** Run `work` and count the statements IT issued (its async context only, never background work) that returned a document or source. */
+async function readingDocument<T>(work: () => Promise<T>): Promise<{ value: T; documentRows: number }> {
+  const db = await getDb();
+  const query = db.query.bind(db);
+  const mine = new AsyncLocalStorage<true>();
+  let documentRows = 0;
+  db.query = (async (sql: string, args?: unknown[]) => {
+    const result = await (query as (s: string, a?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>)(sql, args);
+    if (mine.getStore()) for (const row of result.rows) if (row.document != null || row.source != null) documentRows++;
+    return result;
+  }) as typeof db.query;
+  try { return { value: await mine.run(true, work), documentRows }; } finally { db.query = query as typeof db.query; }
+}
+
+it('lists a large document with no threads without reading the document', async () => {
+  const f = await seedBig(0);
+  const { value, documentRows } = await readingDocument(() => listAnnotationPageFor(f.tokenActor, f.doc.id, { status: 'open', limit: 10 }));
+  expect(value).toEqual({ annotations: [] });
+  expect(documentRows).toBe(0);
+  const all = await readingDocument(() => listAnnotationsFor(f.tokenActor, f.doc.id));
+  expect(all.value).toEqual([]);
+  expect(all.documentRows).toBe(0);
+});
+
+it('reads the document of a large page once, only to anchor the threads it lists, with the same result as before', async () => {
+  const f = await seedBig(4);
+  const paged = await readingDocument(() => listAnnotationPageFor(f.tokenActor, f.doc.id, { status: 'open', limit: 10 }));
+  expect(paged.documentRows).toBe(1);
+  // The artifact GET inlines the open threads from the row it already holds: the unchanged reference.
+  const inline = await getArtifactRoute(request(`/api/artifacts/${f.doc.id}`, { token: f.t.token }), params({ id: f.doc.id }));
+  const expected = ((await inline.json()) as { annotations: unknown[] }).annotations;
+  expect(expected).toHaveLength(4);
+  expect(JSON.parse(JSON.stringify(paged.value!.annotations))).toEqual(expected);
+  expect(JSON.parse(JSON.stringify((await listAnnotationsFor(f.tokenActor, f.doc.id))!))).toEqual(expected);
+  expect(paged.value!.annotations.every(a => !a.orphaned && a.anchor)).toBe(true);
+  const empty = await readingDocument(() => listAnnotationPageFor(f.tokenActor, f.doc.id, { status: 'resolved', limit: 10 }));
+  expect(empty.value).toEqual({ annotations: [] });
+  expect(empty.documentRows).toBe(0);
+});
+
+it('answers a stranger, and a trashed or missing document, with the same null and the uniform 404 body', async () => {
+  const f = await seedBig(1);
+  const stranger = await mintToken('other');
+  const strangerActor = { userId: stranger.userId!, tokenId: stranger.id, email: stranger.email! };
+  const refused = await readingDocument(() => listAnnotationPageFor(strangerActor, f.doc.id, { status: 'open', limit: 10 }));
+  expect(refused.value).toBeNull();
+  expect(refused.documentRows).toBe(0);
+  expect(await listAnnotationsFor(strangerActor, f.doc.id)).toBeNull();
+  const viaToken = await listAnnotationsRoute(request(`/api/artifacts/${f.doc.id}/annotations`, { token: stranger.token }), params({ id: f.doc.id }));
+  expect(viaToken.status).toBe(404);
+  expect(await viaToken.json()).toEqual({ error: 'not_found' });
+  const strangerSession = { credential: 'session' as const, userId: stranger.userId!, email: stranger.email!, emailVerified: true };
+  const viaSession = await myListAnnotationsRoute(request(`/api/my/artifacts/${f.doc.id}/annotations`, { actor: strangerSession }), params({ id: f.doc.id }));
+  expect(viaSession.status).toBe(404);
+  expect(await viaSession.json()).toEqual({ error: 'not_found' });
+  const missing = await listAnnotationsRoute(request('/api/artifacts/nope/annotations', { token: stranger.token }), params({ id: 'nope' }));
+  expect([missing.status, await missing.json()]).toEqual([404, { error: 'not_found' }]);
+  const db = await getDb();
+  await db.query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [f.doc.id]);
+  expect(await listAnnotationPageFor(f.tokenActor, f.doc.id, { status: 'open', limit: 10 })).toBeNull();
+  expect(await listAnnotationsFor(f.tokenActor, f.doc.id)).toBeNull();
 });
