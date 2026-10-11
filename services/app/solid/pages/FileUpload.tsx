@@ -1,3 +1,4 @@
+import { FORM_INPUT, FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON } from '../ui/FormControls';
 /* @jsxImportSource solid-js */
 import { creationDestination } from '../lib/creation-destination';
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
@@ -5,7 +6,7 @@ import { Navigate } from '@solidjs/router';
 import { Check, Copy, FileUp } from 'lucide-solid';
 import AssetPageHeader from '../components/AssetPageHeader';
 import { FILE_ACTION as ACTION, FileViewer, extensionOf } from '../components/FileViewer';
-import { LINK } from '../ui/ui';
+
 import { formatFileSize } from '@/lib/islands/file-display';
 import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@artifactbin/contracts';
 import { useSession } from '../lib/session';
@@ -85,34 +86,34 @@ export function FileUploadPage(): JSX.Element {
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}
           class={`flex h-56 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed transition-colors ${dragging() ? 'border-accent bg-accent-soft' : 'border-edge-bright bg-raised/40 hover:border-accent'}`}>
           <FileUp aria-hidden="true" size={24} strokeWidth={1.6} class="text-accent" />
-          <span class="text-sm text-fg">Drop a file here, or click to choose one</span>
-          <span class="text-xs text-muted">Images, pdf, video, audio, text, fonts and glb models</span>
+          <span class="px-4 text-center text-base font-medium text-fg">Drop a file here, or click to choose one</span>
+          <span class="px-4 text-center text-sm text-muted">Images, pdf, video, audio, text, fonts and glb models</span>
         </button>}>
           {(selected) => <>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span class="min-w-0 truncate font-medium text-fg">{selected().file.name}</span>
               <span class="text-xs text-muted">{formatFileSize(selected().file.size)}</span>
-              <Show when={!result()}><button type="button" onClick={() => input.click()} class={`ml-auto cursor-pointer font-mono text-xs ${LINK}`}>choose another</button></Show>
+              <Show when={!result()}><button type="button" onClick={() => input.click()} class={`ml-auto ${FORM_SECONDARY_BUTTON}`}>choose another</button></Show>
             </div>
             <div class="mt-4"><FileViewer name={selected().file.name} size={selected().file.size} url={selected().url} blob={selected().file} pdfUrl={result() ? `/a/${result()!.id}/raw` : null} downloadUrl={result() ? `/a/${result()!.id}/raw` : undefined} /></div>
             <Show when={result()} fallback={<div class="mt-5 flex flex-wrap items-end gap-3">
               <label class="grid min-w-48 flex-1 gap-1.5 text-xs text-muted">Title
-                <input class="w-full rounded border border-edge bg-surface px-3 py-2 font-mono text-sm text-fg" value={title()} onInput={(event) => setTitle(event.currentTarget.value)} placeholder={selected().file.name} />
+                <input class={FORM_INPUT} value={title()} onInput={(event) => setTitle(event.currentTarget.value)} placeholder={selected().file.name} />
               </label>
-              <button type="button" onClick={() => void upload()} disabled={busy()} class="inline-flex items-center gap-1.5 rounded border border-accent bg-accent px-3 py-2 font-mono text-xs text-bg disabled:opacity-50">
+              <button type="button" onClick={() => void upload()} disabled={busy()} class={FORM_PRIMARY_BUTTON}>
                 <FileUp aria-hidden="true" size={13} />{busy() ? 'Uploading…' : 'Upload'}
               </button>
             </div>}>
               {(uploaded) => <div aria-label="Uploaded file" class="mt-5 rounded-lg border border-edge bg-raised/40 p-4">
-                <div class="flex items-center gap-3">
+                <div class="flex flex-wrap items-center gap-3">
                   <p class="flex min-w-0 flex-1 items-center gap-2 text-sm text-fg"><Check aria-hidden="true" size={15} class="shrink-0 text-accent" /><span class="shrink-0">Uploaded as</span><span class="truncate font-medium">{title().trim() || selected().file.name}</span></p>
                   <button type="button" aria-label="Copy file reference" onClick={() => { void copyText(`ref:${uploaded().id}`); setCopied(true); }} class={`${ACTION} shrink-0 border-edge-bright bg-surface text-accent hover:border-accent`}>
                     ref:{uploaded().id}{copied() ? <Check aria-hidden="true" size={12} /> : <Copy aria-hidden="true" size={12} />}
                   </button>
                 </div>
-                <div class="mt-4 grid grid-cols-2 gap-2">
-                  <a href={`/a/${uploaded().id}`} aria-label="Open artifact" class={`${ACTION} justify-center border-accent bg-accent py-2 font-semibold text-bg hover:brightness-110`}>Open artifact →</a>
-                  <button type="button" onClick={reset} class={`${ACTION} justify-center border-edge-bright bg-surface py-2 text-fg hover:border-accent`}>Upload another</button>
+                <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                  <a href={`/a/${uploaded().id}`} aria-label="Open artifact" class={FORM_PRIMARY_BUTTON}>Open artifact →</a>
+                  <button type="button" onClick={reset} class={FORM_SECONDARY_BUTTON}>Upload another</button>
                 </div>
               </div>}
             </Show>

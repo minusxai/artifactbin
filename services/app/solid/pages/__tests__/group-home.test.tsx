@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
+import { DefaultDestinationControl } from '../../components/DefaultDestinationControl';
 import { HomePage } from '../Home';
 import { CompanySetup } from '../CompanySetup';
 import { SessionProvider } from '../../lib/session';
@@ -62,4 +63,52 @@ it('retains explicit Personal recovery for an admitted account when the company 
  render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);
  expect(await screen.findByRole('heading',{name:/create your first artifact/i})).toBeInTheDocument();
  expect(screen.queryByText('Your deployment owner needs to finish setup before you can continue.')).toBeNull();
+ expect(screen.getByRole('link',{name:'Personal'})).toHaveAttribute('aria-current','page');
+ expect(screen.getByRole('link',{name:'Artifacts'})).not.toHaveAttribute('aria-current');
+});
+
+it('sets a group default, shows the saved state, and lets the account return to Personal',async()=>{
+ let destination:unknown={type:'personal'};
+ const fetcher=vi.fn(async(url:string,options?:RequestInit)=>{
+  if(url.includes('/session'))return Response.json(session);
+  if(url==='/api/deployment')return Response.json({mode:'public',setup_complete:true,is_owner:false,default_group:null});
+  if(url==='/api/me/preferences'){
+   if(options?.method==='PUT')destination=JSON.parse(String(options.body)).default_destination;
+   return Response.json({default_destination:destination});
+  }
+  return Response.json({});
+ });vi.stubGlobal('fetch',fetcher);
+ render(()=> <SessionProvider><DefaultDestinationControl group={{id:'g1',name:'Team'}}/></SessionProvider>);
+ const setDefault=await screen.findByRole('button',{name:'Set as default'});
+ await waitFor(()=>expect(setDefault).toBeEnabled());
+ fireEvent.click(setDefault);
+ expect(await screen.findByRole('button',{name:'Remove default'})).toBeInTheDocument();
+ expect(destination).toEqual({type:'group',id:'g1'});
+ fireEvent.click(screen.getByRole('button',{name:'Remove default'}));
+ expect(await screen.findByRole('button',{name:'Set as default'})).toBeInTheDocument();
+ expect(destination).toEqual({type:'personal'});
+ expect(screen.getByRole('status')).toHaveTextContent('Personal is now your default');
+});
+it('lets an account override an inherited company default with Personal',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>Response.json(url.includes('/session')?session:url==='/api/deployment'?{mode:'company',setup_complete:true,is_owner:false,default_group:group}:options?.method==='PUT'?{default_destination:{type:'personal'}}:{default_destination:{type:'inherit'}})));
+ render(()=> <SessionProvider><DefaultDestinationControl group={{id:'g1',name:'Team'}}/></SessionProvider>);
+ fireEvent.click(await screen.findByRole('button',{name:'Remove default'}));
+ await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/me/preferences',expect.objectContaining({method:'PUT',body:JSON.stringify({default_destination:{type:'personal'}})})));
+ expect(await screen.findByRole('button',{name:'Set as default'})).toBeInTheDocument();
+});
+it('keeps the saved default visible when removing it fails and permits retry',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>options?.method==='PUT'?Response.json({error:'Could not save preference'},{status:503}):Response.json(url.includes('/session')?session:url==='/api/deployment'?{mode:'public',setup_complete:true,is_owner:false,default_group:null}:{default_destination:{type:'group',id:'g1'}})));
+ render(()=> <SessionProvider><DefaultDestinationControl group={{id:'g1',name:'Team'}}/></SessionProvider>);
+ fireEvent.click(await screen.findByRole('button',{name:'Remove default'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Could not save');
+ expect(screen.getByRole('button',{name:'Remove default'})).toBeEnabled();
+ expect(screen.queryByRole('button',{name:'Set as default'})).toBeNull();
+});
+
+it('lets phone users expand and close the workspace navigation',async()=>{
+ stub();open();await screen.findByRole('heading',{name:'Team'});
+ const toggle=screen.getByRole('button',{name:'Toggle navigation'});
+ expect(toggle).toHaveAttribute('aria-expanded','false');
+ fireEvent.click(toggle);expect(toggle).toHaveAttribute('aria-expanded','true');
+ fireEvent.click(toggle);expect(toggle).toHaveAttribute('aria-expanded','false');
 });

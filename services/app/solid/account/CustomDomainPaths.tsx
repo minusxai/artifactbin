@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Button } from '../ui/ui';
+import { FORM_INPUT } from '../ui/FormControls';
 
 interface PathMapping { path: string; artifactId: string }
 interface DocumentOption { id: string; title: string }
@@ -49,9 +50,9 @@ export function CustomDomainPaths(props: {
         </li>}</For>
       </ul>
     </Show>
-    <Show when={editing()}><form aria-label="Custom path editor" class="mt-3 rounded-[4px] border border-edge bg-raised p-3" onSubmit={event => { event.preventDefault(); void save(); }}>
-      <div class="grid gap-3 sm:grid-cols-2"><label class="min-w-0 text-xs font-medium">Path<input aria-label="Custom path" placeholder="/about" maxlength={200} readOnly={existing()} disabled={props.busy} value={path()} onInput={event => setPath(event.currentTarget.value)} autocomplete="off" spellcheck={false} class="mt-1 block w-full min-w-0 rounded-[4px] border border-edge-bright bg-surface px-3 py-2 font-mono text-sm" /></label>
-      <label class="min-w-0 text-xs font-medium">Document<select aria-label="Path document" disabled={props.busy} value={artifactId()} onChange={event => setArtifactId(event.currentTarget.value)} class="mt-1 block w-full min-w-0 rounded-[4px] border border-edge-bright bg-surface px-3 py-2 text-sm">
+    <Show when={editing()}><form aria-label="Custom path editor" class="mt-4 rounded-lg border border-edge bg-raised p-4" onSubmit={event => { event.preventDefault(); void save(); }}>
+      <div class="grid gap-3 sm:grid-cols-2"><label class="min-w-0 text-xs font-medium">Path<input aria-label="Custom path" placeholder="/about" maxlength={200} readOnly={existing()} disabled={props.busy} value={path()} onInput={event => setPath(event.currentTarget.value)} autocomplete="off" spellcheck={false} class={`${FORM_INPUT} mt-2 min-w-0 font-mono`} /></label>
+      <label class="min-w-0 text-xs font-medium">Document<select aria-label="Path document" disabled={props.busy} value={artifactId()} onChange={event => setArtifactId(event.currentTarget.value)} class={`${FORM_INPUT} mt-2 min-w-0`}>
         <option value="" selected={!artifactId()}>Choose a public document</option>
         <Show when={artifactId() && !eligible()}><option value={artifactId()} selected>Document unavailable</option></Show>
         <For each={props.documents}>{document => <option value={document.id} selected={artifactId() === document.id}>{document.title || 'Untitled document'}</option>}</For>

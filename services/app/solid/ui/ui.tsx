@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 /** The kit pieces the ported pages use and its tokens and labels. */
 import type { JSX } from 'solid-js';
+import { FORM_INPUT, FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON, FORM_DANGER_BUTTON } from './FormControls';
 export { timeAgo } from '../lib/format';
 /** Display name for a normalized format — the designed tier is BRANDED "mx-markup". */
 export function formatLabel(format: string): string {
@@ -50,16 +51,12 @@ export function MicroLabel(props: { children: JSX.Element }): JSX.Element {
   return <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{props.children}</span>;
 }
 
-const BUTTON_VARIANTS = {
-  solid: 'bg-accent text-bg border border-accent hover:brightness-110 font-semibold',
-  ghost: 'bg-transparent text-fg border border-edge-bright hover:border-accent hover:text-accent',
-  danger: 'bg-transparent text-danger border border-edge-bright hover:border-danger hover:bg-danger-soft',
-} as const;
+const BUTTON_VARIANTS = { solid: FORM_PRIMARY_BUTTON, ghost: FORM_SECONDARY_BUTTON, danger: FORM_DANGER_BUTTON } as const;
 
-/** Input and button styling for Solid asset forms. Native props keep accessible names and state. */
+/** Native props retain accessible names, form semantics and pending states. */
 export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof BUTTON_VARIANTS }): JSX.Element {
-  return <button {...props} class={`cursor-pointer rounded-[4px] px-3 py-1.5 font-mono text-xs transition-colors disabled:opacity-50 ${BUTTON_VARIANTS[props.variant ?? 'solid']} ${props.class ?? ''}`} />;
+  return <button {...props} class={`${BUTTON_VARIANTS[props.variant ?? 'solid']} ${props.class ?? ''}`} />;
 }
 export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>): JSX.Element {
-  return <input {...props} class={`w-full rounded-[4px] border border-edge bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-faint focus:border-accent focus:outline-none ${props.class ?? ''}`} />;
+  return <input {...props} class={`${FORM_INPUT} ${props.class ?? ''}`} />;
 }

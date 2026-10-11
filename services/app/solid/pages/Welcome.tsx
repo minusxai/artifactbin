@@ -7,6 +7,7 @@ import { AvatarCircle } from '../ui/AvatarCircle';
 import { replaceDocument } from '../lib/document-navigation';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
+import { FormPage, FORM_INPUT, FORM_PRIMARY_BUTTON } from '../ui/FormControls';
 
 const HANDLE_REFUSALS: Record<string, string> = {
   username_taken: 'that handle is taken — pick another',
@@ -41,16 +42,17 @@ export function WelcomePage(): JSX.Element {
   };
   return <Show when={leaving() || !session() || !!session()?.user} fallback={<Navigate href={`/login?callbackUrl=${encodeURIComponent(`/welcome${search.toString() ? `?${search}` : ''}`)}`} />}>
     <Show when={leaving() || !session()?.onboarded} fallback={<Navigate href="/account" />}>
-      <main class="mx-auto mt-16 max-w-xl px-6"><div class="mx-auto max-w-sm">
-        <h1 class="text-base font-semibold"><span class="text-accent">&gt;</span> welcome</h1>
+      <FormPage narrow>
+        <h1 class="text-3xl font-semibold tracking-tight text-fg">Welcome to artifactbin</h1>
+        <p class="mt-3 text-sm leading-relaxed text-muted">Choose a handle for your profile and the documents you share.</p>
         <div class="mt-6"><AvatarCircle image={image()} initial={username() || 'a'} userId={session()?.user?.id ?? ''} onChange={setImage} /></div>
         <form class="mt-6" onSubmit={event => { event.preventDefault(); void confirm(); }}>
-          <label for="welcome-username" class="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">handle</label>
-          <div class="mt-2 flex items-center gap-2"><span class="w-4 text-center font-mono text-sm text-muted">@</span><input id="welcome-username" aria-label="Username" autocomplete="off" spellcheck={false} value={username()} onInput={event => setUsername(event.currentTarget.value)} class="min-w-0 flex-1 rounded-[4px] border border-edge bg-surface px-3 py-2 text-sm" /></div>
-          <Show when={status()}><p role="status" class="mt-2 ml-6 font-mono text-xs text-danger">{status()}</p></Show>
-          <div class="mt-6"><button type="submit" disabled={busy() || !username().trim()} class="rounded-[4px] border border-fg bg-fg px-3 py-1.5 font-mono text-xs font-semibold text-bg">Confirm</button></div>
+          <label for="welcome-username" class="text-sm font-medium text-fg">Handle</label>
+          <div class="mt-2 flex items-center gap-2"><span class="w-4 text-center font-mono text-sm text-muted">@</span><input id="welcome-username" aria-label="Username" autocomplete="off" spellcheck={false} value={username()} onInput={event => setUsername(event.currentTarget.value)} class={`${FORM_INPUT} min-w-0 flex-1`} /></div>
+          <Show when={status()}><p role="status" class="mt-2 ml-6 text-sm text-danger">{status()}</p></Show>
+          <div class="mt-6"><button type="submit" disabled={busy() || !username().trim()} class={`${FORM_PRIMARY_BUTTON} w-full`}>{busy() ? 'Saving…' : 'Confirm'}</button></div>
         </form>
-      </div></main>
+      </FormPage>
     </Show>
   </Show>;
 }

@@ -36,7 +36,7 @@ export function DatasetImport(props: {
     <p class="text-xs text-muted">Upload a CSV file with column names in the first row.</p>
     <label class="grid gap-1.5 text-xs text-muted">CSV file
       <input type="file" accept=".csv,text/csv" aria-label="CSV file" disabled={props.disabled}
-        class="w-full min-w-0 text-xs text-fg" onChange={event => {
+        class="w-full min-w-0 rounded-lg border border-edge-bright bg-surface p-2 font-sans text-sm text-fg file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-raised file:px-3 file:py-2 file:font-medium file:text-fg focus-visible:outline-2 focus-visible:outline-accent" onChange={event => {
           const input = event.currentTarget;
           const file = input.files?.[0];
           if (file) void run(async () => {

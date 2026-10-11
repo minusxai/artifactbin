@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
+import { FORM_INPUT } from '../ui/FormControls';
 import { Copy } from 'lucide-solid';
 import { Badge, Button, PANEL } from '../ui/ui';
 import { Tooltip } from '../ui/Tooltip';
@@ -54,11 +55,11 @@ export function CustomDomainCard(): JSX.Element {
   };
   const target = () => settings()?.target ?? domain()?.target ?? null;
   return <Show when={settings() && (settings()!.enabled || settings()!.domain)}><section aria-labelledby="custom-domain-heading"><h2 id="custom-domain-heading" class="text-base font-semibold">Custom domain</h2><p class="mt-2 max-w-2xl text-sm leading-relaxed text-muted">Publish your public documents on your own domain. Choose a homepage or show your document listing.</p><div class={`${PANEL} mt-4 p-4 sm:p-5`}>
-    <Show when={domain()} fallback={<form class="flex items-center gap-2" onSubmit={event => { event.preventDefault(); void attach(); }}><input aria-label="Custom domain" placeholder="blog.example.com" autocomplete="off" spellcheck={false} value={hostname()} onInput={event => setHostname(event.currentTarget.value)} class="min-w-0 flex-1 rounded-[4px] border border-edge bg-surface px-3 py-2 text-sm" /><Button type="submit" aria-label="Add custom domain" disabled={busy() || !hostname().trim()}>Add domain</Button></form>}>
+    <Show when={domain()} fallback={<form class="flex flex-col gap-3 sm:flex-row sm:items-center" onSubmit={event => { event.preventDefault(); void attach(); }}><input aria-label="Custom domain" placeholder="blog.example.com" autocomplete="off" spellcheck={false} value={hostname()} onInput={event => setHostname(event.currentTarget.value)} class={`${FORM_INPUT} min-w-0 flex-1`} /><Button type="submit" aria-label="Add custom domain" disabled={busy() || !hostname().trim()}>Add domain</Button></form>}>
       {current => <><div class="flex flex-wrap items-center gap-2"><span class="break-all font-mono text-sm font-medium">{current().hostname}</span><Badge tone={current().status === 'verified' ? 'accent' : 'dim'}>{current().status}</Badge></div><form class="mt-5 border-t border-edge pt-4" onSubmit={event => { event.preventDefault(); void saveHomepage(); }}>
         <label for="domain-homepage" class="text-sm font-medium">Homepage</label>
         <p class="mt-1 text-xs leading-relaxed text-muted">What visitors see at your domain’s root. Only your public documents can be selected.</p>
-        <div class="mt-3 flex flex-wrap gap-2"><select disabled={busy()} id="domain-homepage" aria-label="Domain homepage" value={homepage()} onChange={event => setHomepage(event.currentTarget.value)} class="min-w-0 flex-1 rounded-[4px] border border-edge-bright bg-surface px-3 py-2 text-sm">
+        <div class="mt-3 flex flex-wrap gap-2"><select disabled={busy()} id="domain-homepage" aria-label="Domain homepage" value={homepage()} onChange={event => setHomepage(event.currentTarget.value)} class={`${FORM_INPUT} min-w-0 flex-1`}>
           <option value="" selected={homepage() === ''}>Document listing (default)</option>
           <Show when={current().homepageArtifactId && !settings()?.homepageOptions?.some(option => option.id === current().homepageArtifactId)}><option value={current().homepageArtifactId!} selected={homepage() === current().homepageArtifactId}>Selected document unavailable — showing listing</option></Show>
           <For each={settings()?.homepageOptions ?? []}>{option => <option value={option.id} selected={homepage() === option.id}>{option.title || 'Untitled document'}</option>}</For>
@@ -69,6 +70,6 @@ export function CustomDomainCard(): JSX.Element {
         <Show when={target() && bare(current().hostname)}><p class="mt-2 font-mono text-[11px] leading-relaxed text-faint">A bare domain cannot take a CNAME. Use ALIAS, ANAME or CNAME flattening if your DNS host offers it; otherwise add the A record.</p></Show></details><div class="mt-4 flex flex-wrap items-center gap-2"><Show when={settings()?.enabled}><Button type="button" aria-label="Verify custom domain" disabled={busy()} onClick={() => void verify()}>Verify domain</Button></Show><Button variant="danger" type="button" aria-label="Remove custom domain" disabled={busy()} onClick={() => void remove()}>Remove domain</Button></div><Show when={!settings()?.enabled && current().status === 'pending'}><p class="mt-2 font-mono text-xs text-muted">Verification is paused on this server right now; your domain will wait.</p></Show>
       </>}
     </Show>
-    <Show when={status()}>{message => <p role="status" class={`mt-3 font-mono text-xs leading-relaxed ${message().tone === 'ok' ? 'text-accent' : 'text-danger'}`}>{message().text}</p>}</Show>
+    <Show when={status()}>{message => <p role="status" class={`mt-3 text-sm leading-relaxed ${message().tone === 'ok' ? 'text-accent' : 'text-danger'}`}>{message().text}</p>}</Show>
   </div></section></Show>;
 }

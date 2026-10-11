@@ -70,24 +70,26 @@ export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
   };
   return <Show when={!session()?.user && (session() || sessionError())}>
     <FormPage narrow>
-      <h1 class="text-base font-semibold"><span class="text-accent">&gt;</span> log in</h1>
+      <h1 class="text-3xl font-semibold tracking-tight text-fg">Log in to artifactbin</h1>
       <Show when={!sent()} fallback={<>
-        <p class="mt-2 text-xs text-muted">We emailed a code to <span class="text-fg">{email()}</span>. It expires in 10 minutes.</p>
-        <form class="mt-5 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void verify(); }}>
-          <input type="text" autofocus inputMode="numeric" autocomplete="one-time-code" maxLength={6} aria-label="Login code" placeholder="6-digit code" value={code()} onInput={event => setCode(event.currentTarget.value)} class={INPUT} />
-          <button type="submit" aria-label="Verify code" disabled={busy() || !code()} class={BUTTON}>{busy() ? 'checking…' : 'log in'}</button>
+        <p class="mt-3 text-sm leading-relaxed text-muted">We emailed a code to <span class="text-fg">{email()}</span>. It expires in 10 minutes.</p>
+        <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void verify(); }}>
+          <label for="login-code" class="text-sm font-medium text-fg">Verification code</label>
+          <input id="login-code" type="text" autofocus inputMode="numeric" autocomplete="one-time-code" maxLength={6} aria-label="Login code" placeholder="6-digit code" value={code()} onInput={event => setCode(event.currentTarget.value)} class={INPUT} />
+          <button type="submit" aria-label="Verify code" disabled={busy() || !code()} class={BUTTON}>{busy() ? 'Checking…' : 'Log in'}</button>
         </form>
-        <div class="mt-4 flex items-center justify-between text-xs text-muted"><button type="button" aria-label="Change email" class="cursor-pointer underline hover:text-accent" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress('', false); }}>change email</button><button type="button" aria-label="Resend code" class="cursor-pointer underline hover:text-accent" disabled={busy()} onClick={() => void requestCode()}>resend code</button></div>
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted"><button type="button" aria-label="Change email" class="min-h-11 cursor-pointer rounded-md px-1 underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress('', false); }}>Change email</button><button type="button" aria-label="Resend code" class="min-h-11 cursor-pointer rounded-md px-1 underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50" disabled={busy()} onClick={() => void requestCode()}>Resend code</button></div>
       </>}>
-        <Show when={cameFromSignedOutRedirect()}><p role="note" class="mt-2 text-xs text-fg">Guest sessions ended on 8 October 2026. Sign in with your email on this browser and documents you made as a guest will join your account.</p></Show>
-        <p class="mt-2 text-xs text-muted">We’ll email you a 6-digit code. No password to remember.</p>
-        <form class="mt-5 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void requestCode(); }}>
-          <input type="email" autofocus autocomplete="email" aria-label="Email" placeholder="email" value={email()} onInput={event => setEmail(event.currentTarget.value)} class={INPUT} />
-          <button type="submit" aria-label="Log in with email" disabled={busy() || !email()} class={BUTTON}>{busy() ? 'sending…' : 'log in with email'}</button>
+        <Show when={cameFromSignedOutRedirect()}><p role="note" class="mt-4 rounded-lg border border-edge bg-raised p-3 text-sm leading-relaxed text-fg">Guest sessions ended on 8 October 2026. Sign in with your email on this browser and documents you made as a guest will join your account.</p></Show>
+        <p class="mt-3 text-sm leading-relaxed text-muted">We’ll email you a 6-digit code. No password to remember.</p>
+        <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void requestCode(); }}>
+          <label for="login-email" class="text-sm font-medium text-fg">Email address</label>
+          <input id="login-email" type="email" autofocus autocomplete="email" aria-label="Email" placeholder="you@example.com" value={email()} onInput={event => setEmail(event.currentTarget.value)} class={INPUT} />
+          <button type="submit" aria-label="Log in with email" disabled={busy() || !email()} class={BUTTON}>{busy() ? 'Sending…' : 'Log in with email'}</button>
         </form>
-        <p class="mt-10 text-xs text-muted"><b>Note:</b> Previously saved guest artifacts and connected agents will join this account.</p>
+        <p class="mt-6 border-t border-edge pt-5 text-sm leading-relaxed text-muted">Previously saved guest artifacts and connected agents will join this account.</p>
       </Show>
-      <Show when={error()}><p class="mt-3 text-xs text-danger">{error()}</p></Show>
+      <Show when={error()}><p role="alert" class="mt-4 text-sm leading-relaxed text-danger">{error()}</p></Show>
     </FormPage>
   </Show>;
 }

@@ -1,3 +1,4 @@
+import WorkspaceHeading from './WorkspaceHeading';
 /* @jsxImportSource solid-js */
 /** The human docs — the tour of the product. */
 import FlowSchematic from './FlowSchematic';
@@ -13,7 +14,7 @@ import DesignSystemSpecimen from './DesignSystemSpecimen';
  * design systems come from the registry with their live specimens, the formats from
  * the badge component.
  */
-const SECTION = 'font-mono text-xs tracking-[0.14em] text-faint uppercase';
+const SECTION = 'font-sans text-lg font-semibold tracking-tight text-fg';
 const PROSE = 'mt-3 font-sans text-sm leading-relaxed text-muted';
 
 /** The tour's sections, in reading order. ONE list feeds both the contents
@@ -46,9 +47,7 @@ export default function DocsHuman() {
 
   return (
     <main class="workspace-page">
-      <h1 class="text-base font-semibold">
-        <span class="text-accent">&gt;</span> how this works
-      </h1>
+      <WorkspaceHeading title="how this works" />
 
       <FlowSchematic className="mt-6 hidden sm:block" />
 
@@ -60,7 +59,7 @@ export default function DocsHuman() {
 
       <nav aria-label="Contents" class="mt-6 rounded-[6px] border border-edge bg-surface px-4 py-3">
         <span class={SECTION}>contents</span>
-        <ol class="mt-2 grid gap-x-8 gap-y-1.5 font-mono text-xs sm:grid-cols-2">
+        <ol class="mt-2 grid gap-x-8 gap-y-2 font-sans text-sm sm:grid-cols-2">
           {TOC.map((s, i) => (
             <li>
               <a href={`#${s.id}`} class={LINK}>
@@ -158,7 +157,7 @@ export default function DocsHuman() {
         <ul class="mt-3 flex flex-col gap-2.5 font-sans text-sm leading-relaxed text-muted">
           {TEMPLATES.map((t) => (
             <li>
-              <span class="font-mono text-xs text-fg">{t.name}</span> {t.blurb}
+              <span class="font-sans text-sm font-medium text-fg">{t.name}</span> {t.blurb}
             </li>
           ))}
         </ul>
