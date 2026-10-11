@@ -22,6 +22,7 @@ import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { FeatureGate } from '../components/FeatureGate';
+import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { COMMENT_IMAGE_TYPES, createCommentCapture } from './CommentCapture';
 import type { ScreenshotDrawing } from './ScreenshotEditor';
@@ -204,21 +205,23 @@ export function ImageDropTarget(props: { over: boolean }): JSX.Element {
 }
 
 /**
- * A file picker that looks like a toolbar button; always offered, disabled with its reason where images are unavailable.
- * Its sr-only <input type="file"> is wrapped by a <label> (the click target): ui/Button cannot be a label or open a picker
- * without changing the control's role from file input to button, so the input stays hand-drawn (allowlisted styled-field).
+ * A toolbar button that opens the file picker; always offered, disabled with its reason where images are unavailable.
+ * The picker is a hidden <input type="file"> the button clicks (ui/DropZone is a full-width target, not a toolbar tool).
  */
 export function AttachImageButton(props: { image: CommentImageDraft }): JSX.Element {
+  let input!: HTMLInputElement;
   const control = (gate: { disabled?: true; 'aria-describedby'?: string }) => (
-    <label class="inline-flex size-control-sm cursor-pointer items-center justify-center rounded-control text-muted hover:bg-raised hover:text-fg focus-within:outline-2 focus-within:outline-accent has-[:disabled]:cursor-default has-[:disabled]:opacity-50">
+    <Button type="button" variant="ghost" size="sm" icon aria-label="Attach image" {...gate} onClick={() => input.click()}>
       <ImagePlus size={13} strokeWidth={1.8} aria-hidden="true" />
-      <input type="file" class="sr-only" accept={COMMENT_IMAGE_TYPES.join(',')} aria-label="Attach image" {...gate}
-        onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) props.image.attach(file); event.currentTarget.value = ''; }} />
-    </label>
+    </Button>
   );
-  return <FeatureGate reason={props.image.unavailable()}>
-    {(gate) => (gate.disabled ? control(gate) : <Tooltip content="attach image (or paste / drop one)">{control(gate)}</Tooltip>)}
-  </FeatureGate>;
+  return <>
+    <input ref={input} type="file" hidden tabIndex={-1} accept={COMMENT_IMAGE_TYPES.join(',')} aria-label="Attach image file"
+      onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) props.image.attach(file); event.currentTarget.value = ''; }} />
+    <FeatureGate reason={props.image.unavailable()}>
+      {(gate) => (gate.disabled ? control(gate) : <Tooltip content="attach image (or paste / drop one)">{control(gate)}</Tooltip>)}
+    </FeatureGate>
+  </>;
 }
 
 /** The draft's image in the brush editor, and anything that went wrong attaching one. */

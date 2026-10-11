@@ -200,7 +200,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     setCrop(documentDraft.crop); setCamera(documentDraft.crop); setReset(documentDraft.reset); setCropDirty(documentDraft.dirty);
   };
 
-  return <Dialog title="Social preview" size="lg" description="Drag to pan. Resize the locked 40:21 frame; release to focus." onClose={props.onClose} initialFocus="[data-cancel-preview]"
+  return <Dialog title="Social preview" size="xl" closeLabel="Close social preview" description="Drag to pan. Resize the locked 40:21 frame; release to focus." onClose={props.onClose} initialFocus="[data-cancel-preview]"
     footer={<div class="flex w-full items-center justify-between gap-3">
       <Button variant="ghost" aria-label="Reset social preview" disabled={!imageReady() || uploading() || saving()}
         onClick={() => { setCropDirty(true); imageDraft = null; const next = imageId() ? defaultImageCrop(sourceHeight()) : DEFAULT_SOCIAL_PREVIEW_CROP; setCrop(next); setCamera(next); setReset(true); setError(''); }}>

@@ -1,15 +1,15 @@
 /* @jsxImportSource solid-js */
-import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { CapturedImage } from '@/lib/capture/contract';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke } from '../../../contracts/src/comment-image';
-import Check from 'lucide-solid/icons/check';
 import Undo2 from 'lucide-solid/icons/undo-2';
 import { Button } from '../ui/Button';
+import { SwatchPicker, SWATCHES } from '../ui/ColorField';
+import { Panel } from '../ui/Panel';
+import { Slider } from '../ui/Slider';
 import { StatusMessage } from '../ui/StatusMessage';
 import { Tooltip } from '../ui/Tooltip';
 
-/** The brush palette is drawing DATA, not theme: these exact hex values are stored in the strokes a comment carries and read back by the colour input. */
-const COLORS = [['Red', '#ef4444'], ['Orange', '#f59e0b'], ['Blue', '#3b82f6'], ['Green', '#22c55e'], ['Black', '#171717'], ['White', '#ffffff']] as const;
 export interface ScreenshotDrawing { preview: Blob; strokes: BrushStroke[] }
 interface ScreenshotEditorProps {
   image: CapturedImage; initialStrokes: BrushStroke[];
@@ -30,7 +30,7 @@ export function ScreenshotEditor(props: ScreenshotEditorProps): JSX.Element {
   let raf = 0;
   let exported: ScreenshotDrawing | null = null;
   const [count, setCount] = createSignal(strokes.length);
-  const [color, setColor] = createSignal<string>(COLORS[0][1]);
+  const [color, setColor] = createSignal<string>(SWATCHES[0]!.value);
   const [width, setWidth] = createSignal(3);
   const [ready, setReady] = createSignal(false);
   const [error, setError] = createSignal('');
@@ -77,17 +77,10 @@ export function ScreenshotEditor(props: ScreenshotEditorProps): JSX.Element {
     return exported = { preview: blob, strokes: saved };
   };
   onCleanup(() => { props.exportRef.current = null; });
-  return <div aria-label="Screenshot editor" class="mb-4 overflow-hidden rounded-xl border border-edge bg-surface">
+  return <Panel label="Screenshot editor" padding="none" class="mb-4 overflow-hidden">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-3 border-b border-edge px-3 py-3">
-      <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Brush colors">
-        <For each={COLORS}>{([name, value]) =>
-          <Tooltip content={name}><button type="button" aria-label={`${name} brush`} aria-pressed={color() === value} onClick={() => setColor(value)}
-            class={`flex h-7 w-7 items-center justify-center rounded-full border shadow-sm transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${color() === value ? 'ring-2 ring-fg ring-offset-2 ring-offset-panel' : 'border-edge-bright'}`}
-            style={{ 'background-color': value, color: name === 'White' ? 'black' : 'white' }}><Show when={color() === value}><Check size={14} strokeWidth={3} /></Show></button></Tooltip>
-        }</For>
-        <label class="ml-1 flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-edge" aria-label="Custom brush color"><input aria-label="Brush color" type="color" value={color()} onChange={event => setColor(event.currentTarget.value)} class="h-7 w-7 cursor-pointer border-0 bg-transparent p-0" /></label>
-      </div>
-      <label class="flex items-center gap-3 text-xs text-muted"><span>Size</span><input aria-label="Brush thickness" type="range" min="1" max="16" value={width()} onInput={event => setWidth(Number(event.currentTarget.value))} onChange={event => setWidth(Number(event.currentTarget.value))} class="w-24 accent-accent" /><span class="w-9 tabular-nums text-fg">{width()} px</span></label>
+      <SwatchPicker label="Brush color" size="sm" custom options={SWATCHES} value={color()} onChange={setColor} />
+      <Slider label="Brush thickness" size="sm" min={1} max={16} value={width()} onChange={setWidth} valueText={(value) => `${value} px`} class="min-w-60 flex-1" />
       <Tooltip content="Undo last stroke (⌘/Ctrl Z)"><Button variant="ghost" size="sm" disabled={!count() || props.busy} onClick={undo} aria-label="Undo stroke" class="ml-auto"><Undo2 size={16} />Undo</Button></Tooltip>
     </div>
     <div class="flex min-h-24 items-center justify-center overflow-auto bg-surface p-3" style={{ 'background-image': 'radial-gradient(var(--color-edge) 1px, transparent 1px)', 'background-size': '16px 16px' }}>
@@ -119,5 +112,5 @@ export function ScreenshotEditor(props: ScreenshotEditorProps): JSX.Element {
         <Show when={props.onRetake}><Button variant="ghost" size="sm" disabled={props.busy} onClick={() => props.onRetake?.()}>Retake screenshot</Button></Show>
       </span>
     </div>
-  </div>;
+  </Panel>;
 }

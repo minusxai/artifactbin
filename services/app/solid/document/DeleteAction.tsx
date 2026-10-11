@@ -2,6 +2,7 @@
 import { createSignal, Show, type JSX } from 'solid-js';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
+import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 export function DeleteAction(props: { id: string; title: string; onDeleted: () => void }): JSX.Element {
@@ -21,7 +22,7 @@ export function DeleteAction(props: { id: string; title: string; onDeleted: () =
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not move this artifact to trash. Try again.'); }
     finally { setBusy(false); }
   };
-  return <><button type="button" aria-label={`Delete ${props.title}`} onClick={() => setAsked(true)} class="flex w-full items-center gap-2 rounded px-2 py-2 text-left font-mono text-xs text-danger hover:bg-raised"><Trash2 size={14} />delete</button>
+  return <><Button variant="ghost" size="sm" aria-label={`Delete ${props.title}`} onClick={() => setAsked(true)} class="w-full justify-start"><span class="inline-flex items-center gap-2 text-danger"><Trash2 size={14} />delete</span></Button>
     <Show when={asked()}><ConfirmDialog title={`Delete “${props.title}”?`} description={`Delete "${props.title}"? The link stops working. It goes to the trash, where you can restore it any time.`}
       action="Move to trash" confirmLabel="Confirm delete" cancelLabel="Cancel delete" danger busy={busy()} error={error()} onConfirm={() => void remove()} onCancel={() => setAsked(false)} /></Show>
   </>;

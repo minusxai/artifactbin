@@ -2,7 +2,9 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import GitFork from 'lucide-solid/icons/git-fork';
 import { loginHref } from '@/lib/http/login-href';
+import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { StatusMessage } from '../ui/StatusMessage';
 import { Tooltip } from '../ui/Tooltip';
 
 type Dataset = { id: string; title: string | null };
@@ -57,17 +59,17 @@ export function ForkConfirm(props: ForkProps & { onClose: () => void }): JSX.Ele
   };
   return <ConfirmDialog title="Fork this artifact?" description={<>
     <p>{`A copy of “${props.title ?? 'this artifact'}” will be added to your artifacts. You’ll open the new copy after forking. Comments, history and sharing stay with the original.`}</p>
-    <Show when={datasets() && copiedDatasetsNote(datasets()!)}><p aria-label="Datasets this fork copies" role="status" class="mt-3 rounded border border-edge bg-raised px-2 py-2 text-xs text-muted">{copiedDatasetsNote(datasets()!)}</p></Show>
-    <Show when={refusal()}>{lines => <div aria-label="Fork refused" role="status" class="mt-3 rounded border border-edge bg-raised px-2 py-2 text-xs text-muted"><For each={lines()}>{line => <p class="whitespace-pre-wrap">{line}</p>}</For><button type="button" aria-label="Dismiss fork refusal" onClick={() => setRefusal(null)}>dismiss</button></div>}</Show>
+    <Show when={datasets() && copiedDatasetsNote(datasets()!)}><StatusMessage kind="notice" aria-label="Datasets this fork copies" class="mt-3 text-xs">{copiedDatasetsNote(datasets()!)}</StatusMessage></Show>
+    <Show when={refusal()}>{lines => <StatusMessage kind="notice" aria-label="Fork refused" class="mt-3 text-xs" action={<Button variant="link" aria-label="Dismiss fork refusal" onClick={() => setRefusal(null)}>dismiss</Button>}><For each={lines()}>{line => <p class="whitespace-pre-wrap">{line}</p>}</For></StatusMessage>}</Show>
   </>}
     action="Fork and open copy" confirmLabel="Confirm fork" cancelLabel="Cancel fork" busy={busy()} onConfirm={fork} onCancel={props.onClose} />;
 }
 
 export function ForkArtifact(props: ForkProps): JSX.Element {
   const [asked, setAsked] = createSignal(false);
-  return <div class="relative"><Tooltip content="Fork artifact"><button type="button" aria-label="Fork artifact" onClick={() => setAsked(true)}
-    class={props.variant === 'bar' ? 'flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-raised' : 'flex w-full items-center gap-2 rounded px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised'}>
-    <GitFork size={14} /><span class={props.variant === 'bar' ? 'sr-only' : ''}>fork</span></button></Tooltip>
+  return <div class="relative"><Tooltip content="Fork artifact"><Button variant="ghost" size={props.variant === 'bar' ? 'bar' : 'sm'} {...(props.variant === 'bar' ? { icon: true as const } : {})} aria-label="Fork artifact" onClick={() => setAsked(true)}
+    class={props.variant === 'bar' ? '' : 'w-full justify-start'}>
+    <GitFork size={14} /><span class={props.variant === 'bar' ? 'sr-only' : ''}>fork</span></Button></Tooltip>
     <Show when={asked()}><ForkConfirm {...props} onClose={() => setAsked(false)} /></Show>
   </div>;
 }

@@ -1,10 +1,11 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import Users from 'lucide-solid/icons/users';
 import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
-import { Input } from '../ui/Field';
+import { Combobox } from '../ui/Combobox';
+import { Field } from '../ui/Field';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 import { apiFetch } from '../lib/api';
@@ -102,20 +103,19 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
   </section>;
 }
 
-/** Owns invitation lookup and its keyboard interaction; selecting never sends an invite. */
+/** Owns invitation lookup; selecting never sends an invite. The suggestions and their keyboard are ui/Combobox's. */
 function PeopleInvitePicker(props: { endpoint: string; selected: Person[]; onSelect: (person: Person) => void }): JSX.Element {
-  const id = createUniqueId();
   const [query, setQuery] = createSignal('');
-  const [open, setOpen] = createSignal(false);
+  // Lookups begin when the field is first reached, not when the panel opens.
+  const [engaged, setEngaged] = createSignal(false);
   const [candidates, setCandidates] = createSignal<Person[]>([]);
-  const [active, setActive] = createSignal(-1);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
   const options = () => candidates().filter(person => !props.selected.some(item => item.user_id === person.user_id));
   createEffect(() => {
-    if (!open()) return;
+    if (!engaged()) return;
     const controller = new AbortController();
-    setLoading(true); setError(''); setCandidates([]); setActive(-1);
+    setLoading(true); setError(''); setCandidates([]);
     void fetch(`${props.endpoint}?purpose=invite&query=${encodeURIComponent(query())}`, { signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw new Error('Could not find people. Try again.');
@@ -126,35 +126,13 @@ function PeopleInvitePicker(props: { endpoint: string; selected: Person[]; onSel
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     onCleanup(() => controller.abort());
   });
-  const select = (person: Person) => { props.onSelect(person); setQuery(''); setOpen(false); setActive(-1); };
-  return <div class="relative" onFocusOut={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
-    <label class="grid gap-2 text-xs font-medium">Add people
-      <Input role="combobox" aria-label="Find people by username" aria-autocomplete="list" aria-expanded={open()}
-        aria-controls={open() ? id : undefined} aria-activedescendant={open() && options()[active()] ? `${id}-${active()}` : undefined}
-        value={query()} placeholder="@username" autocomplete="off"
-        onFocus={() => setOpen(true)} onClick={() => setOpen(true)}
-        onInput={event => { setQuery(event.currentTarget.value); setOpen(true); setActive(-1); }}
-        onKeyDown={event => {
-          const list = options();
-          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); }
-          else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault(); setOpen(true);
-            setActive(current => !list.length ? -1 : current < 0 ? (event.key === 'ArrowDown' ? 0 : list.length - 1) : (current + (event.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length);
-          } else if (event.key === 'Enter' && open() && list[active()]) { event.preventDefault(); select(list[active()]!); }
-        }} />
-    </label>
-    {/* GAP (solid/ui): an async type-ahead listbox anchored to a text input is neither Select (button trigger, fixed options) nor Menu; this stays hand-rolled until a Combobox exists. */}
-    <Show when={open()}><div class="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-md border border-edge bg-surface shadow-lg">
-      <ul id={id} role="listbox" aria-label="People suggestions" class="max-h-48 overflow-y-auto p-1">
-        <For each={options()}>{(person, index) => <li role="presentation">
-          <button type="button" role="option" id={`${id}-${index()}`} aria-selected={active() === index()} tabIndex={-1}
-            class={`w-full rounded px-3 py-2 text-left text-sm hover:bg-raised ${active() === index() ? 'bg-raised' : ''}`}
-            onMouseDown={event => event.preventDefault()} onClick={() => select(person)}>
-            @{person.username}{' '}<span class="ml-2 text-xs text-muted">{person.name}</span>
-          </button>
-        </li>}</For>
-      </ul>
-      <Show when={loading() || error() || options().length === 0}><p role="status" class="px-3 py-2 text-xs text-muted">{loading() ? 'Finding people…' : error() || 'No people found.'}</p></Show>
-    </div></Show>
-  </div>;
+  return <Field label="Add people">
+    <div onFocusIn={() => setEngaged(true)}>
+      <Combobox ariaLabel="Find people by username" listLabel="People suggestions" placeholder="@username"
+        value={query()} onValue={setQuery} options={options()} optionKey={person => person.user_id}
+        renderOption={person => <>@{person.username}<span class="ml-2 text-xs text-muted">{person.name}</span></>}
+        status={loading() ? 'Finding people…' : error() || (options().length ? undefined : 'No people found.')}
+        onSelect={person => { props.onSelect(person); setQuery(''); }} />
+    </div>
+  </Field>;
 }

@@ -7,8 +7,8 @@ import { Tooltip } from '../ui/Tooltip';
 import { agentNameColor } from '../lib/agent-identity';
 import { PersonMention } from './PersonMention';
 
-// Inline code scales with its paragraph (0.92em), which no px-based text token expresses.
-const CODE_CLASS = 'break-all rounded-chip bg-raised px-1 py-0.5 font-mono text-[0.92em] text-fg';
+// Inline code takes the paragraph's size (the mono face already reads smaller beside the sans body).
+const CODE_CLASS = 'break-all rounded-chip bg-raised px-1 py-0.5 font-mono text-fg';
 
 function inline(nodes: MdInline[]): JSX.Element {
   return <For each={nodes}>{(node) => {

@@ -4,7 +4,7 @@
  * Both are looked up on the server; without either, its section says why. The textarea keeps the
  * keyboard — this list answers ArrowUp/ArrowDown/Enter/Tab through `onReady`'s handle.
  */
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, createUniqueId, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import ArrowUpRight from 'lucide-solid/icons/arrow-up-right';
 import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend, MemberPerson } from '@/lib/artifact-backend/types';
@@ -13,6 +13,8 @@ import { remoteMention } from '@/lib/annotations/remote-reply';
 import { type RemoteSessionInfo } from '../../../contracts/src/remote';
 import { agentNameColor } from '../lib/agent-identity';
 import { Button } from '../ui/Button';
+import { ComboboxList, createListNavigation } from '../ui/Combobox';
+import { Panel } from '../ui/Panel';
 import { Tooltip } from '../ui/Tooltip';
 const agentLabel = (name: string) => (({ claude: 'Claude Code', codex: 'Codex', pi: 'Pi', opencode: 'OpenCode' } as Record<string, string>)[name] ?? name);
 /** Hosted native generations own the comment relay; raw run terminals do not.
@@ -24,9 +26,9 @@ export function CommentMentionPicker(props: {
   backend: ArtifactBackend; artifactId?: string; query: string; onSelect: (text: string) => void;
   onReady?: (keyboard: MentionKeyboard | null) => void;
 }): JSX.Element {
+  const id = createUniqueId();
   const [sessions, setSessions] = createSignal<RemoteSessionInfo[]>([]);
   const [people, setPeople] = createSignal<MemberPerson[]>([]);
-  const [active, setActive] = createSignal(0);
   const [loaded, setLoaded] = createSignal(false);
   const [error, setError] = createSignal('');
   const [removing, setRemoving] = createSignal<string | null>(null);
@@ -36,19 +38,16 @@ export function CommentMentionPicker(props: {
     canTagAgent(session)
     && `${session.name} ${session.harness}`.toLowerCase().includes(props.query.toLowerCase()));
   const choose = (session: RemoteSessionInfo) => props.onSelect(remoteMention(session));
-  const keyboard: MentionKeyboard = { keyDown(key) {
-    const count = people().length + matches().length;
-    if (!count) return false;
-    if (key === 'ArrowDown' || key === 'ArrowUp') { setActive((index) => (index + (key === 'ArrowDown' ? 1 : count - 1)) % count); return true; }
-    if (key === 'Enter' || key === 'Tab') {
-      const index = active() % count;
+  // One list navigation over both sections: the people first, then the agents.
+  const nav = createListNavigation({
+    count: () => people().length + matches().length,
+    onSelect: (index) => {
       const person = people()[index];
       if (person) props.onSelect(personMention(person));
       else { const session = matches()[index - people().length]; if (session) choose(session); }
-      return true;
-    }
-    return false;
-  } };
+    },
+  });
+  const keyboard: MentionKeyboard = { keyDown: nav.keyDown };
   onMount(() => {
     props.onReady?.(keyboard);
     onCleanup(() => props.onReady?.(null));
@@ -61,7 +60,7 @@ export function CommentMentionPicker(props: {
   });
   createEffect(() => {
     const query = props.query;
-    setActive(0);
+    nav.setActive(0);
     if (!props.artifactId || peopleUnavailable) return;
     const abort = new AbortController();
     void props.backend.members(query, { signal: abort.signal })
@@ -70,53 +69,54 @@ export function CommentMentionPicker(props: {
       .catch(() => {});
     onCleanup(() => abort.abort());
   });
-  const remove = async (id: string) => {
-    setRemoving(id); setError('');
+  const remove = async (sessionId: string) => {
+    setRemoving(sessionId); setError('');
     try {
-      await props.backend.deleteRemoteSession(id);
-      setSessions((items) => items.filter((item) => item.id !== id));
-      setActive(0);
+      await props.backend.deleteRemoteSession(sessionId);
+      setSessions((items) => items.filter((item) => item.id !== sessionId));
+      nav.setActive(0);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not remove agent. Try again.'); }
     finally { setRemoving(null); }
   };
-  const keep = (event: MouseEvent) => event.preventDefault();
-  return <div aria-label="Agent sessions" class="mb-2 overflow-hidden rounded-panel border border-edge bg-surface p-1.5 font-sans text-sm shadow-lg">
+  return <Panel label="Agent sessions" padding="none" class="mb-2 overflow-hidden p-1.5 font-sans text-sm shadow-lg">
     <Show when={props.artifactId}>
       <p class="px-2 py-1.5 text-xs font-medium text-muted">Mention a person</p>
-      <For each={people()}>{(person, index) => (
-        <Button type="button" size="sm" variant={index() === active() ? 'secondary' : 'ghost'} aria-label={`Mention @${person.username}`} class="w-full"
-          onMouseDown={keep} onMouseEnter={() => setActive(index())} onClick={() => props.onSelect(personMention(person))}>
-          <span class="flex w-full min-w-0 items-baseline gap-2 text-left font-sans"><span class="text-sm text-fg">@{person.username}</span><span class="truncate text-xs text-muted">{person.name}</span></span>
-        </Button>
-      )}</For>
+      <Show when={people().length}>
+        <ComboboxList id={`${id}-people`} label="People" options={people()} optionKey={(person) => person.user_id}
+          active={nav.active()} onActive={nav.setActive} onSelect={(person) => props.onSelect(personMention(person))}
+          renderOption={(person) => (
+            <span aria-label={`Mention @${person.username}`} class="flex w-full min-w-0 items-baseline gap-2 text-left"><span class="text-sm text-fg">@{person.username}</span><span class="truncate text-xs text-muted">{person.name}</span></span>
+          )} />
+      </Show>
       <Show when={peopleUnavailable} fallback={<Show when={!people().length}><p class="px-2 py-1 text-xs text-muted">No matching followers or members.</p></Show>}>
         <p role="note" class="px-2 py-1 text-xs text-muted">{peopleUnavailable}</p>
       </Show>
     </Show>
     <p class="px-2 py-1.5 text-xs font-medium text-muted">Mention an agent</p>
-    <For each={matches()}>{(session, index) => (
-      <div class="flex items-center">
-        {/* Two lines tall: min-h-12 grows the control past its fixed height without fighting it. */}
-        <Button type="button" size="sm" variant={index() + people().length === active() ? 'secondary' : 'ghost'} aria-label={`Mention ${session.name} (${session.harness})`}
-          class="min-h-12 min-w-0 flex-1 py-1"
-          onMouseEnter={() => setActive(index() + people().length)} onMouseDown={keep} onClick={() => choose(session)}>
-          <span aria-hidden="true" style={{ color: agentNameColor(session.name) }} class="flex size-8 shrink-0 items-center justify-center rounded-control bg-accent-soft font-semibold text-accent">@</span>
-          <span class="min-w-0 flex-1 text-left font-sans">
-            <span class="block truncate text-sm font-medium text-fg">{session.name}</span>
-            <span class="block truncate text-xs text-muted">{agentLabel(session.harness)} · {session.machine}</span>
+    <Show when={matches().length}>
+      <ComboboxList id={`${id}-agents`} label="Agents" options={matches()} optionKey={(session) => session.id}
+        active={nav.active() - people().length} onActive={(index) => nav.setActive(index + people().length)} onSelect={choose}
+        renderOption={(session) => (
+          <span class="flex items-center gap-2">
+            <span aria-label={`Mention ${session.name} (${session.harness})`} class="flex min-w-0 flex-1 items-center gap-2">
+              <span aria-hidden="true" style={{ color: agentNameColor(session.name) }} class="flex size-8 shrink-0 items-center justify-center rounded-control bg-accent-soft font-semibold text-accent">@</span>
+              <span class="min-w-0 flex-1 text-left font-sans">
+                <span class="block truncate text-sm font-medium text-fg">{session.name}</span>
+                <span class="block truncate text-xs text-muted">{agentLabel(session.harness)} · {session.machine}</span>
+              </span>
+              <span class="flex shrink-0 items-center gap-1 font-sans text-micro text-muted"><span class={`h-1.5 w-1.5 rounded-full ${session.online ? 'bg-accent' : 'bg-muted'}`} />{session.online ? (session.activity ?? 'Online') : 'Offline'}</span>
+            </span>
+            <Show when={!session.online}>
+              <Tooltip content="Remove agent">
+                <Button type="button" variant="ghost" size="sm" icon aria-label={`Remove ${session.name}`} disabled={removing() !== null}
+                  onClick={(event) => { event.stopPropagation(); void remove(session.id); }}>
+                  <X size={14} aria-hidden="true" />
+                </Button>
+              </Tooltip>
+            </Show>
           </span>
-          <span class="flex shrink-0 items-center gap-1 font-sans text-micro text-muted"><span class={`h-1.5 w-1.5 rounded-full ${session.online ? 'bg-accent' : 'bg-muted'}`} />{session.online ? (session.activity ?? 'Online') : 'Offline'}</span>
-        </Button>
-        <Show when={!session.online}>
-          <Tooltip content="Remove agent">
-            <Button type="button" variant="ghost" size="sm" icon aria-label={`Remove ${session.name}`} disabled={removing() !== null}
-              onMouseDown={keep} onClick={() => void remove(session.id)}>
-              <X size={14} aria-hidden="true" />
-            </Button>
-          </Tooltip>
-        </Show>
-      </div>
-    )}</For>
+        )} />
+    </Show>
     <Show when={error()}><p role="alert" class="px-2 py-1.5 text-sm text-muted">{error()}</p></Show>
     <Show when={sessionsUnavailable}><p role="note" class="px-2 py-1.5 text-xs text-muted">{sessionsUnavailable}</p></Show>
     <Show when={!sessionsUnavailable}>
@@ -127,5 +127,5 @@ export function CommentMentionPicker(props: {
         </Show>
       </div>
     </Show>
-  </div>;
+  </Panel>;
 }

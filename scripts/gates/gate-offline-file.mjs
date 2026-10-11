@@ -990,7 +990,7 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
     const pixel = await canvas.evaluate(c => Array.from(c.getContext('2d').getImageData(5, 5, 1, 1).data));
     check(pixel.slice(0, 3).every((value, i) => Math.abs(value - referencePixel[i]) <= 3), `${name}: content pixel ${pixel}; unmarked reference ${referencePixel}`);
     await step('the brush paints a stroke', async () => {
-      await editor.getByLabel('Brush color', { exact: true }).fill('#00ff00');
+      await editor.getByLabel('Custom brush color', { exact: true }).fill('#00ff00');
       await editor.getByLabel('Brush thickness').fill('8');
       const drawing = await canvas.boundingBox();
       if (!drawing) throw new Error('the drawing canvas has no box');

@@ -38,6 +38,21 @@ describe('the annotation composer', () => {
   const online = { id: '11111111-1111-1111-1111-111111111111', name: 'review', online: true, managed: true, exitCode: null, activity: 'listening' };
   const openComposer = () => layer({ initialSelection: TEXT() });
 
+  it('is a non-modal floating panel: no aria-modal, fixed at its position, and Escape cancels it exactly once', async () => {
+    const view = openComposer(); await flush();
+    const dialog = screen.getByRole('dialog', { name: 'Annotation composer' });
+    expect(dialog).not.toHaveAttribute('aria-modal');
+    expect(dialog.style.position).toBe('fixed');
+    // The page behind stays live: nothing paints a backdrop over it.
+    expect(document.querySelector('[data-dialog-body]')).toBeNull();
+    const before = selects(view.runtime.send).filter((message) => message.path === null).length;
+    fireEvent.keyDown(screen.getByLabelText('Annotation comment'), { key: 'Escape' });
+    await flush();
+    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+    // One cancel posts one null selection; a second would cancel the pick the cancel resumes.
+    expect(selects(view.runtime.send).filter((message) => message.path === null).length - before).toBe(1);
+  });
+
   it('moves the comment box without losing its draft or annotation target', async () => {
     openComposer(); await flush();
     const field = screen.getByLabelText('Annotation comment');
@@ -236,7 +251,7 @@ describe('the annotation composer', () => {
     expect(within(agents).queryByText(/agents available/)).toBeNull();
     expect(within(agents).getByRole('link', {name:'Manage agents'})).toHaveAttribute('href', '/chat');
     fireEvent.click(screen.getByRole('button',{name:'+1 other'})); await flush();
-    fireEvent.click(screen.getByRole('button',{name:/^Mention third/})); await flush();
+    fireEvent.click(screen.getByLabelText(/^Mention third/)); await flush();
     expect(screen.getByLabelText('Annotation comment').querySelector('[data-comment-mention]')).toHaveTextContent('@third');
   });
 
@@ -331,7 +346,7 @@ describe('the annotation composer', () => {
     expect(consumed).toHaveBeenCalled();
     const composer = await screen.findByLabelText('Annotation comment');
     const popover = screen.getByRole('dialog', { name: 'Annotation composer' });
-    expect(popover).toHaveClass('fixed');
+    expect(popover.style.position).toBe('fixed');
     // Kept clear of the open rail's 320px: 800 - 320 - 12 - 384 = 84, not the 217 the selection alone asks for.
     expect(popover.style.left).toBe('84px');
     expect(Number.parseInt(popover.style.left, 10) + Number.parseInt(popover.style.width, 10)).toBeLessThanOrEqual(800 - 320);
