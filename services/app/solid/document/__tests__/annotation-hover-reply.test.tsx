@@ -51,6 +51,8 @@ describe('the marker layer', () => {
     expect(carrier.querySelector<HTMLElement>('[data-annotation-id]')!.style.position).toBe('fixed');
     const hit = within(carrier).getByRole('button', { name: /^Open annotation conversation by/ });
     expect(hit).toHaveClass('absolute', 'inset-0', 'h-auto');
+    // The card clips what falls outside it, so the focus ring is drawn inside.
+    expect(hit).toHaveClass('focus-visible:ring-inset');
     expect(hit).toBeEnabled();
     expect(view.container).toBeTruthy();
   });
