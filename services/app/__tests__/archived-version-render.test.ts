@@ -69,7 +69,12 @@ describe('?version=N on the served document', () => {
     expect(data.status, await data.clone().text()).toBe(200);
     const body = await data.json();
     expect(body.archived).toEqual({ version: 1, head: 2 });
-    expect(JSON.stringify(body)).toContain('Version one');
+    // The version's tree is the nodes door's, asked for with the same address.
+    const tree = await pageData(request(`/api/page/artifact/${id}?version=1&part=nodes`, { token: owner.token }), params({ id }));
+    expect(tree.status).toBe(200);
+    const text = JSON.stringify(await tree.json());
+    expect(text).toContain('Version one');
+    expect(text).not.toContain('Version two');
   });
 });
 

@@ -163,6 +163,18 @@ const scopedRow = async (q: Queryable, scope: Scope, id: string, lock = false): 
   return r.rows[0] ?? null;
 };
 
+/**
+ * The access decision for a LIST, without the document: the same statement shape and scope as {@link scopedRow}, but it
+ * answers with the id alone. A document is megabytes of JSONB the database would ship and the server decode just to be
+ * told yes or no; `wireFor` loads it only when there are threads to anchor.
+ */
+const scopedHead = async (q: Queryable, scope: Scope, id: string): Promise<AnnotatedHead | null> => {
+  const r = await q.query<AnnotatedHead>(`SELECT id FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
+  return r.rows[0] ?? null;
+};
+
+/** The artifact a thread listing is for. `source` is present when the caller already holds the row; otherwise `wireFor` reads it. */
+type AnnotatedHead = Pick<ArtifactRow, 'id'> & Partial<Pick<ArtifactRow, 'source'>>;
 
 const notify = (q: Queryable, artifactId: string, annotationId: string) =>
   q.query('SELECT pg_notify($1, $2)', [annotationsChannel(artifactId), annotationId]);
@@ -359,9 +371,16 @@ export async function createAnnotationFor(
  */
 const LIVE_ANNOTATION_SQL = 'deleted_at IS NULL';
 
+/** The current source of a markup document (a row that does not decode reads as empty, like everywhere else). */
+async function sourceOf(db: Queryable, id: string): Promise<string> {
+  const r = await artifactQuery<Pick<ArtifactRow, 'source'>>(db, 'SELECT document, source FROM artifacts WHERE id = $1', [id]);
+  return r.rows[0]?.source ?? '';
+}
+
 /** Assemble wire threads for a set of roots — anchors resolved against the CURRENT source. */
-async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[]): Promise<AnnotationWire[]> {
+async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowDb[]): Promise<AnnotationWire[]> {
   if (roots.length === 0) return [];
+  const source = head.source !== undefined ? head.source ?? '' : await sourceOf(db, head.id);
   const rootIds = roots.map((root) => root.id);
   // Three statements however many threads: the selected roots' replies, their remote work, the artifact's images.
   const replies = await db.query<AnnotationRowDb>(
@@ -377,7 +396,6 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
     byRoot.set(r.root_id!, list);
   }
 
-  const source = head.source ?? '';
   const anchors = anchorIndex(source);
 
   return roots.map((root) => {
@@ -420,7 +438,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
 export async function listAnnotationPageFor(actor: TokenActor, artifactId: string,
   opts: {status: 'open' | 'resolved' | 'all'; limit: number; after?: string;author?:string}): Promise<{annotations: AnnotationWire[]; next?: string} | null> {
   const db = await getDb();
-  const row = await scopedRow(db, annotationScope(actor), artifactId);
+  const row = await scopedHead(db, annotationScope(actor), artifactId);
   if (!row) return null;
   const roots = await db.query<AnnotationRowDb>(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id=$1 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}
@@ -439,7 +457,7 @@ export async function listAnnotationsFor(
   opts?: { status?: 'open' | 'resolved' | 'all' },
 ): Promise<AnnotationWire[] | null> {
   const db = await getDb();
-  const row = await scopedRow(db, annotationScope(actor), artifactId);
+  const row = await scopedHead(db, annotationScope(actor), artifactId);
   if (!row) return null;
   return annotationsWireForRow(row, opts);
 }
@@ -451,7 +469,7 @@ export async function listAnnotationsFor(
  * not admitted; the scoping lives in the caller by construction here.
  */
 export async function annotationsWireForRow(
-  row: ArtifactRow,
+  row: AnnotatedHead,
   opts?: { status?: 'open' | 'resolved' | 'all' },
 ): Promise<AnnotationWire[]> {
   const db = await getDb();

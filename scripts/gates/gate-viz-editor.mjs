@@ -289,7 +289,7 @@ await p.screenshot({ path: '/tmp/viz-editor-table.png' });
   // The title and color-mode edits below are deliberately unsaved at the time of copying.
   await p.locator('[aria-label="Title"]').fill('Unsaved recovery title');
   await p.click('[aria-label="Color mode"]');
-  await p.click('[aria-label="Color mode dark"]');
+  await p.getByRole('option', { name: 'dark', exact: true }).click();
   await p.getByRole('button', { name: 'Copy draft' }).click();
   await p.waitForFunction(() => navigator.clipboard.readText().then(text => text.includes('Unsaved recovery title')));
   const copiedDraft = await p.evaluate(async () => navigator.clipboard.readText());

@@ -7,7 +7,7 @@ import { BOOTSTRAP_ID, appPagePolicy, candidateDocument, createAppServer } from 
 import { createArtifact } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
-import { agentCookie, useAppHarness } from './harness';
+import { agentCookie, framedDocument, useAppHarness } from './harness';
 useAppHarness();
 const secret='test-reader-actor-secret-000000000000';
 const shell='<html><head><title>App</title></head><body><div id="root"></div></body></html>';
@@ -50,7 +50,10 @@ describe('reader delivery over HTTP',()=>{
  });
  it('keeps scripts inert and live selections in prepared data',async()=>{
   const {row}=await publish('public','<Helmet><Value name="count" type="number" default={0}/><script>{`globalThis.shouldNotRun=true`}</script></Helmet><p>{$count}</p>');
-  const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).toMatch(/"authorScript":"[^"]*globalThis\.shouldNotRun = true;/);expect(html).not.toContain('<script>globalThis.shouldNotRun');expect(html).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]*shouldNotRun/);expect(html).toContain('"values":{"count":4}');
+  // The script runs in the document's own frame, so it is the framed document's prepared data that carries it — as inert JSON, never an executable script.
+  const doc=await(await framedDocument(app,`/a/${row.id}?$count=4`))!.text();expect(doc).toMatch(/"authorScript":"[^"]*globalThis\.shouldNotRun = true;/);expect(doc).not.toContain('<script>globalThis.shouldNotRun');expect(doc).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]*shouldNotRun/);expect(doc).toContain('"values":{"count":4}');
+  // The app page frames the document and never needs the script: its data (all it reads of a framed runtime is the title and the dataflow) carries none, and nothing of it is executable there either.
+  const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).not.toContain('shouldNotRun');expect(html).not.toContain('authorScript');expect(html).toContain('"values":{"count":4}');
  });
  it('keeps datasets on their existing app representation',async()=>{
   const token=await mintToken('dataset'),row=await createArtifact(token.id, token.userId,{format:'dataset',source:null,meta:{},title:'Data',description:null,visibility:'public'});

@@ -11,7 +11,8 @@ export { canReadArtifact, ownsArtifact, roleFor, effectiveRole, isOwner } from '
 export { commentMonitorScope, annotationScope, editorScope, writerFor } from './table';
 export type { ArtifactRow, Scope } from './table';
 export { readableArtifact, snapshotForReader, snapshotHeadFor } from './read-access';
-export { getArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor } from './rows';
+export { getArtifact, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor } from './rows';
+export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived, versionToWire } from './store';
 export type { ArtifactSummary } from './store';
 export { can, capabilityGuard, capabilityRefusal } from './capabilities';
@@ -43,7 +44,7 @@ export { findDependentsFor } from './dependents';
 
 /** Sharing, membership, placement and dataset grants. */
 export { getSharingFor, updateSharingFor } from './sharing';
-export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates, savedMentionStates } from './membership/membership';
+export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates, savedMentionStates, selfMembership } from './membership/membership';
 export { accountProfile, updateAccountProfile } from './membership/account-profile';
 export { ancestorsForMove, isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';
 export type { Viewer } from './placement';

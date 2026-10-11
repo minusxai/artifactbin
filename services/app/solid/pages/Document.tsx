@@ -9,7 +9,7 @@ import { rowTitle } from '@/lib/document/display-title';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import type { ServedStoryRuntime } from '@/lib/publish/prepared/prepared-runtime';
+import type { FramedRuntime } from '@/lib/serving';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { loginHref } from '@/lib/http/login-href';
 import { takeBootstrap } from '@/solid/lib/bootstrap';
@@ -27,7 +27,7 @@ import { SelectionActions } from '../document/SelectionActions';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DocumentPeople } from '../document/DocumentPeople';
-import { createFramedStory, framedDocumentFor, type FramedStory } from '../document/create-framed-story';
+import { createFramedStory, fetchFrameNodes, framedDocumentFor, type FramedStory } from '../document/create-framed-story';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
 import { moveInto } from '@/lib/islands/island-controller';
@@ -53,7 +53,7 @@ interface DocumentAnswer {
     group_id?:string|null;
     id: string; title: string | null; format: string; version: number; editId?: string;
     openAnnotations?: number; accountSession?: boolean; anonSession?: boolean;
-    runtime?: ServedStoryRuntime;
+    runtime?: FramedRuntime;
     refs?: Array<{ id: string; kind: string; title?: string | null }>;
     template?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null;
     heading?: string | null; pwaEnabled?: boolean; membershipAvailable?: boolean;
@@ -298,8 +298,12 @@ export function DocumentPage(): JSX.Element {
     Object.assign(served.style, { position: 'relative', inset: 'auto', top: 'auto', flex: '1 1 auto', minHeight: '0px' });
     setFrameSlot(slot);
     setDocumentFrame(framed.frame);
+    // The tree the frame's edit controller classifies against is its own request (not in the page's data): it is asked for
+    // now, while the frame loads, and the bridge attaches when it is here.
+    const nodes = new AbortController();
+    onCleanup(() => nodes.abort());
     story = createFramedStory({
-      id, framed, nodes: page.surface?.runtime?.data.nodes ?? [],
+      id, framed, nodes: fetchFrameNodes(id, window.location.search, nodes.signal),
       editId: () => editorSeed()?.edit_id ?? editorPart()?.editId ?? page.surface?.editId ?? '',
       source: () => editorSeed()?.markup ?? editorPart()?.source ?? null,
       version: live, reading: () => lifecycle.phase() === 'reading',
@@ -314,7 +318,9 @@ export function DocumentPage(): JSX.Element {
     framed.frame.addEventListener('load', forwardHash);
     // The served frame may have loaded before the app did: forward now as well.
     forwardHash();
-    runtimeRef.current = story.controller();
+    // Null until the bridge is made (the tree arrives), then the bridge's stand-in for the document's controller.
+    runtimeRef.current = framedStory.controller();
+    createEffect(on(framedStory.controller, (next) => { runtimeRef.current = next; }, { defer: true }));
     // The frame's controller signs its events once it runs: the nonce arrives then (and again after the frame loads
     // anew, which also takes the reader's colour choice again).
     createEffect(on(() => story?.nonce() ?? null, (next) => {

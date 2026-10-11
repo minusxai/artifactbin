@@ -35,6 +35,13 @@ async function world() {
   return { owner, t, pub: await mk({ title: 'Pub', markup: '<div><p>public words</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret words</p></div>', visibility: 'private' }) };
 }
 
+/** The document's node tree, as the page fetches it for its frame (`?part=nodes`): the document's words are in it, not in the page's data. */
+async function nodesOf(id: string, headers: Record<string, string>): Promise<string> {
+  const res = await app.request(`/api/page/artifact/${id}?part=nodes`, { headers });
+  expect(res.status).toBe(200);
+  return res.text();
+}
+
 describe('a document address', () => {
   // The app page frames the document on its own origin under the strict app policy (__tests__/pages-origin-host).
   it('serves the document\'s frame under the strict app policy at the canonical address', async () => {
@@ -43,16 +50,17 @@ describe('a document address', () => {
       const res = await app.request(path, { headers: as({ credential: 'none' }) });
       expect(res.status, path).toBe(200);
       expect(res.headers.get('content-security-policy'), path).toBe(appPagePolicy(pagesSite()));
-      expect(await res.text()).toContain('public words');
+      expect(await res.text()).toContain('data-mx-document-frame');
     }
+    expect(await nodesOf(w.pub.id, as({ credential: 'none' }))).toContain('public words');
   });
   it('serves the owner the same app page under the same CSP (at the canonical address)', async () => {
     const w = await world();
     const res = await app.request(`/@${w.owner.username}/${w.pub.id}-pub`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
     expect(res.headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
     const html = await res.text();
-    expect(html).toContain('public words');
     expect(html).toContain('data-mx-document-frame');
+    expect(await nodesOf(w.pub.id, as({ credential: 'session', userId: w.owner.id, email: w.owner.email }))).toContain('public words');
   });
   /**
    * The exporter's key is the ONE credential that opens a private document to
@@ -80,6 +88,8 @@ describe('a document address', () => {
     expect(res.status, 'the STATUS is the answer a crawler and a curl read').toBe(404);
     expect(await res.text()).not.toContain('secret words');
     expect((await app.request(`/api/page/artifact/${w.priv.id}`, { headers: as({ credential: 'none' }) })).status).toBe(404);
+    // The tree the page relays to its frame is refused exactly like the page.
+    expect((await app.request(`/api/page/artifact/${w.priv.id}?part=nodes`, { headers: as({ credential: 'none' }) })).status).toBe(404);
     // …and an id that never existed is indistinguishable from it.
     expect((await app.request('/a/nope00', { headers: as({ credential: 'none' }) })).status).toBe(404);
     // The owner still gets their page — at the canonical address it heals to.
@@ -104,7 +114,8 @@ describe('the address heals after checking read access', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('location')).toBeNull();
     const html = await res.text();
-    expect(html).toContain('public words');
+    expect(html).toContain('data-mx-document-frame');
+    expect(await nodesOf(w.pub.id, as({ credential: 'session', userId: w.owner.id, email: w.owner.email }))).toContain('public words');
     expect(html).toMatch(new RegExp(`<link rel="canonical" href="https?://[^"/]+/@${w.owner.username}/${w.pub.id}-pub">`));
     const payload = payloadOf(html);
     expect(payload.address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
@@ -126,7 +137,8 @@ describe('the address heals after checking read access', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('location')).toBeNull();
     const html = await res.text();
-    expect(html).toContain('public words');
+    expect(html).toContain('data-mx-document-frame');
+    expect(await nodesOf(w.pub.id, as({ credential: 'none' }))).toContain('public words');
     expect(payloadOf(html).address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
   });
   it('serves the owner their PRIVATE document at /a/<id> as themselves, and keeps /edit', async () => {
@@ -135,7 +147,8 @@ describe('the address heals after checking read access', () => {
     const res = await app.request(`/a/${w.priv.id}`, owner);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('secret words');
+    expect(html).toContain('data-mx-document-frame');
+    expect(await nodesOf(w.priv.id, owner.headers)).toContain('secret words');
     expect(payloadOf(html).address).toBe(`/@${w.owner.username}/${w.priv.id}-priv`);
     const edit = await app.request(`/a/${w.priv.id}/edit`, owner);
     expect(edit.status).toBe(200);

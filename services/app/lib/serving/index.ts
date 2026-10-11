@@ -5,7 +5,7 @@ export { agentBlurb } from './agent-discovery';
 export { APP_SHELL_FONT_PRELOADS } from './app-fonts';
 export { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/artifacts';
 export { artifactPageAnswer, artifactPageResponse } from './artifact-page';
-export type { ArtifactPageAnswer } from './artifact-page';
+export type { ArtifactPageAnswer, FramedRuntime } from './artifact-page';
 export { artifactAppIcon, artifactManifest, artifactPwaEnabled, readableApp, withArtifactAppHead } from './artifact-pwa.server';
 export { artifactAppPath } from './artifact-pwa';
 export { DOMAIN_HOME_CSP, linkedStylesheets, renderDomainHome } from './custom-domain-home';

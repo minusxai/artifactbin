@@ -5,7 +5,7 @@ import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { screen } from '@testing-library/dom';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
-import ThemePicker from '../ThemePicker';
+import ThemePicker, { ModeChip, TemplateChip } from '../ThemePicker';
 
 beforeEach(() => vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} })));
 afterEach(() => vi.unstubAllGlobals());
@@ -50,4 +50,24 @@ it('resolves each specimen in the document mode without putting design tokens on
     expect(specimen.style.getPropertyValue('--font-display')).toBe('');
     expect(option.style.getPropertyValue('--background')).toBe('');
   }
+});
+
+it('picks the document color mode from the shared listbox, with the theme default as the unset choice', () => {
+  const onPick = vi.fn();
+  render(() => <ModeChip mode={null} themeDefault="dark" onPick={onPick} />);
+  const trigger = screen.getByRole('button', { name: 'Color mode' });
+  expect(trigger).toHaveTextContent('system default (dark)');
+  fireEvent.click(trigger);
+  expect(screen.getByRole('option', { name: 'system default (dark)' })).toHaveAttribute('aria-selected', 'true');
+  fireEvent.click(screen.getByRole('option', { name: 'light' }));
+  expect(onPick).toHaveBeenLastCalledWith('light');
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole('option', { name: 'system default (dark)' }));
+  expect(onPick).toHaveBeenLastCalledWith(null);
+});
+
+it('shows the chosen color mode and the page type as a badge', () => {
+  render(() => <><ModeChip mode="dark" themeDefault="light" onPick={() => {}} /><TemplateChip template="dashboard" /></>);
+  expect(screen.getByRole('button', { name: 'Color mode' })).toHaveTextContent('dark');
+  expect(screen.getByLabelText('Page type: dashboard')).toHaveTextContent('dashboard');
 });

@@ -15,6 +15,7 @@ import MessageSquare from 'lucide-solid/icons/message-square';
 import PanelRightClose from 'lucide-solid/icons/panel-right-close';
 import PanelRightOpen from 'lucide-solid/icons/panel-right-open';
 import SlidersHorizontal from 'lucide-solid/icons/sliders-horizontal';
+import { Button } from '@/solid/ui/Button';
 import { Tooltip } from '@/solid/ui/Tooltip';
 import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 
@@ -60,15 +61,9 @@ export default function EditPanel(props: {
           style={{ top: `${props.top}px`, width: `${EDIT_PANEL_STRIP_W}px` }}
         >
           <Tooltip content="Expand panel" side="left">
-            <button
-              type="button"
-              aria-label="Expand panel"
-              aria-expanded="false"
-              onClick={() => props.onCollapsedChange(false)}
-              class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[4px] text-muted hover:bg-raised hover:text-fg"
-            >
+            <Button variant="ghost" size="sm" icon aria-label="Expand panel" aria-expanded="false" onClick={() => props.onCollapsedChange(false)}>
               <PanelRightOpen size={15} />
-            </button>
+            </Button>
           </Tooltip>
           <div role="tablist" aria-label="Edit panel tabs" aria-orientation="vertical" class="flex flex-col gap-1 border-t border-edge pt-1">
             <For each={tabs()}>
@@ -84,7 +79,7 @@ export default function EditPanel(props: {
                     disabled={!!reason() || undefined}
                     aria-describedby={reason() ? `${id}-${t}-reason` : undefined}
                     onClick={() => props.onTab(t)}
-                    class={`relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[4px] disabled:cursor-default disabled:opacity-50 ${
+                    class={`relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-chip disabled:cursor-default disabled:opacity-50 ${
                       props.tab === t ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
                     }`}
                   >
@@ -129,7 +124,7 @@ export default function EditPanel(props: {
                       disabled={!!reason() || undefined}
                       aria-describedby={reason() ? `${id}-${t}-reason` : undefined}
                       onClick={() => props.onTab(t)}
-                      class={`relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[4px] px-2 font-mono text-[11px] disabled:cursor-default disabled:opacity-50 ${
+                      class={`relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-chip px-2 font-mono text-2xs disabled:cursor-default disabled:opacity-50 ${
                         props.tab === t ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
                       }`}
                     >
@@ -144,15 +139,9 @@ export default function EditPanel(props: {
             </For>
           </div>
           <Tooltip content="Collapse panel" side="bottom">
-            <button
-              type="button"
-              aria-label="Collapse panel"
-              aria-expanded="true"
-              onClick={() => props.onCollapsedChange(true)}
-              class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted hover:bg-raised hover:text-fg"
-            >
+            <Button variant="ghost" size="sm" icon aria-label="Collapse panel" aria-expanded="true" onClick={() => props.onCollapsedChange(true)}>
               <PanelRightClose size={15} />
-            </button>
+            </Button>
           </Tooltip>
         </div>
         <div role="tabpanel" id={`${id}-body`} aria-labelledby={`${id}-${props.tab}`} class="flex min-h-0 flex-1 flex-col">
