@@ -6,13 +6,13 @@ Use a Linux server with Docker Engine, Compose v2.30+, Docker Buildx v0.17+, Nod
 
 ## 1. DNS and certificates
 
-Choose a public application hostname, for example `dashverse.artifactbin.dev`. Configure DNS pointing to the server's stable IP for all three:
+Choose a public application hostname, for example `company.example.com`. Configure DNS pointing to the server's stable IP for all three:
 
-- `dashverse.artifactbin.dev`
-- `pages.dashverse.artifactbin.dev`
-- `*.pages.dashverse.artifactbin.dev`
+- `company.example.com`
+- `pages.company.example.com`
+- `*.pages.company.example.com`
 
-Do not substitute `*.dashverse.artifactbin.dev`: it does not cover individual document hostnames. The app and document hosts must be on the same site so authenticated private documents work.
+Do not substitute `*.company.example.com`: it does not cover individual document hostnames. The app and document hosts must be on the same site so authenticated private documents work.
 
 Wildcard certificates need a DNS challenge. **Select your actual DNS provider**, its explicitly pinned [Caddy DNS module](https://caddyserver.com/docs/modules/), and its documented credentials before starting. Stock Caddy does not include provider modules; `Caddy.Dockerfile` builds the selected one. Give it DNS access scoped to this zone. Credentials belong only in `secrets/dns.env`, never in the app configuration or image. For Route53 on EC2 prefer a scoped instance role; ensure containers can reach IMDSv2 (appropriate metadata hop limit) and do not configure static AWS keys. Other providers use their module's credential names. See [Caddy DNS challenge configuration](https://caddyserver.com/docs/caddyfile/directives/tls#dns).
 
@@ -21,8 +21,8 @@ Wildcard certificates need a DNS challenge. **Select your actual DNS provider**,
 Copy this directory to a new operator directory on the server. Supply the following environment variables through your protected configuration mechanism (avoid secrets in shell history):
 
 ```dotenv
-APP_HOSTNAME=dashverse.artifactbin.dev
-PAGES_HOSTNAME=pages.dashverse.artifactbin.dev
+APP_HOSTNAME=company.example.com
+PAGES_HOSTNAME=pages.company.example.com
 OWNER_EMAIL=owner@company.example
 ALLOWED_EMAIL_PATTERNS=*
 ACME_EMAIL=ops@company.example
@@ -32,7 +32,7 @@ EMAIL__SMTP_PORT=587
 EMAIL__SMTP_SECURE=false
 EMAIL__SMTP_USER=<SMTP username>
 EMAIL__SMTP_PASSWORD=<SMTP password>
-EMAIL__FROM=Dashverse <login@verified-sender.example>
+EMAIL__FROM=Example Company <login@verified-sender.example>
 ```
 
 `ALLOWED_EMAIL_PATTERNS=*` permits invited colleagues from any email domain; company admission remains invite-only. Set a narrower email glob when your company requires it. The owner address is always supplied explicitly.
@@ -41,7 +41,7 @@ Then `node init.mjs .`. The initializer generates independent random database an
 
 Use an SMTP sender authorized by your provider. Port 587 requires STARTTLS; `EMAIL__SMTP_SECURE=true` uses implicit TLS with default port 465. Certificate verification stays enabled; provide both username/password, or neither only for a trusted TLS relay. Alternatively choose Resend with `EMAIL__RESEND_API_KEY` plus its verified sender in `EMAIL__FROM`; do not configure both transports. Instead of email codes, supply both `AUTH__GOOGLE_CLIENT_ID` and `AUTH__GOOGLE_CLIENT_SECRET`, or a complete OIDC configuration from [server.env.example](../../docs/extraction/server.env.example). Register the application's login redirect URI with that provider. There is no local OTP outbox on this external host.
 
-For Amazon SES in Mumbai, use `EMAIL__SMTP_HOST=email-smtp.ap-south-1.amazonaws.com`, port 587, `EMAIL__SMTP_SECURE=false`, and the provider's SMTP username/password. An example shared sender is `Dashverse login <login@verify.artifactbin.dev>` after that sending domain is verified; each company can use a separate credential restricted to its authorized sender. SES SMTP credentials differ from AWS access keys, and sandbox accounts also require verified recipients until production sending access is approved. See [SES SMTP requirements](https://docs.aws.amazon.com/ses/latest/dg/send-email-smtp.html).
+For Amazon SES in Mumbai, use `EMAIL__SMTP_HOST=email-smtp.ap-south-1.amazonaws.com`, port 587, `EMAIL__SMTP_SECURE=false`, and the provider's SMTP username/password. An example shared sender is `Example Company login <login@verify.example.com>` after that sending domain is verified; each company can use a separate credential restricted to its authorized sender. SES SMTP credentials differ from AWS access keys, and sandbox accounts also require verified recipients until production sending access is approved. See [SES SMTP requirements](https://docs.aws.amazon.com/ses/latest/dg/send-email-smtp.html).
 
 Complete `dns-provider.caddy` with your selected module's TLS block. Example **only if the selected provider is Route53**:
 
@@ -80,7 +80,7 @@ Open the public hostname and sign in using the configured verified owner email. 
 Colleagues install the CLI on their own computers (not in the server container):
 
 ```sh
-npx --yes @afbin/cli@0.5.25 setup --server https://dashverse.artifactbin.dev --group <company-handle> --set-default
+npx --yes @afbin/cli@0.5.25 setup --server https://company.example.com --group <company-handle> --set-default
 ```
 
 They authenticate as themselves. New publications use their verified account/deployment default; existing personal documents are not transferred. Group viewers can read and discover private company artifacts; editors can create/edit/comment. Individual document shares can grant commenter access separately, and do not admit an account to the company. Use the group's **Copy agent setup** command to avoid mistyping the origin/handle. See [company permissions](../../docs/extraction/team.md#owner-setup-and-colleague-permissions).
