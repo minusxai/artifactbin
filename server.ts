@@ -12,7 +12,7 @@ import path from 'node:path';
 import { developmentPagesHosts, developmentViteOptions } from './services/app/lib/runtime/dev-vite';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
-import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/auth';
+import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/auth';
 
 async function main(): Promise<void> {
   const env = process.env;
@@ -176,8 +176,7 @@ async function main(): Promise<void> {
     const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
     await ensureAuthSchema(queryable, authSchema);
     const mailer = mailerForRuntime({
-      apiKey: readEnv(env, 'EMAIL__RESEND_API_KEY'),
-      from: readEnv(env, 'EMAIL__FROM') ?? 'artifactbin <login@example.com>',
+      ...mailSettingsOf(env),
       publicBaseUrl: baseURL,
       devOutboxPath: readEnv(env, 'EMAIL__DEV_OUTBOX_PATH'),
     });

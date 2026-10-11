@@ -33,7 +33,7 @@ describe('resendMailer', () => {
     const file = join(mkdtempSync(join(tmpdir(), 'artifactbin-mail-runtime-')), 'outbox.jsonl');
     const message = { to: 'dev@example.com', kind: 'otp', subject: 'x', text: 'x' } as const;
 
-    const local = mailerForRuntime({ publicBaseUrl: 'http://localhost:3030', from: 'x', devOutboxPath: file });
+    const local = mailerForRuntime({ publicBaseUrl: 'http://localhost:3030', from: 'x', devOutboxPath: file, smtp: { host: 'smtp.invalid', port: 587, secure: false } });
     await local.send({ ...message, otp: '424242' });
     expect(JSON.parse(readFileSync(file, 'utf8').trim())).toMatchObject({ to: 'dev@example.com', otp: '424242' });
 
@@ -49,7 +49,8 @@ describe('resendMailer', () => {
 
   it('refuses to send without a key, and reports a failed send with its status', async () => {
     await expect(resendMailer({ from: 'x' }).send({ to: 'a', kind: 'other', subject: 's', text: 't' })).rejects.toBeInstanceOf(MailNotConfigured);
-    const f = (async () => new Response('nope', { status: 500 })) as unknown as typeof fetch;
+    const f = (async () => new Response('secret-key 123456', { status: 500 })) as unknown as typeof fetch;
     await expect(resendMailer({ apiKey: 'k', from: 'x', fetch: f }).send({ to: 'a', kind: 'other', subject: 's', text: 't' })).rejects.toBeInstanceOf(MailSendFailed);
+    await expect(resendMailer({ apiKey: 'k', from: 'x', fetch: f }).send({ to: 'a', kind: 'other', subject: 's', text: 't' })).rejects.toThrow('mail send failed: 500');
   });
 });

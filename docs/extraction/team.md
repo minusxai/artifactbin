@@ -15,7 +15,11 @@ APP__DEPLOYMENT_OWNER_EMAIL=owner@example.com
 AUTH__INVITE_ONLY=true
 AUTH__ALLOWED_EMAIL_PATTERNS=*@example.com
 AUTH__SECRET=<persistent random secret of at least 32 characters>
-EMAIL__RESEND_API_KEY=<mail provider credential>
+EMAIL__SMTP_HOST=smtp.example.com
+EMAIL__SMTP_PORT=587
+EMAIL__SMTP_SECURE=false
+EMAIL__SMTP_USER=<SMTP username>
+EMAIL__SMTP_PASSWORD=<SMTP password>
 EMAIL__FROM=Artifactbin <login@example.com>
 ```
 
@@ -23,12 +27,16 @@ For local development, use `APP__HOST=127.0.0.1` and `APP__PUBLIC_BASE_URL=http:
 
 `--port` selects the listener for one run and is never written back to `server.env`, so a later `afbin serve --dir <path>` listens on the port that file names. The full set of settings the host accepts is [`server.env.example`](server.env.example); the repository's own `.env.example` is for `npm run dev` and is refused here (`Unsupported team setting: OBJECT_STORE__LOCAL_DIR`).
 
+## Docker company deployment
+
+For a repeatable external company server with PostgreSQL, HTTPS and persistent storage, use the [Docker Compose hosting bundle](../../deploy/company/README.md). It builds a pinned npm CLI image, runs `afbin serve` inside it, and documents wildcard DNS/TLS, real login, normal owner onboarding, isolated client installation, consistent backups and recovery. Colleagues install their own CLI; they do not operate the server container.
+
 ## Team on a network
 
 `afbin serve` refuses at startup rather than serving a login page nobody can complete, so a shared host needs all of:
 
 - **An HTTPS public URL.** afbin clients only connect over HTTPS, or HTTP on localhost, so an `http://` non-loopback `APP__PUBLIC_BASE_URL` is refused. Terminate TLS at a reverse proxy in front and set `APP__PUBLIC_BASE_URL=https://…`; `APP__HOST`/`--port` still select the local listener behind it.
-- **A login method teammates can COMPLETE.** Naming one is not configuring it, and a half-configured method is refused rather than served: `EMAIL__RESEND_API_KEY` **and** `EMAIL__FROM` (without the sender the composition falls back to `artifactbin <login@example.com>`, which no provider is verified for, so every code fails on the way out), or Google (`AUTH__GOOGLE_CLIENT_ID` + `AUTH__GOOGLE_CLIENT_SECRET`), or OIDC (`AUTH__OIDC_PROVIDER_ID` + `AUTH__OIDC_CLIENT_ID` + `AUTH__OIDC_CLIENT_SECRET`, plus either `AUTH__OIDC_DISCOVERY_URL` or all of `AUTH__OIDC_AUTHORIZATION_URL`, `AUTH__OIDC_TOKEN_URL` and `AUTH__OIDC_USERINFO_URL`). There is no SMTP option, and the local `[dev-mail]` outbox serves loopback origins only. Startup says which of these teammates should use; with only Google or OIDC it says so, rather than promising an emailed code.
+- **A login method teammates can COMPLETE.** Naming one is not configuring it, and a half-configured method is refused rather than served: SMTP (`EMAIL__SMTP_HOST` + `EMAIL__FROM`, valid port/TLS, paired username/password), or `EMAIL__RESEND_API_KEY` **and** `EMAIL__FROM` (without the sender the composition falls back to `artifactbin <login@example.com>`, which no provider is verified for, so every code fails on the way out), or Google (`AUTH__GOOGLE_CLIENT_ID` + `AUTH__GOOGLE_CLIENT_SECRET`), or OIDC (`AUTH__OIDC_PROVIDER_ID` + `AUTH__OIDC_CLIENT_ID` + `AUTH__OIDC_CLIENT_SECRET`, plus either `AUTH__OIDC_DISCOVERY_URL` or all of `AUTH__OIDC_AUTHORIZATION_URL`, `AUTH__OIDC_TOKEN_URL` and `AUTH__OIDC_USERINFO_URL`). SMTP defaults to port 587 with required STARTTLS; `EMAIL__SMTP_SECURE=true` uses implicit TLS (default port 465). Server certificates are verified. Omit both username/password only for a trusted TLS relay; half-configured credentials are refused. Select one email transport, SMTP or Resend. The local `[dev-mail]` outbox serves loopback origins only. Startup says which of these teammates should use; with only Google or OIDC it says so, rather than promising an emailed code.
 - **DNS and TLS for the pages host.** Every document is served on its own origin, `https://<id>.<pages host>`, which must be on the public URL's site. `APP__PAGES_HOST` names it; unset, the host serves documents under `pages.<public hostname>` (`lvh.me` for a loopback or `lvh.me` public URL, such as the generated `http://app.lvh.me:<port>`), and an IP-address public URL must set it. Point DNS and a certificate for the pages host and `*.<pages host>` at the server; startup names both.
 - **`APP__PUBLIC_BASE_URL` exactly as teammates type it.** Approval and login both happen at that origin, and `http://localhost:7445` and `http://127.0.0.1:7445` are different origins: a mismatch fails with `approval_origin_mismatch`. `APP__HOST=0.0.0.0` with a loopback public URL is refused for the same reason.
 
