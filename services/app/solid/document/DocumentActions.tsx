@@ -10,12 +10,13 @@ import { DownloadOffline } from './DownloadOffline';
 import { DocumentSharing } from './DocumentSharing';
 import { ForkArtifact } from './ForkArtifact';
 import { LikeAction } from './LikeAction';
-import { DocumentPeople } from './DocumentPeople';
 
 /**
  * Lazy on purpose (a documented lazy-import exception): only an owner who picks "transfer ownership" needs the
  * dialog, and every reader's document page would otherwise download it (the page-speed prose budget).
  */
+/** Lazy on purpose (a documented lazy-import exception): the People panel only draws once its row is opened, and the reader's document page must stay within the page-speed prose budget. */
+const DocumentPeople = lazy(() => import('./DocumentPeople').then((m) => ({ default: m.DocumentPeople })));
 const TransferOwnershipDialog = lazy(() => import('../components/TransferOwnershipDialog').then((m) => ({ default: m.TransferOwnershipDialog })));
 import { RefreshDocumentAssets } from './RefreshDocumentAssets';
 
@@ -46,7 +47,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
   const activeCommenter = () => props.canAnnotate && !props.archived;
   const toggleComments = () => { const open = !commentsOpen(); setCommentsOpen(open); props.onCommentsChange(open); };
   return <div class="space-y-4" aria-label="Document actions">
-    <Show when={props.membershipAvailable}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} hideJoin /></Show>
+    <Show when={props.membershipAvailable}><Suspense fallback={null}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} hideJoin /></Suspense></Show>
     <section aria-label="Document actions" class="space-y-1">
       <h2 class="px-2"><MicroLabel>Artifact</MicroLabel></h2>
       <Show when={props.forkedFrom}>{source => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{href => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>
