@@ -12,7 +12,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { GET as mermaidAsset } from '@/app/assets/mermaid/[file]/route';
 import { artifactPageAnswer } from '@/lib/serving';
 import { getArtifactById } from '@/lib/artifacts';
@@ -23,6 +22,7 @@ import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/publish/assets/mermaid-harvester';
 import { MERMAID_RENDER_ENGINE } from '@/lib/mermaid-images/engine';
 import { documentEditBody } from './prepared-document';
+import { servedRuntimeOf } from './served-runtime';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { installStoryCommitHooks } from '@/lib/publish/prepared/commit-hooks.server';
 
@@ -127,8 +127,7 @@ describe('a published Mermaid document', () => {
     const id = (await made.json()).id as string;
     while (await runNextMermaidHarvest()) { /* drain */ }
     // As the reader stored drawings are offered to (lib/mermaid-images/readers).
-    const answer = await artifactPageAnswer(reader(`/a/${id}`), id);
-    const data = (answer.body as { surface: { runtime: { data: { mermaidImages?: Record<string, { src: string }>; dataflow?: { results?: { tables: Record<string, { rows: unknown[] }> } } } } } }).surface.runtime.data;
+    const data = (await servedRuntimeOf(id, { results: true })).data as { mermaidImages?: Record<string, { src: string }>; dataflow?: { results?: { tables: Record<string, { rows: unknown[] }> } } };
     expect(data.dataflow?.results?.tables.q?.rows).toEqual([{ n: 42 }]);
     const drawing = data.mermaidImages?.[mermaidImageKey(FLOW, 'light')];
     expect(drawing?.src).toMatch(/^\/assets\/mermaid\//);
@@ -178,8 +177,7 @@ describe('a published Mermaid document', () => {
     expect(after).toContain(`src="${flow.src}"`);
 
     // The app's inline reader gets its OWN surface's drawings.
-    const page = await (await pageData(reader(`/api/page/artifact/${id}`), params({ id }))).json();
-    const inline = page.surface.runtime.data.mermaidImages[mermaidImageKey(FLOW, 'light')];
+    const inline = (await servedRuntimeOf(id)).data.mermaidImages![mermaidImageKey(FLOW, 'light')]!;
     expect(inline.palette).toBe(PALETTE.inline);
     expect(inline.src).not.toBe(flow.src);
 
@@ -207,9 +205,8 @@ describe('a published Mermaid document', () => {
     setServices({ browser: drawingBrowser([FLOW]).browser });
     const { id } = await publish([FLOW]);
     // The app's reader page is prepared (and stored) before any drawing exists.
-    const first = await artifactPageAnswer(reader(`/a/${id}`, '', { accept: 'text/html' }), id);
-    expect(first.status).toBe(200);
-    expect((first.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
+    expect((await artifactPageAnswer(reader(`/a/${id}`, '', { accept: 'text/html' }), id)).status).toBe(200);
+    expect((await servedRuntimeOf(id)).data.mermaidImages).toBeUndefined();
     const db = await getDb();
     expect(Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM prepared_pages WHERE artifact_id=$1', [id])).rows[0].n)).toBe(1);
 
@@ -218,8 +215,7 @@ describe('a published Mermaid document', () => {
     expect(await runNextMermaidHarvest()).toBe(true);
     await drainPreparedPageWarmups();
     expect((await db.query<{ marked: boolean }>(`SELECT page ? 'preHarvest' AS marked FROM prepared_pages WHERE artifact_id=$1 AND slot='head'`, [id])).rows).toEqual([{ marked: false }]);
-    const next = await artifactPageAnswer(reader(`/a/${id}`, '', { accept: 'text/html' }), id);
-    const images = (next.body as { surface: { runtime: { data: { mermaidImages?: Record<string, { src: string; palette: string }> } } } }).surface.runtime.data.mermaidImages;
+    const images = (await servedRuntimeOf(id)).data.mermaidImages as Record<string, { src: string; palette: string }> | undefined;
     const stored = images?.[mermaidImageKey(FLOW, 'light')];
     expect(stored?.palette).toBe(PALETTE.inline);
     // The served story itself carries the stored drawing, and the page names no engine code for it.
@@ -227,8 +223,7 @@ describe('a published Mermaid document', () => {
     expect(served).toContain(`src="${island(served).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src}"`);
     expect(island(served).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src).toMatch(/^\/assets\/mermaid\//);
     // Asked for by name, the engine draws as before.
-    const engine = await artifactPageAnswer(reader(`/a/${id}?mermaid=engine`, '', { accept: 'text/html' }), id);
-    expect((engine.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
+    expect((await servedRuntimeOf(id, { search: '?mermaid=engine' })).data.mermaidImages).toBeUndefined();
     expect(await raw(id, '?mermaid=engine')).not.toContain('src="/assets/mermaid/');
   });
 

@@ -38,7 +38,9 @@ const bytes = async (res: Response) => Buffer.from(await res.arrayBuffer());
 describe('the document page and its page data', () => {
   it('are brotli when accepted, decoding to exactly the identity answer', async () => {
     const doc = await publicDocument();
-    for (const address of [doc.canonical, `/api/page/artifact/${doc.id}`]) {
+    // The page data a document's words ride is the nodes part: the shell the JSON door answers a framed document with is
+    // under the 1 KiB the encoder leaves alone (a framed runtime, not the sheet and script it once carried).
+    for (const [address, marker] of [[doc.canonical, doc.id], [`/api/page/artifact/${doc.id}?part=nodes`, 'public words']] as const) {
       const plain = await app.request(address, { headers: stranger });
       const encoded = await app.request(address, { headers: { ...stranger, 'accept-encoding': BROWSER } });
       expect(plain.status, address).toBe(200);
@@ -56,8 +58,8 @@ describe('the document page and its page data', () => {
       // A compiled page may finish a warm snapshot between these two requests;
       // check a valid decoded answer with the same artifact rather than byte identity across reads.
       const decoded = brotliDecompressSync(wire).toString();
-      expect(decoded, address).toContain(doc.id);
-      expect(identity.toString(), address).toContain(doc.id);
+      expect(decoded, address).toContain(marker);
+      expect(identity.toString(), address).toContain(marker);
     }
   });
   it('stay identity for a client that refuses brotli or takes only gzip (nginx gzips those as before)', async () => {

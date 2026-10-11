@@ -3,6 +3,7 @@ import {useAppHarness,request} from './harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { servedRuntimeOf } from './served-runtime';
 
 useAppHarness();
 
@@ -13,8 +14,11 @@ it('the markup page transports its isolated sheet once and leaves the source to 
   const response=await artifactPage(request(`/api/page/artifact/${id}`,{token:token.token}),{params:Promise.resolve({id})});
   expect(response.status).toBe(200);
   const payload=await response.json();
-  expect(payload.surface.runtime.css).toEqual(expect.any(String));
-  for(const raw of ['baseCss','compiledCss','authorCss'])expect(payload.surface.runtime).not.toHaveProperty(raw);
+  // The framed document's sheet is the frame's: the app's door answers the title and declared dataflow only.
+  expect(payload.surface.runtime).toEqual({title:expect.any(String),data:{}});
+  const sheet=await servedRuntimeOf(id);
+  expect(sheet.css).toEqual(expect.any(String));
+  for(const raw of ['baseCss','compiledCss','authorCss'])expect(sheet).not.toHaveProperty(raw);
   expect(payload.surface).not.toHaveProperty('compiledCss');
   expect(payload.surface).not.toHaveProperty('source');
   expect(payload.surface.heading).toBe('Readable content');

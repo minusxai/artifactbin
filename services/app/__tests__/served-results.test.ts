@@ -15,6 +15,7 @@ import path from 'node:path';
 import { servedHtml } from '@/test/helpers/served-html';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
+import { servedRuntimeOf } from '@/__tests__/served-runtime';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -74,7 +75,11 @@ const resultOf = (html: string) => {
   return servedHtml(html).json<{ results?: unknown }>(ISLAND_DATA_ID)?.results as
   { tables: Record<string, { rows: Array<Record<string, unknown>> }>; errors: Record<string, string>; mutationAccess?: Record<string, string | null>; since?: string } | undefined;
 };
-const servedOf = (body: { surface: { runtime: { data: { dataflow?: { results?: unknown } } } } }) => body.surface.runtime.data.dataflow?.results as
+/**
+ * The first results the reader's runtime carries for this session (lib/publish/prepared/prepared-page.server `servedPage`). The app's
+ * own doors answer a framed document's title and declared dataflow only (FramedRuntime): the frame runs its own results.
+ */
+const servedOf = async (id: string, search = '') => (await servedRuntimeOf(id, { search, results: true })).data.dataflow?.results as
   { tables: Record<string, { rows: Array<Record<string, unknown>> }>; errors: Record<string, string>; mutationAccess?: Record<string, string | null>; since?: string } | undefined;
 /** What the query route answers this session for these values: the parity reference. */
 const routeAnswer = async (id: string, values: Record<string, unknown> = {}) =>
@@ -108,7 +113,7 @@ describe('the reader page carries its first results', () => {
     const { id, user } = board();
     for (const who of [null, { id: user.id, email: user.email ?? '' }]) {
       asSession(who);
-      const results = servedOf(await pageJson(id))!;
+      const results = (await servedOf(id))!;
       const answer = await routeAnswer(id);
       expect(results.tables).toEqual(answer.tables);
       expect(results.errors).toEqual(answer.errors);
@@ -139,7 +144,7 @@ describe('the reader page carries its first results', () => {
 
   it('opens a live stream that sends nothing when nothing changed, and ignores a token it cannot read', async () => {
     const { id } = board();
-    const since = servedOf(await pageJson(id))!.since!;
+    const since = (await servedOf(id))!.since!;
     // Each token gets its own stream, all read at once: a quiet stream is only shown quiet by waiting out its budget.
     const streams = await Promise.all([since, 'not a token', `${'x'.repeat(6)}.deadbeef0000`].map(async (token) =>
       readEvents((await eventsRoute(request(`/a/${id}/events?since=${encodeURIComponent(token)}`), params(id))).body!, 2, 800)));
@@ -174,13 +179,13 @@ describe('who may see which rows', () => {
     await drainPreparedPageWarmups();
     // The owner reads the dataset: served rows, the route's rows.
     asSession({ id: who.user.id, email: who.user.email ?? '' });
-    const own = servedOf(await pageJson(id))!;
+    const own = (await servedOf(id))!;
     expect(own.tables.q).toEqual((await routeAnswer(id)).tables.q);
     expect(own.tables.q).toMatchObject({ rows: [{ total: 7 }] });
     expect(storyText(await html(id))).toMatch(/Total\s*—/);
     // A stranger does not: no rows, and the refusal is the route's own, word for word.
     asSession(null);
-    const stranger = servedOf(await pageJson(id))!;
+    const stranger = (await servedOf(id))!;
     const answer = await routeAnswer(id);
     expect(stranger.tables).not.toHaveProperty('q');
     expect(answer.tables).not.toHaveProperty('q');
@@ -194,11 +199,11 @@ describe('who may see which rows', () => {
     const id = await publish(who.token, { markup: `<Helmet><Query name="me">{\`select coalesce($_me.id, 'guest') as who\`}</Query></Helmet><DataTable data="$me" height="120px" />` });
     await drainPreparedPageWarmups();
     asSession({ id: who.user.id, email: who.user.email ?? '' });
-    const mine = servedOf(await pageJson(id))!;
+    const mine = (await servedOf(id))!;
     expect(mine.tables.me).toMatchObject({ rows: [{ who: who.user.id }] });
     expect(mine.tables).toEqual((await routeAnswer(id)).tables);
     asSession(null);
-    const guest = servedOf(await pageJson(id))!;
+    const guest = (await servedOf(id))!;
     expect(guest.tables.me).toMatchObject({ rows: [{ who: 'guest' }] });
   });
 
@@ -213,7 +218,7 @@ describe('who may see which rows', () => {
     const seen: Array<Record<string, string | null> | undefined> = [];
     for (const who2 of [null, { id: who.user.id, email: who.user.email ?? '' }]) {
       asSession(who2);
-      const results = servedOf(await pageJson(id))!;
+      const results = (await servedOf(id))!;
       const answer = await routeAnswer(id);
       expect(answer.mutationAccess).toBeDefined();
       expect(results.mutationAccess).toEqual(answer.mutationAccess);
@@ -230,17 +235,16 @@ describe('who may see which rows', () => {
     expect(edited.status, await edited.clone().text()).toBe(200);
     asSession({ id: user.id, email: user.email ?? '' });
     // The head, for the same viewer, does carry them.
-    expect(servedOf(await pageJson(id))!.tables).toHaveProperty('monthly');
-    const archived = await pageJson(id, '?version=1');
-    expect(archived.archived).toMatchObject({ version: 1 });
-    expect(servedOf(archived)).toBeUndefined();
+    expect((await servedOf(id))!.tables).toHaveProperty('monthly');
+    expect((await pageJson(id, '?version=1')).archived).toMatchObject({ version: 1 });
+    expect(await servedOf(id, '?version=1')).toBeUndefined();
   });
 
   it('leaves a query that reads the reader\'s time zone to the page, which alone knows it', async () => {
     const who = await owner();
     const id = await publish(who.token, { markup: `<Helmet><Query name="zone">{\`select $_tz as tz\`}</Query><Query name="n">{\`select 41 + 1 as n\`}</Query></Helmet><p><Number data="$n" col="n" /></p><DataTable data="$zone" height="120px" />` });
     await drainPreparedPageWarmups();
-    const results = servedOf(await pageJson(id))!;
+    const results = (await servedOf(id))!;
     expect(results.tables).toHaveProperty('n');
     expect(results.tables).not.toHaveProperty('zone');
     expect(results.errors).not.toHaveProperty('zone');
@@ -261,9 +265,9 @@ describe('the budget', () => {
     } } });
     try {
       const started = performance.now();
-      const body = await pageJson(id);
+      const results = await servedOf(id);
       const took = performance.now() - started;
-      expect(servedOf(body)).toBeUndefined();
+      expect(results).toBeUndefined();
       expect(took).toBeLessThan(SERVED_RESULTS_BUDGET_MS + 1000);
       expect(took).toBeGreaterThanOrEqual(SERVED_RESULTS_BUDGET_MS - 5);
     } finally {
@@ -271,7 +275,7 @@ describe('the budget', () => {
       setServices(real);
     }
     // Once the engine answers in time, the same page carries the rows.
-    expect(servedOf(await pageJson(id))!.tables.slow).toMatchObject({ rows: [{ label: 'slow_marker', n: 5 }] });
+    expect((await servedOf(id))!.tables.slow).toMatchObject({ rows: [{ label: 'slow_marker', n: 5 }] });
   });
 });
 
@@ -280,7 +284,7 @@ describe('the live stream picks up where the served results left off', () => {
 
   it('sends a data frame at once for a dataset that changed between the page and the stream', async () => {
     const { id, sales, token } = await dashboard();
-    const since = servedOf(await pageJson(id))!.since!;
+    const since = (await servedOf(id))!.since!;
     expect(since).toEqual(expect.any(String));
     const rows = fixture('sales.csv').trim().split('\n');
     const replaced = await putArtifactRoute(await observedRequest(`/api/artifacts/${sales}`, { method: 'PUT', token, json: { dataset: `${rows[0]}\n2025-01-01,North,Alpha,1000,1\n` } }), params(sales));
@@ -293,7 +297,7 @@ describe('the live stream picks up where the served results left off', () => {
 
   it('covers a change to who may read the dataset, not only to its rows', async () => {
     const { id, sales } = await dashboard();
-    const since = servedOf(await pageJson(id))!.since!;
+    const since = (await servedOf(id))!.since!;
     await (await harness.db()).query('UPDATE artifacts SET sharing_revision = sharing_revision + 1 WHERE id = $1', [sales]);
     const data = (await readEvents((await stream(id, since)).body!, 2)).find((e) => e.event === 'data');
     expect(data?.data).toMatchObject({ datasets: [sales] });

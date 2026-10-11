@@ -26,6 +26,7 @@ import { prepareStoryRuntime } from '@/lib/publish/prepared/prepare-runtime.serv
 import { storyBaseCss } from '@/lib/page-styles/story-base-css';
 import { readerStorySheet } from '@/lib/publish/prepared/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
+import { servedRuntimeOf } from '@/__tests__/served-runtime';
 import { type CompiledPage, type StoredCompile, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { readFileSync } from 'node:fs';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
@@ -99,7 +100,9 @@ describe('the reader payload', () => {
     for (const key of ['source', 'document', 'compiledCss', 'dataflow']) expect(surface).not.toHaveProperty(key);
     expect(surface.heading).toBe('Quarterly notes');
     expect(surface.starter).toBe(false);
-    const runtime = surface.runtime;
+    // The app's door answers a framed document's title and dataflow only; the sheet is the frame's and the runtime's own (below).
+    expect(surface.runtime).toEqual({ title: expect.any(String), data: {} });
+    const runtime = await servedRuntimeOf(id);
     for (const key of ['baseCss', 'compiledCss', 'authorCss']) expect(runtime).not.toHaveProperty(key);
     // The sheet the SSR `<style>` carries: base + compiled + author under the CSS policy.
     const row = (await getArtifactById(id))!;
@@ -114,8 +117,8 @@ describe('the reader payload', () => {
     expect(runtime.data).not.toHaveProperty('nodes');
     const { nodes } = await (await readPage(id, '?part=nodes')).json();
     expect(nodes).toEqual(raw.data.nodes);
-    expect(runtime.overrides.length).toBeGreaterThan(0);
-    expect(applyStyleOverrides(nodes, runtime.overrides)).toEqual(realInlineStoryNodes(raw.data.nodes, reader));
+    expect(runtime.overrides!.length).toBeGreaterThan(0);
+    expect(applyStyleOverrides(nodes, runtime.overrides!)).toEqual(realInlineStoryNodes(raw.data.nodes, reader));
   });
 
   it('hands the editor its source and graph only on the editor door, and only to a writer (its payload: editor-part.test.ts)', async () => {
@@ -253,9 +256,9 @@ describe('the prepared page store', () => {
     const { id } = await world();
     await (await harness.db()).query(`UPDATE artifacts SET meta = jsonb_set(meta, '{cssCompileVersion}', '"v-old"') WHERE id = $1`, [id]);
     await (await harness.db()).query('DELETE FROM prepared_pages');
-    const before = (await (await readPage(id)).json()).surface.runtime.css;
+    const before = (await servedRuntimeOf(id)).css;
     resetSpies();
-    const after = (await (await readPage(id)).json()).surface.runtime.css;
+    const after = (await servedRuntimeOf(id)).css;
     expect(after).toBe(before);
     expect(spies.css).toBe(0);
   });
