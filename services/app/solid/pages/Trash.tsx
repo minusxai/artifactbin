@@ -11,10 +11,10 @@ import { Navigate } from '@solidjs/router';
 import ChevronLeft from 'lucide-solid/icons/chevron-left';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
-import Search from 'lucide-solid/icons/search';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { RowMenu } from '../ui/Menu';
 import { Button } from '../ui/Button';
+import { SearchField } from '../ui/Field';
 import { Panel } from '../ui/Panel';
 import { Tooltip } from '../ui/Tooltip';
 import { Badge, FormatBadge, formatLabel, MicroLabel, TABLE_ROW, timeAgo } from '../ui/ui';
@@ -31,19 +31,16 @@ const HEADINGS = ['title', 'type', 'ver', 'deleted', ''];
 
 function TypeFilter(props: { format: string; active: boolean; onToggle: (format: string) => void }): JSX.Element {
   return (
-    <button
+    <Button
       type="button"
+      size="sm"
+      variant={props.active ? 'primary' : 'secondary'}
       aria-label={`Filter ${props.format}`}
       aria-pressed={props.active}
       onClick={() => props.onToggle(props.format)}
-      class={`inline-flex min-h-8 cursor-pointer items-center rounded-full border px-3 py-1 text-xs whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
-        props.active
-          ? 'border-accent bg-accent-soft text-accent'
-          : 'border-edge bg-transparent text-faint hover:border-edge-bright hover:text-muted'
-      }`}
     >
       {formatLabel(props.format)}
-    </button>
+    </Button>
   );
 }
 
@@ -93,16 +90,16 @@ export function TrashPage(): JSX.Element {
 
         <Panel label="Trash" padding="none">
           <Show when={page.error()}>
-            <Button variant="secondary" class="m-3" aria-label="Retry trash" onClick={() => void page.refresh(true)}>Could not refresh trash. Retry</Button>
+            <Button variant="secondary" size="sm" class="m-3" aria-label="Retry trash" onClick={() => void page.refresh(true)}>Could not refresh trash. Retry</Button>
           </Show>
           <div class="flex flex-wrap items-center gap-2 border-b border-edge bg-raised/30 px-4 py-3">
-            <Search size={13} class="shrink-0 text-faint" />
-            <input
-              aria-label="Search trash"
+            <SearchField
+              size="sm"
+              label="Search trash"
               placeholder="search artifacts"
               value={query()}
-              onInput={(event) => { setQuery(event.currentTarget.value); setPageIndex(0); }}
-              class="min-h-10 min-w-32 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none"
+              onValue={(value) => { setQuery(value); setPageIndex(0); }}
+              class="min-w-32 flex-1"
             />
             <Show when={formats().length > 1}>
               <span class="ml-auto flex flex-wrap items-center gap-1.5">
