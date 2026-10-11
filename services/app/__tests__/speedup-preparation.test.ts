@@ -27,7 +27,9 @@ it('shares the server canonical/status row read AND its admission with the boots
     const app = createAppServer({ indexHtml: async () => '<head></head><body><div id="root"></div></body>' });
     const response = await app.request(`/a/${id}`);
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain('Server preparation');
+    const html = await response.text();
+    expect(html).toContain('data-mx-document-frame');
+    expect(html).toContain(`"id":"${id}"`);
     expect(read.mock.calls.filter(([value]) => value === id)).toHaveLength(1);
     expect(admitted.mock.calls.filter(([row]) => row.id === id)).toHaveLength(1);
   } finally { read.mockRestore(); admitted.mockRestore(); }
