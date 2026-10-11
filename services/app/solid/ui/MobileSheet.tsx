@@ -12,6 +12,7 @@ import { Portal } from 'solid-js/web';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 import { LAYER } from './layers';
+import { createPlacedAppearance } from './theme';
 
 /** Tailwind's `sm` threshold, by innerWidth (jsdom implements no media queries). */
 export const isPhoneViewport = (): boolean => typeof window !== 'undefined' && window.innerWidth < 640;
@@ -64,15 +65,19 @@ export default function MobileSheet(props: {
     if (close) props.onClose();
   };
   const half = () => (props.size ?? 'tall') === 'half';
-  return (
+  // The sheet takes the appearance of where it is rendered, else of its opener (solid/ui/theme).
+  const placed = createPlacedAppearance();
+  const appearance = () => placed.appearance();
+  return (<>
+    <span ref={placed.marker} hidden />
     <Portal mount={trustedPortalOf(document) ?? document.body}>
       <Show when={!half()}>
-        <button type="button" aria-label="Close sheet" onClick={() => props.onClose()} style={{ 'z-index': LAYER.sheetBackdrop }}
+        <button type="button" aria-label="Close sheet" data-app-appearance={appearance()} onClick={() => props.onClose()} style={{ 'z-index': LAYER.sheetBackdrop }}
           class="fixed inset-0 cursor-default border-0 bg-black/40 p-0" />
       </Show>
-      <div ref={panel} role="dialog" aria-modal="true" aria-label={props.label}
+      <div ref={panel} role="dialog" aria-modal="true" aria-label={props.label} data-app-appearance={appearance()}
         style={{ 'z-index': LAYER.sheet, transform: dragged() ? `translateY(${dragged()}px)` : undefined }}
-        class={`fixed inset-x-0 bottom-0 ${half() ? 'max-h-[50vh]' : 'max-h-[80vh]'} flex animate-[sheet-in_.2s_ease-out] flex-col rounded-t-dialog border-t border-edge bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] font-mono text-xs shadow-lg`}>
+        class={`fixed inset-x-0 bottom-0 ${half() ? 'max-h-[50vh]' : 'max-h-[80vh]'} flex animate-[sheet-in_.2s_ease-out] flex-col rounded-t-dialog border-t border-edge bg-surface p-3 text-fg pb-[max(0.75rem,env(safe-area-inset-bottom))] font-mono text-xs shadow-lg`}>
         <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
           class={props.swipeToClose ? 'shrink-0 touch-none' : 'contents'}>
           <div aria-hidden="true" class="mx-auto mb-2 h-1 w-9 shrink-0 rounded-full bg-edge" />
@@ -81,5 +86,5 @@ export default function MobileSheet(props: {
         <div class="min-h-0 flex-1 overflow-y-auto">{props.children}</div>
       </div>
     </Portal>
-  );
+  </>);
 }

@@ -3,6 +3,9 @@
  * The modal contract (lib/islands/kit/dialog-shell) as a wrapper: it owns Escape, the Tab trap,
  * focus restore and the optional scroll lock for as long as it is mounted, over the `role="dialog"`
  * element its child is or contains. The caller keeps its own portal, backdrop and markup.
+ *
+ * @deprecated → ui/Dialog (`label`, `align`, `size="xl"`, `closeLabel`, `body="flush"`, `role="alertdialog"`,
+ * `dismissible={false}`), ui/Drawer for a side panel, ui/FloatingPanel for a non-modal card.
  */
 import { children as resolveChildren, type JSX } from 'solid-js';
 import { createDialogShell } from '@/lib/islands/kit/dialog-shell';

@@ -10,6 +10,7 @@
  * (lib/islands/kit/popup-dismiss): an outside pointerdown or Escape reports a close, and opening one
  * closes any other open popup. Opening never steals focus from the trigger (Radix's onOpenAutoFocus prevented) — a
  * field inside the panel that wants focus asks for it itself (the `autofocus` attribute, or a ref).
+ * The panel takes the appearance of its trigger (solid/ui/theme), so a popover opened inside a dark editor is dark.
  */
 import { createEffect, createSignal, createUniqueId, on, onCleanup, Show, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -17,6 +18,7 @@ import { placePopper, type Align, type Side } from '@/lib/islands/kit/popper';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
 import { LAYER } from './layers';
+import { appearanceOf } from './theme';
 
 export interface PopoverTriggerAttrs {
   ref: (el: HTMLElement) => void;
@@ -29,8 +31,12 @@ export function Popover(props: {
   onOpenChange: (open: boolean) => void;
   /** Renders the trigger; spread the given attrs onto the real trigger element. */
   trigger: (attrs: PopoverTriggerAttrs) => JSX.Element;
-  /** Accessible name of the panel. */
-  label: string;
+  /** Accessible name of the panel (omit it for a panel whose content names itself). */
+  label?: string;
+  /** The panel's id, when a trigger must point at it (`aria-controls`); one is generated otherwise. */
+  id?: string;
+  /** `trigger` draws the panel exactly as wide as its trigger. */
+  width?: 'trigger';
   side?: Side;
   align?: Align;
   sideOffset?: number;
@@ -43,7 +49,7 @@ export function Popover(props: {
 }): JSX.Element {
   const [anchor, setAnchor] = createSignal<HTMLElement>();
   const [panel, setPanel] = createSignal<HTMLElement>();
-  const id = createUniqueId();
+  const generated = createUniqueId();
   const announce = popupDismiss(() => props.open, () => props.onOpenChange(false), anchor, panel);
   createEffect(on(() => props.open, (open) => { if (open) announce(); }));
   // The trigger is built ONCE; `aria-expanded` is a getter, so opening updates the attribute in place and
@@ -57,8 +63,9 @@ export function Popover(props: {
           <PopoverPanel
             anchor={() => anchor()!}
             ref={setPanel}
-            id={id}
+            id={props.id ?? generated}
             label={props.label}
+            width={props.width}
             side={props.side ?? 'bottom'}
             align={props.align ?? 'start'}
             sideOffset={props.sideOffset ?? 4}
@@ -77,7 +84,8 @@ export function Popover(props: {
 function PopoverPanel(p: {
   anchor: () => HTMLElement;
   id: string;
-  label: string;
+  label?: string;
+  width?: 'trigger';
   side: Side;
   align: Align;
   sideOffset: number;
@@ -98,7 +106,7 @@ function PopoverPanel(p: {
     onCleanup(stop);
   });
   return (
-    <div data-mx-theme-host="">
+    <div data-mx-theme-host="" data-app-appearance={appearanceOf(p.anchor())}>
       <div
         ref={(el) => { wrapper = el; p.ref(el); }}
         data-story-popper-wrapper=""
@@ -107,10 +115,11 @@ function PopoverPanel(p: {
         <div
           id={p.id}
           role={p.role}
-          aria-label={p.label}
+          aria-label={p.label || undefined}
           data-story-floating=""
           onKeyDown={p.onKeyDown}
-          class={`rounded-panel border border-edge bg-surface shadow-lg ${p.class ?? ''}`}
+          style={p.width === 'trigger' ? { width: 'var(--radix-popper-anchor-width)' } : undefined}
+          class={`rounded-panel border border-edge bg-surface text-fg shadow-lg ${p.class ?? ''}`}
         >
           {p.children}
         </div>

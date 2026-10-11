@@ -2,12 +2,34 @@
 /**
  * THE COMPONENT GALLERY (`/dev/ui`, development builds only): every solid/ui component at each size, variant
  * and state, in light or dark. solid/App.tsx registers the route behind `import.meta.env.DEV` and loads this
- * module lazily, so a production bundle contains neither.
+ * module lazily, so a production bundle contains neither; the server answers `/dev/ui` only in development
+ * (lib/http/app-pages). The appearance is set on this page's <main>, not the document root, the way an editor sets
+ * its own: every portalled panel (a listbox, a menu, a tooltip, a dialog) must follow it there.
  */
-import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createSignal, For, Show, type JSX } from 'solid-js';
 import Copy from 'lucide-solid/icons/copy';
 import Pencil from 'lucide-solid/icons/pencil';
 import Trash2 from 'lucide-solid/icons/trash-2';
+import Bold from 'lucide-solid/icons/bold';
+import Italic from 'lucide-solid/icons/italic';
+import X from 'lucide-solid/icons/x';
+import Globe from 'lucide-solid/icons/globe';
+import Link2 from 'lucide-solid/icons/link-2';
+import Lock from 'lucide-solid/icons/lock';
+import FileUp from 'lucide-solid/icons/file-up';
+import History from 'lucide-solid/icons/history';
+import MessageSquare from 'lucide-solid/icons/message-square';
+import SlidersHorizontal from 'lucide-solid/icons/sliders-horizontal';
+import FolderPlus from 'lucide-solid/icons/folder-plus';
+import { ColorField, SWATCHES, SwatchPicker } from '../ui/ColorField';
+import { Combobox } from '../ui/Combobox';
+import { Drawer } from '../ui/Drawer';
+import { DropZone } from '../ui/DropZone';
+import { FloatingPanel } from '../ui/FloatingPanel';
+import { SelectableItem, SelectableList } from '../ui/SelectableList';
+import { Slider } from '../ui/Slider';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../ui/Table';
+import { ToggleGroup } from '../ui/ToggleGroup';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { Checkbox, Switch } from '../ui/Checkbox';
@@ -25,7 +47,9 @@ import { Tooltip } from '../ui/Tooltip';
 import { Badge, FormatBadge, MicroLabel } from '../ui/ui';
 
 const SIZES = ['md', 'sm'] as const;
-const VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'link'] as const;
+const VARIANTS = ['primary', 'secondary', 'danger', 'caution', 'ghost', 'link'] as const;
+const PEOPLE = [{ id: 'u1', username: 'ada', name: 'Ada Lovelace' }, { id: 'u2', username: 'bob', name: 'Bob Kahn' }, { id: 'u3', username: 'grace', name: 'Grace Hopper' }];
+const TOKENS = [{ name: 'ci deploy', status: 'active', used: '2 hours ago' }, { name: 'laptop', status: 'expired', used: '3 weeks ago' }];
 const ROLES = [{ value: 'editor', label: 'Editor' }, { value: 'viewer', label: 'Viewer' }, { value: 'owner', label: 'Owner', hint: 'one per group' }];
 const TABS = [{ value: 'csv', label: 'CSV' }, { value: 'sheet', label: 'Google Sheets' }, { value: 'json', label: 'JSON' }, { value: 'pg', label: 'PostgreSQL', disabled: true }];
 
@@ -38,19 +62,32 @@ function Row(props: { label: string; children: JSX.Element }): JSX.Element {
 
 export default function UiGallery(): JSX.Element {
   const [appearance, setAppearance] = createSignal<'light' | 'dark'>('light');
-  const root = document.documentElement;
-  const before = root.getAttribute('data-app-appearance');
-  const apply = (mode: 'light' | 'dark') => { setAppearance(mode); root.setAttribute('data-app-appearance', mode); };
-  apply('light');
-  onCleanup(() => { if (before === null) root.removeAttribute('data-app-appearance'); else root.setAttribute('data-app-appearance', before); });
+  const apply = (mode: 'light' | 'dark') => setAppearance(mode);
 
   const [role, setRole] = createSignal('editor');
   const [query, setQuery] = createSignal('');
   const [checked, setChecked] = createSignal(true);
   const [on, setOn] = createSignal(false);
   const [tab, setTab] = createSignal('csv');
-  const [dialog, setDialog] = createSignal<'sm' | 'md' | 'lg' | 'busy' | 'confirm' | null>(null);
+  const [dialog, setDialog] = createSignal<'sm' | 'md' | 'lg' | 'busy' | 'confirm' | 'xl' | 'alert' | null>(null);
   const [selected, setSelected] = createSignal('');
+  const [pressed, setPressed] = createSignal<string[]>(['markup']);
+  const [panelTab, setPanelTab] = createSignal('selection');
+  const [visibility, setVisibility] = createSignal('unlisted');
+  const [writes, setWrites] = createSignal('read');
+  const [color, setColor] = createSignal(SWATCHES[2]!.value);
+  const [brush, setBrush] = createSignal(SWATCHES[0]!.value);
+  const [width, setWidth] = createSignal(4);
+  const [person, setPerson] = createSignal('');
+  const [invited, setInvited] = createSignal<string[]>([]);
+  const [version, setVersion] = createSignal(3);
+  const [files, setFiles] = createSignal<string[]>([]);
+  const [archived, setArchived] = createSignal(false);
+  const [drawer, setDrawer] = createSignal(false);
+  const [floating, setFloating] = createSignal(false);
+  const [mixed, setMixed] = createSignal<boolean | 'mixed'>('mixed');
+  const toggle = (format: string) => setPressed((all) => (all.includes(format) ? all.filter((f) => f !== format) : [...all, format]));
+  const matches = () => PEOPLE.filter((p) => !invited().includes(p.username) && p.username.includes(person().replace(/^@/, '')));
 
   return <main data-app-appearance={appearance()} class="min-h-screen bg-bg px-4 py-10 text-fg sm:px-8">
     <div class="mx-auto grid max-w-5xl gap-8">
@@ -61,12 +98,23 @@ export default function UiGallery(): JSX.Element {
         <For each={SIZES}>{(size) => <>
           <Row label={`${size}`}><For each={VARIANTS}>{(variant) => <Button variant={variant} size={size}>{variant}</Button>}</For></Row>
           <Row label={`${size} disabled`}><For each={VARIANTS}>{(variant) => <Button variant={variant} size={size} disabled>{variant}</Button>}</For></Row>
+          <Row label={`${size} pressed`}>
+            <For each={['markup', 'dataset', 'image']}>{(format) => <Button size={size} pressed={pressed().includes(format)} onClick={() => toggle(format)}>{format}</Button>}</For>
+            <Button size={size} variant="caution" pressed>read &amp; write</Button>
+          </Row>
+          <Row label={`${size} link`}><Button href="#links" size={size}>Open artifact →</Button><Button href="#links" variant="secondary" size={size}>Upload another</Button><Button href="#links" variant="secondary" size={size} disabled>Unavailable link</Button></Row>
           <Row label={`${size} icon`}>
             <Tooltip content="copy"><Button variant="secondary" size={size} icon aria-label={`Copy ${size}`}><Copy size={size === 'md' ? 16 : 13} /></Button></Tooltip>
             <Button variant="ghost" size={size} icon aria-label={`Edit ${size}`}><Pencil size={size === 'md' ? 16 : 13} /></Button>
             <Button variant="danger" size={size} icon aria-label={`Delete ${size}`}><Trash2 size={size === 'md' ? 16 : 13} /></Button>
           </Row>
         </>}</For>
+        <Row label="xs icon (toolbar)">
+          <For each={[['Bold', Bold], ['Italic', Italic]] as const}>{([name, Icon]) => <Tooltip content={name}><Button size="xs" variant="ghost" icon aria-label={name} pressed={name === 'Bold'}><Icon size={13} /></Button></Tooltip>}</For>
+          <Button size="xs" variant="ghost" icon aria-label="Close comments"><X size={13} /></Button>
+          <Button size="xs" variant="secondary">xs text</Button>
+        </Row>
+        <Row label="bar (36px)"><Button size="bar" variant="ghost" icon aria-label="Notifications bar"><MessageSquare size={18} /></Button><Button size="bar" variant="secondary">bar text</Button></Row>
       </Section>
 
       <Section title="Fields">
@@ -86,13 +134,22 @@ export default function UiGallery(): JSX.Element {
           <Field label="New owner" error={selected() ? null : 'Choose a destination.'}><Select value={selected()} options={[{ value: 'personal', label: 'Personal' }, { value: 'team', label: 'Team' }]} placeholder="Choose a destination" onChange={setSelected} /></Field>
           <Field label="Notes" hint="Markdown is fine."><Textarea rows={3} placeholder="Why this change" /></Field>
           <Field label="Chrome notes"><Textarea size="sm" rows={3} placeholder="sm density" /></Field>
+          <Field label="Add people" hint={invited().length ? `Invited: ${invited().map((u) => `@${u}`).join(', ')}` : 'Arrow keys walk the suggestions.'}>
+            <Combobox value={person()} onValue={setPerson} options={matches()} optionKey={(p) => p.id} placeholder="@username"
+              renderOption={(p) => <span>@{p.username} <span class="text-xs text-muted">{p.name}</span></span>}
+              onSelect={(p) => { setInvited([...invited(), p.username]); setPerson(''); }} status={matches().length ? undefined : 'No people found.'} />
+          </Field>
+          <Field label="Theme color" hint="App title bar, where supported."><ColorField value={color()} onChange={setColor} /></Field>
         </div>
+        <For each={SIZES}>{(size) => <Row label={`color ${size}`}><ColorField size={size} ariaLabel={`Text color ${size}`} value={color()} onChange={setColor} class="w-48" /></Row>}</For>
       </Section>
 
       <Section title="Toggles and tabs">
         <For each={SIZES}>{(size) => <Row label={size}>
           <Checkbox size={size} label="Likes and follows" checked={checked()} onChange={setChecked} />
           <Checkbox size={size} label="Disabled" checked={false} onChange={setChecked} disabled />
+          <Checkbox size={size} label="Mixed" checked={mixed() === true} indeterminate={mixed() === 'mixed'} onChange={setMixed} />
+          <Checkbox size={size} ariaLabel={`Unlabelled ${size}`} checked={checked()} onChange={setChecked} />
           <Switch size={size} label={`Switch ${size}`} checked={on()} onChange={setOn} />
           <Switch size={size} label={`Disabled switch ${size}`} checked onChange={setOn} disabled />
         </Row>}</For>
@@ -100,7 +157,27 @@ export default function UiGallery(): JSX.Element {
         <For each={SIZES}>{(size) => <>
           <Row label={`underline ${size}`}><Tabs label={`Source ${size}`} size={size} items={TABS} value={tab()} onChange={setTab} /></Row>
           <Row label={`segmented ${size}`}><Tabs label={`Segmented ${size}`} variant="segmented" size={size} items={TABS} value={tab()} onChange={setTab} /></Row>
+          <Row label={`pill ${size}`}><Tabs label={`Panel tabs ${size}`} variant="pill" size={size} value={panelTab()} onChange={setPanelTab} items={[
+            { value: 'selection', label: 'Selection', icon: () => <SlidersHorizontal size={13} />, badge: true },
+            { value: 'history', label: 'History', icon: () => <History size={13} />, disabled: true, disabledReason: 'History is unavailable offline' },
+            { value: 'comments', label: 'Comments', icon: () => <MessageSquare size={13} /> },
+          ]} /></Row>
         </>}</For>
+        <Row label="vertical icons"><Tabs label="Collapsed strip" variant="pill" size="sm" orientation="vertical" iconOnly value={panelTab()} onChange={setPanelTab} items={[
+          { value: 'selection', label: 'Selection', icon: () => <SlidersHorizontal size={14} /> },
+          { value: 'history', label: 'History', icon: () => <History size={14} /> },
+          { value: 'comments', label: 'Comments', icon: () => <MessageSquare size={14} /> },
+        ]} /></Row>
+        <For each={SIZES}>{(size) => <Row label={`toggles ${size}`}>
+          <ToggleGroup label={`Visibility ${size}`} size={size} value={visibility()} onChange={setVisibility} options={[
+            { value: 'public', label: 'public', ariaLabel: `Make public ${size}`, icon: () => <Globe size={12} />, tooltip: 'Anyone can find it' },
+            { value: 'unlisted', label: 'unlisted', ariaLabel: `Make unlisted ${size}`, icon: () => <Link2 size={12} />, tooltip: 'Anyone with the link' },
+            { value: 'private', label: 'private', ariaLabel: `Make private ${size}`, icon: () => <Lock size={12} />, tooltip: 'Only people you add' },
+          ]} />
+          <ToggleGroup label={`Writes ${size}`} size={size} value={writes()} onChange={setWrites} options={[{ value: 'read', label: 'read-only' }, { value: 'readwrite', label: 'read & write', tone: 'caution' }]} />
+        </Row>}</For>
+        <Row label="swatches"><SwatchPicker label="Brush colors" options={SWATCHES} value={brush()} onChange={setBrush} custom size="sm" /></Row>
+        <Row label="slider"><Slider label="Brush thickness" min={1} max={16} value={width()} onChange={setWidth} valueText={(v) => `${v} px`} class="w-72" /><Slider label="Chrome slider" size="sm" min={0} max={100} value={width() * 6} onChange={(v) => setWidth(Math.round(v / 6))} class="w-72" /></Row>
       </Section>
 
       <Section title="Menus and overlays">
@@ -108,8 +185,16 @@ export default function UiGallery(): JSX.Element {
           <Menu label="Gallery actions" align="start" items={[
             { label: 'Rename item', text: 'rename', icon: () => <Pencil size={12} />, onSelect: () => {} },
             { label: 'Archive item', text: 'archive (refused)', disabled: true, onSelect: () => {} },
+            { label: 'Show archived', text: 'show archived', checked: archived(), onSelect: () => setArchived(!archived()) },
+            { separator: true },
             { label: 'Delete item', text: 'delete', icon: () => <Trash2 size={12} />, danger: true, onSelect: () => setDialog('confirm') },
           ]} trigger={(attrs) => <Button {...attrs} variant="secondary" size="sm">Actions</Button>} />
+          <span class="w-48"><Menu label="Create menu" align="start" width="trigger" items={[
+            { label: 'Artifact', text: 'Artifact', items: [{ label: 'Doc', text: 'Doc', onSelect: () => {} }, { label: 'Deck', text: 'Deck', onSelect: () => {} }, { label: 'Dashboard', text: 'Dashboard', onSelect: () => {} }] },
+            { label: 'Folder', text: 'Folder', icon: () => <FolderPlus size={12} />, onSelect: () => {} },
+            { label: 'Program', text: 'Program', href: '#menus' },
+            { section: 'assets', items: [{ label: 'File', text: 'File', href: '#menus' }, { label: 'Dataset', text: 'Dataset', href: '#menus' }] },
+          ]} trigger={(attrs) => <Button {...attrs} class="w-full">Create</Button>} /></span>
           <RowMenu name="Quarterly review" items={[{ label: 'Restore Quarterly review', text: 'restore', icon: () => <Pencil size={12} />, onSelect: () => {} }]} />
           <Tooltip content="A tooltip sits above dialogs and menus"><Button variant="ghost" size="sm">Hover for a tooltip</Button></Tooltip>
         </Row>
@@ -118,7 +203,13 @@ export default function UiGallery(): JSX.Element {
           <Button variant="secondary" onClick={() => setDialog('md')}>Dialog md</Button>
           <Button variant="secondary" onClick={() => setDialog('lg')}>Dialog lg</Button>
           <Button variant="secondary" onClick={() => setDialog('busy')}>Busy dialog</Button>
+          <Button variant="secondary" onClick={() => setDialog('xl')}>Dialog xl (top, close)</Button>
+          <Button variant="secondary" onClick={() => setDialog('alert')}>Alert dialog</Button>
           <Button variant="danger" onClick={() => setDialog('confirm')}>Confirm dialog</Button>
+        </Row>
+        <Row label="panels">
+          <Button variant="secondary" onClick={() => setDrawer(true)}>Drawer</Button>
+          <Button variant="secondary" onClick={() => setFloating(!floating())}>{floating() ? 'Hide' : 'Show'} floating panel</Button>
         </Row>
       </Section>
 
@@ -134,7 +225,26 @@ export default function UiGallery(): JSX.Element {
           <StatusMessage kind="loading">Loading group…</StatusMessage>
           <StatusMessage kind="empty">No people match your search.</StatusMessage>
           <StatusMessage kind="notice">Saved</StatusMessage>
+          <StatusMessage kind="caution" aria-label="Write access">Anyone with view access may run this dataset's writes.</StatusMessage>
           <StatusMessage kind="error" action={<Button variant="link">Retry</Button>}>Could not load groups.</StatusMessage>
+        </div>
+        <Row label="caution"><Badge tone="caution">read &amp; write</Badge></Row>
+        <For each={['md', 'sm'] as const}>{(density) => <Panel padding="none"><Table label={`Connections ${density}`} density={density}>
+          <TableHead><TableHeaderCell>name</TableHeaderCell><TableHeaderCell>status</TableHeaderCell><TableHeaderCell>last used</TableHeaderCell><TableHeaderCell align="right">actions</TableHeaderCell></TableHead>
+          <TableBody>
+            <For each={TOKENS}>{(token) => <TableRow aria-label={`Token row ${token.name}`}><TableCell class="font-mono">{token.name}</TableCell><TableCell><Badge tone={token.status === 'active' ? 'accent' : 'danger'}>{token.status}</Badge></TableCell><TableCell class="text-muted">{token.used}</TableCell><TableCell align="right"><Button size="sm" variant="danger">Revoke</Button></TableCell></TableRow>}</For>
+            <TableRow interactive={false}><TableCell colSpan={4} align="center" class="text-muted">No more tokens.</TableCell></TableRow>
+          </TableBody>
+        </Table></Panel>}</For>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <Panel padding="sm" title="Versions"><SelectableList label="Versions">
+            <For each={[3, 2, 1]}>{(v) => <SelectableItem label={`Preview version ${v}`} title={`v${v}${v === 3 ? ' · current' : ''}`} meta={`@ada · ${v} days ago`} trailing={v === 2 ? 'title change' : undefined}
+              selected={version() === v} onSelect={() => setVersion(v)}>{version() === v && v !== 3 ? <Button size="sm" variant="secondary">Restore v{v}</Button> : null}</SelectableItem>}</For>
+          </SelectableList></Panel>
+          <Panel padding="sm" title="Drop zone">
+            <DropZone label="Choose a file" size="sm" title="Drop a file here, or click to choose one" hint="Images, pdf, video, audio and text" icon={() => <FileUp size={22} />} onFiles={(list) => setFiles(list.map((f) => f.name))} />
+            <Show when={files().length}><p class="mt-2 text-xs text-muted">Chose {files().join(', ')}</p></Show>
+          </Panel>
         </div>
         <Row label="identity"><span class="size-8"><Avatar image={null} initial="A" userId="alice" size={32} /></span><CopyBlock class="min-w-0 flex-1" label="Copy command" text="npm run afbin -- publish page.html" /></Row>
       </Section>
@@ -146,6 +256,28 @@ export default function UiGallery(): JSX.Element {
         footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button><Button disabled={dialog() === 'busy'} onClick={() => setDialog(null)}>Save</Button></>}>
         <Field label="Role"><Select value={role()} options={ROLES} onChange={setRole} /></Field>
       </Dialog>
+    </Show>
+    <Show when={dialog() === 'xl'}>
+      <Dialog size="xl" align="top" body="flush" title="Social preview" label="Social preview stage" closeLabel="Close social preview" description="A flush body scrolls between a fixed header and footer." onClose={() => setDialog(null)}
+        footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button><Button onClick={() => setDialog(null)}>Save</Button></>}>
+        <div class="grid gap-3 border-y border-edge bg-raised p-6"><For each={Array.from({ length: 12 }, (_, i) => i + 1)}>{(i) => <p class="text-sm text-muted">Stage line {i}</p>}</For></div>
+      </Dialog>
+    </Show>
+    <Show when={dialog() === 'alert'}>
+      <Dialog role="alertdialog" dismissible={false} align="top" size="lg" title="Your text needs recovery" description="Escape and the backdrop do not close this; only an action does." onClose={() => setDialog(null)}
+        footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Copy uncommitted text</Button><Button variant="danger" onClick={() => setDialog(null)}>Discard and restore</Button></>}>
+        <Textarea aria-label="Uncommitted text" readOnly rows={4} value="Some text that could not be applied." />
+      </Dialog>
+    </Show>
+    <Show when={drawer()}>
+      <Drawer label="Gallery menu" role="navigation" top={0} scrimLabel="Close panel" onClose={() => setDrawer(false)}>
+        <SelectableList label="Pages"><SelectableItem label="Artifacts" href="#top" title="Artifacts" selected /><SelectableItem label="Schedules" href="#top" title="Schedules" meta="2 running" /></SelectableList>
+      </Drawer>
+    </Show>
+    <Show when={floating()}>
+      <FloatingPanel label="New comment" position={{ left: 24, top: 96 }} width={300} onClose={() => setFloating(false)} class="p-3">
+        <Field label="Comment"><Textarea size="sm" rows={3} placeholder="Escape closes this card" /></Field>
+      </FloatingPanel>
     </Show>
     <Show when={dialog() === 'confirm'}>
       <ConfirmDialog title="Delete Quarterly review?" description="It goes to the trash, and you can restore it any time." action="Delete" confirmLabel="Confirm delete" danger onCancel={() => setDialog(null)} onConfirm={() => setDialog(null)} />

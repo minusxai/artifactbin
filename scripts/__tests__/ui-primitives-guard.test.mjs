@@ -63,6 +63,21 @@ describe('UI-primitive guard', () => {
     expect(run(repository({ 'services/app/solid/pages/Page.tsx': clean })).status).toBe(0);
   });
 
+  it.each([
+    ['styled-button', '<button type="button" onClick={() => go()} class="rounded px-2">Go</button>'],
+    ['styled-field', '<input onInput={(event) => set(event.currentTarget.value)} class="border" />'],
+    ['native-title', '<span onClick={() => go()} title="hint">x</span>'],
+  ])('still sees %s after an arrow-function attribute', (rule, text) => {
+    const outside = run(repository({ 'services/app/solid/pages/Page.tsx': text }));
+    expect(outside.status).toBe(1);
+    expect(outside.output).toContain(rule);
+  });
+
+  it('does not run a tag scan past a comparison into the next tag', () => {
+    const clean = '<span onClick={() => go(a > b)}>x</span><Button class="w-full">Go</Button><Dialog role="alertdialog" title="t" />';
+    expect(run(repository({ 'services/app/solid/pages/Page.tsx': clean })).status).toBe(0);
+  });
+
   it('ratchets the exact allowlisted count', () => {
     const files = { 'services/app/solid/pages/Page.tsx': '<select></select><select></select>' };
     const entry = (count) => [{ path: 'services/app/solid/pages/Page.tsx', rule: 'native-select', count }];

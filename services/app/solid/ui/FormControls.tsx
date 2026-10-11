@@ -1,11 +1,11 @@
 /* @jsxImportSource solid-js */
 import type { JSX } from 'solid-js';
 /** First-party form presentation, independent of accounts and transports. The FORM_* strings are being replaced by ui/Button and ui/Field. */
-/** @deprecated Use ui/Field's Input. */
+/** @deprecated → ui/Field's Input. */
 export const FORM_INPUT = 'w-full min-h-11 rounded-lg border border-edge-bright bg-surface px-3 py-2 font-sans text-sm text-fg placeholder:text-faint transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60';
-/** @deprecated Use ui/Button variant="primary". */
+/** @deprecated → ui/Button variant="primary" (a link: ui/Button with `href`). */
 export const FORM_PRIMARY_BUTTON = 'inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-action bg-action px-4 py-2 font-sans text-sm font-semibold text-action-ink transition-colors hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50';
-/** @deprecated Use ui/Button variant="secondary". */
+/** @deprecated → ui/Button variant="secondary" (a link: ui/Button with `href`). */
 export const FORM_SECONDARY_BUTTON = 'inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-edge-bright bg-surface px-4 py-2 font-sans text-sm font-medium text-fg transition-colors hover:border-accent hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50';
 
 /** The same login/import page spacing, kept in the app's scanned presentation boundary. */

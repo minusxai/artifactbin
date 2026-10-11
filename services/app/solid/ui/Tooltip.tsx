@@ -14,7 +14,8 @@
  * the timing shared with the reader kit's tooltip (lib/islands/kit/tooltip-core).
  * Placement is the framework-free Radix popper model the islands already use (lib/islands/kit/popper).
  * The destination is resolved when it opens: the trusted UI portal if the page has one
- * (lib/islands/trusted-portal), else the body, inside its own theme host.
+ * (lib/islands/trusted-portal), else the body, inside its own theme host, which takes the trigger's appearance
+ * (solid/ui/theme).
  */
 import { children as resolveChildren, createEffect, createSignal, createUniqueId, onCleanup, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -22,6 +23,7 @@ import { placePopper, type Placed, type Side } from '@/lib/islands/kit/popper';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { ARROW_ORIGIN, ARROW_TRANSFORM, createTooltipTiming } from '@/lib/islands/kit/tooltip-core';
 import { LAYER } from './layers';
+import { appearanceOf } from './theme';
 
 export function Tooltip(props: { content: JSX.Element; children: JSX.Element; side?: Side; disabled?: boolean }): JSX.Element {
   const child = resolveChildren(() => props.children);
@@ -70,7 +72,7 @@ function TooltipPopper(p: { anchor: HTMLElement | undefined; id: string; side: S
     onCleanup(() => { stop(); p.setPlaced(undefined); });
   });
   const side = () => p.placed()?.side ?? p.side;
-  return <div data-mx-theme-host="">
+  return <div data-mx-theme-host="" data-app-appearance={appearanceOf(p.anchor)}>
     <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content', 'z-index': String(LAYER.tooltip) }}>
       <div role="tooltip" id={p.id} data-side={p.placed()?.side} data-slot="tooltip-content" data-story-floating=""
         class="pointer-events-none w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-control border border-edge-bright bg-surface px-2.5 py-1.5 text-left text-xs leading-normal text-fg shadow-md">

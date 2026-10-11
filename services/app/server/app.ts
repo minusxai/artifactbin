@@ -36,7 +36,7 @@ import { ID_RE, verifyExportKey } from '@/lib/platform';
 import { measureQueries, runWithRequest } from '@/lib/platform';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
-import { SPA_PATHS } from '@/lib/http/app-pages';
+import { spaPaths } from '@/lib/http/app-pages';
 import { ownerUsername, sessionActor } from '@/lib/accounts';
 import { AGENT_COOKIE } from '@/lib/accounts';
 import { canEdit } from '@artifactbin/contracts';
@@ -757,7 +757,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // A handle is `@name` in ONE segment — Hono's params are whole segments, so the shape is a regex param.
   app.get('/:user{@[a-z0-9_]+}/*', documentAddress);
   app.get('/:user{@[a-z0-9_]+}', (c) => page(c));
-  // A root typo gets the SPA too — its 404 page, under the 404 STATUS.
-  app.get('*', async (c) => (SPA_PATHS.test(new URL(c.req.url).pathname) ? page(c) : page(c, 404)));
+  // A root typo gets the SPA too — its 404 page, under the 404 STATUS. A development server also answers its dev pages.
+  const appPages = spaPaths({ dev: opts.devHmrPort !== undefined });
+  app.get('*', async (c) => (appPages.test(new URL(c.req.url).pathname) ? page(c) : page(c, 404)));
   return app;
 }
