@@ -24,7 +24,7 @@ async function copyBundle(directory){
  await configureFixture(directory);
 }
 async function configureFixture(directory){
- await cp(join(bundle,'CI.smtp.Dockerfile'),join(directory,'CI.smtp.Dockerfile'));
+ for(const name of ['CI.smtp.Dockerfile','ci-smtp-fixture.mjs'])await cp(join(bundle,name),join(directory,name));
  // No caddy service runs in CI: real wildcard DNS/TLS acceptance belongs to the external host.
  await mkdir(join(directory,'ci-tls'));
  run(directory,'openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=smtpfixture','-addext','subjectAltName=DNS:smtpfixture','-keyout','ci-tls/key.pem','-out','ci-tls/cert.pem']);
