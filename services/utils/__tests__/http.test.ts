@@ -6,6 +6,7 @@
 import http from 'node:http';
 import { format } from 'node:util';
 import { afterAll, describe, expect, it, vi } from 'vitest';
+import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
 import { httpClient, jsonServer } from '@artifactbin/utils';
 
 /** POST with the request target EXACTLY as written — `fetch` may normalise a path, and what the server sees in `req.url` is the whole point below. */
@@ -64,5 +65,38 @@ describe('jsonServer + httpClient', () => {
     const [first, ...rest] = calls[0];
     expect(String(first)).not.toContain('/boom');
     expect(format(first, ...rest)).toContain('/boom%s%d');
+  });
+});
+
+/** A service shell (events, sql): the same transport with a health probe ahead of a secret, and its own log label. */
+describe('jsonServer as a service shell', () => {
+  const server = jsonServer({ '/echo': async (body) => ({ got: body }), '/boom': async () => { throw new Error('kaput'); } },
+    { maxBody: 64, health: '/health', serviceSecret: 's3cret', label: 'test-shell' });
+  const listening = server.listen(0);
+  afterAll(() => server.close());
+
+  it('answers the health probe without the secret, and nothing else', async () => {
+    const health = await fetch(`${listening.url}/health`);
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ ok: true });
+    expect((await fetch(`${listening.url}/echo`, { method: 'POST', body: '{}' })).status).toBe(401);
+    expect((await fetch(`${listening.url}/echo`, { method: 'POST', body: '{}', headers: { [SERVICE_AUTH_HEADER]: 'wrong' } })).status).toBe(401);
+  });
+  it('serves a route with the secret and logs a failure under its label', async () => {
+    const client = httpClient(listening.url, { deadlineMs: 1000, headers: { [SERVICE_AUTH_HEADER]: 's3cret' } });
+    expect(await client.post('/echo', { a: 1 })).toEqual({ got: { a: 1 } });
+    const calls: unknown[][] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { calls.push(args); });
+    try {
+      expect((await fetch(`${listening.url}/boom`, { method: 'POST', body: '{}', headers: { [SERVICE_AUTH_HEADER]: 's3cret' } })).status).toBe(400);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(calls[0][0]).toBe('[test-shell] %s failed:');
+  });
+  it('without a health path, a GET is a 405 like any other non-POST', async () => {
+    const bare = jsonServer({}, { maxBody: 64 });
+    const at = bare.listen(0);
+    try { expect((await fetch(`${at.url}/health`)).status).toBe(405); } finally { await bare.close(); }
   });
 });

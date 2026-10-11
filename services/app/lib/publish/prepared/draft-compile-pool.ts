@@ -76,6 +76,7 @@ export function createDraftCompilePool(options: { url: URL; execArgv?: string[];
     return thread;
   };
 
+  // Twin of services/sql/src/pool.ts's pump, without its per-task deadline and thread retirement; change both together.
   const pump = () => {
     while (queue.length && !closed) {
       const idle = threads.find((t) => !t.task) ?? (threads.length < size ? spawn() : null);

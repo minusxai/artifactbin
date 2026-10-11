@@ -53,7 +53,7 @@ import { lane } from './lib/lane.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { connectAgent } from './lib/cli-connection.mjs';
+import { bearerApi, connectAgent } from './lib/cli-connection.mjs';
 import { cliConformance } from './lib/cli-conformance.mjs';
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs, passTheWelcomePage } from '../lib/mail-login.mjs';
@@ -311,15 +311,7 @@ async function workspaceOwner() {
     // the same credential an agent would hold.
     const anon = await connectAgent(BASE, { email: `mxmx_test_workspace_owner_${stamp}@example.com` });
     must(await mergeGuestIntoAccount(page, BASE, anon.token) === 200, 'owner adopted the guest connection');
-    const api = async (path, body) => {
-      const res = await fetch(`${BASE}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon.token}` },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`${path} → ${res.status} ${await res.text()}`);
-      return res.json();
-    };
+    const api = bearerApi(BASE, anon.token, fetch);
     owner = { ctx, page, api, newPage: async () => { const p = await ctx.newPage(); await p.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' }); return p; } };
   });
   return owner;

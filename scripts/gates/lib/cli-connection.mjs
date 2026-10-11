@@ -86,3 +86,19 @@ export async function connectAgent(base, { email, cookie: existingCookie } = {})
   browsers.set(granted.access_token, { origins: [origin, advertised], cookie });
   return { token: granted.access_token };
 }
+
+/**
+ * The connection as a JSON API caller: `api(path, body)` POSTs as its bearer and returns the body, or throws naming
+ * the path, status and text. `send` is the gate's fetch (gates author through fixture-http's fixtureFetch).
+ */
+export function bearerApi(base, token, send = fetch) {
+  return async (path, body) => {
+    const res = await send(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`${path} → ${res.status} ${await res.text()}`);
+    return res.json();
+  };
+}

@@ -37,7 +37,7 @@
  *   usage: node scripts/gates/gate-media.mjs [base]
  */
 import { createServer } from 'node:http';
-import { createChecker } from './lib/assert.mjs';
+import { createChecker, createSection } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
 import { documentFrame, documentFrame as framedDocument, INLINE_STORY } from './lib/page-facts.mjs';
@@ -47,11 +47,7 @@ import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('media');
-/** One leg's failure is reported and the walk goes on, so a run names every broken leg at once. */
-const section = async (name, run) => {
-  console.log(`█ ${name}`);
-  try { await run(); } catch (error) { check(false, `${name}: the leg threw (${String(error?.message ?? error).split('\n')[0].slice(0, 300)})`); }
-};
+const section = createSection(check);
 
 const browser = await launchChromium();
 

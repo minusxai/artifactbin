@@ -7,11 +7,10 @@
  * EventsService it is handed, and only `runEvents` (the boot, which owns the
  * pool) reaches for the local one.
  */
-import http from 'node:http';
 import { Pool } from 'pg';
 import type { EventsService, EventSink, EventSubscriber, Queryable } from '@artifactbin/contracts';
-import { EVENTS_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
-import { createEnv, log, serviceSecretForServer, type JsonServer } from '@artifactbin/utils';
+import { EVENTS_ROUTES } from '@artifactbin/contracts';
+import { createEnv, jsonServer, log, serviceSecretForServer, type JsonServer } from '@artifactbin/utils';
 import { createEvents, ensureEventsSchema } from './local';
 import { DEFAULT_EVENTS_SCHEMA, IDENTIFIER } from './schema';
 
@@ -26,8 +25,8 @@ const HEALTH = '/health';
 /**
  * One POST (`/emit`, a JSON array of envelopes → `{ accepted: n }`) plus
  * `GET /health`, answered BEFORE the secret check so the probe works with a
- * secret set. Mirrors services/sql's shell line for line: the secret guard,
- * the method guard, the body cap, the name-only error.
+ * secret set. The same shell as services/sql's: utils' jsonServer with its
+ * secret guard, method guard, body cap and name-only error.
  */
 export function serveEvents(svc: EventsService, opts: { maxBody?: number; serviceSecret?: string; routes?: Record<string,(body:unknown)=>Promise<unknown>> } = {}): JsonServer {
   const routes: Record<string, (body: unknown) => Promise<unknown>> = {
@@ -39,37 +38,13 @@ export function serveEvents(svc: EventsService, opts: { maxBody?: number; servic
     },
     [EVENTS_ROUTES.emit]: async (b) => {
       // The wire IS the envelope array; anything else is a 400 whose detail
-      // stays in the operator log (the catch below).
+      // stays in the operator log (jsonServer's catch).
       if (!Array.isArray(b)) throw new Error(`${EVENTS_ROUTES.emit}: body is not an array of envelopes`);
       await svc.emit(b);
       return { accepted: b.length };
     },
   };
-  const maxBody = opts.maxBody ?? 1024 * 1024;
-  const server = http.createServer(async (req, res) => {
-    const json = (status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-    if (req.method === 'GET' && req.url === HEALTH) return json(200, { ok: true });
-    if (opts.serviceSecret && req.headers[SERVICE_AUTH_HEADER] !== opts.serviceSecret) return json(401, { error: 'unauthorized' });
-    if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
-    const route = routes[req.url ?? ''];
-    if (!route) return json(404, { error: 'not_found' });
-    const chunks: Buffer[] = []; let size = 0;
-    for await (const c of req) { size += (c as Buffer).length; if (size > maxBody) { json(413, { error: 'too_large' }); req.destroy(); return; } chunks.push(c as Buffer); }
-    try {
-      return json(200, await route(JSON.parse(Buffer.concat(chunks).toString('utf8'))));
-    } catch (error) {
-      // The url is CALLER INPUT: as the format string its own `%s`/`%d` would eat
-      // the arguments after it and the error would vanish from the line (CodeQL
-      // js/tainted-format-string). It travels as an argument, logged verbatim.
-      console.error('[events-shell] %s failed:', req.url, error);
-      return json(400, { error: 'bad_request' });
-    }
-  });
-  return {
-    // No host → Node binds synchronously and the port is known on return; a hostname bind resolves asynchronously.
-    listen: (port, host) => { if (host) server.listen(port, host); else server.listen(port); const a = server.address(); const p = typeof a === 'object' && a ? a.port : port; return { port: p, url: `http://${host ?? '127.0.0.1'}:${p}` }; },
-    close: () => new Promise<void>((resolve, reject) => { server.closeAllConnections(); server.close((e) => (e ? reject(e) : resolve())); }),
-  };
+  return jsonServer(routes, { maxBody: opts.maxBody ?? 1024 * 1024, health: HEALTH, serviceSecret: opts.serviceSecret, label: 'events-shell' });
 }
 
 /** What the process needs, resolved from the environment by `loadEventsConfig`. */

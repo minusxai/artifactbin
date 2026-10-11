@@ -9,7 +9,8 @@
  * Expanded, the preview ends in the thread's reply box; focusing it or leaving a draft in it PINS the
  * card, which then stays until it is sent from, closed, escaped, or clicked away from while empty.
  */
-import { batch, createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
+import { batch, createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type Component, type JSX } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { StoryEditRect } from '@/lib/edit-protocol';
@@ -79,22 +80,17 @@ function PixelGhost(props: { size: number }): JSX.Element {
   return <svg width={props.size} height={props.size} viewBox="0 0 14 14" fill="currentColor" shape-rendering="crispEdges" aria-hidden="true"><path fill-rule="evenodd" d="M5 1h4v1h2v2h1v8h-2v-2H8v2H6v-2H4v2H2V4h1V2h2V1Zm-1 3v3h2V4H4Zm4 0v3h2V4H8Z" /></svg>;
 }
 
+/** Each agent program's product mark, keyed by its lower-cased label; anything else is the ghost. */
+const AGENT_ICONS: Record<string, Component<{ size: number }>> = {
+  pi: PiIcon, opencode: OpenCodeIcon, codex: CodexIcon, chatgpt: ChatGPTIcon, 'claude code': ClaudeCodeIcon, claude: ClaudeAIIcon,
+};
+
 function AgentMark(props: { label: string; name?: string; compact?: boolean; decorative?: boolean; borderless?: boolean }): JSX.Element {
-  const icon = () => {
-    switch (props.label.toLowerCase()) {
-      case 'pi': return <PiIcon size={props.compact ? 12 : 14} />;
-      case 'opencode': return <OpenCodeIcon size={props.compact ? 12 : 14} />;
-      case 'codex': return <CodexIcon size={props.compact ? 12 : 14} />;
-      case 'chatgpt': return <ChatGPTIcon size={props.compact ? 12 : 14} />;
-      case 'claude code': return <ClaudeCodeIcon size={props.compact ? 12 : 14} />;
-      case 'claude': return <ClaudeAIIcon size={props.compact ? 12 : 14} />;
-      default: return <PixelGhost size={props.compact ? 12 : 14} />;
-    }
-  };
+  const color = () => agentNameColor(props.name ?? props.label);
   return <span aria-label={props.decorative ? undefined : `${props.label} agent`} aria-hidden={props.decorative || undefined}
-    style={{color:agentNameColor(props.name ?? props.label), background:`color-mix(in srgb, ${agentNameColor(props.name ?? props.label)} 12%, var(--color-surface))`, "border-color":`color-mix(in srgb, ${agentNameColor(props.name ?? props.label)} 22%, transparent)`}}
+    style={{color:color(), background:`color-mix(in srgb, ${color()} 12%, var(--color-surface))`, "border-color":`color-mix(in srgb, ${color()} 22%, transparent)`}}
     class={`inline-flex shrink-0 items-center justify-center rounded-full ${props.borderless ? '' : 'border border-edge'} ${props.compact ? 'h-[18px] w-[18px]' : 'h-[22px] w-[22px]'}`}>
-    {icon()}
+    <Dynamic component={AGENT_ICONS[props.label.toLowerCase()] ?? PixelGhost} size={props.compact ? 12 : 14} />
   </span>;
 }
 

@@ -43,21 +43,17 @@ import assert from 'node:assert/strict';
 import { becomeOwner, mergeGuestIntoAccount, startDocument } from '../lib/start-doc.mjs';
 import { documentFrame, documentLocator, INLINE_STORY } from './lib/page-facts.mjs';
 import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
-import { createChecker } from './lib/assert.mjs';
+import { createChecker, createSection } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
-import { connectAgent } from './lib/cli-connection.mjs';
+import { bearerApi, connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('reader-shell');
 const ts = Date.now().toString(36);
 
-/** One leg's failure is reported and the journey goes on, so a run names every broken leg at once. */
-const section = async (name, run) => {
-  console.log(`█ ${name}`);
-  try { await run(); } catch (error) { check(false, `${name}: the leg threw (${String(error?.message ?? error).split('\n')[0].slice(0, 300)})`); }
-};
+const section = createSection(check);
 
 const sink = await startMailSink();
 const browser = await launchChromium();
@@ -164,15 +160,7 @@ const anon = await connectAgent(BASE, { email: `mxmx_test_vis_${ts}@example.com`
 const claimed = await mergeGuestIntoAccount(owner, BASE, anon.token);
 check(claimed === 200, 'owner A adopted a guest connection');
 
-const api = async (path, body) => {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon.token}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${path} → ${res.status} ${await res.text()}`);
-  return res.json();
-};
+const api = bearerApi(BASE, anon.token, fetch);
 
 // ── 3. the reader: the app page, framing the document on its own origin (was gate-secure-arch §1–2) ──
 await section('reader', async () => {

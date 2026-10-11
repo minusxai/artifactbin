@@ -40,7 +40,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sleep } from './lib/sleep.mjs';
 import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
-import { createChecker } from './lib/assert.mjs';
+import { createChecker, createSection } from './lib/assert.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent, connectionBrowserCookie } from './lib/cli-connection.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -61,11 +61,7 @@ const until = async (probe, ok, timeout) => {
   return value;
 };
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
-/** One leg's failure is reported and the journey goes on, so a run names every broken leg at once. */
-const section = async (name, run) => {
-  console.log(`█ ${name}`);
-  try { await run(); } catch (error) { check(false, `${name}: the leg threw (${String(error?.message ?? error).split('\n')[0].slice(0, 300)})`); }
-};
+const section = createSection(check);
 
 /*
  * The script document. No backticks or `${` inside: the script is a template literal in the markup. It binds a Value

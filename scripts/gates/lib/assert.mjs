@@ -51,3 +51,17 @@ export function createChecker(subject) {
   Object.defineProperty(check, 'passed', { get: () => passed });
   return check;
 }
+
+/**
+ * A gate's LEG: printed as a heading, and a throw inside it is reported as that leg's failure while the journey goes
+ * on, so a run names every broken leg at once.
+ *
+ *   const section = createSection(check);
+ *   await section('reader', async () => { … });
+ */
+export function createSection(check) {
+  return async (name, run) => {
+    console.log(`█ ${name}`);
+    try { await run(); } catch (error) { check(false, `${name}: the leg threw (${String(error?.message ?? error).split('\n')[0].slice(0, 300)})`); }
+  };
+}

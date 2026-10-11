@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
 
 /** JSON with a Set on the wire as an array — a Set stringifies to `{}` and binds nothing, which is a bug this was found by. */
 const replacer = (_k: string, v: unknown) => (v instanceof Set ? [...v] : v);
@@ -19,13 +20,28 @@ export function httpClient(url: string, opts: { deadlineMs: number; headers?: Re
 export type JsonRoutes = Record<string, (body: unknown) => Promise<unknown>>;
 export interface JsonServer { listen(port: number, host?: string): { port: number; url: string }; close(): Promise<void> }
 
+/** How a service shell is served: the body cap, and what a service process adds to the bare transport. */
+interface JsonServerOptions {
+  maxBody: number;
+  /** The one GET path answered `{ ok: true }`, BEFORE the secret check, so an orchestrator's probe works with a secret set. */
+  health?: string;
+  /** Every other request must carry it in SERVICE_AUTH_HEADER, or is a 401. */
+  serviceSecret?: string;
+  /** The operator log's prefix for a failed route (`[label] <url> failed:`). */
+  label?: string;
+}
+
 /**
  * A POST per route, a body cap, the detail to the operator log and only the
- * name to the caller (a parser's message quotes the bytes it choked on).
+ * name to the caller (a parser's message quotes the bytes it choked on). The
+ * services' shells (events, sql) are this server with a health probe and a secret.
  */
-export function jsonServer(routes: JsonRoutes, opts: { maxBody: number }): JsonServer {
+export function jsonServer(routes: JsonRoutes, opts: JsonServerOptions): JsonServer {
+  const failed = `[${opts.label ?? 'json-server'}] %s failed:`;
   const server = http.createServer(async (req, res) => {
     const json = (status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body, replacer)); };
+    if (opts.health && req.method === 'GET' && req.url === opts.health) return json(200, { ok: true });
+    if (opts.serviceSecret && req.headers[SERVICE_AUTH_HEADER] !== opts.serviceSecret) return json(401, { error: 'unauthorized' });
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
     const route = routes[req.url ?? ''];
     if (!route) return json(404, { error: 'not_found' });
@@ -37,7 +53,7 @@ export function jsonServer(routes: JsonRoutes, opts: { maxBody: number }): JsonS
       // The url is CALLER INPUT: as the format string its own `%s`/`%d` would eat
       // the arguments after it and the error would vanish from the line (CodeQL
       // js/tainted-format-string). It travels as an argument, logged verbatim.
-      console.error('[json-server] %s failed:', req.url, error);
+      console.error(failed, req.url, error);
       return json(400, { error: 'bad_request' });
     }
   });
