@@ -174,6 +174,31 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
         // Controlled contract violation: the same assertion must reject a leaked private response.
         assert.throws(() => hidden(read.status), /private read must remain hidden/);
       });
+      await scenario('group viewer CLI discovery preserves read-only access and revokes on removal',async()=>{
+        assert.ok(otherAccount?.token,'Separate verified colleague account is required');
+        const otherCookie=credentialSource?otherAccount.cookie:connectionBrowserCookie(BASE,otherAccount.token);
+        const session=await fetch(`${BASE}/api/auth/get-session`,{headers:{cookie:otherCookie}});
+        assert.equal(session.status,200);const userId=(await session.json())?.user?.id;assert.ok(userId);
+        const handle=`mxmx_test_list_${stamp.slice(-12)}`;
+        const created=await api('/api/groups',token,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'mxmx_test_cli_group',handle})});
+        assert.equal(created.status,201);const group=(await created.json());assert.ok(group.id);
+        const memberPath=`/api/groups/${group.id}/members/${userId}`;
+        const joined=await api(memberPath,token,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({role:'viewer'})});
+        assert.equal(joined.status,200);
+        try{
+          await writeFile(join(workspace,'group-review.jsx'),'---\ntitle: mxmx_test_group_review\nvisibility: private\n---\n<p id="finding">Group viewer review</p>');
+          const pushed=await invoke(['push','group-review.jsx','--group',handle]);
+          const groupId=pushed.operations.find(item=>item.path.endsWith('group-review.jsx'))?.id;assert.ok(groupId);publishedIds.push(groupId);
+          const cwd=join(root,'group-viewer');await mkdir(cwd);const opts={cwd,credential:otherAccount.token};
+          assert.ok((await invoke(['list'],opts)).artifacts.some(item=>item.id===groupId),'Viewer discovers the group publication');
+          assert.ok(!(await invoke(['list','--filter','relationship=owned'],opts)).artifacts.some(item=>item.id===groupId),'Discovery grants no ownership');
+          await invoke(['pull',groupId,'--output','group.jsx'],opts);
+          const file=join(cwd,'group.jsx');await writeFile(file,(await readFile(file,'utf8')).replace('Group viewer review','Denied group viewer edit'));
+          assert.equal((await invoke(['push','group.jsx'],{...opts,expected:1})).error?.code,'not_found');
+          assert.equal((await api(memberPath,token,{method:'DELETE'})).status,200);
+          assert.ok(!(await invoke(['list'],opts)).artifacts.some(item=>item.id===groupId),'Removal revokes discovery immediately');
+        }finally{assert.equal((await api(memberPath,token,{method:'DELETE'})).status,200);}
+      });
       await scenario('colleague share roles, rejected comment recovery and immediate revocation',async()=>{
         assert.ok(otherAccount?.token,'Separate verified colleague account is required');
         const otherCookie=credentialSource?otherAccount.cookie:connectionBrowserCookie(BASE,otherAccount.token);

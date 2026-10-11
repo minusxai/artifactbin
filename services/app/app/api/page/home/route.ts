@@ -1,14 +1,18 @@
-/** Account library and view/engagement insights; anonymous callers receive landing or held drafts. */
+/** Account library and view/engagement insights; anonymous callers receive landing or held drafts. `part=bootstrap` is the Home destination and its shelf in one answer. */
 import { liveAgentSession } from '@/lib/accounts';
 import { json } from '@/lib/http';
 import { sessionActor } from '@/lib/accounts';
-import { accountWorkspaceFor, accountWorkspaceCoreFor, accountWorkspaceInsightsFor, listDraftsByTokenIds } from '@/lib/workspace';
+import { accountWorkspaceFor, accountWorkspaceCoreFor, accountWorkspaceInsightsFor, homeBootstrapFor, listDraftsByTokenIds } from '@/lib/workspace';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
   const user = actor.credential === 'session' && actor.viewer?.userId ? actor.viewer : null;
   const part = new URL(request.url).searchParams.get('part');
   const groupId=new URL(request.url).searchParams.get('groupId')??undefined;
+  if (part === 'bootstrap') {
+    const personal = new URL(request.url).searchParams.get('personal') === '1';
+    return json(await homeBootstrapFor(user?.userId ? { userId: user.userId, email: user.email } : null, { personal }), 200, { 'Cache-Control': 'no-store' });
+  }
   if (!user?.userId) {
     if (part === 'insights') return json({ signedIn: false }, 200, { 'Cache-Control': 'no-store' });
     const cookie = actor.heldTokenIds

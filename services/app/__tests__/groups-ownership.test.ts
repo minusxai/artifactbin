@@ -1,9 +1,11 @@
 import {afterEach,expect,it,vi} from 'vitest';
+import {documentPublicationBody} from './prepared-document';
 import {useAppHarness,request,mintAccountToken} from './harness';
 import {createUser} from '@/lib/accounts';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
-import {POST as create} from '@/app/api/artifacts/route';
+import {POST as create,GET as list} from '@/app/api/artifacts/route';
+import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {POST as transfer} from '@/app/api/artifacts/[id]/transfer/route';
 import { effectiveRole, ownsArtifact } from '@/lib/artifacts/access';
 import { canWriteDataset } from '@/lib/document-data/dataset-policy';
@@ -26,6 +28,24 @@ async function fixture(){
  const move=(id:string,destination:object,bearer=a.token)=>transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',token:bearer,json:{destination}}),{params:Promise.resolve({id})});
  return {creator,editor,viewer,a,b,c,db,make,move};
 }
+it('lists group viewer documents as shared without granting ownership and revokes discovery on removal',async()=>{
+ const f=await fixture();
+ const first=await f.make({markup:'<p>Company review one</p>',title:'Company review one',visibility:'private',destination:{type:'group',id:'grp_ownership'}});
+ const second=await f.make({markup:'<p>Company review two</p>',title:'Company review two',visibility:'private',destination:{type:'group',id:'grp_ownership'}});
+ await f.make({markup:'<p>Unrelated personal</p>',visibility:'public',destination:{type:'personal'}});
+ const page=async(query:string,token=f.c.token)=>{
+  const response=await list(request(`/api/artifacts${query}`,{token}));expect(response.status).toBe(200);return response.json();
+ };
+ expect((await page('')).artifacts.map((r:{id:string})=>r.id).sort()).toEqual([first,second].sort());
+ expect((await page('?relationship=owned')).artifacts).toEqual([]);
+ const filtered=await page('?relationship=shared&search=review&limit=1');expect(filtered.artifacts).toHaveLength(1);expect(filtered.next_cursor).toBeTruthy();
+ const next=await page(`?relationship=shared&search=review&limit=1&cursor=${encodeURIComponent(filtered.next_cursor)}`);
+ expect([...filtered.artifacts,...next.artifacts].map((r:{id:string})=>r.id).sort()).toEqual([first,second].sort());
+ expect((await page('?relationship=owned',f.b.token)).artifacts).toHaveLength(2);
+ expect((await replace(request(`/api/artifacts/${first}`,{method:'PUT',token:f.c.token,json:documentPublicationBody((await getArtifactById(first))!,{markup:'<p>Denied viewer edit</p>'},true)}),{params:Promise.resolve({id:first})})).status).toBe(404);
+ await f.db.query('DELETE FROM group_members WHERE user_id=$1',[f.viewer.id]);
+ expect((await page('')).artifacts).toEqual([]);
+});
 it('echoes canonical ownership and immutable creator metadata from personal and group publication',async()=>{
  const f=await fixture();
  for(const destination of [{type:'personal'},{type:'group',id:'grp_ownership'}]){
