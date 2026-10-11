@@ -2,7 +2,7 @@
 
 This bundle runs one `afbin serve` process, a separate PostgreSQL container on the same Linux box, and Caddy for HTTPS. It builds its own application image from **@afbin/cli 0.5.25**; no public Artifactbin Docker image is assumed. Caddy **2.11.7** terminates HTTPS. PostgreSQL **17.11** is a supported release ([version policy](https://www.postgresql.org/support/versioning/), [official image tags](https://github.com/docker-library/official-images/blob/master/library/postgres)). Keep minor/security releases current after testing upgrades; major database upgrades require PostgreSQL migration, not changing an image tag on an existing volume.
 
-Use a Linux server with Docker Engine, Compose v2.30+, Node 22+, `tar` and `flock`. A practical starting point is 2 vCPU, 4 GiB RAM and encrypted persistent disk; size for real use. Open inbound TCP 80/443 only (plus restricted administrative access). Do not publish PostgreSQL or the app port. EC2 Mumbai (`ap-south-1`) is suitable for India-based users. This single-box design survives process/container restarts but is not highly available; host/disk loss requires an off-box backup.
+Use a Linux server with Docker Engine, Compose v2.30+, Docker Buildx v0.17+, Node 22+, `tar` and `flock`. Verify both `docker compose version` and `docker buildx version`: some distribution Docker packages omit these plugins. Install missing plugins from Docker's official releases and verify their published checksums before building. A practical starting point is 2 vCPU, 4 GiB RAM and encrypted persistent disk; size for real use. Open inbound TCP 80/443 only (plus restricted administrative access). Do not publish PostgreSQL or the app port. EC2 Mumbai (`ap-south-1`) is suitable for India-based users. This single-box design survives process/container restarts but is not highly available; host/disk loss requires an off-box backup.
 
 ## 1. DNS and certificates
 
@@ -50,10 +50,12 @@ tls {
     dns route53 {
         region ap-south-1
     }
+    propagation_delay 60s
+    propagation_timeout 5m
 }
 ```
 
-Route53 uses its AWS credential chain; a scoped EC2 role requires no values in `secrets/dns.env`. For a different provider, use its documented `dns <provider>` block and environment placeholders for credentials. The initializer deliberately leaves this file incomplete until you choose a provider: never start without reviewing it. Do not mount secrets in the builder or place them in Docker build arguments.
+Route53 uses its AWS credential chain; a scoped EC2 role requires no values in `secrets/dns.env`. The propagation wait gives its authoritative servers time to serve a DNS challenge consistently before certificate validation. For a different provider, use its documented `dns <provider>` block and environment placeholders for credentials. The initializer deliberately leaves this file incomplete until you choose a provider: never start without reviewing it. Do not mount secrets in the builder or place them in Docker build arguments.
 
 ## 3. Build and start
 
@@ -64,6 +66,8 @@ docker compose run --rm --no-deps caddy validate --config /etc/caddy/Caddyfile -
 docker compose up -d
 docker compose ps
 ```
+
+On first startup, certificate issuance follows container startup and can take several minutes. Check `docker compose logs caddy` for successful certificate issuance for the application, pages host and wildcard. Verify the public HTTPS hosts before signing in; a healthy app container alone does not prove HTTPS is ready. If issuance fails, correct DNS/provider access and inspect Caddy's retries; do not bypass browser certificate warnings.
 
 Before using a candidate release, copy the **exact CI-tested npm tarball** to `packages/afbin.tgz`, verify its provenance/checksum, and build with `AFBIN_PACKAGE=/packages/afbin.tgz docker compose build`. The Dockerfile still checks its version is 0.5.25. After publishing, the normal build installs that exact pinned registry version. Record the image IDs/digests you deploy. Node's base image is pinned to supported major 22; pin its tested digest for your deployment when you finish acceptance. The Compose application image runs nonroot. A short, network-disabled root helper initializes artifact-volume ownership; it never starts the application.
 
