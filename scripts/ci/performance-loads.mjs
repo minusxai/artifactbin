@@ -169,11 +169,11 @@ try {
           const usefulMs = window.__performanceUseful;
           const resources = performance.getEntriesByType('resource');
           const nav = performance.getEntriesByType('navigation')[0];
-          const core = resources.find(r => r.name.includes('/api/page/home?part=core'));
+          const core = resources.find(r => r.name.includes('/api/page/home?part=bootstrap'));
           const session = resources.find(r => r.name.includes('/api/page/session'));
           const scripts = resources.filter(r => /\.js(?:\?|$)/.test(r.name));
           return { route, cache, repetition, visible: document.visibilityState, usefulMs, ttfbMs: nav.responseStart, navRequestMs: nav.requestStart, navFetchMs: nav.fetchStart, navResponseEndMs: nav.responseEnd, navTransferredBytes: nav.transferSize,
-            coreRequestCount: resources.filter(r => r.name.includes('/api/page/home?part=core')).length,
+            coreRequestCount: resources.filter(r => r.name.includes('/api/page/home?part=bootstrap')).length,
             coreStartMs: core?.startTime, coreEndMs: core?.responseEnd, sessionStartMs: session?.startTime,
             jsEncodedBytes: scripts.reduce((n, r) => n + r.encodedBodySize, 0),
             jsTransferredBytes: scripts.reduce((n, r) => n + r.transferSize, 0),

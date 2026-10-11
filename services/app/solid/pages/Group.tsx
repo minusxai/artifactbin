@@ -9,24 +9,40 @@ import { usePageData } from '../lib/use-page-data';
 import Shelf from '../components/Shelf';
 import WorkspaceShell from '../components/WorkspaceShell';
 import Users from 'lucide-solid/icons/users';
-import { DefaultDestinationControl } from '../components/DefaultDestinationControl';
+import { DefaultDestinationControl, type DefaultDestinationState } from '../components/DefaultDestinationControl';
 import { FORM_INPUT, FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON, FORM_DANGER_BUTTON } from '../ui/FormControls';
-import { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';
+import { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '../components/WorkspaceLayout';
 
+/** A group's page at its own address: details first, then its shelf. Home hands `GroupWorkspace` both at once. */
 export function GroupPage(props: { identity: string }): JSX.Element {
  const detail=usePageData<GroupDetail>(()=>`/api/groups/${encodeURIComponent(props.identity)}`);
  const shelf=usePageData<AccountWorkspaceCore>(()=>`/api/page/home?part=core&groupId=${encodeURIComponent(detail.data()?.group.id ?? '')}`,{enabled:()=>!!detail.data()});
- const [error,setError]=createSignal(''); const [copied,setCopied]=createSignal(false);
  const refresh=()=>{void detail.refresh(true);void shelf.refresh(true);};
- const copy=async()=>{try{if(await copyText(buildGroupSetupInstructions({serverOrigin:window.location.origin,groupHandle:detail.data()!.group.handle})))setCopied(true);else setError('Could not copy instructions.');}catch{setError('Could not copy instructions.');}};
- return <main class={HOME_WORKSPACE_COLUMN}><Show when={detail.data()} fallback={<div class="p-8"><Show when={detail.error()} fallback={<p role="status">Loading group…</p>}><p role="alert">This group is unavailable. Your default may no longer be accessible.</p><a href="/?personal=1">Open Personal</a><button type="button" onClick={()=>void detail.refresh(true)}>Retry group</button></Show></div>}>
- {value=><WorkspaceShell onCreated={refresh} groupId={value().group.id} canCreate={value().group.role==='editor'}><div class="workspace-page groups-page">
- <header class="group-page-header"><a href="/groups" class="text-sm font-medium text-muted hover:text-accent">Groups</a><div class="mt-5 flex items-start gap-4"><span class="group-avatar group-avatar-large" aria-hidden="true"><Users size={26}/></span><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-3"><h1 class="break-words text-3xl font-semibold tracking-tight">{value().group.name}</h1><span class="group-role">{value().group.role==='editor'?'Editor':'Viewer'}</span></div><p class="mt-1 break-all text-sm text-muted"><a href={`/@${encodeURIComponent(value().group.handle)}`} class="rounded-sm underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">@{value().group.handle}</a></p><Show when={value().group.description}><p class="mt-3 max-w-2xl text-sm leading-relaxed text-muted">{value().group.description}</p></Show></div></div><div class="group-default-panel"><DefaultDestinationControl group={value().group}/><button type="button" class={FORM_SECONDARY_BUTTON} onClick={()=>void copy()}>{copied()?'Instructions copied':'Copy agent setup'}</button></div></header>
- <Show when={error()}><p role="alert" class="group-error">{error()}</p></Show>
- <section aria-label="Group artifacts" class="workspace-library"><h2 class="mb-5 text-lg font-semibold">Files and folders</h2><Show when={shelf.data()} fallback={<Show when={shelf.error()} fallback={<p role="status">Loading artifacts…</p>}><p role="alert">Could not load group artifacts. <button type="button" onClick={()=>void shelf.refresh(true)}>Retry artifacts</button></p></Show>}>{rows=><Shelf groupId={value().group.id} rows={rows().artifacts} actions={value().group.role==='editor'?'full':'share'} assets={false} scopeParentId={null}/>}</Show></section>
- <GroupManagement detail={value()} refresh={refresh}/>
- </div></WorkspaceShell>}
+ return <main class={HOME_WORKSPACE_COLUMN}><Show when={detail.data()} fallback={<div class="p-8"><Show when={detail.error()} fallback={<WorkspaceSkeleton/>}><GroupUnavailable retry={()=>void detail.refresh(true)}/></Show></div>}>
+ {value=><GroupWorkspace detail={value()} shelf={shelf.data()} shelfFailed={!!shelf.error()} retryShelf={()=>void shelf.refresh(true)} refresh={refresh}/>}
  </Show></main>;
+}
+
+/** The recovery state for a group this account cannot open (deleted, or membership removed). */
+export function GroupUnavailable(props:{retry:()=>void}): JSX.Element {
+ return <><p role="alert">This group is unavailable. Your default may no longer be accessible.</p><a href="/?personal=1">Open Personal</a><button type="button" onClick={props.retry}>Retry group</button></>;
+}
+
+/**
+ * A group's page from data already in hand. `defaults` is the account preference and deployment the caller
+ * already read (Home's bootstrap), so the default control makes no requests of its own; `onDefaultSaved`
+ * tells the caller the homepage may now resolve elsewhere.
+ */
+export function GroupWorkspace(props: { detail: GroupDetail; shelf: AccountWorkspaceCore | null; shelfFailed: boolean; retryShelf: () => void; refresh: () => void; defaults?: DefaultDestinationState; onDefaultSaved?: () => void }): JSX.Element {
+ const [error,setError]=createSignal(''); const [copied,setCopied]=createSignal(false);
+ const copy=async()=>{try{if(await copyText(buildGroupSetupInstructions({serverOrigin:window.location.origin,groupHandle:props.detail.group.handle})))setCopied(true);else setError('Could not copy instructions.');}catch{setError('Could not copy instructions.');}};
+ const value=()=>props.detail;
+ return <WorkspaceShell onCreated={props.refresh} groupId={value().group.id} canCreate={value().group.role==='editor'}><div class="workspace-page groups-page">
+ <header class="group-page-header"><a href="/groups" class="text-sm font-medium text-muted hover:text-accent">Groups</a><div class="mt-5 flex items-start gap-4"><span class="group-avatar group-avatar-large" aria-hidden="true"><Users size={26}/></span><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-3"><h1 class="break-words text-3xl font-semibold tracking-tight">{value().group.name}</h1><span class="group-role">{value().group.role==='editor'?'Editor':'Viewer'}</span></div><p class="mt-1 break-all text-sm text-muted"><a href={`/@${encodeURIComponent(value().group.handle)}`} class="rounded-sm underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">@{value().group.handle}</a></p><Show when={value().group.description}><p class="mt-3 max-w-2xl text-sm leading-relaxed text-muted">{value().group.description}</p></Show></div></div><div class="group-default-panel"><DefaultDestinationControl group={value().group} initial={props.defaults} onSaved={props.onDefaultSaved}/><button type="button" class={FORM_SECONDARY_BUTTON} onClick={()=>void copy()}>{copied()?'Instructions copied':'Copy agent setup'}</button></div></header>
+ <Show when={error()}><p role="alert" class="group-error">{error()}</p></Show>
+ <section aria-label="Group artifacts" class="workspace-library"><h2 class="mb-5 text-lg font-semibold">Files and folders</h2><Show when={props.shelf} fallback={<Show when={props.shelfFailed} fallback={<p role="status">Loading artifacts…</p>}><p role="alert">Could not load group artifacts. <button type="button" onClick={props.retryShelf}>Retry artifacts</button></p></Show>}>{rows=><Shelf groupId={value().group.id} rows={rows().artifacts} actions={value().group.role==='editor'?'full':'share'} assets={false} scopeParentId={null}/>}</Show></section>
+ <GroupManagement detail={value()} refresh={props.refresh}/>
+ </div></WorkspaceShell>;
 }
 
 /** Membership edits use server-confirmed state. Refusals, including the last editor, stay visible. */
