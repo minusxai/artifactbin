@@ -49,6 +49,9 @@ const DocumentPeople = lazy(() => import('../document/DocumentPeople').then((m) 
 const ArtifactEditor = lazy(() => import('../editor/ArtifactEditor'));
 const SocialPreviewEditor = lazy(() => import('../document/SocialPreviewEditor').then((m) => ({ default: m.SocialPreviewEditor })));
 
+/** A document whose source is at most this long has its editor part prefetched on idle: a few tens of KB, never worth saving. */
+const EDITOR_PREFETCH_MAX_CHARS = 60_000;
+
 interface DocumentAnswer {
   role: ArtifactRole; kind: string;
   surface?: {
@@ -65,6 +68,8 @@ interface DocumentAnswer {
     framedOrigin?: string;
     /** The reader's standing on a document that writes to datasets (the bar's Join/Joined/Pending pill). */
     membership?: 'join' | 'pending' | 'joined';
+    /** The source's length, for a writer: what the editor's door will cost (lib/serving/artifact-page). */
+    sourceLength?: number;
   };
   archived?: { version: number; head: number } | null;
   /** What the document asks of the network beyond the default policy, and this reader's standing (lib/trust). */
@@ -188,18 +193,34 @@ export function DocumentPage(): JSX.Element {
   }) : () => null;
 
   // ── edit mode: a MODE of the one address, mirrored in `#edit` (solid/document/create-edit-lifecycle) ──
-  /** Everything the switch into editing downloads, started on idle for a writer and again on the click (both deduplicate). */
-  const prefetchEditor = () => {
-    void loadEditorPart();
+  /**
+   * What the switch into editing downloads. The editor's code is fetched on idle for every writer. Its part (the
+   * source and the graph, about as large as the document) is fetched on idle only for a document small enough
+   * that this costs nothing, and otherwise when edit mode opens: a writer who only reads a large document never
+   * pays for it. A page that did not say how large the document is gets the safe answer.
+   */
+  const prefetchEditorCode = () => {
     void import('../editor/ArtifactEditor').catch(() => {});
     void import('@/lib/frame-edit/session').catch(() => {});
     void import('@/lib/frame-edit/dom-mounter').catch(() => {});
   };
+  const cheapEditorPart = () => (editorPart()?.source.length ?? page?.surface?.sourceLength ?? Infinity) <= EDITOR_PREFETCH_MAX_CHARS;
+  const prefetchEditor = () => {
+    if (cheapEditorPart()) void loadEditorPart();
+    prefetchEditorCode();
+  };
   const beginEdit = (selectionPath: string | null) => {
-    if (editable() && !editing()) prefetchEditor();
+    if (editable() && !editing()) { void loadEditorPart(); prefetchEditorCode(); }
     lifecycle.enter(selectionPath);
   };
   const enterEdit = () => beginEdit(null);
+  /**
+   * The Edit control was approached (hover, focus or press): fetch what editing needs now, so the click that follows
+   * finds it on its way or here. One request however many of these and the click itself arrive (the loader shares it);
+   * a pointer that moves on does not cancel it. Only leaving the page does (the cleanup below).
+   */
+  const intendEdit = () => { if (editable() && !editing()) { void loadEditorPart(); prefetchEditorCode(); } };
+  onCleanup(() => parts.abort());
   createEffect(on(lifecycle.phase, (now, before) => {
     if (now === 'entering') {
       setEditorTitle(null);
@@ -208,7 +229,7 @@ export function DocumentPage(): JSX.Element {
     }
     if (!editing()) setEditorMounted(false);
     // Back to reading in place: the next edit opens on the version just saved, not the part this session opened on.
-    if (now === 'reading' && before === 'restoring') { parts.reset(); if (editable()) void loadEditorPart(); }
+    if (now === 'reading' && before === 'restoring') { const cheap = cheapEditorPart(); parts.reset(); if (editable() && cheap) void loadEditorPart(); }
   }, { defer: true }));
   createEffect(() => { if (page?.surface) document.title = editing() ? `${page.surface.title ?? page.surface.runtime?.title ?? 'Untitled'} [edit mode]` : document.title.replace(/ \[edit mode\]$/, ''); });
 
@@ -255,7 +276,6 @@ export function DocumentPage(): JSX.Element {
       colorMode: (fresh ? frame!.colorMode : surface.colorMode) ?? null,
       template: (fresh ? frame!.template : surface.template) ?? null,
       refs: surface.refs ?? [],
-      compiledCss: part.compiledCss,
       dataflow: surface.runtime?.data.dataflow ? { flow: surface.runtime.data.dataflow.flow, state: surface.runtime.data.dataflow.state } as EditorArtifact['dataflow'] : null,
     };
   });
@@ -388,13 +408,13 @@ export function DocumentPage(): JSX.Element {
       membership={page!.surface?.membership}
       titleSlot={() => editing() && !phone() && editorMounted()} titleHost={setTitleHost}
       panel={panel} setPanel={setPanel} mode={mode} onMode={chooseMode}
-      onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onEdit={() => act('edit')} onMembership={() => act('membership')}
+      onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onEdit={() => act('edit')} onEditIntent={intendEdit} onMembership={() => act('membership')}
       controls={(close) => <DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         owner={isOwner() && !editing()} canEdit={editable() && !editing()} canAnnotate={annotatable()} accountSession={accountSession()}
         like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { close(); setRailOpen(open); }}
         openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork={!phone()}
         membershipRevision={membershipRevision()} onMembershipChange={() => setMembershipRevision((n) => n + 1)}
-        onEdit={() => { close(); enterEdit(); }}
+        onEdit={() => { close(); enterEdit(); }} onEditIntent={intendEdit}
         onShare={() => { close(); setSharingOpen(true); }}
         onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />} />
     <div ref={host} aria-label="Artifact viewport" />
@@ -445,7 +465,7 @@ export function DocumentPage(): JSX.Element {
     </Show>
     <Show when={ready() && editing() && backend && (editorSeed() || editorPartFailed())}>
       <Suspense fallback={null}>
-        <ArtifactEditor id={id!} backend={backend!} seed={editorSeed()} onExit={() => void lifecycle.done()} flushRef={editorFlush}
+        <ArtifactEditor id={id!} backend={backend!} seed={editorSeed()} admitted={parts.admitted} onExit={() => void lifecycle.done()} flushRef={editorFlush}
           runtimeRef={runtimeRef} sessionNonce={nonce()} initialSelectionPath={lifecycle.selectionPath()}
           onComment={editable() ? (selection) => setInitialAnnotationSelection(selection) : undefined}
           onRightInsetChange={setEditorRightInset}

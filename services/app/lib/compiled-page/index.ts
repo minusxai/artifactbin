@@ -26,7 +26,6 @@ export { ISLANDS_MANIFEST_PATH } from './build.server';
 // ---- Assembly: the reader page around a compiled version.
 export { assembleReaderPage } from './assembler';
 export { withStoredCarriers } from './carriers';
-export { inlineStoryElement } from './story-element';
 export { planOf } from './plan';
 export { agentDiscovery, agentDiscoveryHead, withAgentDiscoveryTail } from './agent-discovery';
 

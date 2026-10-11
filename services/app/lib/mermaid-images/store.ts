@@ -154,8 +154,18 @@ export async function mermaidImagesFor(
   lookup: MermaidImageLookup,
   nodes: readonly JsxNode[],
 ): Promise<Record<string, StoredMermaidImage>> {
+  return mermaidImagesForCodes(lookup, prerenderableCodes(nodes));
+}
+
+/** The codes of a tree whose drawings a harvest may store: what a prepared page records, so a reader looks drawings up without loading the tree. */
+export const prerenderableCodes = (nodes: readonly JsxNode[]): string[] => mermaidCodesOf(nodes).filter(mermaidPrerenderable);
+
+/** {@link mermaidImagesFor} for the codes {@link prerenderableCodes} named. */
+export async function mermaidImagesForCodes(
+  lookup: MermaidImageLookup,
+  codes: readonly string[],
+): Promise<Record<string, StoredMermaidImage>> {
   if (lookup.visibility === 'private') return {};
-  const codes = mermaidCodesOf(nodes).filter(mermaidPrerenderable);
   if (!codes.length) return {};
   try {
     const db = await getDb();

@@ -38,7 +38,7 @@ export async function membershipState(actor: RoleActor, id: string): Promise<Mem
   if (!header || !canRead(role)) return fail('Artifact not found',404);
   const db=await getDb();
   const rows=(await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND (m.status='accepted' OR m.user_id=$2 OR ($3 AND m.status='pending')) ORDER BY m.joined_at NULLS LAST,u.username`,[id,actor.userId,canEdit(role)])).rows;
-  const mentions=await mentionStatesFor(id);
+  const mentions=await mentionStatesFor(id,header.version);
   return {mentions,members:rows.filter(m=>m.status==='accepted'),pending:rows.filter(m=>m.status==='pending'),self:rows.find(m=>m.user_id===actor.userId)??null,canManage:canEdit(role),canInvite:!!actor.userId&&canAnnotate(role)};
 }
 /**
@@ -182,23 +182,35 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
 
 /** Caller must establish read access to this artifact before exposing these public tag states. */
 export async function savedMentionStates(artifact:ArtifactRow){
- return mentionStatesOf(artifact.id,artifact.source??'');
+ return mentionStatesOfPeople(artifact.id,mentionedPeople(artifact.source??''));
+}
+/** The people a document's source names: every `/people/<id>` in it. Stored with the prepared page (`prepared_pages.mentions`) so nothing rescans the document for them. */
+export function mentionedPeople(source:string):string[]{
+ return [...new Set([...source.matchAll(/\/people\/([A-Za-z0-9_-]{1,128})/g)].map(m=>m[1]!))];
 }
 /**
- * {@link savedMentionStates} for a caller that holds the artifact's header and no document. The document is read only
- * when its stored text mentions "people" at all — a superset of the `/people/<id>` the mention scan looks for, decided
- * by the database over the stored value — so a page that names no one (nearly all of them) never ships its document
- * for this. Same answer either way: a document that passes the check is read whole and scanned as ever.
+ * {@link savedMentionStates} for a caller that holds the artifact's header and no document: the people the HEAD version
+ * names come from its prepared page (`prepared_pages.mentions`, written when that version was prepared), so listing
+ * members never reads the document. A version whose page is not prepared yet, or was prepared before the people were
+ * stored, is read as ever — and only if its stored text mentions "people" at all, a superset of the `/people/<id>` the
+ * scan looks for, decided by the database over the stored value — and the answer is stored for the next list. Same
+ * answer either way.
  */
-async function mentionStatesFor(id:string){
+async function mentionStatesFor(id:string,version:number){
  const db=await getDb();
- const named=(await db.query<{named:boolean}>("SELECT strpos(coalesce(document::text,'')||coalesce(source,''),'people')>0 AS named FROM artifacts WHERE id=$1 AND deleted_at IS NULL",[id])).rows[0]?.named===true;
- return mentionStatesOf(id,named?(await getArtifactById(id))?.source??'':'');
+ const stored=(await db.query<{mentions:string[]|null}>("SELECT mentions FROM prepared_pages WHERE artifact_id=$1 AND slot='head' AND page_key=$2",[id,`v:${version}`])).rows[0]?.mentions;
+ if(stored)return mentionStatesOfPeople(id,stored);
+ const scan=(await db.query<{named:boolean;version:number}>("SELECT strpos(coalesce(document::text,'')||coalesce(source,''),'people')>0 AS named, version FROM artifacts WHERE id=$1 AND deleted_at IS NULL",[id])).rows[0];
+ const read=scan?.named?await getArtifactById(id):null;
+ const people=mentionedPeople(read?.source??'');
+ // Stored under the version whose text was read, which may be newer than the header's: only that version's page takes it.
+ const scanned=read?.version??scan?.version;
+ if(scanned!==undefined)await db.query("UPDATE prepared_pages SET mentions=$3::text[] WHERE artifact_id=$1 AND slot='head' AND page_key=$2 AND mentions IS NULL",[id,`v:${scanned}`,people]);
+ return mentionStatesOfPeople(id,people);
 }
-async function mentionStatesOf(id:string,source:string){
+async function mentionStatesOfPeople(id:string,sourcePeople:string[]){
  const db=await getDb();
-  const savedText=[source,...(await db.query<{body:string}>('SELECT body FROM annotations WHERE artifact_id=$1 AND deleted_at IS NULL',[id])).rows.map(r=>r.body)].join('\n');
-  const mentioned=[...savedText.matchAll(/\/people\/([A-Za-z0-9_-]{1,128})/g)].map(m=>m[1]);
-  const mentions=Object.fromEntries((await db.query<{user_id:string;status:MembershipStatus}>(`SELECT user_id,status FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=ANY($2::text[])`,[id,mentioned])).rows.map(m=>[m.user_id,m.status]));
- return mentions;
+ const commented=(await db.query<{body:string}>('SELECT body FROM annotations WHERE artifact_id=$1 AND deleted_at IS NULL',[id])).rows.flatMap(r=>mentionedPeople(r.body));
+ const mentioned=[...new Set([...sourcePeople,...commented])];
+ return Object.fromEntries((await db.query<{user_id:string;status:MembershipStatus}>(`SELECT user_id,status FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=ANY($2::text[])`,[id,mentioned])).rows.map(m=>[m.user_id,m.status]));
 }

@@ -60,6 +60,8 @@ interface DocumentChromeProps {
   onFork: () => void;
   onShare: () => void;
   onEdit: () => void;
+  /** The Edit control was approached (hover, focus, press): start what editing needs. */
+  onEditIntent?: () => void;
   onMembership: () => void;
   controls: (close: () => void) => JSX.Element;
 }
@@ -138,7 +140,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
       </Show>
     </Show>
     <Show when={props.canEdit && !props.archived}>
-      <DocumentEditAction editing={editing()} onClick={props.onEdit} />
+      <DocumentEditAction editing={editing()} onClick={props.onEdit} onIntent={props.onEditIntent} />
     </Show>
     <Show when={props.owner && !props.archived}>
       <Tooltip content="Share">

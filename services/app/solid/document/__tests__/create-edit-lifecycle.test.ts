@@ -1,6 +1,8 @@
 import { createRoot, createSignal } from 'solid-js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createEditLifecycle, createEditorPartLoader } from '../create-edit-lifecycle';
+import { createDocumentGraph, graphSource } from '@/lib/document/document-graph';
+import { packDocumentGraph } from '@/lib/document/document-graph-wire';
 
 /** A window with an in-memory history: `back()` pops asynchronously and fires the page's hashchange, as a browser does. */
 function fakeWindow(start = '/a/doc') {
@@ -231,7 +233,7 @@ it('entering again while the last session restores is not undone by that restore
 it('the editor part loader dedupes concurrent loads and retries after a failure', async () => {
   const fetchMock = vi.fn<(input: unknown) => Promise<Response>>()
     .mockResolvedValueOnce(new Response('no', { status: 500 }))
-    .mockResolvedValue(Response.json({ editId: 'e1', version: 3, source: '<p/>', compiledCss: null, authorCss: null }));
+    .mockResolvedValue(Response.json({ editId: 'e1', version: 3, source: '<p/>'}));
   vi.stubGlobal('fetch', fetchMock);
   try {
     const loader = createRoot((dispose) => { disposers.push(dispose); return createEditorPartLoader('doc12345', () => true); });
@@ -254,3 +256,54 @@ it('the editor part loader dedupes concurrent loads and retries after a failure'
   } finally { vi.unstubAllGlobals(); }
 });
 
+
+it('the editor part loader inflates the wire graph against its source, and asks for the whole graph when that does not hold', async () => {
+  const stored = createDocumentGraph('<main id="m"><p id="p">Hi</p></main>', 3);
+  const source = graphSource(stored);
+  const packed = packDocumentGraph(stored, source)!;
+  const answers = [
+    Response.json({ editId: 'e1', version: 3, source, graph: packed }),
+    // A source the keys do not belong to: the guard refuses it and the loader reads the graph whole.
+    Response.json({ editId: 'e1', version: 3, source: `${source}<p id="extra">x</p>`, graph: packed }),
+    Response.json({ editId: 'e1', version: 3, source, document: stored }),
+  ];
+  const fetchMock = vi.fn<(input: unknown) => Promise<Response>>(async () => answers.shift()!);
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const loader = createRoot((dispose) => { disposers.push(dispose); return createEditorPartLoader('doc12345', () => true); });
+    const inflated = await loader.load();
+    expect(inflated?.document).toEqual(stored);
+    expect(inflated).not.toHaveProperty('graph');
+    expect(String(fetchMock.mock.calls[0]![0])).not.toContain('graph=full');
+    loader.reset();
+    const whole = await loader.load();
+    expect(String(fetchMock.mock.calls[1]![0])).not.toContain('graph=full');
+    expect(String(fetchMock.mock.calls[2]![0])).toContain('graph=full');
+    expect(whole?.source).toBe(source);
+    expect(whole?.document).toEqual(stored);
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it('the editor part loader asks admission alone for an old part, trusts a fresh one, and aborts only when told to leave', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const signals: AbortSignal[] = [];
+  const fetchMock = vi.fn<(input: unknown, init?: RequestInit) => Promise<Response>>(async (input, init) => {
+    if (init?.signal) signals.push(init.signal);
+    return String(input).includes('probe=1') ? new Response('{}', { status: 404 }) : Response.json({ editId: 'e1', version: 3, source: '<p/>' });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const loader = createRoot((dispose) => { disposers.push(dispose); return createEditorPartLoader('doc12345', () => true); });
+    expect(await loader.admitted()).toBe(false);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('probe=1');
+    await loader.load();
+    expect(await loader.admitted()).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.setSystemTime(Date.now() + 60_000);
+    expect(await loader.admitted()).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(signals.some((signal) => signal.aborted)).toBe(false);
+    loader.abort();
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
+});

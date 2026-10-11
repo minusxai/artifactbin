@@ -602,13 +602,22 @@ const DATASET_RESULT_CACHE: Table = {
 
 /**
  * THE PREPARED PAGE — each document version compiled ONCE for the reader
- * (lib/publish/prepared/prepared-page.server): its isolated stylesheet, its node tree and
- * the style values the CSS policy rewrote, its glyphs, fonts and lazy-code
- * manifest, its declared dataflow, and the anonymous server render. Derived and
+ * (lib/publish/prepared/prepared-page.server): its isolated stylesheet and the
+ * style values the CSS policy rewrote, its glyphs, fonts and lazy-code
+ * manifest, its declared dataflow, its node tree and the compiled page. Derived and
  * disposable: one slot per head or archived version, overwritten whenever the
  * key (a digest of what preparation reads + the CSS compile version + the
  * server build) or the dependency fingerprint (imported datasets, held web
  * assets, imported fonts) no longer matches. Holds no per-viewer data.
+ *
+ * STORED IN THREE PARTS, because readers use them in different amounts: `page`
+ * is the shell (everything the app page reads; its size does not grow with the document),
+ * `nodes` the node tree and `compiled` the compiled page (or its recorded
+ * failure), which do. A view selects only the columns it uses. A row from before
+ * the split holds all of it in `page` (`nodes` NULL, or `page.data.nodes` present):
+ * the next read rewrites it into parts, in place.
+ * `mentions`: the people the version's source names (`/people/<id>`), so the
+ * membership list never scans the document (NULL: not recorded yet, filled by the first list).
  */
 const PREPARED_PAGES: Table = {
   name: 'prepared_pages',
@@ -619,6 +628,10 @@ const PREPARED_PAGES: Table = {
     { name: 'page_key', type: 'TEXT', notNull: true },
     { name: 'deps', type: 'TEXT', notNull: true, default: "''" },
     { name: 'page', type: 'JSONB', notNull: true },
+    // lz4: both are rewritten whole with every preparation and grow with the document (pglz is ~3x slower).
+    { name: 'nodes', type: 'JSONB', compression: 'lz4' },
+    { name: 'compiled', type: 'JSONB', compression: 'lz4' },
+    { name: 'mentions', type: 'TEXT[]' },
     { name: 'compiler_version', type: 'TEXT' },
     { name: 'island_build', type: 'TEXT' },
     { name: 'css_version', type: 'TEXT' },

@@ -1600,6 +1600,9 @@ CREATE TABLE IF NOT EXISTS app.prepared_pages (
   page_key TEXT NOT NULL,
   deps TEXT NOT NULL DEFAULT '',
   page JSONB NOT NULL,
+  nodes JSONB,
+  compiled JSONB,
+  mentions TEXT[],
   compiler_version TEXT,
   island_build TEXT,
   css_version TEXT,
@@ -1620,6 +1623,12 @@ ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS deps TEXT NOT NULL DEFAU
 
 ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS page JSONB NOT NULL;
 
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS nodes JSONB;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS compiled JSONB;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS mentions TEXT[];
+
 ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS compiler_version TEXT;
 
 ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS island_build TEXT;
@@ -1633,6 +1642,28 @@ ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS page_format INTEGER;
 ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS handover_contract INTEGER;
 
 ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_attribute
+     WHERE attrelid = to_regclass('app.prepared_pages') AND attname = 'nodes' AND attcompression IS DISTINCT FROM 'l'
+  ) THEN
+    ALTER TABLE app.prepared_pages ALTER COLUMN nodes SET COMPRESSION lz4;
+  END IF;
+EXCEPTION WHEN feature_not_supported THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_attribute
+     WHERE attrelid = to_regclass('app.prepared_pages') AND attname = 'compiled' AND attcompression IS DISTINCT FROM 'l'
+  ) THEN
+    ALTER TABLE app.prepared_pages ALTER COLUMN compiled SET COMPRESSION lz4;
+  END IF;
+EXCEPTION WHEN feature_not_supported THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_prepared_compiler_version ON app.prepared_pages (compiler_version);
 
