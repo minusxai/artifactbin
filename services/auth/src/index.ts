@@ -2,11 +2,11 @@ export {authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundar
 export {AUTH_TABLES,ensureAuthSchema} from './schema';
 export { createHumanAuth, humanAuthOptions, type HumanAuth, type HumanAuthOptions, type BetterAuthOptions, type Mailer, type OutgoingMail } from './auth/human';
 export {
-  resendMailer, devOutboxMailer, mailerForRuntime, usesDevOutbox,
+  smtpMailer, type SmtpSettings, type MailSettings, resendMailer, devOutboxMailer, mailerForRuntime, usesDevOutbox,
   DEV_OUTBOX_RELATIVE_PATH, DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed,
 } from './mail';
 export {authEnvNamesRead,readEnv} from './env';
-export {admissionPolicyOf,type AdmissionPolicy,loginProvidersOf,completeLoginMethods,type LoginProviders,type CompleteLoginMethods} from './config';
+export {mailSettingsOf,admissionPolicyOf,type AdmissionPolicy,loginProvidersOf,completeLoginMethods,type LoginProviders,type CompleteLoginMethods} from './config';
 import type { HumanAuth } from './auth/human';
 import type { SessionStore } from './parts';
 

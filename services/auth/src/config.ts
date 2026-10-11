@@ -1,5 +1,6 @@
 import type { OidcProvider } from './auth/human';
 import {readEnv} from './env';
+import type { MailSettings } from './mail';
 const LOGIN_PROVIDER_ENV_NAMES = {
   googleClientId: 'AUTH__GOOGLE_CLIENT_ID',
   googleClientSecret: 'AUTH__GOOGLE_CLIENT_SECRET',
@@ -50,6 +51,29 @@ export function loginProvidersOf(source: Record<string, string | undefined>): Lo
   };
 }
 
+/** The audited owner of outgoing-mail settings. Credentials are never interpolated into errors. */
+export function mailSettingsOf(source: Record<string, string | undefined>): MailSettings {
+  const apiKey = readEnv(source, 'EMAIL__RESEND_API_KEY')?.trim() || undefined;
+  const from = readEnv(source, 'EMAIL__FROM')?.trim() || 'artifactbin <login@example.com>';
+  const host = readEnv(source, 'EMAIL__SMTP_HOST')?.trim() || undefined;
+  const portValue = readEnv(source, 'EMAIL__SMTP_PORT')?.trim() || undefined;
+  const secureValue = readEnv(source, 'EMAIL__SMTP_SECURE')?.trim() || undefined;
+  const user = readEnv(source, 'EMAIL__SMTP_USER')?.trim() || undefined;
+  // Passwords are opaque: do not silently trim valid leading/trailing spaces.
+  const password = readEnv(source, 'EMAIL__SMTP_PASSWORD') || undefined;
+  const named = !!(host || portValue || secureValue || user || password);
+  if (!named) return { ...(apiKey ? { apiKey } : {}), from };
+  if (apiKey) throw new Error('Configure either EMAIL__SMTP_HOST or EMAIL__RESEND_API_KEY, never both.');
+  if (!host) throw new Error('EMAIL__SMTP_HOST is required when SMTP settings are present.');
+  if (!/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[a-f0-9:]+\])$/i.test(host)) throw new Error('EMAIL__SMTP_HOST must be a hostname or IP address, not a URL.');
+  if (secureValue && secureValue !== 'true' && secureValue !== 'false') throw new Error('EMAIL__SMTP_SECURE must be true or false.');
+  const secure = secureValue === 'true';
+  const port = portValue ? Number(portValue) : secure ? 465 : 587;
+  if ((portValue && !/^\d+$/.test(portValue)) || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('EMAIL__SMTP_PORT must be an integer from 1 to 65535.');
+  if (!!user !== !!password) throw new Error('EMAIL__SMTP_USER and EMAIL__SMTP_PASSWORD must both be set or both be absent.');
+  return { from, smtp: { host, port, secure, ...(user && password ? { user, password } : {}) } };
+}
+
 /**
  * WHICH LOGIN METHODS COULD ACTUALLY COMPLETE A ROUND TRIP — a stricter question than
  * `loginProvidersOf`, which answers "what did the operator name". A host that boots with a named
@@ -58,7 +82,7 @@ export function loginProvidersOf(source: Record<string, string | undefined>): Lo
  * `loginProvidersOf`, so the provider names stay read in exactly one place and the env audit
  * (`readEnv`) still sees every one of them.
  *
- * - **mail** needs the key AND a sender. `EMAIL__FROM` is not optional in practice: the composition
+ * - **mail** needs a completed Resend or SMTP transport AND a sender. `EMAIL__FROM` is not optional in practice: the composition
  *   falls back to `artifactbin <login@example.com>`, a domain no real provider is verified for, so
  *   the key alone sends nothing.
  * - **google** is already all-or-nothing in `loginProvidersOf`; this only rejects blank values.
@@ -68,19 +92,19 @@ export function loginProvidersOf(source: Record<string, string | undefined>): Lo
  *   `createHumanAuth` sets no `getUserInfo` and Better Auth must fetch the claims itself.
  */
 export interface CompleteLoginMethods {
-  mail?: { apiKey: string; from: string };
+  mail?: MailSettings;
   google?: { clientId: string; clientSecret: string };
   oidc?: OidcProvider;
 }
 const filled = (value: string | undefined): boolean => (value ?? '').trim().length > 0;
 export function completeLoginMethods(source: Record<string, string | undefined>): CompleteLoginMethods {
   const named = loginProvidersOf(source);
-  const apiKey = readEnv(source, 'EMAIL__RESEND_API_KEY'), from = readEnv(source, 'EMAIL__FROM');
+  const mail = mailSettingsOf(source), from = readEnv(source, 'EMAIL__FROM');
   const oidc = named.oidc;
   const endpoints = filled(oidc?.discoveryUrl)
     || (filled(oidc?.authorizationUrl) && filled(oidc?.tokenUrl) && filled(oidc?.userInfoUrl));
   return {
-    ...(filled(apiKey) && filled(from) ? { mail: { apiKey: apiKey!.trim(), from: from!.trim() } } : {}),
+    ...(filled(from) && (mail.apiKey || mail.smtp) ? { mail } : {}),
     ...(named.google && filled(named.google.clientId) && filled(named.google.clientSecret) ? { google: named.google } : {}),
     ...(oidc && filled(oidc.providerId) && filled(oidc.clientId) && filled(oidc.clientSecret) && endpoints ? { oidc } : {}),
   };
