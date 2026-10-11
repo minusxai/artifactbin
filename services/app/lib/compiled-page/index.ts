@@ -31,6 +31,6 @@ export { agentDiscovery, agentDiscoveryHead, withAgentDiscoveryTail } from './ag
 
 // ---- Build storage: the shared build, the per-document modules and their binding to the build.
 export { loadCompilerBuild } from './build.server';
-export { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore } from './modules.server';
+export { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, STYLESHEET_PATH, stylesheetStore } from './modules.server';
 export { archiveSharedBuild, retainedBuild, retainedIslandFile } from './shared-builds.server';
 export { bindModule, bindModuleCode, unresolvedSpecifiers } from './runtime-binding';

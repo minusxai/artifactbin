@@ -296,6 +296,22 @@ export async function compileStoryCss(story: string | null | undefined, _force?:
   return result;
 }
 
+/**
+ * The compile of the recipe union alone: the part of every document's sheet that is the same bytes for all of
+ * them (lib/page-styles/story-css-split). Once per compile environment.
+ */
+// eslint-disable-next-line no-restricted-syntax -- process-lifetime memo of one compile, keyed by its environment version; no per-request scope
+let unionMemo: { version: string; css: Promise<string> } | null = null;
+export function unionStoryCss(): Promise<string> {
+  const version = storyCssCompileVersion();
+  if (unionMemo?.version !== version) {
+    const css = compileStoryCssUncached('').then((compiled) => compiled ?? '');
+    css.catch(() => { if (unionMemo?.css === css) unionMemo = null; });
+    unionMemo = { version, css };
+  }
+  return unionMemo.css;
+}
+
 async function compileStoryCssUncached(story: string): Promise<string | null> {
   // EVERY compiled story gets the shadcn token layer + the registry recipe classes unioned in:
   // component chrome classes never appear in story markup, and the compiled sheet is the

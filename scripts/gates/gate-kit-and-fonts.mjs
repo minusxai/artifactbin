@@ -180,7 +180,9 @@ try {
     await p.waitForTimeout(2500);
     check(reqs.length > 0, `the font is actually fetched (${reqs.length} request)`);
     check(reqs.every((u) => u.endsWith('.woff2')), 'and nothing requests a .ttf');
-    const docReqs = new Set(reqs.filter((u) => new URL(u).origin !== APP_ORIGIN && isDocFont(u)).map((u) => new URL(u).pathname));
+    // The document's faces are declared by the shared sheet it links from the app's origin (lib/publish/prepared/linked-sheets.server),
+    // so they are fetched from there: the document's files are the ones its own head names, wherever they are served from.
+    const docReqs = new Set(reqs.filter((u) => isDocFont(u)).map((u) => new URL(u).pathname));
     check(docReqs.size === 2, `and exactly the document's display and body files are needed (${docReqs.size})`);
     const inside = await docFrame.evaluate(async (docFonts) => {
       await document.fonts.ready;
@@ -463,7 +465,8 @@ try {
     const allowed = closure([manifest.manifest['@mx/page']]);
     // The owner's app page attaches to the frame for comments, which loads `@mx/frame-editor` and its lazy chunks.
     const frameEditor = (p) => closure([manifest.manifest['@mx/frame-editor']]).has(p) || p.startsWith('/islands/frame-editor-chunk-');
-    const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !allowed.has(p) && !frameEditor(p));
+    // The shared document stylesheets (/islands/c/<sha>.css, lib/page-styles/story-css-split) are CSS on the app's origin, not island code.
+    const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !p.startsWith('/islands/c/') && !allowed.has(p) && !frameEditor(p));
     check(extra.length === 0, `a prose document never fetches the chart chunk (island files beyond its page behaviour: ${extra.join(', ') || 'none'})`);
     await prosePage.close();
   });

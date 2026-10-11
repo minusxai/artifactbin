@@ -2,7 +2,7 @@
 import { Show, createUniqueId, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { useIsland } from '../context';
-import { STORY_ROOT_SELECTOR, type IslandContext } from '../contract';
+import { LINKED_BASE_SELECTOR, STORY_ROOT_SELECTOR, type IslandContext } from '../contract';
 
 export function overlayDestination(island: IslandContext, anchor?: HTMLElement): HTMLElement | null {
   if (typeof document === 'undefined') return null;
@@ -10,7 +10,7 @@ export function overlayDestination(island: IslandContext, anchor?: HTMLElement):
   // a story-root portal remains behind the modal regardless of its z-index.
   // Inside the story root, the overlay inherits the story's font and theme, not the app shell's.
   const story = document.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
-  return anchor?.closest<HTMLElement>('dialog[open]') ?? (story && document.querySelector('style[data-mx-story-css], style[data-mx-tw]')
+  return anchor?.closest<HTMLElement>('dialog[open]') ?? (story && (document.querySelector('style[data-mx-story-css], style[data-mx-tw]') || document.querySelector(LINKED_BASE_SELECTOR))
     ? story : island.trustedPortal());
 }
 

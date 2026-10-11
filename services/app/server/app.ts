@@ -23,7 +23,7 @@ import {
   agentDiscovery, agentDiscoveryHead, archiveSharedBuild, bindModule, createModuleStore,
   createSpeculationRulesStore, createTemplateResourceStore, loadCompilerBuild, READER_MODE_HEADER,
   retainedBuild, retainedIslandFile, SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH,
-  TEMPLATE_RESOURCE_PATH, withAgentDiscoveryTail,
+  STYLESHEET_PATH, stylesheetStore, TEMPLATE_RESOURCE_PATH, withAgentDiscoveryTail,
 } from '@/lib/compiled-page';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -554,6 +554,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   });
   const islandModules = createModuleStore();
   const islandTemplates = createTemplateResourceStore();
+  const islandStylesheets = stylesheetStore();
   const speculationRules = createSpeculationRulesStore();
   /*
    * Brotli like every other text response (the precompressed /islands chunks, the pages): these bytes
@@ -613,6 +614,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
     const bytes = sha ? await islandTemplates.get(sha) : null;
     return bytes ? islandFile(c, `t/${sha}`, bytes, 'application/json; charset=utf-8') : c.notFound();
+  });
+  // The shared document stylesheets: one URL per text for every document (lib/page-styles/linked-sheets.server).
+  app.on(['GET', 'HEAD'], `${STYLESHEET_PATH}/:file`, async (c) => {
+    const sha = /^([0-9a-f]{16})\.css$/.exec(c.req.param('file'))?.[1];
+    const bytes = sha ? await islandStylesheets.get(sha) : null;
+    return bytes ? islandFile(c, `c/${sha}`, bytes, 'text/css; charset=utf-8') : c.notFound();
   });
   app.on(['GET', 'HEAD'], `${SPECULATION_RULES_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
