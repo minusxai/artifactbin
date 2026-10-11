@@ -21,7 +21,7 @@
 import type { JsxNode } from '@/lib/jsx';
 import type { CompiledDataflow, CompiledReads, Scalar, RefDataMap } from '@/lib/dataflow';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { OutlineEntry } from '@/lib/story-runtime';
+import type { OutlineEntry } from '@/lib/reader-chrome';
 import type { DrawnChart, ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { AgentDiscovery } from './agent-discovery';

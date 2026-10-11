@@ -17,7 +17,7 @@
  *      and from listed browser-bundled code also through listed leaves; browserLeavesOnly rows (lib/islands,
  *      lib/document) are stricter (server code uses an entry, browser code a leaf). Browser-bundled code may
  *      always import TYPES from an entry: types are erased, so a type-only import cannot change a bundle.
- *      A serverOnly entry (lib/story-runtime's index) is refused to every row's browser importers for
+ *      A serverOnly entry (lib/reader-chrome's index) is refused to every row's browser importers for
  *      values. A new deep import is a reviewed edit to the table, and every listed entry and leaf must
  *      still be imported, so the lists only shrink;
  *   5. the CLI's source (services/cli/src) imports app code only through lib/cli-toolkit's entries
@@ -64,12 +64,12 @@ const ISLANDS_BROWSER_LEAVES = [
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
 /*
- * lib/story-runtime's doors: its index (serverOnly: the compile-time reader chrome; the outline pulls in markdown),
- * contract, story-fragment and the four lazy edit/ chunks. Re-export entries grow the island chunks (measured in row
- * 40.2: esbuild reaches every file an entry re-exports), so browser-bundled code imports values from the listed leaf
- * files instead.
+ * lib/story-runtime's doors: contract, story-fragment and the four lazy edit/ chunks. It has no index: the
+ * compile-time reader chrome is lib/reader-chrome's, whose index is serverOnly (the outline pulls in markdown).
+ * Re-export entries grow the island chunks (measured in row 40.2: esbuild reaches every file an entry re-exports),
+ * so browser-bundled code imports values from the listed leaf files instead.
  */
-const STORY_RUNTIME_ENTRIES = ['', 'contract', 'story-fragment', 'edit/annotate', 'edit/dom-mounter', 'edit/selection-actions', 'edit/session'];
+const STORY_RUNTIME_ENTRIES = ['contract', 'story-fragment', 'edit/annotate', 'edit/dom-mounter', 'edit/selection-actions', 'edit/session'];
 const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/web/',
@@ -193,7 +193,8 @@ export const DEEP_MODULES = {
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: ['', 'table'], serverOnly: ['', 'table'] },
   'lib/document-data': { entries: [''], serverOnly: [''] },
-  'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, serverOnly: [''], browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
+  'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
+  'lib/reader-chrome': { entries: ['', 'outline-view', 'script-mount', 'slides'], serverOnly: [''] },
   'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },

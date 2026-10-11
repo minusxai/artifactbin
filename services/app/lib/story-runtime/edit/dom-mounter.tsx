@@ -13,9 +13,9 @@ import type { StoryLayoutRect } from '@/lib/edit-protocol';
 import { FlowEditor } from './FlowEditor';
 import { flushFlowView, repathFlowView } from '@/lib/editor-engine/flow-view';
 import { GridEdit, type GridTile } from './GridEdit';
-import { discoverSlides } from '@/lib/story-runtime/slides';
+import { discoverSlides } from '@/lib/reader-chrome/slides';
 import { AST_PATH_ATTR as AST_PATH } from '@/lib/story-ui/ast-path';
-import { isScriptComponent, MOUNT_ATTR } from '@/lib/story-runtime/script-mount';
+import { isScriptComponent, MOUNT_ATTR } from '@/lib/reader-chrome/script-mount';
 
 export interface CompiledEditCallbacks {
   onFlow(path: string, expected: string, replacement: string, group?: string, selection?: EditorSelectionChange): void;

@@ -30,7 +30,7 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
 import { SOURCE_NODE_ID_ATTR } from '@/lib/story-ui/ast-path';
 import { STORY_SVG_TAGS } from '@/lib/jsx/component-names';
-import { discoverOutline, discoverSlides, hasOutline, isScriptComponent, MIN_SLIDES_FOR_RAIL, MOUNT_ATTR } from '@/lib/story-runtime';
+import { discoverOutline, discoverSlides, hasOutline, isScriptComponent, MIN_SLIDES_FOR_RAIL, MOUNT_ATTR } from '@/lib/reader-chrome';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
 import { buildGlyphMap } from '@/lib/story-ui/icon-glyphs.server';

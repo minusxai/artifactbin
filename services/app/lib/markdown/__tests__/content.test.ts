@@ -3,7 +3,7 @@ import { parseJsx, serializeJsx } from '@/lib/jsx';
 import { validateMarkupStructure } from '@/lib/document/local-validation';
 import { markdownContent, markdownSource } from '../content';
 import { generate } from '@/lib/compiled-page/compiler';
-import { discoverOutline } from '@/lib/story-runtime/outline';
+import { discoverOutline } from '@/lib/reader-chrome/outline';
 import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { displayTitle } from '@/lib/document/title';
 

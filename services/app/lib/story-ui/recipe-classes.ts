@@ -163,7 +163,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "@/lib/page-store/page-bindings",
   "@/lib/page-store/store",
   "@/lib/platform/config",
-  "@/lib/story-runtime",
+  "@/lib/reader-chrome",
   "@/lib/story-runtime/contract",
   "@/lib/story-ui/ast-path",
   "@/lib/story-ui/data-table",

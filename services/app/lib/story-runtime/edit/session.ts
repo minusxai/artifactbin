@@ -18,7 +18,7 @@ import type { JsxNode } from '@/lib/jsx';
 import { createMarkdownRegions } from './markdown-regions';
 import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-engine/bookmark';
 import { flushFlowView } from '@/lib/editor-engine/flow-view';
-import { syncDocumentOutline } from '../outline-view';
+import { syncDocumentOutline } from '@/lib/reader-chrome/outline-view';
 import { toggleInline, pasteFragment } from '@/lib/editor-engine/model';
 import { clipboardAst } from '@/lib/editor-engine/clipboard';
 import { SELECTION_PRESENTATION } from '@/lib/editor-engine/selection-presentation';
