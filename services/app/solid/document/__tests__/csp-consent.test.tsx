@@ -24,6 +24,13 @@ it('says what the document asks this reader for, in hosts, leaving out the hosts
     .toBe('This document wants to load styles and fonts from fonts.example.com, play media from media.example.com and embed pages from www.youtube-nocookie.com');
 });
 
+it('draws its choices with the shared button, at toolbar density', () => {
+  const view = render(() => <CspConsentBar id="abc123" request={ASK} accountSession />);
+  for (const name of ['Allow once', 'Always for this document', 'Never']) {
+    expect(view.getByRole('button', { name })).toHaveClass('h-control-sm', 'rounded-control', 'bg-surface');
+  }
+});
+
 it('Allow once grants for the session and reloads the document', async () => {
   const fetcher = reply(ALLOWED);
   vi.stubGlobal('fetch', fetcher);
