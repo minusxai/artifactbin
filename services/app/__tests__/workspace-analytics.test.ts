@@ -11,6 +11,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { trackEvent } from '@/lib/platform';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { dailyViewsByUser, eventsTablePresent, forkCountByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
+import { forgetEventsTable } from '@/lib/workspace/analytics';
 import { setServices } from '@/lib/platform';
 
 const harness = useAppHarness();
@@ -43,6 +44,8 @@ beforeEach(async () => {
   requestHeaders.clear();
   const db = await harness.db();
   await db.query(`DROP SCHEMA IF EXISTS ${EVENTS_SCHEMA} CASCADE`);
+  // The events table is asked about once per database; this file drops it under a live handle.
+  forgetEventsTable();
 });
 
 describe('the dashboard reads the log', () => {

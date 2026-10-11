@@ -37,7 +37,7 @@ const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch {
  * caller. Even `meta` is narrowed: compiled CSS, image placeholders and
  * object-store keys belong to an individual artifact read, not discovery.
  */
-const SUMMARY_META_FIELDS = {
+export const SUMMARY_META_FIELDS = {
   markup: ['theme', 'template', 'colorMode', 'refs'],
   dataset: ['columns', 'rowCount', 'totalRows', 'truncated'],
   viz: ['slots'],
