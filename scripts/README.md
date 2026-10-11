@@ -42,6 +42,7 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 |---|---|---|
 | `scripts/ci/check-local.mjs` | The FAST checks: `validate` (names, types, module graph) and `test` (affected tests). | `npm run validate`, `npm test`, `ci.yml` |
 | `scripts/ci/check-residual-names.mjs` | Refuse retired product names outside the allowlist. | `check-local.mjs validate` |
+| `scripts/ci/check-ui-primitives.mjs` | Refuse controls, overlays and one-off styles drawn outside `services/app/solid/ui`; ratchets `ui-primitives-allowlist.json`. | `check-local.mjs validate` |
 | `scripts/ci/module-graph.mjs` | Refuse import cycles and layer violations between modules. | `check-local.mjs validate` |
 | `scripts/ci/test-changed.mjs` | Discover the affected Vitest and CLI tests, enforce the 50-file budget, run them. | `check-local.mjs test` |
 
