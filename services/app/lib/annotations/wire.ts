@@ -25,8 +25,10 @@ import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor,
  * second call and no second concept exist on the read side.
  */
 export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string) {
-  const wire = await artifactToWire(row, base, await openAnnotationsFor(row));
-  return row.format === 'markup' || row.format === 'folder' ? { ...wire, annotations: await annotationsWireForRow(row) } : wire;
+  if (row.format !== 'markup' && row.format !== 'folder') return artifactToWire(row, base, 0);
+  // The count and the threads are independent reads.
+  const [open, annotations] = await Promise.all([countOpenAnnotations(row.id), annotationsWireForRow(row)]);
+  return { ...await artifactToWire(row, base, open), annotations };
 }
 
 /** Any artifact read above lib/artifacts: the wire row with its open-thread count. */

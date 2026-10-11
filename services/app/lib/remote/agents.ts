@@ -2,7 +2,7 @@ import {services} from '../platform/services';
 import {managedTerminalView,managedTerminalInput,stopManagedTerminal} from './managed-terminal';
 import {managedRunRosterStatus} from './managed-status';
 import {externalHostedProofHash} from './hosted-proof';
-import {hostedStatusSnapshot,refreshHostedStatus,hostedRemoteAgent} from './hosted-interface';
+import {hostedStatusFresh,hostedStatusSnapshot,refreshHostedStatus,hostedRemoteAgent} from './hosted-interface';
 import {isTerminalFeedback} from './terminal-input';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import {createHash,randomUUID} from 'node:crypto';
@@ -227,12 +227,26 @@ export class RemoteAgents {
   }
  }
  async refreshWorkStatus(artifactId:string){
+  // Nothing to ask without a hosted agent, and nothing to wait for while its snapshot is fresh.
+  if(!hostedRemoteAgent()?.status)return;
   const db=await getDb();const owners=(await db.query<{owner:string}>("SELECT DISTINCT owner FROM remote_work WHERE artifact_id=$1",[artifactId])).rows;
-  await Promise.all(owners.map(({owner})=>refreshHostedStatus(owner)));
+  await Promise.all(owners.filter(({owner})=>!hostedStatusFresh(owner)).map(({owner})=>refreshHostedStatus(owner)));
  }
+ /** One thread's remote work. */
  async work(tx:Queryable,artifactId:string,threadId:string):Promise<RemoteWork[]>{
-  const rows=(await tx.query<WorkRow>("SELECT w.*,a.info AS agent_info,a.active,(a.seen_at>now()-interval '30 seconds') AS connected FROM remote_work w LEFT JOIN remote_agents a ON a.id=w.session_id AND a.owner=w.owner WHERE artifact_id=$1 AND thread_id=$2 ORDER BY seq",[artifactId,threadId])).rows;
-  return rows.map(r=>({id:r.id,sessionId:r.session_id,artifactId:r.artifact_id,threadId:r.thread_id,commentId:r.comment_id,name:r.data.name,color:r.data.color,phase:r.phase,updatedAt:r.updated_at,...(r.data.reason?{reason:r.data.reason}:{}),activity:hostedStatusSnapshot(r.owner,r.session_id)?.activity??r.agent_info?.activity,connection:hostedStatusSnapshot(r.owner,r.session_id)!==undefined?(hostedStatusSnapshot(r.owner,r.session_id)?.online?'online':'offline'):r.active?(r.connected?'online':'offline'):'stopped'}));
+  return (await this.workFor(tx,artifactId,[threadId])).get(threadId)??[];
+ }
+ /** The remote work of many threads in ONE statement, keyed by thread id; threads without work are absent. */
+ async workFor(tx:Queryable,artifactId:string,threadIds:string[]):Promise<Map<string,RemoteWork[]>>{
+  const byThread=new Map<string,RemoteWork[]>();
+  if(!threadIds.length)return byThread;
+  const rows=(await tx.query<WorkRow>("SELECT w.*,a.info AS agent_info,a.active,(a.seen_at>now()-interval '30 seconds') AS connected FROM remote_work w LEFT JOIN remote_agents a ON a.id=w.session_id AND a.owner=w.owner WHERE artifact_id=$1 AND thread_id=ANY($2::text[]) ORDER BY seq",[artifactId,threadIds])).rows;
+  for(const r of rows){
+   const hosted=hostedStatusSnapshot(r.owner,r.session_id);
+   const work:RemoteWork={id:r.id,sessionId:r.session_id,artifactId:r.artifact_id,threadId:r.thread_id,commentId:r.comment_id,name:r.data.name,color:r.data.color,phase:r.phase,updatedAt:r.updated_at,...(r.data.reason?{reason:r.data.reason}:{}),activity:hosted?.activity??r.agent_info?.activity,connection:hosted!==undefined?(hosted?.online?'online':'offline'):r.active?(r.connected?'online':'offline'):'stopped'};
+   const list=byThread.get(r.thread_id);if(list)list.push(work);else byThread.set(r.thread_id,[work]);
+  }
+  return byThread;
  }
  async receipt(tx:Queryable,owner:string|null|undefined,artifactId:string,threadId:string,receipt:ReviewReceipt,resolve:boolean){
   if(!owner)throw new RemoteError('Account required',403);

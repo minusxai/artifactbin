@@ -15,8 +15,11 @@ export async function refreshHostedStatus(owner:string):Promise<void>{
  try{session=await agent.status(owner);}catch{/* An unreachable agent is not online. */}
  if(hosted===agent)snapshots.set(owner,{agent,session,at:Date.now()});
 }
+const SNAPSHOT_TTL_MS=30000;
+const fresh=(owner:string):{session:RemoteSessionInfo|null}|undefined=>{const item=snapshots.get(owner);return item&&item.agent===hosted&&Date.now()-item.at<SNAPSHOT_TTL_MS?item:undefined;};
+/** Whether this owner's snapshot is still current — a caller that holds one never waits on `refreshHostedStatus`. */
+export const hostedStatusFresh=(owner:string):boolean=>!!hosted?.status&&!!fresh(owner);
 export function hostedStatusSnapshot(owner:string,id:string):RemoteSessionInfo|null|undefined{
  const agent=hosted;if(!agent?.status||!agent.owns(owner,id))return undefined;
- const item=snapshots.get(owner);
- return item?.agent===agent&&Date.now()-item.at<30000?item.session:null;
+ return fresh(owner)?.session??null;
 }
