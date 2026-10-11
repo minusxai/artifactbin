@@ -1,4 +1,3 @@
-import { FORM_SECONDARY_BUTTON } from '../ui/FormControls';
 /* @jsxImportSource solid-js */
 /**
  * THE DATA TIERS' PAGE — `/a/<id>` (and its pretty alias) for an image, a pdf, a stored file, a viz
@@ -141,9 +140,9 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
           <p class="font-sans text-xs text-muted" aria-label={format === 'pdf' ? 'PDF summary' : 'File summary'}>
             {format === 'pdf' ? 'PDF' : 'File'}{surface.bytes ? ` · ${formatFileSize(surface.bytes)}` : ''}{surface.pages ? ` · ${surface.pages} page${surface.pages === 1 ? '' : 's'}` : ''}
           </p>
-          <a aria-label={format === 'pdf' ? 'Open the PDF' : 'Download file'} href={rawUrl()} target="_blank" rel="noopener noreferrer" class={`${FORM_SECONDARY_BUTTON} ml-auto max-w-full break-words`}>
-            {format === 'pdf' ? 'Open' : 'Download'} {title()}
-          </a>
+          <Button variant="secondary" aria-label={format === 'pdf' ? 'Open the PDF' : 'Download file'} href={rawUrl()} target="_blank" rel="noopener noreferrer" class="ml-auto max-w-full">
+            <span class="truncate">{format === 'pdf' ? 'Open' : 'Download'} {title()}</span>
+          </Button>
         </Panel>
         {/* A file with no viewer (a zip, a spreadsheet) is the card above and nothing else. */}
         <Show when={fileKindOf(fileName()) !== 'other' && rawKey()} keyed>{(_version) => <div class="mt-4">
@@ -182,7 +181,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
     <Show when={!capture} fallback={<main class="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">{preview}</main>}>
       <WorkspaceShell>
         <AssetWorkspace workspace={format === 'dataset' ? 'Dataset' : 'Asset'} tabs={format === 'dataset' ? ['data', 'actions', 'sharing'] : ['asset', 'sharing']} active={section()} onSelect={setSection}
-          actions={<Show when={format === 'dataset' && canEdit()}><a href={`/a/${id}/edit`} aria-label="Edit dataset" class={FORM_SECONDARY_BUTTON}>Edit dataset</a></Show>}>
+          actions={<Show when={format === 'dataset' && canEdit()}><Button variant="secondary" href={`/a/${id}/edit`} aria-label="Edit dataset">Edit dataset</Button></Show>}>
           <div hidden={section() !== 'data' && section() !== 'asset'}>{preview}</div>
           <Show when={format === 'dataset' && section() === 'actions'}><DatasetActionsView id={id} canInspect={canEdit()} kind={catalog()?.kind} /></Show>
           <Show when={section() === 'sharing'}>

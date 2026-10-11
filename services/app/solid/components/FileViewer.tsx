@@ -12,6 +12,7 @@ import { createEffect, createResource, createSignal, onCleanup, Show, Switch, Ma
 import { Dynamic } from 'solid-js/web';
 import { Box, Download, File as FileIcon, FileArchive, FileSpreadsheet } from 'lucide-solid';
 import ModelPreview from './ModelPreview';
+import { Button } from '../ui/Button';
 import { formatFileSize } from '@/lib/islands/file-display';
 
 type FileKind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'font' | 'model' | 'other';
@@ -23,8 +24,6 @@ const KIND_BY_EXTENSION: Record<string, FileKind> = {
   woff: 'font', woff2: 'font', ttf: 'font', otf: 'font', glb: 'model',
 };
 const TEXT_PREVIEW_BYTES = 8_000;
-/** The Download link's look: a link styled as a button, which solid/ui has no primitive for yet. */
-const FILE_ACTION = 'inline-flex cursor-pointer items-center gap-1.5 rounded-chip border px-3 py-1.5 font-mono text-xs no-underline transition-colors';
 export const extensionOf = (name: string) => { const dot = name.lastIndexOf('.'); return dot <= 0 ? '' : name.slice(dot + 1).toLowerCase(); };
 export const fileKindOf = (name: string): FileKind => KIND_BY_EXTENSION[extensionOf(name)] ?? 'other';
 
@@ -77,9 +76,8 @@ export function FileViewer(props: FileViewerProps): JSX.Element {
   const download = () => props.downloadUrl ?? props.url;
   return <Switch fallback={<DownloadCard name={props.name} size={props.size} url={download()} note="no preview for this type" />}>
     <Match when={kind() === 'image'}><img src={props.url} alt={props.name} class={`${height()} max-w-full rounded-lg border border-edge`} /></Match>
-    {/* The iframe's `title` names the frame for assistive tech; it is not a tooltip. */}
     <Match when={kind() === 'pdf'}><Show when={props.pdfUrl} fallback={<DownloadCard name={props.name} size={props.size} url={download()} note="previews once uploaded" />}>
-      {(stored) => <iframe src={stored()} title={props.name} class={`${props.tall ? 'h-[80vh]' : 'h-[32rem]'} w-full rounded-lg border border-edge bg-surface`} />}
+      {(stored) => <iframe src={stored()} aria-label={props.name} class={`${props.tall ? 'h-[80vh]' : 'h-[32rem]'} w-full rounded-lg border border-edge bg-surface`} />}
     </Show></Match>
     <Match when={kind() === 'video'}><video src={props.url} controls aria-label={props.name} class={`${height()} w-full rounded-lg border border-edge bg-code`} /></Match>
     <Match when={kind() === 'audio'}><audio src={props.url} controls aria-label={props.name} class="w-full" /></Match>
@@ -125,6 +123,6 @@ function DownloadCard(props: { name: string; size: number; url: string; note: st
   return <div aria-label={`File summary of ${props.name}`} class="flex items-center gap-4 rounded-lg border border-edge bg-raised/40 p-5">
     <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-edge bg-surface text-accent"><Dynamic component={Icon()} aria-hidden="true" size={26} strokeWidth={1.5} /></span>
     <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium text-fg">{props.name}</p><p class="mt-0.5 text-xs text-muted">.{extension()} · {formatFileSize(props.size)} · {props.note}</p></div>
-    <a href={props.url} download={props.name} aria-label={`Download ${props.name}`} class={`${FILE_ACTION} border-edge-bright text-fg hover:border-accent hover:text-accent`}><Download aria-hidden="true" size={13} />Download</a>
+    <Button variant="secondary" size="sm" href={props.url} download={props.name} aria-label={`Download ${props.name}`}><Download aria-hidden="true" size={13} />Download</Button>
   </div>;
 }

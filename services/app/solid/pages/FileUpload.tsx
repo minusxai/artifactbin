@@ -1,4 +1,3 @@
-import { FORM_PRIMARY_BUTTON } from '../ui/FormControls';
 /* @jsxImportSource solid-js */
 import { creationDestination } from '../lib/creation-destination';
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
@@ -7,6 +6,7 @@ import { Check, Copy, FileUp } from 'lucide-solid';
 import AssetPageHeader from '../components/AssetPageHeader';
 import { FileViewer, extensionOf } from '../components/FileViewer';
 import { Button } from '../ui/Button';
+import { DropZone } from '../ui/DropZone';
 import { Field, Input } from '../ui/Field';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
@@ -35,7 +35,6 @@ export function FileUploadPage(): JSX.Element {
   const [error, setError] = createSignal('');
   const [result, setResult] = createSignal<{ id: string } | null>(null);
   const [copied, setCopied] = createSignal(false);
-  const [dragging, setDragging] = createSignal(false);
   createEffect(() => { const url = picked()?.url; if (url) onCleanup(() => URL.revokeObjectURL(url)); });
 
   const pick = async (file: File) => {
@@ -75,29 +74,22 @@ export function FileUploadPage(): JSX.Element {
     } finally { setBusy(false); }
   };
   const reset = () => { setPicked(null); setTitle(''); setResult(null); setError(''); setCopied(false); };
-  const onDrop: JSX.EventHandlerUnion<HTMLButtonElement, DragEvent> = (event) => {
-    event.preventDefault(); setDragging(false);
-    const file = event.dataTransfer?.files?.[0];
-    if (file) void pick(file);
-  };
   return <Show when={!session()?.user && session()} fallback={
     <main class="workspace-page">
       <AssetPageHeader icon={FileUp} eyebrow="Asset upload" title="Upload a file" link={{ href: '/assets', label: 'Back to assets', text: 'all assets' }} />
       <div class="mx-auto max-w-4xl space-y-6"><Panel label="Upload a file" padding="sm">
-        <input ref={input} type="file" accept={ACCEPT} aria-label="Choose a file" hidden
-          onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void pick(file); }} />
-        <Show when={picked()} fallback={<button type="button" onClick={() => input.click()}
-          onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}
-          class={`flex h-56 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed transition-colors ${dragging() ? 'border-accent bg-accent-soft' : 'border-edge-bright bg-raised/40 hover:border-accent'}`}>
-          <FileUp aria-hidden="true" size={24} strokeWidth={1.6} class="text-accent" />
-          <span class="px-4 text-center text-base font-medium text-fg">Drop a file here, or click to choose one</span>
-          <span class="px-4 text-center text-sm text-muted">Images, pdf, video, audio, text, fonts and glb models</span>
-        </button>}>
+        <Show when={picked()} fallback={<DropZone label="Choose a file" accept={ACCEPT} icon={() => <FileUp size={24} strokeWidth={1.6} />}
+          title="Drop a file here, or click to choose one" hint="Images, pdf, video, audio, text, fonts and glb models" onFiles={([file]) => { if (file) void pick(file); }} />}>
           {(selected) => <>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span class="min-w-0 truncate font-medium text-fg">{selected().file.name}</span>
               <span class="text-xs text-muted">{formatFileSize(selected().file.size)}</span>
-              <Show when={!result()}><Button variant="secondary" size="sm" type="button" onClick={() => input.click()} class="ml-auto">choose another</Button></Show>
+              <Show when={!result()}>
+                {/* DropZone owns its picker and offers no way to reopen it from outside, so re-picking keeps this one hidden input. */}
+                <input ref={input} type="file" accept={ACCEPT} aria-label="Choose another file" hidden
+                  onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void pick(file); }} />
+                <Button variant="secondary" size="sm" type="button" onClick={() => input.click()} class="ml-auto">choose another</Button>
+              </Show>
             </div>
             <div class="mt-4"><FileViewer name={selected().file.name} size={selected().file.size} url={selected().url} blob={selected().file} pdfUrl={result() ? `/a/${result()!.id}/raw` : null} downloadUrl={result() ? `/a/${result()!.id}/raw` : undefined} /></div>
             <Show when={result()} fallback={<div class="mt-5 flex flex-wrap items-end gap-3">
@@ -116,7 +108,7 @@ export function FileUploadPage(): JSX.Element {
                   </Button>
                 </div>
                 <div class="mt-4 grid gap-2 sm:grid-cols-2">
-                  <a href={`/a/${uploaded().id}`} aria-label="Open artifact" class={FORM_PRIMARY_BUTTON}>Open artifact →</a>
+                  <Button href={`/a/${uploaded().id}`} aria-label="Open artifact">Open artifact →</Button>
                   <Button variant="secondary" type="button" onClick={reset}>Upload another</Button>
                 </div>
               </Panel>}

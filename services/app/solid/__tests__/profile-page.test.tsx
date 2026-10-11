@@ -33,7 +33,7 @@ it.each(['/@cee', '/@cee/'])('renders the public profile at %s, filters its shel
   expect(screen.getByRole('link', { name: 'Open First note' })).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Open folder Reports' }).querySelector('svg')).toBeTruthy();
   expect(screen.queryByRole('link', { name: 'Open Asset' })).toBeNull();
-  fireEvent.input(screen.getByRole('textbox', { name: 'Search artifacts' }), { target: { value: 'second' } });
+  fireEvent.input(screen.getByRole('searchbox', { name: 'Search artifacts' }), { target: { value: 'second' } });
   expect(screen.queryByRole('link', { name: 'Open First note' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Open Second note' })).toBeInTheDocument();
   expect(calls).toContain('POST /api/users/owner/follow');

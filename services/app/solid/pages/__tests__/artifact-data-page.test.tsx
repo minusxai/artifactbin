@@ -48,7 +48,8 @@ const open = (data: DataAnswer) => {
   window.history.replaceState(null, '', `/a/${data.surface.id}`);
   return render(() => <InboxProvider><Router><Route path="/a/:id" component={() => <ArtifactDataPage answer={data} />} /></Router></InboxProvider>);
 };
-const controls = () => { fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' })); return within(screen.getByLabelText('Artifact controls')); };
+// The panel loads on first open (components/PageChromePanels), so it is awaited.
+const controls = async () => { fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' })); return within(await screen.findByLabelText('Artifact controls')); };
 
 it('draws an image from its raw address under the app bar, titled and forkable', () => {
   open(answer('image'));
@@ -73,7 +74,7 @@ it('summarizes a pdf and a stored file with the link that opens them', () => {
 
 it('opens a stored file in the viewer its extension picks, reading the bytes from its raw address', async () => {
   open(answer('pdf', { bytes: 1100, pages: 3, title: 'Quarterly review' }));
-  expect(screen.getByTitle('Quarterly review.pdf')).toHaveAttribute('src', '/a/art001/raw');
+  expect(screen.getByLabelText('Quarterly review.pdf')).toHaveAttribute('src', '/a/art001/raw');
   cleanup();
   open(answer('file', { bytes: 120, filename: 'clip.mp4', title: 'clip' }));
   expect(screen.getByLabelText('clip.mp4').tagName).toBe('VIDEO');
@@ -105,23 +106,23 @@ it('explores a catalogued dataset, and the owner may edit it and copy its refere
   open(answer('dataset', { catalog: catalog() }, 'owner'));
   await waitFor(() => expect(screen.getByLabelText('Dataset catalog')).toBeInTheDocument());
   expect(screen.getByLabelText('Edit dataset')).toBeInTheDocument();
-  const panel = controls();
+  const panel = await controls();
   fireEvent.click(panel.getByRole('button', { name: 'Copy dataset reference' }));
   expect(writeText).toHaveBeenCalledWith(datasetQuerySnippet('art001', catalog()));
   expect(panel.getByRole('button', { name: 'Copy dataset reference' })).toHaveTextContent('copied dataset reference');
   expect(within(panel.getByLabelText('Owner actions')).queryByRole('button', { name: 'Share' })).toBeNull();
 });
 
-it('keeps the owner affordances from readers and hands an editor sharing without ownership', () => {
+it('keeps the owner affordances from readers and hands an editor sharing without ownership', async () => {
   open(answer('image', { author: { username: 'cee', forkedFrom: { label: '@bob/original', href: '/a/orig01' } } }));
-  let panel = controls();
+  let panel = await controls();
   expect(panel.getByRole('link', { name: 'Open the artifact this was forked from' })).toHaveAttribute('href', '/a/orig01');
   expect(panel.queryByLabelText('Owner actions')).toBeNull();
   expect(panel.queryByRole('button', { name: 'Share' })).toBeNull();
   expect(panel.getByRole('group', { name: 'Color mode' })).toBeInTheDocument();
   cleanup();
   open(answer('dataset', { catalog: catalog() }, 'editor'));
-  panel = controls();
+  panel = await controls();
   expect(panel.queryByLabelText('Owner actions')).toBeNull();
   expect(panel.queryByRole('button', { name: 'Copy dataset reference' })).toBeNull();
   expect(panel.queryByRole('button', { name: 'Share' })).toBeNull();

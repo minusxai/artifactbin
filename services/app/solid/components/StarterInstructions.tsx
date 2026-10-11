@@ -5,6 +5,8 @@ import Copy from 'lucide-solid/icons/copy';
 import { existingPaste } from '@/lib/serving/agent-copy';
 import { ARTIFACT_STARTERS } from '@/lib/workspace/artifact-starters';
 import { copyText } from '../lib/copy-text';
+import { Button } from '../ui/Button';
+import { Textarea } from '../ui/Field';
 
 /**
  * First-party starter chrome. The paste is public, tokenless
@@ -30,16 +32,16 @@ export function StarterInstructions(props: { id: string; template?: string | nul
       <h1 class="text-2xl font-semibold tracking-tight">Your {typeName()} is ready for your agent!</h1>
       <p class="mt-2 text-sm text-muted">Copy this into your coding agent and tell it what to build.</p>
     </div>
-    <textarea ref={instructions} aria-label="Agent instructions" rows={8} spellcheck={false} value={prompt()}
+    <Textarea ref={instructions} size="sm" aria-label="Agent instructions" rows={8} spellcheck={false} value={prompt()}
       onInput={(event) => { setDraft(event.currentTarget.value); setState('idle'); fitInstructions(); }}
-      class="w-full resize-y rounded-md border border-edge bg-surface p-4 font-mono text-xs leading-relaxed text-muted focus:border-accent focus:outline-2 focus:outline-accent/30" />
+      class="resize-y" />
     <p class="-mt-2 font-sans text-xs text-muted">New to afbin? <a href={`${origin}/getting-started`} target="_blank" rel="noopener noreferrer" class="underline decoration-edge-bright underline-offset-4 hover:text-fg">Getting started</a></p>
-    <button type="button" aria-label="Copy agent instructions" disabled={!origin} onClick={() => void copy()} class="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-accent px-5 py-3 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50">
+    <Button aria-label="Copy agent instructions" disabled={!origin} onClick={() => void copy()} class="w-full">
       <Show when={state() === 'copied'} fallback={<Copy size={18} aria-hidden="true" />}><Check size={18} aria-hidden="true" /></Show>
       {state() === 'copied' ? 'Copied — paste into your agent' : 'Copy agent instructions'}
-    </button>
+    </Button>
     <Show when={props.onContinueBlank}>
-      <button type="button" disabled={props.converting} onClick={() => props.onContinueBlank?.()} class="min-h-12 w-full cursor-pointer rounded-md border border-edge bg-raised px-5 py-3 text-sm font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50">{props.converting ? 'Opening blank report…' : 'Continue with blank report'}</button>
+      <Button variant="secondary" disabled={props.converting} onClick={() => props.onContinueBlank?.()} class="w-full">{props.converting ? 'Opening blank report…' : 'Continue with blank report'}</Button>
     </Show>
     <Show when={props.conversionError}><p role="alert" class="text-sm text-muted">{props.conversionError}</p></Show>
     <p role="status" class="text-center text-sm text-muted">{state() === 'error' ? 'Could not copy. Select and copy the instructions above.' : 'Waiting for your agent…'}</p>

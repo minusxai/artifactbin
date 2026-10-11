@@ -31,8 +31,8 @@ export default function SharedWithYou(props: { items: WorkspaceSharedItem[]; que
       <div class="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">
         <SearchField size="sm" class="min-w-32 flex-1" label="Search shared artifacts" placeholder="search shared artifacts" value={query()} onValue={setQuery} />
         <Show when={formats().length >= 2 || roles().length >= 2}><span class="flex shrink-0 flex-wrap items-center gap-1.5 border-edge sm:ml-auto sm:border-l sm:pl-2">
-          <Show when={formats().length >= 2}><For each={formats()}>{format => <Button size="sm" variant={formatPicks().includes(format) ? 'secondary' : 'ghost'} aria-label={`Filter ${format}`} aria-pressed={formatPicks().includes(format)} onClick={() => toggle('format', format)}>{formatLabel(format)}</Button>}</For></Show>
-          <Show when={roles().length >= 2}><For each={roles()}>{role => <Button size="sm" variant={rolePicks().includes(role) ? 'secondary' : 'ghost'} aria-label={`Filter ${role}`} aria-pressed={rolePicks().includes(role)} onClick={() => toggle('role', role)}>{SHARE_ROLE_LABEL[role]}</Button>}</For></Show>
+          <Show when={formats().length >= 2}><For each={formats()}>{format => <Button size="sm" variant="ghost" aria-label={`Filter ${format}`} pressed={formatPicks().includes(format)} onClick={() => toggle('format', format)}>{formatLabel(format)}</Button>}</For></Show>
+          <Show when={roles().length >= 2}><For each={roles()}>{role => <Button size="sm" variant="ghost" aria-label={`Filter ${role}`} pressed={rolePicks().includes(role)} onClick={() => toggle('role', role)}>{SHARE_ROLE_LABEL[role]}</Button>}</For></Show>
         </span></Show>
         <Show when={filtering()}><span class="shrink-0 border-l border-edge pl-2 font-mono text-micro text-faint">{visible().length}/{props.items.length}</span></Show>
       </div>

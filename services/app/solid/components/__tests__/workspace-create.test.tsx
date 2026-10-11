@@ -12,7 +12,8 @@ function open() {
   render(() => <WorkspaceCreate parentId="folder1" onCreated={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'Create' }));
   fireEvent.click(screen.getByRole('menuitem', { name: 'Artifact' }));
-  return within(screen.getByRole('menu', { name: 'Artifact types' }));
+  // The submenu flyout is named by the item that opens it.
+  return within(screen.getByRole('menu', { name: 'Artifact' }));
 }
 
 it.each([
@@ -34,12 +35,15 @@ it.each([
   expect(screen.getByRole('menuitem', { name: label })).toBeEnabled();
 });
 
-it('keeps a failed creation in the menu for retry without navigating', async () => {
+it('reports a failed creation beside the button for retry without navigating', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'unavailable' }, { status: 503 })));
   fireEvent.click(open().getByRole('menuitem', { name: 'Blank document' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not create');
   expect(replaceDocument).not.toHaveBeenCalled();
   expect(openDocument).not.toHaveBeenCalled();
+  // Choosing an item closes the menu; reopening it offers the same item again.
+  fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Artifact' }));
   expect(screen.getByRole('menuitem', { name: 'Blank document' })).toBeEnabled();
 });
 

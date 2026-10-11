@@ -14,8 +14,6 @@ const FORMAT_COLORS: Record<string, string> = {
 const FORMAT_FALLBACK_COLOR = '#95a5a6';
 
 export const PAGE_COLUMN = 'mx-auto max-w-4xl px-4 sm:px-6';
-/** @deprecated → ui/Table's TableRow (tables) or ui/Panel's ListRow (lists). */
-export const TABLE_ROW = 'border-t border-edge hover:bg-raised transition-colors';
 export const LINK = 'text-accent no-underline hover:underline underline-offset-4';
 
 const TONES = {

@@ -24,5 +24,10 @@ export function DocumentTitle(props: { title: string }): JSX.Element {
 
 /** Capability content varies; controls panel geometry and dismiss action do not. */
 export function PageControlsPanel(props: { label: string; title: string; onClose: () => void; children: JSX.Element }): JSX.Element {
-  return <Panel label={props.label} padding="sm" class="fixed right-3 top-14 z-50 max-h-[80vh] w-72 max-w-[calc(100vw-24px)] overflow-auto font-sans text-sm shadow-xl"><div class="mb-3 flex items-center justify-between"><h1 class="text-sm font-semibold">{props.title}</h1><Button variant="ghost" size="sm" icon aria-label={`Dismiss ${props.title}`} onClick={props.onClose}><X size={15} /></Button></div>{props.children}</Panel>;
+  return <Panel label={props.label} padding="sm" class="fixed right-3 top-14 z-50 max-h-[80vh] w-72 max-w-[calc(100vw-24px)] overflow-auto font-sans text-sm shadow-xl"><PageControlsBody title={props.title} onClose={props.onClose}>{props.children}</PageControlsBody></Panel>;
+}
+
+/** The controls panel's content — its title, the dismiss button and the rows — whichever surface holds it. */
+export function PageControlsBody(props: { title: string; onClose: () => void; children: JSX.Element }): JSX.Element {
+  return <><div class="mb-3 flex items-center justify-between"><h1 class="text-sm font-semibold">{props.title}</h1><Button variant="ghost" size="sm" icon aria-label={`Dismiss ${props.title}`} onClick={props.onClose}><X size={15} /></Button></div>{props.children}</>;
 }

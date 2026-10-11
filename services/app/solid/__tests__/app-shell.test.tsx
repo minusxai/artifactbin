@@ -122,12 +122,12 @@ describe('Solid shell', () => {
     expect(screen.getByRole('navigation', { name: 'Current page' })).toHaveTextContent('trash');
     expect(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('link', { name: 'Trash' })).toHaveAttribute('aria-current', 'page');
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    const menu = screen.getByRole('navigation', { name: 'Menu' });
-    expect(menu).toHaveClass('right-3', 'top-14');
+    const menu = await screen.findByRole('navigation', { name: 'Menu' });
+    expect(menu).toHaveClass('right-3'); expect(menu.style.top).toBe('44px');
     expect(menu).not.toHaveClass('left-0', 'inset-y-0');
     expect(within(menu).getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications');
     fireEvent.click(screen.getByRole('button', { name: 'Open page controls' }));
-    expect(screen.getByRole('group', { name: 'Color mode' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Color mode' })).toBeInTheDocument();
   });
 
   it('opens the app menu as a phone bottom sheet and follows viewport changes', async () => {
@@ -136,12 +136,12 @@ describe('Solid shell', () => {
     render(() => <App />);
     await screen.findByRole('table');
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    const menu = screen.getByRole('navigation', { name: 'Menu' });
+    const menu = await screen.findByRole('navigation', { name: 'Menu' });
     expect(menu).toHaveClass('inset-x-0', 'bottom-0');
     expect(menu).not.toHaveClass('left-0', 'inset-y-0');
     vi.stubGlobal('innerWidth', 1280);
     fireEvent(window, new Event('resize'));
-    expect(menu).toHaveClass('right-3', 'top-14');
+    expect(menu).toHaveClass('right-3'); expect(menu.style.top).toBe('44px');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(menu).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus();
