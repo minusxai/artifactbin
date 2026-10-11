@@ -28,10 +28,12 @@ const PRESSED = {
 } as const;
 
 type ButtonVariant = keyof typeof VARIANT;
-type Look = { variant?: ButtonVariant; size?: ButtonSize; class?: string; pressed?: boolean | 'mixed' } & ({ icon?: false } | { icon: true; 'aria-label': string });
-type NativeButton = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, 'class'> & { href?: undefined; target?: never; rel?: never; download?: never };
+type Look = { variant?: ButtonVariant; size?: ButtonSize; class?: string; pressed?: boolean | 'mixed' };
+type Square = { icon?: false } | { icon: true; 'aria-label': string };
+type NativeButton = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, 'class'> & { href?: undefined };
+type LinkProps = NativeLink & Look & Square;
+type ButtonProps = NativeButton & Look & Square;
 type NativeLink = Omit<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, 'class' | 'href'> & { href: string; disabled?: boolean };
-export type ButtonProps = Look & (NativeButton | NativeLink);
 
 /** The class string of a Button of this look. */
 function buttonClass(look: { variant?: ButtonVariant; size?: ButtonSize; icon?: boolean; pressed?: boolean | 'mixed'; class?: string }): string {
@@ -43,7 +45,11 @@ function buttonClass(look: { variant?: ButtonVariant; size?: ButtonSize; icon?: 
   return `inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap no-underline transition-colors ${geometry} ${tone} ${FOCUS_RING} ${DISABLED} aria-disabled:cursor-not-allowed aria-disabled:opacity-50 ${look.class ?? ''}`;
 }
 
-export function Button(props: ButtonProps): JSX.Element {
+// Two signatures, not one union: a union of the two would defeat TypeScript's check of a spread `icon`
+// (`{...(square ? { icon: true } : {})}`) against the icon/aria-label pairing.
+export function Button(props: LinkProps): JSX.Element;
+export function Button(props: ButtonProps): JSX.Element;
+export function Button(props: LinkProps | ButtonProps): JSX.Element {
   const [own, native] = splitProps(props as ButtonProps & { href?: string; disabled?: boolean }, ['variant', 'size', 'icon', 'class', 'pressed', 'href', 'disabled']);
   const link = () => own.href !== undefined;
   return <Dynamic component={link() ? 'a' : 'button'} {...native}
