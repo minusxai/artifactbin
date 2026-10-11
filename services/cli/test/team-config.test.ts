@@ -281,3 +281,14 @@ test('invalid initial owner creates no settings and existing operator owners are
   assert.equal(await readFile(first.config,'utf8'),bytes);
  }finally{await rm(home,{recursive:true,force:true});}
 });
+test('external SMTP settings enable email login and name SMTP delivery without an outbox',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-team-smtp-'));
+ try{
+  const file=join(directory,'server.env');
+  const base='APP__HOST=0.0.0.0\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=https://team.example.test\nAUTH__SECRET='+'s'.repeat(48)+'\nEMAIL__FROM=Team <team@example.test>\n';
+  await writeFile(file,base+'EMAIL__SMTP_HOST=smtp.example.test\nEMAIL__SMTP_PORT=587\nEMAIL__SMTP_SECURE=false\nEMAIL__SMTP_USER=fixture\nEMAIL__SMTP_PASSWORD=fixture-secret\n');
+  const configuration=await teamSettings(file);assert.equal(configuration.env.EMAIL__SMTP_HOST,'smtp.example.test');
+  const instructions=serverInstructions(configuration).join('\n');assert.match(instructions,/SMTP/);assert.doesNotMatch(instructions,/\[dev-mail\]/);assert.doesNotMatch(instructions,/fixture-secret/);
+  await writeFile(file,base+'EMAIL__SMTP_HOST=smtp.example.test\nEMAIL__SMTP_USER=fixture\n');await assert.rejects(teamSettings(file),/EMAIL__SMTP/);
+ }finally{await rm(directory,{recursive:true,force:true});}
+});

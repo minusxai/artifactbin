@@ -24,16 +24,24 @@ Copy this directory to a new operator directory on the server. Supply the follow
 APP_HOSTNAME=dashverse.artifactbin.dev
 PAGES_HOSTNAME=pages.dashverse.artifactbin.dev
 OWNER_EMAIL=owner@company.example
-ALLOWED_EMAIL_PATTERNS=*@company.example
+ALLOWED_EMAIL_PATTERNS=*
 ACME_EMAIL=ops@company.example
 DNS_MODULE=github.com/caddy-dns/<actual-provider>@v<tested-version>
-EMAIL__RESEND_API_KEY=<credential>
+EMAIL__SMTP_HOST=smtp.example.com
+EMAIL__SMTP_PORT=587
+EMAIL__SMTP_SECURE=false
+EMAIL__SMTP_USER=<SMTP username>
+EMAIL__SMTP_PASSWORD=<SMTP password>
 EMAIL__FROM=Dashverse <login@verified-sender.example>
 ```
 
+`ALLOWED_EMAIL_PATTERNS=*` permits invited colleagues from any email domain; company admission remains invite-only. Set a narrower email glob when your company requires it. The owner address is always supplied explicitly.
+
 Then `node init.mjs .`. The initializer generates independent random database and authentication secrets and refuses an already initialized directory. Generated files are mode 0600; the app configuration is owned by the nonroot container UID selected in `.env`. Run initialization as the operator account that owns this deployment directory; when run as root it uses UID/GID 1000 and assigns configuration ownership accordingly. Do not copy generated files into Git. Preserve `AUTH__SECRET` across upgrades/restores.
 
-The sender/domain must already be verified in Resend. Instead of Resend, supply both `AUTH__GOOGLE_CLIENT_ID` and `AUTH__GOOGLE_CLIENT_SECRET`, or a complete OIDC configuration from [server.env.example](../../docs/extraction/server.env.example). Register the application's login redirect URI with that provider. There is no local OTP outbox on this external host and no SMTP option.
+Use an SMTP sender authorized by your provider. Port 587 requires STARTTLS; `EMAIL__SMTP_SECURE=true` uses implicit TLS with default port 465. Certificate verification stays enabled; provide both username/password, or neither only for a trusted TLS relay. Alternatively choose Resend with `EMAIL__RESEND_API_KEY` plus its verified sender in `EMAIL__FROM`; do not configure both transports. Instead of email codes, supply both `AUTH__GOOGLE_CLIENT_ID` and `AUTH__GOOGLE_CLIENT_SECRET`, or a complete OIDC configuration from [server.env.example](../../docs/extraction/server.env.example). Register the application's login redirect URI with that provider. There is no local OTP outbox on this external host.
+
+For Amazon SES in Mumbai, use `EMAIL__SMTP_HOST=email-smtp.ap-south-1.amazonaws.com`, port 587, `EMAIL__SMTP_SECURE=false`, and the provider's SMTP username/password. An example shared sender is `Dashverse login <login@verify.artifactbin.dev>` after that sending domain is verified; each company can use a separate credential restricted to its authorized sender. SES SMTP credentials differ from AWS access keys, and sandbox accounts also require verified recipients until production sending access is approved. See [SES SMTP requirements](https://docs.aws.amazon.com/ses/latest/dg/send-email-smtp.html).
 
 Complete `dns-provider.caddy` with your selected module's TLS block. Example **only if the selected provider is Route53**:
 
@@ -96,4 +104,4 @@ For an app upgrade: backup first, update the pinned CLI version in the bundle, b
 
 ## CI container acceptance
 
-The required company-container job downloads the exact `cli-pack` tarball and builds the app and Caddy images (Caddy 2.11.7 with Route53 module v1.6.2). It proves nonroot configuration readability, real PostgreSQL migrations, the pinned Chromium installer plus a screenshot, restart persistence, consistent backup, and fresh restore retaining the authentication secret. Its fake mail key is never used to send messages; Caddy issuance does not run in CI. Real external DNS/TLS, email and company collaboration are separate acceptance checks above. Failures block the required rollup; this job runs for company bundle changes and CLI releases, and tested-tree evidence is reused on merge.
+The required company-container job downloads the exact `cli-pack` tarball and builds the app and Caddy images (Caddy 2.11.7 with Route53 module v1.6.2). It proves nonroot configuration readability, real PostgreSQL migrations, the pinned Chromium installer plus a screenshot, restart persistence, consistent backup, and fresh restore retaining the authentication secret. A private SMTP sink receives an actual owner email-code request over authenticated STARTTLS with a trusted test certificate; mail never leaves CI. Caddy issuance does not run in CI. Real external DNS/TLS, email and company collaboration are separate acceptance checks above. Failures block the required rollup; this job runs for company bundle changes and CLI releases, and tested-tree evidence is reused on merge.

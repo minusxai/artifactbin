@@ -49,3 +49,10 @@ test('backup stops writes before both snapshots and restore refuses populated st
  assert.ok(restore.indexOf('Database is not empty')<restore.indexOf('pg_restore'));
  assert.ok(restore.indexOf('Artifact volume is not empty')<restore.indexOf('-xzf -'));
 });
+test('SMTP initialization supports encrypted relay login and refuses ambiguous or incomplete credentials',async()=>{
+ const smtp={...input,EMAIL__RESEND_API_KEY:undefined,EMAIL__SMTP_HOST:'smtp.example.com',EMAIL__SMTP_PORT:'587',EMAIL__SMTP_SECURE:'false',EMAIL__SMTP_USER:'operator',EMAIL__SMTP_PASSWORD:'smtp-fixture-password'};
+ assert.doesNotThrow(()=>validateInputs(smtp));
+ for(const change of [{EMAIL__SMTP_HOST:''},{EMAIL__SMTP_PORT:'0'},{EMAIL__SMTP_SECURE:'sometimes'},{EMAIL__SMTP_PASSWORD:''},{EMAIL__RESEND_API_KEY:'ambiguous-key'}])assert.throws(()=>validateInputs({...smtp,...change}));
+ const directory=await mkdtemp(join(tmpdir(),'company-smtp-'));await initializeCompany(directory,smtp);
+ const settings=await readFile(join(directory,'config/server.env'),'utf8');assert.match(settings,/EMAIL__SMTP_HOST=smtp.example.com/);assert.match(settings,/EMAIL__SMTP_SECURE=false/);assert.doesNotMatch(settings,/EMAIL__RESEND_API_KEY/);
+});

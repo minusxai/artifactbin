@@ -5,7 +5,7 @@
 import {admitDeploymentIdentity,validateDeploymentConfiguration,canAuthenticateUser,EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS,setServices,type Db} from '../../app/lib/cli-toolkit/host.server';
 import {join} from 'node:path';
 import {createTokenReader} from '@artifactbin/utils';
-import {createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,createAuthHost,readEnv,sessionStoreOf} from '@artifactbin/auth';
+import {createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,mailSettingsOf,createAuthHost,readEnv,sessionStoreOf} from '@artifactbin/auth';
 import {createSql} from '@artifactbin/sql/local';
 import {createBrowser,sessionProcessPaths} from '@artifactbin/browser/local';
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
@@ -40,7 +40,7 @@ export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string,
    const raw=db.raw();
    const human=await createHumanAuth({secret,baseURL:origin,schema:authSchema,secure:origin.startsWith('https:'),events,...loginProvidersOf(env),
     ...(raw.kind==='pglite'?{pglite:raw.instance}:{pool:raw.pool as import('pg').Pool}),
-    mail:mailerForRuntime({apiKey:readEnv(env,'EMAIL__RESEND_API_KEY'),from:readEnv(env,'EMAIL__FROM')??'artifactbin <login@example.com>',publicBaseUrl:origin,devOutboxPath:readEnv(env,'EMAIL__DEV_OUTBOX_PATH')})});
+    mail:mailerForRuntime({...mailSettingsOf(env),publicBaseUrl:origin,devOutboxPath:readEnv(env,'EMAIL__DEV_OUTBOX_PATH')})});
    reader=createTokenReader({db:queryable,ttlMs:5000,admitBearer:token=>canAuthenticateUser(token.userId),...(appSchema?{schema:appSchema}:{})});
    // createAppHost supplies the real upstream after initialization; no HTTP hop or signed-header bypass.
    identity={upstream:async()=>{throw new Error('Team host is not initialized.');},env,tokens:reader,sessions:sessionStoreOf(human),admitIdentity:admitDeploymentIdentity,cookieSecret:secret,

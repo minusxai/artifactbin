@@ -73,7 +73,7 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
   // NAMED is not CONFIGURED: a key without a sender, or an OIDC provider id without a client, boots a
   // server whose login page dies at the provider. `completeLoginMethods` is the auth service's answer.
   const methods=completeLoginMethods(operator);
-  if(!methods.mail&&!methods.google&&!methods.oidc)throw new Error(`Team hosting at ${url.origin} has no login method teammates can complete, so they would be told a code was emailed and never receive one. Set EMAIL__RESEND_API_KEY AND EMAIL__FROM for emailed codes (the key alone leaves the sender at a default address no mail provider will send for), or AUTH__GOOGLE_CLIENT_ID with AUTH__GOOGLE_CLIENT_SECRET, or AUTH__OIDC_PROVIDER_ID with AUTH__OIDC_CLIENT_ID, AUTH__OIDC_CLIENT_SECRET and either AUTH__OIDC_DISCOVERY_URL or all of AUTH__OIDC_AUTHORIZATION_URL, AUTH__OIDC_TOKEN_URL and AUTH__OIDC_USERINFO_URL. Only a loopback public URL may use the local outbox.`);
+  if(!methods.mail&&!methods.google&&!methods.oidc)throw new Error(`Team hosting at ${url.origin} has no login method teammates can complete, so they would be told a code was emailed and never receive one. Set EMAIL__SMTP_HOST AND EMAIL__FROM (with valid SMTP port/TLS and paired credentials), or EMAIL__RESEND_API_KEY AND EMAIL__FROM for emailed codes (the key alone leaves the sender at a default address no mail provider will send for), or AUTH__GOOGLE_CLIENT_ID with AUTH__GOOGLE_CLIENT_SECRET, or AUTH__OIDC_PROVIDER_ID with AUTH__OIDC_CLIENT_ID, AUTH__OIDC_CLIENT_SECRET and either AUTH__OIDC_DISCOVERY_URL or all of AUTH__OIDC_AUTHORIZATION_URL, AUTH__OIDC_TOKEN_URL and AUTH__OIDC_USERINFO_URL. Only a loopback public URL may use the local outbox.`);
  }else if(!listensLocally(host))
   throw new Error(`Team APP__HOST ${host} accepts connections from the network, but APP__PUBLIC_BASE_URL ${url.origin} is a loopback address teammates cannot open: approval and login must both happen at the public URL. Set APP__PUBLIC_BASE_URL to the URL teammates use.`);
  // A loopback public URL IS the listener, so `--port` moves it too (an lvh.me name resolves to 127.0.0.1).
@@ -118,7 +118,7 @@ function pagesDelivery(settings:TeamSettings):string{
 }
 function loginDelivery(env:NodeJS.ProcessEnv):string{
  const methods=completeLoginMethods(env);
- if(methods.mail)return 'Login codes go out through the configured mail provider (EMAIL__RESEND_API_KEY, EMAIL__FROM).';
+ if(methods.mail)return 'smtp' in methods.mail?'Login codes go out through the configured SMTP mail provider (EMAIL__SMTP_HOST, EMAIL__FROM).':'Login codes go out through the configured mail provider (EMAIL__RESEND_API_KEY, EMAIL__FROM).';
  const names=[...(methods.google?['Google']:[]),...(methods.oidc?[`the ${methods.oidc.providerId} provider`]:[])];
- return `Teammates sign in with ${names.join(' or ')}: emailed login codes are not configured (set EMAIL__RESEND_API_KEY and EMAIL__FROM to offer them).`;
+ return `Teammates sign in with ${names.join(' or ')}: emailed login codes are not configured (set EMAIL__SMTP_HOST and EMAIL__FROM, or EMAIL__RESEND_API_KEY and EMAIL__FROM, to offer them).`;
 }

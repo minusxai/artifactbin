@@ -5,3 +5,5 @@ Caddyfile
 dns-provider.caddy
 backups/
 packages/*.tgz
+ci-tls/
+ci.override.yaml

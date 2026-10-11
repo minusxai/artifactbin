@@ -20,3 +20,14 @@ it('workflow waits for exact package, runs real Compose acceptance and blocks ro
  expect(workflow.jobs.test.needs).toContain('company-container');
  expect(readFileSync(new URL('../../deploy/company/Caddy.Dockerfile',import.meta.url),'utf8')).toContain('xcaddy build v2.11.7');
 });
+
+it('packaged SMTP acceptance uses a trusted private TLS sink and the normal owner email-code route',()=>{
+ const smoke=readFileSync(new URL('../../deploy/company/ci-smoke.mjs',import.meta.url),'utf8');
+ expect(smoke).toContain('NODE_EXTRA_CA_CERTS');
+ expect(smoke).toContain('/api/auth/email-otp/send-verification-otp');
+ expect(smoke).toContain('EMAIL__SMTP_SECURE');
+ expect(smoke).toContain('authenticated-starttls-email-code');
+ expect(smoke).not.toContain('NODE_TLS_REJECT_UNAUTHORIZED');
+ const fixture=readFileSync(new URL('../../deploy/company/CI.smtp.Dockerfile',import.meta.url),'utf8');
+ expect(fixture).toContain('smtp-server@3.19.21');
+});

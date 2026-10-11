@@ -3,7 +3,7 @@ import {randomBytes} from 'node:crypto';
 import {mkdir,writeFile,access,chmod,chown} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-const loginKeys=['EMAIL__RESEND_API_KEY','EMAIL__FROM','AUTH__GOOGLE_CLIENT_ID','AUTH__GOOGLE_CLIENT_SECRET','AUTH__OIDC_PROVIDER_ID','AUTH__OIDC_CLIENT_ID','AUTH__OIDC_CLIENT_SECRET','AUTH__OIDC_DISCOVERY_URL','AUTH__OIDC_AUTHORIZATION_URL','AUTH__OIDC_TOKEN_URL','AUTH__OIDC_USERINFO_URL'];
+const loginKeys=['EMAIL__RESEND_API_KEY','EMAIL__FROM','EMAIL__SMTP_HOST','EMAIL__SMTP_PORT','EMAIL__SMTP_SECURE','EMAIL__SMTP_USER','EMAIL__SMTP_PASSWORD','AUTH__GOOGLE_CLIENT_ID','AUTH__GOOGLE_CLIENT_SECRET','AUTH__OIDC_PROVIDER_ID','AUTH__OIDC_CLIENT_ID','AUTH__OIDC_CLIENT_SECRET','AUTH__OIDC_DISCOVERY_URL','AUTH__OIDC_AUTHORIZATION_URL','AUTH__OIDC_TOKEN_URL','AUTH__OIDC_USERINFO_URL'];
 export function validateInputs(input){
  const names=['APP_HOSTNAME','PAGES_HOSTNAME','OWNER_EMAIL','ALLOWED_EMAIL_PATTERNS','ACME_EMAIL','DNS_MODULE'];
  for(const name of [...names,...loginKeys]){const value=input[name];if(names.includes(name)&&!value)throw Error(`Missing ${name}`);if(value&&/[\r\n\x00]/.test(value))throw Error(`Invalid ${name}: one line required`);}
@@ -12,11 +12,22 @@ export function validateInputs(input){
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.OWNER_EMAIL)||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.ACME_EMAIL))throw Error('Owner and ACME email required');
  if(!/^github\.com\/caddy-dns\/[a-z0-9-]+@v\d+\.\d+\.\d+$/.test(input.DNS_MODULE))throw Error('DNS_MODULE must name an explicitly version-pinned caddy-dns module');
  const complete=keys=>keys.every(key=>input[key]);
- const email=complete(['EMAIL__RESEND_API_KEY','EMAIL__FROM']);const google=complete(['AUTH__GOOGLE_CLIENT_ID','AUTH__GOOGLE_CLIENT_SECRET']);
+ const smtpKeys=loginKeys.filter(key=>key.startsWith('EMAIL__SMTP_'));
+ const hasSmtp=smtpKeys.some(key=>input[key]);
+ if(hasSmtp){
+  if(!input.EMAIL__SMTP_HOST||!input.EMAIL__FROM)throw Error('SMTP requires EMAIL__SMTP_HOST and EMAIL__FROM');
+  if(!/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[a-f0-9:]+\])$/i.test(input.EMAIL__SMTP_HOST))throw Error('Invalid EMAIL__SMTP_HOST');
+  if(input.EMAIL__SMTP_PORT&&(!/^\d+$/.test(input.EMAIL__SMTP_PORT)||Number(input.EMAIL__SMTP_PORT)<1||Number(input.EMAIL__SMTP_PORT)>65535))throw Error('Invalid EMAIL__SMTP_PORT');
+  if(input.EMAIL__SMTP_SECURE&&!['true','false'].includes(input.EMAIL__SMTP_SECURE))throw Error('Invalid EMAIL__SMTP_SECURE');
+  if(Boolean(input.EMAIL__SMTP_USER)!==Boolean(input.EMAIL__SMTP_PASSWORD))throw Error('SMTP requires both EMAIL__SMTP_USER and EMAIL__SMTP_PASSWORD');
+  if(input.EMAIL__RESEND_API_KEY)throw Error('Configure either SMTP or Resend, not both');
+ }
+ const email=complete(['EMAIL__RESEND_API_KEY','EMAIL__FROM'])||hasSmtp;const google=complete(['AUTH__GOOGLE_CLIENT_ID','AUTH__GOOGLE_CLIENT_SECRET']);
  const oidc=complete(['AUTH__OIDC_PROVIDER_ID','AUTH__OIDC_CLIENT_ID','AUTH__OIDC_CLIENT_SECRET'])&&(input.AUTH__OIDC_DISCOVERY_URL||complete(['AUTH__OIDC_AUTHORIZATION_URL','AUTH__OIDC_TOKEN_URL','AUTH__OIDC_USERINFO_URL']));
- if(!email&&!google&&!oidc)throw Error('Configure complete verified Resend, Google or OIDC login');
+ if(!email&&!google&&!oidc)throw Error('Configure complete verified SMTP, Resend, Google or OIDC login');
  if(loginKeys.filter(key=>key.startsWith('AUTH__OIDC_')).some(key=>input[key])&&!oidc)throw Error('Incomplete OIDC login configuration');
- for(const keys of [['EMAIL__RESEND_API_KEY','EMAIL__FROM'],['AUTH__GOOGLE_CLIENT_ID','AUTH__GOOGLE_CLIENT_SECRET']])if(keys.some(key=>input[key])&&!complete(keys))throw Error('Incomplete login configuration');
+ if(input.EMAIL__RESEND_API_KEY&&!input.EMAIL__FROM)throw Error('Resend requires EMAIL__FROM');
+ for(const keys of [['AUTH__GOOGLE_CLIENT_ID','AUTH__GOOGLE_CLIENT_SECRET']])if(keys.some(key=>input[key])&&!complete(keys))throw Error('Incomplete login configuration');
  return input;
 }
 export async function initializeCompany(directory,input){
