@@ -46,11 +46,10 @@ import {getGroupById} from '@/lib/groups';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { preparedPageFor, servedPage } from '@/lib/publish/prepared/prepared-page.server';
+import { preparedPageFor, servedPage, type TreelessServedRuntime } from '@/lib/publish/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { firstHeadingTitle, packDocumentGraph } from '@/lib/document';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
-import type { ServedStoryRuntime } from '@/lib/publish/prepared/prepared-runtime';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import { pagesOriginFor, pagesSessionUrl, type PagesSite } from '../http/pages-origin';
 import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
@@ -90,16 +89,10 @@ const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_f
  * reaches this page, and the tree is the nodes door's.
  */
 export interface FramedRuntime { title: string; data: Pick<StoryIslandData, 'dataflow'> }
-/** The JSON door's runtime: the served one, less the node tree (`?part=nodes`). */
-type TreelessRuntime = Omit<ServedStoryRuntime, 'data'> & { data: Omit<StoryIslandData, 'nodes'> };
 
-function framedRuntime(runtime: ServedStoryRuntime): FramedRuntime {
+function framedRuntime(runtime: TreelessServedRuntime): FramedRuntime {
   const { dataflow } = runtime.data;
   return { title: runtime.title, data: dataflow ? { dataflow } : {} };
-}
-function treelessRuntime(runtime: ServedStoryRuntime): TreelessRuntime {
-  const { nodes: _tree, ...data } = runtime.data;
-  return { ...runtime, data };
 }
 
 /** Did what admission reads move between the header it was decided on and the row then loaded? Then it is decided again on the row. */
@@ -247,7 +240,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    */
   if (search.get('part') === 'nodes') {
     if (!isDoc || exporting) return notFound();
-    const { row, page } = await preparedPageFor(artifact, at);
+    const { row, page } = await preparedPageFor(artifact, at, { nodes: true });
     return { status: 200, body: { editId: artifact.edit_id, version: row.version, nodes: page.data.nodes } };
   }
 
@@ -274,7 +267,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
-  const prepared = isDoc ? await preparedPageFor(artifact, at) : null;
+  // The shell only: the tree is the nodes door's and the compiled page is the document origin's.
+  const prepared = isDoc ? await preparedPageFor(artifact, at, {}) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
   // Every document the app page serves is the prepared compiled page (§10) — a capture's and the
   // editor's address included — except the starter placeholder's READ view, whose agent instructions
@@ -360,7 +354,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     ...(served ? {
       // The framed page's own sheet, script and reader data are the frame's, and the tree is the nodes door's: the
       // app page keeps what it reads (FramedRuntime). The JSON door keeps the served runtime, less the tree.
-      runtime: framing ? framedRuntime(served.runtime) : treelessRuntime(served.runtime),
+      runtime: framing ? framedRuntime(served.runtime) : served.runtime,
       // What the reader's chrome derived from the source: the document's own
       // name (lib/document/title) and whether it is still the starter placeholder.
       heading: firstHeadingTitle(row.source), starter,
