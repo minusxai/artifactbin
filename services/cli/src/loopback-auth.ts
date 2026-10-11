@@ -87,7 +87,7 @@ export async function loopbackAuthenticate(origin: string, options: LoopbackOpti
     try {
       const connection = await redeem(server, outcome.code, verifier, redirectUri, request, clock);
       await saveConnection(connection, options.home ?? homedir(), {ARTIFACTBIN_HOME: configDir(options.home ?? homedir(), options.env)});
-      await respond(outcome.response, 200, 'Signed in', 'Signed in', 'Return to your terminal; the command is continuing. If this tab stays open, you can close it.', true);
+      await respond(outcome.response, 200, 'Signed in', 'Signed in — you can close this tab', 'Return to your terminal; the command is continuing. If this tab stays open, you can close it.', true);
       return connection;
     } catch (error) {
       await respond(outcome.response, 400, 'Sign-in failed', 'Return to your terminal and run afbin auth again.');
