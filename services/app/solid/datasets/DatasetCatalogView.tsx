@@ -2,6 +2,10 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack, type JSX } from 'solid-js';
 import { ChevronDown } from 'lucide-solid';
 import { Button } from '../ui/Button';
+import { Field, Textarea } from '../ui/Field';
+import { Panel } from '../ui/Panel';
+import { Select } from '../ui/Select';
+import { LINK } from '../ui/ui';
 import { artifactEditPath } from '@/lib/http/urls';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetColumn, Row } from '@/lib/dataflow';
@@ -11,12 +15,11 @@ import { dateTime } from '../lib/format';
 export interface CatalogPreview { rows: Row[]; columns: DatasetColumn[]; truncated?: boolean; refreshedAt: string }
 const PAGE_SIZE = 50;
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
-const selectClass = 'rounded border border-edge bg-surface px-3 py-2 font-mono text-xs text-fg';
 type ExplorerCatalog = Pick<DatasetCatalog, 'kind' | 'defaultSchema' | 'refreshSeconds'> & { tables: Array<{ schema: string; name: string }> };
 export type CatalogQuery = (sql: string, options: { limit: number; offset: number; refresh?: boolean }) => Promise<CatalogPreview>;
 
 export function CatalogRows(props: { result: CatalogPreview; label?: string }): JSX.Element {
-  return <div aria-label={props.label ?? 'Table preview'} class="max-h-[32rem] overflow-auto rounded border border-edge bg-surface">
+  return <div aria-label={props.label ?? 'Table preview'} class="max-h-[32rem] overflow-auto rounded-panel border border-edge bg-surface">
     <table class="w-full border-collapse text-left font-mono text-xs">
       <thead class="sticky top-0 bg-surface"><tr><For each={props.result.columns}>{(column) => <th class="border-b border-edge px-3 py-2 font-medium whitespace-nowrap">{column.name} <span class="font-normal text-faint">{column.type}</span></th>}</For></tr></thead>
       <tbody><For each={props.result.rows}>{(row) => <tr class="odd:bg-raised/40"><For each={props.result.columns}>{(column) => <td class="border-b border-edge px-3 py-2 text-muted whitespace-nowrap">{row[column.name] == null ? '—' : typeof row[column.name] === 'object' ? JSON.stringify(row[column.name]) : String(row[column.name])}</td>}</For></tr>}</For></tbody>
@@ -39,21 +42,21 @@ function DatasetSchemaBrowser(props: { tables: DatasetCatalog['tables'] }): JSX.
   const [open, setOpen] = createSignal(false);
   const regionId = `dataset-schema-${Math.random().toString(36).slice(2, 8)}`;
   const schemas = () => [...new Set(props.tables.map((table) => table.schema))];
-  return <div class="min-w-0 rounded border border-edge bg-surface">
-    <button type="button" aria-label="Browse dataset schema" aria-expanded={open()} aria-controls={regionId} onClick={() => setOpen((value) => !value)} class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs text-muted hover:text-fg focus-visible:outline-2 focus-visible:outline-accent">
-      <span>Schema browser <span class="ml-1 text-faint">· {props.tables.length} table{props.tables.length === 1 ? '' : 's'}</span></span><ChevronDown size={14} class={open() ? 'rotate-180' : ''} />
-    </button>
+  return <Panel padding="none" class="min-w-0">
+    <Button variant="ghost" size="sm" aria-label="Browse dataset schema" aria-expanded={open()} aria-controls={regionId} onClick={() => setOpen((value) => !value)} class="w-full">
+      <span class="flex w-full items-center justify-between gap-3 text-left"><span>Schema browser <span class="ml-1 text-faint">· {props.tables.length} table{props.tables.length === 1 ? '' : 's'}</span></span><ChevronDown size={14} class={open() ? 'rotate-180' : ''} /></span>
+    </Button>
     <Show when={open()}><div id={regionId} aria-label="Dataset schema browser" class="grid max-h-72 gap-4 overflow-auto border-t border-edge p-3 sm:grid-cols-2">
       <Show when={schemas().length === 0}><p class="text-xs text-faint">No exposed tables.</p></Show>
       <For each={schemas()}>{(schema) => <section class="min-w-0 space-y-3">
         <h3 class="break-all font-mono text-xs font-semibold text-fg">{schema}</h3>
         <For each={props.tables.filter((table) => table.schema === schema)}>{(table) => <div class="min-w-0 border-l border-edge pl-3">
           <p class="break-all font-mono text-xs text-fg">{table.name}</p>
-          <ul class="mt-1 space-y-1"><For each={table.columns}>{(column) => <li class="flex min-w-0 items-baseline justify-between gap-3 font-mono text-[11px]"><span class="min-w-0 break-all text-muted">{column.name}</span><span class="shrink-0 text-faint">{column.type}</span></li>}</For></ul>
+          <ul class="mt-1 space-y-1"><For each={table.columns}>{(column) => <li class="flex min-w-0 items-baseline justify-between gap-3 font-mono text-2xs"><span class="min-w-0 break-all text-muted">{column.name}</span><span class="shrink-0 text-faint">{column.type}</span></li>}</For></ul>
         </div>}</For>
       </section>}</For>
     </div></Show>
-  </div>;
+  </Panel>;
 }
 
 export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: CatalogQuery; paginate?: boolean; editHref?: string; schemaTables?: DatasetCatalog['tables'] }): JSX.Element {
@@ -104,16 +107,16 @@ export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: Catalo
     <div class="flex flex-wrap items-center gap-2">
       <Button aria-label="Table view" aria-pressed={mode() === 'table'} variant={mode() === 'table' ? 'primary' : 'secondary'} onClick={() => { setMode('table'); choose(selection().schema, selection().name); }}>Table view</Button>
       <Button aria-label="SQL view" aria-pressed={mode() === 'sql'} variant={mode() === 'sql' ? 'primary' : 'secondary'} onClick={() => { setMode('sql'); if (!sqlDraft()) setSqlDraft(tableSql()); }}>Run SQL</Button>
-      <Show when={props.editHref}><a aria-label="Edit dataset" href={props.editHref} class="ml-auto text-sm text-accent underline underline-offset-4">Edit dataset</a></Show>
+      <Show when={props.editHref}><a aria-label="Edit dataset" href={props.editHref} class={`ml-auto text-sm ${LINK}`}>Edit dataset</a></Show>
     </div>
     <Show when={props.schemaTables}><DatasetSchemaBrowser tables={props.schemaTables!} /></Show>
     <Show when={mode() === 'table'} fallback={<div class="space-y-2">
-      <label class="grid gap-2 text-xs text-muted">Query exposed tables<textarea aria-label="Dataset SQL" spellcheck={false} class="min-h-32 w-full resize-y rounded border border-edge bg-surface p-3 font-mono text-sm leading-6 text-fg focus:border-accent focus:outline-none" value={sqlDraft()} onInput={(event) => setSqlDraft(event.currentTarget.value)} /></label>
+      <Field label="Query exposed tables"><Textarea size="sm" rows={6} aria-label="Dataset SQL" spellcheck={false} class="resize-y" value={sqlDraft()} onInput={(event) => setSqlDraft(event.currentTarget.value)} /></Field>
       <p class="text-xs text-faint">Only whitelisted tables and columns are available here. Changes run when you choose Run SQL.</p>
       <Button aria-label="Run dataset SQL" disabled={busy() || !sqlDraft().trim()} onClick={() => { setExecutedSql(sqlDraft().trim()); setSelection((value) => ({ ...value, offset: 0 })); setExecution((n) => n + 1); }}>Run SQL</Button>
     </div>}><div class="flex flex-wrap items-end gap-3">
-      <label class="grid min-w-0 gap-1 text-xs text-muted">Schema<select aria-label="Dataset schema" class={selectClass} value={selection().schema} onChange={(event) => choose(event.currentTarget.value, props.catalog.tables.find((item) => item.schema === event.currentTarget.value)?.name ?? '')}><For each={schemas()}>{(schema) => <option>{schema}</option>}</For></select></label>
-      <label class="grid min-w-0 gap-1 text-xs text-muted">Table<select aria-label="Dataset table" class={selectClass} value={selection().name} onChange={(event) => choose(selection().schema, event.currentTarget.value)}><For each={props.catalog.tables.filter((item) => item.schema === selection().schema)}>{(item) => <option>{item.name}</option>}</For></select></label>
+      <Field label="Schema" class="min-w-0"><Select size="sm" ariaLabel="Dataset schema" value={selection().schema} options={schemas().map((schema) => ({ value: schema, label: schema }))} onChange={(schema) => choose(schema, props.catalog.tables.find((item) => item.schema === schema)?.name ?? '')} /></Field>
+      <Field label="Table" class="min-w-0"><Select size="sm" ariaLabel="Dataset table" value={selection().name} options={props.catalog.tables.filter((item) => item.schema === selection().schema).map((item) => ({ value: item.name, label: item.name }))} onChange={(name) => choose(selection().schema, name)} /></Field>
     </div></Show>
     <div class="flex flex-wrap items-center gap-3">
       <Button aria-label="Refresh dataset" variant="secondary" disabled={busy() || !sql()} onClick={() => setRefresh((n) => n + 1)}>{busy() ? 'Loading…' : 'Refresh'}</Button>
