@@ -44,7 +44,7 @@ const initialConnection = (): DatasetConnection => ({
   passwordSecretId: "",
   ssl: true
 });
-const control = "w-full rounded border border-edge bg-surface px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-none";
+const control = "w-full rounded-md border border-edge bg-surface px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-2 focus:outline-accent/30";
 const sourceKey = (table: {
   schema: string;
   name: string;
@@ -545,7 +545,7 @@ export function DatasetEditorPage({
   const content =
       <AssetWorkspace workspace="Dataset" tabs={loading() || loadFailed() ? [] : ['source', 'data', ...(id && kind() === 'stored' ? ['actions' as const] : []), ...(id ? ['sharing' as const] : [])]} active={section()} onSelect={setSection}
         actions={id && !loading() && !loadFailed() ? <div class="flex items-center gap-3 py-1">
-          <a href={`/a/${id}`} aria-label="Cancel editing" class="px-2 py-1 font-mono text-xs text-muted hover:text-fg">Cancel</a>
+          <a href={`/a/${id}`} aria-label="Cancel editing" class="inline-flex min-h-9 items-center rounded-md border border-edge bg-surface px-3 text-sm text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent">Cancel</a>
           <span hidden={section() !== 'actions'} ref={setPolicySaveTarget} />
           <span hidden={section() === 'actions' || section() === 'sharing'}><Button aria-label="Save dataset" disabled={!title().trim() || Boolean(busy()) || sourceText() !== null} onClick={saveDataset}>{busy() === 'save' ? 'Saving…' : 'Save'}</Button></span>
         </div> : undefined}>
@@ -700,7 +700,7 @@ export function DatasetEditorPage({
                       </div>}
                     {models().map((model, index) => <article aria-label={`Notebook cell ${index + 1}`} class="min-w-0 overflow-hidden rounded border border-edge bg-bg/30">
                         <header class="flex flex-wrap items-center gap-2 border-b border-edge bg-raised/30 p-2.5">
-                          <button type="button" aria-label={`Collapse cell ${index + 1}`} aria-expanded={!model.collapsed} class="rounded p-1 text-muted hover:text-fg" onClick={() => setModels(items => items.map(m => m.cell.id === model.cell.id ? {
+                          <button type="button" aria-label={`Collapse cell ${index + 1}`} aria-expanded={!model.collapsed} class="inline-flex min-h-8 min-w-8 items-center justify-center rounded border border-edge text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent" onClick={() => setModels(items => items.map(m => m.cell.id === model.cell.id ? {
                       ...m,
                       collapsed: !m.collapsed
                     } : m))}>
@@ -791,7 +791,7 @@ export function DatasetEditorPage({
                   </section>)}
               </fieldset>
             </div>
-            <div hidden={section() !== "data"} class={`${PANEL} rounded-xl overflow-hidden rounded-xl`}>
+            <div hidden={section() !== "data"} class={`${PANEL} overflow-hidden rounded-xl`}>
               <header class="border-b border-edge px-4 py-3">
                 <h2 class="text-sm font-semibold text-fg">
                   Explore exposed data
