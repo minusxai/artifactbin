@@ -179,8 +179,12 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
         const otherCookie=credentialSource?otherAccount.cookie:connectionBrowserCookie(BASE,otherAccount.token);
         const session=await fetch(`${BASE}/api/auth/get-session`,{headers:{cookie:otherCookie}});
         assert.equal(session.status,200);const email=(await session.json())?.user?.email;assert.ok(email);
+        await writeFile(join(workspace,'colleague-review.jsx'),'---\ntitle: mxmx_test_colleague_review\nvisibility: private\n---\n<p id="finding">Colleague review finding</p>');
+        const created=await invoke(['push','colleague-review.jsx','--personal']);
+        const sharedId=created.operations.find(item=>item.path.endsWith('colleague-review.jsx'))?.id;
+        assert.ok(sharedId);publishedIds.push(sharedId);
         const share=async(role)=>{
-          const response=await fetch(`${BASE}/api/my/artifacts/${id}/sharing`,{method:'PUT',headers:{cookie:accountCookie,origin:BASE,'content-type':'application/json'},body:JSON.stringify({shares:role?[{email,role}]:[]})});
+          const response=await fetch(`${BASE}/api/my/artifacts/${sharedId}/sharing`,{method:'PUT',headers:{cookie:accountCookie,origin:BASE,'content-type':'application/json'},body:JSON.stringify({shares:role?[{email,role}]:[]})});
           assert.equal(response.status,200,'Owner can update the colleague share');
         };
         try{
@@ -188,28 +192,21 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
             await share(role);
             const cwd=join(root,`colleague-${role}`);await mkdir(cwd);
             const opts={cwd,credential:otherAccount.token};
-            const comment=await invoke(['comment',id,'--quote','Baseline report','--body',`mxmx_test_${role}_review`],{...opts,expected:role==='viewer'?1:0});
+            const comment=await invoke(['comment',sharedId,'--quote','Colleague review finding','--body',`mxmx_test_${role}_review`],{...opts,expected:role==='viewer'?1:0});
             if(role==='viewer')assert.equal(comment.error?.code,'not_found');
             // This read immediately after a denied comment catches a stuck local journal.
-            await invoke(['pull',id,'--output','shared.jsx'],opts);
+            await invoke(['pull',sharedId,'--output','shared.jsx'],opts);
             const file=join(cwd,'shared.jsx');const before=await readFile(file,'utf8');
-            await writeFile(file,before.replace('Baseline report',`mxmx_test_${role}_edit`));
+            await writeFile(file,before.replace('Colleague review finding',`mxmx_test_${role}_edit`));
             const edited=await invoke(['push','shared.jsx'],{...opts,expected:role==='editor'?0:1});
             if(role!=='editor')assert.equal(edited.error?.code,'not_found');
             else{
-              const state=await api(`/api/artifacts/${id}`);assert.equal(state.status,200);
+              const state=await api(`/api/artifacts/${sharedId}`);assert.equal(state.status,200);
               assert.match((await state.json()).markup,/mxmx_test_editor_edit/);
             }
           }
           await share(null);
-          assert.equal((await api(`/api/artifacts/${id}`,otherAccount.token)).status,404,'Revoked recipient cannot read the private document');
-          const published=await readFile(join(workspace,'report.jsx'),'utf8');
-          // Restore the owner draft from the canonical shared head before later conflict scenarios.
-          await invoke(['pull','report.jsx','--force']);
-          const current=await readFile(join(workspace,'report.jsx'),'utf8');
-          await writeFile(join(workspace,'report.jsx'),current.replace('mxmx_test_editor_edit','Baseline report'));
-          await invoke(['push','report.jsx']);
-          assert.match(published,/Baseline report/);
+          assert.equal((await api(`/api/artifacts/${sharedId}`,otherAccount.token)).status,404,'Revoked recipient cannot read the private document');
         }finally{await share(null);}
       });
       await scenario('CLI query executes on the host with bound parameters', async () => {
