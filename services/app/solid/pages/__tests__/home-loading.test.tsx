@@ -30,12 +30,12 @@ it('starts the bootstrap before session and offers retry if identity fails', asy
   open(); expect(fetcher.mock.calls.map(([url]) => url)).toContain('/api/page/home?part=bootstrap'); expect(screen.queryByLabelText('Open Private document')).toBeNull();
   pending.resolve(response({}, 500)); await screen.findByLabelText('Retry workspace');
   await waitFor(() => expect(signal?.aborted).toBe(true));
-  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {} }))));
+  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : { signedIn: true, accountId: 'one' }))));
   fireEvent.click(screen.getByLabelText('Retry workspace')); await screen.findByLabelText('Open Private document');
 });
 
 it.each(['core', 'insights'])('refuses a mismatched %s account stamp', async part => {
-  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, accountId: part === 'core' ? 'other' : 'one' } : { signedIn: true, accountId: 'other', sparklines: {} }))));
+  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, accountId: part === 'core' ? 'other' : 'one' } : { signedIn: true, accountId: 'other' }))));
   open(); await screen.findByLabelText('Retry workspace'); expect(screen.queryByLabelText('Open Private document')).toBeNull();
 });
 
@@ -56,7 +56,7 @@ it('keeps a folder menu open when deferred insights arrive', async () => {
   const trigger = await screen.findByRole('button', { name: 'More actions for Reports' });
   fireEvent.click(trigger);
   expect(screen.getByRole('button', { name: 'Delete Reports' })).toHaveTextContent('1 inside');
-  pending.resolve(response({ signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 7 }, viewsOverTime: [], views: { ABC123: 7 }, likes: 0, likesOverTime: [], followers: 0, forks: 0, sparklines: {} }));
+  pending.resolve(response({ signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 7 }, viewsOverTime: [], views: { ABC123: 7 }, likes: 0, likesOverTime: [], followers: 0, forks: 0 }));
   expect(await screen.findByLabelText('Dashboard metrics')).toHaveTextContent('7');
   expect(screen.getByRole('button', { name: 'More actions for Reports' })).toBe(trigger);
   expect(screen.getByRole('button', { name: 'Delete Reports' })).toHaveTextContent('1 inside');
@@ -65,7 +65,7 @@ it('keeps a folder menu open when deferred insights arrive', async () => {
 });
 
 it('shows a retryable core failure', async () => {
-  let fail = true; vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(url.includes('/home') && fail ? response({}, 500) : response(url.includes('/session') ? session : url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {} }))));
+  let fail = true; vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(url.includes('/home') && fail ? response({}, 500) : response(url.includes('/session') ? session : url.includes('part=core') ? core : { signedIn: true, accountId: 'one' }))));
   open(); await screen.findByLabelText('Retry workspace'); fail = false; fireEvent.click(screen.getByLabelText('Retry workspace')); await screen.findByLabelText('Open Private document');
 });
 
@@ -78,7 +78,7 @@ it('revokes private rows immediately on identity reload despite late responses',
 });
 
 it('drops retained private rows when the core reports an expired session', async () => {
-  let signedIn = true; vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? signedIn ? core : { signedIn: false } : { signedIn: true, accountId: 'one', sparklines: {} }))));
+  let signedIn = true; vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? signedIn ? core : { signedIn: false } : { signedIn: true, accountId: 'one' }))));
   const view = open(); await screen.findByLabelText('Open Private document'); view.remount(); signedIn = false;
   window.dispatchEvent(new Event(REFRESH_EVENT)); await screen.findByRole('heading', { name: 'Log in' }); expect(screen.queryByLabelText('Open Private document')).toBeNull();
 });
@@ -91,15 +91,15 @@ it('retains the shelf and offers retry when only insights fail', async () => {
 it('rejects late responses from a prior account', async () => {
   const oldCore = deferred(); const oldInsights = deferred(); let owner = 'one'; let visits = 0;
   const next = { ...core, accountId: 'two', artifacts: [{ ...core.artifacts[0], title: 'Next account document' }] };
-  vi.stubGlobal('fetch', homeFetch((url: string) => url.includes('/session') ? Promise.resolve(response({ ...session, user: { id: owner, email: `${owner}@example.com` } })) : url.includes('part=insights') ? owner === 'one' ? oldInsights.promise : Promise.resolve(response({ signedIn: true, accountId: 'two', sparklines: {} })) : url.includes('/home') ? owner === 'two' ? Promise.resolve(response(next)) : ++visits === 1 ? Promise.resolve(response(core)) : oldCore.promise : Promise.resolve(response({}))));
+  vi.stubGlobal('fetch', homeFetch((url: string) => url.includes('/session') ? Promise.resolve(response({ ...session, user: { id: owner, email: `${owner}@example.com` } })) : url.includes('part=insights') ? owner === 'one' ? oldInsights.promise : Promise.resolve(response({ signedIn: true, accountId: 'two' })) : url.includes('/home') ? owner === 'two' ? Promise.resolve(response(next)) : ++visits === 1 ? Promise.resolve(response(core)) : oldCore.promise : Promise.resolve(response({}))));
   const view = open(); await screen.findByLabelText('Open Private document'); view.remount(); owner = 'two'; fireEvent.click(screen.getByLabelText('Reload identity'));
-  await screen.findByLabelText('Open Next account document'); oldCore.resolve(response(core)); oldInsights.resolve(response({ signedIn: true, accountId: 'one', sparklines: {} }));
+  await screen.findByLabelText('Open Next account document'); oldCore.resolve(response(core)); oldInsights.resolve(response({ signedIn: true, accountId: 'one' }));
   expect(screen.getByLabelText('Open Next account document')).toBeInTheDocument(); expect(screen.queryByLabelText('Open Private document')).toBeNull();
 });
 
 it('an older same-account refresh cannot overwrite the newer shelf', async () => {
   const old = deferred(); let visits = 0;
-  vi.stubGlobal('fetch', homeFetch((url: string) => url.includes('/session') ? Promise.resolve(response(session)) : url.includes('part=insights') ? Promise.resolve(response({ signedIn: true, accountId: 'one', sparklines: {} })) : url.includes('/home') ? ++visits === 2 ? old.promise : Promise.resolve(response(visits === 1 ? core : { ...core, artifacts: [{ ...core.artifacts[0], title: 'Newest document' }] })) : Promise.resolve(response({}))));
+  vi.stubGlobal('fetch', homeFetch((url: string) => url.includes('/session') ? Promise.resolve(response(session)) : url.includes('part=insights') ? Promise.resolve(response({ signedIn: true, accountId: 'one' })) : url.includes('/home') ? ++visits === 2 ? old.promise : Promise.resolve(response(visits === 1 ? core : { ...core, artifacts: [{ ...core.artifacts[0], title: 'Newest document' }] })) : Promise.resolve(response({}))));
   open(); await screen.findByLabelText('Open Private document'); window.dispatchEvent(new Event(REFRESH_EVENT)); window.dispatchEvent(new Event(REFRESH_EVENT));
   await screen.findByLabelText('Open Newest document'); old.resolve(response(core)); expect(screen.getByLabelText('Open Newest document')).toBeInTheDocument();
 });
@@ -115,7 +115,7 @@ describe('the refresh event', () => {
 });
 
 it.each([true, false])('renders an activity-free workspace (empty=%s)', async empty => {
-  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, artifacts: empty ? [] : core.artifacts } : { signedIn: true, accountId: 'one', sparklines: {}, viewsOverTime: [], views: {}, stats: { assets: 0 }, likes: 0, likesOverTime: [], followers: 0, forks: 0 }))));
+  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, artifacts: empty ? [] : core.artifacts } : { signedIn: true, accountId: 'one', viewsOverTime: [], views: {}, stats: { assets: 0 }, likes: 0, likesOverTime: [], followers: 0, forks: 0 }))));
   open(); if (empty) await screen.findByRole('heading', { name: /create your first artifact/i }); else await screen.findByLabelText('Dashboard metrics');
   expect(screen.queryByRole('heading', { name: /activity/i })).toBeNull(); if (empty) expect(screen.getByLabelText('Create dataset')).toBeInTheDocument(); else expect(screen.getByLabelText('Open Private document')).toBeInTheDocument();
 });
