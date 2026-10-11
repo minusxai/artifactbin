@@ -12,7 +12,7 @@
  * The frame is the server's — it may have loaded before this code ran — so this adopts it and never draws or removes
  * one; the page owns its layout.
  */
-import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
+import { createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, type Accessor } from 'solid-js';
 import type { JsxNode } from '@/lib/jsx/types';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
@@ -57,11 +57,38 @@ export function followFramedValues(win: Window, values: string): void {
   win.history.replaceState(win.history.state, '', `${pathname}${next}${hash}`);
 }
 
+/**
+ * The framed document's node tree (the page's NODES door, `?part=nodes`): a request of its own because the page draws nothing
+ * from it — it is only relayed to the frame's edit controller — and on a large document it is most of the page's bytes.
+ * `search` carries an archived version's `?version=N`, so the tree is that version's. A transient failure is asked
+ * again twice; a refusal is not. Null when it never arrives: the frame then has no edit controller, and says so nowhere.
+ */
+export async function fetchFrameNodes(id: string, search: string, signal?: AbortSignal): Promise<JsxNode[] | null> {
+  const version = new URLSearchParams(search).get('version');
+  const url = `/api/page/artifact/${encodeURIComponent(id)}?part=nodes${version ? `&version=${encodeURIComponent(version)}` : ''}`;
+  for (let attempt = 0; attempt < 3 && !signal?.aborted; attempt++) {
+    try {
+      const response = await fetch(url, { credentials: 'same-origin', signal });
+      if (response.ok) {
+        const part = await response.json() as { nodes?: unknown };
+        return Array.isArray(part.nodes) ? part.nodes as JsxNode[] : null;
+      }
+      if (response.status < 500 && response.status !== 429) return null;
+    } catch { if (signal?.aborted) return null; }
+    await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 500 : 2000));
+  }
+  return null;
+}
+
 interface FramedStoryOptions {
   id: string;
   framed: FramedDocument;
-  /** The version's SOURCE nodes, which comments and selections are classified against. */
-  nodes: JsxNode[];
+  /**
+   * The version's SOURCE nodes, which comments and selections are classified against: at hand, or on their way
+   * (fetchFrameNodes). The bridge attaches to the frame when they are here; until then the controller is null and
+   * nothing the page draws waits (the frame draws itself), and one that never arrives leaves the bridge unmade.
+   */
+  nodes: JsxNode[] | Promise<JsxNode[] | null>;
   /** The head pointer drafts are previewed against, and the source the editor opened on (read live; sent on change). */
   editId: () => string;
   source: () => string | null;
@@ -89,27 +116,39 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   const { frame, origin } = options.framed;
   const [nonce, setNonce] = createSignal<string | null>(null);
   const [current, setCurrent] = createSignal<FrameBridgeParent | null>(null);
-  const bridge = createFrameBridgeParent({
-    win: window, frame, frameOrigin: origin, id: options.id, nodes: options.nodes,
-    editId: options.editId, source: options.source,
-    onReady: (next) => setNonce(next || null),
-    onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
-    onUrlValues: (values) => followFramedValues(window, values),
-  });
-  setCurrent(bridge);
-  createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
-  // Each saved version once, while reading: the editor's drafts (and Done's return to reading) draw their own.
-  let forwarded: string | null = null;
-  createEffect(() => {
-    const version = options.version?.();
-    if (!version?.nodes || !(options.reading?.() ?? true) || version.editId === forwarded) return;
-    forwarded = version.editId;
-    bridge.update({ type: STORY_DOCUMENT_MESSAGE, nodes: version.nodes });
-  });
+  const owner = getOwner();
+  let disposed = false;
+  /** The bars' reach over the frame's top edge, kept for a bridge made after it was set. */
+  let inset = 0;
+  const start = (nodes: JsxNode[]) => {
+    if (disposed || current()) return;
+    const bridge = createFrameBridgeParent({
+      win: window, frame, frameOrigin: origin, id: options.id, nodes,
+      editId: options.editId, source: options.source,
+      onReady: (next) => setNonce(next || null),
+      onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
+      onUrlValues: (values) => followFramedValues(window, values),
+    });
+    setCurrent(bridge);
+    if (inset) bridge.setTopInset(inset);
+    createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
+    // Each saved version once, while reading: the editor's drafts (and Done's return to reading) draw their own.
+    let forwarded: string | null = null;
+    createEffect(() => {
+      const version = options.version?.();
+      if (!version?.nodes || !(options.reading?.() ?? true) || version.editId === forwarded) return;
+      forwarded = version.editId;
+      bridge.update({ type: STORY_DOCUMENT_MESSAGE, nodes: version.nodes });
+    });
+  };
+  if (Array.isArray(options.nodes)) start(options.nodes);
+  else void options.nodes.then((nodes) => { if (nodes && !disposed) runWithOwner(owner, () => start(nodes)); });
   onCleanup(() => {
+    disposed = true;
+    const bridge = current();
     setCurrent(null);
     setNonce(null);
-    bridge.dispose();
+    bridge?.dispose();
   });
-  return { controller: current, nonce, frame, setTopInset: (px) => bridge.setTopInset(px) };
+  return { controller: current, nonce, frame, setTopInset: (px) => { inset = px; current()?.setTopInset(px); } };
 }

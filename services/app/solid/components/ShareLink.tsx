@@ -2,7 +2,12 @@
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetAccess, ShareEntry, ShareRole, SharingPatch, Visibility } from '@artifactbin/contracts';
-import { DialogShell } from '@/solid/ui/DialogShell';
+import { Button } from '../ui/Button';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Dialog } from '../ui/Dialog';
+import { Input } from '../ui/Field';
+import { Select } from '../ui/Select';
+import { StatusMessage } from '../ui/StatusMessage';
 import { copyText } from '../lib/copy-text';
 import { apiFetch } from '../lib/api';
 interface SharingState {
@@ -11,9 +16,9 @@ interface SharingState {
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
 }
 
+const ROLE_OPTIONS = [{ value: 'viewer', label: 'can view' }, { value: 'editor', label: 'can edit' }];
 function RolePicker(props: { label: string; value: ShareRole; onChange: (role: ShareRole) => void }): JSX.Element {
-  const [open, setOpen] = createSignal(false);
-  return <span class="relative inline-block"><button type="button" aria-label={props.label} aria-expanded={open()} onClick={() => setOpen(value => !value)} class="rounded border border-edge bg-surface p-1">{props.value === 'editor' ? 'can edit' : 'can view'}</button><Show when={open()}><span role="listbox" aria-label={props.label} class="absolute right-0 top-full z-50 min-w-24 rounded border border-edge bg-surface p-1 shadow-xl"><For each={(['viewer', 'editor'] as const)}>{role => <button type="button" role="option" aria-selected={props.value === role} onClick={() => { setOpen(false); props.onChange(role); }} class="block w-full p-1 text-left hover:bg-raised">{role === 'editor' ? 'can edit' : 'can view'}</button>}</For></span></Show></span>;
+  return <Select size="sm" class="w-32" ariaLabel={props.label} value={props.value} options={ROLE_OPTIONS} onChange={role => props.onChange(role as ShareRole)} />;
 }
 /** Sharing edits stay on the scoped artifact endpoint; copied links contain no secret or query. */
 export default function ShareLink(props: { artifactId?: string; title?: string; format?: string; datasetKind?: DatasetCatalog['kind']; editable?: boolean; class?: string; url?: string; startOpen?: boolean; onClose?: () => void }): JSX.Element {
@@ -38,30 +43,31 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
   const copyLink = () => { void copyText(new URL(props.url ?? location.pathname, location.origin).href); setCopied(true); };
   const postgres = () => props.format === 'dataset' && (props.datasetKind === 'postgres' || state()?.datasetKind === 'postgres');
   const showWrites = () => props.format === 'dataset' && state() && !postgres() && state()?.policyVersion !== 2;
+  const close = () => { setOpen(false); props.onClose?.(); };
   return <>
-    <Show when={!props.startOpen}><button type="button" aria-label="Share" class={props.class} onClick={() => canManage() ? setOpen(true) : copyLink()}>{copied() ? 'copied' : state() ? `share: ${state()!.visibility}` : 'Share'}</button></Show>
-    <Show when={open()}><DialogShell onClose={() => { setOpen(false); props.onClose?.(); }}><div role="dialog" aria-modal="true" aria-label="Sharing" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div class="max-h-[90vh] w-full max-w-lg space-y-4 overflow-auto rounded-xl border border-edge bg-surface p-6 text-sm text-fg">
-        <div class="flex justify-between"><h2 class="text-lg font-semibold">Sharing {props.title}</h2><button type="button" aria-label="Close sharing" onClick={() => { setOpen(false); props.onClose?.(); }}>Close</button></div>
-        <button type="button" aria-label="Copy link" onClick={copyLink} class="w-full rounded border border-edge p-2">{copied() ? 'copied' : 'copy link'}</button>
+    <Show when={!props.startOpen}><Button variant="secondary" size="sm" aria-label="Share" class={props.class} onClick={() => canManage() ? setOpen(true) : copyLink()}>{copied() ? 'copied' : state() ? `share: ${state()!.visibility}` : 'Share'}</Button></Show>
+    <Show when={open()}><Dialog title="Sharing" description={props.title} size="md" onClose={close}
+      footer={<Button variant="secondary" aria-label="Close sharing" onClick={close}>Close</Button>}>
+      <div class="space-y-4 text-sm">
+        <Button variant="secondary" class="w-full" aria-label="Copy link" onClick={copyLink}>{copied() ? 'copied' : 'copy link'}</Button>
         <div class="flex gap-1"><For each={(['public', 'unlisted', 'private'] as const).filter(value => value !== 'private' || state()?.canPrivate !== false)}>{visibility =>
-          <button type="button" aria-label={`Make ${visibility}`} aria-pressed={state()?.visibility === visibility} disabled={!state()} onClick={() => void update({ visibility })} class="flex-1 rounded border border-edge p-2 aria-pressed:border-accent">{visibility}</button>
+          <Button variant={state()?.visibility === visibility ? 'primary' : 'secondary'} class="flex-1" aria-label={`Make ${visibility}`} aria-pressed={state()?.visibility === visibility} disabled={!state()} onClick={() => void update({ visibility })}>{visibility}</Button>
         }</For></div>
-        <input aria-label="Invite email" type="email" value={email()} onInput={event => setEmail(event.currentTarget.value)} placeholder="email@example.com" class="w-full rounded border border-edge bg-surface p-2" />
-        <Show when={state()} fallback={<p role="status">Loading sharing…</p>}>{current => <>
+        <Input aria-label="Invite email" type="email" value={email()} onInput={event => setEmail(event.currentTarget.value)} placeholder="email@example.com" />
+        <Show when={state()} fallback={<StatusMessage kind="loading">Loading sharing…</StatusMessage>}>{current => <>
           <Show when={current().visibility !== 'private'}><div class="flex items-center justify-between">Anyone with the link<RolePicker label="Link role" value={current().linkRole ?? 'viewer'} onChange={role => void update({ linkRole: role })} /></div></Show>
           <Show when={postgres()}><p aria-label="PostgreSQL read-only access">Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.</p></Show>
-          <Show when={showWrites()}><section aria-label="Dataset writes" class="space-y-2 border-t border-edge pt-4"><h3 class="font-semibold">Writes</h3><div class="flex gap-2"><button type="button" aria-label="Make read-only" aria-pressed={current().access !== 'readwrite'} onClick={() => current().writtenBy?.length ? setConfirmReadOnly(true) : void update({ access: 'read' })}>read-only</button><button type="button" aria-label="Make read & write" aria-pressed={current().access === 'readwrite'} onClick={() => void update({ access: 'readwrite' })}>read &amp; write</button></div>
+          <Show when={showWrites()}><section aria-label="Dataset writes" class="space-y-2 border-t border-edge pt-4"><h3 class="font-semibold">Writes</h3><div class="flex gap-2"><Button size="sm" variant={current().access !== 'readwrite' ? 'primary' : 'secondary'} aria-label="Make read-only" aria-pressed={current().access !== 'readwrite'} onClick={() => current().writtenBy?.length ? setConfirmReadOnly(true) : void update({ access: 'read' })}>read-only</Button><Button size="sm" variant={current().access === 'readwrite' ? 'primary' : 'secondary'} aria-label="Make read & write" aria-pressed={current().access === 'readwrite'} onClick={() => void update({ access: 'readwrite' })}>read &amp; write</Button></div>
             <For each={current().writtenBy ?? []}>{writer => <p>{writer.title ?? writer.id} · {writer.mutations.join(', ')}</p>}</For>
-            <Show when={confirmReadOnly()}><div role="alertdialog" aria-label="Make this dataset read-only?"><p>Documents that write here will stop working until writes are enabled again. The rows stay.</p><button type="button" aria-label="Confirm read-only" onClick={() => { void update({ access: 'read' }); setConfirmReadOnly(false); }}>Make read-only</button><button type="button" onClick={() => setConfirmReadOnly(false)}>Keep writable</button></div></Show>
           </section></Show>
-          <section class="space-y-2 border-t border-edge pt-4"><h3 class="font-semibold">People</h3><For each={current().shares}>{entry => <div class="flex items-center gap-2"><span class="min-w-0 flex-1 truncate">{entry.email}</span><RolePicker label={`Role for ${entry.email}`} value={entry.role} onChange={role => void update({ shares: current().shares.map(person => person.email === entry.email ? { ...person, role } : person) })} /><button type="button" aria-label={`Remove ${entry.email}`} onClick={() => void update({ shares: current().shares.filter(person => person.email !== entry.email) })}>Remove</button></div>}</For>
-            <form class="flex gap-2" onSubmit={event => { event.preventDefault(); const address = email().trim(); if (!address) return; void update({ shares: [...current().shares, { email: address, role: 'viewer' }] }); setEmail(''); }}><button type="submit" aria-label="Add email">add</button></form>
+          <section class="space-y-2 border-t border-edge pt-4"><h3 class="font-semibold">People</h3><For each={current().shares}>{entry => <div class="flex items-center gap-2"><span class="min-w-0 flex-1 truncate">{entry.email}</span><RolePicker label={`Role for ${entry.email}`} value={entry.role} onChange={role => void update({ shares: current().shares.map(person => person.email === entry.email ? { ...person, role } : person) })} /><Button size="sm" variant="ghost" aria-label={`Remove ${entry.email}`} onClick={() => void update({ shares: current().shares.filter(person => person.email !== entry.email) })}>Remove</Button></div>}</For>
+            <form class="flex gap-2" onSubmit={event => { event.preventDefault(); const address = email().trim(); if (!address) return; void update({ shares: [...current().shares, { email: address, role: 'viewer' }] }); setEmail(''); }}><Button type="submit" size="sm" variant="secondary" aria-label="Add email">add</Button></form>
           </section>
           <Show when={props.format === 'dataset' && !postgres()}><a aria-label="Manage access policies" href={`/a/${props.artifactId}/edit`} onClick={() => setOpen(false)}>Manage data actions ↗</a></Show>
         </>}</Show>
-        <Show when={error()}><p role="alert" class="text-danger">{error()}</p></Show>
+        <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
       </div>
-    </div></DialogShell></Show>
+    </Dialog></Show>
+    <Show when={confirmReadOnly()}><ConfirmDialog title="Make this dataset read-only?" description="Documents that write here will stop working until writes are enabled again. The rows stay." action="Make read-only" confirmLabel="Confirm read-only" cancelLabel="Keep writable" onCancel={() => setConfirmReadOnly(false)} onConfirm={() => { void update({ access: 'read' }); setConfirmReadOnly(false); }} /></Show>
   </>;
 }

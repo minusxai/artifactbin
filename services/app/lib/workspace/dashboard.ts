@@ -11,8 +11,7 @@ import { count } from '@/lib/accounts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import { getDb } from '@/lib/platform/db';
 import type { SharedArtifactSummary } from './';
-import { renderSparklineSvg } from '@/lib/viz/sparkline';
-import { workspaceDocumentsFor, workspaceStatsFor } from './inventory';
+import { workspaceCountsFor, workspaceDocumentsFor } from './inventory';
 
 
 // Workspace projections deliberately exclude source metadata and engagement.
@@ -31,31 +30,21 @@ export async function accountWorkspaceCoreFor(userId: string, email?: string | n
   ]);
   return {
     artifacts: artifacts.map((artifact) => ({
-      ...artifact, url: `/a/${artifact.id}`, sparkline: null as string | null,
+      ...artifact, url: `/a/${artifact.id}`,
     })), shared: shared.rows,
   };
 }
 
-/** All-time unique daily visitors per document, counted once for the whole account. */
-async function workspaceViewCounts(userId: string): Promise<Record<string, number>> {
-  const db = await getDb();
-  const result = await db.query<{ id: string; views: number }>(`SELECT a.id, COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS views
-    FROM artifacts a LEFT JOIN analytics_events e ON e.artifact_id = a.id AND e.event = 'view'
-    WHERE a.user_id = $1 AND a.${LIVE_ARTIFACT_SQL} AND a.format IN ('markup', 'folder') GROUP BY a.id`, [userId]);
-  return Object.fromEntries(result.rows.map(row => [row.id, row.views]));
-}
-
-/** No shelf query here: account-wide series already identify their documents. */
+/**
+ * No shelf query here: the account-wide counts already identify their documents. Everything sent is NUMBERS.
+ * Home draws no per-document picture from them (its one chart is `viewsOverTime`, drawn in the browser), so no
+ * sparkline travels: rendering one Vega SVG per document was the whole CPU cost and ~90% of the bytes.
+ */
 export async function accountWorkspaceInsightsFor(userId: string) {
-  const [series, likes, followers, forks, views, stats] = await Promise.all([
+  const [series, likes, followers, forks, { stats, views }] = await Promise.all([
     viewSeriesByUser(userId, VIEW_SERIES_DAYS, 'markup'), likeSummaryByUser(userId),
-    count('follow', userId), forkCountByUser(userId), workspaceViewCounts(userId), workspaceStatsFor(userId),
+    count('follow', userId), forkCountByUser(userId), workspaceCountsFor(userId),
   ]);
-
-  const sparklines: Record<string, string | undefined> = {};
-  for (const [id, values] of series) {
-    if (values.some((value) => value > 0)) sparklines[id] = await renderSparklineSvg(values);
-  }
 
   const viewsOverTime = new Array<number>(VIEW_SERIES_DAYS).fill(0);
   for (const buckets of series.values()) {
@@ -64,7 +53,6 @@ export async function accountWorkspaceInsightsFor(userId: string) {
 
   return {
     stats,
-    sparklines,
     views,
     viewsOverTime,
     likes: likes.total,
@@ -75,10 +63,10 @@ export async function accountWorkspaceInsightsFor(userId: string) {
 }
 
 export async function accountWorkspaceFor(userId: string, email?: string | null) {
-  const [core, { sparklines, ...insights }] = await Promise.all([
+  const [core, insights] = await Promise.all([
     accountWorkspaceCoreFor(userId, email), accountWorkspaceInsightsFor(userId),
   ]);
-  return { ...core, ...insights, artifacts: core!.artifacts.map((row) => ({ ...row, views: insights.views[row.id] ?? 0, sparkline: sparklines[row.id] ?? null })) };
+  return { ...core, ...insights, artifacts: core!.artifacts.map((row) => ({ ...row, views: insights.views[row.id] ?? 0 })) };
 }
 
 export type AccountWorkspaceCore = NonNullable<Awaited<ReturnType<typeof accountWorkspaceCoreFor>>>;

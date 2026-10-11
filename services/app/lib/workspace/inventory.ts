@@ -2,6 +2,7 @@
 import { getDb } from '@/lib/platform/db';
 import { type ArtifactSummary } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { viewTotalsFor } from './view-totals';
 
 export interface WorkspaceStats { artifacts: number; assets: number; views: number }
 export interface AssetSelection { page: number; query: string; formats: string[]; visibilities: string[] }
@@ -20,17 +21,27 @@ export async function workspaceDocumentsFor(userId: string, groupId?:string) {
   return result.rows;
 }
 
-/** Preserve the shelf's per-document, all-time view semantics, without its row limit. */
-export async function workspaceStatsFor(userId: string): Promise<WorkspaceStats> {
+/**
+ * The account's totals and every document's view count, in one read of the inventory and one aggregate
+ * over the view events (view-totals): the shelf's per-document, all-time semantics, without its row limit.
+ * `stats.views` is the sum of the markup documents' counts, so the headline and the per-document map can
+ * never disagree. Documents and folders count views wherever they live; the artifact and asset counts are
+ * the personal inventory (`OWNED`).
+ */
+export async function workspaceCountsFor(userId: string): Promise<{ stats: WorkspaceStats; views: Record<string, number> }> {
   const db = await getDb();
-  const result = await db.query<WorkspaceStats>(`SELECT
-    COUNT(*) FILTER (WHERE format = 'markup')::int AS artifacts,
-    COUNT(*) FILTER (WHERE format NOT IN ('markup', 'folder'))::int AS assets,
-    (SELECT COUNT(DISTINCT (e.artifact_id, COALESCE(e.visitor, e.seq::text)))::int
-     FROM analytics_events e JOIN artifacts a ON a.id = e.artifact_id
-     WHERE a.user_id = $1 AND a.${LIVE_ARTIFACT_SQL} AND a.format = 'markup' AND e.event = 'view') AS views
-    FROM artifacts WHERE ${OWNED}`, [userId]);
-  return result.rows[0];
+  const result = await db.query<{ artifacts: number; assets: number; documents: string[]; folders: string[] }>(`SELECT
+    COUNT(*) FILTER (WHERE group_id IS NULL AND format = 'markup')::int AS artifacts,
+    COUNT(*) FILTER (WHERE group_id IS NULL AND format NOT IN ('markup', 'folder'))::int AS assets,
+    COALESCE(array_agg(id) FILTER (WHERE format = 'markup'), '{}') AS documents,
+    COALESCE(array_agg(id) FILTER (WHERE format = 'folder'), '{}') AS folders
+    FROM artifacts WHERE user_id = $1 AND ${LIVE_ARTIFACT_SQL}`, [userId]);
+  const { artifacts, assets, documents, folders } = result.rows[0];
+  const totals = await viewTotalsFor([...documents, ...folders]);
+  return {
+    stats: { artifacts, assets, views: documents.reduce((sum, id) => sum + (totals.get(id) ?? 0), 0) },
+    views: Object.fromEntries(totals),
+  };
 }
 
 /** Search/filter before pagination; stable tie breaking also covers bulk uploads. */

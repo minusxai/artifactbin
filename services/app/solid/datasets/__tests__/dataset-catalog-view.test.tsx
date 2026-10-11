@@ -45,12 +45,14 @@ it('shows a reader every exposed relation and column in the schema browser, and 
 it('opens on the default schema and moves the preview with the schema selector', async () => {
   serve();
   render(() => <DatasetCatalogView id="ds1" catalog={catalog} canEdit={false} />);
-  expect(screen.getByLabelText('Dataset schema')).toHaveValue('sales');
+  expect(screen.getByLabelText('Dataset schema')).toHaveTextContent('sales');
   await waitFor(() => expect(screen.getByLabelText('Table preview')).toHaveTextContent('120'));
-  fireEvent.change(screen.getByLabelText('Dataset schema'), { target: { value: 'support' } });
+  fireEvent.click(screen.getByLabelText('Dataset schema'));
+  fireEvent.click(screen.getByRole('option', { name: 'support' }));
   await waitFor(() => expect(screen.getByLabelText('Table preview')).toHaveTextContent('Refund requested'));
-  expect(screen.getByLabelText('Dataset table')).toHaveValue('tickets');
-  fireEvent.change(screen.getByLabelText('Dataset schema'), { target: { value: 'sales' } });
+  expect(screen.getByLabelText('Dataset table')).toHaveTextContent('tickets');
+  fireEvent.click(screen.getByLabelText('Dataset schema'));
+  fireEvent.click(screen.getByRole('option', { name: 'sales' }));
   await waitFor(() => expect(within(screen.getByLabelText('Table preview')).getByText('120')).toBeInTheDocument());
 });
 

@@ -68,3 +68,15 @@ it('explains the actual invalid_schedule code while preserving the complete draf
  expect(screen.getByLabelText('Cron expression')).toHaveValue('not a cron');expect(screen.getByLabelText('Timezone')).toHaveValue('Bad/Zone');expect(screen.getByLabelText('Artifact ID')).toHaveValue('doc-one');
  await waitFor(()=>expect(screen.getByRole('button',{name:'Create schedule'})).toBeEnabled());
 });
+
+it('wires each schedule field to its label and hint, and an edit moves focus to the cron field',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({schedules:[{id:'s1',artifactId:'doc-one',cron:'0 * * * *',timezone:'UTC',input:null,maxAttempts:1,retryBackoffSeconds:60,enabled:true,nextDueAt:'2026-10-06T00:00:00Z'}]})));
+ render(()=><SchedulesPage/>);
+ const cron=await screen.findByRole('textbox',{name:'Cron expression'});
+ expect(cron).toHaveAccessibleDescription(/Five fields: minute, hour, day, month, weekday/);
+ expect(screen.getByRole('textbox',{name:'Timezone'})).toHaveAccessibleDescription(/IANA name/);
+ expect(screen.getByRole('spinbutton',{name:'Maximum attempts'})).toHaveAccessibleDescription(/Includes the first attempt/);
+ fireEvent.click(await screen.findByRole('button',{name:'Edit doc-one'}));
+ expect(cron).toHaveFocus();
+ expect(screen.getByRole('heading',{name:'Edit schedule'})).toBeInTheDocument();
+});

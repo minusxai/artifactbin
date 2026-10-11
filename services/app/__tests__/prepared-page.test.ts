@@ -109,10 +109,12 @@ describe('the reader payload', () => {
     expect(runtime.css).toBe(realInlineStoryCss(reader));
     expect(runtime.css).not.toMatch(/<\/style/i);
     expect(storyBaseCss(runtime.base)).toBe(raw.baseCss);
-    // Raw nodes plus the rewritten style values reproduce the isolated tree exactly.
-    expect(runtime.data.nodes).toEqual(raw.data.nodes);
+    // The tree is the nodes door's, not the payload's; raw nodes plus the rewritten style values reproduce the isolated tree exactly.
+    expect(runtime.data).not.toHaveProperty('nodes');
+    const { nodes } = await (await readPage(id, '?part=nodes')).json();
+    expect(nodes).toEqual(raw.data.nodes);
     expect(runtime.overrides.length).toBeGreaterThan(0);
-    expect(applyStyleOverrides(runtime.data.nodes, runtime.overrides)).toEqual(realInlineStoryNodes(raw.data.nodes, reader));
+    expect(applyStyleOverrides(nodes, runtime.overrides)).toEqual(realInlineStoryNodes(raw.data.nodes, reader));
   });
 
   it('hands the editor its source, graph and raw sheets only on the editor door, and only to a writer', async () => {
@@ -267,7 +269,8 @@ describe('the per-viewer overlay', () => {
     const ownDoc = await (await framedDocument(app, own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
     expect(ownDoc).toContain('Signed in reader');
     expect(servedHtml(ownDoc).html.has('data-mx-signed-in')).toBe(true);
-    expect(inlined(ownHtml).artifact.surface.runtime.data.viewer).toEqual({ id: owner.id });
+    // The app page's data keeps only what it reads of a framed runtime: the viewer's overlay is the frame's own (above).
+    expect(inlined(ownHtml).artifact.surface.runtime).toEqual({ title: expect.any(String), data: {} });
     expect(inlined(ownHtml).artifact.surface.hasInvitedUsers).toBe(false);
     asSession(null);
     resetSpies();
@@ -278,7 +281,7 @@ describe('the per-viewer overlay', () => {
     expect(story).not.toContain('Signed in reader');
     const anon = inlined(html).artifact;
     expect(anon.role).toBe('viewer');
-    expect(anon.surface.runtime.data).not.toHaveProperty('viewer');
+    expect(anon.surface.runtime).toEqual({ title: expect.any(String), data: {} });
     expect(anon.surface).not.toHaveProperty('hasInvitedUsers');
     // The stored page was the ANONYMOUS render, whoever missed first: the stranger's view renders nothing.
     expect(spies.render).toBe(0);

@@ -9,7 +9,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@solidjs/testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogInput } from '@/lib/datasets/types';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
-import { addCell, catalog, change, click, connection, discover, editor, installDatasetFetch, savedDefinition, selectOrders, state, tables } from '@/solid/test/dataset-catalog';
+import { addCell, catalog, change, click, connection, discover, editor, installDatasetFetch, pick, savedDefinition, selectOrders, state, tables } from '@/solid/test/dataset-catalog';
 
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => state.viewerSession }) }));
 beforeEach(installDatasetFetch);
@@ -113,7 +113,7 @@ describe('dataset editor — the notebook', () => {
     editor(); change('Dataset title', 'Orders'); await discover();
     await addCell('raw_orders','select id from sales.orders');
     await addCell('region_totals','select count(*) id from raw_orders',2);
-    click('Expose cell 2'); change('Default schema','models');
+    click('Expose cell 2'); pick('Default schema','models');
     click('Edit dataset source'); click('Apply dataset source');
     expect(screen.getByLabelText('Expose cell 2')).toBeEnabled();
     expect(screen.getByLabelText('Expose cell 2')).toBeChecked();

@@ -3,7 +3,8 @@ import { createEffect, createSignal, Show } from 'solid-js';
 import { MAX_DATASET_BYTES, type DatasetSource, type IngestResult } from '@/lib/data-ingest/types';
 import { apiRequest } from '../lib/api';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Field';
+import { Field, Input } from '../ui/Field';
+import { StatusMessage } from '../ui/StatusMessage';
 
 /** Imports rows into a draft; the editor owns table naming and the eventual save. */
 export function DatasetImport(props: {
@@ -35,9 +36,9 @@ export function DatasetImport(props: {
   return <div class="space-y-3" aria-label="Import data">
     <Show when={props.source === 'csv'}>
     <p class="text-xs text-muted">Upload a CSV file with column names in the first row.</p>
-    <label class="grid gap-1.5 text-xs text-muted">CSV file
-      <input type="file" accept=".csv,text/csv" aria-label="CSV file" disabled={props.disabled}
-        class="w-full min-w-0 rounded-lg border border-edge-bright bg-surface p-2 font-sans text-sm text-fg file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-raised file:px-3 file:py-2 file:font-medium file:text-fg focus-visible:outline-2 focus-visible:outline-accent" onChange={event => {
+    <Field label="CSV file">
+      <Input type="file" accept=".csv,text/csv" aria-label="CSV file" disabled={props.disabled}
+        class="cursor-pointer py-1.5 file:mr-3 file:cursor-pointer file:border-0 file:bg-transparent file:font-medium file:text-fg" onChange={event => {
           const input = event.currentTarget;
           const file = input.files?.[0];
           if (file) void run(async () => {
@@ -45,19 +46,19 @@ export function DatasetImport(props: {
             return { kind: 'csv', text: await file.text() };
           }, file.name.replace(/\.csv$/i, '')).finally(() => { input.value = ''; });
         }} />
-    </label>
+    </Field>
     </Show>
     <Show when={props.source === 'sheet'}>
     <div class="flex flex-wrap items-end gap-2">
-      <label class="grid min-w-0 flex-1 gap-1.5 text-xs text-muted">Public Google Sheet
+      <Field label="Public Google Sheet" class="min-w-0 flex-1">
         <Input type="url" aria-label="Google Sheet URL" placeholder="https://docs.google.com/spreadsheets/d/…" disabled={props.disabled} value={sheetUrl()} onInput={event => setSheetUrl(event.currentTarget.value)} />
-      </label>
+      </Field>
       <Button aria-label="Import sheet" disabled={props.disabled || !sheetUrl().trim()} onClick={() => void run(async () => ({ kind: 'sheetUrl', url: sheetUrl().trim() }), 'sheet')}>Import sheet</Button>
     </div>
     <p class="text-xs text-muted">Imports a snapshot of the rows. Google Sheets must be shared so anyone with the link can view.</p>
     </Show>
-    <Show when={importing()}><p role="status" class="text-xs text-muted">Importing rows…</p></Show>
-    <Show when={error()}><p role="alert" class="text-xs text-danger">{error()}</p></Show>
-    <Show when={notice()}><p role="status" class="text-xs text-muted">{notice()}</p></Show>
+    <Show when={importing()}><StatusMessage kind="loading">Importing rows…</StatusMessage></Show>
+    <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
+    <Show when={notice()}><StatusMessage kind="notice">{notice()}</StatusMessage></Show>
   </div>;
 }

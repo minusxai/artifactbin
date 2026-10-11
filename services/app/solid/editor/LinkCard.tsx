@@ -9,6 +9,9 @@ import ExternalLink from 'lucide-solid/icons/external-link';
 import Link2Off from 'lucide-solid/icons/link-2-off';
 import Pencil from 'lucide-solid/icons/pencil';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+import { Button } from '@/solid/ui/Button';
+import { Input } from '@/solid/ui/Field';
+import { Panel } from '@/solid/ui/Panel';
 import { Tooltip } from '@/solid/ui/Tooltip';
 
 interface LinkCardRect { x: number; y: number; width: number; height: number }
@@ -51,37 +54,38 @@ export function LinkCard(props: {
     props.onApply(value);
   };
   const keepFocus = (event: MouseEvent) => event.preventDefault();
-  const iconButton = 'inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-fg hover:bg-raised';
 
   return (
-    <div role="group" aria-label={props.editing ? 'Edit link' : 'Link'} style={position()}
-      class="fixed z-50 flex w-max min-w-0 flex-wrap items-center gap-1 rounded-md border border-edge bg-surface p-1 font-sans text-xs text-fg shadow-lg">
+    <div role="group" aria-label={props.editing ? 'Edit link' : 'Link'} style={position()} class="fixed z-50 w-max min-w-0">
+    <Panel padding="none" class="flex flex-wrap items-center gap-1 p-1 font-sans text-xs text-fg shadow-lg">
       <Show when={props.editing} fallback={
         <>
           <a href={props.href ?? '#'} target="_blank" rel="noopener noreferrer" onMouseDown={keepFocus}
-            class="inline-flex min-w-0 max-w-56 items-center gap-1.5 truncate rounded-[3px] px-1.5 py-1 text-accent hover:bg-raised">
+            class="inline-flex min-w-0 max-w-56 items-center gap-1.5 truncate rounded-chip px-1.5 py-1 text-accent hover:bg-raised">
             <ExternalLink size={12} class="shrink-0" /><span class="truncate">{props.href}</span>
           </a>
           <Tooltip content="Edit link (⌘K)">
-            <button type="button" aria-label="Edit link" onMouseDown={keepFocus} onClick={() => props.onEdit()} class={iconButton}><Pencil size={13} /></button>
+            <Button variant="ghost" size="sm" icon aria-label="Edit link" onMouseDown={keepFocus} onClick={() => props.onEdit()}><Pencil size={13} /></Button>
           </Tooltip>
           <Tooltip content="Remove link">
-            <button type="button" aria-label="Remove link" onMouseDown={keepFocus} onClick={() => props.onApply(null)} class={iconButton}><Link2Off size={13} /></button>
+            <Button variant="ghost" size="sm" icon aria-label="Remove link" onMouseDown={keepFocus} onClick={() => props.onApply(null)}><Link2Off size={13} /></Button>
           </Tooltip>
         </>
       }>
         <form class="flex min-w-0 items-center gap-1" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-          <input ref={input} aria-label="Link URL" aria-invalid={invalid()} value={draft()} placeholder="Paste or type a link"
-            onInput={(event) => { setDraft(event.currentTarget.value); setInvalid(false); }}
-            onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); props.onCancel(); } }}
-            onBlur={() => props.onDismiss()}
-            class={`w-56 min-w-0 rounded-[3px] border bg-transparent px-1.5 py-1 text-xs text-fg focus:outline-none ${invalid() ? 'border-danger' : 'border-edge focus:border-edge-bright'}`} />
-          <button type="submit" onMouseDown={keepFocus} class="cursor-pointer rounded-[3px] px-2 py-1 font-medium text-accent hover:bg-raised">Apply</button>
+          <div class="w-56 min-w-0">
+            <Input size="sm" ref={input} aria-label="Link URL" aria-invalid={invalid()} value={draft()} placeholder="Paste or type a link"
+              onInput={(event) => { setDraft(event.currentTarget.value); setInvalid(false); }}
+              onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); props.onCancel(); } }}
+              onBlur={() => props.onDismiss()} />
+          </div>
+          <Button type="submit" variant="secondary" size="sm" onMouseDown={keepFocus}>Apply</Button>
         </form>
       </Show>
       <Show when={props.editing && invalid()}>
-        <span role="alert" class="w-full px-1.5 pb-0.5 text-[11px] text-danger">Enter a web address, like example.com</span>
+        <span role="alert" class="w-full px-1.5 pb-0.5 text-2xs text-danger">Enter a web address, like example.com</span>
       </Show>
+    </Panel>
     </div>
   );
 }

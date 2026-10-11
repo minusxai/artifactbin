@@ -5,6 +5,7 @@
  * `<Value>` has no query, so this renders nothing.
  */
 import { Show, type JSX } from 'solid-js';
+import { Button } from '../ui/Button';
 import type { TableChoice } from '@/lib/document/table-catalog';
 
 interface BoundQueryProps {
@@ -20,21 +21,16 @@ export default function BoundQuery(props: BoundQueryProps): JSX.Element {
       {(table) => (
         <div class="flex flex-col gap-1" aria-label="Bound query">
           <div class="flex items-baseline justify-between">
-            <span class="font-mono text-[11px] text-faint">query</span>
+            <span class="font-mono text-2xs text-faint">query</span>
             <Show when={props.onOpenQuery}>
               {(onOpenQuery) => (
-                <button
-                  type="button"
-                  aria-label={`Open $${table().name} in queries`}
-                  onClick={() => onOpenQuery()(table().name)}
-                  class="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
-                >
+                <Button variant="link" aria-label={`Open $${table().name} in queries`} onClick={() => onOpenQuery()(table().name)}>
                   edit in queries
-                </button>
+                </Button>
               )}
             </Show>
           </div>
-          <pre aria-label="Bound query SQL" class="max-h-40 overflow-auto whitespace-pre rounded-[4px] border border-edge bg-raised p-2 font-mono text-[11px] leading-[1.5] text-fg">
+          <pre aria-label="Bound query SQL" class="max-h-40 overflow-auto whitespace-pre rounded-chip border border-edge bg-raised p-2 font-mono text-2xs leading-[1.5] text-fg">
             {table().sql}
           </pre>
         </div>
