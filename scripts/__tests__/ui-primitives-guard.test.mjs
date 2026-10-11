@@ -90,11 +90,15 @@ describe('UI-primitive guard', () => {
     expect(fell.status).toBe(1);
     expect(fell.output).toContain('lower its allowlist entry');
   });
-  it('refuses an exported class-string constant for a control inside solid/ui, but not the internal control-styles module', () => {
+  it('refuses an exported class-string constant for a control inside solid/ui, but only the named page column and link styles in ui.tsx and the internal control-styles module', () => {
     const constant = "export const FORM_INPUT = 'w-full rounded-control border';";
     const inside = run(repository({ 'services/app/solid/ui/Thing.tsx': constant }));
     expect(inside.status).toBe(1);
     expect(inside.output).toContain('control-constant');
+    const grabBag = run(repository({ 'services/app/solid/ui/ui.tsx': "export const LINK = 'text-accent';\nexport const FORM_PRIMARY_BUTTON = 'rounded-lg px-4';" }));
+    expect(grabBag.status).toBe(1);
+    expect(grabBag.output).toContain('control-constant');
+    expect(run(repository({ 'services/app/solid/ui/ui.tsx': "export const PAGE_COLUMN = 'mx-auto';\nexport const LINK = 'text-accent';" })).status).toBe(0);
     expect(run(repository({ 'services/app/solid/ui/control-styles.ts': "export const FOCUS_RING = 'outline-none';" })).status).toBe(0);
     expect(run(repository({ 'services/app/solid/ui/Thing.tsx': "const LOCAL = 'w-full'; export const LAYER = { dialog: 40 };" })).status).toBe(0);
   });

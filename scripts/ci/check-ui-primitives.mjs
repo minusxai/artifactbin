@@ -37,8 +37,6 @@ const exceptionsPath = path.resolve(option('--exceptions') ?? path.join(sourceRo
 const SCOPE = /^services\/app\/solid\/.+\.(tsx|css)$|^services\/app\/lib\/offline\/[^/]+\.tsx$/;
 const EXEMPT = /^services\/app\/solid\/test\/|\/__tests__\//;
 const IN_UI = /^services\/app\/solid\/ui\//;
-/** The two ui modules whose exported strings are not controls' looks: the shared control tokens (internal to ui) and the page-level link/column. */
-const UI_CONSTANT_HOMES = /^services\/app\/solid\/ui\/(?:control-styles\.ts|ui\.tsx)$/;
 const PALETTE = 'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';
 
 /** The rest of an opening tag: anything but `<` and `>`, except the `=>` of an arrow-function attribute. */
@@ -60,7 +58,8 @@ const RULES = [
   // The control look tokens are ui-internal: a module outside ui that imports them is drawing a control by hand.
   { id: 'style-constant', use: 'the ui component that owns the style', pattern: /\bfrom\s+['"][^'"]*control-styles['"]/g },
   // ui exports components, not class strings: an exported FORM_INPUT-style constant invites the hand-rolled controls this guard exists to stop.
-  { id: 'control-constant', use: 'a ui component (control look is not exported as a class string)', inUi: true, pattern: /^export const [A-Z][A-Z0-9_]* = ['"`]/gm },
+  // Only ui.tsx's page column and link styles are named here; the control tokens live in control-styles.ts, which is .ts and never exported past ui.
+  { id: 'control-constant', use: 'a ui component (control look is not exported as a class string)', inUi: true, pattern: /^export const (?!(?:LINK|PAGE_COLUMN)\b)[A-Z][A-Z0-9_]* = ['"`]/gm },
 ];
 
 /** Offender counts per `file\0rule` for one file's text. */
@@ -68,7 +67,7 @@ function scan(file, text) {
   const found = new Map();
   const inUi = IN_UI.test(file);
   for (const rule of RULES) {
-    if (!!rule.inUi !== inUi || UI_CONSTANT_HOMES.test(file)) continue;
+    if (!!rule.inUi !== inUi) continue;
     const hits = text.match(rule.pattern)?.length ?? 0;
     if (hits) found.set(`${file}\0${rule.id}`, hits);
   }

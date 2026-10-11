@@ -54,8 +54,6 @@ const NOTHING_TO_SAVE = 'No changes to save';
 const EDIT_REFUSED = 'This text could not be applied to the current document.';
 const INVALID_SOURCE_EDIT = 'Editing needs a valid source. Fix the markup in the file, then open it again.';
 const CHROME_CSS = 'body{margin:0;padding-top:44px}';
-/** The page bar's height: the controls panel and its scrim start under it. */
-const BAR_HEIGHT = 44;
 
 function textOf(node: JsxNode): string { return node.type === 'text' ? node.value : node.type === 'element' ? node.children.map(textOf).join('') : ''; }
 
@@ -379,7 +377,7 @@ function OfflineShell(props: Opened) {
         <Show when={saveReceipt()}><span role="status">{saveReceipt()}</span></Show>
       </div></Show>
     </div>
-    <Show when={controls()}><Drawer label="Artifact controls" role="region" top={BAR_HEIGHT} onClose={closeControls}><div class="font-sans"><PageControlsBody title="Offline copy" onClose={closeControls}>
+    <Show when={controls()}><Drawer label="Artifact controls" role="region" top={chromeHeight()} onClose={closeControls}><div class="font-sans"><PageControlsBody title="Offline copy" onClose={closeControls}>
       <div class="grid gap-3 text-sm">
         <p>Data as of <time dateTime={file().snapshot.at}>{new Date(file().snapshot.at).toLocaleString()}</time></p>
         <Show when={file().liveUrl}><a class={LINK} href={file().liveUrl}>Open live version</a></Show>
