@@ -71,8 +71,8 @@ export async function runDev({ appOnly, args = [] }) {
   });
   const [serverStatus, islandsStatus] = await Promise.all([build('scripts/build-server-reader.mjs'), build(ISLANDS_BUILD)]);
   if (serverStatus !== 0 || islandsStatus !== 0) { process.exitCode = 1; return; }
-  watchServerSources();
-  watchIslandSources();
+  watchAndRebuild({ label: 'server reader source changed — rebuilding server assets', dirs: RUNTIME_SOURCES, command: ['scripts/build-server-reader.mjs', '--cache'] });
+  watchAndRebuild({ label: 'island source changed — rebuilding public/islands', dirs: ISLAND_SOURCES, command: [ISLANDS_BUILD, '--cache'] });
 
   const nodeEnv = appOnly && process.env.NODE_ENV === 'test'
     ? 'development'
@@ -105,31 +105,6 @@ export async function runDev({ appOnly, args = [] }) {
  */
 const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/reader-chrome', 'lib/frame-edit', 'lib/edit-protocol', 'lib/page-store', 'lib/story-ui', 'lib/publish', 'lib/offline', 'lib/viz', 'lib/data/story'];
 
-function watchServerSources() {
-  let timer = null;
-  let building = false;
-  let again = false;
-  const rebuild = () => {
-    if (building) { again = true; return; }
-    building = true;
-    console.log('[dev] server reader source changed — rebuilding server assets');
-    const run = spawn('node', ['scripts/build-server-reader.mjs', '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
-    run.on('exit', () => {
-      building = false;
-      if (again) { again = false; rebuild(); }
-    });
-  };
-  const onChange = (_event, file) => {
-    if (!file || !/\.(tsx?|css|mjs|json)$/.test(String(file)) || String(file).includes('__tests__')) return;
-    clearTimeout(timer);
-    timer = setTimeout(rebuild, 250);
-  };
-  for (const dir of RUNTIME_SOURCES) {
-    const full = path.join(APP_ROOT, dir);
-    if (fs.existsSync(full)) fs.watch(full, { recursive: true }, onChange);
-  }
-}
-
 /**
  * The compiled reader's shared island build (scripts/build/build-islands.mjs → public/islands): the island
  * runtime, the Solid kit and the behaviour chunks. A change under their sources rebuilds it, debounced
@@ -139,15 +114,19 @@ function watchServerSources() {
 const ISLANDS_BUILD = path.join(ROOT, 'scripts/build/build-islands.mjs');
 const ISLAND_SOURCES = ['lib/islands'];
 
-function watchIslandSources() {
+/**
+ * Run `node <command>` whenever a source under `dirs` changes (tests excluded): debounced, and serialised, so a
+ * change that lands mid-build runs the build once more after it.
+ */
+function watchAndRebuild({ label, dirs, command }) {
   let timer = null;
   let building = false;
   let again = false;
   const rebuild = () => {
     if (building) { again = true; return; }
     building = true;
-    console.log('[dev] island source changed — rebuilding public/islands');
-    const run = spawn('node', [ISLANDS_BUILD, '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
+    console.log(`[dev] ${label}`);
+    const run = spawn('node', command, { cwd: APP_ROOT, stdio: 'inherit' });
     run.on('exit', () => {
       building = false;
       if (again) { again = false; rebuild(); }
@@ -158,7 +137,7 @@ function watchIslandSources() {
     clearTimeout(timer);
     timer = setTimeout(rebuild, 250);
   };
-  for (const dir of ISLAND_SOURCES) {
+  for (const dir of dirs) {
     const full = path.join(APP_ROOT, dir);
     if (fs.existsSync(full)) fs.watch(full, { recursive: true }, onChange);
   }

@@ -105,6 +105,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
     pump();
   };
 
+  // Twin of services/app/lib/publish/prepared/draft-compile-pool.ts's pump; this one adds a per-task deadline and retires a timed-out thread.
   const pump = () => {
     while (queue.length && !closed) {
       const idle = threads.find((t) => !t.task) ?? (threads.length < size ? spawn() : null);

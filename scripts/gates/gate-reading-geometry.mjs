@@ -25,7 +25,7 @@
  *   usage: node scripts/gates/gate-reading-geometry.mjs [base]
  */
 import { sleep } from './lib/sleep.mjs';
-import { createChecker } from './lib/assert.mjs';
+import { createChecker, createSection } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { checkViewportGeometry } from './lib/viewport-geometry.mjs';
 import { DOCUMENT_FRAME, documentFrame, documentLocator, horizontalOverflow } from './lib/page-facts.mjs';
@@ -35,11 +35,7 @@ import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('reading-geometry');
-/** One leg's failure is reported and the walk goes on, so a run names every broken leg at once. */
-const section = async (name, run) => {
-  console.log(`█ ${name}`);
-  try { await run(); } catch (error) { check(false, `${name}: the leg threw (${String(error?.message ?? error).split('\n')[0].slice(0, 300)})`); }
-};
+const section = createSection(check);
 
 const browser = await launchChromium();
 /** The deck leg 1 measures; leg 5 reads it at phone width too. */
