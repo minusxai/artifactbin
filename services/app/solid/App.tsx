@@ -35,6 +35,12 @@ const ProgramPage = lazy(() => import('./pages/Program').then(m => ({default:m.P
 const ProgramEditPage = () => { const params=useParams<{id:string}>(); return <ProgramPage artifactId={params.id}/>; };
 const ChatPage = lazy(() => import('./pages/Chat').then((m) => ({ default: m.ChatPage })));
 const DocumentPage = lazy(() => import('./pages/Document').then((m) => ({ default: m.DocumentPage })));
+/**
+ * The component gallery (`/dev/ui`), development builds only. The DEV test must sit HERE, around the dynamic
+ * import, at module level: a production build folds `import.meta.env.DEV` to false and then emits no chunk for
+ * it. Gating only the <Route> in the JSX below still emits the gallery chunk (measured with Vite 8).
+ */
+const UiGallery = import.meta.env.DEV ? lazy(() => import('./pages/UiGallery')) : undefined;
 
 function PendingPage(): JSX.Element {
   return <main aria-label="Loading page" role="status" aria-busy="true" class="mx-auto max-w-5xl px-4 py-10"><span class="sr-only">Loading page…</span><div aria-hidden="true" class="h-7 w-48 rounded bg-raised" /></main>;
@@ -114,9 +120,7 @@ export function App(): JSX.Element {
       <Route path="/docs-human" component={DocsPage} />
       <Route path="/groups" component={GroupsPage} />
       <Route path="/getting-started" component={GettingStartedPage} />
-      {/* The component gallery, development builds only: Vite folds `import.meta.env.DEV` to false in a production
-        * build, so this branch and its lazy chunk drop out of the bundle (the one documented lazy-import exception). */}
-      {import.meta.env.DEV && <Route path="/dev/ui" component={lazy(() => import('./pages/UiGallery'))} />}
+      {UiGallery && <Route path="/dev/ui" component={UiGallery} />}
       <Route path="/:user" component={ProfilePage} />
       {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/ProfileAlias.tsx
         * ProfileAliasRoute); a sibling `/:user/:alias` route here would overlap it and win first for
