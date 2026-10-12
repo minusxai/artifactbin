@@ -190,3 +190,24 @@ it('lets phone users expand and close the workspace navigation',async()=>{
  fireEvent.click(toggle);expect(toggle).toHaveAttribute('aria-expanded','true');
  fireEvent.click(toggle);expect(toggle).toHaveAttribute('aria-expanded','false');
 });
+
+it('shows tokenless company setup to a signed-out visitor without private workspace data',async()=>{
+ const visitor={kind:'none',user:null,onboarded:false};
+ const deployment={mode:'company',setup_complete:true,is_owner:false,default_group:{...group,role:null}};
+ const fetcher=vi.fn(async(url:string)=>url.includes('/session')?Response.json(visitor):Response.json({signedIn:false,deployment}));
+ vi.stubGlobal('fetch',fetcher);open();
+ expect(await screen.findByRole('heading',{name:'Set up this workspace'})).toBeInTheDocument();
+ const command=screen.getByRole('button',{name:'Copy deployment setup command'}).parentElement!.textContent!;
+ expect(command).toContain(`--server '${window.location.origin}'`);
+ expect(command).toContain("--group 'team' --set-default");
+ expect(screen.getByRole('link',{name:'Sign in'})).toHaveAttribute('href','/login');
+ expect(screen.queryByRole('region',{name:'Group artifacts'})).toBeNull();
+ expect(requested(fetcher).filter(url=>!url.includes('/session'))).toEqual(['/api/page/home?part=bootstrap']);
+});
+it('sets the deployment server before a company default group is confirmed',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json({kind:'none',user:null,onboarded:false}):Response.json({signedIn:false,deployment:{mode:'company',setup_complete:false,is_owner:false,default_group:null}})));
+ open();expect(await screen.findByRole('heading',{name:'Set up this workspace'})).toBeInTheDocument();
+ const command=screen.getByRole('button',{name:'Copy deployment setup command'}).parentElement!.textContent!;
+ expect(command).toContain('--set-default');expect(command).not.toContain('--group');
+ expect(screen.getByText(/owner must sign in and confirm/i)).toBeInTheDocument();
+});

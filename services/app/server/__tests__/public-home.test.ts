@@ -1,8 +1,10 @@
-import {describe,expect,it} from 'vitest';
+import {beforeEach,describe,expect,it} from 'vitest';
+import {overrideConfig} from '@/lib/platform/config';
 import {AGENT_COOKIE} from '@/lib/accounts/agent-session';
 import {createAppServer} from '../app';
 import {request,useAppHarness} from '@/__tests__/harness';
 useAppHarness();
+beforeEach(()=>overrideConfig({}, {APP__DEPLOYMENT_MODE:'public'}));
 const app=createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
 describe('application home',()=>{
  it.each(['GET','HEAD'])('serves /start anonymously on %s without creating an artifact',async method=>{
@@ -13,6 +15,13 @@ describe('application home',()=>{
  it.each(['GET','HEAD'])('redirects an unauthenticated %s to login without caching',async method=>{
   const response=await app.request('/',{method});
   expect(response.status).toBe(302);expect(response.headers.get('location')).toBe('/login');
+  expect(response.headers.get('cache-control')).toBe('no-store');
+ });
+ it.each(['GET','HEAD'])('serves the company setup homepage anonymously on %s',async method=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.test'});
+  const response=await app.request('/',{method,headers:{cookie:`${AGENT_COOKIE}=stale`}});
+  expect(response.status).toBe(200);
+  expect(response.headers.get('location')).toBeNull();
   expect(response.headers.get('cache-control')).toBe('no-store');
  });
  it('renders the shared workspace shell for an authenticated account',async()=>{
