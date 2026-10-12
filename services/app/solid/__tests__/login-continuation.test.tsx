@@ -2,8 +2,10 @@
 import {render,screen,fireEvent,waitFor,cleanup} from '@solidjs/testing-library';
 import {it,expect,vi,afterEach} from 'vitest';
 import {LoginPage} from '../pages/Login';
+import {replaceDocument} from '../lib/document-navigation';
+vi.mock('../lib/document-navigation',()=>({replaceDocument:vi.fn()}));
 vi.mock('@/solid/lib/session',()=>({useSession:()=>({session:()=>({user:null,kind:'none',onboarded:true}),sessionError:()=>null})}));
-afterEach(()=>{cleanup();sessionStorage.clear();vi.unstubAllGlobals();window.history.replaceState(null,'','/');});
+afterEach(()=>{vi.clearAllMocks();cleanup();sessionStorage.clear();vi.unstubAllGlobals();window.history.replaceState(null,'','/');});
 it('uses the existing email login handlers and continues without navigating away from an in-memory offer',async()=>{
  window.history.replaceState(null,'','/connect?request=portable');const done=vi.fn();
  const fetch=vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('{}',{status:200}));vi.stubGlobal('fetch',fetch);
@@ -117,4 +119,40 @@ it('keeps email delivery wording when the server confirms it',async()=>{
  fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_email@example.com'}});
  fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
  await screen.findByRole('textbox',{name:'Login code'});expect(screen.getByText(/We emailed a code/)).toBeTruthy();
+});
+
+it('does not resume a stale CLI callback during ordinary website login',async()=>{
+ window.history.replaceState(null,'','/login?callbackUrl='+encodeURIComponent('/oauth/loopback?state=stale'));
+ vi.stubGlobal('fetch',vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({success:true})));
+ render(()=> <LoginPage/>);
+ fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_website@example.com'}});
+ fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
+ fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'123456'}});
+ fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
+ await waitFor(()=>expect(replaceDocument).toHaveBeenCalledWith('/'));
+});
+
+it('uses the router-provided website destination instead of stale browser history',async()=>{
+ window.history.replaceState(null,'','/login?callbackUrl='+encodeURIComponent('/oauth/loopback?state=old'));
+ vi.stubGlobal('fetch',vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({success:true})));
+ render(()=> <LoginPage callbackUrl={null}/>);
+ fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_route@example.com'}});
+ fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
+ fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'123456'}});
+ fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
+ await waitFor(()=>expect(replaceDocument).toHaveBeenCalledWith('/'));
+});
+it('labels explicit CLI sign-in and keeps the original continuation through OTP entry',async()=>{
+ const target='/oauth/loopback?state=current';
+ window.history.replaceState(null,'','/login/cli?callbackUrl='+encodeURIComponent(target));
+ vi.stubGlobal('fetch',vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({success:true})));
+ render(()=> <LoginPage cliLogin callbackUrl={target}/>);
+ expect(screen.getByText(/Sign in to connect the CLI/)).toBeTruthy();
+ expect(screen.getByRole('link',{name:'Use the website instead'}).getAttribute('href')).toBe('/login');
+ fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_cli@example.com'}});
+ fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
+ fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'123456'}});
+ window.history.replaceState(null,'','/login/cli?callbackUrl='+encodeURIComponent('/oauth/loopback?state=other'));
+ fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
+ await waitFor(()=>expect(replaceDocument).toHaveBeenCalledWith(target));
 });

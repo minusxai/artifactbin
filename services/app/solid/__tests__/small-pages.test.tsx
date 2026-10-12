@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url: String(url), method: init?.method ?? 'GET' });
     if (url === '/api/page/session') return Response.json(session);
-    if (url === '/api/auth/email-otp/send-verification-otp') return Response.json({});
+    if (url === '/api/auth/email-otp/send-verification-otp' || url === '/api/auth/sign-in/email-otp') return Response.json({});
     if (url === '/api/start' || url === '/api/start?mode=blank') return Response.json({ id: 'doc_1' }, { status: startStatus });
     if (url === '/api/my/profile/image' && init?.method === 'PUT') return Response.json({ image: '/api/users/new_1/avatar?v=1' });
     if (url === '/api/my/profile' && init?.method === 'PATCH') return Response.json(profileStatus === 200 ? { username: 'chosen' } : { error: 'username_taken' }, { status: profileStatus });
@@ -117,4 +117,17 @@ it('uploads a welcome photo through the named picture control', async () => {
   expect(picker.accept).toBe('image/png,image/jpeg,image/webp,image/gif,image/avif');
   fireEvent.change(picker, { target: { files: [new File(['x'], 'me.png', { type: 'image/png' })] } });
   await waitFor(() => expect(view.container.querySelector('img[src="/api/users/new_1/avatar?v=1"]')).toBeInTheDocument());
+});
+
+it('leaves an old CLI login continuation behind when the reader chooses website sign-in',async()=>{
+ window.history.replaceState(null,'','/login/cli?callbackUrl='+encodeURIComponent('/oauth/loopback?state=old'));
+ render(()=> <App/>);
+ fireEvent.click(await screen.findByRole('link',{name:'Use the website instead'}),{button:0});
+ await waitFor(()=>expect(window.location.pathname+window.location.search).toBe('/login'));
+ expect(screen.queryByText(/Sign in to connect the CLI/)).toBeNull();
+ fireEvent.input(await screen.findByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_website@example.com'}});
+ fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
+ fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'123456'}});
+ fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
+ await waitFor(()=>expect(replaceDocument).toHaveBeenCalledWith('/'));
 });

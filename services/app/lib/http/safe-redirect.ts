@@ -26,7 +26,10 @@ export function internalRedirectTarget(raw: string | null | undefined, origin: s
 }
 
 /** Login destinations share origin validation and cannot loop back to login. */
-export function loginRedirectTarget(raw: string | null | undefined, origin: string): string {
+export function loginRedirectTarget(raw: string | null | undefined, origin: string, cliLogin = false): string {
   const target = internalRedirectTarget(raw, origin);
-  return new URL(target, origin).pathname.replace(/\/+$/, '') === '/login' ? '/' : target;
+  const path = new URL(target, origin).pathname.replace(/\/+$/, '');
+  if (path === '/login' || path.startsWith('/login/')) return '/';
+  // A browser login never inherits a local CLI return address. Only the distinct CLI login door continues it.
+  return path === '/oauth/loopback' && !cliLogin ? '/' : target;
 }

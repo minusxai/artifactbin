@@ -94,6 +94,15 @@ function ArtifactEditRoute(): JSX.Element {
   return servedDocumentFrame() ? <DocumentPage /> : <ArtifactAddressRoute editing />;
 }
 
+/** The router location leads browser history during a transition; each login entry owns its continuation. */
+function LoginRoute(): JSX.Element {
+ const location = useLocation();
+ return <Show when={location.pathname + location.search} keyed>{address => {
+  const url = new URL(address, window.location.origin);
+  return <LoginPage callbackUrl={url.searchParams.get('callbackUrl')} cliLogin={url.pathname === '/login/cli'}/>;
+ }}</Show>;
+}
+
 export function App(): JSX.Element {
   return (
     <Router root={Root}>
@@ -111,7 +120,8 @@ export function App(): JSX.Element {
       <Route path="/programs/new" component={ProgramPage} />
       <Route path="/programs/:id/edit" component={ProgramEditPage} />
       <Route path="/chat" component={ChatPage} />
-      <Route path="/login" component={LoginPage} />
+      <Route path="/login" component={LoginRoute} />
+      <Route path="/login/cli" component={LoginRoute} />
       <Route path="/connect" component={ConnectPage} />
       <Route path="/start" component={StartPage} />
       <Route path="/welcome" component={WelcomePage} />

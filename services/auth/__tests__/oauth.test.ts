@@ -580,7 +580,7 @@ describe('the afbin CLI loopback sign-in (RFC 8252 + PKCE, no approval click)', 
     const anonymous = await app.request(authorizeUrl());
     expect(anonymous.status).toBe(302);
     const login = new URL(anonymous.headers.get('location')!, BASE);
-    expect(login.pathname).toBe('/login');
+    expect(login.pathname).toBe('/login/cli');
     const callback = login.searchParams.get('callbackUrl')!;
     expect(callback).toBe(authorizeUrl());
     const after = await app.request(callback, { headers: asUser() });

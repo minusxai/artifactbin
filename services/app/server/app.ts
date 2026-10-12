@@ -693,12 +693,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const wasGuest = (c.req.header('cookie') ?? '').split(/;\s*/).some(part => part.startsWith(`${AGENT_COOKIE}=`));
     return c.redirect(wasGuest ? '/login?signedOut=1' : '/login', 302);
   });
-  app.on(['GET', 'HEAD'], '/login', async c => {
+  app.on(['GET', 'HEAD'], ['/login', '/login/cli'], async c => {
     c.header('Cache-Control', 'no-store');
     const actor = await runWithRequest(c.req.raw, () => sessionActor(c.req.raw));
     if (actor.credential === 'session' && actor.viewer?.userId) {
       const url = new URL(c.req.url);
-      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw)), 302);
+      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw), url.pathname === '/login/cli'), 302);
     }
     return page(c);
   });
