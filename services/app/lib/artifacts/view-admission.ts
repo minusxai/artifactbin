@@ -4,7 +4,7 @@
  */
 import { trackEvent } from '@/lib/platform/analytics';
 import { canReadArtifact } from './access';
-import { getArtifactById } from './rows';
+import { getArtifactHeaderById } from './rows';
 import { isCrossSiteRequest } from '@/lib/http/http';
 import { sessionActor } from '@/lib/accounts';
 
@@ -13,7 +13,8 @@ export async function recordArtifactView(request: Request, id: string): Promise<
   // a cookie credential. This endpoint is called only from the app origin.
   if (isCrossSiteRequest(request)) return 'forbidden';
   const actor = await sessionActor(request);
-  const artifact = await getArtifactById(id);
+  // The header decides (format and access): a view is never a reason to read the document itself.
+  const artifact = await getArtifactHeaderById(id);
   if (!artifact || artifact.format !== 'markup' || !(await canReadArtifact(artifact, actor.viewer))) return 'not_found';
   if (!new URL(request.url).searchParams.has('key')) {
     await trackEvent('view', artifact.id, { userId: actor.viewer?.userId ?? null });

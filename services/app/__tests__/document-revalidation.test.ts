@@ -122,6 +122,47 @@ describe('the document on its own origin', () => {
     expect(revalidated.stats.count).toBeLessThan(25);
   });
 
+  it('answers a matching If-None-Match without reading the compiled page, and an edit still gets the page under a new tag', async () => {
+    const w = await world();
+    const id = await w.publish(BODY);
+    const first = await read(id);
+    const tag = tagOf(first);
+    const html = await first.text();
+    // Every row the database hands back while answering: a compiled page (its story HTML) must not be among them.
+    const db = await getDb();
+    const query = db.query.bind(db);
+    const answered: unknown[] = [];
+    vi.spyOn(db, 'query').mockImplementation(async (sql: string, params?: unknown[]) => {
+      const result = await query(sql, params);
+      answered.push(...result.rows);
+      return result;
+    });
+    const readsCompiled = () => answered.some((row) => JSON.stringify(row).includes('"html":'));
+
+    const revalidated = await read(id, { 'if-none-match': tag });
+    expect(revalidated.status).toBe(304);
+    expect(answered.length, 'the spy sees the reads').toBeGreaterThan(0);
+    expect(readsCompiled(), 'a 304 never reads the compiled page').toBe(false);
+
+    // A tag that does not match still gets the very page a first view gets.
+    const missed = await read(id, { 'if-none-match': '"someone-elses-tag-000"' });
+    expect(missed.status).toBe(200);
+    expect(tagOf(missed)).toBe(tag);
+    expect(await missed.text()).toBe(html);
+
+    // An edit: the old tag is answered with the new page and a new tag, which then revalidates without the compiled page.
+    await w.edit(id, `${BODY}<p id="more">One more paragraph.</p>`);
+    const edited = await read(id, { 'if-none-match': tag });
+    expect(edited.status).toBe(200);
+    const fresh = tagOf(edited);
+    expect(fresh).not.toBe(tag);
+    expect(await edited.text()).toContain('One more paragraph.');
+    answered.length = 0;
+    const again = await read(id, { 'if-none-match': fresh });
+    expect(again.status).toBe(304);
+    expect(readsCompiled()).toBe(false);
+  });
+
   it('changes the tag with the reader: another account, the same account in another role, and a guest', async () => {
     const w = await world();
     const id = await w.publish(BODY, 'public');
