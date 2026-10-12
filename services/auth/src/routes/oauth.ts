@@ -253,7 +253,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     if (problem) return page('artifactbin — error', `<h1>Can’t sign in</h1><p class="err">${escapeHtml(problem)}</p><p>Run afbin auth again.</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) {
-      return new Response(null, { status: 302, headers: { Location: `/login?callbackUrl=${encodeURIComponent(`/oauth/loopback?${q.toString()}`)}`, ...NO_STORE } });
+      return new Response(null, { status: 302, headers: { Location: `/login/cli?callbackUrl=${encodeURIComponent(`/oauth/loopback?${q.toString()}`)}`, ...NO_STORE } });
     }
     let owner: Actor;
     try { owner = (await browserOwner(o, c.req.raw, actor)).actor; }

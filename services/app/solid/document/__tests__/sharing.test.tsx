@@ -221,3 +221,28 @@ it('chooses a dataset\'s writes from a pressed-state group, and re-pressing the 
   fireEvent.click(screen.getByRole('button', { name: 'Make read & write' }));
   expect(puts).toHaveLength(1);
 });
+
+
+it('disables public visibility when deployment policy forbids it while keeping link sharing usable', async () => {
+  const fetcher = vi.fn(async () => Response.json({ visibility: 'unlisted', linkRole: 'viewer', shares: [], canPublic: false, canPrivate: true }));
+  vi.stubGlobal('fetch', fetcher);
+  render(() => <DocumentSharing id="abc123" title="Report" owner variant="dialog" />);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Make public' })).toBeDisabled());
+  expect(screen.getByText(/Public documents are disabled on this server/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Make unlisted' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Make private' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('shows a structured server refusal without marking the unsaved visibility selected', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => init?.method === 'PUT'
+    ? Response.json({ error: 'public_not_enabled', hint: 'Public documents are disabled. Use unlisted to share a link.' }, { status: 400 })
+    : Response.json({ visibility: 'private', linkRole: 'viewer', shares: [], canPublic: true, canPrivate: true })));
+  render(() => <DocumentSharing id="abc123" title="Report" owner variant="dialog" />);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Make public' })).toBeTruthy());
+  fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Public documents are disabled. Use unlisted to share a link.'));
+  expect(screen.getByRole('button', { name: 'Make private' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Make public' })).toHaveAttribute('aria-pressed', 'false');
+});

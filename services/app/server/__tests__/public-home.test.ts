@@ -45,6 +45,9 @@ describe('application home',()=>{
  describe('signed-in login visits', () => {
   it.each([
     ['/login', '/'],
+    ['/login?callbackUrl=%2Foauth%2Floopback%3Fstate%3Dstale', '/'],
+    ['/login?callbackUrl=%2Flogin%2Fcli%3FcallbackUrl%3Dstale', '/'],
+    ['/login/cli?callbackUrl=%2Foauth%2Floopback%3Fstate%3Dcurrent', '/oauth/loopback?state=current'],
     ['/login?callbackUrl=%2Fa%2Fabc%3Fx%3D1%23edit', '/a/abc?x=1#edit'],
     ['/login?callbackUrl=https://evil.example', '/'],
     ['/login?callbackUrl=%2Flogin%3FcallbackUrl%3D%252Faccount', '/'],

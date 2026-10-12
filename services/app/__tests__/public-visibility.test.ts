@@ -4,7 +4,7 @@
  * links remain available; anonymous API creation remains unauthorized.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
@@ -22,9 +22,19 @@ async function withPublic(enabled: boolean) {
   ]);
   // Import account creation and minting from the same reset module graph as
   // the route so these fixtures use its deployment config and current DB.
+  const sharingRoute = await import('@/app/api/my/artifacts/[id]/sharing/route');
+  const { getDb } = await import('@/lib/platform/db');
   const user = await createUser({ email: 'mxmx_test_visibility@example.test' });
   const { token } = await mintToken('visibility', user.id);
+  const { overrideSession } = await import('@/auth');
+  overrideSession(() => ({ user: { id: user.id, email: user.email } }));
   return {
+    group: async () => {
+      const db = await getDb();
+      await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('grp_visibility','visibility_team','Team',$1)", [user.id]);
+      await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES('grp_visibility',$1,'editor')", [user.id]);
+    },
+    sharing: (id: string, patch?: Record<string, unknown>) => sharingRoute[patch ? 'PUT' : 'GET'](request(`/api/my/artifacts/${id}/sharing`, { method: patch ? 'PUT' : 'GET', json: patch }), { params: Promise.resolve({ id }) }),
     anonymousCreate: (body: Record<string, unknown>) => createArtifact(new Request(`${BASE}/api/artifacts`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
     })),
@@ -86,4 +96,33 @@ it.each([false, true])('public enabled=%s never enables anonymous creation', asy
   const response = await w.anonymousCreate({ markup: '<p>Anonymous</p>', visibility: 'unlisted' });
   expect(response.status).toBe(401);
   expect((await response.json()).error).toBe('unauthorized');
+});
+
+
+it.each([false, true])('sharing reads and updates expose public enabled=%s', async (enabled) => {
+  const w = await withPublic(enabled);
+  const created = await w.create({ markup: '<p>Team review</p>', visibility: 'private' });
+  expect(created.status).toBe(201);
+  const { id } = await created.json();
+  expect(await (await w.sharing(id)).json()).toMatchObject({ canPublic: enabled });
+  const updated = await w.sharing(id, { visibility: 'unlisted' });
+  expect(updated.status).toBe(200);
+  expect(await updated.json()).toMatchObject({ canPublic: enabled, visibility: 'unlisted' });
+  if (!enabled) {
+    const refused = await w.sharing(id, { visibility: 'public' });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ error: 'public_not_enabled' });
+    expect(await (await w.sharing(id)).json()).toMatchObject({ visibility: 'unlisted' });
+  }
+});
+
+it('can restore group-owned link sharing to private', async () => {
+  const w = await withPublic(false);
+  await w.group();
+  const created = await w.create({ markup: '<p>Team review</p>', visibility: 'unlisted', destination: { type: 'group', id: 'grp_visibility' } });
+  expect(created.status).toBe(201);
+  const { id } = await created.json();
+  const updated = await w.sharing(id, { visibility: 'private' });
+  expect(updated.status).toBe(200);
+  expect(await updated.json()).toMatchObject({ visibility: 'private', canPrivate: true });
 });

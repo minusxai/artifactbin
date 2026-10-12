@@ -30,6 +30,7 @@ const Select = lazy(() => import('../ui/Select').then((m) => ({ default: m.Selec
 const ROLE_OPTIONS = SHARE_ROLES.map((role) => ({ value: role, label: SHARE_ROLE_LABEL[role] }));
 /** What the sharing surface is for: the Share dialog's description and the editor's Sharing tab say the same. */
 const SHARING_DESCRIPTION = 'Manage access, invite people, or copy the link.';
+const PUBLIC_DISABLED = 'Public documents are disabled on this server. Use unlisted to share with anyone who has the link, or private for invited people and group members.';
 const VISIBILITY_TIPS = { public: 'anyone with the link · listed on your profile', unlisted: 'anyone with the link · not listed anywhere', private: 'only you and invited emails' } as const;
 
 /** The sharing verdict's icon, from the same nodes the served rail draws (lib/visibility-icons). */
@@ -39,7 +40,7 @@ function VisibilityIcon(props: { icon: SharingIcon; size: number; class?: string
 }
 
 interface SharingState {
-  visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; canPrivate?: boolean;
+  visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; canPrivate?: boolean; canPublic?: boolean;
   /** A dataset's writes: who may change it through a document. */
   access?: DatasetAccess; datasetKind?: DatasetCatalog['kind']; policyVersion?: number;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
@@ -73,7 +74,8 @@ export function DocumentSharing(props: {
   const [open, setOpen] = createSignal(props.variant === 'dialog');
   const [state, setState] = createSignal<SharingState | null>(null);
   const canPrivate = createMemo(() => state()?.canPrivate !== false);
-  const visibilityOptions = createMemo(() => VISIBILITY_OPTIONS.filter(option => option.value !== 'private' || canPrivate()));
+  const canPublic = createMemo(() => state()?.canPublic !== false);
+  const visibilityOptions = createMemo(() => VISIBILITY_OPTIONS.filter(option => option.value !== 'private' || canPrivate()).map(option => option.value === 'public' && !canPublic() ? { ...option, disabled: true, tooltip: PUBLIC_DISABLED } : option));
   const [email, setEmail] = createSignal('');
   const [error, setError] = createSignal('');
   const [copied, setCopied] = createSignal(false);
@@ -94,7 +96,13 @@ export function DocumentSharing(props: {
     setError('');
     try {
       const response = await apiFetch(endpoint, 'PUT', patch);
-      if (!response.ok) throw new Error('could not update sharing');
+      if (!response.ok) {
+        const refusal = await response.json().catch(() => null) as { hint?: unknown; message?: unknown; details?: unknown; error?: unknown } | null;
+        const message = [refusal?.hint, refusal?.message, ...(Array.isArray(refusal?.details) ? refusal.details : []), refusal?.error]
+          .find((value): value is string => typeof value === 'string' && !!value.trim());
+        setError(message ?? 'could not update sharing');
+        return false;
+      }
       setState(await response.json() as SharingState);
       return true;
     } catch { setError('could not update sharing'); return false; }
@@ -160,6 +168,7 @@ export function DocumentSharing(props: {
     <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
     <Show when={canManage() && state()}>{current => <>
       <ToggleGroup label="Link visibility" fill value={current().visibility} options={visibilityOptions()} onChange={value => void put({ visibility: value as Visibility })} />
+      <Show when={!canPublic()}><p aria-label="Public visibility policy" class="mt-2 leading-relaxed text-muted">{PUBLIC_DISABLED}</p></Show>
       <Show when={current().visibility !== 'private'}>
         <label class="mt-2 flex items-center justify-between gap-2 text-muted"><span>anyone with the link</span>
           <span class="w-32 shrink-0"><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></Suspense></span>
