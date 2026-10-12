@@ -49,7 +49,7 @@ import { scriptJson } from '@artifactbin/utils/escape';
 import { compiledPageFor, documentEtag, domainFooter, linkedDocumentSheets } from '@/lib/publish/prepared';
 import { stylesheetStore } from '@/lib/compiled-page';
 import { matchingTag, notModified, REVALIDATE } from '@/lib/http/revalidation';
-import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';
+import { preparedPageFor, type PreparedView, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';
 import { cspExtensionsFor } from '@/lib/trust/document-trust';
 
 // The markup document's policy — per document, built in lib/page-styles/markup-csp:
@@ -301,7 +301,6 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       const picked = pages && !key && !domain ? readerModeOf(new URL(request.url).search) : null;
       const shownMode = captured ?? picked;
       const design = resolveStoredStoryDesign(meta.theme, shownMode ?? meta.colorMode);
-      const compiledCss = await currentStoryCss(meta, row.source);
       // ?chrome=0 — the capture path (lib/export screenshots this frame, so the
       // document's own rail/present bar and attribution footer would land in
       // every OG card).
@@ -319,29 +318,6 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       const appStory = fragment?.surface === 'app';
       {
         const capture = byExportKey && !chrome;
-        // The shell and the compiled page: the tree is read only for a fragment (below) or a recompile (which reads it itself).
-        let prepared = await preparedPageFor(artifact, at, { compiled: true });
-        if (byExportKey && request.headers.get('x-mx-compiled-backfill') === 'recompile') {
-          // A page prepared under an older stylesheet is prepared again whole (its compile with it); otherwise only recompiled.
-          if (prepared.stale) prepared = await reprepareStoredPage(artifact, at);
-          else {
-            const compiled = await recompilePage(prepared.row, at, prepared.page);
-            if (compiled) prepared.page.compiled = compiled;
-          }
-        }
-        /**
-         * A document on its own origin LINKS the sheets every document of a build shares, from the app's origin where
-         * one URL serves them all (lib/page-styles/linked-sheets.server); a sandboxed copy, a domain post and the
-         * exporter's capture carry the standalone sheets inline, as they always did.
-         */
-        const documentSheets = (standalone: ReturnType<typeof documentStyleSheets>) =>
-          pages && !capture ? linkedDocumentSheets(standalone, { origin: pages.site.app, store: stylesheetStore() }) : standalone;
-        const flow = prepared.page.declared?.flow ?? null;
-        // The exporter photographs this page: its run is settled, and carries whoever asked (see the
-        // capture's run below) — never the guest snapshot's rows, never cached.
-        const ran = capture && flow && !prepared.page.declared?.state
-          ? await dataflowForRow(row, { values: readUrlValues(new URL(request.url).search, flow), viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } })
-          : null;
         // What this reader trusts the document to reach beyond the default policy (its Helmet `csp-*` metas): the
         // hosts they published, or every declared one once they allowed the rest; nothing for a capture. On its own
         // origin the reader's "Allow once" grants arrive with the pages session (`pages.carried`).
@@ -366,19 +342,54 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
           ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN, ...(extensions ? { extensions } : {}) })
           : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions);
         const revalidated = !!pages && !key && !fragment && !at;
-        const etag = revalidated ? await documentEtag({
-          row: prepared.row, artifact, at, page: prepared.page, stale: !!prepared.stale, search: new URL(request.url).search, drawings, holder,
-          facts: {
-            // Who asks, in what role, and what they trust: another reader never matches this reader's tag.
-            reader: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null, credential: actor.credential },
-            role: await roleFor(artifact, actor), trust: extensions ?? null,
-            // The surface and the addresses written into it.
-            surface: pages ? { self: pages.self, app: pages.site.app } : null,
-            chrome, canonical, design, policy,
-          },
-        }) : null;
-        const held = etag ? matchingTag(request.headers.get('if-none-match'), etag) : null;
+        const facts = revalidated ? {
+          // Who asks, in what role, and what they trust: another reader never matches this reader's tag.
+          reader: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null, credential: actor.credential },
+          role: await roleFor(artifact, actor), trust: extensions ?? null,
+          // The surface and the addresses written into it.
+          surface: pages ? { self: pages.self, app: pages.site.app } : null,
+          chrome, canonical, design, policy,
+        } : null;
+        const etagFor = (stored: { row: typeof row; page: PreparedView<{ compiled: 'head' }>; stale?: true }) => documentEtag({
+          row: stored.row, artifact, at, page: stored.page, stale: !!stored.stale, search: new URL(request.url).search, drawings, holder, facts,
+        });
+        // A conditional request is named from the compile's head (documentEtag reads no more): a 304 never reads the
+        // compiled page's bulk, the multi-megabyte part of a large document. A miss reads the page whole below.
+        const asked = request.headers.get('if-none-match');
+        if (revalidated && asked) {
+          const tag = await etagFor(await preparedPageFor(artifact, at, { compiled: 'head' }));
+          const held = tag ? matchingTag(asked, tag) : null;
+          if (held) return notModified(held);
+        }
+        // The shell and the compiled page: the tree is read only for a fragment (below) or a recompile (which reads it itself).
+        let prepared = await preparedPageFor(artifact, at, { compiled: true });
+        if (byExportKey && request.headers.get('x-mx-compiled-backfill') === 'recompile') {
+          // A page prepared under an older stylesheet is prepared again whole (its compile with it); otherwise only recompiled.
+          if (prepared.stale) prepared = await reprepareStoredPage(artifact, at);
+          else {
+            const compiled = await recompilePage(prepared.row, at, prepared.page);
+            if (compiled) prepared.page.compiled = compiled;
+          }
+        }
+        /**
+         * A document on its own origin LINKS the sheets every document of a build shares, from the app's origin where
+         * one URL serves them all (lib/page-styles/linked-sheets.server); a sandboxed copy, a domain post and the
+         * exporter's capture carry the standalone sheets inline, as they always did.
+         */
+        const documentSheets = (standalone: ReturnType<typeof documentStyleSheets>) =>
+          pages && !capture ? linkedDocumentSheets(standalone, { origin: pages.site.app, store: stylesheetStore() }) : standalone;
+        const flow = prepared.page.declared?.flow ?? null;
+        // The exporter photographs this page: its run is settled, and carries whoever asked (see the
+        // capture's run below) — never the guest snapshot's rows, never cached.
+        const ran = capture && flow && !prepared.page.declared?.state
+          ? await dataflowForRow(row, { values: readUrlValues(new URL(request.url).search, flow), viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } })
+          : null;
+        // Named again from the page as read: a compile that changed since the head was read is the one served, and tagged.
+        const etag = revalidated ? await etagFor(prepared) : null;
+        const held = etag ? matchingTag(asked, etag) : null;
         if (etag && held) return notModified(held);
+        // Only an answer with a body uses the document's sheet (a stale one is compiled from the source here).
+        const compiledCss = await currentStoryCss(meta, row.source);
         const answer = await compiledPageFor(prepared.row, prepared.page, {
           at,
           search: new URL(request.url).search,

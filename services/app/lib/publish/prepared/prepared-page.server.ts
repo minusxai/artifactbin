@@ -54,7 +54,7 @@ import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesForCodes, prerenderableCodes } from '@/lib/mermaid-images/store';
 import {
   archiveSharedBuild, type CompilerBuild, createSpeculationRulesStore, loadCompilerBuild,
-  MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, type StoredCompile,
+  type CompiledPage, MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, type StoredCompile,
 } from '@/lib/compiled-page';
 import { readUrlValues } from '@/lib/dataflow';
 import { servedResultsFor } from './served-results.server';
@@ -97,15 +97,30 @@ export interface PreparedPage {
 }
 interface PreparedDeps { datasets: string[]; assets: string[] }
 
-/** Which of the heavy parts a reader uses. The shell (everything else) is always read. */
-export interface PreparedParts { nodes?: boolean; compiled?: boolean }
+/**
+ * The compiled page's bulk: its story HTML and what renders and links it, which only an answer with a body uses. A
+ * validator (revalidation.server documentEtag) names the compile by everything else (`compiled: 'head'`), so a 304
+ * never makes the database read, send or decode the bulk.
+ */
+const COMPILED_BULK = ['html', 'islands', 'outline', 'links', 'kit', 'reactStatic', 'partial', 'behaviors', 'authorScript'] as const;
+/** A stored compile less its bulk: a recorded failure whole, a compiled page without {@link COMPILED_BULK}. */
+type CompiledHead = Omit<CompiledPage, typeof COMPILED_BULK[number]> | Exclude<StoredCompile, CompiledPage>;
+const headOf = (compiled: StoredCompile | undefined): CompiledHead | undefined => {
+  if (!compiled || 'error' in compiled) return compiled;
+  const head: Partial<CompiledPage> = { ...compiled };
+  for (const key of COMPILED_BULK) delete head[key];
+  return head as CompiledHead;
+};
+
+/** Which of the heavy parts a reader uses. The shell (everything else) is always read. `compiled: 'head'`: the compile less its bulk. */
+export interface PreparedParts { nodes?: boolean; compiled?: boolean | 'head' }
 const WHOLE = { nodes: true, compiled: true } as const;
 /** The version less its tree and its compiled page: what the app page reads. */
 export type PreparedShell = Omit<PreparedPage, 'data' | 'compiled'> & { data: Omit<PreparedPage['data'], 'nodes'> };
-/** The shell and the parts asked for: `{ nodes: true }` adds `data.nodes`, `{ compiled: true }` adds `compiled`. */
+/** The shell and the parts asked for: `{ nodes: true }` adds `data.nodes`, `{ compiled: true }` adds `compiled`, `{ compiled: 'head' }` its head. */
 export type PreparedView<P extends PreparedParts = typeof WHOLE> = PreparedShell
   & (P extends { nodes: true } ? { data: PreparedPage['data'] } : unknown)
-  & (P extends { compiled: true } ? Pick<PreparedPage, 'compiled'> : unknown);
+  & (P extends { compiled: true } ? Pick<PreparedPage, 'compiled'> : P extends { compiled: 'head' } ? { compiled?: CompiledHead } : unknown);
 /** A served runtime without the tree (`?part=nodes` is its door). */
 export type TreelessServedRuntime = Omit<ServedStoryRuntime, 'data'> & { data: Omit<StoryIslandData, 'nodes'>; css: string };
 
@@ -280,7 +295,7 @@ function splitPage(page: PreparedPage): { shell: Omit<PreparedShell, 'pageFormat
 /** The parts of `page` that were asked for, and no more (the shell is always there): a view never carries what its reader did not ask for. */
 function narrow<P extends PreparedParts>(page: PreparedPage, want: P): PreparedView<P> {
   const { data: { nodes, ...data }, compiled, ...rest } = page;
-  return { ...rest, data: want.nodes ? { ...data, nodes } : data, ...(want.compiled ? { compiled } : {}) } as PreparedView<P>;
+  return { ...rest, data: want.nodes ? { ...data, nodes } : data, ...(want.compiled ? { compiled: want.compiled === 'head' ? headOf(compiled) : compiled } : {}) } as PreparedView<P>;
 }
 
 /** Write a fresh preparation back. `onlyKey`: only over the entry it replaces (a background re-preparation), never a newer one. */
@@ -387,17 +402,21 @@ async function settleWhole(row: ArtifactRow, at: ArchivedRender | null, slot: st
   return page;
 }
 
-/** One statement: the shell, and of the tree and the compiled page ($3, $4) only those asked for. A whole-stored entry (`legacy`) is read whole by settleWhole. */
+/**
+ * One statement: the shell, and of the tree and the compiled page ($3, $4) only those asked for — the compiled page
+ * whole, or ($5) less its bulk ($6), cut in the database so the bulk never leaves it. A whole-stored entry (`legacy`)
+ * is read whole by settleWhole.
+ */
 const READ_PARTS = `
   SELECT p.page_key, p.page_format, p.handover_contract, p.css_version, l.legacy, (p.compiled IS NOT NULL OR p.page ? 'compiled') AS has_compiled,
     CASE WHEN l.legacy THEN NULL ELSE p.page END AS page,
     CASE WHEN $3 AND NOT l.legacy THEN p.nodes END AS nodes,
-    CASE WHEN $4 AND NOT l.legacy THEN p.compiled END AS compiled
+    CASE WHEN l.legacy THEN NULL WHEN $4 THEN p.compiled WHEN $5 THEN p.compiled - $6::text[] END AS compiled
   FROM prepared_pages p, LATERAL (SELECT p.nodes IS NULL OR (p.page #> '{data,nodes}') IS NOT NULL AS legacy) l
   WHERE p.artifact_id = $1 AND p.slot = $2`;
 interface StoredRow {
   page_key: string; page_format: number | null; handover_contract: number | null; css_version: string | null;
-  legacy: boolean; has_compiled: boolean; page: PreparedShell | null; nodes: JsxNode[] | null; compiled: StoredCompile | null;
+  legacy: boolean; has_compiled: boolean; page: PreparedShell | null; nodes: JsxNode[] | null; compiled: StoredCompile | CompiledHead | null;
 }
 
 /**
@@ -406,12 +425,13 @@ interface StoredRow {
  * `parts`: the tree and the compiled page are read only when asked for (both, when `parts` is omitted).
  */
 export async function preparedPageFor<const P extends PreparedParts = typeof WHOLE>(stored: ArtifactRow, at: ArchivedRender | null, parts?: P): Promise<{ row: ArtifactRow; page: PreparedView<P>; stale?: true }> {
-  const want = parts ?? WHOLE;
+  // `P` is `typeof WHOLE` exactly when no parts were passed.
+  const want = (parts ?? WHOLE) as P;
   const row = await servedRow(stored, at);
   const key = keyOf(row);
   const slot = slotOf(at);
   const db = await getDb();
-  const found = (await db.query<StoredRow>(READ_PARTS, [row.id, slot, !!want.nodes, !!want.compiled])).rows[0];
+  const found = (await db.query<StoredRow>(READ_PARTS, [row.id, slot, !!want.nodes, want.compiled === true, want.compiled === 'head', COMPILED_BULK])).rows[0];
   if (found && found.page_key === key && found.has_compiled) {
     const whole = found.legacy ? await settleWhole(row, at, slot, key) : null;
     if (whole || !found.legacy) {
