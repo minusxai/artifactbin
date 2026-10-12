@@ -21,6 +21,10 @@ function compose(directory,args,options){return run(directory,'docker',['compose
 async function copyBundle(directory){
  await cp(bundle,directory,{recursive:true,filter:source=>!/(?:^|\/)(?:config|secrets|backups|node_modules|\.env|Caddyfile|dns-provider\.caddy)$/.test(source)});
  await cp(join(candidate,tarballs[0]),join(directory,'packages/afbin.tgz'));
+ await configureFixture(directory);
+}
+async function configureFixture(directory){
+ for(const name of ['CI.smtp.Dockerfile','ci-smtp-fixture.mjs'])await cp(join(bundle,name),join(directory,name));
  // No caddy service runs in CI: real wildcard DNS/TLS acceptance belongs to the external host.
  await mkdir(join(directory,'ci-tls'));
  run(directory,'openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=smtpfixture','-addext','subjectAltName=DNS:smtpfixture','-keyout','ci-tls/key.pem','-out','ci-tls/cert.pem']);
@@ -76,10 +80,14 @@ try{
  const backup=join(scratch,'backup');run(first,'sh',['backup.sh',backup]);
  const config=await readFile(join(first,'config/server.env'));
  compose(first,['stop','app']);
- await copyBundle(restored);run(restored,'sh',['restore.sh',backup],{timeout:180_000});
+ // Recovery starts with the restore script and test-only SMTP fixtures; all build inputs come from the backup.
+ await mkdir(restored);
+ await cp(join(bundle,'restore.sh'),join(restored,'restore.sh'));
+ await configureFixture(restored);run(restored,'sh',['restore.sh',backup],{timeout:180_000});
  compose(restored,['up','-d','--wait','--wait-timeout','90','app']);
  assert.equal(databaseMarker(restored),marker);assert.equal(artifactMarker(restored),marker);
  assert.deepEqual(await readFile(join(restored,'config/server.env')),config,'Persistent auth secret and database configuration survived restore');
+ assert.deepEqual(await readFile(join(restored,'backup.sh')),await readFile(join(bundle,'backup.sh')),'The recovered deployment retains its backup helper');
  compose(restored,['exec','-T','app','node','-e',"if(require('node:fs').statSync('/data/data/hosting-browser.png').size<100)process.exit(1)"]);
  console.log(JSON.stringify({status:'passed',package:tarballs[0],sha256:createHash('sha256').update(await readFile(join(candidate,tarballs[0]))).digest('hex'),checks:['exact-package-image','pinned-caddy-route53','nonroot-app','authenticated-starttls-email-code','postgres-migrations','chromium-install-and-screenshot','restart-persistence','consistent-backup','fresh-restore','persistent-auth-secret']}));
 }catch(error){
