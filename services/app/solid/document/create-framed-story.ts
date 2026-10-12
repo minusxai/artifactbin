@@ -12,7 +12,7 @@
  * The frame is the server's — it may have loaded before this code ran — so this adopts it and never draws or removes
  * one; the page owns its layout.
  */
-import { createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, type Accessor } from 'solid-js';
+import { createEffect, createRoot, createSignal, getOwner, on, onCleanup, type Accessor } from 'solid-js';
 import type { JsxNode } from '@/lib/jsx/types';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
@@ -80,6 +80,23 @@ export async function fetchFrameNodes(id: string, search: string, signal?: Abort
   return null;
 }
 
+/**
+ * The reader's first press into the framed document (a click, a tap, a selection starting there): all a page sees of a
+ * frame on another origin is its own window losing focus to that frame. `act` runs once; the returned stop drops it.
+ */
+export function onFirstPressInto(frame: HTMLIFrameElement, act: () => void): () => void {
+  const win = frame.ownerDocument.defaultView ?? window;
+  let timer = 0;
+  const stop = () => { win.removeEventListener('blur', onBlur); win.clearTimeout(timer); };
+  // Where the focus went is settled a task after the window's blur in every browser.
+  const onBlur = () => {
+    win.clearTimeout(timer);
+    timer = win.setTimeout(() => { if (frame.ownerDocument.activeElement === frame) { stop(); act(); } }, 0);
+  };
+  win.addEventListener('blur', onBlur);
+  return stop;
+}
+
 interface FramedStoryOptions {
   id: string;
   framed: FramedDocument;
@@ -87,6 +104,8 @@ interface FramedStoryOptions {
    * The version's SOURCE nodes, which comments and selections are classified against: at hand, or on their way
    * (fetchFrameNodes). The bridge attaches to the frame when they are here; until then the controller is null and
    * nothing the page draws waits (the frame draws itself), and one that never arrives leaves the bridge unmade.
+   * `[]` for a reader the page gives no selection action yet: the bridge attaches at once without the tree (reading,
+   * the mode pick and the `$` values need none of it), and `attachTree` brings it when an action can use it.
    */
   nodes: JsxNode[] | Promise<JsxNode[] | null>;
   /** The head pointer drafts are previewed against, and the source the editor opened on (read live; sent on change). */
@@ -110,6 +129,12 @@ export interface FramedStory {
   frame: HTMLIFrameElement;
   /** How far the page's bars reach over the frame's top edge: the document reserves it without moving (bridge `inset`). */
   setTopInset(px: number): void;
+  /**
+   * The tree for a bridge made without one (`nodes: []`), asked for once: when it arrives the bridge attaches again
+   * with it — a new session, so the frame's controller starts over and `nonce` is null until it runs. Ignored for a
+   * bridge given its tree, and for one that never arrives (the bridge stays as it was).
+   */
+  attachTree(nodes: Promise<JsxNode[] | null>): void;
 }
 
 export function createFramedStory(options: FramedStoryOptions): FramedStory {
@@ -120,8 +145,18 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   let disposed = false;
   /** The bars' reach over the frame's top edge, kept for a bridge made after it was set. */
   let inset = 0;
-  const start = (nodes: JsxNode[]) => {
-    if (disposed || current()) return;
+  /** The bridge was made without the tree, and it has not been asked for yet. */
+  let bare = Array.isArray(options.nodes) && options.nodes.length === 0;
+  /** Ends the current bridge and the effects that feed it. */
+  let stopBridge: (() => void) | null = null;
+  const start = (nodes: JsxNode[], replace = false) => {
+    if (disposed || (current() && !replace)) return;
+    stopBridge?.();
+    stopBridge = null;
+    setNonce(null);
+    createRoot((disposeEffects) => startBridge(nodes, disposeEffects), owner ?? undefined);
+  };
+  const startBridge = (nodes: JsxNode[], disposeEffects: () => void) => {
     const bridge = createFrameBridgeParent({
       win: window, frame, frameOrigin: origin, id: options.id, nodes,
       editId: options.editId, source: options.source,
@@ -130,6 +165,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
       onUrlValues: (values) => followFramedValues(window, values),
     });
     setCurrent(bridge);
+    stopBridge = () => { disposeEffects(); bridge.dispose(); };
     if (inset) bridge.setTopInset(inset);
     createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
     // Each saved version once, while reading: the editor's drafts (and Done's return to reading) draw their own.
@@ -142,13 +178,21 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     });
   };
   if (Array.isArray(options.nodes)) start(options.nodes);
-  else void options.nodes.then((nodes) => { if (nodes && !disposed) runWithOwner(owner, () => start(nodes)); });
+  else void options.nodes.then((nodes) => { if (nodes) start(nodes); });
   onCleanup(() => {
     disposed = true;
-    const bridge = current();
+    stopBridge?.();
+    stopBridge = null;
     setCurrent(null);
     setNonce(null);
-    bridge?.dispose();
   });
-  return { controller: current, nonce, frame, setTopInset: (px) => { inset = px; current()?.setTopInset(px); } };
+  return {
+    controller: current, nonce, frame,
+    setTopInset: (px) => { inset = px; current()?.setTopInset(px); },
+    attachTree: (nodes) => {
+      if (!bare || disposed) return;
+      bare = false;
+      void nodes.then((tree) => { if (tree && current()) start(tree, true); });
+    },
+  };
 }

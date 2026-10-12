@@ -129,3 +129,78 @@ describe('the bridge waits for the tree', () => {
     expect(payloads()).toEqual([expect.objectContaining({ kind: 'attach', nodes: TREE })]);
   });
 });
+
+/**
+ * A READER THE PAGE GIVES NO COMMENT OR EDIT ACTION ON LOAD is attached at once with no tree (`[]`): the bridge still
+ * carries everything reading needs (the reader's mode, the `$` values to the address), and the tree is asked for only
+ * when a selection action can use it (`attachTree`), which attaches the bridge again with it.
+ */
+describe('a bridge made without the tree', () => {
+  function barePage() {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('data-mx-document-frame', '');
+    document.body.append(frame);
+    const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const story = createRoot((dispose) => {
+      cleanups.push(dispose);
+      return createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, nodes: [], editId: () => 'e1', source: () => null });
+    });
+    const envelopes = () => posted.mock.calls.map(([message]) => message as { key?: string; payload?: { kind?: string; nodes?: unknown } });
+    const ready = (key: string, nonce: string) => window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'mx:frame-bridge', key, payload: { kind: 'ready', nonce } }, origin: PAGES, source: frame.contentWindow,
+    }));
+    return { story, envelopes, ready };
+  }
+
+  it('attaches at once with no tree, then again with the tree when it is asked for and arrives', async () => {
+    const { story, envelopes, ready } = barePage();
+    expect(envelopes().map((e) => e.payload)).toEqual([expect.objectContaining({ kind: 'attach', nodes: [] })]);
+    const firstKey = envelopes()[0]!.key!;
+    ready(firstKey, 'first-nonce');
+    expect(story.nonce()).toBe('first-nonce');
+
+    let arrive!: (nodes: JsxNode[] | null) => void;
+    story.attachTree(new Promise((resolve) => { arrive = resolve; }));
+    expect(envelopes()).toHaveLength(1);
+    arrive(TREE);
+    await Promise.resolve(); await Promise.resolve();
+    const [, detach, attach] = envelopes();
+    expect(detach).toEqual(expect.objectContaining({ key: firstKey, payload: { kind: 'detach' } }));
+    expect(attach?.payload).toEqual(expect.objectContaining({ kind: 'attach', nodes: TREE }));
+    expect(attach?.key).not.toBe(firstKey);
+    // The old session's nonce is gone; the new controller's arrives with its ready.
+    expect(story.nonce()).toBeNull();
+    ready(attach!.key!, 'second-nonce');
+    expect(story.nonce()).toBe('second-nonce');
+    ready(firstKey, 'stale-nonce');
+    expect(story.nonce()).toBe('second-nonce');
+  });
+
+  it('asks once, keeps the bare bridge for a tree that never arrives, and does nothing after the page is gone', async () => {
+    const none = barePage();
+    none.story.attachTree(Promise.resolve(null));
+    await Promise.resolve(); await Promise.resolve();
+    expect(none.envelopes().map((e) => e.payload?.kind)).toEqual(['attach']);
+    expect(none.story.controller()).not.toBeNull();
+
+    const late = barePage();
+    let arrive!: (nodes: JsxNode[] | null) => void;
+    late.story.attachTree(new Promise((resolve) => { arrive = resolve; }));
+    for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+    arrive(TREE);
+    await Promise.resolve(); await Promise.resolve();
+    expect(late.envelopes().map((e) => e.payload?.kind)).toEqual(['attach', 'detach']);
+    expect(late.story.controller()).toBeNull();
+  });
+
+  it('ignores a tree asked for when the bridge already holds one', async () => {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('data-mx-document-frame', '');
+    document.body.append(frame);
+    const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const story = createRoot((dispose) => { cleanups.push(dispose); return createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, nodes: TREE, editId: () => 'e1', source: () => null }); });
+    story.attachTree(Promise.resolve(TREE));
+    await Promise.resolve(); await Promise.resolve();
+    expect(posted.mock.calls.map(([message]) => (message as { payload?: { kind?: string } }).payload?.kind)).toEqual(['attach']);
+  });
+});

@@ -26,7 +26,7 @@ import { AnnotationLayer } from '../document/AnnotationLayer';
 import { SelectionActions } from '../document/SelectionActions';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { DocumentSharing } from '../document/DocumentSharing';
-import { createFramedStory, fetchFrameNodes, framedDocumentFor, type FramedStory } from '../document/create-framed-story';
+import { createFramedStory, fetchFrameNodes, framedDocumentFor, onFirstPressInto, type FramedStory } from '../document/create-framed-story';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
 import { moveInto } from '@/lib/islands/island-controller';
@@ -334,16 +334,25 @@ export function DocumentPage(): JSX.Element {
     Object.assign(served.style, { position: 'relative', inset: 'auto', top: 'auto', flex: '1 1 auto', minHeight: '0px' });
     setFrameSlot(slot);
     setDocumentFrame(framed.frame);
-    // The tree the frame's edit controller classifies against is its own request (not in the page's data): it is asked for
-    // now, while the frame loads, and the bridge attaches when it is here.
+    // The tree the frame's controller classifies comments, selections and edits against is its own request (not in the
+    // page's data), and on a large document most of the page's bytes. A commenter or editor asks for it now, while the
+    // frame loads, and the bridge attaches when it is here. Every other reader's bridge attaches at once without it
+    // (reading, the mode pick and the `$` values need none of it): a guest's selection bubble (Comment → sign-in) is
+    // the one use left, so a guest asks for it on the first press into the document; a signed-in viewer never does.
     const nodes = new AbortController();
     onCleanup(() => nodes.abort());
+    const askTree = () => fetchFrameNodes(id, window.location.search, nodes.signal);
+    const treeOnLoad = annotatable() || editable();
     story = createFramedStory({
-      id, framed, nodes: fetchFrameNodes(id, window.location.search, nodes.signal),
+      id, framed, nodes: treeOnLoad ? askTree() : [],
       editId: () => editorSeed()?.edit_id ?? editorPart()?.editId ?? page.surface?.editId ?? '',
       source: () => editorSeed()?.markup ?? editorPart()?.source ?? null,
       version: live, reading: () => lifecycle.phase() === 'reading',
     });
+    if (!treeOnLoad && canStartComment()) {
+      const bare = story;
+      onCleanup(onFirstPressInto(framed.frame, () => bare.attachTree(askTree())));
+    }
     // The document's links to app paths take this page (another document by a full load, an app page by the router).
     const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
     // The document is on screen: one view (a prerendered page counts when it is shown).

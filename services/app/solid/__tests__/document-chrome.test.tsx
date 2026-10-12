@@ -10,7 +10,7 @@ import { Route, Router } from '@solidjs/router';
 import { waitFor, within } from '@testing-library/dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
-import type { ArtifactLiveEvent } from '@/lib/story-runtime/contract';
+import { STORY_FRAME_HASH_MESSAGE, type ArtifactLiveEvent } from '@/lib/story-runtime/contract';
 import type { FramedStory } from '../document/create-framed-story';
 import * as liveEdits from '../editor/create-live-edits';
 
@@ -83,7 +83,10 @@ function mount(path = '/a/doc') {
   document.body.append(host);
   served = host;
   const view = render(() => <Router><Route path="/a/:id" component={DocumentPage} /></Router>);
-  return { host, frame, unmount: view.unmount };
+  // What the page posts to its frame (the bridge's envelopes, the hash): the window the frame has once the page
+  // adopted it (a move without moveBefore gives the frame a new one).
+  const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
+  return { host, frame, posted, unmount: view.unmount };
 }
 
 /** The page's trusted overlays: 0 the navigation layer (install, fork), 1 discussion (comments, editor, sharing). */
@@ -607,4 +610,99 @@ it('while editing, the preview shows the document\'s own Mode setting, and the p
     await waitFor(() => expect(toldModes().at(-1)).toBe('dark'), { timeout: 5000 });
     expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('dark'));
   } finally { delete document.documentElement.dataset.theme; }
+});
+
+/**
+ * THE NODE TREE ONLY WHERE A READER CAN USE IT (solid/document/create-framed-story): the tree is what the frame's
+ * controller classifies comments, selections and edits against, and on a large document most of the page's bytes. A
+ * commenter or editor gets it on load; a guest when they first press into the document (the selection bubble's
+ * Comment → sign-in is the only use they have for it); a signed-in viewer or an archived version never. Every reader's
+ * bridge still attaches at once, so reading, the address's `$` values, the hash, the mode pick and live versions are
+ * the same for all.
+ */
+const FRAME_ORIGIN = 'http://646f633132333435.lvh.me';
+const TREE = [{ type: 'element', tag: 'p', start: 0, end: 10, attributes: [], children: [] }];
+type Posted = ReturnType<typeof mount>['posted'];
+type Envelope = { type?: string; key?: string; hash?: string; payload?: { kind?: string; nodes?: unknown; command?: { type?: string; mode?: string } } };
+const nodeFetches = () => vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('part=nodes')).length;
+const servingTree = () => {
+  const existing = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => (String(input).includes('part=nodes') ? Response.json({ nodes: TREE }) : existing(input, init)));
+};
+const envelopes = (posted: Posted) => posted.mock.calls.map(([message]) => message as Envelope);
+const attaches = (posted: Posted) => envelopes(posted).filter((message) => message.payload?.kind === 'attach');
+const frameReady = (frame: HTMLIFrameElement, key: string, nonce: string, urlValues?: string) => window.dispatchEvent(new MessageEvent('message', {
+  data: { type: 'mx:frame-bridge', key, payload: { kind: 'ready', nonce, ...(urlValues === undefined ? {} : { urlValues }) } }, origin: FRAME_ORIGIN, source: frame.contentWindow,
+}));
+/** The frame's door opens (lib/islands/frame-door says `hello`): the page attaches, or attaches again, through it. */
+const doorOpens = (frame: HTMLIFrameElement) => window.dispatchEvent(new MessageEvent('message', {
+  data: { type: 'mx:frame-bridge', payload: { kind: 'hello' } }, origin: FRAME_ORIGIN, source: frame.contentWindow,
+}));
+/** A press inside the frame: focus moves into it and the page's window loses it (all a page sees of a frame on another origin). */
+const pressIntoDocument = (frame: HTMLIFrameElement) => { frame.focus(); window.dispatchEvent(new FocusEvent('blur')); };
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+it.each([['a guest', 'anon'], ['a signed-in viewer', 'account']])('%s reads, navigates and follows live versions without the node tree', async (_who, kind) => {
+  mockKind = kind; mockRole = 'viewer'; servingTree();
+  const [liveFrame, setLiveFrame] = createSignal<ArtifactLiveEvent | null>(null);
+  mockLive = liveFrame;
+  try {
+    const { frame, posted } = mount('/a/doc');
+    doorOpens(frame);
+    await settle();
+    expect(nodeFetches()).toBe(0);
+    // Reads: the server's frame is the page's viewport, and the bridge attaches at once, with no tree.
+    expect(screen.getByLabelText('Artifact viewport')).toContainElement(frame);
+    expect(attaches(posted)).toEqual([expect.objectContaining({ payload: expect.objectContaining({ kind: 'attach', nodes: [] }) })]);
+    // The document's controller runs: its `$` values reach the address.
+    frameReady(frame, attaches(posted)[0]!.key!, 'reader-nonce', '?$region=east');
+    expect(window.location.search).toBe('?$region=east');
+    // Navigates: a link to a heading reaches the frame.
+    window.history.replaceState(null, '', '/a/doc?$region=east#later');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(envelopes(posted)).toContainEqual({ type: STORY_FRAME_HASH_MESSAGE, hash: '#later' });
+    // The reader's mode pick reaches the document's controller.
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+    fireEvent.click(within(await controls()).getByRole('button', { name: 'Dark mode' }));
+    await waitFor(() => expect(envelopes(posted).map((message) => message.payload?.command)).toContainEqual({ type: 'mx:reader-mode', mode: 'dark' }));
+    // Live: a newer version's title reaches the bar.
+    setLiveFrame({ version: 4, editId: 'e4', title: 'A newer title', format: 'markup', by: null } as ArtifactLiveEvent);
+    await waitFor(() => expect(screen.getByText('A newer title', { selector: '[data-mx-document-title]' })).toBeInTheDocument());
+    expect(nodeFetches()).toBe(0);
+  } finally { delete document.documentElement.dataset.theme; }
+});
+
+it('asks for the tree when a guest first presses into the document, once, and attaches the bridge with it', async () => {
+  mockKind = 'anon'; mockRole = 'viewer'; servingTree();
+  const { frame, posted } = mount();
+  doorOpens(frame);
+  await settle();
+  expect(nodeFetches()).toBe(0);
+  pressIntoDocument(frame);
+  await waitFor(() => expect(nodeFetches()).toBe(1));
+  await waitFor(() => expect(attaches(posted).at(-1)?.payload?.nodes).toEqual(TREE));
+  expect(envelopes(posted).map((message) => message.payload?.kind)).toContain('detach');
+  frame.blur();
+  pressIntoDocument(frame);
+  await settle();
+  expect(nodeFetches()).toBe(1);
+  expect(attaches(posted)).toHaveLength(2);
+});
+
+it.each([['a signed-in viewer', 'account', null], ['a guest reading an archived version', 'anon', { version: 1, head: 2 }]] as const)('never asks for the tree for %s, pressing into the document included', async (_who, kind, archived) => {
+  mockKind = kind; mockRole = 'viewer'; mockArchived = archived ? { ...archived } : null; servingTree();
+  const { frame, posted } = mount();
+  doorOpens(frame);
+  pressIntoDocument(frame);
+  await settle();
+  expect(nodeFetches()).toBe(0);
+  expect(attaches(posted)).toEqual([expect.objectContaining({ payload: expect.objectContaining({ nodes: [] }) })]);
+});
+
+it.each(['commenter', 'owner'])('a %s gets the tree on load, and the bridge attaches only with it', async (role) => {
+  mockRole = role; servingTree();
+  const { posted } = mount();
+  await waitFor(() => expect(attaches(posted)).toHaveLength(1));
+  expect(nodeFetches()).toBe(1);
+  expect(attaches(posted)[0]!.payload?.nodes).toEqual(TREE);
 });
