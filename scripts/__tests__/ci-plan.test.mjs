@@ -874,7 +874,7 @@ describe('CI job shape', () => {
     const warmKeys = jobs['warm-caches'].steps.filter((step) => step.uses?.startsWith('actions/cache@')).map((step) => step.with.key);
     for (const restore of [debs, jobs.gates.steps.find((step) => step.id === 'browser-chromium'), jobs.gates.steps.find((step) => step.id === 'build-cache')]) {
       // The independent warmer writes ordinary builds; release-only caches use their own shape.
-      expect(warmKeys).toContain(restore.with.key.replace('${{ needs.plan.outputs.cli }}','false'));
+      expect(warmKeys).toContain(restore.with.key.replace('${{ needs.plan.outputs.cli }}','false').replace('${{ needs.plan.outputs.cli-pack }}','false'));
     }
     // No gate starts its own PostgreSQL (its leg is services/app/lib/datasets/__tests__/postgres-routes.test.ts),
     // so no gate shard pulls the image.

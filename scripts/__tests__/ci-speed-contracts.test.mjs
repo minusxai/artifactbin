@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {gzipSync} from 'node:zlib';
+import {planCi} from '../lib/ci-plan.mjs';
 import {createHash} from 'node:crypto';
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
 describe('release critical path',()=>{
@@ -32,15 +33,33 @@ it('supplies ordinary composition the cached exact-tree universal package before
  expect(prune).toBeGreaterThan(pack);
  expect(steps[pack].run).toContain('dist/npm-candidate');
  expect(upload.with.path).toBe('dist/npm-candidate/*.tgz');
- expect(upload.if).toBe("needs.plan.outputs.cli != 'true'");
+ expect(upload.if).toBe("needs.plan.outputs.cli-pack != 'true'");
+ expect(steps[pack].if).toContain("needs.plan.outputs.cli-pack != 'true'");
  const cache=steps.find(step=>step.id==='build-cache');
  expect(cache.with.path).toMatch(/^dist$/m);
- expect(cache.with.key).toContain('app-build-v2-');
- expect(cache.with.key).toContain('needs.plan.outputs.cli');
+ expect(cache.with.key).toContain('app-build-v3-');
+ expect(cache.with.key).toContain('needs.plan.outputs.cli-pack');
  expect(jobs['reference-compatibility'].steps.find(step=>step.with?.name==='afbin-npm-packages')).toBeUndefined();
  const release=jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-npm-packages');
  expect(release.with.path).toBe('services/cli/dist/packages/*.tgz');
  expect(release.if).toBeUndefined();
+});
+it('selects exactly one package producer for ordinary, company-only and CLI changes',()=>{
+ const jobs=workflow().jobs;
+ const ordinaryUpload=jobs.build.steps.find(step=>step.with?.name==='afbin-npm-packages');
+ expect(ordinaryUpload.if).toBe("needs.plan.outputs.cli-pack != 'true'");
+ expect(jobs['cli-pack'].if).toBe("needs.plan.outputs.cli-pack == 'true'");
+ for(const path of ['services/app/solid/index.tsx','deploy/company/backup.sh','services/cli/src/index.ts']) {
+  const plan=planCi([path],{cliRelease:path.startsWith('services/cli/')});
+  const owners=[plan.jobs.build && !plan.cliPack,plan.cliPack].filter(Boolean);
+  expect(owners, path).toHaveLength(1);
+ }
+ const company=planCi(['deploy/company/backup.sh']);
+ expect(company.companyContainer).toBe(true);
+ expect(company.cliRelease).toBe(false);
+ expect(company.cliPack).toBe(true);
+ const cacheKey=jobs.build.steps.find(step=>step.id==='build-cache').with.key;
+ expect(jobs.gates.steps.find(step=>step.id==='build-cache').with.key).toBe(cacheKey);
 });
 it('does not compile the app twice or repeat email-source conformance in the reference proof',()=>{
  const steps=workflow().jobs['reference-compatibility'].steps;
@@ -54,7 +73,7 @@ it('warms the complete ordinary package cache without a nonexistent plan depende
  expect(job.needs).toBeUndefined();
  const cache=job.steps.find(step=>step.id==='build-cache');
  expect(cache.with.key).not.toContain('needs.');
- expect(cache.with.key).toMatch(/-npm-false$/);
+ expect(cache.with.key).toMatch(/-npm-false-pack-false$/);
  const pack=job.steps.findIndex(step=>step.run?.includes('pack:release'));
  const prune=job.steps.findIndex(step=>step.run?.includes('rm -rf services/cli/dist/runtime'));
  expect(pack).toBeGreaterThan(job.steps.findIndex(step=>step.run?.includes('npm run build -w services/cli')));
