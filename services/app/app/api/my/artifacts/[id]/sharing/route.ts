@@ -47,7 +47,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (refusal) return refusal;
 
   const patch: SharingPatch = {};
-  const visibility = parseVisibilityValue(body.visibility, !!current.user_id);
+  const visibility = parseVisibilityValue(body.visibility, !!(current.user_id || current.group_id));
   if (visibility instanceof Response) return visibility;
   if (visibility) patch.visibility = visibility;
 

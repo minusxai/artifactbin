@@ -6,6 +6,7 @@ import { findWritersFor } from './dependents';
 import { artifactQuery } from './document';
 import { grantsOf } from '@/lib/artifacts/dataset-policy/grants';
 import { catalogOf } from '@/lib/datasets/catalog';
+import { ALLOW_PUBLIC_VISIBILITY } from '../platform/config';
 import { getDb } from '../platform/db';
 import { actorSubject, emit } from '../platform/events';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
@@ -34,6 +35,8 @@ async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess):
 
 export interface SharingState {
   visibility: Visibility;
+  /** Deployment policy: public listing is an operator opt-in. */
+  canPublic: boolean;
   /** What the link grants — the general-access role beside the general-access tier. */
   linkRole: ShareRole;
   /** The named people, by email, with their role — sorted by email. */
@@ -64,6 +67,7 @@ export async function getSharingFor(actor: TokenActor, id: string): Promise<Shar
   );
   return {
     visibility: row.visibility,
+    canPublic: ALLOW_PUBLIC_VISIBILITY,
     linkRole: (row.link_role ?? 'viewer') as ShareRole,
     shares: shares.rows,
     canPrivate: !!(row.user_id||row.group_id),
@@ -104,6 +108,7 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
     const shares = await tx.query<ShareEntry>('SELECT email, role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id]);
     return {
       visibility: patch.visibility ?? row.visibility,
+      canPublic: ALLOW_PUBLIC_VISIBILITY,
       linkRole: patch.linkRole ?? row.link_role ?? 'viewer',
       shares: shares.rows,
       canPrivate: !!(row.user_id||row.group_id),
