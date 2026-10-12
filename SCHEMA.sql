@@ -561,6 +561,8 @@ ALTER TABLE app.event_outbox ADD COLUMN IF NOT EXISTS envelope JSONB NOT NULL;
 
 ALTER TABLE app.event_outbox ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE INDEX IF NOT EXISTS idx_event_outbox_created ON app.event_outbox (created_at, id);
+
 CREATE TABLE IF NOT EXISTS app.member_notifications (
   id TEXT NOT NULL,
   artifact_id TEXT,
@@ -608,6 +610,8 @@ ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS source_event_id TE
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS agent_label TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_member_notifications_recipient ON app.member_notifications (recipient_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_member_notifications_source ON app.member_notifications (artifact_id, source);
 
 CREATE TABLE IF NOT EXISTS app.user_blocks (
   user_id TEXT NOT NULL,
@@ -1064,6 +1068,8 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON app.tokens (token_hash);
 
+CREATE INDEX IF NOT EXISTS idx_tokens_user ON app.tokens (user_id) WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS app.artifacts (
   id TEXT NOT NULL,
   token_id TEXT NOT NULL,
@@ -1173,6 +1179,8 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_parent ON app.artifacts ((ancestor_ids[
 CREATE INDEX IF NOT EXISTS idx_artifacts_user_level ON app.artifacts (user_id, (cardinality(ancestor_ids)));
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_group_updated ON app.artifacts (group_id, updated_at DESC) WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_user_updated ON app.artifacts (user_id, updated_at DESC) WHERE deleted_at IS NULL AND group_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS app.artifact_versions (
   artifact_id TEXT NOT NULL,

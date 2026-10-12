@@ -27,6 +27,8 @@ export function createDatasetResultCache(db: Db, options: ResultCacheOptions = {
   type Claim = { kind: 'hit'; result: CatalogResult } | { kind: 'owner'; token: string } | { kind: 'wait' } | { kind: 'bypass' };
   // A short table lock makes BOTH aggregate byte and lease bounds atomic across
   // replicas. Only these bounded metadata transactions hold it, never SQL work.
+  // A claim never queues for it: a busy lock is a wait, paced off-connection by
+  // run(), so a burst of misses cannot park every pooled connection behind it.
   const acquire = async(key: string, refresh: boolean): Promise<Claim> => {
     if(!refresh){
       // Hot reads and waiters do not serialize behind unrelated fills.
@@ -34,8 +36,8 @@ export function createDatasetResultCache(db: Db, options: ResultCacheOptions = {
       if(row?.result!==null&&row?.fresh){const hit=resultSchema.safeParse(row.result);if(hit.success)return {kind:'hit',result:hit.data};}
       if(row&&row.result===null&&row.live)return {kind:'wait'};
     }
-    return db.transaction(async tx => {
-    await tx.query('LOCK TABLE dataset_result_cache IN EXCLUSIVE MODE');
+    try { return await db.transaction(async tx => {
+    await tx.query('LOCK TABLE dataset_result_cache IN EXCLUSIVE MODE NOWAIT');
     await tx.query('DELETE FROM dataset_result_cache WHERE (result IS NOT NULL AND expires_at<=clock_timestamp()) OR (result IS NULL AND lease_until<=clock_timestamp())');
     const row = (await tx.query<{result: unknown; live: boolean}>('SELECT result,lease_until>clock_timestamp() AS live FROM dataset_result_cache WHERE cache_key=$1',[key])).rows[0];
     if (row && !refresh) {
@@ -56,10 +58,12 @@ export function createDatasetResultCache(db: Db, options: ResultCacheOptions = {
     await tx.query(`INSERT INTO dataset_result_cache(cache_key,owner_token,lease_until) VALUES($1,$2,clock_timestamp()+$3::int*interval '1 millisecond')
       ON CONFLICT(cache_key) DO UPDATE SET result=NULL,bytes=0,expires_at=NULL,owner_token=$2,lease_until=clock_timestamp()+$3::int*interval '1 millisecond',updated_at=clock_timestamp()`,[key,token,leaseMs]);
     return {kind:'owner',token};
-    });
+    }); } catch (error) { if (lockBusy(error)) return {kind:'wait'}; throw error; }
   };
   const release = async (key:string,token:string) => { try { await db.query('DELETE FROM dataset_result_cache WHERE cache_key=$1 AND owner_token=$2',[key,token]); } catch { /* disposable cache unavailable */ } };
   const publish = (key:string,token:string,result:CatalogResult,ttl:number):Promise<boolean> => db.transaction(async tx => {
+    // An owner waits briefly; past that it returns its result uncached (run() treats a publish fault so).
+    await tx.query("SET LOCAL lock_timeout = '2s'");
     await tx.query('LOCK TABLE dataset_result_cache IN EXCLUSIVE MODE');
     const owner=await tx.query('SELECT 1 FROM dataset_result_cache WHERE cache_key=$1 AND owner_token=$2 AND lease_until>clock_timestamp()',[key,token]);
     if (!owner.rows.length) return false;
@@ -106,6 +110,8 @@ export function createDatasetResultCache(db: Db, options: ResultCacheOptions = {
   }};
 }
 
+/** Postgres lock_not_available (NOWAIT, lock_timeout). */
+const lockBusy=(error:unknown):boolean=>typeof error==='object'&&error!==null&&(error as {code?:unknown}).code==='55P03';
 const resultSchema: z.ZodType<CatalogResult> = z.object({
   rows:z.array(z.record(z.string(),z.unknown())),
   columns:z.array(z.object({name:z.string(),type:z.enum(['string','number','boolean','date','timestamp'])}).strict()),

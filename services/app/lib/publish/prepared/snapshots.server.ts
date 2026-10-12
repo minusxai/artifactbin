@@ -402,7 +402,7 @@ async function freshness(row: StoredRow, snapshot: DataSnapshot): Promise<boolea
 
 async function invalidateDataset(datasetId: string): Promise<SnapshotKey[]> {
   const rows = (await (await getDb()).query<Pick<StoredRow, 'artifact_id' | 'slot' | 'plan_key' | 'inputs_key'>>(
-    `UPDATE data_snapshots SET stale_at = coalesce(stale_at, now()) WHERE $1 = ANY(datasets)
+    `UPDATE data_snapshots SET stale_at = coalesce(stale_at, now()) WHERE datasets @> ARRAY[$1]::text[]
      RETURNING artifact_id, slot, plan_key, inputs_key`,
     [datasetId],
   )).rows;
