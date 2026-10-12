@@ -91,3 +91,14 @@ it('zero TTL bypasses retention and a failed fill does not poison future work',a
   await expect(cache.run('error-seed',async()=>{throw new Error('upstream');},{...req,ttlSeconds:60})).rejects.toThrow('upstream');
   expect((await cache.run('error-seed',async()=>result(9),{...req,ttlSeconds:60})).rows).toEqual([{n:9}]);
 });
+// A replica holding the table lock: the claim must not queue on a connection, nor run uncached; it waits and then fills.
+it('a busy table lock is a wait, not an uncached run',async()=>{
+  const db=await getDb();let busy=1,loads=0;
+  const contended:Db={...db,query:db.query.bind(db),transaction:(fn)=>busy-->0
+    ?Promise.reject(Object.assign(new Error('could not obtain lock on relation "dataset_result_cache"'),{code:'55P03'}))
+    :db.transaction(fn)} as Db;
+  const cache=createDatasetResultCache(contended);
+  expect(await cache.run('busy',async()=>{loads++;return result(1);},cacheRequest)).toMatchObject({rows:[{n:1}]});
+  expect(await cache.run('busy',async()=>{loads++;return result(2);},cacheRequest)).toMatchObject({rows:[{n:1}]});
+  expect(loads).toBe(1);
+});

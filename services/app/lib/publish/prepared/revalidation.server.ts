@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ArchivedRender, ArtifactRow } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts';
-import { type DataPlan, isCompileFailure, loadCompilerBuild, MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, planOf } from '@/lib/compiled-page';
+import { type DataPlan, loadCompilerBuild, MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, planOf } from '@/lib/compiled-page';
 import { holdableImports } from '@/lib/document-data';
 import { readUrlValues } from '@/lib/dataflow';
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
@@ -38,8 +38,8 @@ export interface DocumentEtagInput {
   row: ArtifactRow;
   artifact: ArtifactRow;
   at: ArchivedRender | null;
-  /** The version's shell and its compile: the tree is not read to name a validator. */
-  page: PreparedView<{ compiled: true }>;
+  /** The version's shell and its compile's head: neither the tree nor the compiled page's bulk is read to name a validator. */
+  page: PreparedView<{ compiled: 'head' }>;
   /** Whether the stored page was prepared under an older stylesheet (served as stored, re-prepared in the background). */
   stale?: boolean;
   /** The request's query string: the reader's `$` values. */
@@ -106,7 +106,7 @@ async function snapshotIdentity(input: DocumentEtagInput, plan: DataPlan, values
 export async function documentEtag(input: DocumentEtagInput): Promise<string | null> {
   const { row, artifact, at, page } = input;
   const stored = page.compiled;
-  if (!stored || isCompileFailure(stored) || page.pageFormat < MIN_PAGE_FORMAT || page.handoverContract < MIN_HANDOVER_CONTRACT) return null;
+  if (!stored || 'error' in stored || page.pageFormat < MIN_PAGE_FORMAT || page.handoverContract < MIN_HANDOVER_CONTRACT) return null;
   try { loadCompilerBuild(); } catch { return null; }
 
   const flow = page.declared?.flow ?? null;

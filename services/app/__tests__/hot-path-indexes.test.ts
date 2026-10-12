@@ -53,3 +53,32 @@ it('chooses each new index for the query that motivated it', async () => {
   expect(invitations).toContain('idx_group_invitations_by_email');
   expect(invitations).not.toMatch(/Seq Scan on group_invitations/);
 });
+
+it('chooses the launch indexes and the snapshot GIN index', async () => {
+  const db = await getDb();
+  await seed();
+  await db.query(`INSERT INTO tokens (id, token_hash, user_id, deleted_at)
+    SELECT 'tok' || n, 'hash' || n, 'user' || (n % 2000), CASE WHEN n % 9 = 0 THEN now() END FROM generate_series(1, 12000) n`);
+  await db.query(`INSERT INTO member_notifications (id, artifact_id, user_id, recipient_id, sender_id, kind, source)
+    SELECT 'mn' || n, 'a' || (n % 3000), 'user' || (n % 400), 'user' || (n % 400), 'user1', 'reply', 'comment:t' || (n % 4000)
+    FROM generate_series(1, 12000) n`);
+  await db.query(`INSERT INTO event_outbox (id, envelope, created_at)
+    SELECT 'ev' || n, '{}'::jsonb, now() - (n || ' seconds')::interval FROM generate_series(1, 12000) n`);
+  await db.query(`INSERT INTO data_snapshots (artifact_id, slot, plan_key, inputs_key, datasets)
+    SELECT 'a' || n, 'head', 'p', 'i', ARRAY['ds' || (n % 3000)] FROM generate_series(1, 12000) n`);
+  for (const table of ['tokens', 'member_notifications', 'event_outbox', 'data_snapshots']) await db.query(`ANALYZE ${table}`);
+
+  // An account's live tokens (lib/accounts/tokens).
+  expect(await plan('SELECT id FROM tokens WHERE user_id = $1 AND deleted_at IS NULL', ['user8'])).toContain('idx_tokens_user');
+  // An account's own documents (lib/workspace/listings).
+  expect(await plan(`SELECT id FROM artifacts WHERE group_id IS NULL AND user_id = $1 AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC LIMIT 200`, ['user5']))
+    .toContain('idx_artifacts_user_updated');
+  // A thread's notifications (lib/notifications/write).
+  expect(await plan('SELECT id, recipient_id, revision FROM member_notifications WHERE artifact_id = $1 AND source = $2', ['a7', 'comment:t7']))
+    .toContain('idx_member_notifications_source');
+  // The outbox drain (lib/platform/event-outbox).
+  expect(await plan('SELECT id, envelope FROM event_outbox ORDER BY created_at, id LIMIT 50', [])).toContain('idx_event_outbox_created');
+  // Dataset invalidation (lib/publish/prepared/snapshots.server).
+  expect(await plan(`UPDATE data_snapshots SET stale_at = coalesce(stale_at, now()) WHERE datasets @> ARRAY[$1]::text[]
+    RETURNING artifact_id`, ['ds7'])).toContain('idx_data_snapshots_datasets');
+});

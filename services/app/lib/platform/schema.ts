@@ -137,7 +137,11 @@ const TOKENS: Table = {
     { name: 'last_used_at', type: 'TIMESTAMPTZ' },
   ],
   primaryKey: ['id'],
-  indexes: [{ name: 'idx_tokens_hash', columns: ['token_hash'], unique: true }],
+  indexes: [
+    { name: 'idx_tokens_hash', columns: ['token_hash'], unique: true },
+    // An account's live tokens (lib/accounts/tokens: the web token, the token list).
+    { name: 'idx_tokens_user', columns: ['user_id'], where: 'deleted_at IS NULL' },
+  ],
 };
 
 const ARTIFACTS: Table = {
@@ -230,6 +234,8 @@ const ARTIFACTS: Table = {
     // owner scope of a group-owned listing (lib/artifacts/table ownerPredicate) filter `group_id = $1` over the
     // live rows and sort by recency — without it, every one reads the whole table.
     { name: 'idx_artifacts_group_updated', columns: ['group_id', 'updated_at DESC'], where: 'deleted_at IS NULL' },
+    // An account's own live documents newest first (lib/workspace/listings): the personal counterpart of the above.
+    { name: 'idx_artifacts_user_updated', columns: ['user_id', 'updated_at DESC'], where: 'deleted_at IS NULL AND group_id IS NULL' },
   ],
   // `folder` was a materialized PATH of names ('2026/08/reports'). Placement is
   // `ancestor_ids` now — ids, so two sibling folders may share a name and a
@@ -892,7 +898,9 @@ const MEMBER_NOTIFICATIONS: Table = {
   {name:'first_update_id',type:'TEXT'},
   {name:'source_event_id',type:'TEXT'},
   {name:'agent_label',type:'TEXT'}, // latest conversation actor's display snapshot; sender_id remains the access principal
- ],primaryKey:['id'],indexes:[{name:'idx_member_notifications_recipient',columns:['recipient_id','created_at']}],
+ ],primaryKey:['id'],indexes:[{name:'idx_member_notifications_recipient',columns:['recipient_id','created_at']},
+  // A thread's notifications (lib/notifications/write), read inside every comment reply, resolve and delete.
+  {name:'idx_member_notifications_source',columns:['artifact_id','source']}],
 };
 const USER_BLOCKS: Table = {
  name:'user_blocks',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'blocked_user_id',type:'TEXT',notNull:true}],primaryKey:['user_id','blocked_user_id'],
@@ -901,7 +909,9 @@ const USER_BLOCKS: Table = {
 const EVENT_OUTBOX: Table = {name:'event_outbox',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'envelope',type:'JSONB',notNull:true},
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['id']};
+],primaryKey:['id'],
+ // The drain reads the oldest batch every second (lib/platform/event-outbox).
+ indexes:[{name:'idx_event_outbox_created',columns:['created_at','id']}]};
 /** Durable query triggers and their one winning output stay in app-owned storage. */
 const NOTIFICATION_JOBS: Table = {name:'notification_jobs',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'mutation_run_id',type:'TEXT',notNull:true},

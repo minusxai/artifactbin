@@ -319,6 +319,21 @@ const TIMESTAMPTZ_OID = 1184;
 const TIMESTAMP_OID = 1114;
 const toIso = (v: string) => new Date(v).toISOString();
 
+/**
+ * The serving pool's bounds. A request that waits 5 s for a connection fails instead of queueing behind
+ * the proxy's 30 s deadline, and one runaway statement is cancelled instead of holding its connection for good.
+ */
+export const SERVING_POOL = { max: 20, connectionTimeoutMillis: 5_000, statement_timeout: 60_000 } as const;
+
+/**
+ * An idle client's error (a database restart or failover) is emitted on the pool; with no listener Node
+ * throws it and the process exits. The pool has already discarded that client, so logging is enough.
+ */
+export function withPoolErrors<P extends { on(event: 'error', cb: (error: Error) => void): unknown }>(pool: P): P {
+  pool.on('error', (error) => console.error('[db] idle connection lost:', error.message));
+  return pool;
+}
+
 async function createDb(): Promise<Db> {
   // Tests always run in-memory PGLite so they never touch a data dir or a
   // real server, whatever the ambient DATABASE_URL says.
@@ -329,10 +344,16 @@ async function createDb(): Promise<Db> {
     const pg = await import('pg');
     pg.types.setTypeParser(TIMESTAMPTZ_OID, toIso);
     pg.types.setTypeParser(TIMESTAMP_OID, (v: string) => toIso(v.replace(' ', 'T') + 'Z'));
-    const db = new PostgresDb(new pg.Pool({ connectionString: target.url }));
-    await db.initializeSchema();
-    await applyBackfills(db);
-    return db;
+    // The boot DDL and backfills run on their own short-lived connection, with no statement timeout: an index
+    // build on a large table may outlast the request bound the serving pool below holds every statement to.
+    const boot = new PostgresDb(withPoolErrors(new pg.Pool({ connectionString: target.url, max: 1 })));
+    try {
+      await boot.initializeSchema();
+      await applyBackfills(boot);
+    } finally {
+      await boot.close();
+    }
+    return new PostgresDb(withPoolErrors(new pg.Pool({ connectionString: target.url, ...SERVING_POOL })));
   }
 
   const { PGlite } = await import('@electric-sql/pglite');
