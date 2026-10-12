@@ -688,6 +688,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
     if (signedIn) return page(c);
     c.header('Cache-Control', 'no-store');
+    if ((await getDeploymentState(null)).mode === 'company') return page(c);
     // A browser still holding its old guest cookie was signed out when guest sessions ended: say so on the login page.
     const wasGuest = (c.req.header('cookie') ?? '').split(/;\s*/).some(part => part.startsWith(`${AGENT_COOKIE}=`));
     return c.redirect(wasGuest ? '/login?signedOut=1' : '/login', 302);

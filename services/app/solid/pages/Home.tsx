@@ -3,12 +3,13 @@ import WorkspaceHeading from '../components/WorkspaceHeading';
 import { Button } from '../ui/Button';
 import { createEffect, createMemo, createSignal, onMount, Show, type Accessor, type JSX } from 'solid-js';
 import { GroupUnavailable, GroupWorkspace } from './Group';
+import { DeploymentWelcome } from './DeploymentWelcome';
 import { CompanySetup } from './CompanySetup';
 import { DefaultDestinationControl } from '../components/DefaultDestinationControl';
 import { useLocation } from '@solidjs/router';
 import { Navigate } from '@solidjs/router';
 import DatabasePlus from 'lucide-solid/icons/database-plus';
-import { homeBootstrapKey, type HomeBootstrap, type HomeCore, type HomeInsights, type SignedInHome } from '@/solid/lib/home-resource';
+import { homeBootstrapKey, type HomeBootstrap, type HomeCore, type HomeInsights } from '@/solid/lib/home-resource';
 import { dropServedFrame } from '@/solid/lib/served-frame';
 import WorkspaceShell from '../components/WorkspaceShell';
 import GetStarted from '../components/GetStarted';
@@ -30,20 +31,21 @@ export function HomePage(): JSX.Element {
  const home=usePageData<HomeBootstrap>(()=>homeBootstrapKey(personal()));
  createEffect(()=>{if(sessionError())home.invalidate();});
  // A bootstrap for another account is never shown, whatever the store retained.
- const resolved=createMemo<'login'|'loading'|'error'|SignedInHome>(()=>{
+ const resolved=createMemo<'login'|'loading'|'error'|HomeBootstrap>(()=>{
   const current=session();
-  if(current&&current.kind!=='account')return 'login';
   const data=home.data();
   if(!data)return home.error()?'error':'loading';
-  if(!data.signedIn)return 'login';
+  if(!data.signedIn)return data.deployment.mode==='company'?data:'login';
+  if(current&&current.kind!=='account')return 'login';
   return current?.user&&data.accountId!==current.user.id?'error':data;
  });
- const loaded=()=>{const value=resolved();return typeof value==='object'?value:null;};
+ const loaded=()=>{const value=resolved();return typeof value==='object'&&value.signedIn?value:null;};
+ const welcome=()=>{const value=resolved();return typeof value==='object'&&!value.signedIn?value.deployment:null;};
  const retry=()=>sessionError()?reload():void home.refresh(true);
  // Remove-default is the one edit that moves the homepage: read where it opens now.
  const destinationMoved=()=>void home.refresh(true);
  return <Show when={resolved()!=='login'} fallback={<Navigate href="/login"/>}>
- <Show when={loaded()} fallback={<main class={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}><Show when={resolved()==='error'} fallback={<WorkspaceSkeleton/>}><div role="alert"><p>Could not load your workspace.</p><Button variant="secondary" size="sm" aria-label="Retry workspace" onClick={retry}>Try again</Button></div></Show></main>}>
+ <Show when={welcome()} fallback={<Show when={loaded()} fallback={<main class={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}><Show when={resolved()==='error'} fallback={<WorkspaceSkeleton/>}><div role="alert"><p>Could not load your workspace.</p><Button variant="secondary" size="sm" aria-label="Retry workspace" onClick={retry}>Try again</Button></div></Show></main>}>
  {data=>{
   const destination=()=>data().destination;
   const setup=()=>destination().kind==='setup';
@@ -60,7 +62,7 @@ export function HomePage(): JSX.Element {
    <Show when={personal()}><div class="mx-auto max-w-4xl px-6 py-5 font-sans"><DefaultDestinationControl initial={{preferences:data().preferences,deployment:data().deployment}}/></div></Show>
    <PersonalHomePage core={{data:core,error:home.error,refresh:home.refresh,invalidate:home.invalidate}}/></>}</Show>
   </>;}}
- </Show></Show>;
+ </Show>}>{deployment=><DeploymentWelcome deployment={deployment()}/>}</Show></Show>;
 }
 
 /** The slice of the Home bootstrap's page data Personal reads and refreshes. */
