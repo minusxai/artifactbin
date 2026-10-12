@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,readFile,stat,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {CLI_VERSION} from '../src/version';
 import {initializeCompany,validateInputs} from '../../../deploy/company/init.mjs';
 const input={APP_HOSTNAME:'company.example.com',PAGES_HOSTNAME:'pages.company.example.com',OWNER_EMAIL:'owner@example.com',ALLOWED_EMAIL_PATTERNS:'*@example.com',ACME_EMAIL:'ops@example.com',DNS_MODULE:'github.com/caddy-dns/route53@v1.6.0',EMAIL__RESEND_API_KEY:'test-provider-key',EMAIL__FROM:'Company <login@example.com>'};
 test('external hosting refuses incomplete login, unsafe origins and unpinned DNS module',()=>{
@@ -28,7 +29,11 @@ test('compose exposes only HTTPS proxy and separates persistent storage',async()
  assert.match(compose,/app-data:\/data/);assert.match(compose,/user:.*APP_UID/);
  assert.match(compose,/service_healthy/);assert.match(compose,/service_completed_successfully/);
  const docker=await readFile(new URL('../../../deploy/company/Dockerfile',import.meta.url),'utf8');
- assert.match(docker,/install-deps chromium/);assert.match(docker,/AFBIN_VERSION=0\.5\.25/);
+ assert.match(docker,/install-deps chromium/);
+ assert.ok(docker.includes(`ARG AFBIN_VERSION=${CLI_VERSION}\n`));
+ assert.ok(docker.includes(`ARG AFBIN_PACKAGE=@afbin/cli@${CLI_VERSION}\n`));
+ assert.ok(compose.includes(`image: artifactbin-company:${CLI_VERSION}`));
+ assert.ok(compose.includes(`AFBIN_PACKAGE:-@afbin/cli@${CLI_VERSION}`));
 });
 
 test('partial prior configuration is never overwritten and invalid inputs create no secrets',async()=>{
