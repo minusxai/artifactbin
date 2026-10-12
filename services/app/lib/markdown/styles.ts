@@ -4,6 +4,13 @@ export const MARKDOWN_CSS = `
 :where(.mx-markdown[data-placeholder]) { position: relative; }
 :where(.mx-markdown[data-placeholder]:empty)::before,
 :where(.mx-markdown[data-placeholder]:has(> p:only-child > br:only-child))::before { content: attr(data-placeholder); position: absolute; pointer-events: none; color: var(--muted-foreground, #888); }
+/* A heading hint above the body hint while the region is empty: the heading is drawn as the region's h1 (2.25em at 1.2 line height plus its .6em gap, 4.05em of the base size) and the body sits below it. */
+:where(.mx-markdown[data-placeholder-heading]:empty),
+:where(.mx-markdown[data-placeholder-heading]:has(> p:only-child > br:only-child)) { min-height: 5.7em; }
+:where(.mx-markdown[data-placeholder-heading]:empty)::before,
+:where(.mx-markdown[data-placeholder-heading]:has(> p:only-child > br:only-child))::before { content: attr(data-placeholder-heading); position: absolute; top: 0; pointer-events: none; color: var(--muted-foreground, #888); font-family: var(--font-display, inherit); font-weight: 600; font-size: 2.25em; line-height: 1.2; }
+:where(.mx-markdown[data-placeholder-heading][data-placeholder]:empty)::after,
+:where(.mx-markdown[data-placeholder-heading][data-placeholder]:has(> p:only-child > br:only-child))::after { content: attr(data-placeholder); position: absolute; top: 4.05em; pointer-events: none; color: var(--muted-foreground, #888); }
 :where(.mx-markdown > :first-child) { margin-top: 0; }
 :where(.mx-markdown > :last-child) { margin-bottom: 0; }
 :where(.mx-markdown p, .mx-markdown ul, .mx-markdown ol, .mx-markdown blockquote, .mx-markdown pre, .mx-markdown .mx-md-code) { margin-block: 1em; }
